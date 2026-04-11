@@ -221,7 +221,7 @@ def place_logo(canvas: Image.Image, logo_path: str | None):
     if not logo_path or not Path(logo_path).exists():
         # Draw placeholder text if no logo file
         draw = ImageDraw.Draw(canvas)
-        font = load_font(FONT_AVENIR, 20, index=0)
+        font = load_font(FONT_DETAIL, 20, index=FONT_DETAIL_INDEX)
         text = "DW / DAN WRIGHT PHOTOGRAPHY"
         bbox = draw.textbbox((0, 0), text, font=font)
         text_w = bbox[2] - bbox[0]
