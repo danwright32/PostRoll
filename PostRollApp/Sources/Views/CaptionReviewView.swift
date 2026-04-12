@@ -44,7 +44,10 @@ struct CaptionReviewView: View {
                         day: day,
                         caption: captionBinding(day),
                         isExpanded: expanded == section,
-                        onToggle: { expanded = expanded == section ? nil : section }
+                        onToggle: { expanded = expanded == section ? nil : section },
+                        onRevise: { feedback in
+                            try await reviseCaption(day: day, feedback: feedback)
+                        }
                     )
                 }
 
@@ -83,6 +86,20 @@ struct CaptionReviewView: View {
         )
     }
 
+    // MARK: - Caption revision
+
+    private func reviseCaption(day: DayName, feedback: String) async throws {
+        guard let current = result[day] else { return }
+        let revised = try await PythonBridge.shared.runCaptionRevision(
+            event: event,
+            day: day,
+            feedback: feedback,
+            currentCaption: current
+        )
+        result[day] = revised
+        save()
+    }
+
     // MARK: - Persistence
 
     private func save() {
@@ -107,6 +124,12 @@ private struct CaptionSection: View {
     @Binding var caption: DayCaption
     let isExpanded: Bool
     let onToggle: () -> Void
+    let onRevise: (String) async throws -> Void
+
+    @State private var showingRevision = false
+    @State private var feedbackText = ""
+    @State private var isRevising = false
+    @State private var revisionError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -118,7 +141,7 @@ private struct CaptionSection: View {
                         .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
 
                     if !caption.caption.isEmpty {
-                        Text(caption.caption.prefix(40) + (caption.caption.count > 40 ? "…" : ""))
+                        Text(String(caption.caption.prefix(40)) + (caption.caption.count > 40 ? "…" : ""))
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
                             .lineLimit(1)
@@ -144,6 +167,26 @@ private struct CaptionSection: View {
                     if !caption.altTexts.isEmpty {
                         AltTextsSection(altTexts: $caption.altTexts)
                     }
+
+                    // Revision panel
+                    if showingRevision {
+                        RevisionPanel(
+                            feedbackText: $feedbackText,
+                            isRevising: isRevising,
+                            error: revisionError,
+                            onApply: { applyRevision() },
+                            onCancel: {
+                                showingRevision = false
+                                feedbackText = ""
+                                revisionError = nil
+                            }
+                        )
+                    } else {
+                        Button("Revise with feedback…") { showingRevision = true }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.roseGold)
+                    }
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.md)
@@ -151,6 +194,103 @@ private struct CaptionSection: View {
 
             RoseGoldDivider(opacity: 0.3)
         }
+    }
+
+    private func applyRevision() {
+        let trimmed = feedbackText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        isRevising = true
+        revisionError = nil
+        Task {
+            do {
+                try await onRevise(trimmed)
+                await MainActor.run {
+                    isRevising = false
+                    showingRevision = false
+                    feedbackText = ""
+                }
+            } catch {
+                await MainActor.run {
+                    isRevising = false
+                    revisionError = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Revision panel
+
+private struct RevisionPanel: View {
+    @Binding var feedbackText: String
+    let isRevising: Bool
+    let error: String?
+    let onApply: () -> Void
+    let onCancel: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("FEEDBACK FOR REVISION")
+                .font(.system(size: 9, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.roseGold)
+
+            TextField("e.g. make it shorter, add @dciny, don't mention the scene label", text: $feedbackText)
+                .focused($focused)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.warmDark)
+                .focusEffectDisabled()
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.xs)
+                        .fill(Color.creamDeep)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Radius.xs)
+                                .strokeBorder(
+                                    focused ? Color.roseGold : Color.creamEdge,
+                                    lineWidth: focused ? 1.5 : 1
+                                )
+                        )
+                )
+                .animation(.easeOut(duration: 0.12), value: focused)
+                .disabled(isRevising)
+                .onAppear { focused = true }
+
+            if let error {
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.roseDeep)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: Spacing.sm) {
+                if isRevising {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color.roseGold)
+                    Text("Revising…")
+                        .font(.light(11))
+                        .foregroundStyle(Color.warmMid)
+                } else {
+                    Button("Apply") { onApply() }
+                        .buttonStyle(BrandButtonStyle())
+                        .disabled(feedbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Cancel") { onCancel() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.warmMid)
+                }
+            }
+        }
+        .padding(Spacing.md)
+        .background(Color.roseGold.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.md)
+                .strokeBorder(Color.roseGold.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 

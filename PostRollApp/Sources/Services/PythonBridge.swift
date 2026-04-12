@@ -85,6 +85,73 @@ actor PythonBridge {
         }
     }
 
+    // MARK: - Caption revision
+
+    func runCaptionRevision(
+        event: Event,
+        day: DayName,
+        feedback: String,
+        currentCaption: DayCaption
+    ) async throws -> DayCaption {
+        let tmp = FileManager.default.temporaryDirectory
+        let manifestFile = tmp.appendingPathComponent("postroll_revise_\(UUID().uuidString).json")
+        let outputFile   = tmp.appendingPathComponent("postroll_revised_\(UUID().uuidString).json")
+
+        defer {
+            try? FileManager.default.removeItem(at: manifestFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        guard let ocr = event.ocrResult else {
+            throw PythonBridgeError.invalidOutput("No OCR result — complete the OCR step first.")
+        }
+        let ocrData = try JSONEncoder().encode(ocr)
+        guard let programDict = try JSONSerialization.jsonObject(with: ocrData) as? [String: Any] else {
+            throw PythonBridgeError.invalidOutput("Could not serialise OCR result.")
+        }
+
+        // Serialize current caption for the Python manifest
+        let captionData = try JSONEncoder().encode(currentCaption)
+        guard let captionDict = try JSONSerialization.jsonObject(with: captionData) as? [String: Any] else {
+            throw PythonBridgeError.invalidOutput("Could not serialise current caption.")
+        }
+
+        let manifest: [String: Any] = [
+            "event":      event.name,
+            "org":        event.org,
+            "venue":      event.venue,
+            "date":       event.isoDate,
+            "shoot_type": event.shootType.pythonValue,
+            "day":        day.rawValue,
+            "program":    programDict,
+            "existing":   captionDict,
+            "feedback":   feedback,
+        ]
+
+        let manifestData = try JSONSerialization.data(
+            withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
+        )
+        try manifestData.write(to: manifestFile)
+
+        let args = [
+            "-m", "postroll.ai.revise_caption",
+            "--manifest", manifestFile.path,
+            "--output",   outputFile.path,
+        ]
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+
+        let data = try Data(contentsOf: outputFile)
+        do {
+            return try JSONDecoder().decode(DayCaption.self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
     // MARK: - Manifest builder
 
     private func buildManifest(event: Event) throws -> [String: Any] {
