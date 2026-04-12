@@ -24,6 +24,10 @@ struct OCRReviewView: View {
 
                 EventHeader(event: event, subtitle: "Review Program Data")
                     .padding([.horizontal, .top], Spacing.xl)
+                    .padding(.bottom, Spacing.sm)
+
+                StageBackButton(label: "Re-upload program") { goBack() }
+                    .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.md)
 
                 if let issues = detectedIssues, !issues.isEmpty {
@@ -86,6 +90,12 @@ struct OCRReviewView: View {
         ev.ocrResult = ocr
         ev.ocrReviewDone = true
         ev.stage = .photosAssigned
+        appState.updateEvent(ev)
+    }
+
+    private func goBack() {
+        var ev = event
+        ev.stage = .programUploaded
         appState.updateEvent(ev)
     }
 }

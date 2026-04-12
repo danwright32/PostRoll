@@ -56,6 +56,14 @@ struct ExportView: View {
 
     private var readyContent: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
+            StageBackButton(label: "Back to caption review") {
+                var ev = event
+                ev.stage = .captionsReviewed
+                appState.updateEvent(ev)
+            }
+            .padding(.horizontal, Spacing.xl)
+            .padding(.top, Spacing.sm)
+
             BrandBanner(
                 icon: "folder",
                 message: "Exports captions, blog draft, and checklist — then generates story images and Wednesday collage using PIL. Reels are not generated here."

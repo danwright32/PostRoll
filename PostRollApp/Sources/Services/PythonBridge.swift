@@ -266,6 +266,28 @@ actor PythonBridge {
         }
     }
 
+    // MARK: - Brand voice
+
+    /// Appends a user feedback note to brand-voice.md under a "## Caption revision notes" section.
+    nonisolated func appendBrandVoiceNote(_ note: String) throws {
+        let file = projectRoot
+            .appendingPathComponent("postroll/assets/brand-voice.md")
+        var content = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+
+        let sectionHeader = "\n\n## Caption revision notes\n"
+        if !content.contains("## Caption revision notes") {
+            content += sectionHeader
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        let date = formatter.string(from: Date())
+        content += "\n- (\(date)) \(note)"
+
+        try content.write(to: file, atomically: true, encoding: .utf8)
+    }
+
     // MARK: - Private
 
     /// Runs the Python command via `zsh -l` so the user's login shell profile

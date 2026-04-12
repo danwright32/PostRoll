@@ -212,6 +212,26 @@ struct BrandBanner: View {
     }
 }
 
+// MARK: - Stage Back Button (reused across stages)
+
+struct StageBackButton: View {
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 9, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 11))
+            }
+            .foregroundStyle(Color.warmMid)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Drop Zone
 
 private struct ProgramDropZone: View {

@@ -65,7 +65,15 @@ struct AssetGenerationView: View {
 
                 EventHeader(event: event, subtitle: "Generate Content")
                     .padding([.horizontal, .top], Spacing.xl)
-                    .padding(.bottom, Spacing.md)
+                    .padding(.bottom, Spacing.sm)
+
+                StageBackButton(label: "Back to photo assignment") {
+                    var ev = event
+                    ev.stage = .photosAssigned
+                    appState.updateEvent(ev)
+                }
+                .padding(.horizontal, Spacing.xl)
+                .padding(.bottom, Spacing.md)
 
                 BrandBanner(
                     icon: "sparkles",

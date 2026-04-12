@@ -27,7 +27,15 @@ struct CaptionReviewView: View {
 
                 EventHeader(event: event, subtitle: "Review Content")
                     .padding([.horizontal, .top], Spacing.xl)
-                    .padding(.bottom, Spacing.md)
+                    .padding(.bottom, Spacing.sm)
+
+                StageBackButton(label: "Back to generation") {
+                    var ev = event
+                    ev.stage = .assetsGenerated
+                    appState.updateEvent(ev)
+                }
+                .padding(.horizontal, Spacing.xl)
+                .padding(.bottom, Spacing.md)
 
                 if result.errorCount > 0 {
                     BrandBanner(
@@ -128,6 +136,7 @@ private struct CaptionSection: View {
 
     @State private var showingRevision = false
     @State private var feedbackText = ""
+    @State private var saveToBrandVoice = false
     @State private var isRevising = false
     @State private var revisionError: String?
 
@@ -172,12 +181,14 @@ private struct CaptionSection: View {
                     if showingRevision {
                         RevisionPanel(
                             feedbackText: $feedbackText,
+                            saveToBrandVoice: $saveToBrandVoice,
                             isRevising: isRevising,
                             error: revisionError,
                             onApply: { applyRevision() },
                             onCancel: {
                                 showingRevision = false
                                 feedbackText = ""
+                                saveToBrandVoice = false
                                 revisionError = nil
                             }
                         )
@@ -201,13 +212,18 @@ private struct CaptionSection: View {
         guard !trimmed.isEmpty else { return }
         isRevising = true
         revisionError = nil
+        let shouldSave = saveToBrandVoice
         Task {
             do {
                 try await onRevise(trimmed)
+                if shouldSave {
+                    try? PythonBridge.shared.appendBrandVoiceNote(trimmed)
+                }
                 await MainActor.run {
                     isRevising = false
                     showingRevision = false
                     feedbackText = ""
+                    saveToBrandVoice = false
                 }
             } catch {
                 await MainActor.run {
@@ -223,6 +239,7 @@ private struct CaptionSection: View {
 
 private struct RevisionPanel: View {
     @Binding var feedbackText: String
+    @Binding var saveToBrandVoice: Bool
     let isRevising: Bool
     let error: String?
     let onApply: () -> Void
@@ -257,6 +274,14 @@ private struct RevisionPanel: View {
                 .animation(.easeOut(duration: 0.12), value: focused)
                 .disabled(isRevising)
                 .onAppear { focused = true }
+
+            Toggle(isOn: $saveToBrandVoice) {
+                Text("Save this feedback to brand voice for all future events")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.warmMid)
+            }
+            .toggleStyle(.checkbox)
+            .disabled(isRevising)
 
             if let error {
                 Text(error)

@@ -32,7 +32,15 @@ struct PhotoAssignmentView: View {
 
                 EventHeader(event: event, subtitle: "Assign Photos")
                     .padding([.horizontal, .top], Spacing.xl)
-                    .padding(.bottom, Spacing.md)
+                    .padding(.bottom, Spacing.sm)
+
+                StageBackButton(label: "Back to OCR review") {
+                    var ev = event
+                    ev.stage = .ocrDone
+                    appState.updateEvent(ev)
+                }
+                .padding(.horizontal, Spacing.xl)
+                .padding(.bottom, Spacing.md)
 
                 BrandBanner(
                     icon: "rectangle.3.group",
@@ -42,8 +50,13 @@ struct PhotoAssignmentView: View {
                 .padding(.bottom, Spacing.lg)
 
                 ForEach(DayName.allCases, id: \.self) { day in
+                    let wednesdayCount = day == .wednesday ? (dayPhotos[.wednesday]?.count ?? 0) : 0
+                    let note: String? = day == .wednesday && wednesdayCount > 10
+                        ? "Collage uses the first 10 photos (\(wednesdayCount) assigned). Drag to reorder."
+                        : nil
                     PhotoDaySection(
                         label: day.displayName,
+                        collageNote: note,
                         photos: dayBinding(day),
                         onAddPhotos: { pickerTarget = .day(day) }
                     )
@@ -138,6 +151,7 @@ struct PhotoAssignmentView: View {
 private struct PhotoDaySection: View {
     let label: String
     var subtitle: String? = nil
+    var collageNote: String? = nil
     @Binding var photos: [URL]
     let onAddPhotos: () -> Void
 
@@ -207,6 +221,13 @@ private struct PhotoDaySection: View {
                             }
                         }
                     }
+                    if let collageNote {
+                        Text(collageNote)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.warmMid)
+                            .padding(.top, 2)
+                    }
+
                     Button(photos.isEmpty ? "Add Photos…" : "Add more…", action: onAddPhotos)
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
