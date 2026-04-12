@@ -12,8 +12,14 @@ struct EventDetailView: View {
             OCRProgressView(event: event)
         case .ocrDone:
             OCRReviewView(event: event)
-        case .photosAssigned, .assetsGenerated, .captionsReviewed, .exported:
-            ComingSoonView(event: event)
+        case .photosAssigned:
+            PhotoAssignmentView(event: event)
+        case .assetsGenerated:
+            AssetGenerationView(event: event)
+        case .captionsReviewed:
+            CaptionReviewView(event: event)
+        case .exported:
+            ExportView(event: event)
         }
     }
 }

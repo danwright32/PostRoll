@@ -20,6 +20,9 @@ struct Event: Identifiable, Codable, Hashable {
     // Blog
     var blogPhotoPaths: [URL] = []
 
+    // Generated content (captions + blog)
+    var weekResult: WeekGenerationResult?
+
     // Export
     var exportPath: URL?
 
@@ -50,6 +53,16 @@ enum ShootType: String, Codable, CaseIterable {
         case .photoCall: return "camera.fill"
         case .rehearsal: return "arrow.2.circlepath"
         case .combo:     return "square.grid.2x2.fill"
+        }
+    }
+
+    /// Value expected by the Python caption / blog generators.
+    var pythonValue: String {
+        switch self {
+        case .fullShow:  return "performance"
+        case .photoCall: return "photo_call"
+        case .rehearsal: return "rehearsal"
+        case .combo:     return "rehearsal_and_performance"
         }
     }
 }
@@ -95,4 +108,6 @@ enum DayName: String, Codable, CaseIterable {
 struct PostingDay: Codable, Hashable {
     var day: DayName
     var photoPaths: [URL] = []
+    var tagHandles: [String] = []
+    var nameMentions: [String] = []
 }

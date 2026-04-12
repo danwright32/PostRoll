@@ -46,6 +46,84 @@ actor PythonBridge {
 
     // MARK: - Public API
 
+    // MARK: - Week generation
+
+    func runWeekGeneration(event: Event) async throws -> WeekGenerationResult {
+        let tmp = FileManager.default.temporaryDirectory
+        let manifestFile = tmp.appendingPathComponent("postroll_manifest_\(UUID().uuidString).json")
+        let outputFile   = tmp.appendingPathComponent("postroll_week_\(UUID().uuidString).json")
+
+        defer {
+            try? FileManager.default.removeItem(at: manifestFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        // Build manifest
+        let manifest = try buildManifest(event: event)
+        let manifestData = try JSONSerialization.data(
+            withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
+        )
+        try manifestData.write(to: manifestFile)
+
+        // Run Python
+        let args = [
+            "-m", "postroll.ai.generate_week",
+            "--manifest", manifestFile.path,
+            "--output",   outputFile.path,
+        ]
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+
+        let data = try Data(contentsOf: outputFile)
+        do {
+            return try JSONDecoder().decode(WeekGenerationResult.self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Manifest builder
+
+    private func buildManifest(event: Event) throws -> [String: Any] {
+        // Serialize OCRResult via JSONEncoder so CodingKeys produce snake_case
+        guard let ocr = event.ocrResult else {
+            throw PythonBridgeError.invalidOutput("No OCR result — complete the OCR step first.")
+        }
+        let ocrData = try JSONEncoder().encode(ocr)
+        guard let programDict = try JSONSerialization.jsonObject(with: ocrData) as? [String: Any] else {
+            throw PythonBridgeError.invalidOutput("Could not serialise OCR result.")
+        }
+
+        // Build per-day entries
+        var daysDict: [String: Any] = [:]
+        for dayName in DayName.allCases {
+            guard let pd = event.days[dayName.rawValue], !pd.photoPaths.isEmpty else { continue }
+            var dayEntry: [String: Any] = [
+                "photos": pd.photoPaths.map { $0.path },
+            ]
+            if !pd.tagHandles.isEmpty  { dayEntry["tag_handles"]  = pd.tagHandles }
+            if !pd.nameMentions.isEmpty { dayEntry["name_mentions"] = pd.nameMentions }
+            daysDict[dayName.rawValue] = dayEntry
+        }
+
+        var manifest: [String: Any] = [
+            "event":      event.name,
+            "org":        event.org,
+            "venue":      event.venue,
+            "date":       event.isoDate,
+            "shoot_type": event.shootType.pythonValue,
+            "program":    programDict,
+            "days":       daysDict,
+        ]
+        if !event.blogPhotoPaths.isEmpty {
+            manifest["blog_photos"] = event.blogPhotoPaths.map { $0.path }
+        }
+        return manifest
+    }
+
     func runOCR(imagePaths: [URL]) async throws -> OCRResult {
         let outputFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("postroll_ocr_\(UUID().uuidString).json")
