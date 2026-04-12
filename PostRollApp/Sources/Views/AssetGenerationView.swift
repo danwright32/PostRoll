@@ -7,12 +7,35 @@ struct AssetGenerationView: View {
     @State private var dayHandles: [DayName: String] = [:]   // comma-separated @handles
     @State private var dayNames: [DayName: String] = [:]     // comma-separated plain names
     @State private var generationState: GenState = .configuring
+    @State private var progressDayIndex = 0
 
     enum GenState {
         case configuring
         case running
         case failed(String)
         case done
+    }
+
+    // Animated progress cycling through day names while Python runs
+    private var progressLabel: String {
+        let steps = daysWithPhotos.map { $0.displayName } + (event.blogPhotoPaths.count >= 4 ? ["blog post"] : [])
+        guard !steps.isEmpty else { return "Generating…" }
+        return "Generating \(steps[progressDayIndex % steps.count])…"
+    }
+
+    private var blogPhotoWarning: String? {
+        let count = event.blogPhotoPaths.count
+        if count > 0 && count < 4 {
+            return "Blog post needs 4–7 photos; you have \(count). Add more or remove all to skip."
+        }
+        if count > 7 {
+            return "Blog post needs 4–7 photos; you have \(count). Remove \(count - 7) before generating."
+        }
+        return nil
+    }
+
+    private var canGenerate: Bool {
+        totalPhotoCount > 0 && blogPhotoWarning == nil
     }
 
     var daysWithPhotos: [DayName] {
@@ -49,7 +72,13 @@ struct AssetGenerationView: View {
                     message: "Add @handles for each day if you want to tag accounts. Plain names (no @) go in the second field — for people without Instagram."
                 )
                 .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.lg)
+                .padding(.bottom, Spacing.sm)
+
+                if let warning = blogPhotoWarning {
+                    BrandBanner(icon: "photo.on.rectangle", message: warning)
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.sm)
+                }
 
                 // Summary row
                 GenerationSummaryRow(
@@ -74,6 +103,7 @@ struct AssetGenerationView: View {
                     Spacer()
                     Button("Generate All") { startGeneration() }
                         .buttonStyle(BrandButtonStyle())
+                        .disabled(!canGenerate)
                 }
                 .padding(Spacing.xl)
             }
@@ -96,19 +126,28 @@ struct AssetGenerationView: View {
                 .tint(Color.roseGold)
                 .padding(.vertical, Spacing.sm)
 
-            Text("Generating captions and blog post…")
+            Text(progressLabel)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.warmDark)
+                .animation(.easeInOut(duration: 0.4), value: progressDayIndex)
 
-            Text("This typically takes 3–6 minutes.\nCloe won't hurt it — just let it run.")
+            Text("Typically 3–6 minutes total. Don't close the app.")
                 .font(.light(12))
                 .foregroundStyle(Color.warmMid)
-                .multilineTextAlignment(.center)
 
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cream)
+        .onAppear {
+            let stepCount = daysWithPhotos.count + (event.blogPhotoPaths.count >= 4 ? 1 : 0)
+            guard stepCount > 0 else { return }
+            let perStep = 240.0 / Double(stepCount)
+            Timer.scheduledTimer(withTimeInterval: perStep, repeats: true) { timer in
+                progressDayIndex += 1
+                if progressDayIndex >= stepCount { timer.invalidate() }
+            }
+        }
     }
 
     // MARK: - Error
