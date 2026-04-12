@@ -105,7 +105,7 @@ Required plain-name credits for this post (people without Instagram
 handles — appear as plain text in the caption, NOT as #-tags):
 {name_mentions}
 
-**SCOPE RULE — read this before writing anything.**
+{shooter_notes_section}**SCOPE RULE — read this before writing anything.**
 {scope_rule}
 
 {existing_captions_section}Photos in this post ({photo_count}):
@@ -510,6 +510,7 @@ def generate_caption(
     post_type: str = "feed_photo",
     tag_handles: list[str] | None = None,
     name_mentions: list[str] | None = None,
+    notes: str = "",
     existing_captions: list[str] | None = None,
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
@@ -576,6 +577,10 @@ def generate_caption(
         )
         existing_section = _format_existing_captions(existing_captions)
         scope_rule = _scope_rule_for(post_type)
+        shooter_notes_section = (
+            f"Shooter's observations for this post (first-hand detail from Dan"
+            f" — use these to write a more specific, voice-y caption):\n{notes.strip()}\n\n"
+        ) if notes.strip() else ""
 
         # === Pass 1: generate the draft ===
         prompt = PROMPT_TEMPLATE.format(
@@ -594,6 +599,7 @@ def generate_caption(
             scenes=_format_scenes(program.get("scenes", [])),
             tag_handles=_format_tag_handles(tag_handles),
             name_mentions=_format_name_mentions(name_mentions),
+            shooter_notes_section=shooter_notes_section,
             existing_captions_section=existing_section,
             photo_count=photo_count,
             photo_list=photo_list,

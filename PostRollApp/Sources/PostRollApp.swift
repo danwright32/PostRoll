@@ -3,11 +3,13 @@ import SwiftUI
 @main
 struct PostRollApp: App {
     @State private var appState = AppState()
+    @State private var hashtagStore = HashtagStore()
 
     var body: some Scene {
         WindowGroup {
             MainWindowView()
                 .environment(appState)
+                .environment(hashtagStore)
                 .preferredColorScheme(.light)
                 .tint(Color.roseGold)
         }

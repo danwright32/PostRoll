@@ -131,4 +131,6 @@ struct PostingDay: Codable, Hashable {
     // Wednesday collage
     var collageSeed: Int? = nil        // nil = random each time
     var cropOffsets: [String: CropOffset] = [:]  // keyed by photo URL absoluteString
+    // Shooter's observations — passed to caption generator to produce voice-y, specific captions
+    var notes: String = ""
 }

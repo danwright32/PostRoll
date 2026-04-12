@@ -32,6 +32,8 @@ struct PhotoAssignmentView: View {
 
     // Crop offsets for Wednesday + Thursday photos (keyed by photo URL absoluteString)
     @State private var dayCropOffsets: [DayName: [String: CropOffset]] = [:]
+    // Shooter observations per day — passed to caption generator
+    @State private var dayNotes: [DayName: String] = [:]
 
     var totalPhotos: Int { dayPhotos.values.reduce(0) { $0 + $1.count } }
 
@@ -80,6 +82,13 @@ struct PhotoAssignmentView: View {
             }
         }
         _dayCropOffsets = State(initialValue: offsets)
+
+        // Load per-day shooter notes
+        var notes: [DayName: String] = [:]
+        for day in DayName.allCases {
+            notes[day] = event.days[day.rawValue]?.notes ?? ""
+        }
+        _dayNotes = State(initialValue: notes)
     }
 
     var body: some View {
@@ -176,6 +185,8 @@ struct PhotoAssignmentView: View {
                     default:
                         EmptyView()
                     }
+
+                    DayNotesField(notes: noteBinding(day))
                 }
 
                 PhotoDaySection(
@@ -249,6 +260,13 @@ struct PhotoAssignmentView: View {
         Binding(
             get: { dayCropOffsets[day] ?? [:] },
             set: { dayCropOffsets[day] = $0; save() }
+        )
+    }
+
+    private func noteBinding(_ day: DayName) -> Binding<String> {
+        Binding(
+            get: { dayNotes[day] ?? "" },
+            set: { dayNotes[day] = $0; save() }
         )
     }
 
@@ -349,6 +367,7 @@ struct PhotoAssignmentView: View {
             var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
             pd.photoPaths  = dayPhotos[day] ?? []
             pd.cropOffsets = dayCropOffsets[day] ?? [:]
+            pd.notes       = dayNotes[day] ?? ""
             switch day {
             case .tuesday:
                 pd.screenRecordingPath = tuesdayScreenRecording
@@ -883,8 +902,7 @@ private struct ThursdayReelSection: View {
                         Text("Optional audio — auto-fetched from Jamendo if omitted.")
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
-                        SingleFilePicker(label: "Audio File", url: audio,
-                                         onPick: onPickAudio, onClear: { audio = nil })
+                        AudioFilePicker(audio: $audio, onPick: onPickAudio)
                     }
 
                     // Scroll duration slider
@@ -1108,6 +1126,102 @@ private struct PhotoThumb: View {
             .padding(3)
         }
         .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+    }
+}
+
+// MARK: - Audio File Picker (with play/pause)
+
+private struct AudioFilePicker: View {
+    @Binding var audio: URL?
+    let onPick: () -> Void
+
+    @State private var player: AVAudioPlayer? = nil
+    @State private var isPlaying = false
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Text("AUDIO FILE")
+                .font(.system(size: 9, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.warmMid)
+                .frame(width: 110, alignment: .leading)
+
+            if let url = audio {
+                Text(url.lastPathComponent)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.warmDark)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Button {
+                    togglePlayback(url: url)
+                } label: {
+                    Image(systemName: isPlaying ? "pause.circle" : "play.circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.roseGold)
+                }
+                .buttonStyle(.plain)
+                .help(isPlaying ? "Pause" : "Play")
+                Button(action: { audio = nil; stopPlayback() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.warmMid.opacity(0.6), Color.creamEdge)
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button("Choose…", action: onPick)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.roseGold)
+                Spacer()
+            }
+        }
+        .padding(.vertical, 4)
+        .onChange(of: audio) { _, _ in stopPlayback() }
+    }
+
+    private func togglePlayback(url: URL) {
+        if isPlaying {
+            player?.pause()
+            isPlaying = false
+        } else {
+            if player?.url != url {
+                player = try? AVAudioPlayer(contentsOf: url)
+            }
+            player?.play()
+            isPlaying = true
+        }
+    }
+
+    private func stopPlayback() {
+        player?.stop()
+        player = nil
+        isPlaying = false
+    }
+}
+
+// MARK: - Day Notes Field
+
+private struct DayNotesField: View {
+    @Binding var notes: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "pencil.and.outline")
+                .font(.system(size: 10))
+                .foregroundStyle(notes.isEmpty && !focused ? Color.warmMid.opacity(0.3) : Color.warmMid.opacity(0.6))
+            TextField("Notes for today's shoot (seen by caption generator)", text: $notes)
+                .focused($focused)
+                .font(.light(11))
+                .foregroundStyle(Color.warmDark)
+                .textFieldStyle(.plain)
+        }
+        .padding(.horizontal, Spacing.xl)
+        .padding(.vertical, 7)
+        .background(focused || !notes.isEmpty ? Color.roseGold.opacity(0.03) : Color.clear)
+        .animation(.easeOut(duration: 0.15), value: focused)
     }
 }
 

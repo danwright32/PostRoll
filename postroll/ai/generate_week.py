@@ -97,6 +97,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path) -> None:
         post_type    = day_info.get("post_type") or _auto_post_type(day_name, len(photos))
         tag_handles  = day_info.get("tag_handles") or None
         name_mentions = day_info.get("name_mentions") or None
+        notes        = day_info.get("notes", "")
 
         # For large scroll reels, let Claude pick the best representative subset
         if post_type == "scroll_reel" and len(photos) >= REEL_SELECTION_THRESHOLD:
@@ -131,6 +132,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path) -> None:
                 post_type=post_type,
                 tag_handles=tag_handles,
                 name_mentions=name_mentions,
+                notes=notes,
                 existing_captions=existing_captions if existing_captions else None,
             )
             results[day_name] = result

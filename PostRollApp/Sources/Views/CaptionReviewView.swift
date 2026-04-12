@@ -3,6 +3,7 @@ import SwiftUI
 struct CaptionReviewView: View {
     let event: Event
     @Environment(AppState.self) private var appState
+    @Environment(HashtagStore.self) private var hashtagStore
 
     @State private var result: WeekGenerationResult
     @State private var expanded: ReviewSection? = .caption(DayName.allCases.first!)
@@ -103,6 +104,7 @@ struct CaptionReviewView: View {
             }
         }
         .background(Color.cream)
+        .onAppear { mergeGlobalTags() }
         .alert("Regenerate all captions?", isPresented: $showRegenerateConfirm) {
             Button("Regenerate", role: .destructive) {
                 Task { await regenerateAll() }
@@ -137,11 +139,28 @@ struct CaptionReviewView: View {
         do {
             let newResult = try await PythonBridge.shared.runWeekGeneration(event: event)
             result = newResult
-            save()
+            mergeGlobalTags()
         } catch {
             regenerateError = error.localizedDescription
         }
         isRegenerating = false
+    }
+
+    // MARK: - Global hashtag merge
+
+    private func mergeGlobalTags() {
+        guard !hashtagStore.globalTags.isEmpty else { return }
+        var changed = false
+        for day in daysWithContent {
+            guard var cap = result[day] else { continue }
+            var dayChanged = false
+            for tag in hashtagStore.globalTags where !cap.hashtags.contains(tag) {
+                cap.hashtags.append(tag)
+                dayChanged = true
+            }
+            if dayChanged { result[day] = cap; changed = true }
+        }
+        if changed { save() }
     }
 
     // MARK: - Caption revision
@@ -222,10 +241,22 @@ private struct CaptionSection: View {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     ReviewTextArea(label: "Caption", text: $caption.caption, minHeight: 80)
 
-                    Text("\(caption.caption.count) chars")
-                        .font(.system(size: 10))
-                        .foregroundStyle(caption.caption.count > 2200 ? Color.roseDeep : Color.warmMid)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    HStack(spacing: Spacing.sm) {
+                        Spacer()
+                        Text("\(caption.caption.count) chars")
+                            .font(.system(size: 10))
+                            .foregroundStyle(caption.caption.count > 2200 ? Color.roseDeep : Color.warmMid)
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(caption.caption, forType: .string)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.warmMid)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy caption")
+                    }
 
                     HashtagsEditor(hashtags: $caption.hashtags)
 
@@ -510,6 +541,7 @@ private struct BlogBodyEditor: View {
 
 private struct HashtagsEditor: View {
     @Binding var hashtags: [String]
+    @Environment(HashtagStore.self) private var hashtagStore
 
     // Flat editable text — joined with spaces
     @State private var raw: String = ""
@@ -517,10 +549,37 @@ private struct HashtagsEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("HASHTAGS")
-                .font(.system(size: 9, weight: .medium))
-                .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+            HStack(spacing: Spacing.sm) {
+                Text("HASHTAGS")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.warmMid)
+                Spacer()
+                Text("\(hashtags.count)/30")
+                    .font(.system(size: 9))
+                    .foregroundStyle(hashtags.count > 30 ? Color.roseDeep : Color.warmMid)
+                if !hashtagStore.presets.isEmpty {
+                    Menu {
+                        ForEach(hashtagStore.presets) { preset in
+                            Button(preset.name) {
+                                var updated = hashtags
+                                for tag in preset.tags where !updated.contains(tag) {
+                                    updated.append(tag)
+                                }
+                                hashtags = updated
+                                raw = updated.joined(separator: " ")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "tag")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.roseGold)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Apply a hashtag preset")
+                }
+            }
             TextField("", text: $raw)
                 .focused($focused)
                 .font(.system(size: 12))

@@ -265,8 +265,9 @@ actor PythonBridge {
             var dayEntry: [String: Any] = [
                 "photos": pd.photoPaths.map { $0.path },
             ]
-            if !pd.tagHandles.isEmpty  { dayEntry["tag_handles"]  = pd.tagHandles }
+            if !pd.tagHandles.isEmpty   { dayEntry["tag_handles"]   = pd.tagHandles }
             if !pd.nameMentions.isEmpty { dayEntry["name_mentions"] = pd.nameMentions }
+            if !pd.notes.isEmpty        { dayEntry["notes"]         = pd.notes }
             daysDict[dayName.rawValue] = dayEntry
         }
 
