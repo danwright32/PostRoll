@@ -224,7 +224,8 @@ def test_caption_passes_brand_voice_to_prompt(sample_photo):
             day="sunday",
             photo_paths=[sample_photo],
             program={"performers": [], "pieces": []},
-            skip_humanizer=True
+            skip_humanizer=True,
+            skip_voice_pass=True,
         )
 
     prompt = captured["prompt"]

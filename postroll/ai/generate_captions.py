@@ -50,7 +50,9 @@ from typing import Any
 
 from .ai_tells import (
     HUMANIZER_DEFAULT_PATH,
+    build_diversity_review_prompt,
     build_review_prompt,
+    build_voice_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
 )
@@ -102,6 +104,9 @@ somewhere — body or trailing credit line). Each becomes a #-tag too:
 Required plain-name credits for this post (people without Instagram
 handles — appear as plain text in the caption, NOT as #-tags):
 {name_mentions}
+
+**SCOPE RULE — read this before writing anything.**
+{scope_rule}
 
 {existing_captions_section}Photos in this post ({photo_count}):
 {photo_list}
@@ -361,6 +366,91 @@ def _format_existing_captions(existing: list[str] | None) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+# Post types where the subject is ONE moment / one frame / one scene.
+# For these, the caption body must stay focused on what's visible in
+# THIS photo, not recap the whole event. Other required @handles and
+# name credits go on a minimal trailing credit stack.
+SINGLE_SUBJECT_POST_TYPES = {
+    "feed_photo",
+    "slider_reel",
+    "morph_reel",
+    "screen_reel",
+    "before_after_story",
+    "performance",
+}
+
+# Post types where the subject IS the whole event — a carousel of
+# different scenes, or a scroll reel covering many photos. For these,
+# the body can legitimately weave all credits in and cover the full
+# scope of the show.
+EVENT_LEVEL_POST_TYPES = {
+    "carousel",
+    "scroll_reel",
+}
+
+
+SCOPE_RULE_SINGLE_SUBJECT = """\
+This is a SINGLE-SUBJECT post — one photo, or one edit of one photo.
+The BODY of the caption must stay locked to what is actually in this
+frame: the one scene / set / conductor / cast grouping visible. Do NOT
+recap the whole event. Do NOT list every conductor, every set, every
+piece on the program. A reader who sees only this post should learn
+about THIS moment, not the three-hour arc of the night.
+
+Handle the required @ mentions and name credits like this:
+
+1. Body (1–2 short sentences): name ONLY the people, pieces, and
+   context relevant to THIS frame. If only one conductor is visibly
+   leading in the photo, only that conductor belongs in the body. The
+   piece being performed, the section being staged, the actor in the
+   shot — those go in the body. Everyone else does NOT.
+
+2. Trailing credit stack (separated by ONE blank line): on a new line
+   after the body, put the @ handles and name_mentions that did NOT
+   make it into the body, as a bare stack with no "with" prefix and no
+   narrative connector. Org and venue handles almost always land here.
+   Example shape:
+
+       [body sentence about the one scene/set in the frame]
+
+       @org @venue @conductor_not_in_frame Name Without Handle
+
+   Every handle and every name_mention must appear SOMEWHERE — body OR
+   trailing stack. But credits for people not in the frame belong in
+   the stack, not woven into prose about moments they weren't part of.
+
+3. If the body already mentions a handle naturally, don't repeat it in
+   the trailing stack. The stack is for what's left over.
+
+Violations to avoid:
+- "Opened with [A], [B] had the middle set, [C] closed on [D]" — that
+  is a concert recap, not a caption about this photo. Banned.
+- "Earlier in the night [other conductor] did [other thing]" — banned.
+  You are not the program notes.
+- Naming a performer who is not visibly in this frame in the body.
+"""
+
+SCOPE_RULE_EVENT_LEVEL = """\
+This is an EVENT-LEVEL post — a carousel or scroll reel that really
+does cover the whole event. The body legitimately spans everything.
+Credits can weave through the body naturally, or land in a trailing
+stack — pick whichever shape reads best and varies from the other
+captions in the week.
+
+Every required handle and every name_mention must appear somewhere in
+the caption. Because this post covers the whole event, it's fine to
+name multiple conductors / sets / pieces in the body — that matches
+what the post actually shows.
+"""
+
+
+def _scope_rule_for(post_type: str) -> str:
+    """Return the scope rule block for a given post type."""
+    if post_type in EVENT_LEVEL_POST_TYPES:
+        return SCOPE_RULE_EVENT_LEVEL
+    return SCOPE_RULE_SINGLE_SUBJECT
+
+
 # Post-type-specific framing guidance injected into the prompt
 POST_TYPE_FRAMING = {
     "feed_photo": (
@@ -423,6 +513,7 @@ def generate_caption(
     existing_captions: list[str] | None = None,
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
+    skip_voice_pass: bool = False,
 ) -> dict[str, Any]:
     """Generate caption + hashtags + per-photo alt text for one post.
 
@@ -484,6 +575,7 @@ def generate_caption(
             post_type, POST_TYPE_FRAMING["feed_photo"]
         )
         existing_section = _format_existing_captions(existing_captions)
+        scope_rule = _scope_rule_for(post_type)
 
         # === Pass 1: generate the draft ===
         prompt = PROMPT_TEMPLATE.format(
@@ -496,6 +588,7 @@ def generate_caption(
             shoot_type=shoot_type,
             post_type=post_type,
             post_type_framing=post_type_framing,
+            scope_rule=scope_rule,
             performers=_format_performers(program.get("performers", [])),
             pieces=_format_pieces(program.get("pieces", [])),
             scenes=_format_scenes(program.get("scenes", [])),
@@ -516,15 +609,39 @@ def generate_caption(
         if not isinstance(data, dict):
             raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 
-        # === Pass 2: humanizer review-and-revise against brand voice + AI tells ===
-        # Runs by default when the humanizer skill is installed.
+        single_shape = (
+            "{alt_texts: list of strings, scene_labels: list of strings or "
+            "nulls, caption: string, hashtags: list of strings}"
+        )
+
+        # === Pass 2: brand-voice review (does this actually sound like Dan?) ===
+        # Narrower than humanizer — asks only "voice match?"
+        if not skip_voice_pass:
+            voice_prompt = build_voice_review_prompt(
+                draft_json=json.dumps(data, ensure_ascii=False, indent=2),
+                brand_voice=brand_voice_text,
+                output_shape_description=single_shape,
+            )
+            data = run_json_prompt(
+                voice_prompt,
+                timeout=300,
+            )
+            if not isinstance(data, dict):
+                raise ClaudeError(
+                    f"Voice pass returned {type(data).__name__}, expected JSON object"
+                )
+
+        # === Pass 3 (FINAL): humanizer — always runs last, non-negotiable ===
+        # Humanizer is the final word on AI tells. It MUST be the last pass
+        # so nothing downstream can re-introduce tells. skip_humanizer exists
+        # only for tests — production runs should never skip this.
         if not skip_humanizer and is_humanizer_available(humanizer_path):
             humanizer_rules = load_humanizer_rules(humanizer_path)
             review_prompt = build_review_prompt(
                 draft_json=json.dumps(data, ensure_ascii=False, indent=2),
                 humanizer_rules=humanizer_rules,
                 brand_voice=brand_voice_text,
-                output_shape_description="{alt_texts: list of strings, scene_labels: list of strings or nulls, caption: string, hashtags: list of strings}",
+                output_shape_description=single_shape,
             )
             data = run_json_prompt(
                 review_prompt,
@@ -613,14 +730,29 @@ structured scenes list above to decide which scene it shows. Be
 decisive — if the visual evidence points clearly, pick it.
 
 **Stage 3 — unified caption per post.** For each post, write ONE
-caption following the brand voice rules and the post-type-specific
-framing listed with each post. A CAROUSEL or SCROLL_REEL that spans
-multiple scenes should be general event-level; a FEED_PHOTO or
-SLIDER_REEL centered on one scene should label that scene.
+caption following the brand voice rules, the post-type-specific
+framing, AND the SCOPE RULE listed with each post.
+
+The scope rule is the most important structural input. Read it
+carefully per post before writing. Summary:
+
+- SINGLE-SUBJECT posts (feed_photo, slider_reel, morph_reel,
+  screen_reel, before_after_story): body stays locked to what is
+  visibly in THIS frame. Do NOT recap the whole concert. Do NOT name
+  every conductor / set / piece. Required @handles and name_mentions
+  that are NOT in this frame go on a trailing credit stack separated
+  by one blank line — bare, no "with" prefix, no narrative connector.
+  Org and venue handles almost always land in that trailing stack.
+
+- EVENT-LEVEL posts (carousel, scroll_reel): body legitimately spans
+  the whole event. Credits can weave through or land in a stack.
 
 Incorporate the required @-mentions and plain-name credits from each
 post's tag_handles and name_mentions lists. EVERY handle and EVERY
-name MUST appear somewhere in the final caption.
+name MUST appear somewhere in the final caption — but for
+single-subject posts, "somewhere" often means the trailing stack, not
+the body. Do not force in-frame naming of people who aren't in the
+frame.
 
 **Stage 4 — VARY across the whole week.** This is the key advantage
 of generating all 5 at once: the captions must NOT share openers,
@@ -670,8 +802,14 @@ def _format_week_posts(posts: list[dict[str, Any]]) -> str:
         name_mentions = post.get("name_mentions") or []
 
         framing = POST_TYPE_FRAMING.get(post_type, POST_TYPE_FRAMING["feed_photo"])
+        scope_kind = (
+            "EVENT-LEVEL"
+            if post_type in EVENT_LEVEL_POST_TYPES
+            else "SINGLE-SUBJECT"
+        )
 
         lines.append(f"### Post {i}: {day.upper()} ({post_type})")
+        lines.append(f"Scope: {scope_kind}")
         lines.append(f"Framing: {framing}")
         lines.append(f"Required @ handles: {', '.join(tag_handles) if tag_handles else '(none)'}")
         lines.append(
@@ -695,6 +833,8 @@ def generate_week_captions(
     shoot_type: str = "performance",
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
+    skip_voice_pass: bool = False,
+    skip_diversity_pass: bool = False,
 ) -> list[dict[str, Any]]:
     """Generate captions for a whole week in ONE Claude call.
 
@@ -773,17 +913,47 @@ def generate_week_captions(
                 f"Expected JSON with 'posts' array, got {type(data).__name__}"
             )
 
-        # === Pass 2: humanizer review of all captions together ===
+        week_shape = (
+            '{posts: list of {day, post_type, alt_texts, scene_labels, '
+            "caption, hashtags}}"
+        )
+
+        # === Pass 2: brand-voice review (sounds like Dan?) ===
+        if not skip_voice_pass:
+            voice_prompt = build_voice_review_prompt(
+                draft_json=json.dumps(data, ensure_ascii=False, indent=2),
+                brand_voice=brand_voice_text,
+                output_shape_description=week_shape,
+            )
+            data = run_json_prompt(voice_prompt, timeout=900)
+            if not isinstance(data, dict) or "posts" not in data:
+                raise ClaudeError(
+                    f"Voice pass returned {type(data).__name__}, expected object with 'posts'"
+                )
+
+        # === Pass 3: cross-caption diversity check across the whole week ===
+        if not skip_diversity_pass:
+            diversity_prompt = build_diversity_review_prompt(
+                week_json=json.dumps(data, ensure_ascii=False, indent=2),
+                brand_voice=brand_voice_text,
+            )
+            data = run_json_prompt(diversity_prompt, timeout=900)
+            if not isinstance(data, dict) or "posts" not in data:
+                raise ClaudeError(
+                    f"Diversity pass returned {type(data).__name__}, expected object with 'posts'"
+                )
+
+        # === Pass 4 (FINAL): humanizer — always runs last, non-negotiable ===
+        # Humanizer is the final word on AI tells. It MUST be the last pass
+        # so nothing downstream (voice, diversity) can re-introduce tells.
+        # skip_humanizer exists only for tests — production runs never skip.
         if not skip_humanizer and is_humanizer_available(humanizer_path):
             humanizer_rules = load_humanizer_rules(humanizer_path)
             review_prompt = build_review_prompt(
                 draft_json=json.dumps(data, ensure_ascii=False, indent=2),
                 humanizer_rules=humanizer_rules,
                 brand_voice=brand_voice_text,
-                output_shape_description=(
-                    '{posts: list of {day, post_type, alt_texts, scene_labels, '
-                    "caption, hashtags}}"
-                ),
+                output_shape_description=week_shape,
             )
             data = run_json_prompt(review_prompt, timeout=900)
             if not isinstance(data, dict) or "posts" not in data:

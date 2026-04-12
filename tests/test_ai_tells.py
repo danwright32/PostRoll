@@ -74,7 +74,8 @@ def test_review_prompt_includes_humanizer_rules_and_brand_voice():
 
 
 def test_caption_runs_humanizer_review_when_available(sample_photo, tmp_path):
-    """When humanizer is installed, the caption generator runs TWO Claude calls."""
+    """When humanizer is installed, the caption generator runs THREE Claude calls:
+    draft -> voice pass -> humanizer (LAST, always). Humanizer is the final word."""
     fake_humanizer = tmp_path / "SKILL.md"
     fake_humanizer.write_text("# humanizer rules\n- avoid delve")
 
@@ -90,6 +91,15 @@ def test_caption_runs_humanizer_review_when_available(sample_photo, tmp_path):
                 "caption": "A pivotal moment, delving into the music.",
                 "hashtags": ["#x"],
             }
+        if len(calls) == 2:
+            # Pass 2: voice pass output — voice-matched but may still have tells
+            return {
+                "alt_texts": ["voiced alt"],
+                "scene_labels": [None],
+                "caption": "A pivotal moment in Dan's voice.",
+                "hashtags": ["#x"],
+            }
+        # Pass 3 (FINAL): humanizer — cleaned of all AI tells
         return {
             "alt_texts": ["cleaned alt"],
             "scene_labels": [None],
@@ -111,14 +121,19 @@ def test_caption_runs_humanizer_review_when_available(sample_photo, tmp_path):
             humanizer_path=fake_humanizer,
         )
 
-    assert len(calls) == 2
-    # Pass 1 has brand voice, no humanizer rules
+    assert len(calls) == 3
+    # Pass 1 is the draft — brand voice in prompt, no humanizer rules
     assert "Dan Wright" in calls[0]
-    assert "humanizer rules" not in calls[0].lower() or "humanizer" not in calls[0]
-    # Pass 2 has humanizer rules and the draft to clean
-    assert "humanizer rules" in calls[1].lower() or "avoid delve" in calls[1]
-    assert "delving" in calls[1] or "pivotal" in calls[1]
-    # Returned result is from pass 2
+    assert "avoid delve" not in calls[0]
+    # Pass 2 is the voice pass — brand voice, no humanizer rules
+    assert "voice editor" in calls[1].lower() or "voice match" in calls[1].lower()
+    assert "avoid delve" not in calls[1]
+    # Pass 3 is humanizer — has humanizer rules AND sees the voice-pass output
+    assert "humanizer rules" in calls[2].lower() or "avoid delve" in calls[2]
+    assert "voiced alt" in calls[2]  # humanizer received pass 2's output
+    # Hard-ban scan included
+    assert "em dash" in calls[2].lower() or "no em dashes" in calls[2].lower()
+    # Final result is from pass 3 (humanizer is the last word)
     assert result["caption"] == "A specific moment."
 
 
@@ -146,13 +161,15 @@ def test_caption_skips_humanizer_when_skip_flag_set(sample_photo, tmp_path):
             program={"performers": [], "pieces": []},
             humanizer_path=fake_humanizer,
             skip_humanizer=True,
+            skip_voice_pass=True,
         )
 
     assert len(calls) == 1
 
 
 def test_caption_skips_humanizer_when_not_installed(sample_photo, tmp_path):
-    """If humanizer isn't installed, the review pass silently skips."""
+    """If humanizer isn't installed, the humanizer pass silently skips.
+    Voice pass is independent of humanizer install, so skip it explicitly."""
     missing = tmp_path / "missing.md"
 
     calls: list[str] = []
@@ -173,6 +190,7 @@ def test_caption_skips_humanizer_when_not_installed(sample_photo, tmp_path):
             photo_paths=[sample_photo],
             program={"performers": [], "pieces": []},
             humanizer_path=missing,
+            skip_voice_pass=True,
         )
 
     assert len(calls) == 1

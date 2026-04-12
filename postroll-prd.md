@@ -239,15 +239,31 @@ Process:
 ### 6.1 Caption Writing
 
 **Engine:** Claude Code (invoked locally, no API cost)
-**Style guide:** dan-wright-brand-voice skill (stored as app asset)
+**Style guide:** `postroll/assets/brand-voice.md` (loaded at runtime, evolves via Phase 4 feedback loop — see § 13)
+**Source:** `postroll/ai/generate_captions.py`
 
 Per post, generates:
-- 1-2 sentence caption in Dan's voice
-- Required hashtags: venue, performer, #dwphotony, 2-3 additional relevant
+- Post-level caption in Dan's voice (length varies by post type: 80–180 chars for single-photo feed, 120–280 for carousels/scroll reels)
+- Required hashtags: venue, organization, performers visible, composer/playwright, #dwphotony, genre
 - Identical caption used across all 5 platforms
-- Alt text for images (15-25 words, per brand voice guidelines)
+- Per-photo alt text (15–35 words) even for multi-photo posts
+- Per-photo scene labels matched from program/enrichment data
 
-**Inputs:** Event name, venue, organization, performer names (from OCR), photo(s)
+**Inputs:** Event name, venue, organization, date, shoot type, post type, photos, program OCR + enrichment, per-post `tag_handles` (@ mentions), per-post `name_mentions` (plain-text credits for people without handles), optional existing captions for the same event (to vary against)
+
+**Post-type scope rules.** Captions are generated under one of two scope rules, selected from post_type:
+
+- **Single-subject** (feed_photo, slider_reel, morph_reel, screen_reel, before_after_story): the caption body stays locked to what is visibly in THIS frame. Required @handles and name_mentions that aren't in the frame go on a trailing credit stack separated by one blank line — no "with" prefix, no narrative connector. This prevents single-photo posts from recapping the whole concert.
+- **Event-level** (carousel, scroll_reel): the body can legitimately span the whole event. Credits can weave through the body or land in a stack.
+
+**Multi-pass generation pipeline.** Each caption goes through 3 passes for single posts and 4 passes for week batches. Humanizer always runs LAST so nothing downstream can re-introduce AI tells:
+
+1. **Draft.** Claude Code vision call with brand voice + program data + scope rule. Produces alt texts, scene labels, caption, and hashtags in a single JSON response.
+2. **Voice review.** Narrower prompt asking only "does this sound like Dan?" against `brand-voice.md`. Rewrites cadence, removes press-release rhythms, fixes voice drift.
+3. **Diversity review** *(week batch only)*. Looks at all 5 captions together and rewrites any that share structural shapes — same opener, same credit layout, same parallel rhythm. Prevents Mad-Libs across the week.
+4. **Humanizer** (FINAL, non-negotiable). The humanizer skill at `~/.claude/skills/humanizer/SKILL.md` runs as the last pass. Enforces Dan-specific hard bans: no em dashes, no parallel-three credit structures (opened/middle/closed), no comma-list openers, no copula avoidance verbs ("took the podium"), no photo-description bodies, no "same X, same Y" rhetorical parallelism. Zero tolerance — captions are scanned twice for violations before returning.
+
+**Batch entry point.** `generate_week_captions()` runs all 5 posts in a week through the pipeline in ONE set of Claude calls (one per pass, not per post). Dramatically cheaper than 5 separate calls and naturally produces cross-caption variation because the model sees all 5 at once during the diversity pass.
 
 ### 6.2 Blog Post Writing
 
@@ -484,3 +500,10 @@ API research and decision (Metricool vs. direct). Platform API integrations. Bui
 
 ### Phase 4 — GUI
 Application shell and interface. Event creation workflow. Asset review and approval screens. Schedule management view. Manual task checklist generator.
+
+**Feedback loop (required, first-class feature).** The brand voice and generator prompts are LIVING documents that must evolve as Dan uses the app — not get manually patched by Claude in CLI sessions. The GUI must provide two complementary mechanisms:
+
+1. **Plain-English feedback.** Every generated output card has a "Give feedback" button. Dan types/speaks feedback in natural language ("this reads too much like alt text," "Tuesday reel is too fast"), picks a scope (this one / this event / permanent rule), and the system uses Claude to translate the feedback into a concrete edit to `brand-voice.md` or a generator prompt file, shows Dan the diff, and asks him to confirm before saving.
+2. **Final-version capture.** Every caption/blog is shown with an editable text box pre-filled with the suggestion. Dan edits in-place to match what he's about to post (or pastes in the version he wrote). Hitting "Save as final" stores BOTH the suggested text AND the final. Periodically (end of week / on demand) a Claude call reads the paired records, analyzes the diffs, and proposes specific edits to brand-voice/prompts that would have produced something closer to the finals. Dan reviews each proposed edit as a diff and accepts or rejects.
+
+Together these enable compounding improvement: every week Dan uses the app, the system gets closer to his actual voice. No more multi-round CLI sessions encoding lessons — the lessons come from his real edits.
