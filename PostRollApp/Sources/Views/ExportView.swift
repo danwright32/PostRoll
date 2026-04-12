@@ -192,10 +192,22 @@ struct ExportView: View {
                 // Step 2: generate stories + collage via Python
                 await MainActor.run { exportState = .generatingMedia(folder) }
                 do {
-                    try await PythonBridge.shared.runMediaGeneration(
+                    let imagePaths = try await PythonBridge.shared.runMediaGeneration(
                         event: event,
                         outputDir: folder.deletingLastPathComponent()
                     )
+                    // Auto-open all generated static images in Preview
+                    if !imagePaths.isEmpty {
+                        let previewApp = URL(fileURLWithPath: "/System/Applications/Preview.app")
+                        if FileManager.default.fileExists(atPath: previewApp.path) {
+                            NSWorkspace.shared.open(
+                                imagePaths,
+                                withApplicationAt: previewApp,
+                                configuration: .init(),
+                                completionHandler: nil
+                            )
+                        }
+                    }
                 } catch {
                     // Media generation failure is non-fatal — text export already succeeded
                     print("[ExportView] media generation failed (non-fatal): \(error.localizedDescription)")
@@ -366,8 +378,8 @@ struct EventExporter {
 
     private static func checklistText(event: Event) -> String {
         let performers = event.ocrResult?.performers ?? []
-        let collabs = performers.compactMap { $0.name.isEmpty ? nil : $0.name }.joined(separator: ", ")
-        let collabLine = collabs.isEmpty ? "(no performers listed)" : collabs
+        let fallbackCollabs = performers.compactMap { $0.name.isEmpty ? nil : $0.name }.joined(separator: ", ")
+        let fallbackCollabLine = fallbackCollabs.isEmpty ? "(no performers listed)" : fallbackCollabs
 
         var lines: [String] = [
             "# PostRoll — \(event.name) (\(event.isoDate))",
@@ -375,21 +387,72 @@ struct EventExporter {
         ]
 
         for day in DayName.allCases {
-            guard !(event.days[day.rawValue]?.photoPaths.isEmpty ?? true) else { continue }
-            lines += [
-                "### \(day.displayName)",
-                "",
-                "- [ ] Post to Instagram, Facebook, TikTok, Pinterest, Bluesky",
-                "- [ ] Add as Instagram collaborators: \(collabLine)",
-                "- [ ] Tag story with performer and venue accounts",
-                "",
-            ]
+            let pd = event.days[day.rawValue]
+            guard !(pd?.photoPaths.isEmpty ?? true) else { continue }
+
+            // Prefer day-specific handles + names; fall back to OCR performers
+            let handles = pd?.tagHandles ?? []
+            let names   = pd?.nameMentions ?? []
+            let collabParts = handles + names
+            let collabLine = collabParts.isEmpty ? fallbackCollabLine : collabParts.joined(separator: ", ")
+
+            lines += ["### \(day.displayName)", ""]
+
+            switch day {
+            case .sunday, .monday:
+                lines += [
+                    "- [ ] Post photo + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
+                    "- [ ] Add as Instagram collaborators: \(collabLine)",
+                    "- [ ] Post \(day.rawValue)/story.png as story to Instagram + Facebook",
+                    "- [ ] Tag story with performer and venue accounts",
+                ]
+            case .tuesday:
+                let hasReel = pd?.screenRecordingPath != nil
+                    && pd?.rawPhotoPath != nil
+                    && pd?.editedPhotoPath != nil
+                if hasReel {
+                    lines += [
+                        "- [ ] Post speed edit reel + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
+                        "- [ ] Add as Instagram collaborators: \(collabLine)",
+                        "- [ ] Post tuesday/before_after.png as story to Instagram + Facebook",
+                        "- [ ] Tag story with performer and venue accounts",
+                    ]
+                } else {
+                    lines += [
+                        "- [ ] Post photo + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
+                        "- [ ] Add as Instagram collaborators: \(collabLine)",
+                        "- [ ] Post tuesday/story.png as story to Instagram + Facebook",
+                        "- [ ] Tag story with performer and venue accounts",
+                    ]
+                }
+            case .wednesday:
+                lines += [
+                    "- [ ] Post carousel (10 photos) + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
+                    "- [ ] Add as Instagram collaborators: \(collabLine)",
+                    "- [ ] Post wednesday/collage.png as story to Instagram + Facebook",
+                    "- [ ] Tag story with performer and venue accounts",
+                ]
+            case .thursday:
+                lines += [
+                    "- [ ] Post scroll reel + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
+                    "- [ ] Add as Instagram collaborators: \(collabLine)",
+                ]
+            case .friday:
+                let hasBeforeAfter = pd?.rawPhotoPath != nil && pd?.editedPhotoPath != nil
+                lines += [
+                    "- [ ] Post friday/\(hasBeforeAfter ? "before_after" : "story").png as story to Instagram + Facebook",
+                    "- [ ] Save story to Instagram highlights",
+                ]
+            }
+
+            lines += [""]
         }
 
         lines += [
             "## Post-Week",
             "",
-            "- [ ] Add Instagram post link to one-year follow-up",
+            "- [ ] Add Instagram post link to OmniFocus one-year follow-up",
+            "- [ ] Promote Tuesday reel to followers",
             "",
         ]
 

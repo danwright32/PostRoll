@@ -61,6 +61,7 @@ struct AssetGenerationView: View {
 
     private var configureView: some View {
         ScrollView {
+
             VStack(alignment: .leading, spacing: 0) {
 
                 EventHeader(event: event, subtitle: "Generate Content")
@@ -117,6 +118,7 @@ struct AssetGenerationView: View {
             }
         }
         .background(Color.cream)
+        .onAppear { loadHandlesFromModel() }
     }
 
     // MARK: - Running
@@ -211,6 +213,20 @@ struct AssetGenerationView: View {
     }
 
     // MARK: - Helpers
+
+    /// Pre-populate handle fields from saved model so returning to this screen
+    /// after generation shows previously entered values.
+    private func loadHandlesFromModel() {
+        for day in daysWithPhotos {
+            guard let pd = event.days[day.rawValue] else { continue }
+            if !pd.tagHandles.isEmpty {
+                dayHandles[day] = pd.tagHandles.joined(separator: ", ")
+            }
+            if !pd.nameMentions.isEmpty {
+                dayNames[day] = pd.nameMentions.joined(separator: ", ")
+            }
+        }
+    }
 
     private var totalPhotoCount: Int {
         daysWithPhotos.reduce(0) {
