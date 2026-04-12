@@ -99,11 +99,27 @@ actor PythonBridge {
             try? FileManager.default.removeItem(at: outputFile)
         }
 
-        // Build a lightweight manifest (no OCR needed — just photos)
+        // Build a lightweight manifest (no OCR needed — just photos + special assets)
         var daysDict: [String: Any] = [:]
         for dayName in DayName.allCases {
             guard let pd = event.days[dayName.rawValue], !pd.photoPaths.isEmpty else { continue }
-            daysDict[dayName.rawValue] = ["photos": pd.photoPaths.map { $0.path }]
+            var entry: [String: Any] = ["photos": pd.photoPaths.map { $0.path }]
+            // Day-specific special assets
+            switch dayName {
+            case .tuesday:
+                if let rec  = pd.screenRecordingPath { entry["screen_recording"] = rec.path }
+                if let raw  = pd.rawPhotoPath        { entry["raw_photo"]        = raw.path }
+                if let edit = pd.editedPhotoPath     { entry["edited_photo"]     = edit.path }
+                if let aud  = pd.audioPath           { entry["audio"]            = aud.path }
+            case .thursday:
+                if let aud  = pd.audioPath           { entry["audio"]            = aud.path }
+            case .friday:
+                if let raw  = pd.rawPhotoPath        { entry["raw_photo"]        = raw.path }
+                if let edit = pd.editedPhotoPath     { entry["edited_photo"]     = edit.path }
+            default:
+                break
+            }
+            daysDict[dayName.rawValue] = entry
         }
 
         let manifest: [String: Any] = [

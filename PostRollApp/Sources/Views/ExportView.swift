@@ -66,7 +66,7 @@ struct ExportView: View {
 
             BrandBanner(
                 icon: "folder",
-                message: "Exports captions, blog draft, and checklist — then generates story images and Wednesday collage using PIL. Reels are not generated here."
+                message: "Exports captions and blog draft, then generates story images, Wednesday collage, Thursday scroll reel, Friday before/after, and Tuesday speed edit reel (where inputs are provided). Requires ffmpeg for reels."
             )
             .padding(.horizontal, Spacing.xl)
 
@@ -103,10 +103,10 @@ struct ExportView: View {
             ProgressView()
                 .controlSize(.large)
                 .tint(Color.roseGold)
-            Text("Generating story images…")
+            Text("Generating visual assets…")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.warmDark)
-            Text("This takes 20–60 seconds.")
+            Text("Stories + collage: ~30s. Reels: 2–5 min each.")
                 .font(.light(12))
                 .foregroundStyle(Color.warmMid)
 

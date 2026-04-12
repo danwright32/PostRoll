@@ -110,4 +110,10 @@ struct PostingDay: Codable, Hashable {
     var photoPaths: [URL] = []
     var tagHandles: [String] = []
     var nameMentions: [String] = []
+    // Tuesday speed edit reel inputs
+    var screenRecordingPath: URL? = nil
+    var rawPhotoPath: URL? = nil       // Tuesday closing frame + Friday before/after
+    var editedPhotoPath: URL? = nil    // Tuesday closing frame + Friday before/after
+    // Thursday scroll reel audio (auto-fetched from Jamendo if nil)
+    var audioPath: URL? = nil
 }
