@@ -128,6 +128,14 @@ Return JSON ONLY (no markdown fences, no commentary) matching this schema:
       "notes": "string or null"
     }}
   ],
+  "scenes": [
+    {{
+      "name": "short label like 'spa scene' or 'Act II finale' or 'second movement'",
+      "location": "where this scene takes place if relevant, or null",
+      "visual_cues": "what would visually distinguish this scene from others — set design, lighting, costumes, props that someone could recognize from a photo",
+      "description": "what happens in this scene, if known, or null"
+    }}
+  ],
   "organization_notes": "string",
   "program_notes": "string",
   "venue_notes": "string",
@@ -146,6 +154,12 @@ Rules:
 - The `_enrichment` block is required on enriched output — it's how the
   GUI knows what came from research vs. the program itself. Flag pass
   will be extra skeptical of enriched fields.
+- For `scenes`, look for any mention of distinct settings, locations,
+  scenes, sets, acts, or sections in the synopsis/reviews/web research.
+  Populate one entry per distinct scene with the strongest visual_cues
+  you can find. The caption generator uses this list to label which
+  scene each photo shows. Even partial info (just a name + a one-line
+  visual cue) is better than an empty list.
 - Don't fabricate. If you can't find solid information about something,
   leave the field empty rather than guessing. Note the gap in
   `notes_for_human`.
@@ -251,6 +265,7 @@ def enrich_program(
     result = {
         "performers": data.get("performers", ocr_data.get("performers", [])),
         "pieces": data.get("pieces", ocr_data.get("pieces", [])),
+        "scenes": data.get("scenes", ocr_data.get("scenes", [])),
         "organization_notes": data.get(
             "organization_notes", ocr_data.get("organization_notes", "")
         ),

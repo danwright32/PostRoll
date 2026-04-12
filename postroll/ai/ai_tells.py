@@ -1,109 +1,141 @@
 """
-PostRoll — AI Tells Loader
+PostRoll — Humanizer Loader and Review Prompt Builder
 
-Fetches the comprehensive AI writing signals list from Wikipedia and
-caches it per project. Every blog and caption generation injects the
-cached list as a hard constraint so drafts arrive cleaner.
+Loads the humanizer skill (https://github.com/blader/humanizer) installed
+globally at ~/.claude/skills/humanizer/SKILL.md and uses it as the rule
+set for the second-pass review-and-revise that runs on every PostRoll
+caption and blog. Humanizer is a curated, rewrite-focused version of the
+same Wikipedia "Signs of AI writing" patterns we used to fetch directly,
+plus voice-calibration and a draft → audit → revise loop.
 
-Per project (one event = one project), the list is fetched ONCE from
-Wikipedia and cached in the project's working directory. Subsequent
-writes within the project read from the cache. The cache expires after
-CACHE_MAX_AGE_DAYS so the list stays current.
-
-Source: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+Earlier versions of this module fetched Wikipedia directly per project
+and cached the result. That mechanism is superseded — humanizer is the
+single source of truth for AI tells going forward, and PostRoll uses
+Dan's `brand-voice.md` as humanizer's voice calibration sample.
 
 Usage:
-    from postroll.ai.ai_tells import get_ai_tells_list
-    text = get_ai_tells_list(Path("output/event-slug/ai_tells.md"))
+    from postroll.ai.ai_tells import load_humanizer_rules, build_review_prompt
+    rules = load_humanizer_rules()  # reads from default global path
+    prompt = build_review_prompt(...)
 """
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
-from .claude_client import run_prompt, ClaudeError
+from .claude_client import ClaudeError
 
 
-WIKIPEDIA_URL = "https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing"
-CACHE_MAX_AGE_DAYS = 30
+# Default global install path for the humanizer skill (cloned via
+# `git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer`).
+HUMANIZER_DEFAULT_PATH = Path.home() / ".claude" / "skills" / "humanizer" / "SKILL.md"
 
 
-FETCH_PROMPT = f"""\
-Use the WebFetch tool to fetch this URL:
-{WIKIPEDIA_URL}
+def load_humanizer_rules(path: str | Path | None = None) -> str:
+    """Read the humanizer SKILL.md from disk and return its content.
 
-Extract every specific pattern, phrase, word, and structural habit listed
-on that page as a sign of AI writing. Organize the output as a clean
-markdown document with these sections:
+    Args:
+        path: Optional path to the SKILL.md. Defaults to the global
+            install location at ~/.claude/skills/humanizer/SKILL.md.
 
-- Vocabulary and word choice (specific words to avoid)
-- Sentence and paragraph patterns (negative parallelism, rule of three, etc.)
-- Avoidance of basic copulas ("serves as" instead of "is", etc.)
-- Significance and meaning-making patterns (vague claims, gestural phrases)
-- Structural habits (challenges-and-future-prospects template, etc.)
-- Formatting habits (em dash overuse, title case, etc.)
-- Communication and tone habits (collaborative tone, knowledge-cutoff
-  disclaimers, etc.)
+    Returns:
+        The full SKILL.md content as a string.
 
-For each item, give the specific pattern with a short example or rule.
-Capture EVERYTHING the page lists — don't summarize aggressively. The
-output is going to be injected into writing prompts as a blacklist, so
-completeness matters.
-
-Return ONLY the markdown document. No preamble, no commentary, no
-explanation about what you fetched.
-"""
-
-
-def _is_cache_fresh(cache_path: Path) -> bool:
-    """True if the cache exists and is younger than CACHE_MAX_AGE_DAYS."""
-    if not cache_path.exists():
-        return False
-    age_seconds = time.time() - cache_path.stat().st_mtime
-    age_days = age_seconds / 86400
-    return age_days < CACHE_MAX_AGE_DAYS
-
-
-def get_ai_tells_list(cache_path: str | Path) -> str:
-    """Return the AI tells list, fetching from Wikipedia if needed.
-
-    If the cache file at `cache_path` exists and is fresh (<30 days old),
-    its contents are returned. Otherwise, Claude is invoked with
-    WebFetch to pull the latest Wikipedia signals page, extract a
-    comprehensive list, write it to the cache, and return it.
-
-    Raises ClaudeError if the fetch fails.
+    Raises:
+        FileNotFoundError: If the humanizer skill isn't installed at the
+            expected path. Install with:
+                git clone https://github.com/blader/humanizer.git \\
+                    ~/.claude/skills/humanizer
     """
-    path = Path(cache_path).expanduser().resolve()
-
-    if _is_cache_fresh(path):
-        return path.read_text(encoding="utf-8")
-
-    # Cache miss or stale — fetch fresh from Wikipedia via Claude
-    text = run_prompt(
-        FETCH_PROMPT,
-        timeout=300,
-        allowed_tools=["WebFetch"],
-    )
-
-    if not text.strip():
-        raise ClaudeError("AI tells fetch returned empty content")
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text + "\n", encoding="utf-8")
-    return text
+    p = Path(path).expanduser().resolve() if path else HUMANIZER_DEFAULT_PATH
+    if not p.exists():
+        raise FileNotFoundError(
+            f"Humanizer skill not found at {p}. Install it with:\n"
+            f"  git clone https://github.com/blader/humanizer.git "
+            f"{HUMANIZER_DEFAULT_PATH.parent}"
+        )
+    return p.read_text(encoding="utf-8")
 
 
-def format_for_prompt(ai_tells_text: str) -> str:
-    """Wrap the AI tells list in a section header for prompt injection."""
-    return (
-        "---\n\n"
-        "## AI WRITING TELLS TO AVOID (live from Wikipedia)\n\n"
-        "The following patterns are AI writing tells. After drafting your\n"
-        "output, review it against EVERY item below and revise to remove\n"
-        "any matches. The cleaned version is what you return — never the\n"
-        "first draft.\n\n"
-        f"{ai_tells_text}\n\n"
-        "---\n"
-    )
+def is_humanizer_available(path: str | Path | None = None) -> bool:
+    """Check whether the humanizer skill is installed and readable."""
+    p = Path(path).expanduser().resolve() if path else HUMANIZER_DEFAULT_PATH
+    return p.exists()
+
+
+def build_review_prompt(
+    *,
+    draft_json: str,
+    humanizer_rules: str,
+    brand_voice: str,
+    output_shape_description: str,
+) -> str:
+    """Build a second-pass prompt that reviews a draft and returns a cleaned version.
+
+    The first pass generates a draft. The second pass (this prompt) takes
+    the draft, runs it through humanizer's rewrite logic with Dan's brand
+    voice as the voice calibration sample, applies fixes, and returns the
+    SAME JSON shape with cleaned text in each field.
+
+    Args:
+        draft_json: The first-pass output as a JSON string.
+        humanizer_rules: The humanizer SKILL.md content.
+        brand_voice: The brand voice doc text — used as the voice
+            calibration sample so the rewrite matches Dan's voice rather
+            than humanizer's default.
+        output_shape_description: One-line description of what shape the
+            cleaned JSON should keep.
+    """
+    return f"""\
+You are humanizer, a writing editor. You apply the rules in the document
+below to remove AI writing tells from a draft, while matching the voice
+calibration sample provided.
+
+---
+
+## HUMANIZER RULES (the source of truth for what counts as an AI tell)
+
+{humanizer_rules}
+
+---
+
+## VOICE CALIBRATION SAMPLE (match this voice in your rewrite)
+
+This is Dan Wright Photography's brand voice. When you rewrite the
+draft below, do not just remove AI tells — match this voice:
+
+{brand_voice}
+
+---
+
+## THE DRAFT TO REWRITE
+
+```json
+{draft_json}
+```
+
+## YOUR PROCESS
+
+1. Read the draft carefully.
+2. Identify AI tells using the humanizer rules above.
+3. Identify brand voice violations using the voice calibration sample.
+4. Apply humanizer's "draft → audit → revise" loop:
+   a. Mentally produce a first rewrite that fixes the obvious issues.
+   b. Ask yourself: "What makes this still obviously AI generated?"
+   c. List the remaining tells in your head (do NOT output them).
+   d. Revise once more to fix those.
+5. Return the final cleaned version in the SAME JSON shape as the
+   input ({output_shape_description}).
+
+## CRITICAL OUTPUT RULES
+
+- Return ONLY the cleaned JSON. No commentary, no markdown fences, no
+  "here's what I changed", no diff, no draft-vs-final.
+- Preserve every key in the input. Don't drop fields.
+- For lists like hashtags, keep them unchanged unless one of the
+  hashtags itself contains an AI tell.
+- For lists of strings (alt_texts, scene_labels), preserve count and
+  order — clean each item in place.
+- Do NOT return the original draft. Return the revised version.
+- If the draft is already clean, return it unchanged.
+"""

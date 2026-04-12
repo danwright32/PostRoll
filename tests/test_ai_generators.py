@@ -175,7 +175,7 @@ def test_caption_raises_on_missing_photo(tmp_path):
             venue="V",
             date="2026-04-05",
             day="sunday",
-            photo_path=tmp_path / "missing.jpg",
+            photo_paths=[tmp_path / "missing.jpg"],
             program={},
         )
 
@@ -184,7 +184,8 @@ def test_caption_returns_normalized_dict(sample_photo):
     fake = {
         "caption": "  A specific moment from the second movement.  ",
         "hashtags": ["#dwphotony", "#carnegiehall", "#dcinyconcerts"],
-        "alt_text": "  A conductor mid-phrase facing a choir.  ",
+        "alt_texts": ["  A conductor mid-phrase facing a choir.  "],
+        "scene_labels": [None],
     }
     with patch(
         "postroll.ai.generate_captions.run_json_prompt", return_value=fake
@@ -195,11 +196,11 @@ def test_caption_returns_normalized_dict(sample_photo):
             venue="Carnegie Hall",
             date="2026-04-05",
             day="sunday",
-            photo_path=sample_photo,
+            photo_paths=[sample_photo],
             program={"performers": [], "pieces": []},
         )
     assert result["caption"] == "A specific moment from the second movement."
-    assert result["alt_text"] == "A conductor mid-phrase facing a choir."
+    assert result["alt_texts"][0] == "A conductor mid-phrase facing a choir."
     assert result["hashtags"][0] == "#dwphotony"
 
 
@@ -221,8 +222,9 @@ def test_caption_passes_brand_voice_to_prompt(sample_photo):
             venue="Carnegie Hall",
             date="2026-04-05",
             day="sunday",
-            photo_path=sample_photo,
+            photo_paths=[sample_photo],
             program={"performers": [], "pieces": []},
+            skip_humanizer=True
         )
 
     prompt = captured["prompt"]
@@ -314,6 +316,7 @@ def test_blog_passes_program_notes_to_prompt(sample_photo):
                 "other": "Sponsored by anonymous donor.",
             },
             photo_paths=[sample_photo] * 4,
+            skip_humanizer=True
         )
 
     prompt = captured["prompt"]

@@ -104,21 +104,153 @@ like a marketing team writing on his behalf.
 
 ## Captions
 
-**Length:** 1–2 sentences. Sometimes one sentence is enough. Caption is the
-same across Instagram, Facebook, TikTok, Pinterest, and Bluesky.
+**Captions default to SHORT and STRUCTURAL.** Until the system has
+ground-truth observations from Dan himself (which currently it does
+not), captions must stay inside what's verifiable from the photo, the
+program/enrichment data, and the shoot_type. Trying to fake voice
+without real material produces either alt text or fabrication. Both
+fail. Short and honest beats long and invented.
 
-**Structure:**
-1. One concrete observation about the photo, performance, piece, scene,
-   song, moment, or bit.
-2. (Optional) One short follow-up — a piece of context, a credit, a quiet
-   thought. Skip this if the first sentence stands alone.
+**Critical rule: a caption is NOT a description of the photo.** The
+photo shows what's in the photo. The viewer's eyes do that work. A
+good short caption adds ONE piece of information the photo CAN'T
+carry — usually context about WHERE in the production this moment
+sits, or who made it, or what comes next. Then it stops.
 
-**Hashtags** go on their own line below the caption, separated by a blank line.
-Required tags every time:
+If the caption could double as alt text, it's a bad caption. Rewrite it.
+
+**Length:** Tight. The same caption runs across Instagram, Facebook,
+TikTok, Pinterest, and Bluesky. Bluesky caps at 300 characters total
+(caption + hashtags), so the ceiling is real. Most captions should be
+80–180 characters. Shorter is fine. Longer needs to earn it with real
+non-fabricated content.
+
+### Default structure (the pattern to use almost always)
+
+A short caption that adds context the photo can't show, plus credits
+woven into a sentence. NOT a description of the frame.
+
+**The shape (use this, don't copy the wording):**
+> [One short sentence of CONTEXT about where this moment lives in the
+> production — which scene, which piece, which act, which moment in the
+> show.] [One sentence with cast/work/venue woven naturally, NOT
+> stacked like a press release.]
+
+**What "context the photo can't show" means:**
+- Which scene from the play this is — *"From the second-act kitchen
+  scene."*
+- Which piece in the program this is — *"From the slow movement of the
+  Brahms."*
+- The moment in the show this happened — *"Just before the curtain
+  call."*
+- The take or staging — *"First read-through of the new opening."*
+- A piece of program/enrichment context — *"Day one of a four-week
+  run."*
+
+**Scene/section LABELING is REQUIRED when the data supports it.** When
+the program/enrichment data lists distinct scenes, sections, movements,
+acts, sets, or sections, AND the photo clearly shows one of them, you
+MUST label which one in the caption. Do not skip the label and fall
+back to a generic "photo call" caption when scene-level labeling is
+available. The label is what differentiates posts from the same event.
+
+Use the photo's visible cues — set design, costumes, location, props
+— to PICK which label applies, but put only the LABEL in the caption,
+not the visible cues themselves.
+
+**VARY the position and phrasing of the scene label across captions
+in the same event.** Don't open every caption with "From the [scene]."
+That makes a week of posts look like Mad Libs. The scene label can
+appear anywhere in the caption — at the start, in the middle as a
+prepositional phrase, at the end as a tag, or woven into a sentence
+about the cast. Pick the shape that reads most naturally for THIS
+specific caption.
+
+Acceptable shapes (use these as STRUCTURAL options, not as templates
+to copy verbatim — and remember the words "scene", "act", etc. are
+placeholders for whatever the actual scene label is):
+
+- **Lead with the label:** *"From the [scene]. [Cast] in [show] at
+  [venue]."*
+- **Lead with the cast:** *"[Cast] in the [scene] of [show], at
+  [venue]."*
+- **Lead with the show:** *"[Show] at [venue]. The [scene]."*
+- **Lead with the location:** *"On the [scene] set. [Cast] in [show]."*
+- **Lead with the staging verb:** *"Staging the [scene] for the camera.
+  [Cast] in [show]."*
+- **Tag at the end:** *"[Cast] in [show] at [venue]. [Scene]."*
+- **Embed mid-sentence:** *"[Cast] working through the [scene] of
+  [show]."*
+- **Lead with the moment:** *"The opening of the [scene]. [Cast] in
+  [show]."*
+
+Vary across captions for the same event so they don't all share an
+opening. If you have multiple captions to write for one event, treat
+them as a SET — each one should start differently from the others.
+
+✓ Good labeling (example from a fictional opera production —
+structural pattern only, do NOT copy phrases):
+> "From the second-act balcony scene. [Soprano] and [tenor] in the
+> Chicago Lyric's new Tosca."
+
+The good version names the scene (information from the program data,
+identified by looking at the photo). It does NOT describe the costume,
+the lighting, the gestures, or the set design — those go in alt text.
+
+✗ Bad — describes the visible cues instead of labeling:
+> "A soprano in a red gown on a candlelit balcony with a tenor.
+> [Names] in Tosca at the Chicago Lyric."
+
+If two scenes/sections in the same event get photos posted on
+different days, each post must label its own scene. Identical generic
+captions across an event are a failure mode — they make the posts
+look interchangeable and waste the differentiation the data provides.
+
+You may NOT make any of this up. If the program/enrichment data
+doesn't tell you which scene or piece, leave that out. Don't guess.
+Don't infer scene names that aren't in the data — use only labels
+that exist in the program/enrichment.
+
+**Credit woven, not stacked:**
+
+❌ Bad (press release):
+> Rebecca De Mornay and Di Zhu in John Patrick Shanley's The Pushover,
+> directed by Kirk Gostkowski at Chain Theatre.
+
+✓ Good (Dan talking):
+> Rebecca De Mornay and Di Zhu in Shanley's new one at Chain.
+
+The good version names the people and the work and the venue without
+listing them. It reads like a sentence, not a marquee.
+
+### Voice-y captions (RARE — only when genuine observation material exists)
+
+A longer voice-y caption with a behind-the-camera hook is the IDEAL
+output, but it requires actual observation material from Dan that
+the system currently doesn't collect. **Do NOT write voice-y captions
+unless the inputs contain a `dan_notes` field with Dan's own words
+about what he saw or noticed.** If `dan_notes` is empty or absent,
+default to the short/structural shape above.
+
+When `dan_notes` exists and contains real observation material, that
+material can become the hook — but only that material. Do NOT
+extrapolate from it or invent surrounding details.
+
+### CTA
+
+Most captions don't need a CTA. The photo is the engagement hook. If
+a CTA appears, it must feel like conversation, not transaction. NEVER
+"link in bio," "DM for prints," "swipe to see more," "what do you
+think?" or any other scroll-pattern bait.
+
+### Hashtags
+
+Hashtags go on their own line below the caption, separated by a blank
+line. Required tags every time:
 - `#dwphotony` (Dan's tag)
 - Venue tag (e.g. `#carnegiehall`, `#chaintheatre`, `#mercurylounge`)
-- Organization / company / band tag (e.g. `#dcinyconcerts`, `#publictheater`,
-  `#bandname`)
+- Organization / company / band tag (e.g. `#dcinyconcerts`,
+  `#publictheater`, `#bandname`)
 - Performer / cast / conductor / choreographer tags if known
 - 2–3 additional relevant tags that match the genre:
   - Classical: instrument, repertoire, composer, city
@@ -129,6 +261,98 @@ Required tags every time:
   - Improv: troupe name, long-form improv, comedy
 
 Total hashtags: 6–10. Don't pad.
+
+### Hard caption rules
+
+- NEVER describe what's literally in the frame as the entire caption.
+  That's alt text's job, not the caption's.
+- NEVER open with a comma-separated list of objects or noun phrases
+  ("A kitchen table, two bowls, one Heineken..."). That's the AI list
+  cadence and it reads as constructed.
+- NEVER use rule-of-three patterns ("X, Y, and Z").
+- NEVER fabricate observations, durations, activities, audience
+  reactions, or anything else not in the photo or the verified data.
+- NEVER write a caption that could be auto-generated by a vision model
+  looking at the photo with no other context.
+- NEVER stack credits like a billing block.
+- NEVER use "link in bio," "DM me," "swipe to see more," or any other
+  scroll-pattern engagement bait.
+- NEVER end with a generic "what do you think?" question.
+- DEFAULT to short and structural unless `dan_notes` provides real
+  observation material to work with.
+
+## DO NOT FABRICATE — hard rule
+
+The hook and every specific detail in a caption or blog must be grounded
+in one of:
+
+1. **Something visible in the photo** Dan took
+2. **Something in the OCR/enrichment data** about the production
+3. **Something implied by the `shoot_type`** (e.g. for `photo_call`, the
+   cast staged scenes for the camera; for `performance`, there was a
+   real audience)
+
+You may NOT invent:
+- Activities Dan didn't witness ("watching them rehearse for an hour")
+- Durations or counts ("they ran the scene six times")
+- Audience reactions when there was no audience (photo call, rehearsal)
+- Backstory details that aren't in the program data
+- What characters or performers were thinking
+- Conversations or dialogue that weren't printed in the program
+
+If you don't have enough material to write a hook that's grounded in
+real observation, write a SHORTER caption that stays inside what's
+verifiable. A short, true caption beats a long, invented one.
+
+## Example captions — STRUCTURAL TEMPLATES ONLY
+
+These examples are from EVENTS THAT ARE NOT THE CURRENT TASK. They
+demonstrate the *structure* of a good caption — hook, body, woven
+credit. Do NOT copy any specific phrasing, person, venue, or detail
+from these into your output. Use them only as patterns.
+
+**Symphonic concert (Carnegie Hall, DCINY, 2025 — example only):**
+
+❌ Bad (alt-text style — what we DON'T want):
+> Conductor on the podium, both arms raised, choir behind in red robes
+> at Carnegie Hall. DCINY choir conducted by Jonathan Griffith performing
+> Mahler's Resurrection Symphony.
+
+✓ Good (voice + hook + woven credit):
+> The Mahler offstage brass came in from the balcony and the whole hall
+> seemed to forget to breathe for a second. DCINY choir, conducted by
+> Jonathan Griffith.
+
+**Rock show (Mercury Lounge, fictional band — example only):**
+
+✓ Good:
+> Encore. The drummer stood up before the band committed to a song. The
+> room figured it out half a beat later and caught up.
+
+**Dance (contemporary company, fictional — example only):**
+
+✓ Good:
+> Six dancers held a single diagonal across the stage long enough that I
+> stopped predicting the next move and just watched. Then it broke.
+
+**Improv (UCB-style long form, fictional show — example only):**
+
+✓ Good:
+> The suggestion was "garage sale." Twenty minutes later they were doing
+> a scene about a man buying his own childhood back from a stranger.
+> Don't know how they got there. Wish I'd had a third camera.
+
+Notice what every good example does: opens with a specific observation
+that requires Dan's perspective (something only the person behind the
+camera would know), never describes the photo literally, names people
+and places naturally, and stops before adding filler.
+
+**Why no theater example here:** because theater examples in this section
+would be too tempting to copy when the current task is also theater.
+Build theater captions from the structure shown above (hook + body +
+woven credit) using only the actual photo, the actual OCR data, and the
+actual shoot_type. Don't pattern-match against an example that happens
+to involve similar staging.
 
 ## Alt text
 

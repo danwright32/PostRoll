@@ -255,7 +255,7 @@ def test_caption_passes_shoot_type_to_prompt(sample_photo):
             venue="V",
             date="2026-04-05",
             day="sunday",
-            photo_path=sample_photo,
+            photo_paths=[sample_photo],
             program={"performers": [], "pieces": []},
             shoot_type="photo_call",
         )
@@ -281,7 +281,7 @@ def test_caption_defaults_to_performance(sample_photo):
             venue="V",
             date="2026-04-05",
             day="sunday",
-            photo_path=sample_photo,
+            photo_paths=[sample_photo],
             program={"performers": [], "pieces": []},
         )
 
@@ -334,6 +334,7 @@ def test_blog_passes_production_details_to_prompt(sample_photo):
                 "production_details": "Directed by Jane Doe. Opening Feb 15, 2026.",
             },
             photo_paths=[sample_photo] * 4,
+            skip_humanizer=True
         )
 
     assert "Directed by Jane Doe" in captured["prompt"]

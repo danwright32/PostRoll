@@ -39,15 +39,18 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .ai_tells import format_for_prompt as _format_ai_tells
-from .ai_tells import get_ai_tells_list
+from .ai_tells import (
+    build_review_prompt,
+    is_humanizer_available,
+    load_humanizer_rules,
+)
 from .claude_client import run_json_prompt, load_brand_voice, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
 PROMPT_TEMPLATE = """\
 {brand_voice}
-{ai_tells_section}
+
 ---
 
 Your task: write a blog post draft for Dan Wright's website about an
@@ -164,7 +167,8 @@ def generate_blog(
     program: dict[str, Any],
     photo_paths: list[str | Path],
     shoot_type: str = "performance",
-    ai_tells_cache: str | Path | None = None,
+    humanizer_path: str | Path | None = None,
+    skip_humanizer: bool = False,
 ) -> dict[str, Any]:
     """Generate a blog post draft for one event.
 
@@ -175,11 +179,9 @@ def generate_blog(
     "rehearsal", "dress_rehearsal". Any other string is passed through
     verbatim to the prompt for unusual cases.
 
-    ai_tells_cache, if provided, is a path to a per-project cache file
-    holding the latest AI writing signals from Wikipedia. If the cache
-    is missing or stale, it's fetched fresh. The list is injected into
-    the generation prompt and Claude self-reviews against it before
-    returning the final draft.
+    The second-pass humanizer review runs by default if the humanizer
+    skill is installed at ~/.claude/skills/humanizer/SKILL.md. Pass
+    `skip_humanizer=True` to skip (mostly used in tests).
     """
     if not (4 <= len(photo_paths) <= 7):
         raise ValueError(
@@ -202,14 +204,11 @@ def generate_blog(
 
         photo_list = "\n".join(f"- {p}" for p in resolved)
 
-        ai_tells_section = ""
-        if ai_tells_cache:
-            ai_tells_text = get_ai_tells_list(ai_tells_cache)
-            ai_tells_section = "\n" + _format_ai_tells(ai_tells_text)
+        brand_voice_text = load_brand_voice()
 
+        # === Pass 1: generate the draft ===
         prompt = PROMPT_TEMPLATE.format(
-            brand_voice=load_brand_voice(),
-            ai_tells_section=ai_tells_section,
+            brand_voice=brand_voice_text,
             event=event,
             org=org,
             venue=venue,
@@ -233,8 +232,26 @@ def generate_blog(
             allowed_tools=["Read"],
         )
 
-    if not isinstance(data, dict):
-        raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
+        if not isinstance(data, dict):
+            raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
+
+        # === Pass 2: humanizer review-and-revise against brand voice + AI tells ===
+        if not skip_humanizer and is_humanizer_available(humanizer_path):
+            humanizer_rules = load_humanizer_rules(humanizer_path)
+            review_prompt = build_review_prompt(
+                draft_json=json.dumps(data, ensure_ascii=False, indent=2),
+                humanizer_rules=humanizer_rules,
+                brand_voice=brand_voice_text,
+                output_shape_description="{title: string, body: string with [PHOTO: ...] markers preserved, photo_count: integer}",
+            )
+            data = run_json_prompt(
+                review_prompt,
+                timeout=600,
+            )
+            if not isinstance(data, dict):
+                raise ClaudeError(
+                    f"Humanizer pass returned {type(data).__name__}, expected JSON object"
+                )
 
     return {
         "title": data.get("title", "").strip(),
@@ -261,9 +278,14 @@ def main() -> int:
         help="What Dan actually witnessed: performance, rehearsal_and_performance, photo_call, rehearsal, dress_rehearsal, or free text",
     )
     parser.add_argument(
-        "--ai-tells-cache",
+        "--humanizer-path",
         type=Path,
-        help="Path to per-project AI tells cache. Fetched from Wikipedia if missing/stale.",
+        help="Path to humanizer SKILL.md (defaults to ~/.claude/skills/humanizer/SKILL.md)",
+    )
+    parser.add_argument(
+        "--skip-humanizer",
+        action="store_true",
+        help="Skip the humanizer review pass (faster but lower quality)",
     )
     parser.add_argument(
         "--photo",
@@ -290,7 +312,8 @@ def main() -> int:
             program=program,
             photo_paths=args.photo,
             shoot_type=args.shoot_type,
-            ai_tells_cache=args.ai_tells_cache,
+            humanizer_path=args.humanizer_path,
+            skip_humanizer=args.skip_humanizer,
         )
     except (ClaudeError, FileNotFoundError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)

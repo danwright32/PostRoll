@@ -51,12 +51,21 @@ HEIC_SUFFIXES = {".heic", ".heif"}
 #   "pieces": [
 #       {"composer": "creator/playwright/choreographer/band", "title": "...", "movements": ["acts/scenes if applicable"], "notes": "..."}
 #   ],
+#   "scenes": [
+#       {"name": "spa scene", "location": "New Mexico", "visual_cues": "wellness setting, soft lighting, possibly Asian-inspired decor", "description": "what happens here, if known"}
+#   ],
 #   "organization_notes": "theater co / orchestra / band / label — mission, history, who they are",
 #   "program_notes": "free text — composer/playwright/director notes, scene descriptions, historical context",
 #   "venue_notes": "free text about the venue, if printed",
 #   "production_details": "director, creative team, run dates, tour info, anything production-specific",
 #   "other": "anything else printed in the program that could be useful"
 # }
+#
+# `scenes` is the differentiating-context field for captions. The caption
+# generator uses it to label which scene/section/movement a photo belongs
+# to, so different photos in the same event get different captions.
+# Populate it whenever the program lists distinct scenes, sets, locations,
+# movements, acts, or sections.
 
 
 PROMPT_TEMPLATE = """\
@@ -90,6 +99,14 @@ Return JSON ONLY (no commentary, no markdown fences) matching this schema:
       "notes": "string or null — anything printed about this specific piece/scene/song"
     }}
   ],
+  "scenes": [
+    {{
+      "name": "string — short label for the scene, set, section, or movement. Examples: 'spa scene', 'restaurant scene', 'Act II finale', 'second movement', 'opening number'",
+      "location": "string or null — where the scene takes place if relevant (e.g. 'New Mexico', 'Queens')",
+      "visual_cues": "string — what would visually distinguish this scene from others. Set design, lighting, costumes, props that someone could recognize from a photo. Examples: 'shoji screens, soft lighting, wellness aesthetic' or 'bare wooden table, harsh kitchen light, minimal decor'",
+      "description": "string or null — what happens in this scene, if known"
+    }}
+  ],
   "organization_notes": "string — presenting organization, theater company, orchestra, band, label, or production company (history, mission, who they are). Empty string if nothing printed.",
   "program_notes": "string — composer/playwright/director notes, piece/scene descriptions, historical context, any prose printed about the work itself. Empty string if nothing printed.",
   "venue_notes": "string — anything printed about the venue. Empty string if nothing printed.",
@@ -104,6 +121,14 @@ Rules:
 - `composer` is used loosely for the work's originator across all genres.
   Don't leave it blank just because the event isn't classical.
 - If a piece has multiple movements/acts/scenes listed, capture all of them.
+- For `scenes`, populate one entry per distinct scene/section/set/
+  movement/act mentioned in the program. The caption generator uses
+  this to differentiate photos from different parts of the same show.
+  Each scene should have a short distinguishing `name`, the strongest
+  `visual_cues` you can give a photo-matching system, and a `location`
+  or `description` if available.
+- If the program doesn't list scenes/sections explicitly, leave
+  `scenes` as an empty array — don't invent.
 - If you can't read part of the program clearly, do your best and skip
   what's truly illegible.
 - Return ONLY the JSON object. No explanation before or after.
@@ -193,6 +218,7 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
     return {
         "performers": data.get("performers", []),
         "pieces": data.get("pieces", []),
+        "scenes": data.get("scenes", []),
         "organization_notes": data.get("organization_notes", ""),
         "program_notes": data.get("program_notes", ""),
         "venue_notes": data.get("venue_notes", ""),
