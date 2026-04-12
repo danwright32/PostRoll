@@ -85,6 +85,58 @@ actor PythonBridge {
         }
     }
 
+    // MARK: - Media generation (stories + collage)
+
+    /// Generates story images for each day and a masonry collage for Wednesday.
+    /// Throws on Python error; individual day failures are logged but non-fatal.
+    func runMediaGeneration(event: Event, outputDir: URL) async throws {
+        let tmp = FileManager.default.temporaryDirectory
+        let manifestFile = tmp.appendingPathComponent("postroll_media_manifest_\(UUID().uuidString).json")
+        let outputFile   = tmp.appendingPathComponent("postroll_media_\(UUID().uuidString).json")
+
+        defer {
+            try? FileManager.default.removeItem(at: manifestFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        // Build a lightweight manifest (no OCR needed — just photos)
+        var daysDict: [String: Any] = [:]
+        for dayName in DayName.allCases {
+            guard let pd = event.days[dayName.rawValue], !pd.photoPaths.isEmpty else { continue }
+            daysDict[dayName.rawValue] = ["photos": pd.photoPaths.map { $0.path }]
+        }
+
+        let manifest: [String: Any] = [
+            "event":  event.name,
+            "org":    event.org,
+            "venue":  event.venue,
+            "date":   event.isoDate,
+            "days":   daysDict,
+        ]
+
+        let manifestData = try JSONSerialization.data(
+            withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
+        )
+        try manifestData.write(to: manifestFile)
+
+        let args = [
+            "-m", "postroll.ai.generate_media",
+            "--manifest",   manifestFile.path,
+            "--output-dir", outputDir.path,
+            "--output",     outputFile.path,
+        ]
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+
+        // Verify output file exists (individual day results are logged by Python side)
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+    }
+
     // MARK: - Caption revision
 
     func runCaptionRevision(

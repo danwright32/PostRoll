@@ -6,9 +6,12 @@ struct ExportView: View {
 
     @State private var exportState: ExportState = .ready
     @State private var showingFolderPicker = false
+    @State private var exportedFolder: URL? = nil   // set after text export so media gen can use it
 
     enum ExportState {
         case ready
+        case exportingText
+        case generatingMedia(URL)   // folder where text export landed
         case done(URL)
         case failed(String)
     }
@@ -26,6 +29,10 @@ struct ExportView: View {
                 switch exportState {
                 case .ready:
                     readyContent
+                case .exportingText:
+                    progressContent(label: "Exporting captions & blog…")
+                case .generatingMedia(let folder):
+                    mediaProgressContent(folder: folder)
                 case .done(let folder):
                     doneContent(folder: folder)
                 case .failed(let msg):
@@ -51,7 +58,7 @@ struct ExportView: View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
             BrandBanner(
                 icon: "folder",
-                message: "Choose a destination folder. PostRoll will create a dated subfolder with all captions, blog draft, and checklist ready to use."
+                message: "Exports captions, blog draft, and checklist — then generates story images and Wednesday collage using PIL. Reels are not generated here."
             )
             .padding(.horizontal, Spacing.xl)
 
@@ -65,6 +72,47 @@ struct ExportView: View {
             }
             .padding(Spacing.xl)
         }
+    }
+
+    private func progressContent(label: String) -> some View {
+        VStack(spacing: Spacing.lg) {
+            Spacer().frame(height: Spacing.xl)
+            ProgressView()
+                .controlSize(.large)
+                .tint(Color.roseGold)
+            Text(label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.warmDark)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Spacing.xl)
+    }
+
+    private func mediaProgressContent(folder: URL) -> some View {
+        VStack(spacing: Spacing.lg) {
+            Spacer().frame(height: Spacing.xl)
+            ProgressView()
+                .controlSize(.large)
+                .tint(Color.roseGold)
+            Text("Generating story images…")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.warmDark)
+            Text("This takes 20–60 seconds.")
+                .font(.light(12))
+                .foregroundStyle(Color.warmMid)
+
+            // Let user skip media generation if they just want the text
+            Button("Skip — use text export only") {
+                exportState = .done(folder)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 11))
+            .foregroundStyle(Color.warmMid)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Spacing.xl)
     }
 
     private func doneContent(folder: URL) -> some View {
@@ -122,13 +170,36 @@ struct ExportView: View {
             exportState = .failed("Could not access the selected folder.")
             return
         }
-        defer { destinationRoot.stopAccessingSecurityScopedResource() }
 
-        do {
-            let folder = try EventExporter.export(event: event, to: destinationRoot)
-            exportState = .done(folder)
-        } catch {
-            exportState = .failed(error.localizedDescription)
+        exportState = .exportingText
+
+        Task {
+            do {
+                // Step 1: text export (fast, on background thread)
+                let folder = try await Task.detached {
+                    defer { destinationRoot.stopAccessingSecurityScopedResource() }
+                    return try EventExporter.export(event: self.event, to: destinationRoot)
+                }.value
+
+                // Step 2: generate stories + collage via Python
+                await MainActor.run { exportState = .generatingMedia(folder) }
+                do {
+                    try await PythonBridge.shared.runMediaGeneration(
+                        event: event,
+                        outputDir: folder.deletingLastPathComponent()
+                    )
+                } catch {
+                    // Media generation failure is non-fatal — text export already succeeded
+                    print("[ExportView] media generation failed (non-fatal): \(error.localizedDescription)")
+                }
+
+                await MainActor.run { exportState = .done(folder) }
+            } catch {
+                await MainActor.run {
+                    destinationRoot.stopAccessingSecurityScopedResource()
+                    exportState = .failed(error.localizedDescription)
+                }
+            }
         }
     }
 }

@@ -143,6 +143,7 @@ private struct PhotoDaySection: View {
 
     @State private var isExpanded = true
     @State private var isDropTargeted = false
+    @State private var reorderTargetIndex: Int? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -184,9 +185,24 @@ private struct PhotoDaySection: View {
                             columns: [GridItem(.adaptive(minimum: 80))],
                             spacing: Spacing.sm
                         ) {
-                            ForEach(photos.indices, id: \.self) { i in
-                                PhotoThumb(url: photos[i]) {
+                            ForEach(Array(photos.enumerated()), id: \.offset) { i, url in
+                                PhotoThumb(url: url, isReorderTarget: reorderTargetIndex == i) {
                                     photos.remove(at: i)
+                                }
+                                .draggable(i.description)
+                                .dropDestination(for: String.self) { items, _ in
+                                    guard let src = items.first,
+                                          let srcIdx = Int(src),
+                                          srcIdx != i else { return false }
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        photos.move(
+                                            fromOffsets: IndexSet(integer: srcIdx),
+                                            toOffset: srcIdx < i ? i + 1 : i
+                                        )
+                                    }
+                                    return true
+                                } isTargeted: { targeted in
+                                    reorderTargetIndex = targeted ? i : nil
                                 }
                             }
                         }
@@ -285,6 +301,7 @@ private struct PhotoCountBadge: View {
 
 private struct PhotoThumb: View {
     let url: URL
+    var isReorderTarget: Bool = false
     let onRemove: () -> Void
     @State private var image: NSImage?
 
@@ -308,8 +325,13 @@ private struct PhotoThumb: View {
             .clipShape(RoundedRectangle(cornerRadius: Radius.md))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.md)
-                    .strokeBorder(Color.creamEdge, lineWidth: 0.5)
+                    .strokeBorder(
+                        isReorderTarget ? Color.roseGold : Color.creamEdge,
+                        lineWidth: isReorderTarget ? 2 : 0.5
+                    )
             )
+            .opacity(isReorderTarget ? 0.75 : 1.0)
+            .animation(.easeOut(duration: 0.1), value: isReorderTarget)
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
