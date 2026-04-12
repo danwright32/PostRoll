@@ -39,24 +39,32 @@ HEIC_SUFFIXES = {".heic", ".heif"}
 
 # === Output schema ===
 #
+# Genre-agnostic — works for classical, plays, musicals, opera, rock, dance,
+# improv. The `composer` field is used loosely: composer (classical),
+# playwright (plays), book-writer or composer (musicals), choreographer
+# (dance), artist or band (rock shows), company (improv).
+#
 # {
 #   "performers": [
-#       {"name": "...", "role": "soloist|conductor|ensemble|composer", "voice_or_instrument": "..."}
+#       {"name": "...", "role": "soloist|conductor|ensemble|composer|actor|dancer|band|other", "voice_or_instrument": "..."}
 #   ],
 #   "pieces": [
-#       {"composer": "...", "title": "...", "movements": [...], "notes": "..."}
+#       {"composer": "creator/playwright/choreographer/band", "title": "...", "movements": ["acts/scenes if applicable"], "notes": "..."}
 #   ],
-#   "organization_notes": "free text about the org — history, mission, who they are",
-#   "program_notes": "free text — composer notes, piece descriptions, historical context",
+#   "organization_notes": "theater co / orchestra / band / label — mission, history, who they are",
+#   "program_notes": "free text — composer/playwright/director notes, scene descriptions, historical context",
 #   "venue_notes": "free text about the venue, if printed",
+#   "production_details": "director, creative team, run dates, tour info, anything production-specific",
 #   "other": "anything else printed in the program that could be useful"
 # }
 
 
 PROMPT_TEMPLATE = """\
-You are extracting structured data from photos of a classical music event
-program. The program is for a concert that Dan Wright photographed and will
-write about in a blog post.
+You are extracting structured data from photos of a performing arts event
+program. Dan Wright photographed this event and will write about it. The
+event might be a classical concert, a play, a musical, an opera, a rock
+show, a dance performance, or an improv night — any genre of live
+performance.
 
 Read the image(s) at the following path(s) and return JSON with the schema
 below. Read EVERY image carefully — programs often span multiple pages.
@@ -70,29 +78,32 @@ Return JSON ONLY (no commentary, no markdown fences) matching this schema:
   "performers": [
     {{
       "name": "string",
-      "role": "soloist | conductor | ensemble | composer | other",
-      "voice_or_instrument": "string or null (e.g. soprano, violin, etc.)"
+      "role": "soloist | conductor | ensemble | composer | actor | dancer | band_member | troupe | director | other",
+      "voice_or_instrument": "string or null (soprano, violin, lead guitar, principal dancer, etc.)"
     }}
   ],
   "pieces": [
     {{
-      "composer": "string",
+      "composer": "string — the creator of this work. Composer for music, playwright for plays, book writer or composer for musicals, choreographer for dance, artist or band for rock, troupe for improv. Use whichever fits.",
       "title": "string",
       "movements": ["string", ...],
-      "notes": "string or null — anything printed about this specific piece"
+      "notes": "string or null — anything printed about this specific piece/scene/song"
     }}
   ],
-  "organization_notes": "string — everything printed about the presenting organization (history, mission, who they are). Empty string if nothing printed.",
-  "program_notes": "string — composer biographies, piece descriptions, historical context, any prose printed in the program about the music itself. Empty string if nothing printed.",
+  "organization_notes": "string — presenting organization, theater company, orchestra, band, label, or production company (history, mission, who they are). Empty string if nothing printed.",
+  "program_notes": "string — composer/playwright/director notes, piece/scene descriptions, historical context, any prose printed about the work itself. Empty string if nothing printed.",
   "venue_notes": "string — anything printed about the venue. Empty string if nothing printed.",
+  "production_details": "string — director, creative team (designers, music director, choreographer), run dates, tour info, production-specific credits that don't fit in performers or pieces. Empty string if nothing printed.",
   "other": "string — any other printed content that could enrich a blog post (sponsor notes, dedications, audience instructions, etc.). Empty string if nothing useful."
 }}
 
 Rules:
 - Capture EXACT names as printed (don't normalize spelling).
-- For program_notes and organization_notes, preserve the substance — long
-  paragraphs are fine. Don't summarize aggressively.
-- If a piece has multiple movements listed, capture all of them.
+- For text fields, preserve the substance — long paragraphs are fine.
+  Don't summarize aggressively.
+- `composer` is used loosely for the work's originator across all genres.
+  Don't leave it blank just because the event isn't classical.
+- If a piece has multiple movements/acts/scenes listed, capture all of them.
 - If you can't read part of the program clearly, do your best and skip
   what's truly illegible.
 - Return ONLY the JSON object. No explanation before or after.
@@ -185,6 +196,7 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
         "organization_notes": data.get("organization_notes", ""),
         "program_notes": data.get("program_notes", ""),
         "venue_notes": data.get("venue_notes", ""),
+        "production_details": data.get("production_details", ""),
         "other": data.get("other", ""),
     }
 

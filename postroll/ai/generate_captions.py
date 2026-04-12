@@ -39,13 +39,15 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from .ai_tells import format_for_prompt as _format_ai_tells
+from .ai_tells import get_ai_tells_list
 from .claude_client import run_json_prompt, load_brand_voice, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
 PROMPT_TEMPLATE = """\
 {brand_voice}
-
+{ai_tells_section}
 ---
 
 Your task: write ONE social media caption + hashtags + alt text for a
@@ -58,6 +60,10 @@ Event details:
 - Venue: {venue}
 - Date: {date}
 - Day of week posting: {day}
+- Shoot type: {shoot_type}  ← CRITICAL: match the caption to what Dan
+  actually witnessed. If shoot_type is photo_call, do NOT mention
+  applause, audience reactions, or performance moments that require
+  an audience. Frame it as a scene being performed for the camera.
 
 Performers (from program OCR):
 {performers}
@@ -134,10 +140,22 @@ def generate_caption(
     day: str,
     photo_path: str | Path,
     program: dict[str, Any],
+    shoot_type: str = "performance",
+    ai_tells_cache: str | Path | None = None,
 ) -> dict[str, Any]:
     """Generate caption + hashtags + alt text for a single post.
 
     Accepts JPEG, PNG, and HEIC photos. HEIC is converted via sips.
+
+    shoot_type controls how the prose frames what Dan witnessed. Common
+    values: "performance", "rehearsal_and_performance", "photo_call",
+    "rehearsal", "dress_rehearsal". Any other string is passed through
+    verbatim to the prompt for unusual cases.
+
+    ai_tells_cache, if provided, is a path to a per-project cache file
+    holding the latest AI writing signals from Wikipedia. The list is
+    injected into the prompt and Claude self-reviews against it before
+    returning.
     """
     photo = Path(photo_path).expanduser().resolve()
     if not photo.exists():
@@ -152,13 +170,20 @@ def generate_caption(
             staged = tmp_path / photo.name
             shutil.copy2(photo, staged)
 
+        ai_tells_section = ""
+        if ai_tells_cache:
+            ai_tells_text = get_ai_tells_list(ai_tells_cache)
+            ai_tells_section = "\n" + _format_ai_tells(ai_tells_text)
+
         prompt = PROMPT_TEMPLATE.format(
             brand_voice=load_brand_voice(),
+            ai_tells_section=ai_tells_section,
             event=event,
             org=org,
             venue=venue,
             date=date,
             day=day,
+            shoot_type=shoot_type,
             performers=_format_performers(program.get("performers", [])),
             pieces=_format_pieces(program.get("pieces", [])),
             photo_path=str(staged),
@@ -200,6 +225,16 @@ def main() -> int:
         choices=["sunday", "monday", "wednesday"],
         help="Day of week the post will be published",
     )
+    parser.add_argument(
+        "--shoot-type",
+        default="performance",
+        help="What Dan actually witnessed: performance, rehearsal_and_performance, photo_call, rehearsal, dress_rehearsal, or free text",
+    )
+    parser.add_argument(
+        "--ai-tells-cache",
+        type=Path,
+        help="Path to per-project AI tells cache. Fetched from Wikipedia if missing/stale.",
+    )
     parser.add_argument("--photo", required=True, type=Path, help="Photo to caption")
     parser.add_argument(
         "--program",
@@ -226,6 +261,8 @@ def main() -> int:
             day=args.day,
             photo_path=args.photo,
             program=program,
+            shoot_type=args.shoot_type,
+            ai_tells_cache=args.ai_tells_cache,
         )
     except (ClaudeError, FileNotFoundError) as e:
         print(f"error: {e}", file=sys.stderr)
