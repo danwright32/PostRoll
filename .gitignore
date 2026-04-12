@@ -3,3 +3,10 @@ output/
 __pycache__/
 *.pyc
 .DS_Store
+
+# App data and client files — keep local only
+events.json
+programs/
+
+# Build artifacts
+Test2
