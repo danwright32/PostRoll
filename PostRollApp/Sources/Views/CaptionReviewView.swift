@@ -189,6 +189,7 @@ private struct CaptionSection: View {
     @State private var saveToBrandVoice = false
     @State private var isRevising = false
     @State private var revisionError: String?
+    @State private var undoCaption: DayCaption? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -248,10 +249,21 @@ private struct CaptionSection: View {
                             }
                         )
                     } else {
-                        Button("Revise with feedback…") { showingRevision = true }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.roseGold)
+                        HStack(spacing: Spacing.md) {
+                            Button("Revise with feedback…") { showingRevision = true }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.roseGold)
+                            if undoCaption != nil {
+                                Button("Restore previous") {
+                                    caption = undoCaption!
+                                    undoCaption = nil
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.warmMid)
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, Spacing.xl)
@@ -265,6 +277,7 @@ private struct CaptionSection: View {
     private func applyRevision() {
         let trimmed = feedbackText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let snapshot = caption
         isRevising = true
         revisionError = nil
         let shouldSave = saveToBrandVoice
@@ -275,6 +288,7 @@ private struct CaptionSection: View {
                     try? PythonBridge.shared.appendBrandVoiceNote(trimmed)
                 }
                 await MainActor.run {
+                    undoCaption = snapshot
                     isRevising = false
                     showingRevision = false
                     feedbackText = ""
@@ -380,6 +394,7 @@ private struct BlogSection: View {
     @Binding var blog: BlogOutput
     let isExpanded: Bool
     let onToggle: () -> Void
+    @State private var showingPreview = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -411,7 +426,48 @@ private struct BlogSection: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     ReviewTextArea(label: "Title", text: $blog.title, minHeight: 36)
-                    ReviewTextArea(label: "Body (Markdown)", text: $blog.body, minHeight: 280)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text("BODY (MARKDOWN)")
+                                .font(.system(size: 9, weight: .medium))
+                                .tracking(0.8)
+                                .foregroundStyle(Color.warmMid)
+                            Spacer()
+                            Button(showingPreview ? "Edit" : "Preview") {
+                                showingPreview.toggle()
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.roseGold)
+                        }
+                        if showingPreview {
+                            ScrollView {
+                                Group {
+                                    if let attr = try? AttributedString(markdown: blog.body) {
+                                        Text(attr)
+                                    } else {
+                                        Text(blog.body)
+                                    }
+                                }
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.warmDark)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                            }
+                            .frame(minHeight: 280)
+                            .background(
+                                RoundedRectangle(cornerRadius: Radius.sm)
+                                    .fill(Color.creamDeep)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: Radius.sm)
+                                            .strokeBorder(Color.creamEdge, lineWidth: 1)
+                                    )
+                            )
+                        } else {
+                            BlogBodyEditor(text: $blog.body)
+                        }
+                    }
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.md)
@@ -419,6 +475,34 @@ private struct BlogSection: View {
 
             RoseGoldDivider(opacity: 0.3)
         }
+    }
+}
+
+private struct BlogBodyEditor: View {
+    @Binding var text: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextEditor(text: $text)
+            .focused($focused)
+            .font(.system(size: 12))
+            .foregroundStyle(Color.warmDark)
+            .focusEffectDisabled()
+            .frame(minHeight: 280)
+            .scrollContentBackground(.hidden)
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm)
+                    .fill(Color.creamDeep)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.sm)
+                            .strokeBorder(
+                                focused ? Color.roseGold : Color.creamEdge,
+                                lineWidth: focused ? 1.5 : 1
+                            )
+                    )
+            )
+            .animation(.easeOut(duration: 0.15), value: focused)
     }
 }
 

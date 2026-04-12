@@ -166,6 +166,20 @@ private struct PerformerRow: View {
                 }
                 BrandField("Voice / Instrument (optional)", text: $performer.voiceOrInstrument)
             }
+            Button {
+                let query = performer.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? performer.name
+                if let url = URL(string: "https://www.google.com/search?q=instagram+\(query)") {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(performer.name.isEmpty ? Color.creamEdge : Color.warmMid)
+                    .font(.system(size: 13))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 6)
+            .disabled(performer.name.isEmpty)
+            .help("Search Instagram")
             BrandDeleteButton(action: onDelete)
         }
         .padding(.vertical, 2)

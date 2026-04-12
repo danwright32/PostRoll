@@ -7,6 +7,7 @@ struct ExportView: View {
     @State private var exportState: ExportState = .ready
     @State private var showingFolderPicker = false
     @State private var exportedFolder: URL? = nil   // set after text export so media gen can use it
+    @State private var lastExportFolder: URL? = nil
 
     enum ExportState {
         case ready
@@ -41,6 +42,14 @@ struct ExportView: View {
             }
         }
         .background(Color.cream)
+        .onAppear {
+            if let path = UserDefaults.standard.string(forKey: "lastExportFolder") {
+                let candidate = URL(fileURLWithPath: path)
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    lastExportFolder = candidate
+                }
+            }
+        }
         .fileImporter(
             isPresented: $showingFolderPicker,
             allowedContentTypes: [.folder],
@@ -73,10 +82,27 @@ struct ExportView: View {
             ExportSummaryCard(event: event, result: result)
                 .padding(.horizontal, Spacing.xl)
 
-            HStack {
-                Spacer()
-                Button("Choose Destination…") { showingFolderPicker = true }
-                    .buttonStyle(BrandButtonStyle())
+            VStack(alignment: .trailing, spacing: Spacing.sm) {
+                if let last = lastExportFolder {
+                    HStack {
+                        Spacer()
+                        Button("Export to \"\(last.lastPathComponent)\"") { runExport(to: last) }
+                            .buttonStyle(BrandButtonStyle())
+                    }
+                    HStack {
+                        Spacer()
+                        Button("Choose different folder…") { showingFolderPicker = true }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.roseGold)
+                    }
+                } else {
+                    HStack {
+                        Spacer()
+                        Button("Choose Destination…") { showingFolderPicker = true }
+                            .buttonStyle(BrandButtonStyle())
+                    }
+                }
             }
             .padding(Spacing.xl)
         }
@@ -179,6 +205,8 @@ struct ExportView: View {
             return
         }
 
+        UserDefaults.standard.set(destinationRoot.path, forKey: "lastExportFolder")
+        lastExportFolder = destinationRoot
         exportState = .exportingText
 
         Task {

@@ -44,6 +44,7 @@ struct PhotoAssignmentView: View {
         case thursdayAudio
         case fridayRawPhoto
         case fridayEditedPhoto
+        case importFolder
     }
 
     init(event: Event) {
@@ -97,8 +98,18 @@ struct PhotoAssignmentView: View {
 
                 BrandBanner(
                     icon: "rectangle.3.group",
-                    message: "Drop photos into each posting day. Wednesday and Thursday show a crop button on each photo — use it to reframe before generating."
+                    message: "Drop photos into each posting day, or import a whole folder organized by day subfolders. Wednesday and Thursday show a crop button on each photo — use it to reframe before generating."
                 )
+                .padding(.horizontal, Spacing.xl)
+                .padding(.bottom, Spacing.sm)
+
+                HStack {
+                    Spacer()
+                    Button("Import from folder…") { pickerTarget = .importFolder }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.roseGold)
+                }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.lg)
 
@@ -204,6 +215,8 @@ struct PhotoAssignmentView: View {
             return [.audio, .mp3, .aiff,
                     UTType(filenameExtension: "m4a") ?? .audio,
                     UTType(filenameExtension: "aac") ?? .audio]
+        case .importFolder:
+            return [.folder]
         default:
             return [.image]
         }
@@ -256,8 +269,75 @@ struct PhotoAssignmentView: View {
         case .thursdayAudio:          thursdayAudio = url
         case .fridayRawPhoto:         fridayRawPhoto = url
         case .fridayEditedPhoto:      fridayEditedPhoto = url
+        case .importFolder:           importFromFolder(url)
         case nil: break
         }
+        save()
+    }
+
+    private func importFromFolder(_ root: URL) {
+        let fm = FileManager.default
+        let imageExts = Set(["jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "webp"])
+        let videoExts = Set(["mov", "mp4", "m4v"])
+        let audioExts = Set(["m4a", "mp3", "aiff", "aif", "aac"])
+
+        func imageFiles(in dir: URL) -> [URL] {
+            ((try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+                .filter { imageExts.contains($0.pathExtension.lowercased()) }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        }
+
+        for day in DayName.allCases {
+            let dayDir = root.appendingPathComponent(day.rawValue)
+            guard fm.fileExists(atPath: dayDir.path) else { continue }
+
+            let images = imageFiles(in: dayDir)
+            if !images.isEmpty {
+                var list = dayPhotos[day] ?? []
+                for u in images where !list.contains(u) { list.append(u) }
+                dayPhotos[day] = list
+            }
+
+            let contents = (try? fm.contentsOfDirectory(at: dayDir, includingPropertiesForKeys: nil)) ?? []
+
+            switch day {
+            case .tuesday:
+                if tuesdayScreenRecording == nil,
+                   let rec = contents.first(where: { videoExts.contains($0.pathExtension.lowercased()) }) {
+                    tuesdayScreenRecording = rec
+                }
+                for file in contents where imageExts.contains(file.pathExtension.lowercased()) {
+                    let name = file.deletingPathExtension().lastPathComponent.lowercased()
+                    if tuesdayRawPhoto == nil, name.contains("raw") || name.contains("before") {
+                        tuesdayRawPhoto = file
+                    } else if tuesdayEditedPhoto == nil, name.contains("edit") || name.contains("after") {
+                        tuesdayEditedPhoto = file
+                    }
+                }
+            case .thursday:
+                if thursdayAudio == nil,
+                   let audio = contents.first(where: { audioExts.contains($0.pathExtension.lowercased()) }) {
+                    thursdayAudio = audio
+                }
+            case .friday:
+                for file in contents where imageExts.contains(file.pathExtension.lowercased()) {
+                    let name = file.deletingPathExtension().lastPathComponent.lowercased()
+                    if fridayRawPhoto == nil, name.contains("raw") || name.contains("before") {
+                        fridayRawPhoto = file
+                    } else if fridayEditedPhoto == nil, name.contains("edit") || name.contains("after") {
+                        fridayEditedPhoto = file
+                    }
+                }
+            default: break
+            }
+        }
+
+        let blogDir = root.appendingPathComponent("blog")
+        if fm.fileExists(atPath: blogDir.path) {
+            let images = imageFiles(in: blogDir)
+            for u in images where !blogPhotos.contains(u) { blogPhotos.append(u) }
+        }
+
         save()
     }
 
