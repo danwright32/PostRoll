@@ -2,7 +2,7 @@
 
 **Author:** Dan Wright
 **Date:** April 4, 2026
-**Status:** Planning / Pre-Development
+**Status:** In Development — Phase 4 (GUI), Steps 1–2 complete
 
 ---
 
@@ -350,7 +350,7 @@ Local Mac desktop application with GUI. Not a web app. Runs on Dan's machine.
 
 ### 8.2 Core Architecture
 
-- **GUI layer:** [TBD — Electron, Tauri, SwiftUI, or Python/tkinter]
+- **GUI layer:** SwiftUI (native macOS, chosen April 2026)
 - **AI engine:** Claude Code (invoked via CLI subprocess)
 - **Media pipeline:** Python + Pillow (static images) + ffmpeg (video/audio)
 - **Scheduling:** API client modules per platform (or single Metricool client)
@@ -445,7 +445,7 @@ The app generates a checklist of actions that cannot be automated, including:
 
 ## 10. Open Questions — Design & UX
 
-30. What GUI framework is preferred? Options: Electron (web tech, heavier), Tauri (Rust + web, lighter), SwiftUI (native Mac, fastest), Python + tkinter (simplest, ugliest)
+30. ~~What GUI framework is preferred?~~ **Resolved:** SwiftUI (native macOS). Chosen April 2026.
 31. Should the app support multiple events in progress at once, or one at a time?
 32. Should there be a template/preset system for different recurring event types (e.g., DCINY events always use certain settings)?
 33. For the Thursday scrolling reel — should there be an option for a tiny gap between photos, or always seamless?
@@ -487,23 +487,33 @@ The app generates a checklist of actions that cannot be automated, including:
 
 ---
 
-## 13. Suggested Build Phases
+## 13. Build Phases — Status
 
-### Phase 1 — Media Pipeline
-Story template generator, before/after image generator, masonry collage generator, Tuesday speed edit reel, Thursday photo scroll reel. This is the most complex work and where the most time savings come from.
+### Phase 1 — Media Pipeline ✅ Complete
+Story template generator, before/after image generator, masonry collage generator, Tuesday speed edit reel, Thursday photo scroll reel.
 
-### Phase 2 — AI Content
-Caption writing via Claude Code with brand voice skill. Blog post drafting via Claude Code. Program OCR pipeline.
+### Phase 2 — AI Content ✅ Complete
+Caption writing via Claude Code with brand voice skill. Blog post drafting. Program OCR pipeline. Multi-pass generation (draft, voice review, diversity review, humanizer). Batch week caption generation.
 
-### Phase 3 — Scheduling & Publishing
-API research and decision (Metricool vs. direct). Platform API integrations. Built-in calendar (if direct APIs). Collaborator suggestion and invite system.
+### Phase 3 — Export Pipeline ✅ Complete (April 12, 2026)
+`export.py` + `audio.py`. Jamendo auto-fetch for licensed audio. 143 tests passing.
 
-### Phase 4 — GUI
-Application shell and interface. Event creation workflow. Asset review and approval screens. Schedule management view. Manual task checklist generator.
+### Phase 4 — GUI 🔄 In Progress
+**Framework:** SwiftUI (native macOS). **Design system:** documented in `PostRollApp/DESIGN.md`.
 
-**Feedback loop (required, first-class feature).** The brand voice and generator prompts are LIVING documents that must evolve as Dan uses the app — not get manually patched by Claude in CLI sessions. The GUI must provide two complementary mechanisms:
+| Step | Description | Status |
+|---|---|---|
+| 1 | App shell — NavigationSplitView, AppState, event CRUD, persistence | ✅ Done |
+| 2 | OCR flow — program upload (PDF + images), progress view, review/correction loop | ✅ Done |
+| 3 | Photo assignment — drag photos to posting days, select 4–7 blog photos | Next |
+| 4 | Asset generation — invoke Python pipeline, show progress per asset type | Pending |
+| 5 | Caption and blog review — inline editing, approve/reject per post | Pending |
+| 6 | Export and scheduling — package output, hand off to export pipeline | Pending |
+| 7 | Feedback loop — plain-English feedback translates to brand-voice edits | Pending |
 
-1. **Plain-English feedback.** Every generated output card has a "Give feedback" button. Dan types/speaks feedback in natural language ("this reads too much like alt text," "Tuesday reel is too fast"), picks a scope (this one / this event / permanent rule), and the system uses Claude to translate the feedback into a concrete edit to `brand-voice.md` or a generator prompt file, shows Dan the diff, and asks him to confirm before saving.
-2. **Final-version capture.** Every caption/blog is shown with an editable text box pre-filled with the suggestion. Dan edits in-place to match what he's about to post (or pastes in the version he wrote). Hitting "Save as final" stores BOTH the suggested text AND the final. Periodically (end of week / on demand) a Claude call reads the paired records, analyzes the diffs, and proposes specific edits to brand-voice/prompts that would have produced something closer to the finals. Dan reviews each proposed edit as a diff and accepts or rejects.
+**Feedback loop (required, first-class feature).** The brand voice and generator prompts are LIVING documents that must evolve as Dan uses the app — not get manually patched in CLI sessions. The GUI must provide two complementary mechanisms:
 
-Together these enable compounding improvement: every week Dan uses the app, the system gets closer to his actual voice. No more multi-round CLI sessions encoding lessons — the lessons come from his real edits.
+1. **Plain-English feedback.** Every generated output card has a "Give feedback" button. Dan types feedback in natural language, picks a scope (this one / this event / permanent rule), and the system uses Claude to translate it into a concrete edit to `brand-voice.md` or a generator prompt file, shows Dan the diff, and asks him to confirm.
+2. **Final-version capture.** Every caption/blog is shown with an editable text box. Dan edits in-place to match what he actually posts. Hitting "Save as final" stores both the suggested text and the final. Periodically a Claude call analyzes the diffs and proposes edits to brand-voice/prompts — Dan reviews each as a diff and accepts or rejects.
+
+Together these enable compounding improvement: every week Dan uses the app, the system gets closer to his actual voice.
