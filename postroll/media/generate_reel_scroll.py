@@ -226,9 +226,12 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
     return frame_rgba.convert("RGB")
 
 
+_DEFAULT_AUDIO_TAGS = "ambient,atmospheric"
+
+
 def generate_reel_scroll(
     photo_paths: list[str],
-    audio_path: str,
+    audio_path: str | None,   # None = auto-fetch from Jamendo
     output_path: str,
     event_name: str = "",
     org: str = "",
@@ -239,6 +242,10 @@ def generate_reel_scroll(
     seed: int | None = None,
 ) -> str:
     """Generate a photo scroll reel with masonry collage layout."""
+    if audio_path is None:
+        from postroll.audio import fetch_audio
+        audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
+
     n = len(photo_paths)
     total_duration = SCROLL_DURATION + HOLD_END + CLOSING_FRAME_DURATION
 
@@ -331,7 +338,7 @@ def generate_reel_scroll(
 def main():
     parser = argparse.ArgumentParser(description="Generate a photo scroll reel")
     parser.add_argument("--photos", nargs="+", required=True)
-    parser.add_argument("--audio", required=True)
+    parser.add_argument("--audio", default=None, help="Path to audio file (omit to auto-fetch from Jamendo)")
     parser.add_argument("--event", default="")
     parser.add_argument("--org", default="")
     parser.add_argument("--venue", default="")

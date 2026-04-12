@@ -280,10 +280,13 @@ def generate_split_frame(
     return frame
 
 
+_DEFAULT_AUDIO_TAGS = "electronic,upbeat"
+
+
 def generate_reel_morph(
     raw_path: str,
     edit_path: str,
-    audio_path: str,
+    audio_path: str | None,   # None = auto-fetch from Jamendo
     output_path: str,
     event_name: str = "",
     org: str = "",
@@ -292,6 +295,10 @@ def generate_reel_morph(
     logo_path: str | None = None,
 ) -> str:
     """Generate a split compare reel."""
+    if audio_path is None:
+        from postroll.audio import fetch_audio
+        audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
+
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
     font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_THIN)
@@ -398,7 +405,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate a split compare reel")
     parser.add_argument("--raw", required=True)
     parser.add_argument("--edit", required=True)
-    parser.add_argument("--audio", required=True)
+    parser.add_argument("--audio", default=None, help="Path to audio file (omit to auto-fetch from Jamendo)")
     parser.add_argument("--event", default="")
     parser.add_argument("--org", default="")
     parser.add_argument("--venue", default="")

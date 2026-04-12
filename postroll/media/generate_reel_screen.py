@@ -67,11 +67,14 @@ def get_video_duration(path: str) -> float:
     return float(result.stdout.strip())
 
 
+_DEFAULT_AUDIO_TAGS = "electronic,upbeat"
+
+
 def generate_reel_screen(
     recording_path: str,
     raw_path: str,
     edit_path: str,
-    audio_path: str,
+    audio_path: str | None,   # None = auto-fetch from Jamendo
     output_path: str,
     event_name: str = "",
     org: str = "",
@@ -85,6 +88,10 @@ def generate_reel_screen(
     The recording is sped up to fit within target_duration, placed on a
     branded canvas, then a closing before/after frame is appended.
     """
+    if audio_path is None:
+        from postroll.audio import fetch_audio
+        audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
+
     # Get recording duration and calculate speed multiplier
     rec_duration = get_video_duration(recording_path)
     speed_multiplier = rec_duration / target_duration
@@ -379,7 +386,7 @@ def main():
     parser.add_argument("--recording", required=True, help="Path to screen recording")
     parser.add_argument("--raw", required=True, help="Path to RAW photo")
     parser.add_argument("--edit", required=True, help="Path to edited photo")
-    parser.add_argument("--audio", required=True, help="Path to audio file")
+    parser.add_argument("--audio", default=None, help="Path to audio file (omit to auto-fetch from Jamendo)")
     parser.add_argument("--event", default="")
     parser.add_argument("--org", default="")
     parser.add_argument("--venue", default="")
