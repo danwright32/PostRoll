@@ -6,6 +6,9 @@ struct CaptionReviewView: View {
 
     @State private var result: WeekGenerationResult
     @State private var expanded: ReviewSection? = .caption(DayName.allCases.first!)
+    @State private var isRegenerating = false
+    @State private var showRegenerateConfirm = false
+    @State private var regenerateError: String?
 
     enum ReviewSection: Equatable {
         case caption(DayName)
@@ -57,6 +60,7 @@ struct CaptionReviewView: View {
                             try await reviseCaption(day: day, feedback: feedback)
                         }
                     )
+                    .disabled(isRegenerating)
                 }
 
                 if result.blog != nil {
@@ -65,17 +69,48 @@ struct CaptionReviewView: View {
                         isExpanded: expanded == .blog,
                         onToggle: { expanded = expanded == .blog ? nil : .blog }
                     )
+                    .disabled(isRegenerating)
                 }
 
-                HStack {
-                    Spacer()
-                    Button("Approve & Export") { advance() }
-                        .buttonStyle(BrandButtonStyle())
+                if let error = regenerateError {
+                    BrandBanner(icon: "exclamationmark.triangle", message: error)
+                        .padding(.horizontal, Spacing.xl)
                 }
-                .padding(Spacing.xl)
+
+                if isRegenerating {
+                    HStack(spacing: Spacing.sm) {
+                        ProgressView().controlSize(.small).tint(Color.roseGold)
+                        Text("Regenerating captions…")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.warmDark)
+                        Text("~3–6 min")
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
+                    }
+                    .padding(Spacing.xl)
+                } else {
+                    HStack {
+                        Button("Regenerate All…") { showRegenerateConfirm = true }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.warmMid)
+                        Spacer()
+                        Button("Approve & Export") { advance() }
+                            .buttonStyle(BrandButtonStyle())
+                    }
+                    .padding(Spacing.xl)
+                }
             }
         }
         .background(Color.cream)
+        .alert("Regenerate all captions?", isPresented: $showRegenerateConfirm) {
+            Button("Regenerate", role: .destructive) {
+                Task { await regenerateAll() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will replace all current captions and the blog draft. Your inline edits will be lost.")
+        }
     }
 
     // MARK: - Bindings
@@ -92,6 +127,21 @@ struct CaptionReviewView: View {
             get: { result.blog ?? BlogOutput() },
             set: { result.blog = $0; save() }
         )
+    }
+
+    // MARK: - Regenerate all
+
+    private func regenerateAll() async {
+        isRegenerating = true
+        regenerateError = nil
+        do {
+            let newResult = try await PythonBridge.shared.runWeekGeneration(event: event)
+            result = newResult
+            save()
+        } catch {
+            regenerateError = error.localizedDescription
+        }
+        isRegenerating = false
     }
 
     // MARK: - Caption revision
@@ -170,6 +220,11 @@ private struct CaptionSection: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     ReviewTextArea(label: "Caption", text: $caption.caption, minHeight: 80)
+
+                    Text("\(caption.caption.count) chars")
+                        .font(.system(size: 10))
+                        .foregroundStyle(caption.caption.count > 2200 ? Color.roseDeep : Color.warmMid)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
 
                     HashtagsEditor(hashtags: $caption.hashtags)
 

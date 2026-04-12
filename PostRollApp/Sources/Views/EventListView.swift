@@ -29,6 +29,10 @@ struct EventListView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { appState.selectedEventID = event.id }
                     .contextMenu {
+                        Button("Duplicate") {
+                            appState.duplicateEvent(id: event.id)
+                        }
+                        Divider()
                         Button("Delete", role: .destructive) {
                             pendingDeleteID = event.id
                         }

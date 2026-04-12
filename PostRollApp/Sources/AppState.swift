@@ -29,4 +29,29 @@ final class AppState {
         if selectedEventID == id { selectedEventID = nil }
         EventStore.save(events)
     }
+
+    /// Duplicate an event: copies metadata and OCR result, clears photos and
+    /// generated content, sets stage to the first step that needs fresh work.
+    func duplicateEvent(id: Event.ID) {
+        guard let original = events.first(where: { $0.id == id }) else { return }
+        var copy = original
+        copy.id = UUID()
+        copy.days = [:]
+        copy.blogPhotoPaths = []
+        copy.weekResult = nil
+        copy.exportPath = nil
+        // Resume from the earliest stage that requires new input
+        if original.ocrReviewDone {
+            copy.stage = .photosAssigned
+        } else if original.ocrResult != nil {
+            copy.stage = .ocrDone
+        } else if !original.programImagePaths.isEmpty {
+            copy.stage = .programUploaded
+        } else {
+            copy.stage = .created
+        }
+        events.append(copy)
+        selectedEventID = copy.id
+        EventStore.save(events)
+    }
 }
