@@ -328,12 +328,30 @@ struct EventExporter {
                                   atomically: true, encoding: .utf8)
             }
 
-            // Copy photos
+            // Copy photos — day-specific rules:
+            // • Tuesday/Thursday: reel is the deliverable; source photos not copied.
+            // • Wednesday: photos go in a carousel/ subfolder (10 for the carousel post).
+            // • All other days: copy all assigned photos flat.
             let photos = event.days[day.rawValue]?.photoPaths ?? []
-            for (i, photo) in photos.enumerated() {
-                let ext = photo.pathExtension
-                let dest = dayDir.appendingPathComponent("photo_\(String(format: "%02d", i + 1)).\(ext)")
-                try? FileManager.default.copyItem(at: photo, to: dest)
+            switch day {
+            case .tuesday, .thursday:
+                break  // reel handles these days; no need to copy source photos
+            case .wednesday:
+                if !photos.isEmpty {
+                    let carouselDir = dayDir.appendingPathComponent("carousel")
+                    try? FileManager.default.createDirectory(at: carouselDir, withIntermediateDirectories: true)
+                    for (i, photo) in photos.enumerated() {
+                        let ext = photo.pathExtension
+                        let dest = carouselDir.appendingPathComponent("\(String(format: "%02d", i + 1)).\(ext)")
+                        try? FileManager.default.copyItem(at: photo, to: dest)
+                    }
+                }
+            default:
+                for (i, photo) in photos.enumerated() {
+                    let ext = photo.pathExtension
+                    let dest = dayDir.appendingPathComponent("photo_\(String(format: "%02d", i + 1)).\(ext)")
+                    try? FileManager.default.copyItem(at: photo, to: dest)
+                }
             }
         }
 

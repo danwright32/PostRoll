@@ -172,6 +172,23 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                     msg = f"speed edit reel failed: {e}"
                     print(f"[generate_media] tuesday: ERROR — {msg}", flush=True, file=sys.stderr)
                     errors["tuesday"] = msg
+
+                # Also write a standalone before/after PNG as the story cover —
+                # the reel embeds this as its closing frame but Dan needs a
+                # separate image to post as a story on Instagram + Facebook.
+                if raw and edit:
+                    try:
+                        story_cover_path = str(day_dir / "before_after.png")
+                        generate_before_after(
+                            raw_path=raw,
+                            edit_path=edit,
+                            output_path=story_cover_path,
+                            logo_path=None,
+                        )
+                        day_result["story_cover"] = story_cover_path
+                        print(f"[generate_media] tuesday: story cover → {story_cover_path}", flush=True)
+                    except Exception as e:
+                        print(f"[generate_media] tuesday: story cover failed (non-fatal): {e}", flush=True, file=sys.stderr)
             else:
                 # Fallback: story template from first photo
                 reason = "ffmpeg not available" if not ffmpeg_available else "missing screen_recording/raw_photo/edited_photo"
