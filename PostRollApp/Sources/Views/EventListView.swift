@@ -24,6 +24,8 @@ struct EventListView: View {
                             .padding(.vertical, 2)
                     )
                     .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+                    .listRowSeparator(.visible)
+                    .listRowSeparatorTint(Color.creamEdge)
                     .contentShape(Rectangle())
                     .onTapGesture { appState.selectedEventID = event.id }
                     .contextMenu {
