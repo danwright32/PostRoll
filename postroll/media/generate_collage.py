@@ -92,9 +92,19 @@ def draw_spaced_text_centered(
         x += (bbox[2] - bbox[0]) + spacing
 
 
-def crop_to_fill(photo: Image.Image, target_w: int, target_h: int) -> Image.Image:
+def crop_to_fill(
+    photo: Image.Image,
+    target_w: int,
+    target_h: int,
+    crop_offset_x: float = 0.0,
+    crop_offset_y: float = 0.0,
+) -> Image.Image:
     """Crop and resize photo to fill target dimensions.
-    Biases vertical crop toward the top (keeps heads/faces visible).
+
+    crop_offset_x / crop_offset_y are in [-1, 1]:
+      0   = default position (horizontally centred; slight top bias vertically)
+     -1   = all the way to the left / top edge
+     +1   = all the way to the right / bottom edge
     """
     photo_ratio = photo.width / photo.height
     target_ratio = target_w / target_h
@@ -108,9 +118,17 @@ def crop_to_fill(photo: Image.Image, target_w: int, target_h: int) -> Image.Imag
     new_h = int(photo.height * scale)
     resized = photo.resize((new_w, new_h), Image.LANCZOS)
 
-    left = (new_w - target_w) // 2
-    overflow = new_h - target_h
-    top = int(overflow * 0.4)  # slight top bias but close to center — safe default
+    overflow_x = new_w - target_w
+    overflow_y = new_h - target_h
+
+    # Horizontal: default = centred (0.5).  offset shifts ±0.5 of overflow.
+    left = int(overflow_x * (0.5 + crop_offset_x * 0.5))
+    left = max(0, min(overflow_x, left))
+
+    # Vertical: default = 0.4 (slight top bias).  offset shifts ±0.4 around that.
+    top = int(overflow_y * (0.4 + crop_offset_y * 0.4))
+    top = max(0, min(overflow_y, top))
+
     return resized.crop((left, top, left + target_w, top + target_h))
 
 
@@ -178,8 +196,12 @@ def place_photo_rows(
     y_start: int,
     total_h: int,
     rng: random.Random,
+    offsets: list[tuple[float, float]] | None = None,
 ) -> int:
-    """Place rows of photos on the canvas. Returns y position after last row."""
+    """Place rows of photos on the canvas. Returns y position after last row.
+
+    offsets: optional list of (crop_offset_x, crop_offset_y) parallel to photos.
+    """
     heights = calculate_row_heights(pattern, photos, total_h)
     photo_idx = 0
     y = y_start
@@ -192,7 +214,8 @@ def place_photo_rows(
 
         x = SIDE_MARGIN
         for col_idx in range(photos_in_row):
-            cropped = crop_to_fill(photos[photo_idx], widths[col_idx], row_h)
+            ox, oy = (offsets[photo_idx] if offsets and photo_idx < len(offsets) else (0.0, 0.0))
+            cropped = crop_to_fill(photos[photo_idx], widths[col_idx], row_h, ox, oy)
             canvas.paste(cropped, (x, y))
             x += widths[col_idx] + GAP
             photo_idx += 1
@@ -283,6 +306,7 @@ def generate_collage(
     venue: str = "",
     logo_path: str | None = None,
     seed: int | None = None,
+    crop_offsets: list[tuple[float, float]] | None = None,
 ) -> str:
     """Generate a masonry collage with branded center strip.
 
@@ -290,6 +314,8 @@ def generate_collage(
         - Top photo rows (5 photos)
         - Branded strip (event name, org/venue, logo) — impossible to crop out
         - Bottom photo rows (5 photos, ends strong)
+
+    crop_offsets: optional list of (x, y) pairs in [-1, 1] parallel to photo_paths.
     """
     rng = random.Random(seed)
 
@@ -334,9 +360,13 @@ def generate_collage(
     # Create canvas with tinted cream background
     canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), gap_color)
 
+    # Split crop_offsets to match top/bottom photo halves
+    top_offsets = crop_offsets[:top_count] if crop_offsets else None
+    bottom_offsets = crop_offsets[top_count:] if crop_offsets else None
+
     # Place top photos
     y = 0
-    y = place_photo_rows(canvas, top_photos, top_pattern, y, top_h, rng)
+    y = place_photo_rows(canvas, top_photos, top_pattern, y, top_h, rng, top_offsets)
 
     # Draw branded center strip
     strip_y = y - GAP  # overlap the last gap
@@ -347,7 +377,7 @@ def generate_collage(
     # Place bottom photos
     bottom_y = strip_y + STRIP_H
     place_photo_rows(
-        canvas, bottom_photos, bottom_pattern, bottom_y, bottom_h, rng
+        canvas, bottom_photos, bottom_pattern, bottom_y, bottom_h, rng, bottom_offsets
     )
 
     # Save

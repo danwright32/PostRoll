@@ -240,14 +240,18 @@ def generate_reel_scroll(
     logo_path: str | None = None,
     gap: int = ROW_GAP,
     seed: int | None = None,
+    scroll_duration: float = SCROLL_DURATION,
 ) -> str:
-    """Generate a photo scroll reel with masonry collage layout."""
+    """Generate a photo scroll reel with masonry collage layout.
+
+    scroll_duration: seconds to scroll the full strip (default 30.0).
+    """
     if audio_path is None:
         from postroll.audio import fetch_audio
         audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
 
     n = len(photo_paths)
-    total_duration = SCROLL_DURATION + HOLD_END + CLOSING_FRAME_DURATION
+    total_duration = scroll_duration + HOLD_END + CLOSING_FRAME_DURATION
 
     # Build collage strip
     print(f"Building collage strip from {n} photos...")
@@ -275,10 +279,10 @@ def generate_reel_scroll(
         closing_frame = closing_frame.resize((CANVAS_W, CANVAS_H), Image.LANCZOS)
 
     total_frames = int(total_duration * FPS)
-    scroll_frames = int(SCROLL_DURATION * FPS)
+    scroll_frames = int(scroll_duration * FPS)
     hold_frames = int(HOLD_END * FPS)
 
-    print(f"Generating {total_frames} frames ({SCROLL_DURATION}s scroll)...")
+    print(f"Generating {total_frames} frames ({scroll_duration}s scroll)...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)

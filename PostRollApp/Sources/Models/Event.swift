@@ -103,6 +103,15 @@ enum DayName: String, Codable, CaseIterable {
     var displayName: String { rawValue.capitalized }
 }
 
+// MARK: - CropOffset
+
+/// Per-photo crop adjustment, stored keyed by photo URL absoluteString.
+/// Values are in [-1, 1]: 0 = default position, ±1 = full shift toward that edge.
+struct CropOffset: Codable, Hashable {
+    var x: Double = 0   // horizontal: -1 = left, +1 = right
+    var y: Double = 0   // vertical:   -1 = top,  +1 = bottom
+}
+
 // MARK: - PostingDay
 
 struct PostingDay: Codable, Hashable {
@@ -114,6 +123,12 @@ struct PostingDay: Codable, Hashable {
     var screenRecordingPath: URL? = nil
     var rawPhotoPath: URL? = nil       // Tuesday closing frame + Friday before/after
     var editedPhotoPath: URL? = nil    // Tuesday closing frame + Friday before/after
-    // Thursday scroll reel audio (auto-fetched from Jamendo if nil)
+    var reelTargetDuration: Double = 20.0  // Tuesday: timelapse target (seconds, 10–30)
+    // Thursday scroll reel
     var audioPath: URL? = nil
+    var scrollDuration: Double = 30.0  // Thursday: scroll animation duration (seconds, 15–60)
+    var reelSeed: Int? = nil           // Thursday: layout seed (nil = random each time)
+    // Wednesday collage
+    var collageSeed: Int? = nil        // nil = random each time
+    var cropOffsets: [String: CropOffset] = [:]  // keyed by photo URL absoluteString
 }

@@ -144,10 +144,11 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
         # or ffmpeg is unavailable.
         # ──────────────────────────────────────────────────────────────
         elif day_name == "tuesday":
-            rec   = day_info.get("screen_recording")
-            raw   = day_info.get("raw_photo")
-            edit  = day_info.get("edited_photo")
-            audio = day_info.get("audio")
+            rec            = day_info.get("screen_recording")
+            raw            = day_info.get("raw_photo")
+            edit           = day_info.get("edited_photo")
+            audio          = day_info.get("audio")
+            target_duration = float(day_info.get("target_duration", 20.0))
 
             if rec and raw and edit and ffmpeg_available:
                 try:
@@ -163,6 +164,7 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                         venue=venue,
                         output_path=reel_path,
                         logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                        target_duration=target_duration,
                     )
                     day_result["reel"] = reel_path
                     print(f"[generate_media] tuesday: reel → {reel_path}", flush=True)
@@ -196,6 +198,13 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                 try:
                     collage_path = str(day_dir / "collage.png")
                     selected = photos[:COLLAGE_PHOTO_COUNT]
+                    # crop_offsets: list of [x, y] pairs from manifest
+                    raw_offsets = day_info.get("crop_offsets")
+                    crop_offsets = (
+                        [tuple(o) for o in raw_offsets[:COLLAGE_PHOTO_COUNT]]
+                        if raw_offsets else None
+                    )
+                    seed = day_info.get("collage_seed")
                     generate_collage(
                         photo_paths=selected,
                         output_path=collage_path,
@@ -203,6 +212,8 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                         org=org,
                         venue=venue,
                         logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                        seed=seed,
+                        crop_offsets=crop_offsets,
                     )
                     day_result["collage"] = collage_path
                     print(f"[generate_media] wednesday: collage → {collage_path}", flush=True)
@@ -221,7 +232,9 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
         # ──────────────────────────────────────────────────────────────
         elif day_name == "thursday":
             if ffmpeg_available:
-                audio = day_info.get("audio")
+                audio           = day_info.get("audio")
+                scroll_duration = float(day_info.get("scroll_duration", 30.0))
+                seed            = day_info.get("reel_seed")
                 try:
                     from ..media.generate_reel_scroll import generate_reel_scroll
                     reel_path = str(day_dir / "reel_scroll.mp4")
@@ -233,6 +246,8 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                         venue=venue,
                         output_path=reel_path,
                         logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                        scroll_duration=scroll_duration,
+                        seed=seed,
                     )
                     day_result["reel"] = reel_path
                     print(f"[generate_media] thursday: reel → {reel_path}", flush=True)

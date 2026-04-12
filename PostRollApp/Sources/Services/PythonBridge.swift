@@ -107,15 +107,28 @@ actor PythonBridge {
             // Day-specific special assets
             switch dayName {
             case .tuesday:
-                if let rec  = pd.screenRecordingPath { entry["screen_recording"] = rec.path }
-                if let raw  = pd.rawPhotoPath        { entry["raw_photo"]        = raw.path }
-                if let edit = pd.editedPhotoPath     { entry["edited_photo"]     = edit.path }
-                if let aud  = pd.audioPath           { entry["audio"]            = aud.path }
+                if let rec  = pd.screenRecordingPath { entry["screen_recording"]  = rec.path }
+                if let raw  = pd.rawPhotoPath        { entry["raw_photo"]         = raw.path }
+                if let edit = pd.editedPhotoPath     { entry["edited_photo"]      = edit.path }
+                if let aud  = pd.audioPath           { entry["audio"]             = aud.path }
+                entry["target_duration"] = pd.reelTargetDuration
             case .thursday:
-                if let aud  = pd.audioPath           { entry["audio"]            = aud.path }
+                if let aud  = pd.audioPath           { entry["audio"]             = aud.path }
+                entry["scroll_duration"] = pd.scrollDuration
+                if let seed = pd.reelSeed            { entry["reel_seed"]         = seed }
+            case .wednesday:
+                if let seed = pd.collageSeed         { entry["collage_seed"]      = seed }
+                // Build crop_offsets list parallel to photos
+                let offsets = pd.photoPaths.map { url -> [Double] in
+                    let o = pd.cropOffsets[url.absoluteString] ?? CropOffset()
+                    return [o.x, o.y]
+                }
+                if offsets.contains(where: { $0[0] != 0 || $0[1] != 0 }) {
+                    entry["crop_offsets"] = offsets
+                }
             case .friday:
-                if let raw  = pd.rawPhotoPath        { entry["raw_photo"]        = raw.path }
-                if let edit = pd.editedPhotoPath     { entry["edited_photo"]     = edit.path }
+                if let raw  = pd.rawPhotoPath        { entry["raw_photo"]         = raw.path }
+                if let edit = pd.editedPhotoPath     { entry["edited_photo"]      = edit.path }
             default:
                 break
             }
