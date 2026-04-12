@@ -1,8 +1,8 @@
 # PostRoll — Product Requirements Document
 
 **Author:** Dan Wright
-**Date:** April 4, 2026
-**Status:** In Development — Phase 4 (GUI), Steps 1–2 complete
+**Date:** April 12, 2026
+**Status:** In Development — Phase 4 (GUI) complete, Phase 5 (publishing) not started
 
 ---
 
@@ -359,20 +359,21 @@ Local Mac desktop application with GUI. Not a web app. Runs on Dan's machine.
 
 ### 8.3 Workflow
 
-1. Dan creates a new "event" in the app
-2. Inputs: event name, organization, venue, date
-3. Uploads program photos → app OCRs them for performer/piece data
-4. Dan reviews/corrects OCR output
-5. Uploads selected photos for the week (assigns them to days)
-6. Uploads screen recording + audio for Tuesday reel
-7. Uploads audio for Thursday reel
-8. App generates all visual assets (stories, collages, reels, before/after)
-9. Dan reviews visual assets, makes adjustments if needed
-10. App generates captions for all posts and blog draft
-11. Dan reviews/edits captions and blog
-12. App suggests collaborator accounts → Dan confirms
-13. App schedules everything for Sun-Fri
-14. Dan handles any remaining manual tasks (story tagging) from a generated checklist
+Steps 1–8 are fully implemented in the GUI as of April 12, 2026. Steps 9–11 are not yet built.
+
+1. Dan creates a new "event" in the app (name, org, venue, date, shoot type)
+2. Uploads program photos (PDF pages or images) → app OCRs them via Claude Vision
+3. Dan reviews/corrects OCR output (performers, pieces, scenes, notes)
+4. Assigns photos to posting days (Sun–Fri) and blog; drag to reorder within each day
+5. Optionally adds per-day @handles and plain-name credits
+6. App generates all captions + blog draft via `generate_week.py` (Claude Code, 3–6 min)
+   - Large Thursday shoots (50+ photos): Claude Vision auto-selects best 20 for the scroll reel
+7. Dan reviews/edits captions, hashtags, and alt texts; can request plain-English revision per caption
+   - Feedback optionally saved to `brand-voice.md` for all future events
+8. Dan exports: captions, blog draft, checklist written to a dated folder; story images + Wednesday collage generated via PIL (20–60 sec); Dan opens folder in Finder
+9. *(Phase 5)* App suggests collaborator accounts → Dan confirms
+10. *(Phase 5)* App schedules everything for Sun-Fri via direct platform APIs or Metricool
+11. Dan handles remaining manual tasks (story tagging, Instagram highlights) from the CHECKLIST.md
 
 ### 8.4 Manual Task Checklist
 
@@ -446,7 +447,7 @@ The app generates a checklist of actions that cannot be automated, including:
 ## 10. Open Questions — Design & UX
 
 30. ~~What GUI framework is preferred?~~ **Resolved:** SwiftUI (native macOS). Chosen April 2026.
-31. Should the app support multiple events in progress at once, or one at a time?
+31. ~~Should the app support multiple events in progress at once, or one at a time?~~ **Resolved:** Multiple events. Sidebar shows all events; any can be selected and worked independently.
 32. Should there be a template/preset system for different recurring event types (e.g., DCINY events always use certain settings)?
 33. For the Thursday scrolling reel — should there be an option for a tiny gap between photos, or always seamless?
 34. For the Tuesday reel — what does the screen recording frame look like in the final reel? Full-screen vertical crop of the Lightroom window? Or placed on a background?
@@ -455,10 +456,10 @@ The app generates a checklist of actions that cannot be automated, including:
 
 ## 11. Open Questions — Content Details
 
-35. What are the exact fonts used in the story template? (Need the script font and the spaced tracking font — or the Canva template to extract them)
-36. What is the exact rose-gold color value for the divider?
-37. What format is the DW Photography logo asset? (Need a high-res PNG with transparency)
-38. For the masonry collage — are there specific layout arrangements you prefer, or should the app have 3-4 templates and rotate?
+35. ~~What are the exact fonts used in the story template?~~ **Resolved:** SignPainter HouseScript (event name, 100pt) + Helvetica Neue Thin (org/venue, 38pt, wide tracking). Both are macOS system fonts.
+36. ~~What is the exact rose-gold color value for the divider?~~ **Resolved:** `#C4877A` (RGB 196/135/122) in Python; `Color(red: 160/255, green: 105/255, blue: 95/255)` in SwiftUI.
+37. ~~What format is the DW Photography logo asset?~~ **Resolved:** `postroll/assets/logo-white.png` and `logo-black.png` (PNG with transparency).
+38. ~~For the masonry collage — are there specific layout arrangements you prefer?~~ **Resolved:** 4 top patterns + 5 bottom patterns, randomly selected per generation. Each handles exactly 5 photos per half. Seed is stable so same photos → same layout.
 39. For the before/after labels ("RAW" and "Edit") — what font and size?
 40. For the Thursday reel scroll — preferred total duration range (e.g., 15-30 seconds, or always target a specific length)?
 
@@ -498,22 +499,23 @@ Caption writing via Claude Code with brand voice skill. Blog post drafting. Prog
 ### Phase 3 — Export Pipeline ✅ Complete (April 12, 2026)
 `export.py` + `audio.py`. Jamendo auto-fetch for licensed audio. 143 tests passing.
 
-### Phase 4 — GUI 🔄 In Progress
-**Framework:** SwiftUI (native macOS). **Design system:** documented in `PostRollApp/DESIGN.md`.
+### Phase 4 — GUI ✅ Complete (April 12, 2026)
+**Framework:** SwiftUI (native macOS). **App icon:** rose-gold P over camera aperture.
 
 | Step | Description | Status |
 |---|---|---|
 | 1 | App shell — NavigationSplitView, AppState, event CRUD, persistence | ✅ Done |
 | 2 | OCR flow — program upload (PDF + images), progress view, review/correction loop | ✅ Done |
-| 3 | Photo assignment — drag photos to posting days, select 4–7 blog photos | Next |
-| 4 | Asset generation — invoke Python pipeline, show progress per asset type | Pending |
-| 5 | Caption and blog review — inline editing, approve/reject per post | Pending |
-| 6 | Export and scheduling — package output, hand off to export pipeline | Pending |
-| 7 | Feedback loop — plain-English feedback translates to brand-voice edits | Pending |
+| 3 | Photo assignment — drag photos to posting days, select 4–7 blog photos; drag-to-reorder within day grid; Wednesday collage warning (>10 photos) | ✅ Done |
+| 4 | Asset generation — invoke `generate_week.py`, animated progress, per-day @handles + plain-name fields; representative photo sampling (Claude Vision picks best 20 from 50+ photos for scroll reels via `select_reel_photos.py`) | ✅ Done |
+| 5 | Caption + blog review — per-day accordion, inline editing, hashtag editor, alt texts collapsible, revision feedback loop with plain-English feedback per caption | ✅ Done |
+| 6 | Export — two-phase: text (captions, blog draft, checklist) then media generation (story images via PIL for all days, Wednesday masonry collage via PIL) via `generate_media.py`; non-fatal skip option if media fails | ✅ Done |
+| 7 | Feedback loop — revision feedback saved to `brand-voice.md` via checkbox in revision panel; back navigation across all stages so any step is reversible | ✅ Done |
 
-**Feedback loop (required, first-class feature).** The brand voice and generator prompts are LIVING documents that must evolve as Dan uses the app — not get manually patched in CLI sessions. The GUI must provide two complementary mechanisms:
+**What the feedback loop does now.** In the caption review step, every "Revise with feedback" panel has a "Save this feedback to brand voice for all future events" checkbox. When checked, the feedback text is appended to `postroll/assets/brand-voice.md` under a `## Caption revision notes` section. This provides the permanent-rule half of the feedback loop. The final-version capture mechanism (diff analysis, periodic batch proposal) is deferred to a future phase.
 
-1. **Plain-English feedback.** Every generated output card has a "Give feedback" button. Dan types feedback in natural language, picks a scope (this one / this event / permanent rule), and the system uses Claude to translate it into a concrete edit to `brand-voice.md` or a generator prompt file, shows Dan the diff, and asks him to confirm.
-2. **Final-version capture.** Every caption/blog is shown with an editable text box. Dan edits in-place to match what he actually posts. Hitting "Save as final" stores both the suggested text and the final. Periodically a Claude call analyzes the diffs and proposes edits to brand-voice/prompts — Dan reviews each as a diff and accepts or rejects.
+**Back navigation.** All 7 stages have a back button. Going back preserves all data — photos, handles, captions, and OCR results are all saved on every change, so reversing is always safe.
 
-Together these enable compounding improvement: every week Dan uses the app, the system gets closer to his actual voice.
+### Phase 5 — Publishing 🔲 Not Started
+
+Direct platform API publishing or Metricool API integration. Blocked on API research (see Section 9). Collaborator suggestion engine also in this phase.
