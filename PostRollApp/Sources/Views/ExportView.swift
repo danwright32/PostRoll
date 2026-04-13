@@ -169,13 +169,21 @@ struct ExportView: View {
             RoseGoldDivider()
                 .frame(width: 80)
 
+            Text("This event is now archived. Use the archive button in the sidebar to revisit it.")
+                .font(.light(11))
+                .foregroundStyle(Color.warmMid.opacity(0.75))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 300)
+
             HStack(spacing: Spacing.md) {
                 Button("Open in Finder") { NSWorkspace.shared.open(folder) }
                     .buttonStyle(BrandButtonStyle())
-                Button("Export Again") { exportState = .ready }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.roseGold)
+                Button("Done") {
+                    appState.selectedEventID = nil
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.warmMid)
             }
 
             Spacer()
@@ -186,7 +194,7 @@ struct ExportView: View {
 
     private func errorContent(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            BrandBanner(icon: "exclamationmark.triangle", message: message)
+            BrandBanner(icon: "exclamationmark.triangle", message: message, style: .error)
                 .padding(.horizontal, Spacing.xl)
             HStack {
                 Spacer()

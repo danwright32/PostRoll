@@ -42,7 +42,7 @@ struct Event: Identifiable, Codable, Hashable {
 // MARK: - ShootType
 
 enum ShootType: String, Codable, CaseIterable {
-    case fullShow  = "Full Show"
+    case fullShow  = "Performance"
     case photoCall = "Photo Call"
     case rehearsal = "Rehearsal"
     case combo     = "Combo"

@@ -44,7 +44,8 @@ struct CaptionReviewView: View {
                 if result.errorCount > 0 {
                     BrandBanner(
                         icon: "exclamationmark.triangle",
-                        message: "\(result.errorCount) day\(result.errorCount == 1 ? "" : "s") failed to generate. You can re-run generation from the previous step."
+                        message: "\(result.errorCount) day\(result.errorCount == 1 ? "" : "s") failed to generate. You can re-run generation from the previous step.",
+                        style: .error
                     )
                     .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.md)
@@ -74,7 +75,7 @@ struct CaptionReviewView: View {
                 }
 
                 if let error = regenerateError {
-                    BrandBanner(icon: "exclamationmark.triangle", message: error)
+                    BrandBanner(icon: "exclamationmark.triangle", message: error, style: .error)
                         .padding(.horizontal, Spacing.xl)
                 }
 
@@ -580,7 +581,7 @@ private struct HashtagsEditor: View {
                     .help("Apply a hashtag preset")
                 }
             }
-            TextField("", text: $raw)
+            TextField("#tag1 #tag2 #tag3", text: $raw)
                 .focused($focused)
                 .font(.system(size: 12))
                 .foregroundStyle(Color.warmDark)
@@ -635,7 +636,7 @@ private struct AltTextsSection: View {
                         .font(.system(size: 9, weight: .medium))
                         .tracking(0.8)
                         .foregroundStyle(Color.warmMid)
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9))
                         .foregroundStyle(Color.warmMid)
                     Spacer()

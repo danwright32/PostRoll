@@ -527,7 +527,7 @@ private struct EmptySidebarView: View {
             Text("No events")
                 .font(.light(12))
                 .foregroundStyle(Color.warmMid)
-            Text("Tap New Event or press ⌘N to start.")
+            Text("Click New Event or press ⌘N to start.")
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
         }

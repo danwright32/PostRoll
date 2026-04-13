@@ -33,7 +33,8 @@ struct OCRReviewView: View {
                 if let issues = detectedIssues, !issues.isEmpty {
                     BrandBanner(
                         icon: "exclamationmark.circle",
-                        message: issues.joined(separator: " ")
+                        message: issues.joined(separator: " "),
+                        style: .error
                     )
                     .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.md)
@@ -41,7 +42,7 @@ struct OCRReviewView: View {
 
                 ForEach(ReviewSection.allCases, id: \.self) { section in
                     ReviewSectionRow(
-                        title: section.rawValue,
+                        title: sectionTitle(section),
                         isExpanded: expanded == section,
                         onToggle: { expanded = expanded == section ? nil : section }
                     ) {
@@ -53,8 +54,10 @@ struct OCRReviewView: View {
 
                 HStack {
                     Spacer()
-                    Button("Looks Good") { confirmAndAdvance() }
-                        .buttonStyle(BrandButtonStyle())
+                    Button(ocr.performers.isEmpty && ocr.pieces.isEmpty ? "Continue Anyway" : "Looks Good") {
+                        confirmAndAdvance()
+                    }
+                    .buttonStyle(BrandButtonStyle())
                 }
                 .padding(Spacing.xl)
             }
@@ -63,6 +66,19 @@ struct OCRReviewView: View {
     }
 
     // MARK: - Helpers
+
+    private func sectionTitle(_ section: ReviewSection) -> String {
+        switch section {
+        case .performers:
+            return ocr.performers.isEmpty ? "Performers (empty)" : "Performers (\(ocr.performers.count))"
+        case .pieces:
+            return ocr.pieces.isEmpty ? "Program (empty)" : "Program (\(ocr.pieces.count))"
+        case .scenes:
+            return ocr.scenes.isEmpty ? "Scenes (none)" : "Scenes (\(ocr.scenes.count))"
+        case .notes:
+            return "Notes"
+        }
+    }
 
     private var detectedIssues: [String]? {
         var issues: [String] = []

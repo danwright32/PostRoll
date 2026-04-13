@@ -184,15 +184,51 @@ struct EventHeader: View {
 
 // MARK: - BrandBanner
 
+enum BrandBannerStyle {
+    case info     // instructional — roseGold border, subtle bg
+    case warning  // action needed — heavier roseGold border
+    case error    // something wrong — roseDeep border
+}
+
 struct BrandBanner: View {
     let icon: String
     let message: String
+    var style: BrandBannerStyle = .info
+
+    private var borderColor: Color {
+        switch style {
+        case .info:    return Color.roseGold.opacity(0.4)
+        case .warning: return Color.roseGold.opacity(0.75)
+        case .error:   return Color.roseDeep
+        }
+    }
+    private var borderWidth: CGFloat {
+        switch style {
+        case .info:    return 2
+        case .warning: return 3
+        case .error:   return 3
+        }
+    }
+    private var bgColor: Color {
+        switch style {
+        case .info:    return Color.roseGold.opacity(0.07)
+        case .warning: return Color.roseGold.opacity(0.10)
+        case .error:   return Color.roseDeep.opacity(0.08)
+        }
+    }
+    private var iconColor: Color {
+        switch style {
+        case .info:    return Color.roseGold
+        case .warning: return Color.roseGold
+        case .error:   return Color.roseDeep
+        }
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 18))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(iconColor)
                 .frame(width: 24)
             Text(message)
                 .font(.system(size: 12))
@@ -201,11 +237,11 @@ struct BrandBanner: View {
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.roseGold.opacity(0.07))
+        .background(bgColor)
         .overlay(
             Rectangle()
-                .fill(Color.roseGold.opacity(0.4))
-                .frame(width: 2),
+                .fill(borderColor)
+                .frame(width: borderWidth),
             alignment: .leading
         )
         .clipShape(RoundedRectangle(cornerRadius: Radius.sm))

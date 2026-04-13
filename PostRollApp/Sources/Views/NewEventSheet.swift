@@ -72,6 +72,7 @@ struct NewEventSheet: View {
                             Spacer()
                             Button("Create Event") { createEvent() }
                                 .buttonStyle(BrandButtonStyle())
+                                .keyboardShortcut(.defaultAction)
                                 .disabled(!isValid)
                                 .opacity(isValid ? 1 : 0.4)
                         }

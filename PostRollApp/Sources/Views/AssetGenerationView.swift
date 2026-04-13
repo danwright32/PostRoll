@@ -7,20 +7,12 @@ struct AssetGenerationView: View {
     @State private var dayHandles: [DayName: String] = [:]   // comma-separated @handles
     @State private var dayNames: [DayName: String] = [:]     // comma-separated plain names
     @State private var generationState: GenState = .configuring
-    @State private var progressDayIndex = 0
 
     enum GenState {
         case configuring
         case running
         case failed(String)
         case done
-    }
-
-    // Animated progress cycling through day names while Python runs
-    private var progressLabel: String {
-        let steps = daysWithPhotos.map { $0.displayName } + (event.blogPhotoPaths.count >= 4 ? ["blog post"] : [])
-        guard !steps.isEmpty else { return "Generating…" }
-        return "Generating \(steps[progressDayIndex % steps.count])…"
     }
 
     private var blogPhotoWarning: String? {
@@ -84,7 +76,7 @@ struct AssetGenerationView: View {
                 .padding(.bottom, Spacing.sm)
 
                 if let warning = blogPhotoWarning {
-                    BrandBanner(icon: "photo.on.rectangle", message: warning)
+                    BrandBanner(icon: "photo.on.rectangle", message: warning, style: .warning)
                         .padding(.horizontal, Spacing.xl)
                         .padding(.bottom, Spacing.sm)
                 }
@@ -136,12 +128,11 @@ struct AssetGenerationView: View {
                 .tint(Color.roseGold)
                 .padding(.vertical, Spacing.sm)
 
-            Text(progressLabel)
+            Text("Generating your content…")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.warmDark)
-                .animation(.easeInOut(duration: 0.4), value: progressDayIndex)
 
-            Text("Typically 3–6 minutes total. Don't close the app.")
+            Text("This usually takes 3–6 minutes. Keep PostRoll open.")
                 .font(.light(12))
                 .foregroundStyle(Color.warmMid)
 
@@ -149,22 +140,6 @@ struct AssetGenerationView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cream)
-        .onAppear {
-            let stepCount = daysWithPhotos.count + (event.blogPhotoPaths.count >= 4 ? 1 : 0)
-            guard stepCount > 0 else { return }
-            let perStep = 240.0 / Double(stepCount)
-            Timer.scheduledTimer(withTimeInterval: perStep, repeats: true) { timer in
-                // Mutate @MainActor state inside the isolated block; carry the
-                // stop decision out as a plain Bool to avoid sending the non-Sendable
-                // Timer across the isolation boundary.
-                var done = false
-                MainActor.assumeIsolated {
-                    progressDayIndex += 1
-                    done = progressDayIndex >= stepCount
-                }
-                if done { timer.invalidate() }
-            }
-        }
     }
 
     // MARK: - Error
@@ -175,7 +150,7 @@ struct AssetGenerationView: View {
                 EventHeader(event: event, subtitle: "Generation Failed")
                     .padding([.horizontal, .top], Spacing.xl)
 
-                BrandBanner(icon: "exclamationmark.triangle", message: message)
+                BrandBanner(icon: "exclamationmark.triangle", message: message, style: .error)
                     .padding(.horizontal, Spacing.xl)
 
                 HStack {
