@@ -6,6 +6,11 @@ struct OCRReviewView: View {
     @State private var ocr: OCRResult
     @State private var expanded: ReviewSection? = .performers
 
+    // Undo state
+    @State private var undoMessage: String? = nil
+    @State private var undoRestore: (() -> Void)? = nil
+    @State private var undoWorkItem: DispatchWorkItem? = nil
+
     enum ReviewSection: String, CaseIterable {
         case performers = "Performers"
         case pieces     = "Program"
@@ -19,50 +24,81 @@ struct OCRReviewView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
 
-                EventHeader(event: event, subtitle: "Review Program Data")
-                    .padding([.horizontal, .top], Spacing.xl)
-                    .padding(.bottom, Spacing.sm)
+                    EventHeader(event: event, subtitle: "Review Program Data")
+                        .padding([.horizontal, .top], Spacing.xl)
+                        .padding(.bottom, Spacing.sm)
 
-                StageBackButton(label: "Re-upload program") { goBack() }
-                    .padding(.horizontal, Spacing.xl)
-                    .padding(.bottom, Spacing.md)
+                    StageBackButton(label: "Re-upload program") { goBack() }
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.md)
 
-                if let issues = detectedIssues, !issues.isEmpty {
-                    BrandBanner(
-                        icon: "exclamationmark.circle",
-                        message: issues.joined(separator: " "),
-                        style: .error
-                    )
-                    .padding(.horizontal, Spacing.xl)
-                    .padding(.bottom, Spacing.md)
-                }
-
-                ForEach(ReviewSection.allCases, id: \.self) { section in
-                    ReviewSectionRow(
-                        title: sectionTitle(section),
-                        isExpanded: expanded == section,
-                        onToggle: { expanded = expanded == section ? nil : section }
-                    ) {
-                        sectionContent(section)
-                            .padding(.horizontal, Spacing.xl)
-                            .padding(.bottom, Spacing.md)
+                    if let issues = detectedIssues, !issues.isEmpty {
+                        BrandBanner(
+                            icon: "exclamationmark.circle",
+                            message: issues.joined(separator: " "),
+                            style: .error
+                        )
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.md)
                     }
-                }
 
-                HStack {
-                    Spacer()
-                    Button(ocr.performers.isEmpty && ocr.pieces.isEmpty ? "Continue Anyway" : "Looks Good") {
-                        confirmAndAdvance()
+                    ForEach(ReviewSection.allCases, id: \.self) { section in
+                        ReviewSectionRow(
+                            title: sectionTitle(section),
+                            isExpanded: expanded == section,
+                            onToggle: { expanded = expanded == section ? nil : section }
+                        ) {
+                            sectionContent(section)
+                                .padding(.horizontal, Spacing.xl)
+                                .padding(.bottom, Spacing.md)
+                        }
                     }
-                    .buttonStyle(BrandButtonStyle())
+
+                    HStack {
+                        Spacer()
+                        Button(detectedIssues != nil ? "Continue Anyway" : "Looks Good") {
+                            confirmAndAdvance()
+                        }
+                        .buttonStyle(BrandButtonStyle())
+                        .help(detectedIssues != nil
+                              ? "Missing data may produce generic captions. You can add performers or works now, or revise captions after generation."
+                              : "")
+                    }
+                    .padding(Spacing.xl)
                 }
-                .padding(Spacing.xl)
+            }
+
+            if let message = undoMessage {
+                OCRUndoBanner(message: message) {
+                    undoRestore?()
+                    dismissUndo()
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .background(Color.cream)
+        .animation(.easeOut(duration: 0.2), value: undoMessage != nil)
+    }
+
+    // MARK: - Undo
+
+    private func scheduleUndo(message: String, restore: @escaping () -> Void) {
+        undoWorkItem?.cancel()
+        undoMessage = message
+        undoRestore = restore
+        let work = DispatchWorkItem { dismissUndo() }
+        undoWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
+    }
+
+    private func dismissUndo() {
+        undoMessage = nil
+        undoRestore = nil
+        undoWorkItem = nil
     }
 
     // MARK: - Helpers
@@ -94,8 +130,18 @@ struct OCRReviewView: View {
     @ViewBuilder
     private func sectionContent(_ section: ReviewSection) -> some View {
         switch section {
-        case .performers: PerformersEditor(performers: $ocr.performers)
-        case .pieces:     PiecesEditor(pieces: $ocr.pieces)
+        case .performers:
+            PerformersEditor(performers: $ocr.performers) { performer, idx in
+                scheduleUndo(message: "Performer removed") {
+                    ocr.performers.insert(performer, at: min(idx, ocr.performers.count))
+                }
+            }
+        case .pieces:
+            PiecesEditor(pieces: $ocr.pieces) { piece, idx in
+                scheduleUndo(message: "Work removed") {
+                    ocr.pieces.insert(piece, at: min(idx, ocr.pieces.count))
+                }
+            }
         case .scenes:     ScenesEditor(scenes: $ocr.scenes)
         case .notes:      NotesEditor(ocr: $ocr)
         }
@@ -105,7 +151,7 @@ struct OCRReviewView: View {
         var ev = event
         ev.ocrResult = ocr
         ev.ocrReviewDone = true
-        ev.stage = .photosAssigned
+        ev.stage = .ocrDone
         appState.updateEvent(ev)
     }
 
@@ -154,12 +200,17 @@ private struct ReviewSectionRow<Content: View>: View {
 
 private struct PerformersEditor: View {
     @Binding var performers: [Performer]
+    let onDeleted: (Performer, Int) -> Void
 
     var body: some View {
         VStack(spacing: Spacing.sm) {
             ForEach($performers) { $p in
                 PerformerRow(performer: $p) {
-                    performers.removeAll { $0.id == p.id }
+                    if let idx = performers.firstIndex(where: { $0.id == p.id }) {
+                        let snapshot = performers[idx]
+                        performers.remove(at: idx)
+                        onDeleted(snapshot, idx)
+                    }
                 }
             }
             BrandAddButton(label: "Add Performer") {
@@ -206,11 +257,18 @@ private struct PerformerRow: View {
 
 private struct PiecesEditor: View {
     @Binding var pieces: [Piece]
+    let onDeleted: (Piece, Int) -> Void
 
     var body: some View {
         VStack(spacing: Spacing.sm) {
             ForEach($pieces) { $p in
-                PieceRow(piece: $p) { pieces.removeAll { $0.id == p.id } }
+                PieceRow(piece: $p) {
+                    if let idx = pieces.firstIndex(where: { $0.id == p.id }) {
+                        let snapshot = pieces[idx]
+                        pieces.remove(at: idx)
+                        onDeleted(snapshot, idx)
+                    }
+                }
             }
             BrandAddButton(label: "Add Work") { pieces.append(Piece()) }
         }
@@ -390,5 +448,29 @@ private struct BrandDeleteButton: View {
         }
         .buttonStyle(.plain)
         .padding(.top, 6)
+    }
+}
+
+// MARK: - OCR Undo Banner
+
+private struct OCRUndoBanner: View {
+    let message: String
+    let onUndo: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(message)
+                .font(.light(11))
+                .foregroundStyle(Color.warmMid)
+            Spacer()
+            Button("Undo", action: onUndo)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.roseGold)
+                .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, Spacing.sm)
+        .background(Color.creamDeep)
+        .overlay(Rectangle().fill(Color.creamEdge).frame(height: 0.5), alignment: .top)
     }
 }

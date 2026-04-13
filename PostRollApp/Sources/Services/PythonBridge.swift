@@ -7,13 +7,40 @@ enum PythonBridgeError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .scriptFailed(let code, let stderr):
-            return "Python exited with code \(code).\n\(stderr)"
+        case .scriptFailed(_, let stderr):
+            return Self.humanise(stderr: stderr)
         case .outputMissing:
-            return "Python ran but produced no output file."
-        case .invalidOutput(let detail):
-            return "Could not parse output: \(detail)"
+            return "Generation finished but produced no output. Check that the program PDF has readable text and try again."
+        case .invalidOutput:
+            return "Generated output couldn't be read. Try regenerating. If it keeps failing, check ~/Documents/PostRoll/logs."
         }
+    }
+
+    private static func humanise(stderr: String) -> String {
+        let s = stderr.lowercased()
+        if s.contains("no performers") || s.contains("performers is empty") || s.contains("no performer") {
+            return "Generation failed: no performers found in your OCR data. Go back to OCR review and add at least one performer, then try again."
+        }
+        if s.contains("no pieces") || s.contains("pieces is empty") || s.contains("no works") {
+            return "Generation failed: no program works found in your OCR data. Go back to OCR review and add at least one work, then try again."
+        }
+        if s.contains("ffmpeg") {
+            return "Media generation failed: ffmpeg is not installed. Run `brew install ffmpeg` in Terminal, then try again."
+        }
+        if s.contains("anthropic") || s.contains("openai") || s.contains("api key") || s.contains("apikey") {
+            return "Generation failed: could not connect to the AI service. Check that your API key is set correctly and that you have internet access."
+        }
+        if s.contains("json") || s.contains("decode") || s.contains("parse") {
+            return "Generation failed: the output could not be read. This is usually a temporary issue — try again."
+        }
+        if s.contains("no such file") || s.contains("filenotfounderror") {
+            return "Generation failed: a required file was not found. Check that your photos are still in their original locations."
+        }
+        // Fall back to a trimmed version of stderr (first 120 chars), not a raw traceback
+        let trimmed = stderr.split(separator: "\n").last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+            .map(String.init) ?? stderr
+        let preview = trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
+        return "Generation failed: \(preview). Check ~/Documents/PostRoll/logs if this persists."
     }
 }
 

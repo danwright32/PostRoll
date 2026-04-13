@@ -8,6 +8,7 @@ struct ExportView: View {
     @State private var showingFolderPicker = false
     @State private var exportedFolder: URL? = nil   // set after text export so media gen can use it
     @State private var lastExportFolder: URL? = nil
+    @State private var mediaGenerationError: String? = nil
 
     enum ExportState {
         case ready
@@ -169,6 +170,15 @@ struct ExportView: View {
             RoseGoldDivider()
                 .frame(width: 80)
 
+            if let mediaErr = mediaGenerationError {
+                BrandBanner(
+                    icon: "exclamationmark.triangle",
+                    message: "Captions + blog exported. Visual assets failed — \(mediaErr). Check that ffmpeg is installed.",
+                    style: .warning
+                )
+                .frame(maxWidth: 400)
+            }
+
             Text("This event is now archived. Use the archive button in the sidebar to revisit it.")
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid.opacity(0.75))
@@ -177,13 +187,13 @@ struct ExportView: View {
 
             HStack(spacing: Spacing.md) {
                 Button("Open in Finder") { NSWorkspace.shared.open(folder) }
-                    .buttonStyle(BrandButtonStyle())
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.roseGold)
                 Button("Done") {
                     appState.selectedEventID = nil
                 }
-                .buttonStyle(.plain)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.warmMid)
+                .buttonStyle(BrandButtonStyle())
             }
 
             Spacer()
@@ -246,7 +256,7 @@ struct ExportView: View {
                     }
                 } catch {
                     // Media generation failure is non-fatal — text export already succeeded
-                    print("[ExportView] media generation failed (non-fatal): \(error.localizedDescription)")
+                    await MainActor.run { mediaGenerationError = error.localizedDescription }
                 }
 
                 await MainActor.run { exportState = .done(folder) }

@@ -8,11 +8,42 @@ struct AssetGenerationView: View {
     @State private var dayNames: [DayName: String] = [:]     // comma-separated plain names
     @State private var generationState: GenState = .configuring
 
+    // Generation tracking
+    @State private var generationTask: Task<Void, Never>? = nil
+    @State private var elapsedSeconds: Int = 0
+    @State private var elapsedTimer: Timer? = nil
+
+    // Animation state
+    @State private var showCheckmark = false
+    @State private var phasesVisible = false
+
     enum GenState {
         case configuring
         case running
         case failed(String)
         case done
+    }
+
+    // Phase timeline — timing approximates observed generation durations
+    private static let phases: [(name: String, startsAt: Int)] = [
+        ("Reading program & photos", 0),
+        ("Matching photo captions",  30),
+        ("Writing captions",         75),
+        ("Drafting blog post",       180),
+        ("Packaging output",         330),
+    ]
+
+    private var activePhaseIndex: Int {
+        var active = 0
+        for (i, phase) in Self.phases.enumerated() {
+            if elapsedSeconds >= phase.startsAt { active = i }
+        }
+        return active
+    }
+
+    private func phaseState(for index: Int) -> PhaseState {
+        index < activePhaseIndex  ? .completed :
+        index == activePhaseIndex ? .active    : .pending
     }
 
     private var blogPhotoWarning: String? {
@@ -40,12 +71,22 @@ struct AssetGenerationView: View {
         switch generationState {
         case .configuring:
             configureView
+                .transition(.asymmetric(insertion: .opacity, removal: .opacity))
         case .running:
             runningView
+                .transition(.asymmetric(
+                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                    removal: .opacity
+                ))
         case .failed(let message):
             errorView(message: message)
+                .transition(.asymmetric(insertion: .opacity, removal: .opacity))
         case .done:
             doneView
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.97).combined(with: .opacity),
+                    removal: .opacity
+                ))
         }
     }
 
@@ -61,7 +102,7 @@ struct AssetGenerationView: View {
                     .padding(.bottom, Spacing.sm)
 
                 StageBackButton(label: "Back to photo assignment") {
-                    var ev = event
+                    var ev = eventWithHandlesSaved()
                     ev.stage = .photosAssigned
                     appState.updateEvent(ev)
                 }
@@ -74,6 +115,20 @@ struct AssetGenerationView: View {
                 )
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.sm)
+
+                if let prev = previousEventWithHandles {
+                    HStack {
+                        Spacer()
+                        Button("Copy handles from \"\(prev.name)\"") {
+                            copyHandlesFromEvent(prev)
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.roseGold)
+                    }
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.bottom, Spacing.sm)
+                }
 
                 if let warning = blogPhotoWarning {
                     BrandBanner(icon: "photo.on.rectangle", message: warning, style: .warning)
@@ -100,11 +155,22 @@ struct AssetGenerationView: View {
                     )
                 }
 
-                HStack {
-                    Spacer()
-                    Button("Generate All") { startGeneration() }
-                        .buttonStyle(BrandButtonStyle())
-                        .disabled(!canGenerate)
+                VStack(alignment: .trailing, spacing: Spacing.sm) {
+                    if !canGenerate, let reason = blogPhotoWarning {
+                        Text(reason)
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
+                    } else if !canGenerate && totalPhotoCount == 0 {
+                        Text("Add photos to at least one day to generate.")
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
+                    }
+                    HStack {
+                        Spacer()
+                        Button("Generate All") { startGeneration() }
+                            .buttonStyle(BrandButtonStyle())
+                            .disabled(!canGenerate)
+                    }
                 }
                 .padding(Spacing.xl)
             }
@@ -123,23 +189,53 @@ struct AssetGenerationView: View {
                 .font(.signPainter(28))
                 .foregroundStyle(Color.warmDark)
 
-            ProgressView()
-                .controlSize(.large)
-                .tint(Color.roseGold)
-                .padding(.vertical, Spacing.sm)
+            // Phase timeline
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(Self.phases.enumerated()), id: \.offset) { i, phase in
+                    PhaseRow(name: phase.name, state: phaseState(for: i))
+                        .opacity(phasesVisible ? 1 : 0)
+                        .offset(y: phasesVisible ? 0 : 6)
+                        .animation(
+                            .spring(response: 0.4, dampingFraction: 0.82)
+                            .delay(Double(i) * 0.07),
+                            value: phasesVisible
+                        )
+                }
+            }
+            .animation(.easeOut(duration: 0.3), value: activePhaseIndex)
+            .padding(.vertical, Spacing.sm)
 
-            Text("Generating your content…")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.warmDark)
+            // Elapsed clock
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: "timer")
+                    .font(.system(size: 11))
+                Text(elapsedFormatted)
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+                Text("/ ~6:00")
+                    .font(.light(12))
+            }
+            .foregroundStyle(Color.warmMid)
 
-            Text("This usually takes 3–6 minutes. Keep PostRoll open.")
-                .font(.light(12))
-                .foregroundStyle(Color.warmMid)
+            Button("Cancel") {
+                cancelGeneration()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 11))
+            .foregroundStyle(Color.warmMid.opacity(0.7))
+            .padding(.top, Spacing.sm)
 
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cream)
+        .onAppear { phasesVisible = true }
+        .onDisappear { stopTimer(); phasesVisible = false }
+    }
+
+    private var elapsedFormatted: String {
+        let m = elapsedSeconds / 60
+        let s = elapsedSeconds % 60
+        return String(format: "%d:%02d", m, s)
     }
 
     // MARK: - Error
@@ -153,10 +249,24 @@ struct AssetGenerationView: View {
                 BrandBanner(icon: "exclamationmark.triangle", message: message, style: .error)
                     .padding(.horizontal, Spacing.xl)
 
-                HStack {
+                HStack(spacing: Spacing.md) {
                     Spacer()
-                    Button("Try Again") { generationState = .configuring }
-                        .buttonStyle(BrandButtonStyle())
+                    if event.weekResult != nil {
+                        Button("Use previous results") {
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                                generationState = .done
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.warmMid)
+                    }
+                    Button("Try Again") {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                            generationState = .configuring
+                        }
+                    }
+                    .buttonStyle(BrandButtonStyle())
                 }
                 .padding(Spacing.xl)
             }
@@ -177,24 +287,60 @@ struct AssetGenerationView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 44))
                 .foregroundStyle(Color.roseGold.opacity(0.7))
+                .scaleEffect(showCheckmark ? 1 : 0.1)
+                .opacity(showCheckmark ? 1 : 0)
 
             Text("Content generated")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.warmDark)
+                .opacity(showCheckmark ? 1 : 0)
+                .offset(y: showCheckmark ? 0 : 8)
 
             RoseGoldDivider()
-                .frame(width: 80)
+                .frame(width: showCheckmark ? 80 : 0)
 
             Button("Continue to Review") { advance() }
                 .buttonStyle(BrandButtonStyle())
+                .opacity(showCheckmark ? 1 : 0)
 
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cream)
+        .onAppear {
+            // Short delay lets the view transition settle before the spring fires
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.62)) {
+                    showCheckmark = true
+                }
+            }
+        }
+        .onDisappear { showCheckmark = false }
     }
 
     // MARK: - Helpers
+
+    /// Most recent other event that has at least one day with saved handles.
+    private var previousEventWithHandles: Event? {
+        appState.events
+            .filter { $0.id != event.id }
+            .sorted { $0.date > $1.date }
+            .first { ev in
+                ev.days.values.contains { !$0.tagHandles.isEmpty || !$0.nameMentions.isEmpty }
+            }
+    }
+
+    private func copyHandlesFromEvent(_ source: Event) {
+        for day in DayName.allCases {
+            guard let pd = source.days[day.rawValue] else { continue }
+            if !pd.tagHandles.isEmpty {
+                dayHandles[day] = pd.tagHandles.joined(separator: ", ")
+            }
+            if !pd.nameMentions.isEmpty {
+                dayNames[day] = pd.nameMentions.joined(separator: ", ")
+            }
+        }
+    }
 
     /// Pre-populate handle fields from saved model so returning to this screen
     /// after generation shows previously entered values.
@@ -236,8 +382,8 @@ struct AssetGenerationView: View {
             .filter { !$0.isEmpty }
     }
 
-    private func startGeneration() {
-        // Bake handles and names into the event before generating
+    /// Returns a copy of `event` with current handle/name field values baked in.
+    private func eventWithHandlesSaved() -> Event {
         var ev = event
         for day in daysWithPhotos {
             if ev.days[day.rawValue] != nil {
@@ -245,29 +391,64 @@ struct AssetGenerationView: View {
                 ev.days[day.rawValue]!.nameMentions = parseHandles(dayNames[day] ?? "")
             }
         }
+        return ev
+    }
+
+    private func startGeneration() {
+        let ev = eventWithHandlesSaved()
         appState.updateEvent(ev)
 
-        generationState = .running
-        Task {
+        elapsedSeconds = 0
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+            generationState = .running
+        }
+
+        // Elapsed timer fires every second on the main run loop
+        elapsedTimer?.invalidate()
+        elapsedTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            MainActor.assumeIsolated { elapsedSeconds += 1 }
+        }
+
+        generationTask = Task {
             do {
                 let result = try await PythonBridge.shared.runWeekGeneration(event: ev)
                 await MainActor.run {
+                    stopTimer()
                     var saved = ev
                     saved.weekResult = result
                     appState.updateEvent(saved)
-                    generationState = .done
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                        generationState = .done
+                    }
                 }
             } catch {
                 await MainActor.run {
-                    generationState = .failed(error.localizedDescription)
+                    stopTimer()
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                        generationState = .failed(error.localizedDescription)
+                    }
                 }
             }
         }
     }
 
+    private func cancelGeneration() {
+        generationTask?.cancel()
+        generationTask = nil
+        stopTimer()
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            generationState = .configuring
+        }
+    }
+
+    private func stopTimer() {
+        elapsedTimer?.invalidate()
+        elapsedTimer = nil
+    }
+
     private func advance() {
         var ev = event
-        ev.stage = .captionsReviewed
+        ev.stage = .assetsGenerated
         appState.updateEvent(ev)
     }
 }
@@ -409,5 +590,45 @@ private struct HandleField: View {
                 )
                 .animation(.easeOut(duration: 0.12), value: focused)
         }
+    }
+}
+
+// MARK: - Phase row
+
+private enum PhaseState: Equatable {
+    case pending, active, completed
+}
+
+private struct PhaseRow: View {
+    let name: String
+    let state: PhaseState
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                switch state {
+                case .completed:
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.roseGold.opacity(0.5))
+                case .active:
+                    Image(systemName: "circle.fill")
+                        .foregroundStyle(Color.roseGold)
+                        .symbolEffect(.pulse)
+                case .pending:
+                    Image(systemName: "circle")
+                        .foregroundStyle(Color.creamEdge)
+                }
+            }
+            .font(.system(size: 12))
+            .frame(width: 16, alignment: .center)
+
+            Text(name)
+                .font(.system(size: 13, weight: state == .active ? .medium : .regular))
+                .foregroundStyle(
+                    state == .pending  ? Color.warmMid.opacity(0.5) :
+                    state == .active   ? Color.warmDark             : Color.warmMid
+                )
+        }
+        .animation(.easeOut(duration: 0.25), value: state)
     }
 }

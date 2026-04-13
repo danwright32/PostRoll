@@ -103,7 +103,13 @@ struct PhotoAssignmentView: View {
                     var ev = event; ev.stage = .ocrDone; appState.updateEvent(ev)
                 }
                 .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.md)
+                .padding(.bottom, Spacing.xs)
+
+                Text("Your photo assignments are saved — going back won't lose them.")
+                    .font(.light(10))
+                    .foregroundStyle(Color.warmMid.opacity(0.7))
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.bottom, Spacing.md)
 
                 BrandBanner(
                     icon: "rectangle.3.group",
@@ -196,11 +202,18 @@ struct PhotoAssignmentView: View {
                     onAddPhotos: { pickerTarget = .blog }
                 )
 
-                HStack {
-                    Spacer()
-                    Button("Continue to Generation") { advance() }
-                        .buttonStyle(BrandButtonStyle())
-                        .disabled(totalPhotos == 0)
+                VStack(alignment: .trailing, spacing: Spacing.sm) {
+                    if totalPhotos == 0 {
+                        Text("Add photos to at least one day to continue.")
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
+                    }
+                    HStack {
+                        Spacer()
+                        Button("Continue to Generation") { advance() }
+                            .buttonStyle(BrandButtonStyle())
+                            .disabled(totalPhotos == 0)
+                    }
                 }
                 .padding(Spacing.xl)
             }

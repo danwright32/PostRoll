@@ -25,6 +25,15 @@ struct PostRollApp: App {
                 }
                 .keyboardShortcut("n")
             }
+            CommandGroup(replacing: .help) {
+                Button("Copy Install Command") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(
+                        "cd /Users/danielhankins-wright/Documents/PostRoll && make install",
+                        forType: .string
+                    )
+                }
+            }
         }
     }
 }

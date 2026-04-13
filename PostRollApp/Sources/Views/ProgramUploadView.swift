@@ -8,6 +8,7 @@ struct ProgramUploadView: View {
     @Environment(AppState.self) private var appState
     @State private var isTargeted = false
     @State private var showingFilePicker = false
+    @State private var isImporting = false
 
     var body: some View {
         ScrollView {
@@ -25,6 +26,7 @@ struct ProgramUploadView: View {
                 // Drop zone
                 ProgramDropZone(
                     isTargeted: $isTargeted,
+                    isImporting: isImporting,
                     imagePaths: event.programImagePaths,
                     onPickFiles: { showingFilePicker = true },
                     onRemove: removeImages
@@ -33,7 +35,7 @@ struct ProgramUploadView: View {
                     handleDrop(providers)
                 }
 
-                if !event.programImagePaths.isEmpty {
+                if !event.programImagePaths.isEmpty && !isImporting {
                     HStack {
                         Spacer()
                         Button("Run OCR") { advanceToOCR() }
@@ -79,6 +81,7 @@ struct ProgramUploadView: View {
 
     /// Accepts both image URLs and PDFs. PDFs are rasterised page-by-page to PNG.
     private func appendFiles(_ urls: [URL]) {
+        isImporting = true
         Task {
             var ev = event
             for url in urls {
@@ -93,7 +96,10 @@ struct ProgramUploadView: View {
                     ev.programImagePaths.append(url)
                 }
             }
-            await MainActor.run { appState.updateEvent(ev) }
+            await MainActor.run {
+                appState.updateEvent(ev)
+                isImporting = false
+            }
         }
     }
 
@@ -272,16 +278,38 @@ struct StageBackButton: View {
 
 private struct ProgramDropZone: View {
     @Binding var isTargeted: Bool
+    let isImporting: Bool
     let imagePaths: [URL]
     let onPickFiles: () -> Void
     let onRemove: (IndexSet) -> Void
 
     var body: some View {
-        if imagePaths.isEmpty {
+        if isImporting {
+            importingState
+        } else if imagePaths.isEmpty {
             emptyState
         } else {
             filledState
         }
+    }
+
+    private var importingState: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+                .controlSize(.regular)
+                .tint(Color.roseGold)
+            Text("Importing…")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.warmDark)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 180)
+        .background(Color.creamDeep)
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.lg)
+                .strokeBorder(Color.roseGold.opacity(0.3),
+                              style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+        )
     }
 
     private var emptyState: some View {
