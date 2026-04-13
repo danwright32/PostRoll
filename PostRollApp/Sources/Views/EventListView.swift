@@ -3,7 +3,6 @@ import SwiftUI
 struct EventListView: View {
     @Environment(AppState.self) private var appState
     @Environment(HashtagStore.self) private var hashtagStore
-    @State private var pendingDeleteID: Event.ID?
     @State private var recentlyDeleted: Event?
     @State private var recentlyDuplicatedID: Event.ID?
     @State private var showUndoBanner = false
@@ -11,19 +10,20 @@ struct EventListView: View {
     @State private var searchText = ""
     @State private var showingHashtagSettings = false
     @State private var hoveredEventID: Event.ID?
+    @State private var showExported = false
     @Namespace private var selectionNamespace
 
+    private var exportedCount: Int {
+        appState.events.filter { $0.stage == .exported }.count
+    }
+
     private var filteredEvents: [Event] {
-        guard !searchText.isEmpty else { return appState.events }
-        return appState.events.filter {
+        let base = showExported ? appState.events : appState.events.filter { $0.stage != .exported }
+        guard !searchText.isEmpty else { return base }
+        return base.filter {
             $0.name.localizedCaseInsensitiveContains(searchText) ||
             $0.org.localizedCaseInsensitiveContains(searchText)
         }
-    }
-
-    private var pendingDeleteName: String {
-        guard let id = pendingDeleteID else { return "" }
-        return appState.events.first(where: { $0.id == id })?.name ?? ""
     }
 
     var body: some View {
@@ -92,27 +92,24 @@ struct EventListView: View {
                         .keyboardShortcut("d", modifiers: .command)
                         Divider()
                         Button("Delete", role: .destructive) {
-                            pendingDeleteID = event.id
+                            if let event = appState.events.first(where: { $0.id == event.id }) {
+                                recentlyDeleted = event
+                                recentlyDuplicatedID = nil
+                                appState.deleteEvent(id: event.id)
+                                undoDismissWork?.cancel()
+                                withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = true }
+                                let work = DispatchWorkItem {
+                                    withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = false }
+                                    recentlyDeleted = nil
+                                }
+                                undoDismissWork = work
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
+                            }
                         }
                     }
             }
             .onDeleteCommand {
-                if let id = appState.selectedEventID {
-                    pendingDeleteID = id
-                }
-            }
-        }
-        .scrollContentBackground(.hidden)
-        .background(Color.creamDeep)
-        .animation(.spring(response: 0.32, dampingFraction: 0.76), value: appState.selectedEventID)
-        .navigationTitle("")
-        .searchable(text: $searchText, placement: .sidebar, prompt: "Search events")
-        .alert("Delete \"\(pendingDeleteName)\"?", isPresented: Binding(
-            get: { pendingDeleteID != nil },
-            set: { if !$0 { pendingDeleteID = nil } }
-        )) {
-            Button("Delete", role: .destructive) {
-                if let id = pendingDeleteID,
+                if let id = appState.selectedEventID,
                    let event = appState.events.first(where: { $0.id == id }) {
                     recentlyDeleted = event
                     recentlyDuplicatedID = nil
@@ -126,12 +123,13 @@ struct EventListView: View {
                     undoDismissWork = work
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
                 }
-                pendingDeleteID = nil
             }
-            Button("Cancel", role: .cancel) { pendingDeleteID = nil }
-        } message: {
-            Text("This event will be permanently removed.")
         }
+        .scrollContentBackground(.hidden)
+        .background(Color.creamDeep)
+        .animation(.spring(response: 0.32, dampingFraction: 0.76), value: appState.selectedEventID)
+        .navigationTitle("")
+        .searchable(text: $searchText, placement: .sidebar, prompt: "Search events")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: Spacing.sm) {
@@ -145,6 +143,30 @@ struct EventListView: View {
                     .focusEffectDisabled()
                     .help("Hashtag settings — manage global tags added to every caption, and save preset groups for quick reuse.")
                     .accessibilityLabel("Hashtag settings")
+
+                    if exportedCount > 0 {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) { showExported.toggle() }
+                        } label: {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "archivebox")
+                                    .foregroundStyle(showExported ? Color.roseGold : Color.warmMid)
+                                if !showExported {
+                                    Text("\(exportedCount)")
+                                        .font(.system(size: 7, weight: .bold))
+                                        .foregroundStyle(Color.cream)
+                                        .padding(.horizontal, 3)
+                                        .padding(.vertical, 1)
+                                        .background(Capsule().fill(Color.warmMid))
+                                        .offset(x: 6, y: -4)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .focusEffectDisabled()
+                        .help(showExported ? "Hide exported events" : "Show \(exportedCount) exported event\(exportedCount == 1 ? "" : "s")")
+                        .accessibilityLabel(showExported ? "Hide exported events" : "Show exported events")
+                    }
 
                     Button {
                         appState.showingNewEvent = true
@@ -291,7 +313,7 @@ struct StagePill: View {
     }
 
     var body: some View {
-        Text("\(stage.stepNumber) · \(stage.rawValue)")
+        Text(stage.rawValue)
             .font(.system(size: 10, weight: .medium))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)

@@ -154,8 +154,15 @@ struct AssetGenerationView: View {
             guard stepCount > 0 else { return }
             let perStep = 240.0 / Double(stepCount)
             Timer.scheduledTimer(withTimeInterval: perStep, repeats: true) { timer in
-                progressDayIndex += 1
-                if progressDayIndex >= stepCount { timer.invalidate() }
+                // Mutate @MainActor state inside the isolated block; carry the
+                // stop decision out as a plain Bool to avoid sending the non-Sendable
+                // Timer across the isolation boundary.
+                var done = false
+                MainActor.assumeIsolated {
+                    progressDayIndex += 1
+                    done = progressDayIndex >= stepCount
+                }
+                if done { timer.invalidate() }
             }
         }
     }
