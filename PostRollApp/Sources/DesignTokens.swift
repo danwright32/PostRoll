@@ -22,6 +22,25 @@ extension Color {
     static let warmMid   = Color(red: 122/255, green: 104/255, blue:  96/255)
     /// Placeholder / tertiary
     static let warmFaint = Color(red: 175/255, green: 160/255, blue: 152/255)
+
+    // MARK: Stage pill colors
+    // Warm editorial progression — all calibrated as foreground at 0.14 opacity on creamDeep.
+    // Rule: every color must lean warm (R ≥ B). No cool blues or hospital greens.
+
+    /// Step 1 — Event Created
+    static let stageCreated          = warmMid
+    /// Step 2 — Program Uploaded: warm rose, one step past neutral
+    static let stageProgramUploaded  = Color(red: 175/255, green: 130/255, blue: 120/255)
+    /// Step 3 — OCR Done: rose gold (primary accent marks this milestone)
+    static let stageOCRDone          = roseGold
+    /// Step 4 — Photos Assigned: warm amber
+    static let stagePhotosAssigned   = Color(red: 165/255, green: 120/255, blue:  85/255)
+    /// Step 5 — Assets Generated: warm olive gold
+    static let stageAssetsGenerated  = Color(red: 150/255, green: 125/255, blue:  70/255)
+    /// Step 6 — Captions Reviewed: warm sage (R ≈ B keeps it from going clinical)
+    static let stageCaptionsReviewed = Color(red: 115/255, green: 140/255, blue: 105/255)
+    /// Step 7 — Exported: warm forest green (R > B — yellow-green, not blue-green)
+    static let stageExported         = Color(red:  85/255, green: 125/255, blue:  60/255)
 }
 
 // MARK: - Fonts
@@ -55,6 +74,20 @@ enum Spacing {
     static let md:  CGFloat = 16
     static let lg:  CGFloat = 24
     static let xl:  CGFloat = 32
+
+    /// Sidebar list row insets — horizontal leading/trailing edge
+    static let rowInset: CGFloat = 12
+    /// Sidebar list row insets — vertical top/bottom edge
+    static let rowV:     CGFloat = 6
+}
+
+// MARK: - Opacity
+
+enum Opacity {
+    /// Icon ghost, display headings — decorative elements that recede behind content
+    static let subtle: Double = 0.35
+    /// Hairline rules — structural but visually lightweight
+    static let faint:  Double = 0.30
 }
 
 // MARK: - RoseGold Divider

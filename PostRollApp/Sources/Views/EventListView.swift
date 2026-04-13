@@ -5,10 +5,13 @@ struct EventListView: View {
     @Environment(HashtagStore.self) private var hashtagStore
     @State private var pendingDeleteID: Event.ID?
     @State private var recentlyDeleted: Event?
+    @State private var recentlyDuplicatedID: Event.ID?
     @State private var showUndoBanner = false
     @State private var undoDismissWork: DispatchWorkItem?
     @State private var searchText = ""
     @State private var showingHashtagSettings = false
+    @State private var hoveredEventID: Event.ID?
+    @Namespace private var selectionNamespace
 
     private var filteredEvents: [Event] {
         guard !searchText.isEmpty else { return appState.events }
@@ -18,43 +21,93 @@ struct EventListView: View {
         }
     }
 
+    private var pendingDeleteName: String {
+        guard let id = pendingDeleteID else { return "" }
+        return appState.events.first(where: { $0.id == id })?.name ?? ""
+    }
+
     var body: some View {
         @Bindable var appState = appState
 
-        // Manual selection — avoids the system blue highlight.
-        // Tap gesture sets selectedEventID; custom listRowBackground shows rose-gold tint.
-        List {
+        List(selection: $appState.selectedEventID) {
             ForEach(filteredEvents) { event in
                 let isSelected = appState.selectedEventID == event.id
+                let isHovered  = hoveredEventID == event.id && !isSelected
+
                 EventRow(event: event)
                     .tag(event.id)
                     .listRowBackground(
-                        RoundedRectangle(cornerRadius: Radius.md)
-                            .fill(isSelected ? Color.roseGold.opacity(0.12) : Color.clear)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
+                        Group {
+                            if isSelected {
+                                // Glider + bookmark strip slide together as one unit
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: Radius.md)
+                                        .fill(Color.roseGold.opacity(0.12))
+                                    // Bookmark strip — a slim rose-gold spine at the leading edge
+                                    Capsule()
+                                        .fill(Color.roseGold)
+                                        .frame(width: 2.5)
+                                        .padding(.vertical, 8)
+                                }
+                                .matchedGeometryEffect(id: "selectionBG", in: selectionNamespace)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                            } else if isHovered {
+                                // Pre-selection warmth — the row glows before the click lands
+                                RoundedRectangle(cornerRadius: Radius.md)
+                                    .fill(Color.roseGold.opacity(0.05))
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 2)
+                            } else {
+                                // Opaque background prevents the system accent-color
+                                // selection highlight from bleeding through.
+                                Color.creamDeep
+                            }
+                        }
                     )
-                    .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+                    .listRowInsets(EdgeInsets(top: Spacing.rowV, leading: Spacing.rowInset, bottom: Spacing.rowV, trailing: Spacing.rowInset))
                     .listRowSeparator(.visible)
                     .listRowSeparatorTint(Color.creamEdge)
                     .contentShape(Rectangle())
-                    .onTapGesture { appState.selectedEventID = event.id }
+                    .onHover { hovering in
+                        withAnimation(.easeOut(duration: 0.12)) {
+                            hoveredEventID = hovering ? event.id : nil
+                        }
+                    }
                     .contextMenu {
                         Button("Duplicate") {
-                            appState.duplicateEvent(id: event.id)
+                            if let newID = appState.duplicateEvent(id: event.id) {
+                                recentlyDuplicatedID = newID
+                                recentlyDeleted = nil
+                                undoDismissWork?.cancel()
+                                withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = true }
+                                let work = DispatchWorkItem {
+                                    withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = false }
+                                    recentlyDuplicatedID = nil
+                                }
+                                undoDismissWork = work
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
+                            }
                         }
+                        .keyboardShortcut("d", modifiers: .command)
                         Divider()
                         Button("Delete", role: .destructive) {
                             pendingDeleteID = event.id
                         }
                     }
             }
+            .onDeleteCommand {
+                if let id = appState.selectedEventID {
+                    pendingDeleteID = id
+                }
+            }
         }
         .scrollContentBackground(.hidden)
         .background(Color.creamDeep)
+        .animation(.spring(response: 0.32, dampingFraction: 0.76), value: appState.selectedEventID)
         .navigationTitle("")
         .searchable(text: $searchText, placement: .sidebar, prompt: "Search events")
-        .alert("Delete Event?", isPresented: Binding(
+        .alert("Delete \"\(pendingDeleteName)\"?", isPresented: Binding(
             get: { pendingDeleteID != nil },
             set: { if !$0 { pendingDeleteID = nil } }
         )) {
@@ -62,6 +115,7 @@ struct EventListView: View {
                 if let id = pendingDeleteID,
                    let event = appState.events.first(where: { $0.id == id }) {
                     recentlyDeleted = event
+                    recentlyDuplicatedID = nil
                     appState.deleteEvent(id: id)
                     undoDismissWork?.cancel()
                     withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = true }
@@ -76,14 +130,11 @@ struct EventListView: View {
             }
             Button("Cancel", role: .cancel) { pendingDeleteID = nil }
         } message: {
-            if let id = pendingDeleteID,
-               let event = appState.events.first(where: { $0.id == id }) {
-                Text("\"\(event.name)\" will be permanently removed.")
-            }
+            Text("This event will be permanently removed.")
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 10) {
+                HStack(spacing: Spacing.sm) {
                     Button {
                         showingHashtagSettings = true
                     } label: {
@@ -91,15 +142,25 @@ struct EventListView: View {
                             .foregroundStyle(Color.warmMid)
                     }
                     .buttonStyle(.plain)
-                    .help("Hashtag settings")
+                    .focusEffectDisabled()
+                    .help("Hashtag settings — manage global tags added to every caption, and save preset groups for quick reuse.")
+                    .accessibilityLabel("Hashtag settings")
 
                     Button {
                         appState.showingNewEvent = true
                     } label: {
                         Label("New Event", systemImage: "plus")
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(Color.roseGold)
+                            .padding(.horizontal, Spacing.sm)
+                            .padding(.vertical, Spacing.xs)
+                            .background(
+                                Capsule()
+                                    .fill(Color.roseGold.opacity(0.10))
+                            )
                     }
                     .buttonStyle(.plain)
+                    .focusEffectDisabled()
                     .help("New Event (⌘N)")
                 }
             }
@@ -112,10 +173,18 @@ struct EventListView: View {
             if appState.events.isEmpty {
                 EmptySidebarView()
             } else if filteredEvents.isEmpty {
-                VStack(spacing: 6) {
+                VStack(spacing: Spacing.sm) {
                     Text("No results for \"\(searchText)\"")
                         .font(.light(12))
                         .foregroundStyle(Color.warmMid)
+                    Text("Try clearing the search field.")
+                        .font(.light(10))
+                        .foregroundStyle(Color.warmMid.opacity(0.65))
+                    Button("Clear Search") { searchText = "" }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.roseGold)
+                        .padding(.top, Spacing.xs)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.creamDeep)
@@ -123,11 +192,24 @@ struct EventListView: View {
         }
         .overlay(alignment: .bottom) {
             if showUndoBanner {
-                UndoBanner {
+                UndoBanner(message: {
+                    if let id = recentlyDuplicatedID,
+                       let name = appState.events.first(where: { $0.id == id })?.name {
+                        return "\"\(name)\" duplicated."
+                    } else if let name = recentlyDeleted?.name {
+                        return "\"\(name)\" deleted."
+                    }
+                    return "Event deleted."
+                }()) {
                     undoDismissWork?.cancel()
-                    if let event = recentlyDeleted { appState.addEvent(event) }
+                    if let event = recentlyDeleted {
+                        appState.addEvent(event)
+                    } else if let id = recentlyDuplicatedID {
+                        appState.deleteEvent(id: id)
+                    }
                     withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = false }
                     recentlyDeleted = nil
+                    recentlyDuplicatedID = nil
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -141,25 +223,28 @@ private struct EventRow: View {
     let event: Event
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Event name in SignPainter — the visual thread to the generated assets
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            // Event name in SignPainter — the visual thread to the generated assets.
+            // Larger size and bottom padding create a clear hierarchy break.
             Text(event.name)
-                .font(.signPainter(16))
+                .font(.signPainter(19))
                 .foregroundStyle(Color.warmDark)
                 .lineLimit(1)
+                .padding(.bottom, 2)
 
             HStack(spacing: 3) {
                 Text(event.org)
                 Text("·")
                 Text(event.displayDate)
             }
-            .font(.light(11))
+            .font(.light(10))
             .foregroundStyle(Color.warmMid)
             .lineLimit(1)
 
             HStack(spacing: 5) {
                 Image(systemName: event.shootType.systemImage)
                     .imageScale(.small)
+                    .accessibilityHidden(true)
                 Text(event.shootType.rawValue)
                 Spacer()
                 StagePill(stage: event.stage)
@@ -168,7 +253,11 @@ private struct EventRow: View {
             .foregroundStyle(Color.warmMid)
             .padding(.top, 2)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 5)
+        // Collapse the three visual sub-rows into one VoiceOver stop with a
+        // natural spoken label, avoiding the "·" separator and step-number prefix.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(event.name), \(event.org), \(event.displayDate), \(event.shootType.rawValue), stage \(event.stage.rawValue)")
     }
 }
 
@@ -179,36 +268,52 @@ struct StagePill: View {
 
     private var pillColor: Color {
         switch stage {
-        case .created:          return Color.warmMid
-        case .programUploaded:  return Color(red: 175/255, green: 130/255, blue: 120/255)
-        case .ocrDone:          return Color.roseGold
-        case .photosAssigned:   return Color(red: 165/255, green: 120/255, blue:  85/255)
-        case .assetsGenerated:  return Color(red: 150/255, green: 125/255, blue:  70/255)
-        case .captionsReviewed: return Color(red: 110/255, green: 140/255, blue: 110/255)
-        case .exported:         return Color(red:  80/255, green: 130/255, blue:  90/255)
+        case .created:          return .stageCreated
+        case .programUploaded:  return .stageProgramUploaded
+        case .ocrDone:          return .stageOCRDone
+        case .photosAssigned:   return .stagePhotosAssigned
+        case .assetsGenerated:  return .stageAssetsGenerated
+        case .captionsReviewed: return .stageCaptionsReviewed
+        case .exported:         return .stageExported
+        }
+    }
+
+    private var tooltipText: String {
+        switch stage {
+        case .created:          return "Step 1 — Event created. Upload the program PDF to begin."
+        case .programUploaded:  return "Step 2 — Program uploaded. Ready to run OCR."
+        case .ocrDone:          return "Step 3 — OCR complete. Review extracted text, then assign photos."
+        case .photosAssigned:   return "Step 4 — Photos assigned to posting days. Ready to generate assets."
+        case .assetsGenerated:  return "Step 5 — Assets generated. Review captions before exporting."
+        case .captionsReviewed: return "Step 6 — Captions approved. Ready to export."
+        case .exported:         return "Step 7 — Exported. All assets are in the output folder."
         }
     }
 
     var body: some View {
-        Text(stage.rawValue)
-            .font(.system(size: 9, weight: .medium))
-            .tracking(0.3)
+        Text("\(stage.stepNumber) · \(stage.rawValue)")
+            .font(.system(size: 10, weight: .medium))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(pillColor.opacity(0.14))
             .foregroundStyle(pillColor)
             .clipShape(Capsule())
+            .help(tooltipText)
+            // Announce as "Stage, Photos Assigned" — not the "3 ·" prefix
+            .accessibilityLabel("Stage")
+            .accessibilityValue(stage.rawValue)
     }
 }
 
 // MARK: - Undo Banner
 
 private struct UndoBanner: View {
+    var message: String = "Event deleted."
     let onUndo: () -> Void
 
     var body: some View {
         HStack {
-            Text("Event deleted.")
+            Text(message)
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
             Spacer()
@@ -218,7 +323,7 @@ private struct UndoBanner: View {
                 .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, Spacing.sm)
         .background(Color.creamDeep)
         .overlay(Rectangle().fill(Color.creamEdge).frame(height: 0.5), alignment: .top)
     }
@@ -392,11 +497,15 @@ struct HashtagSettingsSheet: View {
 
 private struct EmptySidebarView: View {
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: Spacing.sm) {
+            Image(systemName: "theatermasks")
+                .font(.system(size: 28))
+                .foregroundStyle(Color.warmMid.opacity(Opacity.subtle))
+                .padding(.bottom, 4)
             Text("No events")
                 .font(.light(12))
                 .foregroundStyle(Color.warmMid)
-            Text("Click + or press ⌘N to start.")
+            Text("Tap New Event or press ⌘N to start.")
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
         }

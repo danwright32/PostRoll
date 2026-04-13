@@ -1,12 +1,19 @@
 import Foundation
 import Observation
 
+enum SidebarMode: String { case events, insights }
+enum InsightsSection: String { case overview, posts, orgs }
+
 @MainActor
 @Observable
 final class AppState {
     var events: [Event] = []
     var selectedEventID: Event.ID?
     var showingNewEvent = false
+
+    // Analytics navigation
+    var sidebarMode: SidebarMode = .events
+    var insightsSection: InsightsSection = .overview
 
     init() {
         events = EventStore.load()
@@ -32,8 +39,9 @@ final class AppState {
 
     /// Duplicate an event: copies metadata and OCR result, clears photos and
     /// generated content, sets stage to the first step that needs fresh work.
-    func duplicateEvent(id: Event.ID) {
-        guard let original = events.first(where: { $0.id == id }) else { return }
+    @discardableResult
+    func duplicateEvent(id: Event.ID) -> Event.ID? {
+        guard let original = events.first(where: { $0.id == id }) else { return nil }
         var copy = original
         copy.id = UUID()
         copy.days = [:]
@@ -53,5 +61,6 @@ final class AppState {
         events.append(copy)
         selectedEventID = copy.id
         EventStore.save(events)
+        return copy.id
     }
 }

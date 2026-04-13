@@ -7,18 +7,42 @@ struct MainWindowView: View {
         @Bindable var appState = appState
 
         NavigationSplitView {
-            EventListView()
-                .navigationSplitViewColumnWidth(min: 230, ideal: 265)
+            Group {
+                if appState.sidebarMode == .events {
+                    EventListView()
+                } else {
+                    InsightsSidebarView()
+                }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    Picker("Sidebar", selection: $appState.sidebarMode) {
+                        Text("Events").tag(SidebarMode.events)
+                        Text("Insights").tag(SidebarMode.insights)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.creamDeep)
+                    Color.creamEdge.frame(height: 0.5)
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 230, ideal: 265)
         } detail: {
-            if let id = appState.selectedEventID,
-               let event = appState.events.first(where: { $0.id == id }) {
-                EventDetailView(event: event)
-                    .background(Color.cream)
+            if appState.sidebarMode == .events {
+                if let id = appState.selectedEventID,
+                   let event = appState.events.first(where: { $0.id == id }) {
+                    EventDetailView(event: event)
+                        .background(Color.cream)
+                } else {
+                    WelcomeDetailView(
+                        hasEvents: !appState.events.isEmpty,
+                        onNew: { appState.showingNewEvent = true }
+                    )
+                }
             } else {
-                WelcomeDetailView(
-                    hasEvents: !appState.events.isEmpty,
-                    onNew: { appState.showingNewEvent = true }
-                )
+                InsightsDetailView()
             }
         }
         // Solid cream toolbar — no vibrancy, no blending against other windows
@@ -39,23 +63,34 @@ private struct WelcomeDetailView: View {
     let onNew: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.lg) {
+        VStack(alignment: .center, spacing: Spacing.sm) {
+            Text("PostRoll")
+                .font(.signPainter(44))
+                .foregroundStyle(Color.roseGold.opacity(Opacity.subtle))
+
+            RoseGoldDivider(opacity: Opacity.subtle)
+                .frame(width: 80)
+                .padding(.vertical, Spacing.xs)
+
             if hasEvents {
-                Text("Select an event from\nthe sidebar to continue.")
-                    .font(.light(15))
-                    .foregroundStyle(Color.warmDark)
-                    .lineSpacing(5)
+                Text("Select an event from the\nsidebar to continue.")
+                    .font(.light(13))
+                    .foregroundStyle(Color.warmMid)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
             } else {
                 Text("Create an event to begin\nyour weekly posting workflow.")
-                    .font(.light(15))
-                    .foregroundStyle(Color.warmDark)
-                    .lineSpacing(5)
+                    .font(.light(13))
+                    .foregroundStyle(Color.warmMid)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
 
                 Button("New Event", action: onNew)
                     .buttonStyle(BrandButtonStyle())
+                    .padding(.top, Spacing.xs)
             }
         }
-        .frame(maxWidth: 380)
+        .frame(maxWidth: 340)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .background(Color.cream)
     }
@@ -129,5 +164,6 @@ struct BrandButtonStyle: ButtonStyle {
                     .fill(configuration.isPressed ? Color.roseDeep : Color.roseGold)
             )
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+            .focusEffectDisabled()
     }
 }

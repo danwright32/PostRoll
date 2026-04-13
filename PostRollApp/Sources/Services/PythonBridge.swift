@@ -309,6 +309,93 @@ actor PythonBridge {
         }
     }
 
+    // MARK: - Instagram analytics import
+
+    func importMetaCSV(paths: [URL]) async throws -> MetaImportResult {
+        let tmp = FileManager.default.temporaryDirectory
+        let outputFile = tmp.appendingPathComponent("postroll_meta_import_\(UUID().uuidString).json")
+
+        defer { try? FileManager.default.removeItem(at: outputFile) }
+
+        var args = ["-m", "postroll.ai.import_meta_csv", "--output", outputFile.path]
+        for path in paths { args += ["--csv", path.path] }
+
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+
+        let data = try Data(contentsOf: outputFile)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        do {
+            return try decoder.decode(MetaImportResult.self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Instagram analytics generation
+
+    func runAnalytics(
+        posts: [IGPost],
+        orgBands: [String: OrgFollowerBand],
+        globalHashtags: [String]
+    ) async throws -> InsightReport {
+        let tmp = FileManager.default.temporaryDirectory
+        let manifestFile = tmp.appendingPathComponent("postroll_analytics_manifest_\(UUID().uuidString).json")
+        let outputFile   = tmp.appendingPathComponent("postroll_analytics_\(UUID().uuidString).json")
+
+        defer {
+            try? FileManager.default.removeItem(at: manifestFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        // Encode posts as JSON value, embed in manifest dict
+        let postsData = try encoder.encode(posts)
+        guard let postsJSON = try JSONSerialization.jsonObject(with: postsData) as? [[String: Any]] else {
+            throw PythonBridgeError.invalidOutput("Could not serialise posts.")
+        }
+
+        // Encode org bands as [String: String]
+        let orgBandsDict = Dictionary(uniqueKeysWithValues: orgBands.map { ($0.key, $0.value.rawValue) })
+
+        let manifest: [String: Any] = [
+            "posts":                      postsJSON,
+            "org_bands":                  orgBandsDict,
+            "global_hashtags_to_exclude": globalHashtags,
+        ]
+
+        let manifestData = try JSONSerialization.data(
+            withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
+        )
+        try manifestData.write(to: manifestFile)
+
+        let args = [
+            "-m", "postroll.ai.analyze_posts",
+            "--manifest", manifestFile.path,
+            "--output",   outputFile.path,
+        ]
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+
+        let data = try Data(contentsOf: outputFile)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        do {
+            return try decoder.decode(InsightReport.self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
     // MARK: - Brand voice
 
     /// Appends a user feedback note to brand-voice.md under a "## Caption revision notes" section.
@@ -319,6 +406,26 @@ actor PythonBridge {
 
         let sectionHeader = "\n\n## Caption revision notes\n"
         if !content.contains("## Caption revision notes") {
+            content += sectionHeader
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        let date = formatter.string(from: Date())
+        content += "\n- (\(date)) \(note)"
+
+        try content.write(to: file, atomically: true, encoding: .utf8)
+    }
+
+    /// Appends an insight-derived suggestion to brand-voice.md under "## Insights-derived patterns".
+    nonisolated func appendInsightNote(_ note: String) throws {
+        let file = projectRoot
+            .appendingPathComponent("postroll/assets/brand-voice.md")
+        var content = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+
+        let sectionHeader = "\n\n## Insights-derived patterns\n"
+        if !content.contains("## Insights-derived patterns") {
             content += sectionHeader
         }
 

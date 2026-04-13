@@ -1,0 +1,111 @@
+import SwiftUI
+
+struct InsightsOrgsView: View {
+    @Environment(AnalyticsStore.self) private var analyticsStore
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ORGANIZATIONS")
+                        .font(.system(size: 11, weight: .medium))
+                        .tracking(0.8)
+                        .foregroundStyle(Color.warmDark)
+                    Text("Set follower size once per org so analytics can control for audience reach.")
+                        .font(.light(11))
+                        .foregroundStyle(Color.warmMid)
+                }
+            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.top, Spacing.lg)
+            .padding(.bottom, Spacing.md)
+
+            RoseGoldDivider()
+
+            if analyticsStore.uniqueOrgs.isEmpty {
+                OrgsEmptyState()
+            } else {
+                List {
+                    ForEach(analyticsStore.uniqueOrgs, id: \.self) { org in
+                        OrgRow(
+                            org: org,
+                            band: analyticsStore.orgFollowerBands[org] ?? .unknown
+                        ) { newBand in
+                            analyticsStore.setOrgBand(org, newBand)
+                        }
+                        .listRowBackground(Color.cream)
+                        .listRowInsets(EdgeInsets(top: 4, leading: Spacing.lg, bottom: 4, trailing: Spacing.lg))
+                        .listRowSeparatorTint(Color.creamEdge)
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .background(Color.cream)
+            }
+        }
+        .background(Color.cream)
+    }
+}
+
+// MARK: - Org row
+
+private struct OrgRow: View {
+    let org: String
+    let band: OrgFollowerBand
+    let onChange: (OrgFollowerBand) -> Void
+
+    @State private var selected: OrgFollowerBand
+
+    init(org: String, band: OrgFollowerBand, onChange: @escaping (OrgFollowerBand) -> Void) {
+        self.org = org
+        self.band = band
+        self.onChange = onChange
+        _selected = State(initialValue: band)
+    }
+
+    var body: some View {
+        HStack(spacing: Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("@\(org)")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.warmDark)
+                Text("Instagram followers")
+                    .font(.light(10))
+                    .foregroundStyle(Color.warmMid)
+            }
+            Spacer()
+            Picker("Follower band", selection: $selected) {
+                ForEach(OrgFollowerBand.allCases) { band in
+                    Text(band.displayName).tag(band)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(width: 100)
+            .onChange(of: selected) { _, new in onChange(new) }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Empty state
+
+private struct OrgsEmptyState: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "building.2")
+                .font(.system(size: 28))
+                .foregroundStyle(Color.warmMid)
+            Text("No organizations detected yet.")
+                .font(.light(13))
+                .foregroundStyle(Color.warmMid)
+            Text("Import your Meta CSV first. Orgs are extracted from @-mentions in your captions.")
+                .font(.light(11))
+                .foregroundStyle(Color.warmMid)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 260)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.cream)
+    }
+}

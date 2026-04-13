@@ -4,12 +4,14 @@ import SwiftUI
 struct PostRollApp: App {
     @State private var appState = AppState()
     @State private var hashtagStore = HashtagStore()
+    @State private var analyticsStore = AnalyticsStore()
 
     var body: some Scene {
         WindowGroup {
             MainWindowView()
                 .environment(appState)
                 .environment(hashtagStore)
+                .environment(analyticsStore)
                 .preferredColorScheme(.light)
                 .tint(Color.roseGold)
         }

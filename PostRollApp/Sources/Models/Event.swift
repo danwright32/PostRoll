@@ -81,18 +81,6 @@ enum EventStage: String, Codable, CaseIterable {
     var stepNumber: Int {
         EventStage.allCases.firstIndex(of: self).map { $0 + 1 } ?? 1
     }
-
-    var badgeColor: String {
-        switch self {
-        case .created:          return "gray"
-        case .programUploaded:  return "blue"
-        case .ocrDone:          return "purple"
-        case .photosAssigned:   return "orange"
-        case .assetsGenerated:  return "yellow"
-        case .captionsReviewed: return "teal"
-        case .exported:         return "green"
-        }
-    }
 }
 
 // MARK: - DayName
