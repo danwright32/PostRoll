@@ -32,10 +32,7 @@ struct PostRollApp: App {
             CommandGroup(replacing: .help) {
                 Button("Copy Install Command") {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(
-                        "cd ~/Documents/PostRoll && make clean && make install",
-                        forType: .string
-                    )
+                    NSPasteboard.general.setString("postroll", forType: .string)
                 }
             }
         }

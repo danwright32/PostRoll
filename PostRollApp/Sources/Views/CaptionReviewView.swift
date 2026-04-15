@@ -219,8 +219,8 @@ struct CaptionReviewView: View {
             if let suggestion = learningSuggestion {
                 LearningSuggestionSheet(
                     suggestion: suggestion,
-                    onSave: {
-                        try? PythonBridge.shared.appendBrandVoiceNote(suggestion)
+                    onSave: { editedSuggestion in
+                        try? PythonBridge.shared.appendBrandVoiceNote(editedSuggestion)
                         showLearnSheet = false
                         finalizeAdvance()
                     },
@@ -3254,8 +3254,21 @@ private struct ReelPreviewPlayer: NSViewRepresentable {
 
 private struct LearningSuggestionSheet: View {
     let suggestion: String
-    let onSave: () -> Void
+    let onSave: (String) -> Void
     let onSkip: () -> Void
+
+    @State private var editedSuggestion: String
+
+    init(suggestion: String, onSave: @escaping (String) -> Void, onSkip: @escaping () -> Void) {
+        self.suggestion = suggestion
+        self.onSave = onSave
+        self.onSkip = onSkip
+        _editedSuggestion = State(initialValue: suggestion)
+    }
+
+    private var trimmed: String {
+        editedSuggestion.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
@@ -3265,18 +3278,18 @@ private struct LearningSuggestionSheet: View {
                     .tracking(1.2)
                     .foregroundStyle(Color.roseGold)
 
-                Text("Based on how you revised these captions, there may be something worth adding to your brand voice:")
+                Text("Based on how you revised these captions, there may be something worth adding to your brand voice. Edit the wording below before saving if you want to refine it:")
                     .font(.light(12))
                     .foregroundStyle(Color.warmMid)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text(suggestion)
+            TextEditor(text: $editedSuggestion)
                 .font(.system(size: 13))
                 .foregroundStyle(Color.warmDark)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(Spacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .scrollContentBackground(.hidden)
+                .padding(Spacing.sm)
+                .frame(minHeight: 120, maxHeight: 220)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.md)
                         .fill(Color.roseGold.opacity(0.06))
@@ -3291,8 +3304,15 @@ private struct LearningSuggestionSheet: View {
                 .foregroundStyle(Color.warmMid)
 
             HStack(spacing: Spacing.md) {
-                Button("Add to brand voice") { onSave() }
+                Button("Add to brand voice") { onSave(trimmed) }
                     .buttonStyle(BrandButtonStyle())
+                    .disabled(trimmed.isEmpty)
+                Button("Reset") { editedSuggestion = suggestion }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.warmMid)
+                    .disabled(editedSuggestion == suggestion)
+                Spacer()
                 Button("Skip") { onSkip() }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
@@ -3300,7 +3320,7 @@ private struct LearningSuggestionSheet: View {
             }
         }
         .padding(Spacing.xl)
-        .frame(width: 420)
+        .frame(width: 460)
         .background(Color.cream)
     }
 }
