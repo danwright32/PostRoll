@@ -71,6 +71,17 @@ LOGO_BLACK = str(ASSETS_DIR / "logo-black.png")
 
 DAY_ORDER = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]
 
+# On-disk folder names used for exports. Numbered so Finder sorts chronologically.
+# Must match DayName.folderName in PostRollApp/Sources/Models/Event.swift.
+DAY_FOLDER_NAMES = {
+    "sunday":    "1. Sunday",
+    "monday":    "2. Monday",
+    "tuesday":   "3. Tuesday",
+    "wednesday": "4. Wednesday",
+    "thursday":  "5. Thursday",
+    "friday":    "6. Friday",
+}
+
 COLLAGE_MIN_PHOTOS = 10
 COLLAGE_PHOTO_COUNT = 10
 
@@ -179,7 +190,7 @@ def generate_media(
             results[day_name] = None
             continue
 
-        day_dir = base_dir / day_name
+        day_dir = base_dir / DAY_FOLDER_NAMES[day_name]
         day_dir.mkdir(parents=True, exist_ok=True)
         day_result: dict[str, str] = {}
 

@@ -252,11 +252,12 @@ struct ExportView: View {
                         let destSlug = "\(EventExporter.slug(event.org))_\(EventExporter.slug(event.name))_\(event.isoDate)"
                         let mediaBase = folder.deletingLastPathComponent().appendingPathComponent(destSlug)
                         for (dayKey, assetPaths) in event.previewMediaPaths {
+                            let dayFolder = DayName(rawValue: dayKey)?.folderName ?? dayKey
                             for (_, srcPath) in assetPaths {
                                 guard srcPath.hasSuffix(".png"),
                                       FileManager.default.fileExists(atPath: srcPath) else { continue }
                                 let src = URL(fileURLWithPath: srcPath)
-                                let dayDir = mediaBase.appendingPathComponent(dayKey)
+                                let dayDir = mediaBase.appendingPathComponent(dayFolder)
                                 let dest = dayDir.appendingPathComponent(src.lastPathComponent)
                                 try? FileManager.default.removeItem(at: dest)
                                 if (try? FileManager.default.copyItem(at: src, to: dest)) != nil {
@@ -397,7 +398,7 @@ struct EventExporter {
         // Per-day folders
         for day in DayName.allCases {
             guard let caption = result?[day] else { continue }
-            let dayDir = folder.appendingPathComponent(day.rawValue)
+            let dayDir = folder.appendingPathComponent(day.folderName)
             try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
 
             // caption.txt
@@ -443,7 +444,7 @@ struct EventExporter {
 
         // Blog draft
         if let blog = result?.blog {
-            let blogDir = folder.appendingPathComponent("blog")
+            let blogDir = folder.appendingPathComponent("0. Blog")
             try FileManager.default.createDirectory(at: blogDir, withIntermediateDirectories: true)
             let md = "# \(blog.title)\n\n\(blog.body)\n"
             try md.write(to: blogDir.appendingPathComponent("draft.md"),
@@ -507,7 +508,7 @@ struct EventExporter {
                 lines += [
                     "- [ ] Post photo + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
                     "- [ ] Add as Instagram collaborators: \(collabLine)",
-                    "- [ ] Post \(day.rawValue)/story.png as story to Instagram + Facebook",
+                    "- [ ] Post \(day.folderName)/story.png as story to Instagram + Facebook",
                     "- [ ] Tag story with performer and venue accounts",
                 ]
             case .tuesday:
@@ -518,14 +519,14 @@ struct EventExporter {
                     lines += [
                         "- [ ] Post speed edit reel + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
                         "- [ ] Add as Instagram collaborators: \(collabLine)",
-                        "- [ ] Post tuesday/before_after.png as story to Instagram + Facebook",
+                        "- [ ] Post \(day.folderName)/before_after.png as story to Instagram + Facebook",
                         "- [ ] Tag story with performer and venue accounts",
                     ]
                 } else {
                     lines += [
                         "- [ ] Post photo + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
                         "- [ ] Add as Instagram collaborators: \(collabLine)",
-                        "- [ ] Post tuesday/story.png as story to Instagram + Facebook",
+                        "- [ ] Post \(day.folderName)/story.png as story to Instagram + Facebook",
                         "- [ ] Tag story with performer and venue accounts",
                     ]
                 }
@@ -533,7 +534,7 @@ struct EventExporter {
                 lines += [
                     "- [ ] Post carousel (10 photos) + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
                     "- [ ] Add as Instagram collaborators: \(collabLine)",
-                    "- [ ] Post wednesday/collage.png as story to Instagram + Facebook",
+                    "- [ ] Post \(day.folderName)/collage.png as story to Instagram + Facebook",
                     "- [ ] Tag story with performer and venue accounts",
                 ]
             case .thursday:
@@ -544,7 +545,7 @@ struct EventExporter {
             case .friday:
                 let hasBeforeAfter = pd?.rawPhotoPath != nil && pd?.editedPhotoPath != nil
                 lines += [
-                    "- [ ] Post friday/\(hasBeforeAfter ? "before_after" : "story").png as story to Instagram + Facebook",
+                    "- [ ] Post \(day.folderName)/\(hasBeforeAfter ? "before_after" : "story").png as story to Instagram + Facebook",
                     "- [ ] Save story to Instagram highlights",
                 ]
             }

@@ -141,6 +141,19 @@ enum DayName: String, Codable, CaseIterable {
     case sunday, monday, tuesday, wednesday, thursday, friday
 
     var displayName: String { rawValue.capitalized }
+
+    /// On-disk folder name used for exports. Numbered so Finder sorts
+    /// them chronologically (0. Blog, 1. Sunday, 2. Monday, …).
+    var folderName: String {
+        switch self {
+        case .sunday:    return "1. Sunday"
+        case .monday:    return "2. Monday"
+        case .tuesday:   return "3. Tuesday"
+        case .wednesday: return "4. Wednesday"
+        case .thursday:  return "5. Thursday"
+        case .friday:    return "6. Friday"
+        }
+    }
 }
 
 // MARK: - PostingDay backward-compatible decoding
