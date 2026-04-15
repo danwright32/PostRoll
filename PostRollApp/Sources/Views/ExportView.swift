@@ -284,7 +284,10 @@ struct ExportView: View {
                     await MainActor.run { mediaGenerationError = error.localizedDescription }
                 }
 
-                await MainActor.run { exportState = .done(folder) }
+                await MainActor.run {
+                    exportState = .done(folder)
+                    NotificationService.shared.notifyExportComplete(eventName: event.name)
+                }
             } catch {
                 await MainActor.run {
                     destinationRoot.stopAccessingSecurityScopedResource()

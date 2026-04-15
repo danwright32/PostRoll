@@ -8,7 +8,7 @@ struct CaptionReviewView: View {
     @Environment(HashtagStore.self) private var hashtagStore
 
     @State private var result: WeekGenerationResult
-    @State private var expanded: ReviewSection? = .caption(DayName.allCases.first!)
+    @State private var expanded: ReviewSection? = nil
     @State private var isRegenerating = false
     @State private var showRegenerateConfirm = false
     @State private var regenerateError: String?
@@ -283,6 +283,7 @@ struct CaptionReviewView: View {
             let newResult = try await PythonBridge.shared.runWeekGeneration(event: event)
             result = newResult
             mergeGlobalTags()
+            NotificationService.shared.notifyRegenerationComplete(eventName: event.name, what: "Captions")
         } catch {
             regenerateError = error.localizedDescription
         }
@@ -366,6 +367,10 @@ struct CaptionReviewView: View {
                 // Bump the version so SwiftUI rebuilds AVPlayer with the updated file.
                 graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
                 regeneratingDays.remove(day)
+                NotificationService.shared.notifyRegenerationComplete(
+                    eventName: event.name,
+                    what: "\(day.displayName) audio"
+                )
             }
         }
     }
@@ -400,7 +405,13 @@ struct CaptionReviewView: View {
                     graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
                 }
             }
-            await MainActor.run { regeneratingDays.remove(day) }
+            await MainActor.run {
+                regeneratingDays.remove(day)
+                NotificationService.shared.notifyRegenerationComplete(
+                    eventName: event.name,
+                    what: day.displayName
+                )
+            }
         }
     }
 
@@ -642,9 +653,9 @@ private struct CaptionSection: View {
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.warmMid)
                 }
-                .contentShape(Rectangle())
                 .padding(.horizontal, Spacing.xl)
                 .padding(.vertical, 14)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -1248,9 +1259,9 @@ private struct BlogSection: View {
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.warmMid)
                 }
-                .contentShape(Rectangle())
                 .padding(.horizontal, Spacing.xl)
                 .padding(.vertical, 14)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -1807,7 +1818,7 @@ private struct InstagramMockup: View {
         VStack(alignment: .leading, spacing: 0) {
             // ── Header ──────────────────────────────────────────────────────
             HStack(spacing: 9) {
-                // Gradient story-ring avatar
+                // Gradient story-ring avatar with real DW logo
                 ZStack {
                     Circle()
                         .fill(LinearGradient(
@@ -1816,13 +1827,12 @@ private struct InstagramMockup: View {
                                      Color(red: 0.62, green: 0.18, blue: 0.82)],
                             startPoint: .topLeading, endPoint: .bottomTrailing))
                     Circle().fill(Color.white).padding(2)
-                    ZStack {
-                        Circle().fill(Color(red: 0.14, green: 0.11, blue: 0.10))
-                        Text("DW")
-                            .font(.system(size: 7.5, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                    .padding(3)
+                    Image("DWAvatar")
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fill)
+                        .clipShape(Circle())
+                        .padding(3)
                 }
                 .frame(width: 32, height: 32)
 

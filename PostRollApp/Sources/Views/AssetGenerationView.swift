@@ -1,4 +1,5 @@
 import SwiftUI
+import AVKit
 
 struct AssetGenerationView: View {
     let event: Event
@@ -24,6 +25,30 @@ struct AssetGenerationView: View {
     @State private var showCheckmark = false
     @State private var phasesVisible = false
 
+    // MARK: Music picker state
+    @State private var musicPass: MusicPass = .idle
+    @State private var tuesdayCandidates: [TrackCandidate] = []
+    @State private var thursdayCandidates: [TrackCandidate] = []
+    @State private var tuesdayPickedID: String? = nil
+    @State private var thursdayPickedID: String? = nil
+    @State private var tuesdayMood: MusicMood = .auto
+    @State private var thursdayMood: MusicMood = .auto
+    @State private var tuesdaySeenIDs: Set<String> = []
+    @State private var thursdaySeenIDs: Set<String> = []
+    @State private var musicFetchTask: Task<Void, Never>? = nil
+    @State private var nowPlayingID: String? = nil
+    @State private var audioPlayer = AVPlayer()
+    @State private var musicBlockingReady: Bool = false  // true once initial auto-picks are set (or skipped)
+
+    enum MusicPass: Equatable {
+        case idle                // music picker not active (retry run)
+        case fetchingTuesday
+        case pickingTuesday
+        case fetchingThursday
+        case pickingThursday
+        case done                // both passes finished
+    }
+
     enum GenState {
         case configuring
         case running
@@ -31,17 +56,87 @@ struct AssetGenerationView: View {
         case done
     }
 
-    // Phase timeline — timing approximates observed generation durations
-    // Phase timeline — delegated to TimingStore so estimates improve with each run.
+    // Phase timeline — full run uses the rolling-window history from TimingStore;
+    // retries build a smaller, retry-specific timeline so the UI reflects reality.
     private var scaledPhases: [(name: String, startsAt: Int)] {
-        TimingStore.shared.scaledGenerationPhases()
+        retryPhases?.phases ?? TimingStore.shared.scaledGenerationPhases()
     }
 
     private var estimatedTotalFormatted: String {
+        if let retry = retryPhases {
+            return TimingStore.formatClock(retry.estimate)
+        }
         if let est = TimingStore.shared.generationEstimate {
             return TimingStore.formatClock(est)
         }
         return "~6:00"
+    }
+
+    /// Returns retry-specific phase timeline when `retryDays` is set. Caption and
+    /// blog means come from TimingStore if available; otherwise fall back to a
+    /// proportion of the full-run estimate.
+    private var retryPhases: (phases: [(name: String, startsAt: Int)], estimate: Double)? {
+        guard let retry = retryDays else { return nil }
+
+        let fullEstimate = TimingStore.shared.generationEstimate ?? 360
+        let captionsMean = TimingStore.shared.captionsMean ?? (fullEstimate * 0.50)
+        let blogMean     = TimingStore.shared.blogMean     ?? (fullEstimate * 0.25)
+        let totalDayCount = max(1, daysWithPhotos.count)
+
+        let retryDayKeys = retry.subtracting(["blog"])
+        let hasBlog = retry.contains("blog")
+
+        let perDay = captionsMean / Double(totalDayCount)
+        let retryCaptionsTotal = perDay * Double(max(1, retryDayKeys.count))
+
+        var phases: [(name: String, startsAt: Int)] = []
+        var cursor = 0
+
+        if !retryDayKeys.isEmpty {
+            let sortedDayNames = DayName.allCases
+                .filter { retryDayKeys.contains($0.rawValue) }
+                .map { $0.displayName }
+            phases.append(("Re-reading photos", cursor))
+            cursor += 5
+            phases.append(("Writing \(joinNames(sortedDayNames)) captions", cursor))
+            cursor += Int(retryCaptionsTotal.rounded())
+        }
+
+        if hasBlog {
+            phases.append(("Drafting blog post", cursor))
+            cursor += Int(blogMean.rounded())
+        }
+
+        return (phases, Double(cursor))
+    }
+
+    private func joinNames(_ names: [String]) -> String {
+        switch names.count {
+        case 0: return ""
+        case 1: return names[0]
+        case 2: return "\(names[0]) + \(names[1])"
+        default:
+            let head = names.dropLast().joined(separator: ", ")
+            return "\(head) + \(names.last!)"
+        }
+    }
+
+    /// One-line subtitle shown above the phase timeline so the user knows whether
+    /// this is a full run or a partial retry.
+    private var runningSubtitle: String {
+        guard let retry = retryDays else {
+            let count = daysWithPhotos.count
+            return "Generating all \(count) \(count == 1 ? "day" : "days")"
+        }
+        let dayKeys = retry.subtracting(["blog"])
+        let dayNames = DayName.allCases
+            .filter { dayKeys.contains($0.rawValue) }
+            .map { $0.displayName }
+        let hasBlog = retry.contains("blog")
+
+        if dayNames.isEmpty && hasBlog { return "Retrying blog post" }
+        if hasBlog { return "Retrying \(joinNames(dayNames)) + blog" }
+        return "Retrying \(joinNames(dayNames))"
     }
 
     private var activePhaseIndex: Int {
@@ -171,13 +266,17 @@ struct AssetGenerationView: View {
 
     // MARK: - Running
 
-    private var runningView: some View {
+    private var phaseColumn: some View {
         VStack(spacing: Spacing.lg) {
-            Spacer()
-
             Text(event.name)
                 .font(.signPainter(28))
                 .foregroundStyle(Color.warmDark)
+
+            Text(runningSubtitle)
+                .font(.system(size: 11, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.warmMid)
+                .textCase(.uppercase)
 
             // Phase timeline
             VStack(alignment: .leading, spacing: 12) {
@@ -213,13 +312,78 @@ struct AssetGenerationView: View {
             .font(.system(size: 11))
             .foregroundStyle(Color.warmMid.opacity(0.7))
             .padding(.top, Spacing.sm)
-
-            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var musicPickerColumn: some View {
+        if musicPass != .idle {
+            MusicPickerPane(
+                tuesdayVisible: shouldFetchMusicForTuesday(event: event),
+                thursdayVisible: shouldFetchMusicForThursday(event: event),
+                musicPass: musicPass,
+                tuesdayCandidates: tuesdayCandidates,
+                thursdayCandidates: thursdayCandidates,
+                tuesdayPickedID: tuesdayPickedID,
+                thursdayPickedID: thursdayPickedID,
+                tuesdayMood: tuesdayMood,
+                thursdayMood: thursdayMood,
+                nowPlayingID: nowPlayingID,
+                onPick: { day, cand in applyPick(day: day, candidate: cand) },
+                onSkip: { day in clearPick(day: day) },
+                onPreview: { cand in previewTrack(cand) },
+                onRefetchTuesday: refetchTuesday,
+                onRefetchThursday: refetchThursday,
+                onTuesdayMood: changeTuesdayMood,
+                onThursdayMood: changeThursdayMood
+            )
+        }
+    }
+
+    private var runningView: some View {
+        GeometryReader { geo in
+            let wide = geo.size.width >= 1100
+            ZStack {
+                Color.cream.ignoresSafeArea()
+                if wide {
+                    HStack(alignment: .top, spacing: Spacing.xl) {
+                        Spacer(minLength: 0)
+                        phaseColumn
+                            .frame(maxWidth: 380)
+                            .padding(.top, 60)
+                        if musicPass != .idle {
+                            musicPickerColumn
+                                .frame(maxWidth: 420)
+                                .padding(.top, 60)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, Spacing.xl)
+                } else {
+                    ScrollView {
+                        VStack(spacing: Spacing.xl) {
+                            Spacer(minLength: 40)
+                            phaseColumn
+                            if musicPass != .idle {
+                                musicPickerColumn
+                                    .frame(maxWidth: 460)
+                                    .padding(.horizontal, Spacing.lg)
+                            }
+                            Spacer(minLength: 40)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
         .background(Color.cream)
         .onAppear { phasesVisible = true }
-        .onDisappear { stopTimer(); phasesVisible = false }
+        .onDisappear {
+            stopTimer()
+            phasesVisible = false
+            audioPlayer.pause()
+            nowPlayingID = nil
+        }
     }
 
     private var elapsedFormatted: String {
@@ -462,11 +626,40 @@ struct AssetGenerationView: View {
         }
 
         let onlyDays = retryDays
+
+        // Reset music state each run
+        tuesdayCandidates = []
+        thursdayCandidates = []
+        tuesdayPickedID = nil
+        thursdayPickedID = nil
+        tuesdaySeenIDs = []
+        thursdaySeenIDs = []
+        tuesdayMood = .auto
+        thursdayMood = .auto
+        musicBlockingReady = false
+        musicPass = (onlyDays == nil) ? .fetchingTuesday : .idle
+
+        // Kick off music picker sequence (Tuesday → Thursday). Skipped on retry runs
+        // since the user is only regenerating captions/blog, not reels.
+        if onlyDays == nil {
+            musicFetchTask?.cancel()
+            musicFetchTask = Task { await runMusicPickerSequence(event: ev) }
+        } else {
+            musicBlockingReady = true
+        }
+
         generationTask = Task {
-            // Story graphics don't depend on captions — start both at the same time.
-            // Skip graphics on partial retries (user is only redoing one day/blog).
+            // Graphics generation uses the picked audio, so wait until the user has had
+            // at least a moment to auto-pick the initial tracks (captions run in parallel).
             let graphicsTask: Task<[String: [String: String]]?, Never>? = onlyDays == nil
-                ? Task { try? await PythonBridge.shared.runPreviewGeneration(event: ev) }
+                ? Task {
+                    await waitForInitialMusicPicks()
+                    // Read the freshest event state so the manifest includes the picks.
+                    let latest = await MainActor.run { () -> Event in
+                        appState.events.first(where: { $0.id == ev.id }) ?? ev
+                    }
+                    return try? await PythonBridge.shared.runPreviewGeneration(event: latest)
+                }
                 : nil
 
             do {
@@ -512,6 +705,8 @@ struct AssetGenerationView: View {
                 graphicsTask?.cancel()
                 await MainActor.run {
                     stopTimer()
+                    musicFetchTask?.cancel()
+                    audioPlayer.pause()
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
                         generationState = .failed(error.localizedDescription)
                     }
@@ -520,9 +715,217 @@ struct AssetGenerationView: View {
         }
     }
 
+    // MARK: - Music picker sequence
+
+    /// Walks Tuesday (edit reel) then Thursday (scroll reel). Each pass fetches 5
+    /// candidates from Jamendo, auto-selects the first one, and persists it to
+    /// `PostingDay.audioPath` so graphics generation can pick it up. Skipped days
+    /// (no photos, no raw/edited image for Tuesday's speed edit) advance immediately.
+    private func runMusicPickerSequence(event ev: Event) async {
+        // Tuesday — only if we actually have the inputs needed for the speed edit reel.
+        if shouldFetchMusicForTuesday(event: ev) {
+            await MainActor.run { musicPass = .fetchingTuesday }
+            await fetchTuesdayCandidates(event: ev, resetSeen: true)
+            await MainActor.run {
+                if let first = tuesdayCandidates.first {
+                    applyPick(day: .tuesday, candidate: first)
+                }
+                musicPass = .pickingTuesday
+            }
+            // Give the user a brief moment to override auto-pick before advancing.
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+
+        // Thursday — only if there are photos for the scroll reel.
+        if shouldFetchMusicForThursday(event: ev) {
+            await MainActor.run { musicPass = .fetchingThursday }
+            await fetchThursdayCandidates(event: ev, resetSeen: true)
+            await MainActor.run {
+                if let first = thursdayCandidates.first {
+                    applyPick(day: .thursday, candidate: first)
+                }
+                musicPass = .pickingThursday
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+
+        await MainActor.run {
+            musicPass = .done
+            musicBlockingReady = true
+        }
+    }
+
+    /// Blocks graphics generation until either (a) the initial auto-picks are in, or
+    /// (b) a safety timeout elapses. This way the preview manifest sees the user's
+    /// chosen audio the first time around.
+    private func waitForInitialMusicPicks() async {
+        let deadline = Date().addingTimeInterval(60)
+        while await MainActor.run(body: { !musicBlockingReady }) {
+            if Date() >= deadline { return }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+    }
+
+    private func shouldFetchMusicForTuesday(event ev: Event) -> Bool {
+        guard let pd = ev.days[DayName.tuesday.rawValue] else { return false }
+        // Speed edit reel needs both a raw and edited photo plus a screen recording.
+        // If any is missing, the reel isn't generated and music is irrelevant.
+        return pd.rawPhotoPath != nil && pd.editedPhotoPath != nil && pd.screenRecordingPath != nil
+    }
+
+    private func shouldFetchMusicForThursday(event ev: Event) -> Bool {
+        guard let pd = ev.days[DayName.thursday.rawValue] else { return false }
+        return !pd.photoPaths.isEmpty
+    }
+
+    /// Tuesday defaults to ambient/cinematic framing since the speed edit reel
+    /// doesn't have program content to key off of.
+    private var tuesdayAutoTags: String { "ambient,atmospheric" }
+
+    /// Thursday defaults to program-derived tags (sacred/orchestral/jazz/etc).
+    /// We approximate Python's `_derive_audio_tags` on the Swift side so the first
+    /// fetch matches what Python would pick if we didn't override.
+    private var thursdayAutoTags: String {
+        let pieces = event.ocrResult?.pieces ?? []
+        let text = pieces
+            .map { "\($0.title) \($0.composer)" }
+            .joined(separator: " ")
+            .lowercased()
+
+        let sacredKeywords = [
+            "gospel", "praise", "hymn", "church", "sacred", "amen", "hallelujah",
+            "spiritual", "requiem", "kyrie", "sanctus", "mass ", "motet", "anthem",
+            "cantata", "gloria", "agnus dei", "pie jesu", "magnificat",
+        ]
+        let jazzKeywords = ["jazz", "blues", "swing", "bebop", "ellington", "coltrane"]
+        let orchestralKeywords = [
+            "symphony", "concerto", "orchestra", "beethoven", "mozart", "brahms",
+            "tchaikovsky", "mahler", "strauss", "bach", "handel", "haydn",
+        ]
+
+        if sacredKeywords.contains(where: text.contains) { return "inspirational,orchestral" }
+        if jazzKeywords.contains(where: text.contains)   { return "jazz" }
+        if orchestralKeywords.contains(where: text.contains) { return "orchestral,classical" }
+        return "ambient,atmospheric"
+    }
+
+    private func fetchTuesdayCandidates(event ev: Event, resetSeen: Bool) async {
+        let tags = tuesdayMood.tags(autoTags: tuesdayAutoTags)
+        let exclude = Array(tuesdaySeenIDs)
+        do {
+            let tracks = try await PythonBridge.shared.runFetchTrackCandidates(
+                tags: tags, count: 5, excludeIds: exclude
+            )
+            await MainActor.run {
+                if resetSeen { tuesdaySeenIDs = [] }
+                tuesdayCandidates = tracks
+                for t in tracks { tuesdaySeenIDs.insert(t.id) }
+            }
+        } catch {
+            await MainActor.run { tuesdayCandidates = [] }
+        }
+    }
+
+    private func fetchThursdayCandidates(event ev: Event, resetSeen: Bool) async {
+        let tags = thursdayMood.tags(autoTags: thursdayAutoTags)
+        let exclude = Array(thursdaySeenIDs)
+        do {
+            let tracks = try await PythonBridge.shared.runFetchTrackCandidates(
+                tags: tags, count: 5, excludeIds: exclude
+            )
+            await MainActor.run {
+                if resetSeen { thursdaySeenIDs = [] }
+                thursdayCandidates = tracks
+                for t in tracks { thursdaySeenIDs.insert(t.id) }
+            }
+        } catch {
+            await MainActor.run { thursdayCandidates = [] }
+        }
+    }
+
+    /// Persist a user's (or auto-) pick to `PostingDay.audioPath` so the preview
+    /// manifest picks it up. Runs on the main actor.
+    private func applyPick(day: DayName, candidate: TrackCandidate) {
+        var saved = appState.events.first(where: { $0.id == event.id }) ?? event
+        if saved.days[day.rawValue] != nil {
+            saved.days[day.rawValue]!.audioPath = candidate.localURL
+            appState.updateEvent(saved)
+        }
+        if day == .tuesday { tuesdayPickedID = candidate.id }
+        else if day == .thursday { thursdayPickedID = candidate.id }
+    }
+
+    /// Clear a pick so Python falls back to its derived audio.
+    private func clearPick(day: DayName) {
+        var saved = appState.events.first(where: { $0.id == event.id }) ?? event
+        if saved.days[day.rawValue] != nil {
+            saved.days[day.rawValue]!.audioPath = nil
+            appState.updateEvent(saved)
+        }
+        if day == .tuesday { tuesdayPickedID = nil }
+        else if day == .thursday { thursdayPickedID = nil }
+    }
+
+    private func previewTrack(_ candidate: TrackCandidate) {
+        if nowPlayingID == candidate.id {
+            audioPlayer.pause()
+            nowPlayingID = nil
+            return
+        }
+        audioPlayer.replaceCurrentItem(with: AVPlayerItem(url: candidate.localURL))
+        audioPlayer.play()
+        nowPlayingID = candidate.id
+    }
+
+    private func refetchTuesday() {
+        let ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        Task {
+            await MainActor.run { musicPass = .fetchingTuesday }
+            await fetchTuesdayCandidates(event: ev, resetSeen: false)
+            await MainActor.run {
+                if let first = tuesdayCandidates.first {
+                    applyPick(day: .tuesday, candidate: first)
+                }
+                musicPass = .pickingTuesday
+            }
+        }
+    }
+
+    private func refetchThursday() {
+        let ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        Task {
+            await MainActor.run { musicPass = .fetchingThursday }
+            await fetchThursdayCandidates(event: ev, resetSeen: false)
+            await MainActor.run {
+                if let first = thursdayCandidates.first {
+                    applyPick(day: .thursday, candidate: first)
+                }
+                musicPass = .pickingThursday
+            }
+        }
+    }
+
+    private func changeTuesdayMood(_ mood: MusicMood) {
+        guard mood != tuesdayMood else { return }
+        tuesdayMood = mood
+        tuesdaySeenIDs = []
+        refetchTuesday()
+    }
+
+    private func changeThursdayMood(_ mood: MusicMood) {
+        guard mood != thursdayMood else { return }
+        thursdayMood = mood
+        thursdaySeenIDs = []
+        refetchThursday()
+    }
+
     private func cancelGeneration() {
         generationTask?.cancel()
         generationTask = nil
+        musicFetchTask?.cancel()
+        musicFetchTask = nil
+        audioPlayer.pause()
+        nowPlayingID = nil
         stopTimer()
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
             generationState = .configuring
@@ -679,6 +1082,286 @@ private struct HandleField: View {
                 )
                 .animation(.easeOut(duration: 0.12), value: focused)
         }
+    }
+}
+
+// MARK: - Music mood
+
+/// Preset moods the user can pick from during music fetching. Each resolves
+/// to a Jamendo tag combination verified to return usable instrumental tracks.
+/// `.auto` defers to per-day defaults (Tuesday = ambient, Thursday = program-derived).
+enum MusicMood: String, CaseIterable, Identifiable {
+    case auto
+    case ambient
+    case orchestral
+    case jazz
+    case gospel
+    case spiritual
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .auto:       return "Auto"
+        case .ambient:    return "Ambient"
+        case .orchestral: return "Orchestral"
+        case .jazz:       return "Jazz"
+        case .gospel:     return "Gospel"
+        case .spiritual:  return "Spiritual"
+        }
+    }
+
+    /// Returns the Jamendo tag string for this mood. `.auto` uses per-day defaults
+    /// passed via `autoTags`.
+    func tags(autoTags: String) -> String {
+        switch self {
+        case .auto:       return autoTags
+        case .ambient:    return "ambient,atmospheric"
+        case .orchestral: return "orchestral,classical"
+        case .jazz:       return "jazz"
+        case .gospel:     return "gospel"
+        case .spiritual:  return "spiritual"
+        }
+    }
+}
+
+// MARK: - Music picker pane
+
+/// Side panel shown during generation. Walks the user through picking audio for
+/// Tuesday's edit reel then Thursday's scroll reel. Each pass shows 5 candidates
+/// from Jamendo with play-preview buttons, a mood override chip row, and a
+/// "get new tracks" refresh button.
+private struct MusicPickerPane: View {
+    let tuesdayVisible: Bool
+    let thursdayVisible: Bool
+    let musicPass: AssetGenerationView.MusicPass
+    let tuesdayCandidates: [TrackCandidate]
+    let thursdayCandidates: [TrackCandidate]
+    let tuesdayPickedID: String?
+    let thursdayPickedID: String?
+    let tuesdayMood: MusicMood
+    let thursdayMood: MusicMood
+    let nowPlayingID: String?
+    let onPick: (DayName, TrackCandidate) -> Void
+    let onSkip: (DayName) -> Void
+    let onPreview: (TrackCandidate) -> Void
+    let onRefetchTuesday: () -> Void
+    let onRefetchThursday: () -> Void
+    let onTuesdayMood: (MusicMood) -> Void
+    let onThursdayMood: (MusicMood) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("WHILE YOU WAIT — PICK REEL MUSIC")
+                .font(.system(size: 10, weight: .medium))
+                .tracking(1.2)
+                .foregroundStyle(Color.warmMid)
+
+            if tuesdayVisible {
+                section(
+                    title: "Tuesday — Edit Reel",
+                    active: musicPass == .fetchingTuesday || musicPass == .pickingTuesday,
+                    mood: tuesdayMood,
+                    candidates: tuesdayCandidates,
+                    pickedID: tuesdayPickedID,
+                    isFetching: musicPass == .fetchingTuesday,
+                    onMood: onTuesdayMood,
+                    onRefetch: onRefetchTuesday,
+                    onPick: { onPick(.tuesday, $0) },
+                    onSkip: { onSkip(.tuesday) }
+                )
+            }
+
+            if thursdayVisible {
+                section(
+                    title: "Thursday — Scroll Reel",
+                    active: musicPass == .fetchingThursday || musicPass == .pickingThursday || musicPass == .done,
+                    mood: thursdayMood,
+                    candidates: thursdayCandidates,
+                    pickedID: thursdayPickedID,
+                    isFetching: musicPass == .fetchingThursday,
+                    onMood: onThursdayMood,
+                    onRefetch: onRefetchThursday,
+                    onPick: { onPick(.thursday, $0) },
+                    onSkip: { onSkip(.thursday) }
+                )
+            }
+        }
+        .padding(Spacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.md)
+                .fill(Color.creamDeep)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.md)
+                        .strokeBorder(Color.creamEdge, lineWidth: 1)
+                )
+        )
+    }
+
+    @ViewBuilder
+    private func section(
+        title: String,
+        active: Bool,
+        mood: MusicMood,
+        candidates: [TrackCandidate],
+        pickedID: String?,
+        isFetching: Bool,
+        onMood: @escaping (MusicMood) -> Void,
+        onRefetch: @escaping () -> Void,
+        onPick: @escaping (TrackCandidate) -> Void,
+        onSkip: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(active ? Color.warmDark : Color.warmMid.opacity(0.6))
+                Spacer()
+                if active && pickedID != nil && !isFetching {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.roseGold.opacity(0.7))
+                }
+            }
+
+            if active {
+                moodRow(selected: mood, onMood: onMood)
+
+                if isFetching {
+                    HStack(spacing: Spacing.xs) {
+                        ProgressView().controlSize(.small)
+                        Text("Fetching tracks…")
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
+                    }
+                    .padding(.vertical, Spacing.xs)
+                } else if candidates.isEmpty {
+                    Text("No tracks found. Try a different mood.")
+                        .font(.light(11))
+                        .foregroundStyle(Color.warmMid)
+                } else {
+                    VStack(spacing: 4) {
+                        ForEach(candidates) { cand in
+                            TrackRow(
+                                candidate: cand,
+                                isPicked: cand.id == pickedID,
+                                isPlaying: cand.id == nowPlayingID,
+                                onTap: { onPick(cand) },
+                                onPreview: { onPreview(cand) }
+                            )
+                        }
+                    }
+                }
+
+                HStack(spacing: Spacing.sm) {
+                    Button(action: onRefetch) {
+                        Label("New tracks", systemImage: "arrow.clockwise")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.roseGold)
+                    .disabled(isFetching)
+
+                    Spacer()
+
+                    if pickedID != nil {
+                        Button("Use default", action: onSkip)
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.warmMid)
+                    }
+                }
+                .padding(.top, Spacing.xs)
+            } else {
+                Text("Will start after \(title.contains("Tuesday") ? "…" : "Tuesday")")
+                    .font(.light(11))
+                    .foregroundStyle(Color.warmMid.opacity(0.6))
+            }
+        }
+        .padding(Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.sm)
+                .fill(active ? Color.cream : Color.clear)
+        )
+    }
+
+    private func moodRow(selected: MusicMood, onMood: @escaping (MusicMood) -> Void) -> some View {
+        HStack(spacing: 6) {
+            ForEach(MusicMood.allCases) { mood in
+                Button(action: { onMood(mood) }) {
+                    Text(mood.label)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(mood == selected ? Color.cream : Color.warmMid)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(mood == selected ? Color.roseGold : Color.creamDeep)
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(Color.creamEdge, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+private struct TrackRow: View {
+    let candidate: TrackCandidate
+    let isPicked: Bool
+    let isPlaying: Bool
+    let onTap: () -> Void
+    let onPreview: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Button(action: onPreview) {
+                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(Color.roseGold)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(candidate.name)
+                    .font(.system(size: 12, weight: isPicked ? .medium : .regular))
+                    .foregroundStyle(Color.warmDark)
+                    .lineLimit(1)
+                Text(candidate.artistName)
+                    .font(.light(10))
+                    .foregroundStyle(Color.warmMid)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Text(formatDuration(candidate.duration))
+                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .foregroundStyle(Color.warmMid)
+
+            if isPicked {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.roseGold)
+            }
+        }
+        .padding(.horizontal, Spacing.xs)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.xs)
+                .fill(isPicked ? Color.roseGold.opacity(0.10) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
+        let m = Int(seconds) / 60
+        let s = Int(seconds) % 60
+        return String(format: "%d:%02d", m, s)
     }
 }
 

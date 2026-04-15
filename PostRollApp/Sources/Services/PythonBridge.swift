@@ -1,5 +1,23 @@
 import Foundation
 
+/// One candidate track returned by the music-picker fetcher.
+struct TrackCandidate: Codable, Hashable, Identifiable {
+    var id: String
+    var name: String
+    var artistName: String
+    var duration: Double
+    var tags: String
+    var localPath: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, duration, tags
+        case artistName = "artist_name"
+        case localPath  = "local_path"
+    }
+
+    var localURL: URL { URL(fileURLWithPath: localPath) }
+}
+
 enum PythonBridgeError: LocalizedError {
     case scriptFailed(exitCode: Int32, stderr: String)
     case outputMissing
@@ -319,6 +337,41 @@ actor PythonBridge {
         return json["audio_source"] as? String
     }
 
+    // MARK: - Music picker (candidate tracks)
+
+    /// Fetch a batch of candidate Jamendo tracks matching `tags`. Each candidate is
+    /// pre-downloaded to the shared audio cache so the UI can preview it immediately.
+    /// Pass `excludeIds` to skip tracks the user has already seen (used for
+    /// "get new tracks" pagination).
+    func runFetchTrackCandidates(
+        tags: String,
+        count: Int = 5,
+        excludeIds: [String] = []
+    ) async throws -> [TrackCandidate] {
+        let tmp = FileManager.default.temporaryDirectory
+        let outputFile = tmp.appendingPathComponent("postroll_tracks_\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: outputFile) }
+
+        var args: [String] = [
+            "-m", "postroll.ai.fetch_tracks",
+            "--tags", tags,
+            "--count", String(count),
+            "--output", outputFile.path,
+        ]
+        if !excludeIds.isEmpty {
+            args.append("--exclude-ids")
+            args.append(excludeIds.joined(separator: ","))
+        }
+
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else { return [] }
+        let data = try Data(contentsOf: outputFile)
+        struct Wrapper: Codable { let tracks: [TrackCandidate] }
+        let wrapper = try JSONDecoder().decode(Wrapper.self, from: data)
+        return wrapper.tracks
+    }
+
     /// Builds the media manifest dict shared by runMediaGeneration and runPreviewGeneration.
     private func buildMediaManifest(event: Event) -> [String: Any] {
         var daysDict: [String: Any] = [:]
@@ -415,15 +468,16 @@ actor PythonBridge {
         }
 
         let manifest: [String: Any] = [
-            "event":      event.name,
-            "org":        event.org,
-            "venue":      event.venue,
-            "date":       event.isoDate,
-            "shoot_type": event.shootType.pythonValue,
-            "day":        day.rawValue,
-            "program":    programDict,
-            "existing":   captionDict,
-            "feedback":   feedback,
+            "event":         event.name,
+            "org":           event.org,
+            "venue":         event.venue,
+            "venue_context": event.venueContext,
+            "date":          event.isoDate,
+            "shoot_type":    event.shootType.pythonValue,
+            "day":           day.rawValue,
+            "program":       programDict,
+            "existing":      captionDict,
+            "feedback":      feedback,
         ]
 
         let manifestData = try JSONSerialization.data(
@@ -487,14 +541,15 @@ actor PythonBridge {
         }
 
         let manifest: [String: Any] = [
-            "event":      event.name,
-            "org":        event.org,
-            "venue":      event.venue,
-            "date":       event.isoDate,
-            "shoot_type": event.shootType.pythonValue,
-            "program":    programDict,
-            "existing":   blogDict,
-            "feedback":   feedback,
+            "event":         event.name,
+            "org":           event.org,
+            "venue":         event.venue,
+            "venue_context": event.venueContext,
+            "date":          event.isoDate,
+            "shoot_type":    event.shootType.pythonValue,
+            "program":       programDict,
+            "existing":      blogDict,
+            "feedback":      feedback,
         ]
 
         let manifestData = try JSONSerialization.data(
@@ -562,13 +617,14 @@ actor PythonBridge {
         }
 
         var manifest: [String: Any] = [
-            "event":      event.name,
-            "org":        event.org,
-            "venue":      event.venue,
-            "date":       event.isoDate,
-            "shoot_type": event.shootType.pythonValue,
-            "program":    programDict,
-            "days":       daysDict,
+            "event":         event.name,
+            "org":           event.org,
+            "venue":         event.venue,
+            "venue_context": event.venueContext,
+            "date":          event.isoDate,
+            "shoot_type":    event.shootType.pythonValue,
+            "program":       programDict,
+            "days":          daysDict,
         ]
         // Include blog photos only when not filtering, or when "blog" is in the retry set
         let includeBlog = onlyDays == nil || onlyDays?.contains("blog") == true

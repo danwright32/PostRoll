@@ -4,14 +4,26 @@ import UserNotifications
 /// Handles macOS notifications and Dock badge for PostRoll background steps.
 /// Badge count = events where a background process just finished and needs review.
 @MainActor
-final class NotificationService {
+final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationService()
-    private init() {}
+    private override init() { super.init() }
 
     // MARK: - Permission
 
     func requestPermission() {
+        UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    // MARK: - Foreground delivery
+
+    // Without this, macOS silently drops banners when PostRoll is frontmost.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 
     // MARK: - Step notifications
@@ -27,6 +39,13 @@ final class NotificationService {
         send(
             title: "\(eventName): Captions Ready",
             body: "Review your generated captions before exporting."
+        )
+    }
+
+    func notifyRegenerationComplete(eventName: String, what: String) {
+        send(
+            title: "\(eventName): \(what) Regenerated",
+            body: "Ready for review."
         )
     }
 

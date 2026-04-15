@@ -72,7 +72,7 @@ Dan's feedback:
 
 Event context:
 - Organization: {org}
-- Venue: {venue}
+- Venue: {venue}{venue_context_line}
 - Date: {date}
 - Shoot type: {shoot_type}
 
@@ -115,6 +115,7 @@ def revise_blog(
     program: dict[str, Any],
     existing: dict[str, Any],
     feedback: str,
+    venue_context: str = "",
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
@@ -130,11 +131,17 @@ def revise_blog(
     body  = existing.get("body", "")
     photo_count = int(existing.get("photo_count", 0) or 0)
 
+    venue_context_line = (
+        f" — performed in {venue_context.strip()}"
+        if venue_context and venue_context.strip() else ""
+    )
+
     prompt = REVISE_PROMPT.format(
         brand_voice=brand_voice_text,
         event=event,
         org=org,
         venue=venue,
+        venue_context_line=venue_context_line,
         date=date,
         shoot_type=shoot_type,
         title=title,
@@ -202,6 +209,7 @@ if __name__ == "__main__":
         event=m["event"],
         org=m["org"],
         venue=m["venue"],
+        venue_context=m.get("venue_context", "") or "",
         date=m["date"],
         shoot_type=m.get("shoot_type", "performance"),
         program=m["program"],

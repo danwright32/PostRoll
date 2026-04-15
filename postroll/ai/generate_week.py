@@ -73,15 +73,16 @@ def _auto_post_type(day: str, photo_count: int) -> str:
 
 def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path | None = None) -> None:
     """Run caption + blog generation for one event week."""
-    event      = manifest["event"]
-    org        = manifest["org"]
-    venue      = manifest["venue"]
-    date       = manifest["date"]
-    shoot_type = manifest.get("shoot_type", "performance")
-    program    = manifest["program"]
-    days_data  = manifest.get("days", {})
-    blog_photos = manifest.get("blog_photos", [])
-    event_url  = manifest.get("event_url", "")
+    event         = manifest["event"]
+    org           = manifest["org"]
+    venue         = manifest["venue"]
+    venue_context = manifest.get("venue_context", "") or ""
+    date          = manifest["date"]
+    shoot_type    = manifest.get("shoot_type", "performance")
+    program       = manifest["program"]
+    days_data     = manifest.get("days", {})
+    blog_photos   = manifest.get("blog_photos", [])
+    event_url     = manifest.get("event_url", "")
 
     results: dict[str, Any] = {}
     errors:  dict[str, str] = {}
@@ -139,6 +140,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
                 event=event,
                 org=org,
                 venue=venue,
+                venue_context=venue_context,
                 date=date,
                 day=day_name,
                 photo_paths=photos,
@@ -171,6 +173,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
                 event=event,
                 org=org,
                 venue=venue,
+                venue_context=venue_context,
                 date=date,
                 program=program,
                 photo_paths=blog_photos,

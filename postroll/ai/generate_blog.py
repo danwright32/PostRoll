@@ -62,7 +62,7 @@ no bullets, no section breaks.
 Event details:
 - Event name: {event}
 - Organization: {org}
-- Venue: {venue}
+- Venue: {venue}{venue_context_line}
 - Date: {date}
 - Shoot type: {shoot_type}  ← CRITICAL: the prose MUST match what Dan
   actually witnessed.
@@ -176,6 +176,7 @@ def generate_blog(
     photo_paths: list[str | Path],
     shoot_type: str = "performance",
     event_url: str = "",
+    venue_context: str = "",
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
@@ -225,6 +226,12 @@ def generate_blog(
             f"- Event page URL (additional context): {event_url}"
             if event_url else ""
         )
+        # Specific room inside the venue (e.g. Weill Recital Hall inside Carnegie
+        # Hall) — used only for prose context. Graphics still show top-level venue.
+        venue_context_line = (
+            f" — performed in {venue_context.strip()}"
+            if venue_context and venue_context.strip() else ""
+        )
 
         # === Pass 1: generate the draft ===
         prompt = PROMPT_TEMPLATE.format(
@@ -232,6 +239,7 @@ def generate_blog(
             event=event,
             org=org,
             venue=venue,
+            venue_context_line=venue_context_line,
             date=date,
             shoot_type=shoot_type,
             event_url_line=event_url_line,

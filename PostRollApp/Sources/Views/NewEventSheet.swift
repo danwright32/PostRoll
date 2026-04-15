@@ -7,6 +7,7 @@ struct NewEventSheet: View {
     @State private var name = ""
     @State private var org = ""
     @State private var venue = ""
+    @State private var venueContext = ""
     @State private var date = Date()
     @State private var shootType = ShootType.fullShow
 
@@ -38,6 +39,7 @@ struct NewEventSheet: View {
                             BrandTextField("Event name", text: $name)
                             BrandTextField("Organization", text: $org)
                             BrandTextField("Venue (optional)", text: $venue)
+                            BrandTextField("Specific hall/room (optional, for blog context)", text: $venueContext)
 
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Date")
@@ -91,6 +93,7 @@ struct NewEventSheet: View {
             name: name.trimmingCharacters(in: .whitespaces),
             org: org.trimmingCharacters(in: .whitespaces),
             venue: venue.trimmingCharacters(in: .whitespaces),
+            venueContext: venueContext.trimmingCharacters(in: .whitespaces),
             date: date,
             shootType: shootType
         )

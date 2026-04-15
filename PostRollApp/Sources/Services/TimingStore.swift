@@ -76,6 +76,10 @@ final class TimingStore: @unchecked Sendable {
         return s.isEmpty ? nil : s.reduce(0, +) / Double(s.count)
     }
 
+    var captionsMean: Double?  { mean(timings.captions) }
+    var blogMean: Double?      { mean(timings.blog) }
+    var packagingMean: Double? { mean(timings.packaging) }
+
     private func mean(_ arr: [Double]) -> Double? {
         arr.isEmpty ? nil : arr.reduce(0, +) / Double(arr.count)
     }

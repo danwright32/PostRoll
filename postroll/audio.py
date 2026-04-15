@@ -30,6 +30,75 @@ DEFAULT_CACHE_DIR = Path.home() / ".postroll" / "audio_cache"
 _SEARCH_LIMIT = 20  # tracks fetched per search; picks randomly from top 10
 
 
+def fetch_audio_candidates(
+    tags: str,
+    *,
+    count: int = 5,
+    exclude_ids: tuple[str, ...] = (),
+    cache_dir: Path | None = None,
+    seed: int | None = None,
+    exclude_keywords: tuple[str, ...] = ("rock", "heroic", "loop", " logo", "adventure"),
+) -> list[dict[str, Any]]:
+    """Return a list of candidate Jamendo tracks matching `tags`, pre-downloaded
+    to the local cache so the UI can preview them immediately.
+
+    Args:
+        tags: Comma-separated genre/mood tags.
+        count: Target number of candidates to return (<= _SEARCH_LIMIT).
+        exclude_ids: Track IDs to skip (used for "get new tracks" pagination).
+        cache_dir: Override the default cache directory.
+        seed: Seeds the deterministic ordering inside the filtered pool so
+              repeated calls with the same seed return the same set.
+        exclude_keywords: Name substrings to filter out (same defaults as
+                          `fetch_audio`).
+
+    Returns:
+        List of dicts: {id, name, artist_name, duration, tags, local_path}.
+    """
+    client_id = os.environ.get("JAMENDO_CLIENT_ID", "").strip()
+    if not client_id:
+        raise EnvironmentError(
+            "JAMENDO_CLIENT_ID environment variable is not set. "
+            "Get a free key at https://devportal.jamendo.com"
+        )
+
+    cache = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+    cache.mkdir(parents=True, exist_ok=True)
+
+    tracks = _search_tracks(tags, client_id)
+    excluded = set(exclude_ids)
+    filtered = [
+        t for t in tracks
+        if str(t["id"]) not in excluded
+        and not any(kw.lower() in t["name"].lower() for kw in exclude_keywords)
+    ]
+    if not filtered:
+        return []
+
+    rng = random.Random(seed)
+    rng.shuffle(filtered)
+    picks = filtered[:count]
+
+    results: list[dict[str, Any]] = []
+    for track in picks:
+        track_id = str(track["id"])
+        cached = cache / f"{track_id}.mp3"
+        if not cached.exists():
+            try:
+                _download(track["audiodownload"], cached)
+            except Exception:
+                continue
+        results.append({
+            "id": track_id,
+            "name": track["name"],
+            "artist_name": track.get("artist_name", ""),
+            "duration": float(track.get("duration", 0) or 0),
+            "tags": tags,
+            "local_path": str(cached),
+        })
+    return results
+
+
 def fetch_audio(
     tags: str,
     cache_dir: Path | None = None,

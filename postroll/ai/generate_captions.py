@@ -77,7 +77,7 @@ shared post-level caption.
 Event details:
 - Event name: {event}
 - Organization: {org}
-- Venue: {venue}
+- Venue: {venue}{venue_context_line}
 - Date: {date}
 - Day of week posting: {day}
 - Shoot type: {shoot_type}
@@ -514,6 +514,7 @@ def generate_caption(
     notes: str = "",
     existing_captions: list[str] | None = None,
     event_url: str = "",
+    venue_context: str = "",
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
@@ -588,6 +589,12 @@ def generate_caption(
             f"- Event page URL (additional context): {event_url}"
             if event_url else ""
         )
+        # Specific room inside the venue (e.g. Weill Recital Hall inside Carnegie Hall)
+        # — used only for prose context. Graphics still show the top-level venue.
+        venue_context_line = (
+            f" — performed in {venue_context.strip()}"
+            if venue_context and venue_context.strip() else ""
+        )
 
         # === Pass 1: generate the draft ===
         prompt = PROMPT_TEMPLATE.format(
@@ -595,6 +602,7 @@ def generate_caption(
             event=event,
             org=org,
             venue=venue,
+            venue_context_line=venue_context_line,
             date=date,
             day=day,
             shoot_type=shoot_type,
@@ -707,7 +715,7 @@ ONE response as an array.
 Event details (shared across all posts):
 - Event name: {event}
 - Organization: {org}
-- Venue: {venue}
+- Venue: {venue}{venue_context_line}
 - Date: {date}
 - Shoot type: {shoot_type}  ← CRITICAL: match every caption to what
   Dan actually witnessed. If shoot_type is photo_call, do NOT mention
@@ -845,6 +853,7 @@ def generate_week_captions(
     program: dict[str, Any],
     posts: list[dict[str, Any]],
     shoot_type: str = "performance",
+    venue_context: str = "",
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
@@ -900,12 +909,18 @@ def generate_week_captions(
 
         brand_voice_text = load_brand_voice()
 
+        venue_context_line = (
+            f" — performed in {venue_context.strip()}"
+            if venue_context and venue_context.strip() else ""
+        )
+
         # === Pass 1: generate all captions in one call ===
         prompt = WEEK_PROMPT_TEMPLATE.format(
             brand_voice=brand_voice_text,
             event=event,
             org=org,
             venue=venue,
+            venue_context_line=venue_context_line,
             date=date,
             shoot_type=shoot_type,
             performers=_format_performers(program.get("performers", [])),

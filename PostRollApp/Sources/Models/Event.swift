@@ -5,6 +5,10 @@ struct Event: Identifiable, Codable, Hashable {
     var name: String
     var org: String
     var venue: String
+    /// Specific room/hall within the venue (e.g. "Weill Recital Hall" when `venue`
+    /// is "Carnegie Hall"). Used only by blog + captions for richer prose; graphics
+    /// and reels always show the top-level `venue`.
+    var venueContext: String = ""
     var date: Date
     var shootType: ShootType
     var stage: EventStage = .created
@@ -57,6 +61,7 @@ extension Event {
         name         = try c.decode(String.self,    forKey: .name)
         org          = try c.decode(String.self,    forKey: .org)
         venue        = try c.decode(String.self,    forKey: .venue)
+        venueContext = try c.decodeIfPresent(String.self, forKey: .venueContext) ?? ""
         date         = try c.decode(Date.self,      forKey: .date)
         shootType    = try c.decode(ShootType.self, forKey: .shootType)
         stage             = try c.decodeIfPresent(EventStage.self,                 forKey: .stage)             ?? .created

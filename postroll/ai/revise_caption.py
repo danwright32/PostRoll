@@ -73,7 +73,7 @@ Dan's feedback:
 
 Event context:
 - Organization: {org}
-- Venue: {venue}
+- Venue: {venue}{venue_context_line}
 - Shoot type: {shoot_type}
 - Performers: {performers}
 
@@ -102,6 +102,7 @@ def revise_caption(
     program: dict[str, Any],
     existing: dict[str, Any],
     feedback: str,
+    venue_context: str = "",
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
 ) -> dict[str, Any]:
@@ -116,12 +117,18 @@ def revise_caption(
     hashtags      = existing.get("hashtags", [])
     hashtags_text = " ".join(hashtags) if hashtags else "(none)"
 
+    venue_context_line = (
+        f" — performed in {venue_context.strip()}"
+        if venue_context and venue_context.strip() else ""
+    )
+
     prompt = REVISE_PROMPT.format(
         brand_voice=brand_voice_text,
         event=event,
         day=day,
         org=org,
         venue=venue,
+        venue_context_line=venue_context_line,
         shoot_type=shoot_type,
         caption=caption_text,
         hashtags=hashtags_text,
@@ -176,6 +183,7 @@ if __name__ == "__main__":
         event=m["event"],
         org=m["org"],
         venue=m["venue"],
+        venue_context=m.get("venue_context", "") or "",
         date=m["date"],
         day=m["day"],
         shoot_type=m.get("shoot_type", "performance"),

@@ -8,30 +8,30 @@ just a dated folder you can open in Finder.
 Output structure:
 
     {org_slug}_{event_slug}_{date}/
-        sunday/
+        0. Blog/
+            draft.md
+            photo_01.<ext> … photo_n.<ext>
+        1. Sunday/
             photo.<ext>
             story.<ext>
             caption.txt         ← caption + hashtags, copy-pasteable
             alt_text.txt
-        monday/                 ← same layout as sunday
-        tuesday/
+        2. Monday/              ← same layout as sunday
+        3. Tuesday/
             reel.<ext>
             story_cover.<ext>   ← before/after closing frame
             caption.txt
-        wednesday/
+        4. Wednesday/
             carousel/
                 01.<ext> … 10.<ext>
             collage_story.<ext>
             caption.txt
             alt_texts.txt       ← numbered, one per photo
-        thursday/
+        5. Thursday/
             reel.<ext>
             caption.txt
-        friday/
+        6. Friday/
             before_after_story.<ext>
-        blog/
-            draft.md
-            photo_01.<ext> … photo_n.<ext>
         CAPTIONS.txt            ← all 5 days stacked for quick copy-paste
         CHECKLIST.md            ← manual tasks with performer names filled in
 
@@ -140,15 +140,15 @@ def export_week(data: WeekExport, output_dir: Path) -> Path:
     export_dir = output_dir / folder_name
     export_dir.mkdir(parents=True, exist_ok=True)
 
-    _export_single_day(data.sunday, export_dir / "sunday")
-    _export_single_day(data.monday, export_dir / "monday")
-    _export_tuesday(data.tuesday, export_dir / "tuesday")
-    _export_wednesday(data.wednesday, export_dir / "wednesday")
-    _export_thursday(data.thursday, export_dir / "thursday")
-    _export_friday(data.friday, export_dir / "friday")
+    _export_single_day(data.sunday, export_dir / "1. Sunday")
+    _export_single_day(data.monday, export_dir / "2. Monday")
+    _export_tuesday(data.tuesday, export_dir / "3. Tuesday")
+    _export_wednesday(data.wednesday, export_dir / "4. Wednesday")
+    _export_thursday(data.thursday, export_dir / "5. Thursday")
+    _export_friday(data.friday, export_dir / "6. Friday")
 
     if data.blog:
-        _export_blog(data.blog, export_dir / "blog")
+        _export_blog(data.blog, export_dir / "0. Blog")
 
     (export_dir / "CAPTIONS.txt").write_text(_master_captions(data), encoding="utf-8")
     (export_dir / "CHECKLIST.md").write_text(_checklist(data), encoding="utf-8")

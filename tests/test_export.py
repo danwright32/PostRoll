@@ -122,18 +122,21 @@ def test_creates_top_level_folder(week_data, tmp_path):
 
 def test_all_day_folders_exist(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    for day in ("sunday", "monday", "tuesday", "wednesday", "thursday", "friday"):
+    for day in (
+        "1. Sunday", "2. Monday", "3. Tuesday",
+        "4. Wednesday", "5. Thursday", "6. Friday",
+    ):
         assert (out / day).is_dir(), f"Missing day folder: {day}"
 
 
 def test_carousel_subfolder_exists(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert (out / "wednesday" / "carousel").is_dir()
+    assert (out / "4. Wednesday" / "carousel").is_dir()
 
 
 def test_blog_folder_not_created_without_blog(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert not (out / "blog").exists()
+    assert not (out / "0. Blog").exists()
 
 
 def test_blog_folder_created_with_blog(week_data, tmp_path):
@@ -144,8 +147,8 @@ def test_blog_folder_created_with_blog(week_data, tmp_path):
         photos=[_make_photo(src / f"blog_{i}.jpg") for i in range(1, 4)],
     )
     out = export_week(week_data, tmp_path)
-    assert (out / "blog").is_dir()
-    assert (out / "blog" / "draft.md").exists()
+    assert (out / "0. Blog").is_dir()
+    assert (out / "0. Blog" / "draft.md").exists()
 
 
 # ===================================================================
@@ -155,24 +158,24 @@ def test_blog_folder_created_with_blog(week_data, tmp_path):
 
 def test_single_day_photo_copied(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert (out / "sunday" / "photo.jpg").exists()
+    assert (out / "1. Sunday" / "photo.jpg").exists()
 
 
 def test_single_day_story_copied(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert (out / "sunday" / "story.png").exists()
+    assert (out / "1. Sunday" / "story.png").exists()
 
 
 def test_single_day_caption_txt(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    text = (out / "sunday" / "caption.txt").read_text()
+    text = (out / "1. Sunday" / "caption.txt").read_text()
     assert "A moment from the stage." in text
     assert "#dwphotony" in text
 
 
 def test_single_day_alt_text_txt(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    text = (out / "sunday" / "alt_text.txt").read_text()
+    text = (out / "1. Sunday" / "alt_text.txt").read_text()
     assert "Soprano soloist" in text
 
 
@@ -183,17 +186,17 @@ def test_single_day_alt_text_txt(week_data, tmp_path):
 
 def test_tuesday_reel_copied(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert (out / "tuesday" / "reel.mp4").exists()
+    assert (out / "3. Tuesday" / "reel.mp4").exists()
 
 
 def test_tuesday_story_cover_copied(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert (out / "tuesday" / "story_cover.png").exists()
+    assert (out / "3. Tuesday" / "story_cover.png").exists()
 
 
 def test_tuesday_has_no_alt_text(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert not (out / "tuesday" / "alt_text.txt").exists()
+    assert not (out / "3. Tuesday" / "alt_text.txt").exists()
 
 
 # ===================================================================
@@ -204,12 +207,12 @@ def test_tuesday_has_no_alt_text(week_data, tmp_path):
 def test_wednesday_carousel_numbered(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
     for i in range(1, 11):
-        assert (out / "wednesday" / "carousel" / f"{i:02d}.jpg").exists()
+        assert (out / "4. Wednesday" / "carousel" / f"{i:02d}.jpg").exists()
 
 
 def test_wednesday_alt_texts_numbered(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    text = (out / "wednesday" / "alt_texts.txt").read_text()
+    text = (out / "4. Wednesday" / "alt_texts.txt").read_text()
     assert "Photo 1:" in text
     assert "Photo 10:" in text
 
@@ -221,12 +224,12 @@ def test_wednesday_alt_texts_numbered(week_data, tmp_path):
 
 def test_thursday_reel_copied(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert (out / "thursday" / "reel.mp4").exists()
+    assert (out / "5. Thursday" / "reel.mp4").exists()
 
 
 def test_thursday_has_no_alt_text(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert not (out / "thursday" / "alt_text.txt").exists()
+    assert not (out / "5. Thursday" / "alt_text.txt").exists()
 
 
 # ===================================================================
@@ -236,12 +239,12 @@ def test_thursday_has_no_alt_text(week_data, tmp_path):
 
 def test_friday_before_after_copied(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert (out / "friday" / "before_after_story.png").exists()
+    assert (out / "6. Friday" / "before_after_story.png").exists()
 
 
 def test_friday_has_no_caption(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert not (out / "friday" / "caption.txt").exists()
+    assert not (out / "6. Friday" / "caption.txt").exists()
 
 
 # ===================================================================
@@ -310,7 +313,7 @@ def test_blog_draft_contains_title(tmp_path, week_data):
         photos=[_make_photo(src / "blog_1.jpg")],
     )
     out = export_week(week_data, tmp_path)
-    draft = (out / "blog" / "draft.md").read_text()
+    draft = (out / "0. Blog" / "draft.md").read_text()
     assert "# A Night at Geffen Hall" in draft
     assert "First paragraph." in draft
 
@@ -324,7 +327,7 @@ def test_blog_photos_copied_and_numbered(tmp_path, week_data):
     )
     out = export_week(week_data, tmp_path)
     for i in range(1, 4):
-        assert (out / "blog" / f"photo_{i:02d}.jpg").exists()
+        assert (out / "0. Blog" / f"photo_{i:02d}.jpg").exists()
 
 
 # ===================================================================
