@@ -6,6 +6,10 @@ struct PostRollApp: App {
     @State private var hashtagStore = HashtagStore()
     @State private var analyticsStore = AnalyticsStore()
 
+    init() {
+        NotificationService.shared.requestPermission()
+    }
+
     var body: some Scene {
         WindowGroup {
             MainWindowView()
@@ -29,7 +33,7 @@ struct PostRollApp: App {
                 Button("Copy Install Command") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(
-                        "cd /Users/danielhankins-wright/Documents/PostRoll && make install",
+                        "cd ~/Documents/PostRoll && make clean && make install",
                         forType: .string
                     )
                 }

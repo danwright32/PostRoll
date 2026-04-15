@@ -18,8 +18,8 @@ enum OrgFollowerBand: String, Codable, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .under1k: return "< 1k"
-        case .k1to10:  return "1 – 10k"
-        case .k10to50: return "10 – 50k"
+        case .k1to10:  return "1 to 10k"
+        case .k10to50: return "10 to 50k"
         case .k50plus: return "50k+"
         case .unknown: return "Unknown"
         }
@@ -128,6 +128,24 @@ struct InsightReport: Identifiable, Codable, Hashable {
     }
 }
 
+extension InsightReport {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id                     = try c.decodeIfPresent(UUID.self,              forKey: .id)                     ?? UUID()
+        generatedAt            = try c.decodeIfPresent(Date.self,              forKey: .generatedAt)            ?? Date()
+        dateRangeStart         = try c.decodeIfPresent(Date.self,              forKey: .dateRangeStart)         ?? Date()
+        dateRangeEnd           = try c.decodeIfPresent(Date.self,              forKey: .dateRangeEnd)           ?? Date()
+        postCount              = try c.decodeIfPresent(Int.self,               forKey: .postCount)              ?? 0
+        storyCount             = try c.decodeIfPresent(Int.self,               forKey: .storyCount)             ?? 0
+        feedCount              = try c.decodeIfPresent(Int.self,               forKey: .feedCount)              ?? 0
+        summary                = try c.decodeIfPresent(String.self,            forKey: .summary)                ?? ""
+        feedFindings           = try c.decodeIfPresent(InsightFindings.self,   forKey: .feedFindings)           ?? InsightFindings(captionPatterns: [], hashtagPatterns: [], contentTypePatterns: [], timingPatterns: [])
+        storyFindings          = try c.decodeIfPresent(InsightFindings.self,   forKey: .storyFindings)          ?? InsightFindings(captionPatterns: [], hashtagPatterns: [], contentTypePatterns: [], timingPatterns: [])
+        brandVoiceSuggestions  = try c.decodeIfPresent([String].self,          forKey: .brandVoiceSuggestions)  ?? []
+        caveats                = try c.decodeIfPresent([String].self,          forKey: .caveats)                ?? []
+    }
+}
+
 struct InsightFindings: Codable, Hashable {
     var captionPatterns: [InsightFinding]
     var hashtagPatterns: [InsightFinding]
@@ -139,6 +157,16 @@ struct InsightFindings: Codable, Hashable {
         case hashtagPatterns      = "hashtag_patterns"
         case contentTypePatterns  = "content_type_patterns"
         case timingPatterns       = "timing_patterns"
+    }
+}
+
+extension InsightFindings {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        captionPatterns     = try c.decodeIfPresent([InsightFinding].self, forKey: .captionPatterns)     ?? []
+        hashtagPatterns     = try c.decodeIfPresent([InsightFinding].self, forKey: .hashtagPatterns)     ?? []
+        contentTypePatterns = try c.decodeIfPresent([InsightFinding].self, forKey: .contentTypePatterns) ?? []
+        timingPatterns      = try c.decodeIfPresent([InsightFinding].self, forKey: .timingPatterns)      ?? []
     }
 }
 
@@ -162,5 +190,15 @@ struct InsightFinding: Identifiable, Codable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, headline, evidence, confidence
+    }
+}
+
+extension InsightFinding {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id         = try c.decodeIfPresent(UUID.self,       forKey: .id)         ?? UUID()
+        headline   = try c.decodeIfPresent(String.self,     forKey: .headline)   ?? ""
+        evidence   = try c.decodeIfPresent(String.self,     forKey: .evidence)   ?? ""
+        confidence = try c.decodeIfPresent(Confidence.self, forKey: .confidence) ?? .medium
     }
 }

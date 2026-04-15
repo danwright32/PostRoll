@@ -41,6 +41,7 @@ from typing import Any
 
 from .ai_tells import (
     build_review_prompt,
+    build_voice_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
 )
@@ -64,7 +65,8 @@ Event details:
 - Venue: {venue}
 - Date: {date}
 - Shoot type: {shoot_type}  ← CRITICAL: the prose MUST match what Dan
-  actually witnessed. See the "Honor what Dan actually witnessed"
+  actually witnessed.
+{event_url_line} See the "Honor what Dan actually witnessed"
   section in the brand voice above. If shoot_type is photo_call or
   rehearsal, do NOT describe an audience, applause, a curtain call, or
   the arc of a performance. Frame it honestly as the access Dan had.
@@ -94,16 +96,22 @@ Other printed content (from program OCR):
 
 Photos selected for this post ({photo_count} total). READ EACH ONE so
 the prose can refer to what's actually visible in them, then place a
-[PHOTO: short description] marker in the body where each photo belongs:
+marker in the body where each photo belongs:
 {photo_list}
 
 Photo placement rules:
 - Place each photo in the prose at a moment where it makes sense — a
   reference to a specific piece, performer, or moment that the photo
   shows.
-- Use the format [PHOTO: brief description] on its own line between
-  paragraphs. The description should match what's actually in that
-  specific image so a human (or the GUI) can pair them up later.
+- Use this EXACT format on its own line between paragraphs:
+    [PHOTO: filename.jpg | alt text description of what is in the photo]
+  Where "filename.jpg" is the base filename only (no directory path),
+  and the alt text is a specific, useful description for a reader who
+  cannot see the image (15-35 words: who, what, where, lighting,
+  gestures). Example:
+    [PHOTO: 003_DSC4821.jpg | Conductor leading a full chorus from the
+    podium at Carnegie Hall, arms raised mid-phrase, blue stage light
+    behind the choir risers]
 - Use ALL {photo_count} photos. Spread them through the post — not
   clustered at the start or end.
 
@@ -112,7 +120,7 @@ commentary) in this shape:
 
 {{
   "title": "Blog post title — short, specific, no clickbait, no colon-subtitle pattern",
-  "body": "Markdown body. 10-12 short paragraphs separated by blank lines. [PHOTO: ...] markers placed inline on their own lines. Closes with one quiet, useful CTA.",
+  "body": "Markdown body. 10-12 short paragraphs separated by blank lines. [PHOTO: filename.jpg | alt text] markers placed inline on their own lines. Closes with one quiet, useful CTA.",
   "photo_count": {photo_count}
 }}
 
@@ -167,8 +175,10 @@ def generate_blog(
     program: dict[str, Any],
     photo_paths: list[str | Path],
     shoot_type: str = "performance",
+    event_url: str = "",
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
+    skip_voice_pass: bool = False,
 ) -> dict[str, Any]:
     """Generate a blog post draft for one event.
 
@@ -179,14 +189,19 @@ def generate_blog(
     "rehearsal", "dress_rehearsal". Any other string is passed through
     verbatim to the prompt for unusual cases.
 
-    The second-pass humanizer review runs by default if the humanizer
-    skill is installed at ~/.claude/skills/humanizer/SKILL.md. Pass
-    `skip_humanizer=True` to skip (mostly used in tests).
+    Pipeline: draft → voice pass → humanizer pass (3 passes total,
+    matching the caption pipeline). The humanizer is always the final
+    pass so nothing downstream can re-introduce AI tells.
+    skip_humanizer / skip_voice_pass exist for tests only.
     """
-    if not (4 <= len(photo_paths) <= 7):
-        raise ValueError(
-            f"Blog posts use 4-7 photos per the brand voice; got {len(photo_paths)}"
-        )
+    # Auto-select up to 7 photos when more are provided (blog photos are now
+    # auto-derived from all Sunday/Monday/Wednesday assignments).
+    if len(photo_paths) > 7:
+        step = len(photo_paths) / 7
+        photo_paths = [photo_paths[round(i * step)] for i in range(7)]
+
+    if len(photo_paths) < 1:
+        raise ValueError("No blog photos provided")
 
     with tempfile.TemporaryDirectory(prefix="postroll-blog-") as tmp:
         tmp_path = Path(tmp)
@@ -206,6 +221,11 @@ def generate_blog(
 
         brand_voice_text = load_brand_voice()
 
+        event_url_line = (
+            f"- Event page URL (additional context): {event_url}"
+            if event_url else ""
+        )
+
         # === Pass 1: generate the draft ===
         prompt = PROMPT_TEMPLATE.format(
             brand_voice=brand_voice_text,
@@ -214,6 +234,7 @@ def generate_blog(
             venue=venue,
             date=date,
             shoot_type=shoot_type,
+            event_url_line=event_url_line,
             performers=_format_performers(program.get("performers", [])),
             pieces=_format_pieces(program.get("pieces", [])),
             organization_notes=program.get("organization_notes") or "(none)",
@@ -235,19 +256,36 @@ def generate_blog(
         if not isinstance(data, dict):
             raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 
-        # === Pass 2: humanizer review-and-revise against brand voice + AI tells ===
+        blog_shape = (
+            "{title: string, body: string with [PHOTO: filename.jpg | alt text]"
+            " markers preserved exactly as-is, photo_count: integer}"
+        )
+
+        # === Pass 2: voice review (does this actually sound like Dan?) ===
+        if not skip_voice_pass:
+            voice_prompt = build_voice_review_prompt(
+                draft_json=json.dumps(data, ensure_ascii=False, indent=2),
+                brand_voice=brand_voice_text,
+                output_shape_description=blog_shape,
+            )
+            data = run_json_prompt(voice_prompt, timeout=600)
+            if not isinstance(data, dict):
+                raise ClaudeError(
+                    f"Voice pass returned {type(data).__name__}, expected JSON object"
+                )
+
+        # === Pass 3: humanizer — always last, non-negotiable ===
+        # Runs after the voice pass so it catches any AI tells the voice pass
+        # introduced. skip_humanizer exists for tests only.
         if not skip_humanizer and is_humanizer_available(humanizer_path):
             humanizer_rules = load_humanizer_rules(humanizer_path)
             review_prompt = build_review_prompt(
                 draft_json=json.dumps(data, ensure_ascii=False, indent=2),
                 humanizer_rules=humanizer_rules,
                 brand_voice=brand_voice_text,
-                output_shape_description="{title: string, body: string with [PHOTO: ...] markers preserved, photo_count: integer}",
+                output_shape_description=blog_shape,
             )
-            data = run_json_prompt(
-                review_prompt,
-                timeout=600,
-            )
+            data = run_json_prompt(review_prompt, timeout=600)
             if not isinstance(data, dict):
                 raise ClaudeError(
                     f"Humanizer pass returned {type(data).__name__}, expected JSON object"

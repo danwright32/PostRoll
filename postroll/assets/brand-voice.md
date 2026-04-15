@@ -461,3 +461,8 @@ generic enough to fit any event ever; it tells the reader nothing.
 > know how they got there. Wish I'd had a third camera.
 >
 > #dwphotony #improv #longformimprov #nyccomedy #comedyphotography
+
+
+## Caption revision notes
+
+- (Apr 13, 2026) it shouldn't make composers on the program sound like they were there. Like Sorenson composed a piece but she wasn't there at the concert

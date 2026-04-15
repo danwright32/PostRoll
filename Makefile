@@ -10,7 +10,10 @@ install: build
 	@echo "Installing $(APP_NAME).app to /Applications…"
 	@rm -rf "$(INSTALL)"
 	@cp -R "$(BUILD_DIR)/Build/Products/Release/$(APP_NAME).app" "$(INSTALL)"
-	@echo "Done. Launch PostRoll from Spotlight or /Applications."
+	@echo "Done. Launching PostRoll…"
+	@killall PostRoll 2>/dev/null || true
+	@sleep 0.5
+	@open "$(INSTALL)"
 
 build:
 	@echo "Building $(APP_NAME) (Release)…"

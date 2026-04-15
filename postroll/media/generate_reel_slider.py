@@ -37,7 +37,7 @@ FPS = 30
 HOLD_RAW = 1.5           # hold on RAW with branded chrome
 REVEAL_DURATION = 5.0    # slider sweep
 HOLD_EDIT_DURATION = 1.5  # hold on edit
-TRANSITION_DURATION = 0.7  # crossfade to closing frame
+TRANSITION_DURATION = 1.5  # crossfade to closing frame
 CLOSING_FRAME_DURATION = 3.0
 TOTAL_DURATION = HOLD_RAW + REVEAL_DURATION + HOLD_EDIT_DURATION + TRANSITION_DURATION + CLOSING_FRAME_DURATION
 
@@ -351,8 +351,11 @@ def generate_reel_slider(
         logo_path: Optional path to DW logo for header/footer
     """
     if audio_path is None:
-        from postroll.audio import fetch_audio
-        audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
+        try:
+            from postroll.audio import fetch_audio
+            audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
+        except Exception:
+            audio_path = None  # generate silent reel; user can add music on Instagram
 
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
@@ -429,16 +432,20 @@ def generate_reel_slider(
                 )
 
             elif i < phase_end_4:
-                # Crossfade from edit to closing frame
-                edit_frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0)
-                edit_frame = draw_branded_chrome(
-                    edit_frame, event_name, org, venue, logo, photo_y, photo_h
-                )
-                blend_t = (i - phase_end_3) / transition_frames
+                # Crossfade to closing frame.
+                # closing_frame has chrome baked in at a different size/style
+                # than the reel chrome — blending both produces ghost text.
+                # Drop the reel chrome during this transition so only the
+                # still image's text fades in, with no duplicate behind it.
+                blend_t = ease_in_out((i - phase_end_3) / transition_frames)
                 if closing_frame:
+                    edit_frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0)
                     frame = Image.blend(edit_frame, closing_frame, blend_t)
                 else:
-                    frame = edit_frame
+                    edit_frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0)
+                    frame = draw_branded_chrome(
+                        edit_frame, event_name, org, venue, logo, photo_y, photo_h
+                    )
 
             else:
                 # Hold closing frame
@@ -456,19 +463,30 @@ def generate_reel_slider(
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-framerate", str(FPS),
-            "-i", str(tmpdir / "frame_%05d.png"),
-            "-i", audio_path,
-            "-t", str(TOTAL_DURATION),
-            "-af", f"afade=t=out:st={TOTAL_DURATION - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-shortest",
-            str(output),
-        ]
+        if audio_path:
+            cmd = [
+                "ffmpeg", "-y",
+                "-framerate", str(FPS),
+                "-i", str(tmpdir / "frame_%05d.png"),
+                "-i", audio_path,
+                "-t", str(TOTAL_DURATION),
+                "-af", f"afade=t=out:st={TOTAL_DURATION - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-shortest",
+                str(output),
+            ]
+        else:
+            cmd = [
+                "ffmpeg", "-y",
+                "-framerate", str(FPS),
+                "-i", str(tmpdir / "frame_%05d.png"),
+                "-t", str(TOTAL_DURATION),
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                str(output),
+            ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:

@@ -17,9 +17,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import random
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 # === Design Tokens (shared with brand system) ===
@@ -98,38 +99,88 @@ def crop_to_fill(
     target_h: int,
     crop_offset_x: float = 0.0,
     crop_offset_y: float = 0.0,
+    zoom: float = 1.0,
 ) -> Image.Image:
-    """Crop and resize photo to fill target dimensions.
+    """Scale photo to fill target dimensions, then pan/zoom.
 
-    crop_offset_x / crop_offset_y are in [-1, 1]:
-      0   = default position (horizontally centred; slight top bias vertically)
-     -1   = all the way to the left / top edge
-     +1   = all the way to the right / bottom edge
+    zoom >= 1.0  photo fills (or overfills) the cell; cropped to fit.
+    zoom < 1.0   photo is smaller than fill; placed on a blurred bg with pan offset.
+    crop_offset_x / crop_offset_y in [-1, 1]: 0 = centred, ±1 = edge.
     """
     photo_ratio = photo.width / photo.height
     target_ratio = target_w / target_h
 
     if photo_ratio > target_ratio:
-        scale = target_h / photo.height
+        fill_scale = target_h / photo.height
     else:
-        scale = target_w / photo.width
+        fill_scale = target_w / photo.width
 
-    new_w = int(photo.width * scale)
-    new_h = int(photo.height * scale)
+    effective_scale = fill_scale * max(zoom, 0.05)
+    new_w = int(photo.width * effective_scale)
+    new_h = int(photo.height * effective_scale)
+
+    if zoom < 1.0:
+        return _place_on_blur(photo, new_w, new_h, target_w, target_h,
+                              crop_offset_x, crop_offset_y)
+
+    # zoom >= 1.0 — photo fills/overfills; crop to cell
     resized = photo.resize((new_w, new_h), Image.LANCZOS)
-
-    overflow_x = new_w - target_w
-    overflow_y = new_h - target_h
-
-    # Horizontal: default = centred (0.5).  offset shifts ±0.5 of overflow.
+    overflow_x = max(0, new_w - target_w)
+    overflow_y = max(0, new_h - target_h)
     left = int(overflow_x * (0.5 + crop_offset_x * 0.5))
     left = max(0, min(overflow_x, left))
-
-    # Vertical: default = 0.4 (slight top bias).  offset shifts ±0.4 around that.
-    top = int(overflow_y * (0.4 + crop_offset_y * 0.4))
-    top = max(0, min(overflow_y, top))
-
+    top  = int(overflow_y * (0.4 + crop_offset_y * 0.4))
+    top  = max(0, min(overflow_y, top))
     return resized.crop((left, top, left + target_w, top + target_h))
+
+
+def _place_on_blur(
+    photo: Image.Image,
+    fit_w: int,
+    fit_h: int,
+    target_w: int,
+    target_h: int,
+    crop_offset_x: float,
+    crop_offset_y: float,
+) -> Image.Image:
+    """Place a pre-sized photo (fit_w × fit_h) on a blurred-fill background."""
+    # Blurred background: scale photo to fill cell
+    bg_ratio = photo.width / photo.height
+    cell_ratio = target_w / target_h
+    if bg_ratio > cell_ratio:
+        bg_scale = target_h / photo.height
+    else:
+        bg_scale = target_w / photo.width
+    bg_w = int(photo.width * bg_scale)
+    bg_h = int(photo.height * bg_scale)
+    bg = photo.resize((bg_w, bg_h), Image.LANCZOS)
+    bg_left = (bg_w - target_w) // 2
+    bg_top  = (bg_h - target_h) // 2
+    bg = bg.crop((bg_left, bg_top, bg_left + target_w, bg_top + target_h))
+    bg = bg.filter(ImageFilter.GaussianBlur(radius=18))
+    darken = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 80))
+    bg = Image.alpha_composite(bg.convert("RGBA"), darken).convert("RGB")
+
+    resized = photo.resize((fit_w, fit_h), Image.LANCZOS)
+
+    # Pan within available slack (or overflow) for each axis
+    slack_x = target_w - fit_w
+    slack_y = target_h - fit_h
+    if slack_x >= 0:
+        paste_x = int(slack_x * (0.5 + crop_offset_x * 0.5))
+        paste_x = max(0, min(slack_x, paste_x))
+    else:  # photo still wider than cell
+        ox = -slack_x
+        paste_x = -int(ox * (0.5 + crop_offset_x * 0.5))
+    if slack_y >= 0:
+        paste_y = int(slack_y * (0.5 + crop_offset_y * 0.5))
+        paste_y = max(0, min(slack_y, paste_y))
+    else:
+        oy = -slack_y
+        paste_y = -int(oy * (0.4 + crop_offset_y * 0.4))
+
+    bg.paste(resized, (paste_x, paste_y))
+    return bg
 
 
 def calculate_row_heights(
@@ -196,11 +247,15 @@ def place_photo_rows(
     y_start: int,
     total_h: int,
     rng: random.Random,
-    offsets: list[tuple[float, float]] | None = None,
+    offsets: list[tuple[float, float, float]] | None = None,
+    photo_paths: list[str] | None = None,
+    cells_out: list | None = None,
 ) -> int:
     """Place rows of photos on the canvas. Returns y position after last row.
 
-    offsets: optional list of (crop_offset_x, crop_offset_y) parallel to photos.
+    offsets: optional list of (crop_offset_x, crop_offset_y, zoom) parallel to photos.
+    photo_paths: optional parallel list of source paths — recorded in cells_out.
+    cells_out: optional list to append cell dicts {photo_path, x, y, w, h} to.
     """
     heights = calculate_row_heights(pattern, photos, total_h)
     photo_idx = 0
@@ -214,9 +269,17 @@ def place_photo_rows(
 
         x = SIDE_MARGIN
         for col_idx in range(photos_in_row):
-            ox, oy = (offsets[photo_idx] if offsets and photo_idx < len(offsets) else (0.0, 0.0))
-            cropped = crop_to_fill(photos[photo_idx], widths[col_idx], row_h, ox, oy)
+            ox, oy, oz = (offsets[photo_idx] if offsets and photo_idx < len(offsets) else (0.0, 0.0, 1.0))
+            cropped = crop_to_fill(photos[photo_idx], widths[col_idx], row_h, ox, oy, oz)
             canvas.paste(cropped, (x, y))
+            if cells_out is not None and photo_paths and photo_idx < len(photo_paths):
+                cells_out.append({
+                    "photo_path": photo_paths[photo_idx],
+                    "x": x,
+                    "y": y,
+                    "w": widths[col_idx],
+                    "h": row_h,
+                })
             x += widths[col_idx] + GAP
             photo_idx += 1
 
@@ -298,6 +361,48 @@ def get_photo_tint(photos: list[Image.Image]) -> tuple[int, int, int]:
     return (total_r // count, total_g // count, total_b // count)
 
 
+def render_cell_layout_override(
+    canvas: Image.Image,
+    cell_layout: list[dict],
+    offsets_by_path: dict[str, tuple[float, float, float]],
+) -> int:
+    """Render cells at exact (x,y,w,h) positions from cell_layout.
+
+    Returns the inferred strip_y — the bottom of the last cell before the
+    largest inter-row gap (where the original strip was placed).
+    """
+    for cell in cell_layout:
+        path = cell["photo_path"]
+        x, y, w, h = cell["x"], cell["y"], cell["w"], cell["h"]
+        ox, oy, oz = offsets_by_path.get(path, (0.0, 0.0, 1.0))
+        photo = Image.open(path)
+        cropped = crop_to_fill(photo, w, h, ox, oy, oz)
+        canvas.paste(cropped, (x, y))
+
+    # Group cells into rows by y-overlap
+    sorted_cells = sorted(cell_layout, key=lambda c: c["y"])
+    rows: list[list[dict]] = []
+    current: list[dict] = [sorted_cells[0]]
+    for cell in sorted_cells[1:]:
+        row_max_y = max(c["y"] + c["h"] for c in current)
+        if cell["y"] < row_max_y:
+            current.append(cell)
+        else:
+            rows.append(current)
+            current = [cell]
+    rows.append(current)
+
+    if len(rows) < 2:
+        return max(c["y"] + c["h"] for c in cell_layout)
+
+    row_bottoms = [max(c["y"] + c["h"] for c in row) for row in rows]
+    row_tops = [min(c["y"] for c in row) for row in rows]
+    # The strip sits in the largest inter-row gap
+    gaps = [(row_tops[i + 1] - row_bottoms[i], row_bottoms[i]) for i in range(len(rows) - 1)]
+    _, strip_y = max(gaps, key=lambda g: g[0])
+    return strip_y
+
+
 def generate_collage(
     photo_paths: list[str],
     output_path: str,
@@ -306,7 +411,8 @@ def generate_collage(
     venue: str = "",
     logo_path: str | None = None,
     seed: int | None = None,
-    crop_offsets: list[tuple[float, float]] | None = None,
+    crop_offsets: list[tuple[float, float, float]] | None = None,
+    cell_layout: list[dict] | None = None,
 ) -> str:
     """Generate a masonry collage with branded center strip.
 
@@ -315,79 +421,86 @@ def generate_collage(
         - Branded strip (event name, org/venue, logo) — impossible to crop out
         - Bottom photo rows (5 photos, ends strong)
 
-    crop_offsets: optional list of (x, y) pairs in [-1, 1] parallel to photo_paths.
+    crop_offsets: optional list of (x, y, zoom) triples in [-1, 1] / [≥1] parallel to photo_paths.
+    cell_layout:  optional list of {photo_path, x, y, w, h} dicts. When provided the masonry
+                  pattern is skipped and each photo is rendered at the exact supplied coordinates.
     """
-    rng = random.Random(seed)
-
     all_photos = [Image.open(p) for p in photo_paths]
-    n = len(all_photos)
 
-    # Split photos: top half and bottom half
-    top_count = n // 2
-    bottom_count = n - top_count
-    top_photos = all_photos[:top_count]
-    bottom_photos = all_photos[top_count:]
-
-    # Select patterns that match photo counts
-    valid_top = [p for p in TOP_PATTERNS if sum(p) == top_count]
-    valid_bottom = [p for p in BOTTOM_PATTERNS if sum(p) == bottom_count]
-
-    if not valid_top:
-        valid_top = [[top_count]]
-    if not valid_bottom:
-        valid_bottom = [[bottom_count]]
-
-    top_pattern = rng.choice(valid_top)
-    bottom_pattern = rng.choice(valid_bottom)
-
-    # Calculate heights
-    top_gaps = (len(top_pattern) - 1) * GAP
-    bottom_gaps = (len(bottom_pattern) - 1) * GAP
-    photo_area_h = CANVAS_H - STRIP_H - GAP  # gap between top photos and strip
-    top_h = int(photo_area_h * 0.50)
-    bottom_h = photo_area_h - top_h
-
-    # Get photo tint for cream coloring
+    # Get photo tint for cream coloring (used for canvas background + strip)
     photo_tint = get_photo_tint(all_photos)
-
-    # Tint the gap color
     gap_color = (
         (STRIP_CREAM[0] * 2 + photo_tint[0]) // 3,
         (STRIP_CREAM[1] * 2 + photo_tint[1]) // 3,
         (STRIP_CREAM[2] * 2 + photo_tint[2]) // 3,
     )
-
-    # Create canvas with tinted cream background
     canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), gap_color)
+    cells: list[dict] = []
 
-    # Split crop_offsets to match top/bottom photo halves
-    top_offsets = crop_offsets[:top_count] if crop_offsets else None
-    bottom_offsets = crop_offsets[top_count:] if crop_offsets else None
+    if cell_layout:
+        # ── Override mode: render at user-specified positions ──────────────
+        offsets_by_path: dict[str, tuple[float, float, float]] = {}
+        if crop_offsets:
+            for i, path in enumerate(photo_paths):
+                if i < len(crop_offsets):
+                    t = crop_offsets[i]
+                    offsets_by_path[path] = (float(t[0]), float(t[1]), float(t[2]))
 
-    # Place top photos
-    y = 0
-    y = place_photo_rows(canvas, top_photos, top_pattern, y, top_h, rng, top_offsets)
+        strip_y = render_cell_layout_override(canvas, cell_layout, offsets_by_path)
+        canvas = draw_branded_strip(
+            canvas, strip_y, event_name, org, venue, logo_path, photo_tint
+        )
+        cells = list(cell_layout)
+        mode_desc = f"override ({len(cell_layout)} cells)"
+    else:
+        # ── Masonry mode: compute layout from photo ratios + pattern ───────
+        rng = random.Random(seed)
+        n = len(all_photos)
+        top_count = n // 2
+        bottom_count = n - top_count
+        top_photos = all_photos[:top_count]
+        bottom_photos = all_photos[top_count:]
 
-    # Draw branded center strip
-    strip_y = y - GAP  # overlap the last gap
-    canvas = draw_branded_strip(
-        canvas, strip_y, event_name, org, venue, logo_path, photo_tint
-    )
+        valid_top = [p for p in TOP_PATTERNS if sum(p) == top_count] or [[top_count]]
+        valid_bottom = [p for p in BOTTOM_PATTERNS if sum(p) == bottom_count] or [[bottom_count]]
+        top_pattern = rng.choice(valid_top)
+        bottom_pattern = rng.choice(valid_bottom)
 
-    # Place bottom photos
-    bottom_y = strip_y + STRIP_H
-    place_photo_rows(
-        canvas, bottom_photos, bottom_pattern, bottom_y, bottom_h, rng, bottom_offsets
-    )
+        photo_area_h = CANVAS_H - STRIP_H - GAP
+        top_h = int(photo_area_h * 0.50)
+        bottom_h = photo_area_h - top_h
 
-    # Save
+        top_offsets = crop_offsets[:top_count] if crop_offsets else None
+        bottom_offsets = crop_offsets[top_count:] if crop_offsets else None
+
+        y = 0
+        y = place_photo_rows(
+            canvas, top_photos, top_pattern, y, top_h, rng, top_offsets,
+            photo_paths=list(photo_paths[:top_count]), cells_out=cells,
+        )
+        strip_y = y - GAP
+        canvas = draw_branded_strip(
+            canvas, strip_y, event_name, org, venue, logo_path, photo_tint
+        )
+        bottom_y = strip_y + STRIP_H
+        place_photo_rows(
+            canvas, bottom_photos, bottom_pattern, bottom_y, bottom_h, rng, bottom_offsets,
+            photo_paths=list(photo_paths[top_count:]), cells_out=cells,
+        )
+        mode_desc = f"top={top_pattern}, bottom={bottom_pattern}"
+
+    # Save PNG
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     canvas_rgb = canvas.convert("RGB") if canvas.mode != "RGB" else canvas
     canvas_rgb.save(str(output), "PNG", quality=95)
 
-    print(f"Collage generated: {output} ({CANVAS_W}x{CANVAS_H}, "
-          f"top={top_pattern}, bottom={bottom_pattern})")
+    # Save layout sidecar — used by the app to overlay crop controls on the collage
+    layout_path = output.parent / (output.stem + "_layout.json")
+    with open(layout_path, "w") as lf:
+        json.dump(cells, lf)
+
+    print(f"Collage generated: {output} ({CANVAS_W}x{CANVAS_H}, {mode_desc})")
     return str(output)
 
 

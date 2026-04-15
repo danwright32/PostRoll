@@ -224,9 +224,9 @@ def test_blog_runs_humanizer_review_when_available(sample_photo, tmp_path):
             humanizer_path=fake_humanizer,
         )
 
-    assert len(calls) == 2
-    assert "Pivotal moment" in calls[1]
-    assert "delves" in calls[1]
+    # Pipeline: draft (call 0) → voice pass (call 1) → humanizer (call 2)
+    assert len(calls) == 3
+    assert "Pivotal moment" in calls[1]  # voice pass receives the draft output
     assert result["title"] == "A specific title"
     assert result["body"] == "A specific clean body."
 
@@ -253,6 +253,7 @@ def test_blog_skips_humanizer_when_skip_flag_set(sample_photo, tmp_path):
             photo_paths=[sample_photo] * 4,
             humanizer_path=fake_humanizer,
             skip_humanizer=True,
+            skip_voice_pass=True,
         )
 
     assert len(calls) == 1

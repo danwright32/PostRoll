@@ -35,6 +35,7 @@ def fetch_audio(
     cache_dir: Path | None = None,
     *,
     seed: int | None = None,
+    exclude: tuple[str, ...] = ("rock", "heroic", "loop", " logo", "adventure"),
 ) -> str:
     """Return path to a cached Jamendo track matching the given tags.
 
@@ -45,6 +46,8 @@ def fetch_audio(
         tags: Comma-separated genre/mood tags, e.g. "ambient,instrumental".
         cache_dir: Override the default ~/.postroll/audio_cache directory.
         seed: Fix the random track selection (useful for tests).
+        exclude: Case-insensitive substrings to filter out of track names.
+                 Removes low-quality picks like "Epic Rock", "logo sting", loops, etc.
 
     Returns:
         Absolute path to the downloaded .mp3 file.
@@ -70,8 +73,15 @@ def fetch_audio(
             "Try different tags or verify your JAMENDO_CLIENT_ID."
         )
 
+    # Filter out tracks whose names contain unwanted keywords
+    filtered = [
+        t for t in tracks
+        if not any(kw.lower() in t["name"].lower() for kw in exclude)
+    ]
+    pool = filtered if filtered else tracks  # fall back to unfiltered if everything matched
+
     rng = random.Random(seed)
-    track = rng.choice(tracks[: min(10, len(tracks))])
+    track = rng.choice(pool[: min(10, len(pool))])
     track_id = str(track["id"])
     cached = cache / f"{track_id}.mp3"
 

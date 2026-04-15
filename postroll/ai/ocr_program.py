@@ -28,6 +28,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -103,7 +105,7 @@ Return JSON ONLY (no commentary, no markdown fences) matching this schema:
     {{
       "name": "string — short label for the scene, set, section, or movement. Examples: 'spa scene', 'restaurant scene', 'Act II finale', 'second movement', 'opening number'",
       "location": "string or null — where the scene takes place if relevant (e.g. 'New Mexico', 'Queens')",
-      "visual_cues": "string — what would visually distinguish this scene from others. Set design, lighting, costumes, props that someone could recognize from a photo. Examples: 'shoji screens, soft lighting, wellness aesthetic' or 'bare wooden table, harsh kitchen light, minimal decor'",
+      "visual_cues": "string — concrete visible things a photographer would see in a photo from this scene: specific props, costume colors or styles, set pieces, number of people, lighting state. NOT mood or vibe — actual objects. Examples: 'two actors at small table, one in red dress, one in suit jacket' or 'bare stage, single spotlight, actor alone at microphone' or 'full chorus in black, conductor at podium, piano stage right'",
       "description": "string or null — what happens in this scene, if known"
     }}
   ],
@@ -115,6 +117,10 @@ Return JSON ONLY (no commentary, no markdown fences) matching this schema:
 }}
 
 Rules:
+- **NEVER invent or guess names.** Only include names you can read clearly
+  in the program image. Hallucinating a name (e.g. a plausible-sounding
+  conductor or soloist that isn't printed) is far worse than leaving the
+  field empty. If you are uncertain, omit the entry entirely.
 - Capture EXACT names as printed (don't normalize spelling).
 - For text fields, preserve the substance — long paragraphs are fine.
   Don't summarize aggressively.
@@ -124,11 +130,22 @@ Rules:
 - For `scenes`, populate one entry per distinct scene/section/set/
   movement/act mentioned in the program. The caption generator uses
   this to differentiate photos from different parts of the same show.
-  Each scene should have a short distinguishing `name`, the strongest
-  `visual_cues` you can give a photo-matching system, and a `location`
-  or `description` if available.
+  Each scene should have a short distinguishing `name` and `visual_cues`
+  that name specific visible objects (props, costumes, set pieces,
+  staging) — not mood or atmosphere. A photo-matching system needs to
+  know what to literally look for, not how the scene feels.
 - If the program doesn't list scenes/sections explicitly, leave
   `scenes` as an empty array — don't invent.
+- **Choral and festival programs:** Many programs — especially large choral
+  concerts and festivals — list numerous participating ensembles (choirs,
+  school groups, orchestras). Capture EACH ensemble as a separate performer
+  entry with role="ensemble" and the full group name as `name`. These often
+  appear as a bulleted or columned list of school or choir names. Do not
+  collapse them into one entry — list every group individually.
+- **Conductors vs. ensembles:** Conductors are typically named individuals
+  (e.g. "Jennaya Robison, Conductor"). Each conducting ensemble may have
+  its own conductor. List conductors by their personal name. List choirs and
+  orchestras by their group name with role="ensemble".
 - If you can't read part of the program clearly, do your best and skip
   what's truly illegible.
 - Return ONLY the JSON object. No explanation before or after.

@@ -29,6 +29,7 @@ final class AppState {
         guard let index = events.firstIndex(where: { $0.id == event.id }) else { return }
         events[index] = event
         EventStore.save(events)
+        NotificationService.shared.updateBadge(events: events)
     }
 
     func deleteEvent(id: Event.ID) {

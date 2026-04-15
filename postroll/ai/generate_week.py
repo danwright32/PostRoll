@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +71,7 @@ def _auto_post_type(day: str, photo_count: int) -> str:
     return "feed_photo"
 
 
-def generate_week(manifest: dict[str, Any], output_path: Path) -> None:
+def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path | None = None) -> None:
     """Run caption + blog generation for one event week."""
     event      = manifest["event"]
     org        = manifest["org"]
@@ -80,12 +81,24 @@ def generate_week(manifest: dict[str, Any], output_path: Path) -> None:
     program    = manifest["program"]
     days_data  = manifest.get("days", {})
     blog_photos = manifest.get("blog_photos", [])
+    event_url  = manifest.get("event_url", "")
 
     results: dict[str, Any] = {}
     errors:  dict[str, str] = {}
     existing_captions: list[str] = []
 
+    t_start = time.time()
+    t_captions_start: float | None = None
+    t_captions_end: float | None = None
+    t_blog_start: float | None = None
+    t_blog_end: float | None = None
+
     for day_name in DAY_ORDER:
+        if day_name == "friday":
+            results[day_name] = None
+            print(f"[generate_week] {day_name}: story-only day, skipping caption", flush=True)
+            continue
+
         day_info = days_data.get(day_name, {})
         photos   = day_info.get("photos", [])
 
@@ -118,6 +131,8 @@ def generate_week(manifest: dict[str, Any], output_path: Path) -> None:
                 )
 
         print(f"[generate_week] {day_name}: generating {len(photos)} photo(s) ({post_type})", flush=True)
+        if t_captions_start is None:
+            t_captions_start = time.time()
 
         try:
             result = generate_caption(
@@ -134,18 +149,22 @@ def generate_week(manifest: dict[str, Any], output_path: Path) -> None:
                 name_mentions=name_mentions,
                 notes=notes,
                 existing_captions=existing_captions if existing_captions else None,
+                event_url=event_url,
             )
             results[day_name] = result
             if result.get("caption"):
                 existing_captions.append(result["caption"])
+            t_captions_end = time.time()
             print(f"[generate_week] {day_name}: done", flush=True)
         except Exception as e:
+            t_captions_end = time.time()
             print(f"[generate_week] {day_name}: ERROR — {e}", flush=True, file=sys.stderr)
             errors[day_name] = str(e)
             results[day_name] = None
 
     # Blog post
     if blog_photos:
+        t_blog_start = time.time()
         print(f"[generate_week] blog: generating with {len(blog_photos)} photo(s)", flush=True)
         try:
             blog_result = generate_blog(
@@ -156,16 +175,20 @@ def generate_week(manifest: dict[str, Any], output_path: Path) -> None:
                 program=program,
                 photo_paths=blog_photos,
                 shoot_type=shoot_type,
+                event_url=event_url,
             )
             results["blog"] = blog_result
+            t_blog_end = time.time()
             print("[generate_week] blog: done", flush=True)
         except Exception as e:
+            t_blog_end = time.time()
             print(f"[generate_week] blog: ERROR — {e}", flush=True, file=sys.stderr)
             errors["blog"] = str(e)
             results["blog"] = None
     else:
         results["blog"] = None
 
+    t_total = time.time()
     results["errors"] = errors
 
     output_path.write_text(
@@ -174,6 +197,20 @@ def generate_week(manifest: dict[str, Any], output_path: Path) -> None:
     )
     print(f"[generate_week] output written to {output_path}", flush=True)
 
+    # Write per-phase timing data for the Swift layer to consume
+    if timing_path is not None:
+        elapsed = t_total - t_start
+        captions = (t_captions_end - t_captions_start) if (t_captions_start and t_captions_end) else None
+        blog     = (t_blog_end - t_blog_start)         if (t_blog_start and t_blog_end)         else None
+        packaging = elapsed - (captions or 0) - (blog or 0) - (t_captions_start - t_start if t_captions_start else 0)
+        timing = {
+            "total":      elapsed,
+            "captions":   captions,
+            "blog":       blog,
+            "packaging":  max(packaging, 0.0),
+        }
+        timing_path.write_text(json.dumps(timing), encoding="utf-8")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -181,6 +218,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--manifest", required=True, help="Path to manifest JSON")
     parser.add_argument("--output",   required=True, help="Path to write output JSON")
+    parser.add_argument("--timing",   default=None,  help="Optional path to write per-phase timing JSON")
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -189,4 +227,4 @@ if __name__ == "__main__":
         sys.exit(1)
 
     manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    generate_week(manifest_data, Path(args.output))
+    generate_week(manifest_data, Path(args.output), Path(args.timing) if args.timing else None)

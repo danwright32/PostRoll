@@ -133,12 +133,12 @@ struct ExportView: View {
             Text("Generating visual assets…")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.warmDark)
-            Text("Stories + collage: ~30s. Reels: 2–5 min each.")
+            Text("Stories + collage: ~30s. Reels: 2 to 5 min each.")
                 .font(.light(12))
                 .foregroundStyle(Color.warmMid)
 
             // Let user skip media generation if they just want the text
-            Button("Skip — use text export only") {
+            Button("Skip, text export only") {
                 exportState = .done(folder)
             }
             .buttonStyle(.plain)
@@ -173,7 +173,7 @@ struct ExportView: View {
             if let mediaErr = mediaGenerationError {
                 BrandBanner(
                     icon: "exclamationmark.triangle",
-                    message: "Captions + blog exported. Visual assets failed — \(mediaErr). Check that ffmpeg is installed.",
+                    message: "Captions + blog exported. Visual assets failed: \(mediaErr). Check that ffmpeg is installed.",
                     style: .warning
                 )
                 .frame(maxWidth: 400)
@@ -242,12 +242,37 @@ struct ExportView: View {
                         event: event,
                         outputDir: folder.deletingLastPathComponent()
                     )
-                    // Auto-open all generated static images in Preview
-                    if !imagePaths.isEmpty {
+
+                    // Overwrite freshly-generated static PNGs with the exact approved
+                    // preview files. This guarantees the exported graphics match what
+                    // was reviewed, pixel-for-pixel. Videos (reels) come from the
+                    // fresh run above and are left untouched.
+                    var approvedPNGPaths: [URL] = []
+                    if !event.previewMediaPaths.isEmpty {
+                        let destSlug = "\(EventExporter.slug(event.org))_\(EventExporter.slug(event.name))_\(event.isoDate)"
+                        let mediaBase = folder.deletingLastPathComponent().appendingPathComponent(destSlug)
+                        for (dayKey, assetPaths) in event.previewMediaPaths {
+                            for (_, srcPath) in assetPaths {
+                                guard srcPath.hasSuffix(".png"),
+                                      FileManager.default.fileExists(atPath: srcPath) else { continue }
+                                let src = URL(fileURLWithPath: srcPath)
+                                let dayDir = mediaBase.appendingPathComponent(dayKey)
+                                let dest = dayDir.appendingPathComponent(src.lastPathComponent)
+                                try? FileManager.default.removeItem(at: dest)
+                                if (try? FileManager.default.copyItem(at: src, to: dest)) != nil {
+                                    approvedPNGPaths.append(dest)
+                                }
+                            }
+                        }
+                    }
+
+                    // Open the approved PNGs in Preview (fall back to fresh ones if no preview was done)
+                    let pngsToOpen = approvedPNGPaths.isEmpty ? imagePaths : approvedPNGPaths
+                    if !pngsToOpen.isEmpty {
                         let previewApp = URL(fileURLWithPath: "/System/Applications/Preview.app")
                         if FileManager.default.fileExists(atPath: previewApp.path) {
                             NSWorkspace.shared.open(
-                                imagePaths,
+                                pngsToOpen,
                                 withApplicationAt: previewApp,
                                 configuration: .init(),
                                 completionHandler: nil
@@ -277,8 +302,14 @@ private struct ExportSummaryCard: View {
     let result: WeekGenerationResult?
 
     private var daysWithContent: [DayName] {
-        guard let r = result else { return [] }
-        return DayName.allCases.filter { r[$0] != nil }
+        DayName.allCases.filter { day in
+            if result?[day] != nil { return true }
+            if day == .friday, let pd = event.days[day.rawValue],
+               (pd.rawPhotoPath != nil || pd.editedPhotoPath != nil || !pd.photoPaths.isEmpty) {
+                return true
+            }
+            return false
+        }
     }
 
     var body: some View {
@@ -305,6 +336,12 @@ private struct ExportDayRow: View {
     let day: DayName
     let caption: DayCaption?
 
+    private var summary: String {
+        if day == .friday { return "Before / after story" }
+        guard let c = caption?.caption, !c.isEmpty else { return "" }
+        return String(c.prefix(60)) + (c.count > 60 ? "…" : "")
+    }
+
     var body: some View {
         HStack(spacing: Spacing.sm) {
             Text(day.displayName.uppercased())
@@ -315,7 +352,7 @@ private struct ExportDayRow: View {
             Image(systemName: "checkmark")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(Color.roseGold)
-            Text(caption?.caption.prefix(60).appending(caption?.caption.count ?? 0 > 60 ? "…" : "") ?? "—")
+            Text(summary)
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
                 .lineLimit(1)
@@ -446,7 +483,7 @@ struct EventExporter {
         let fallbackCollabLine = fallbackCollabs.isEmpty ? "(no performers listed)" : fallbackCollabs
 
         var lines: [String] = [
-            "# PostRoll — \(event.name) (\(event.isoDate))",
+            "# PostRoll: \(event.name) (\(event.isoDate))",
             "",
         ]
 

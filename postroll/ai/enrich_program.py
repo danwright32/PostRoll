@@ -132,7 +132,7 @@ Return JSON ONLY (no markdown fences, no commentary) matching this schema:
     {{
       "name": "short label like 'spa scene' or 'Act II finale' or 'second movement'",
       "location": "where this scene takes place if relevant, or null",
-      "visual_cues": "what would visually distinguish this scene from others — set design, lighting, costumes, props that someone could recognize from a photo",
+      "visual_cues": "concrete visible things a photographer would see: specific props, costume colors/styles, set pieces, number of people, lighting state. NOT mood or atmosphere — actual objects. Example: 'two actors at small table, one in red dress' or 'full chorus in black, conductor at podium'",
       "description": "what happens in this scene, if known, or null"
     }}
   ],
@@ -156,10 +156,11 @@ Rules:
   will be extra skeptical of enriched fields.
 - For `scenes`, look for any mention of distinct settings, locations,
   scenes, sets, acts, or sections in the synopsis/reviews/web research.
-  Populate one entry per distinct scene with the strongest visual_cues
-  you can find. The caption generator uses this list to label which
-  scene each photo shows. Even partial info (just a name + a one-line
-  visual cue) is better than an empty list.
+  Populate one entry per distinct scene with the most concrete visual_cues
+  you can find — specific props, costume details, set pieces, staging,
+  not mood or atmosphere. The caption generator matches photos by looking
+  for literal visible objects, so "red dress, small table, two actors" is
+  far more useful than "intimate restaurant atmosphere".
 - Don't fabricate. If you can't find solid information about something,
   leave the field empty rather than guessing. Note the gap in
   `notes_for_human`.
@@ -282,20 +283,83 @@ def enrich_program(
     return result
 
 
+FETCH_PERFORMERS_PROMPT = """\
+Fetch the event page at this URL and extract the performing artists:
+
+{url}
+
+Use WebFetch to load the page. Then return a JSON array of performers.
+
+**What to include:**
+- Named conductors (e.g. "Jennaya Robison, Conductor")
+- Participating ensembles / choirs / orchestras by their official group name
+- Named featured soloists
+- Composers or arrangers if listed as participants
+
+**What NOT to include:**
+- Individual singers listed within a choir roster
+- Individual orchestral musicians listed in a section roster
+- Staff, admin, or non-performing credits (directors, designers, etc.)
+- Sponsors, donors, board members
+
+The goal is a CURATED list of the top-level performers — the names that
+would appear in a photo caption or blog credit line. For a large choral
+concert, that's the conductors + the choir/orchestra names, not every member.
+
+Return JSON ONLY (no markdown fences) as an array:
+
+[
+  {{
+    "name": "string — exact name as printed on the page",
+    "role": "soloist | conductor | ensemble | composer | other",
+    "voice_or_instrument": "string or null"
+  }}
+]
+
+Rules:
+- NEVER invent names. Only include names you can see on the fetched page.
+- For ensembles, use the full official group name as `name`.
+- If the page doesn't have a cast/artist list, return an empty array [].
+- Return ONLY the JSON array. No explanation.
+"""
+
+
+def fetch_performers_from_url(url: str) -> list[dict]:
+    """Fetch an event page and extract the curated performer list.
+
+    Returns conductors + named groups/ensembles + soloists.
+    Does NOT include individual choir/orchestra members.
+
+    Raises ClaudeError if the fetch or extraction fails.
+    """
+    prompt = FETCH_PERFORMERS_PROMPT.format(url=url)
+    data = run_json_prompt(
+        prompt,
+        timeout=120,
+        allowed_tools=["WebFetch"],
+    )
+    if not isinstance(data, list):
+        raise ClaudeError(f"Expected JSON array, got {type(data).__name__}")
+    return data
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Enrich thin OCR output via web research"
     )
     parser.add_argument(
+        "--fetch-performers",
+        metavar="URL",
+        help="Fetch performers from an event page URL and write a JSON array to --output",
+    )
+    parser.add_argument(
         "--program",
         type=Path,
-        required=True,
         help="Path to OCR program JSON from ocr_program",
     )
     parser.add_argument(
         "--image",
         action="append",
-        required=True,
         help="Path to a program photo (repeat for multi-page)",
     )
     parser.add_argument(
@@ -313,6 +377,26 @@ def main() -> int:
         help="Where to write enriched JSON (defaults to stdout)",
     )
     args = parser.parse_args()
+
+    # --fetch-performers mode: fetch a URL and return just the performers array
+    if args.fetch_performers:
+        try:
+            performers = fetch_performers_from_url(args.fetch_performers)
+        except (ClaudeError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        text = json.dumps(performers, indent=2, ensure_ascii=False)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(text + "\n", encoding="utf-8")
+            print(f"wrote {args.output} ({len(performers)} performers)")
+        else:
+            print(text)
+        return 0
+
+    if not args.program:
+        print("error: --program is required unless --fetch-performers is used", file=sys.stderr)
+        return 1
 
     ocr_data = json.loads(args.program.read_text(encoding="utf-8"))
 

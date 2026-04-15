@@ -242,25 +242,15 @@ def test_caption_passes_brand_voice_to_prompt(sample_photo):
 # === generate_blog ===
 
 
-def test_blog_requires_4_to_7_photos(sample_photo):
-    with pytest.raises(ValueError, match="4-7 photos"):
+def test_blog_requires_at_least_one_photo():
+    with pytest.raises(ValueError, match="No blog photos"):
         generate_blog.generate_blog(
             event="E",
             org="O",
             venue="V",
             date="2026-04-05",
             program={},
-            photo_paths=[sample_photo, sample_photo, sample_photo],  # 3
-        )
-
-    with pytest.raises(ValueError, match="4-7 photos"):
-        generate_blog.generate_blog(
-            event="E",
-            org="O",
-            venue="V",
-            date="2026-04-05",
-            program={},
-            photo_paths=[sample_photo] * 8,
+            photo_paths=[],
         )
 
 
@@ -317,7 +307,8 @@ def test_blog_passes_program_notes_to_prompt(sample_photo):
                 "other": "Sponsored by anonymous donor.",
             },
             photo_paths=[sample_photo] * 4,
-            skip_humanizer=True
+            skip_humanizer=True,
+            skip_voice_pass=True,
         )
 
     prompt = captured["prompt"]

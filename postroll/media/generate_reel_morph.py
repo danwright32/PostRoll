@@ -33,7 +33,7 @@ FPS = 30
 HOLD_RAW = 1.5            # hold on RAW
 SPLIT_DURATION = 5.0      # continuous split from center to full edit — no pause
 HOLD_EDIT = 1.5           # hold on full edit
-TRANSITION_DURATION = 0.7  # crossfade to closing
+TRANSITION_DURATION = 1.5  # crossfade to closing
 CLOSING_FRAME_DURATION = 3.0
 TOTAL_DURATION = (HOLD_RAW + SPLIT_DURATION + HOLD_EDIT +
                   TRANSITION_DURATION + CLOSING_FRAME_DURATION)
@@ -296,8 +296,11 @@ def generate_reel_morph(
 ) -> str:
     """Generate a split compare reel."""
     if audio_path is None:
-        from postroll.audio import fetch_audio
-        audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
+        try:
+            from postroll.audio import fetch_audio
+            audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
+        except Exception:
+            audio_path = None
 
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
@@ -342,9 +345,9 @@ def generate_reel_morph(
                 frame = generate_split_frame(raw_z, edit_z, 0.0, font)
 
             elif i < p2:
-                # Continuous split from center to full edit — no pause
+                # Continuous split from center to full edit
                 t = (i - p1) / (p2 - p1)
-                split = ease_in_out(t)  # 0.0 → 1.0 continuously
+                split = ease_in_out(t)
                 frame = generate_split_frame(raw_z, edit_z, split, font)
 
             elif i < p3:
@@ -359,40 +362,53 @@ def generate_reel_morph(
                                   int(CANVAS_H * 0.75), font)
 
             elif i < p4:
-                # Crossfade to closing
-                edit_frame = edit_z.copy()
-                edit_frame = draw_branded_chrome(edit_frame, event_name, org, venue, logo)
-                blend_t = (i - p3) / (p4 - p3)
+                # Crossfade to closing frame.
+                # closing_frame has chrome (header/footer text) baked in;
+                # do NOT apply reel chrome here — blending two different chrome
+                # designs produces ghost text.  Drop the reel chrome for this
+                # transition so only the still image's text is visible.
+                blend_t = ease_in_out((i - p3) / (p4 - p3))
                 if closing_frame:
-                    frame = Image.blend(edit_frame, closing_frame, blend_t)
+                    frame = Image.blend(edit_z, closing_frame, blend_t)
                 else:
-                    frame = edit_frame
-                frame.save(str(tmpdir / f"frame_{i:05d}.png"), "PNG")
-                continue
+                    frame = draw_branded_chrome(edit_z.copy(), event_name, org, venue, logo)
 
             else:
-                frame = closing_frame if closing_frame else edit_z.copy()
-                frame.save(str(tmpdir / f"frame_{i:05d}.png"), "PNG")
-                continue
+                # Hold closing frame — chrome is already baked in; don't overdraw.
+                if closing_frame:
+                    frame = closing_frame.copy()
+                else:
+                    frame = draw_branded_chrome(edit_z.copy(), event_name, org, venue, logo)
 
-            # Branded chrome on all non-closing frames
-            frame = draw_branded_chrome(frame, event_name, org, venue, logo)
+            # Apply chrome only during the reel phases (before the crossfade).
+            if i < p3:
+                frame = draw_branded_chrome(frame, event_name, org, venue, logo)
             frame.save(str(tmpdir / f"frame_{i:05d}.png"), "PNG")
 
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-framerate", str(FPS),
-            "-i", str(tmpdir / "frame_%05d.png"),
-            "-i", audio_path,
-            "-t", str(TOTAL_DURATION),
-            "-af", f"afade=t=out:st={TOTAL_DURATION - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-shortest",
-            str(output),
-        ]
+        if audio_path:
+            cmd = [
+                "ffmpeg", "-y",
+                "-framerate", str(FPS),
+                "-i", str(tmpdir / "frame_%05d.png"),
+                "-i", audio_path,
+                "-t", str(TOTAL_DURATION),
+                "-af", f"afade=t=out:st={TOTAL_DURATION - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-shortest",
+                str(output),
+            ]
+        else:
+            cmd = [
+                "ffmpeg", "-y",
+                "-framerate", str(FPS),
+                "-i", str(tmpdir / "frame_%05d.png"),
+                "-t", str(TOTAL_DURATION),
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                str(output),
+            ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")

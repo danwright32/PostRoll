@@ -181,5 +181,5 @@ def test_run_prompt_omits_permission_flags_when_unspecified():
     cmd = captured["cmd"]
     assert "--add-dir" not in cmd
     assert "--allowedTools" not in cmd
-    assert cmd == [cmd[0], "-p"]
+    assert cmd == [cmd[0], "-p", "--model", "sonnet"]
     assert captured["input"] == "the prompt"

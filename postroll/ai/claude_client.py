@@ -47,6 +47,7 @@ def run_prompt(
     timeout: int = 300,
     allowed_dirs: list[str | Path] | None = None,
     allowed_tools: list[str] | None = None,
+    model: str = "sonnet",
 ) -> str:
     """Send a prompt to Claude Code and return the raw text response.
 
@@ -57,12 +58,14 @@ def run_prompt(
             --add-dir). Use this to grant Read access to image paths.
         allowed_tools: Restrict the available toolset (passed via
             --allowedTools). E.g. ["Read"] for read-only operations.
+        model: Model alias or full name. Defaults to "sonnet" which is
+            faster than opus for structured extraction tasks.
 
     Raises ClaudeError on non-zero exit or empty response.
     """
     # Pass the prompt via stdin so variadic flags like --add-dir and
     # --allowedTools can't accidentally consume it as one of their values.
-    cmd: list[str] = [_binary(), "-p"]
+    cmd: list[str] = [_binary(), "-p", "--model", model]
     if allowed_dirs:
         cmd.append("--add-dir")
         cmd.extend(str(Path(d).resolve()) for d in allowed_dirs)
@@ -103,6 +106,7 @@ def run_json_prompt(
     timeout: int = 300,
     allowed_dirs: list[str | Path] | None = None,
     allowed_tools: list[str] | None = None,
+    model: str = "sonnet",
 ) -> Any:
     """Send a prompt that should return JSON and parse the response.
 
@@ -115,6 +119,7 @@ def run_json_prompt(
         timeout=timeout,
         allowed_dirs=allowed_dirs,
         allowed_tools=allowed_tools,
+        model=model,
     )
     return _extract_json(raw)
 

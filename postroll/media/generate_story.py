@@ -37,12 +37,12 @@ ROSE_GOLD_DARK = (160, 105, 95)  # divider on cream background
 EVENT_NAME_Y = 130  # script title — breathing room from top
 PHOTO_TOP_Y = 260  # tighter to title (~50px gap after text)
 PHOTO_SIDE_MARGIN = 20
-PHOTO_BOTTOM_Y = 1280  # larger photo area (~1020px tall)
-DIVIDER_Y = 1360  # 80px below photo
+PHOTO_BOTTOM_Y = 1450  # larger photo area (~1190px tall)
+DIVIDER_Y = 1480  # 30px below photo
 DIVIDER_THICKNESS = 2
 DIVIDER_MARGIN = 200  # inset from each side
-ORG_VENUE_Y = 1420  # 60px below divider
-ORG_VENUE_LINE_SPACING = 60  # generous line height
+ORG_VENUE_Y = 1530  # 50px below divider
+ORG_VENUE_LINE_SPACING = 55  # slightly tighter line height
 LOGO_BOTTOM_MARGIN = 100
 
 # Background blur
@@ -98,10 +98,10 @@ def create_blurred_background(photo: Image.Image) -> Image.Image:
     # Gradient transition from transparent to cream across ~100px
     overlay = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
     cream = (252, 250, 247)  # near-white, slight warmth
-    cream_opacity = 235  # almost fully opaque for clean white look
+    cream_opacity = 255  # fully opaque — blocks warm bleed from stage lighting
 
-    transition_start = PHOTO_BOTTOM_Y + 20  # start fading in just below photo
-    transition_end = transition_start + 100  # fully opaque over 100px
+    transition_start = PHOTO_BOTTOM_Y  # start fading in right at photo area bottom
+    transition_end = transition_start + 80  # fully opaque over 80px
 
     for y_pos in range(transition_start, CANVAS_H):
         if y_pos < transition_end:
@@ -151,7 +151,24 @@ def place_photo(canvas: Image.Image, photo: Image.Image) -> Image.Image:
     x = (CANVAS_W - new_w) // 2
     y = PHOTO_TOP_Y + (avail_h - new_h) // 2
 
-    # Paste photo directly — no border, no shadow
+    # Drop shadow — soft cast behind the photo so it lifts off the background
+    shadow_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
+    shadow_rect = Image.new("RGBA", (new_w + 16, new_h + 16), (0, 0, 0, 160))
+    shadow_layer.paste(shadow_rect, (x - 8, y + 2))  # slight downward offset
+    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=22))
+    canvas = Image.alpha_composite(canvas, shadow_layer)
+
+    # Thin cream border — bright edge against the dark bg creates clear separation
+    border_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(border_layer)
+    bd.rectangle(
+        [x - 2, y - 2, x + new_w + 1, y + new_h + 1],
+        outline=(252, 250, 247, 180),  # cream, semi-transparent
+        width=2,
+    )
+    canvas = Image.alpha_composite(canvas, border_layer)
+
+    # Paste photo on top
     resized_rgba = resized.convert("RGBA")
     canvas.paste(resized_rgba, (x, y), resized_rgba)
 
@@ -167,23 +184,36 @@ def draw_divider(draw: ImageDraw.ImageDraw):
 
 
 def draw_title(canvas: Image.Image, event_name: str):
-    """Draw the event name with a subtle drop shadow for depth."""
-    event_font = load_font(FONT_SCRIPT, 100)
+    """Draw the event name with inline rose-gold rules — editorial framing device."""
+    event_font = load_font(FONT_SCRIPT, 110)
     tmp_draw = ImageDraw.Draw(canvas)
     bbox = tmp_draw.textbbox((0, 0), event_name, font=event_font)
     text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
     x = (CANVAS_W - text_w) // 2
 
-    # Drop shadow on a separate layer
+    canvas_rgba = canvas.convert("RGBA")
+
+    # Soft drop shadow — modest, just takes the raw edge off the letterforms
     shadow = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
     sd = ImageDraw.Draw(shadow)
-    sd.text((x + 3, EVENT_NAME_Y + 4), event_name, font=event_font, fill=(0, 0, 0, 100))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=6))
-
-    canvas_rgba = canvas.convert("RGBA")
+    sd.text((x + 2, EVENT_NAME_Y + 3), event_name, font=event_font, fill=(0, 0, 0, 120))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=8))
     canvas_rgba = Image.alpha_composite(canvas_rgba, shadow)
 
-    # Main text
+    # Inline rose-gold rules — lines extend from text edges to canvas margins,
+    # optically centred on the script x-height (~55% down the em)
+    line_y = EVENT_NAME_Y + int(text_h * 0.52)
+    gap = 28  # breathing room between line and text edge
+    margin = PHOTO_SIDE_MARGIN + 30
+
+    line_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(line_layer)
+    ld.line([(margin, line_y), (x - gap, line_y)], fill=(*ROSE_GOLD_DARK, 170), width=1)
+    ld.line([(x + text_w + gap, line_y), (CANVAS_W - margin, line_y)], fill=(*ROSE_GOLD_DARK, 170), width=1)
+    canvas_rgba = Image.alpha_composite(canvas_rgba, line_layer)
+
+    # Crisp text on top
     draw = ImageDraw.Draw(canvas_rgba)
     draw.text((x, EVENT_NAME_Y), event_name, font=event_font, fill=TEXT_WHITE)
 

@@ -6,12 +6,19 @@ struct AssetGenerationView: View {
 
     @State private var dayHandles: [DayName: String] = [:]   // comma-separated @handles
     @State private var dayNames: [DayName: String] = [:]     // comma-separated plain names
-    @State private var generationState: GenState = .configuring
+    @State private var generationState: GenState
+
+    init(event: Event) {
+        self.event = event
+        // Skip straight to done if results already exist (e.g. after app reload)
+        _generationState = State(initialValue: event.weekResult != nil ? .done : .configuring)
+    }
 
     // Generation tracking
     @State private var generationTask: Task<Void, Never>? = nil
     @State private var elapsedSeconds: Int = 0
     @State private var elapsedTimer: Timer? = nil
+    @State private var retryDays: Set<String>? = nil   // nil = regenerate all
 
     // Animation state
     @State private var showCheckmark = false
@@ -25,17 +32,21 @@ struct AssetGenerationView: View {
     }
 
     // Phase timeline — timing approximates observed generation durations
-    private static let phases: [(name: String, startsAt: Int)] = [
-        ("Reading program & photos", 0),
-        ("Matching photo captions",  30),
-        ("Writing captions",         75),
-        ("Drafting blog post",       180),
-        ("Packaging output",         330),
-    ]
+    // Phase timeline — delegated to TimingStore so estimates improve with each run.
+    private var scaledPhases: [(name: String, startsAt: Int)] {
+        TimingStore.shared.scaledGenerationPhases()
+    }
+
+    private var estimatedTotalFormatted: String {
+        if let est = TimingStore.shared.generationEstimate {
+            return TimingStore.formatClock(est)
+        }
+        return "~6:00"
+    }
 
     private var activePhaseIndex: Int {
         var active = 0
-        for (i, phase) in Self.phases.enumerated() {
+        for (i, phase) in scaledPhases.enumerated() {
             if elapsedSeconds >= phase.startsAt { active = i }
         }
         return active
@@ -46,19 +57,8 @@ struct AssetGenerationView: View {
         index == activePhaseIndex ? .active    : .pending
     }
 
-    private var blogPhotoWarning: String? {
-        let count = event.blogPhotoPaths.count
-        if count > 0 && count < 4 {
-            return "Blog post needs 4–7 photos; you have \(count). Add more or remove all to skip."
-        }
-        if count > 7 {
-            return "Blog post needs 4–7 photos; you have \(count). Remove \(count - 7) before generating."
-        }
-        return nil
-    }
-
     private var canGenerate: Bool {
-        totalPhotoCount > 0 && blogPhotoWarning == nil
+        totalPhotoCount > 0
     }
 
     var daysWithPhotos: [DayName] {
@@ -111,7 +111,7 @@ struct AssetGenerationView: View {
 
                 BrandBanner(
                     icon: "sparkles",
-                    message: "Add @handles for each day if you want to tag accounts. Plain names (no @) go in the second field — for people without Instagram."
+                    message: "Add @handles for each day if you want to tag accounts. Plain names (no @) go in the second field, for people without Instagram."
                 )
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.sm)
@@ -128,12 +128,6 @@ struct AssetGenerationView: View {
                     }
                     .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.sm)
-                }
-
-                if let warning = blogPhotoWarning {
-                    BrandBanner(icon: "photo.on.rectangle", message: warning, style: .warning)
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.bottom, Spacing.sm)
                 }
 
                 // Summary row
@@ -156,11 +150,7 @@ struct AssetGenerationView: View {
                 }
 
                 VStack(alignment: .trailing, spacing: Spacing.sm) {
-                    if !canGenerate, let reason = blogPhotoWarning {
-                        Text(reason)
-                            .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
-                    } else if !canGenerate && totalPhotoCount == 0 {
+                    if !canGenerate {
                         Text("Add photos to at least one day to generate.")
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
@@ -191,7 +181,7 @@ struct AssetGenerationView: View {
 
             // Phase timeline
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(Self.phases.enumerated()), id: \.offset) { i, phase in
+                ForEach(Array(scaledPhases.enumerated()), id: \.offset) { i, phase in
                     PhaseRow(name: phase.name, state: phaseState(for: i))
                         .opacity(phasesVisible ? 1 : 0)
                         .offset(y: phasesVisible ? 0 : 6)
@@ -211,7 +201,7 @@ struct AssetGenerationView: View {
                     .font(.system(size: 11))
                 Text(elapsedFormatted)
                     .font(.system(size: 12, weight: .medium).monospacedDigit())
-                Text("/ ~6:00")
+                Text("/ \(estimatedTotalFormatted)")
                     .font(.light(12))
             }
             .foregroundStyle(Color.warmMid)
@@ -276,39 +266,101 @@ struct AssetGenerationView: View {
 
     // MARK: - Done
 
+    private var failedDayKeys: [String] {
+        (event.weekResult?.errors.keys)
+            .map { Array($0).sorted() } ?? []
+    }
+
+    private func failedDayLabel(_ key: String) -> String {
+        key == "blog" ? "Blog post" : key.capitalized
+    }
+
+    private var failedDaysSummary: String {
+        let labels = failedDayKeys.map { failedDayLabel($0) }
+        switch labels.count {
+        case 0: return ""
+        case 1: return labels[0]
+        case 2: return "\(labels[0]) and \(labels[1])"
+        default:
+            let allButLast = labels.dropLast().joined(separator: ", ")
+            return "\(allButLast), and \(labels.last!)"
+        }
+    }
+
     private var doneView: some View {
-        VStack(spacing: Spacing.lg) {
+        let errorCount = failedDayKeys.count
+
+        return VStack(spacing: Spacing.lg) {
             Spacer()
 
             Text(event.name)
                 .font(.signPainter(28))
                 .foregroundStyle(Color.warmDark)
 
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: errorCount > 0 ? "checkmark.circle" : "checkmark.circle.fill")
                 .font(.system(size: 44))
                 .foregroundStyle(Color.roseGold.opacity(0.7))
                 .scaleEffect(showCheckmark ? 1 : 0.1)
                 .opacity(showCheckmark ? 1 : 0)
 
-            Text("Content generated")
+            Text(errorCount > 0 ? "Partially generated" : "Content generated")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.warmDark)
                 .opacity(showCheckmark ? 1 : 0)
                 .offset(y: showCheckmark ? 0 : 8)
 
+            if errorCount > 0 {
+                Text("\(failedDaysSummary) failed to generate.")
+                    .font(.light(12))
+                    .foregroundStyle(Color.warmMid)
+                    .multilineTextAlignment(.center)
+                    .opacity(showCheckmark ? 1 : 0)
+            }
+
             RoseGoldDivider()
                 .frame(width: showCheckmark ? 80 : 0)
 
-            Button("Continue to Review") { advance() }
-                .buttonStyle(BrandButtonStyle())
-                .opacity(showCheckmark ? 1 : 0)
+            VStack(spacing: Spacing.sm) {
+                Button("Continue to Review") { advance() }
+                    .buttonStyle(BrandButtonStyle())
+
+                if errorCount > 0 {
+                    Button("Retry \(failedDaysSummary)") {
+                        retryDays = Set(failedDayKeys)
+                        startGeneration()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.roseGold)
+                }
+
+                if !event.blogPhotoPaths.isEmpty {
+                    Button("Regenerate blog post") {
+                        retryDays = Set(["blog"])
+                        startGeneration()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.warmMid)
+                }
+
+                Button("Regenerate all") {
+                    retryDays = nil
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                        generationState = .configuring
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmMid)
+            }
+            .opacity(showCheckmark ? 1 : 0)
 
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cream)
         .onAppear {
-            // Short delay lets the view transition settle before the spring fires
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.62)) {
                     showCheckmark = true
@@ -409,19 +461,55 @@ struct AssetGenerationView: View {
             MainActor.assumeIsolated { elapsedSeconds += 1 }
         }
 
+        let onlyDays = retryDays
         generationTask = Task {
+            // Story graphics don't depend on captions — start both at the same time.
+            // Skip graphics on partial retries (user is only redoing one day/blog).
+            let graphicsTask: Task<[String: [String: String]]?, Never>? = onlyDays == nil
+                ? Task { try? await PythonBridge.shared.runPreviewGeneration(event: ev) }
+                : nil
+
             do {
-                let result = try await PythonBridge.shared.runWeekGeneration(event: ev)
+                let result = try await PythonBridge.shared.runWeekGeneration(event: ev, onlyDays: onlyDays)
+
+                // Captions done — now collect graphics (likely already finished in parallel)
+                let mediaPaths = await graphicsTask?.value
+
                 await MainActor.run {
                     stopTimer()
+                    TimingStore.shared.recordGeneration(seconds: Double(elapsedSeconds))
                     var saved = ev
-                    saved.weekResult = result
+
+                    if let only = onlyDays,
+                       var existing = appState.events.first(where: { $0.id == ev.id })?.weekResult ?? ev.weekResult {
+                        // Partial retry: merge new results into the existing weekResult
+                        for key in only {
+                            if key == "blog" {
+                                existing.blog = result.blog
+                            } else if let day = DayName(rawValue: key) {
+                                existing[day] = result[day]
+                            }
+                        }
+                        // Clear retried errors; carry over any new ones
+                        for key in only { existing.errors.removeValue(forKey: key) }
+                        existing.errors.merge(result.errors) { _, new in new }
+                        saved.weekResult = existing
+                    } else {
+                        saved.weekResult = result
+                    }
+
+                    if let paths = mediaPaths, !paths.isEmpty {
+                        saved.previewMediaPaths = paths
+                    }
+
                     appState.updateEvent(saved)
+                    NotificationService.shared.notifyGenerationComplete(eventName: ev.name)
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                         generationState = .done
                     }
                 }
             } catch {
+                graphicsTask?.cancel()
                 await MainActor.run {
                     stopTimer()
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
@@ -447,8 +535,9 @@ struct AssetGenerationView: View {
     }
 
     private func advance() {
-        var ev = event
-        ev.stage = .assetsGenerated
+        // Read the current stored event so weekResult is not overwritten with a stale prop.
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        ev.stage = .captionsReviewed
         appState.updateEvent(ev)
     }
 }
@@ -570,7 +659,7 @@ private struct HandleField: View {
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
                 .foregroundStyle(Color.warmMid)
-            TextField(placeholder, text: $text)
+            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color.warmMid.opacity(0.30)))
                 .focused($focused)
                 .font(.system(size: 12))
                 .foregroundStyle(Color.warmDark)

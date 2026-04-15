@@ -334,7 +334,8 @@ def test_blog_passes_production_details_to_prompt(sample_photo):
                 "production_details": "Directed by Jane Doe. Opening Feb 15, 2026.",
             },
             photo_paths=[sample_photo] * 4,
-            skip_humanizer=True
+            skip_humanizer=True,
+            skip_voice_pass=True,
         )
 
     assert "Directed by Jane Doe" in captured["prompt"]

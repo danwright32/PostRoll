@@ -11,6 +11,8 @@ struct EventListView: View {
     @State private var showingHashtagSettings = false
     @State private var hoveredEventID: Event.ID?
     @State private var showExported = false
+    @State private var renamingEventID: Event.ID? = nil
+    @State private var renameText = ""
     @Namespace private var selectionNamespace
 
     private var exportedCount: Int {
@@ -34,7 +36,14 @@ struct EventListView: View {
                 let isSelected = appState.selectedEventID == event.id
                 let isHovered  = hoveredEventID == event.id && !isSelected
 
-                EventRow(event: event)
+                EventRow(
+                        event: event,
+                        isSelected: isSelected,
+                        isRenaming: renamingEventID == event.id,
+                        renameText: $renameText,
+                        onRenameCommit: { commitRename(event: event) },
+                        onRenameCancel: { renamingEventID = nil }
+                    )
                     .tag(event.id)
                     .listRowBackground(
                         Group {
@@ -75,6 +84,11 @@ struct EventListView: View {
                         }
                     }
                     .contextMenu {
+                        Button("Rename") {
+                            renameText = event.name
+                            renamingEventID = event.id
+                        }
+                        Divider()
                         Button("Duplicate") {
                             if let newID = appState.duplicateEvent(id: event.id) {
                                 recentlyDuplicatedID = newID
@@ -141,7 +155,7 @@ struct EventListView: View {
                     }
                     .buttonStyle(.plain)
                     .focusEffectDisabled()
-                    .help("Hashtag settings — manage global tags added to every caption, and save preset groups for quick reuse.")
+                    .help("Hashtag settings: manage global tags added to every caption, and save preset groups for quick reuse.")
                     .accessibilityLabel("Hashtag settings")
 
                     if exportedCount > 0 {
@@ -194,7 +208,7 @@ struct EventListView: View {
         .overlay {
             if appState.events.isEmpty {
                 EmptySidebarView()
-            } else if filteredEvents.isEmpty {
+            } else if filteredEvents.isEmpty && !searchText.isEmpty {
                 VStack(spacing: Spacing.sm) {
                     Text("No results for \"\(searchText)\"")
                         .font(.light(12))
@@ -207,6 +221,20 @@ struct EventListView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.roseGold)
                         .padding(.top, Spacing.xs)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.creamDeep)
+            } else if filteredEvents.isEmpty && exportedCount > 0 {
+                VStack(spacing: Spacing.sm) {
+                    Text("All events are archived.")
+                        .font(.light(12))
+                        .foregroundStyle(Color.warmMid)
+                    Button("Show Archived") {
+                        withAnimation(.easeOut(duration: 0.2)) { showExported = true }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.roseGold)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.creamDeep)
@@ -237,22 +265,56 @@ struct EventListView: View {
             }
         }
     }
+
+    private func commitRename(event: Event) {
+        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty {
+            var ev = event
+            ev.name = trimmed
+            appState.updateEvent(ev)
+        }
+        renamingEventID = nil
+    }
 }
 
 // MARK: - Event Row
 
 private struct EventRow: View {
     let event: Event
+    let isSelected: Bool
+    var isRenaming: Bool = false
+    @Binding var renameText: String
+    var onRenameCommit: (() -> Void)? = nil
+    var onRenameCancel: (() -> Void)? = nil
+
+    @FocusState private var renameFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            // Event name in SignPainter — the visual thread to the generated assets.
-            // Larger size and bottom padding create a clear hierarchy break.
-            Text(event.name)
-                .font(.signPainter(19))
-                .foregroundStyle(Color.warmDark)
-                .lineLimit(1)
-                .padding(.bottom, 2)
+            if isRenaming {
+                TextField("Event name", text: $renameText)
+                    .font(.signPainter(19))
+                    .foregroundStyle(Color.warmDark)
+                    .textFieldStyle(.plain)
+                    .focused($renameFocused)
+                    .onSubmit { onRenameCommit?() }
+                    .onExitCommand { onRenameCancel?() }
+                    .onChange(of: renameFocused) { _, focused in
+                        if !focused { onRenameCommit?() }
+                    }
+                    .onAppear { renameFocused = true }
+                    .padding(.bottom, 2)
+            } else {
+                // Event name in SignPainter — the visual thread to the generated assets.
+                // Larger size and bottom padding create a clear hierarchy break.
+                Text(event.name)
+                    .font(.signPainter(19))
+                    // Color.primary adapts to selection: white on focused selected rows,
+                    // dark on unfocused. Custom warm color only when unselected.
+                    .foregroundStyle(isSelected ? Color.primary : Color.warmDark)
+                    .lineLimit(1)
+                    .padding(.bottom, 2)
+            }
 
             HStack(spacing: 3) {
                 Text(event.org)
@@ -260,7 +322,7 @@ private struct EventRow: View {
                 Text(event.displayDate)
             }
             .font(.light(10))
-            .foregroundStyle(Color.warmMid)
+            .foregroundStyle(isSelected ? Color.secondary : Color.warmMid)
             .lineLimit(1)
 
             HStack(spacing: 5) {
@@ -269,10 +331,10 @@ private struct EventRow: View {
                     .accessibilityHidden(true)
                 Text(event.shootType.rawValue)
                 Spacer()
-                StagePill(stage: event.stage)
+                StagePill(stage: event.stage, isSelected: isSelected)
             }
             .font(.system(size: 10))
-            .foregroundStyle(Color.warmMid)
+            .foregroundStyle(isSelected ? Color.secondary : Color.warmMid)
             .padding(.top, 2)
         }
         .padding(.vertical, 5)
@@ -280,6 +342,9 @@ private struct EventRow: View {
         // natural spoken label, avoiding the "·" separator and step-number prefix.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(event.name), \(event.org), \(event.displayDate), \(event.shootType.rawValue), stage \(event.stage.rawValue)")
+        .onChange(of: isRenaming) { _, renaming in
+            if renaming { renameFocused = true }
+        }
     }
 }
 
@@ -287,6 +352,7 @@ private struct EventRow: View {
 
 struct StagePill: View {
     let stage: EventStage
+    var isSelected: Bool = false
 
     private var pillColor: Color {
         switch stage {
@@ -302,23 +368,23 @@ struct StagePill: View {
 
     private var tooltipText: String {
         switch stage {
-        case .created:          return "Step 1 — Event created. Upload the program PDF to begin."
-        case .programUploaded:  return "Step 2 — Program uploaded. Ready to run OCR."
-        case .ocrDone:          return "Step 3 — OCR complete. Review extracted text, then assign photos."
-        case .photosAssigned:   return "Step 4 — Photos assigned to posting days. Ready to generate assets."
-        case .assetsGenerated:  return "Step 5 — Assets generated. Review captions before exporting."
-        case .captionsReviewed: return "Step 6 — Captions approved. Ready to export."
-        case .exported:         return "Step 7 — Exported. All assets are in the output folder."
+        case .created:          return "Step 1: Event created. Upload the program PDF to begin."
+        case .programUploaded:  return "Step 2: Program uploaded. Ready to run OCR."
+        case .ocrDone:          return "Step 3: OCR complete. Review extracted text, then assign photos."
+        case .photosAssigned:   return "Step 4: Photos assigned to posting days. Ready to generate assets."
+        case .assetsGenerated:  return "Step 5: Assets generated. Review captions before exporting."
+        case .captionsReviewed: return "Step 6: Captions approved. Ready to export."
+        case .exported:         return "Step 7: Exported. All assets are in the output folder."
         }
     }
 
     var body: some View {
-        Text(stage.rawValue)
+        Text(stage.displayLabel)
             .font(.system(size: 10, weight: .medium))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(pillColor.opacity(0.14))
-            .foregroundStyle(pillColor)
+            .background(isSelected ? Color.primary.opacity(0.15) : pillColor.opacity(0.14))
+            .foregroundStyle(isSelected ? Color.primary : pillColor)
             .clipShape(Capsule())
             .help(tooltipText)
             // Announce as "Stage, Photos Assigned" — not the "3 ·" prefix
@@ -520,7 +586,7 @@ struct HashtagSettingsSheet: View {
 private struct EmptySidebarView: View {
     var body: some View {
         VStack(spacing: Spacing.sm) {
-            Image(systemName: "theatermasks")
+            Image(systemName: "music.mic")
                 .font(.system(size: 28))
                 .foregroundStyle(Color.warmMid.opacity(Opacity.subtle))
                 .padding(.bottom, 4)

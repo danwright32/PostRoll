@@ -4,6 +4,8 @@ struct OCRReviewView: View {
     let event: Event
     @Environment(AppState.self) private var appState
     @State private var ocr: OCRResult
+    @State private var orgHandles: String
+    @State private var venueHandles: String
     @State private var expanded: ReviewSection? = .performers
 
     // Undo state
@@ -13,6 +15,7 @@ struct OCRReviewView: View {
 
     enum ReviewSection: String, CaseIterable {
         case performers = "Performers"
+        case handles    = "Handles"
         case pieces     = "Program"
         case scenes     = "Scenes"
         case notes      = "Notes"
@@ -21,6 +24,8 @@ struct OCRReviewView: View {
     init(event: Event) {
         self.event = event
         _ocr = State(initialValue: event.ocrResult ?? OCRResult())
+        _orgHandles = State(initialValue: HandleBook.shared.handles(forOrg: event.org))
+        _venueHandles = State(initialValue: HandleBook.shared.handles(forVenue: event.venue))
     }
 
     var body: some View {
@@ -107,6 +112,9 @@ struct OCRReviewView: View {
         switch section {
         case .performers:
             return ocr.performers.isEmpty ? "Performers (empty)" : "Performers (\(ocr.performers.count))"
+        case .handles:
+            let any = !orgHandles.isEmpty || !venueHandles.isEmpty
+            return any ? "Handles (set)" : "Handles"
         case .pieces:
             return ocr.pieces.isEmpty ? "Program (empty)" : "Program (\(ocr.pieces.count))"
         case .scenes:
@@ -131,11 +139,27 @@ struct OCRReviewView: View {
     private func sectionContent(_ section: ReviewSection) -> some View {
         switch section {
         case .performers:
-            PerformersEditor(performers: $ocr.performers) { performer, idx in
-                scheduleUndo(message: "Performer removed") {
-                    ocr.performers.insert(performer, at: min(idx, ocr.performers.count))
+            PerformersEditor(
+                performers: $ocr.performers,
+                eventURL: event.eventURL.isEmpty ? nil : event.eventURL,
+                onDeleted: { performer, idx in
+                    scheduleUndo(message: "Performer removed") {
+                        ocr.performers.insert(performer, at: min(idx, ocr.performers.count))
+                    }
+                },
+                onReplacedFromWeb: { old in
+                    scheduleUndo(message: "Replaced from website") {
+                        ocr.performers = old
+                    }
                 }
-            }
+            )
+        case .handles:
+            EventHandlesField(
+                orgHandles: $orgHandles,
+                venueHandles: $venueHandles,
+                orgName: event.org,
+                venueName: event.venue
+            )
         case .pieces:
             PiecesEditor(pieces: $ocr.pieces) { piece, idx in
                 scheduleUndo(message: "Work removed") {
@@ -148,10 +172,19 @@ struct OCRReviewView: View {
     }
 
     private func confirmAndAdvance() {
+        // Save handles to HandleBook so future events at same org/venue auto-fill
+        HandleBook.shared.record(org: event.org, handles: orgHandles)
+        HandleBook.shared.record(venue: event.venue, handles: venueHandles)
+        // Combine org + venue handles into the event-wide string (comma-separated, deduped)
+        let combined = [orgHandles, venueHandles]
+            .flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
+            .filter { !$0.isEmpty }
+        let deduped = Array(NSOrderedSet(array: combined)) as? [String] ?? combined
         var ev = event
         ev.ocrResult = ocr
         ev.ocrReviewDone = true
-        ev.stage = .ocrDone
+        ev.eventHandles = deduped.joined(separator: ", ")
+        ev.stage = .photosAssigned
         appState.updateEvent(ev)
     }
 
@@ -172,16 +205,19 @@ private struct ReviewSectionRow<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Button(action: onToggle) {
+            Button {
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { onToggle() }
+            } label: {
                 HStack(alignment: .center) {
                     Text(title.uppercased())
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
                         .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
                     Spacer()
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, Spacing.xl)
@@ -189,7 +225,10 @@ private struct ReviewSectionRow<Content: View>: View {
             }
             .buttonStyle(.plain)
 
-            if isExpanded { content() }
+            if isExpanded {
+                content()
+                    .transition(.opacity)
+            }
 
             RoseGoldDivider(opacity: 0.3)
         }
@@ -200,7 +239,13 @@ private struct ReviewSectionRow<Content: View>: View {
 
 private struct PerformersEditor: View {
     @Binding var performers: [Performer]
+    var eventURL: String?
     let onDeleted: (Performer, Int) -> Void
+    var onReplacedFromWeb: (([Performer]) -> Void)?
+
+    @State private var isFetchingFromWeb = false
+    @State private var fetchError: String?
+    @Environment(AppState.self) private var appState
 
     var body: some View {
         VStack(spacing: Spacing.sm) {
@@ -216,6 +261,58 @@ private struct PerformersEditor: View {
             BrandAddButton(label: "Add Performer") {
                 performers.append(Performer())
             }
+
+            if let url = eventURL {
+                Divider()
+                    .padding(.vertical, 4)
+
+                if isFetchingFromWeb {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small).tint(Color.roseGold)
+                        Text("Fetching from website…")
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
+                    }
+                    .padding(.top, 2)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Button {
+                            Task { await fetchFromWeb(url: url) }
+                        } label: {
+                            Label("Replace from website", systemImage: "globe")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.roseGold)
+                        }
+                        .buttonStyle(.plain)
+
+                        Text("Replaces the performer list with conductors and named groups from the event page. Use for DCINY-style concerts where the website is more useful than the program.")
+                            .font(.light(10))
+                            .foregroundStyle(Color.warmFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if let err = fetchError {
+                            Text(err)
+                                .font(.light(10))
+                                .foregroundStyle(Color.roseDeep)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func fetchFromWeb(url: String) async {
+        fetchError = nil
+        isFetchingFromWeb = true
+        defer { isFetchingFromWeb = false }
+        do {
+            let fetched = try await PythonBridge.shared.fetchWebPerformers(eventURL: url)
+            let old = performers
+            performers = fetched
+            onReplacedFromWeb?(old)
+        } catch {
+            fetchError = error.localizedDescription
         }
     }
 }
@@ -226,12 +323,10 @@ private struct PerformerRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.sm) {
-            VStack(spacing: 6) {
-                HStack(spacing: Spacing.sm) {
-                    BrandField("Name", text: $performer.name)
-                    BrandField("Role", text: $performer.role).frame(maxWidth: 180)
-                }
-                BrandField("Voice / Instrument (optional)", text: $performer.voiceOrInstrument)
+            HStack(spacing: Spacing.sm) {
+                BrandField("Name", text: $performer.name)
+                BrandField("Description (optional)", text: $performer.voiceOrInstrument)
+                    .frame(maxWidth: 200)
             }
             Button {
                 let query = performer.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? performer.name
@@ -328,7 +423,6 @@ private struct SceneRow: View {
                     BrandField("Location", text: $scene.location)
                 }
                 BrandField("Visual cues", text: $scene.visualCues)
-                BrandField("Description", text: $scene.description)
             }
             BrandDeleteButton(action: onDelete)
         }
@@ -472,5 +566,74 @@ private struct OCRUndoBanner: View {
         .padding(.vertical, Spacing.sm)
         .background(Color.creamDeep)
         .overlay(Rectangle().fill(Color.creamEdge).frame(height: 0.5), alignment: .top)
+    }
+}
+
+// MARK: - Event Handles Field
+
+private struct EventHandlesField: View {
+    @Binding var orgHandles: String
+    @Binding var venueHandles: String
+    let orgName: String
+    let venueName: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("These handles are added to every caption automatically.")
+                .font(.light(11))
+                .foregroundStyle(Color.warmMid)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HandleRow(
+                label: "Organization",
+                placeholder: "@\(orgName.lowercased().replacingOccurrences(of: " ", with: ""))",
+                text: $orgHandles
+            )
+            HandleRow(
+                label: "Venue",
+                placeholder: "@\(venueName.lowercased().replacingOccurrences(of: " ", with: ""))",
+                text: $venueHandles
+            )
+        }
+    }
+}
+
+private struct HandleRow: View {
+    let label: String
+    let placeholder: String
+    @Binding var text: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.warmMid)
+
+            TextField(
+                "",
+                text: $text,
+                prompt: Text(placeholder).foregroundStyle(Color.warmMid.opacity(0.30))
+            )
+            .focused($focused)
+            .font(.system(size: 12))
+            .foregroundStyle(Color.warmDark)
+            .focusEffectDisabled()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.xs)
+                    .fill(Color.creamDeep)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.xs)
+                            .strokeBorder(
+                                focused ? Color.roseGold : Color.creamEdge,
+                                lineWidth: focused ? 1.5 : 1
+                            )
+                    )
+            )
+            .animation(.easeOut(duration: 0.12), value: focused)
+        }
     }
 }

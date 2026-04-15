@@ -16,11 +16,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import subprocess
 import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+# Reuse the collage's pan/zoom-aware crop so per-photo offsets produce
+# identical output in both the strip preview PNG and the final encoded reel.
+from .generate_collage import crop_to_fill as _crop_to_fill
 
 
 # === Design Tokens ===
@@ -80,25 +85,21 @@ def ease_in_out(t: float) -> float:
         return 0.06 + (t - 0.12) / 0.76 * 0.88
 
 
-def crop_to_fill(photo: Image.Image, target_w: int, target_h: int) -> Image.Image:
-    """Crop photo to fill target, biased toward top for heads."""
-    photo_ratio = photo.width / photo.height
-    target_ratio = target_w / target_h
-    if photo_ratio > target_ratio:
-        scale = target_h / photo.height
-    else:
-        scale = target_w / photo.width
-    new_w = int(photo.width * scale)
-    new_h = int(photo.height * scale)
-    resized = photo.resize((new_w, new_h), Image.LANCZOS)
-    left = (new_w - target_w) // 2
-    overflow = new_h - target_h
-    top = int(overflow * 0.4)
-    return resized.crop((left, top, left + target_w, top + target_h))
+def build_collage_strip(
+    photo_paths: list[str],
+    seed: int | None = None,
+    crop_offsets: list[tuple[float, float, float]] | None = None,
+    return_layout: bool = False,
+):
+    """Build a tall collage strip from photos arranged in masonry rows.
 
-
-def build_collage_strip(photo_paths: list[str], seed: int | None = None) -> Image.Image:
-    """Build a tall collage strip from photos arranged in masonry rows."""
+    crop_offsets: optional list of (x, y, zoom) triples in [-1, 1] / [≥1]
+                  parallel to photo_paths. Default (0, 0, 1) = centred fill
+                  with the original 0.4 top-bias used in generate_collage.
+    return_layout: when True, returns (strip_image, cells) where cells is a
+                   list of {photo_path, x, y, w, h} dicts in strip-pixel
+                   coordinates — used by the app to overlay crop controls.
+    """
     rng = random.Random(seed)
     photos = [Image.open(p) for p in photo_paths]
     n = len(photos)
@@ -168,18 +169,35 @@ def build_collage_strip(photo_paths: list[str], seed: int | None = None) -> Imag
     # Create strip with cream background
     strip = Image.new("RGB", (CANVAS_W, total_h), CREAM_BG)
 
+    cells: list[dict] = []
+
     # Place photos below header zone
     y = top_pad
     photo_idx = 0
     for photos_in_row, row_h, widths in row_data:
         x = SIDE_MARGIN
         for col_idx in range(photos_in_row):
-            cropped = crop_to_fill(photos[photo_idx], widths[col_idx], row_h)
+            if crop_offsets and photo_idx < len(crop_offsets):
+                ox, oy, oz = crop_offsets[photo_idx]
+            else:
+                ox, oy, oz = 0.0, 0.0, 1.0
+            cropped = _crop_to_fill(
+                photos[photo_idx], widths[col_idx], row_h, ox, oy, oz,
+            )
             strip.paste(cropped, (x, y))
+            cells.append({
+                "photo_path": str(photo_paths[photo_idx]),
+                "x": x,
+                "y": y,
+                "w": widths[col_idx],
+                "h": row_h,
+            })
             x += widths[col_idx] + COL_GAP
             photo_idx += 1
         y += row_h + ROW_GAP
 
+    if return_layout:
+        return strip, cells
     return strip
 
 
@@ -229,6 +247,43 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
 _DEFAULT_AUDIO_TAGS = "ambient,atmospheric"
 
 
+def build_reel_preview(
+    photo_paths: list[str],
+    output_path: str,
+    seed: int | None = None,
+    crop_offsets: list[tuple[float, float, float]] | None = None,
+) -> str:
+    """Render the reel's photo strip as a standalone PNG + layout sidecar.
+
+    Fast path used by the app's Thursday editor: skips ffmpeg encoding and
+    just writes the masonry strip (applying any crop offsets) plus a JSON
+    sidecar describing each photo cell's rect in strip-pixel coordinates.
+
+    Returns the absolute PNG path. The sidecar is written alongside as
+    {output_stem}_layout.json with shape:
+        {"strip_width": W, "strip_height": H, "cells": [{photo_path, x, y, w, h}, ...]}
+    """
+    print(f"Building reel preview strip from {len(photo_paths)} photos...")
+    strip, cells = build_collage_strip(
+        photo_paths, seed=seed, crop_offsets=crop_offsets, return_layout=True,
+    )
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    strip.save(str(output), "PNG", quality=95)
+
+    layout_path = output.parent / (output.stem + "_layout.json")
+    with open(layout_path, "w") as lf:
+        json.dump({
+            "strip_width":  strip.width,
+            "strip_height": strip.height,
+            "cells":        cells,
+        }, lf)
+
+    print(f"Reel preview written: {output} ({strip.width}x{strip.height}, {len(cells)} cells)")
+    return str(output)
+
+
 def generate_reel_scroll(
     photo_paths: list[str],
     audio_path: str | None,   # None = auto-fetch from Jamendo
@@ -241,21 +296,26 @@ def generate_reel_scroll(
     gap: int = ROW_GAP,
     seed: int | None = None,
     scroll_duration: float = SCROLL_DURATION,
+    audio_tags: str | None = None,  # override default Jamendo search tags
+    crop_offsets: list[tuple[float, float, float]] | None = None,
 ) -> str:
     """Generate a photo scroll reel with masonry collage layout.
 
     scroll_duration: seconds to scroll the full strip (default 30.0).
+    audio_tags: comma-separated Jamendo tags; overrides _DEFAULT_AUDIO_TAGS when provided.
+    crop_offsets: optional per-photo (x, y, zoom) triples — lets the Thursday
+                  editor override the default centred fill on a per-photo basis.
     """
     if audio_path is None:
         from postroll.audio import fetch_audio
-        audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
+        audio_path = fetch_audio(audio_tags or _DEFAULT_AUDIO_TAGS)
 
     n = len(photo_paths)
     total_duration = scroll_duration + HOLD_END + CLOSING_FRAME_DURATION
 
     # Build collage strip
     print(f"Building collage strip from {n} photos...")
-    strip = build_collage_strip(photo_paths, seed=seed)
+    strip = build_collage_strip(photo_paths, seed=seed, crop_offsets=crop_offsets)
     strip_h = strip.height
     print(f"Strip size: {CANVAS_W}x{strip_h}")
 

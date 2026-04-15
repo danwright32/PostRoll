@@ -9,8 +9,9 @@ struct PhotoAssignmentView: View {
     @Environment(AppState.self) private var appState
 
     @State private var dayPhotos: [DayName: [URL]]
-    @State private var blogPhotos: [URL]
     @State private var pickerTarget: PickerTarget? = nil
+    @State private var importResultMessage: String? = nil
+    @State private var previewURL: URL? = nil
 
     // Tuesday: speed edit reel inputs
     @State private var tuesdayScreenRecording: URL?
@@ -26,10 +27,6 @@ struct PhotoAssignmentView: View {
     // Wednesday: collage
     @State private var wednesdayCollageSeed: Int? = nil
 
-    // Friday: before/after story
-    @State private var fridayRawPhoto: URL?
-    @State private var fridayEditedPhoto: URL?
-
     // Crop offsets for Wednesday + Thursday photos (keyed by photo URL absoluteString)
     @State private var dayCropOffsets: [DayName: [String: CropOffset]] = [:]
     // Shooter observations per day — passed to caption generator
@@ -39,22 +36,17 @@ struct PhotoAssignmentView: View {
 
     enum PickerTarget: Equatable {
         case day(DayName)
-        case blog
         case tuesdayScreenRecording
         case tuesdayRawPhoto
         case tuesdayEditedPhoto
         case thursdayAudio
-        case fridayRawPhoto
-        case fridayEditedPhoto
-        case importFolder
     }
 
     init(event: Event) {
         self.event = event
         var loaded: [DayName: [URL]] = [:]
         for day in DayName.allCases { loaded[day] = event.days[day.rawValue]?.photoPaths ?? [] }
-        _dayPhotos  = State(initialValue: loaded)
-        _blogPhotos = State(initialValue: event.blogPhotoPaths)
+        _dayPhotos = State(initialValue: loaded)
 
         let tue = event.days[DayName.tuesday.rawValue]
         _tuesdayScreenRecording = State(initialValue: tue?.screenRecordingPath)
@@ -63,16 +55,12 @@ struct PhotoAssignmentView: View {
         _tuesdayTargetDuration  = State(initialValue: tue?.reelTargetDuration ?? 20.0)
 
         let thu = event.days[DayName.thursday.rawValue]
-        _thursdayAudio        = State(initialValue: thu?.audioPath)
+        _thursdayAudio          = State(initialValue: thu?.audioPath)
         _thursdayScrollDuration = State(initialValue: thu?.scrollDuration ?? 30.0)
-        _thursdayReelSeed     = State(initialValue: thu?.reelSeed)
+        _thursdayReelSeed       = State(initialValue: thu?.reelSeed)
 
         let wed = event.days[DayName.wednesday.rawValue]
         _wednesdayCollageSeed = State(initialValue: wed?.collageSeed)
-
-        let fri = event.days[DayName.friday.rawValue]
-        _fridayRawPhoto    = State(initialValue: fri?.rawPhotoPath)
-        _fridayEditedPhoto = State(initialValue: fri?.editedPhotoPath)
 
         // Load crop offsets for all days
         var offsets: [DayName: [String: CropOffset]] = [:]
@@ -92,6 +80,7 @@ struct PhotoAssignmentView: View {
     }
 
     var body: some View {
+        ZStack {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
 
@@ -105,7 +94,7 @@ struct PhotoAssignmentView: View {
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.xs)
 
-                Text("Your photo assignments are saved — going back won't lose them.")
+                Text("Your photo assignments are saved. Going back won't lose them.")
                     .font(.light(10))
                     .foregroundStyle(Color.warmMid.opacity(0.7))
                     .padding(.horizontal, Spacing.xl)
@@ -113,14 +102,34 @@ struct PhotoAssignmentView: View {
 
                 BrandBanner(
                     icon: "rectangle.3.group",
-                    message: "Drop photos into each posting day, or import a whole folder organized by day subfolders. Wednesday and Thursday show a crop button on each photo — use it to reframe before generating."
+                    message: "Drop photos into each posting day, or import a whole folder organized by day subfolders (named sunday–friday or day 1–day 6). Wednesday and Thursday show a crop button on each photo."
                 )
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.sm)
 
+                if let msg = importResultMessage {
+                    BrandBanner(
+                        icon: msg.hasPrefix("No photos") ? "exclamationmark.circle" : "checkmark.circle",
+                        message: msg,
+                        style: msg.hasPrefix("No photos") ? .error : .info
+                    )
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.bottom, Spacing.sm)
+                }
+
                 HStack {
                     Spacer()
-                    Button("Import from folder…") { pickerTarget = .importFolder }
+                    Button("Import from folder…") {
+                        importResultMessage = nil
+                        let panel = NSOpenPanel()
+                        panel.canChooseFiles = false
+                        panel.canChooseDirectories = true
+                        panel.allowsMultipleSelection = false
+                        panel.prompt = "Import"
+                        if panel.runModal() == .OK, let url = panel.url {
+                            importFromFolder(url)
+                        }
+                    }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.roseGold)
@@ -140,6 +149,8 @@ struct PhotoAssignmentView: View {
                         collageNote: note,
                         photos: dayBinding(day),
                         cropOffsets: enableCrop ? cropOffsetsBinding(day) : nil,
+                        notes: noteBinding(day),
+                        onPreview: { previewURL = $0 },
                         onAddPhotos: { pickerTarget = .day(day) }
                     )
 
@@ -180,27 +191,15 @@ struct PhotoAssignmentView: View {
 
                     case .friday:
                         FridayBeforeAfterSection(
-                            rawPhoto:       $fridayRawPhoto,
-                            editedPhoto:    $fridayEditedPhoto,
-                            onPickRawPhoto:    { pickerTarget = .fridayRawPhoto },
-                            onPickEditedPhoto: { pickerTarget = .fridayEditedPhoto }
+                            rawPhoto:    tuesdayRawPhoto,
+                            editedPhoto: tuesdayEditedPhoto
                         )
-                        .onChange(of: fridayRawPhoto)    { _, _ in save() }
-                        .onChange(of: fridayEditedPhoto) { _, _ in save() }
 
                     default:
                         EmptyView()
                     }
 
-                    DayNotesField(notes: noteBinding(day))
                 }
-
-                PhotoDaySection(
-                    label: "Blog Photos",
-                    subtitle: "Appear in the full blog post",
-                    photos: blogBinding,
-                    onAddPhotos: { pickerTarget = .blog }
-                )
 
                 VStack(alignment: .trailing, spacing: Spacing.sm) {
                     if totalPhotos == 0 {
@@ -220,13 +219,21 @@ struct PhotoAssignmentView: View {
         }
         .background(Color.cream)
         .fileImporter(
-            isPresented: Binding(get: { pickerTarget != nil }, set: { if !$0 { pickerTarget = nil } }),
+            isPresented: Binding(get: { pickerTarget != nil }, set: { _ in }),
             allowedContentTypes: allowedTypes,
             allowsMultipleSelection: isMultiSelection
         ) { result in
             if case .success(let urls) = result { handlePickedFiles(urls) }
             pickerTarget = nil
         }
+
+        // Full-screen photo preview overlay
+        if let url = previewURL {
+            PhotoPreviewOverlay(url: url) { previewURL = nil }
+                .transition(.opacity)
+        }
+        } // ZStack
+        .animation(.easeOut(duration: 0.18), value: previewURL != nil)
     }
 
     // MARK: - File picker config
@@ -239,8 +246,6 @@ struct PhotoAssignmentView: View {
             return [.audio, .mp3, .aiff,
                     UTType(filenameExtension: "m4a") ?? .audio,
                     UTType(filenameExtension: "aac") ?? .audio]
-        case .importFolder:
-            return [.folder]
         default:
             return [.image]
         }
@@ -248,7 +253,7 @@ struct PhotoAssignmentView: View {
 
     private var isMultiSelection: Bool {
         switch pickerTarget {
-        case .day, .blog: return true
+        case .day: return true
         default: return false
         }
     }
@@ -259,13 +264,6 @@ struct PhotoAssignmentView: View {
         Binding(
             get: { dayPhotos[day] ?? [] },
             set: { dayPhotos[day] = $0; save() }
-        )
-    }
-
-    private var blogBinding: Binding<[URL]> {
-        Binding(
-            get: { blogPhotos },
-            set: { blogPhotos = $0; save() }
         )
     }
 
@@ -292,21 +290,19 @@ struct PhotoAssignmentView: View {
             var list = dayPhotos[day] ?? []
             for u in urls where !list.contains(u) { list.append(u) }
             dayPhotos[day] = list
-        case .blog:
-            for u in urls where !blogPhotos.contains(u) { blogPhotos.append(u) }
         case .tuesdayScreenRecording: tuesdayScreenRecording = url
         case .tuesdayRawPhoto:        tuesdayRawPhoto = url
         case .tuesdayEditedPhoto:     tuesdayEditedPhoto = url
         case .thursdayAudio:          thursdayAudio = url
-        case .fridayRawPhoto:         fridayRawPhoto = url
-        case .fridayEditedPhoto:      fridayEditedPhoto = url
-        case .importFolder:           importFromFolder(url)
         case nil: break
         }
         save()
     }
 
     private func importFromFolder(_ root: URL) {
+        let accessed = root.startAccessingSecurityScopedResource()
+        defer { if accessed { root.stopAccessingSecurityScopedResource() } }
+
         let fm = FileManager.default
         let imageExts = Set(["jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "webp"])
         let videoExts = Set(["mov", "mp4", "m4v"])
@@ -318,14 +314,31 @@ struct PhotoAssignmentView: View {
                 .sorted { $0.lastPathComponent < $1.lastPathComponent }
         }
 
-        for day in DayName.allCases {
-            let dayDir = root.appendingPathComponent(day.rawValue)
-            guard fm.fileExists(atPath: dayDir.path) else { continue }
+        // "unedited" contains "edit" so check raw markers first, then edited
+        func isRaw(_ name: String) -> Bool {
+            name.contains("raw") || name.contains("before") || name.contains("unedited") || name.contains("original")
+        }
+        func isEdited(_ name: String) -> Bool {
+            !isRaw(name) && (name.contains("edit") || name.contains("after"))
+        }
+
+        var totalImported = 0
+
+        for (index, day) in DayName.allCases.enumerated() {
+            // Accept named subfolders (sunday, monday…) or numbered (day 1, Day 1, day1…)
+            let n = index + 1
+            let candidates = [
+                root.appendingPathComponent(day.rawValue),
+                root.appendingPathComponent("day \(n)"),
+                root.appendingPathComponent("Day \(n)"),
+                root.appendingPathComponent("day\(n)"),
+            ]
+            guard let dayDir = candidates.first(where: { fm.fileExists(atPath: $0.path) }) else { continue }
 
             let images = imageFiles(in: dayDir)
             if !images.isEmpty {
                 var list = dayPhotos[day] ?? []
-                for u in images where !list.contains(u) { list.append(u) }
+                for u in images where !list.contains(u) { list.append(u); totalImported += 1 }
                 dayPhotos[day] = list
             }
 
@@ -339,37 +352,23 @@ struct PhotoAssignmentView: View {
                 }
                 for file in contents where imageExts.contains(file.pathExtension.lowercased()) {
                     let name = file.deletingPathExtension().lastPathComponent.lowercased()
-                    if tuesdayRawPhoto == nil, name.contains("raw") || name.contains("before") {
-                        tuesdayRawPhoto = file
-                    } else if tuesdayEditedPhoto == nil, name.contains("edit") || name.contains("after") {
-                        tuesdayEditedPhoto = file
-                    }
+                    if tuesdayRawPhoto == nil, isRaw(name) { tuesdayRawPhoto = file }
+                    else if tuesdayEditedPhoto == nil, isEdited(name) { tuesdayEditedPhoto = file }
                 }
             case .thursday:
                 if thursdayAudio == nil,
                    let audio = contents.first(where: { audioExts.contains($0.pathExtension.lowercased()) }) {
                     thursdayAudio = audio
                 }
-            case .friday:
-                for file in contents where imageExts.contains(file.pathExtension.lowercased()) {
-                    let name = file.deletingPathExtension().lastPathComponent.lowercased()
-                    if fridayRawPhoto == nil, name.contains("raw") || name.contains("before") {
-                        fridayRawPhoto = file
-                    } else if fridayEditedPhoto == nil, name.contains("edit") || name.contains("after") {
-                        fridayEditedPhoto = file
-                    }
-                }
             default: break
             }
         }
 
-        let blogDir = root.appendingPathComponent("blog")
-        if fm.fileExists(atPath: blogDir.path) {
-            let images = imageFiles(in: blogDir)
-            for u in images where !blogPhotos.contains(u) { blogPhotos.append(u) }
-        }
-
         save()
+
+        importResultMessage = totalImported == 0
+            ? "No photos found. Expected subfolders named sunday–friday or day 1–day 6."
+            : "Imported \(totalImported) photo\(totalImported == 1 ? "" : "s")."
     }
 
     // MARK: - Persistence
@@ -394,13 +393,15 @@ struct PhotoAssignmentView: View {
             case .wednesday:
                 pd.collageSeed = wednesdayCollageSeed
             case .friday:
-                pd.rawPhotoPath    = fridayRawPhoto
-                pd.editedPhotoPath = fridayEditedPhoto
+                // Before/after story uses Tuesday's RAW and edited photos
+                pd.rawPhotoPath    = tuesdayRawPhoto
+                pd.editedPhotoPath = tuesdayEditedPhoto
             default: break
             }
             ev.days[day.rawValue] = pd
         }
-        ev.blogPhotoPaths = blogPhotos
+        // Blog photos auto-derived from Sunday + Monday + Wednesday
+        ev.blogPhotoPaths = (dayPhotos[.sunday] ?? []) + (dayPhotos[.monday] ?? []) + (dayPhotos[.wednesday] ?? [])
         appState.updateEvent(ev)
     }
 
@@ -420,6 +421,8 @@ private struct PhotoDaySection: View {
     var collageNote: String? = nil
     @Binding var photos: [URL]
     var cropOffsets: Binding<[String: CropOffset]>? = nil
+    var notes: Binding<String>? = nil
+    var onPreview: ((URL) -> Void)? = nil
     let onAddPhotos: () -> Void
 
     @State private var isExpanded = true
@@ -483,8 +486,12 @@ private struct PhotoDaySection: View {
                         .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Color.roseGold)
                 }
                 .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.md)
+                .padding(.bottom, Spacing.sm)
                 .background(isDropTargeted ? Color.roseGold.opacity(0.03) : Color.clear)
+            }
+
+            if let notesBinding = notes {
+                DayNotesField(notes: notesBinding)
             }
 
             RoseGoldDivider(opacity: 0.3)
@@ -501,9 +508,11 @@ private struct PhotoDaySection: View {
             )
             CroppablePhotoThumb(url: url, cropOffset: cropBinding,
                                 isReorderTarget: reorderTargetIndex == i,
+                                onPreview: onPreview,
                                 onRemove: { photos.remove(at: i) })
         } else {
-            PhotoThumb(url: url, isReorderTarget: reorderTargetIndex == i) {
+            PhotoThumb(url: url, isReorderTarget: reorderTargetIndex == i,
+                       onPreview: onPreview) {
                 photos.remove(at: i)
             }
         }
@@ -534,10 +543,12 @@ private struct CroppablePhotoThumb: View {
     let url: URL
     @Binding var cropOffset: CropOffset
     var isReorderTarget: Bool = false
+    var onPreview: ((URL) -> Void)? = nil
     let onRemove: () -> Void
 
     @State private var image: NSImage?
     @State private var showingCropPopover = false
+    @State private var isHovered = false
 
     var hasCrop: Bool { cropOffset.x != 0 || cropOffset.y != 0 }
 
@@ -568,6 +579,7 @@ private struct CroppablePhotoThumb: View {
             )
             .opacity(isReorderTarget ? 0.75 : 1.0)
             .animation(.easeOut(duration: 0.1), value: isReorderTarget)
+            .onTapGesture { onPreview?(url) }
 
             // Remove button — top right
             Button(action: onRemove) {
@@ -578,8 +590,9 @@ private struct CroppablePhotoThumb: View {
             }
             .buttonStyle(.plain)
             .padding(3)
+            .opacity(isHovered ? 1 : 0)
 
-            // Crop button — bottom left
+            // Crop button — bottom left, visible on hover or when a crop is active
             VStack {
                 Spacer()
                 HStack {
@@ -594,9 +607,11 @@ private struct CroppablePhotoThumb: View {
                             .clipShape(RoundedRectangle(cornerRadius: 3))
                     }
                     .buttonStyle(.plain)
+                    .help("Adjust crop position")
                     .popover(isPresented: $showingCropPopover, arrowEdge: .bottom) {
                         CropOffsetPopover(image: image, cropOffset: $cropOffset)
                     }
+                    .opacity(isHovered || hasCrop ? 1 : 0)
                     Spacer()
                 }
                 .padding(.leading, 4)
@@ -604,6 +619,8 @@ private struct CroppablePhotoThumb: View {
             }
             .frame(width: 80, height: 80)
         }
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
         .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
     }
 
@@ -628,7 +645,7 @@ private struct CroppablePhotoThumb: View {
 
 // MARK: - Crop Offset Popover
 
-private struct CropOffsetPopover: View {
+struct CropOffsetPopover: View {
     let image: NSImage?
     @Binding var cropOffset: CropOffset
 
@@ -850,7 +867,7 @@ private struct WednesdayCollageSection: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     if photoCount < 10 {
-                        Text("Need 10 photos to generate the collage — \(10 - photoCount) more required.")
+                        Text("Need 10 photos to generate the collage. \(10 - photoCount) more required.")
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
                     } else {
@@ -912,7 +929,7 @@ private struct ThursdayReelSection: View {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     // Audio
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Optional audio — auto-fetched from Jamendo if omitted.")
+                        Text("Optional audio, auto-fetched from Jamendo if omitted.")
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
                         AudioFilePicker(audio: $audio, onPick: onPickAudio)
@@ -953,57 +970,28 @@ private struct ThursdayReelSection: View {
 // MARK: - Friday Before/After Section
 
 private struct FridayBeforeAfterSection: View {
-    @Binding var rawPhoto: URL?
-    @Binding var editedPhoto: URL?
-    let onPickRawPhoto: () -> Void
-    let onPickEditedPhoto: () -> Void
+    let rawPhoto: URL?
+    let editedPhoto: URL?
 
-    @State private var isExpanded = false
-
-    var hasAllInputs: Bool { rawPhoto != nil && editedPhoto != nil }
+    var hasPhotos: Bool { rawPhoto != nil && editedPhoto != nil }
 
     var body: some View {
         VStack(spacing: 0) {
-            Button(action: { isExpanded.toggle() }) {
-                HStack(spacing: Spacing.sm) {
-                    Image(systemName: hasAllInputs ? "rectangle.split.2x1.fill" : "rectangle.split.2x1")
-                        .font(.system(size: 11))
-                        .foregroundStyle(hasAllInputs ? Color.roseGold : Color.warmMid)
-                    Text("BEFORE/AFTER STORY")
-                        .font(.system(size: 10, weight: .medium))
-                        .tracking(1.2)
-                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
-                    if hasAllInputs {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color.roseGold.opacity(0.8))
-                    }
-                    Spacer()
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
-                }
-                .contentShape(Rectangle())
-                .padding(.horizontal, Spacing.xl)
-                .padding(.vertical, 10)
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: hasPhotos ? "rectangle.split.2x1.fill" : "rectangle.split.2x1")
+                    .font(.system(size: 11))
+                    .foregroundStyle(hasPhotos ? Color.roseGold : Color.warmMid)
+                Text("BEFORE/AFTER STORY")
+                    .font(.system(size: 10, weight: .medium))
+                    .tracking(1.2)
+                    .foregroundStyle(Color.warmMid)
+                Spacer()
+                Text(hasPhotos ? "ready" : "assign Tuesday's RAW + edited first")
+                    .font(.light(10))
+                    .foregroundStyle(hasPhotos ? Color.roseGold.opacity(0.7) : Color.warmMid.opacity(0.5))
             }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text("RAW on top, edited on bottom. Same photos as Tuesday's reel closing frame.")
-                        .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
-                        .padding(.bottom, 4)
-
-                    SingleFilePicker(label: "RAW Photo",    url: rawPhoto,
-                                     onPick: onPickRawPhoto,    onClear: { rawPhoto = nil })
-                    SingleFilePicker(label: "Edited Photo", url: editedPhoto,
-                                     onPick: onPickEditedPhoto, onClear: { editedPhoto = nil })
-                }
-                .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.md)
-            }
+            .padding(.horizontal, Spacing.xl)
+            .padding(.vertical, 10)
 
             RoseGoldDivider(opacity: 0.15)
         }
@@ -1107,6 +1095,7 @@ private struct PhotoCountBadge: View {
 private struct PhotoThumb: View {
     let url: URL
     var isReorderTarget: Bool = false
+    var onPreview: ((URL) -> Void)? = nil
     let onRemove: () -> Void
     @State private var image: NSImage?
 
@@ -1128,6 +1117,7 @@ private struct PhotoThumb: View {
             )
             .opacity(isReorderTarget ? 0.75 : 1.0)
             .animation(.easeOut(duration: 0.1), value: isReorderTarget)
+            .onTapGesture { onPreview?(url) }
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
@@ -1225,7 +1215,7 @@ private struct DayNotesField: View {
             Image(systemName: "pencil.and.outline")
                 .font(.system(size: 10))
                 .foregroundStyle(notes.isEmpty && !focused ? Color.warmMid.opacity(0.3) : Color.warmMid.opacity(0.6))
-            TextField("Notes for today's shoot (seen by caption generator)", text: $notes)
+            TextField("", text: $notes, prompt: Text("Notes for today's shoot (seen by caption generator)").foregroundStyle(Color.warmMid.opacity(0.30)))
                 .focused($focused)
                 .font(.light(11))
                 .foregroundStyle(Color.warmDark)
@@ -1235,6 +1225,49 @@ private struct DayNotesField: View {
         .padding(.vertical, 7)
         .background(focused || !notes.isEmpty ? Color.roseGold.opacity(0.03) : Color.clear)
         .animation(.easeOut(duration: 0.15), value: focused)
+    }
+}
+
+// MARK: - Photo Preview Overlay
+
+private struct PhotoPreviewOverlay: View {
+    let url: URL
+    let onDismiss: () -> Void
+    @State private var image: NSImage?
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.78)
+                .ignoresSafeArea()
+                .onTapGesture { onDismiss() }
+
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(48)
+                    .shadow(color: .black.opacity(0.5), radius: 24, y: 6)
+            } else {
+                ProgressView().tint(.white)
+            }
+
+            // Dismiss button — top right
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark.circle.fill")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white.opacity(0.9), Color.warmDark.opacity(0.5))
+                            .font(.system(size: 22))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(16)
+                }
+                Spacer()
+            }
+        }
+        .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
     }
 }
 

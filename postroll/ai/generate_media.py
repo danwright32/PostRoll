@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 import sys
 from pathlib import Path
@@ -86,16 +87,79 @@ def _has_ffmpeg() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
-def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+def _derive_audio_tags(shoot_type: str, pieces: list[dict]) -> str:
+    """Derive Jamendo search tags from the event's shoot type and program pieces.
+
+    Uses only tag combinations verified to return results on Jamendo:
+      gospel               — 20 tracks (gospel/spiritual content)
+      inspirational,orchestral — 11 tracks (sacred/choral/classical)
+      orchestral,classical — 12 tracks (classical orchestral)
+      jazz                 — abundant  (jazz/blues content)
+      spiritual            — 16 tracks (spiritual/soul content)
+      ambient,atmospheric  — default   (photo calls / light shoots)
+    """
+    all_text = " ".join(
+        f"{p.get('title', '')} {p.get('composer', '')}" for p in pieces
+    ).lower()
+
+    # Genre signals from program content
+    # Note: Jamendo's "gospel" tag skews acoustic/slow guitar — not right for
+    # orchestral concert settings. Use "inspirational,orchestral" for any sacred/
+    # choral/gospel content performed in a classical concert context.
+    sacred_choral_keywords = (
+        "gospel", "praise", "hymn", "church", "sacred", "amen", "hallelujah",
+        "smallwood", "total praise", "african spiritual", "negro spiritual",
+        "soon we will", "freedom song", "traditional spiritual",
+        "requiem", "kyrie", "sanctus", "mass ", "motet", "anthem",
+        "cantata", "gloria", "agnus dei", "pie jesu", "magnificat",
+    )
+    jazz_keywords = ("jazz", "blues", "swing", "bebop", "coltrane", "ellington",
+                     "monk", "mingus")
+
+    has_sacred_choral = any(k in all_text for k in sacred_choral_keywords)
+    has_jazz          = any(k in all_text for k in jazz_keywords)
+
+    if has_jazz:
+        return "jazz"
+    if has_sacred_choral:
+        # Classical/orchestral concert setting, even with gospel/spiritual repertoire
+        return "inspirational,orchestral"
+
+    # Shoot-type fallback when program gives no clear signal
+    if shoot_type in ("performance", "rehearsal_and_performance"):
+        return "orchestral,classical"
+    if shoot_type == "photo_call":
+        return "ambient,atmospheric"
+    return "ambient,atmospheric"
+
+
+def generate_media(
+    manifest: dict[str, Any],
+    output_dir: Path,
+    *,
+    static_only: bool = False,
+    only_days: set[str] | None = None,
+) -> dict[str, Any]:
     """Generate all visual assets for one event week.
+
+    Args:
+        manifest: Event manifest dict.
+        output_dir: Root directory; a slug subfolder is created inside it.
+        static_only: When True, skip video reel generation (Tuesday speed edit
+            and Thursday scroll reel). Tuesday generates a before/after PNG if
+            raw/edited photos are available, or falls back to a story template.
+            Thursday generates a story template from its first photo. Use this
+            for fast preview generation before export.
 
     Returns a dict mapping day names → generated file paths, plus an
     'errors' dict for any days that failed.
     """
-    event = manifest["event"]
-    org = manifest["org"]
-    venue = manifest["venue"]
-    days_data = manifest.get("days", {})
+    event      = manifest["event"]
+    org        = manifest["org"]
+    venue      = manifest["venue"]
+    shoot_type = manifest.get("shoot_type", "performance")
+    pieces     = manifest.get("pieces", [])
+    days_data  = manifest.get("days", {})
 
     folder_name = f"{_slug(org)}_{_slug(event)}_{manifest.get('date', 'undated')}"
     base_dir = output_dir / folder_name
@@ -106,6 +170,8 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
     ffmpeg_available = _has_ffmpeg()
 
     for day_name in DAY_ORDER:
+        if only_days is not None and day_name not in only_days:
+            continue
         day_info = days_data.get(day_name, {})
         photos = day_info.get("photos", [])
 
@@ -129,7 +195,7 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                     org=org,
                     venue=venue,
                     output_path=story_path,
-                    logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                    logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
                 )
                 day_result["story"] = story_path
                 print(f"[generate_media] {day_name}: story → {story_path}", flush=True)
@@ -150,49 +216,98 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
             audio          = day_info.get("audio")
             target_duration = float(day_info.get("target_duration", 20.0))
 
-            if rec and raw and edit and ffmpeg_available:
+            reel_style = day_info.get("reel_style") or random.choice(["slider", "morph"])
+
+            # Also generate the standalone before/after PNG (story cover) whenever
+            # raw + edited are available — used for Instagram/Facebook stories.
+            ba_path = str(day_dir / "before_after.png")
+            if raw and edit:
                 try:
-                    from ..media.generate_reel_screen import generate_reel_screen
-                    reel_path = str(day_dir / "reel_screen.mp4")
-                    generate_reel_screen(
-                        recording_path=rec,
+                    generate_before_after(
                         raw_path=raw,
                         edit_path=edit,
-                        audio_path=audio,
+                        output_path=ba_path,
                         event_name=event,
                         org=org,
                         venue=venue,
-                        output_path=reel_path,
-                        logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
-                        target_duration=target_duration,
+                        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
                     )
-                    day_result["reel"] = reel_path
-                    print(f"[generate_media] tuesday: reel → {reel_path}", flush=True)
+                    day_result["story_cover"] = ba_path
+                    print(f"[generate_media] tuesday: before/after → {ba_path}", flush=True)
                 except Exception as e:
-                    msg = f"speed edit reel failed: {e}"
-                    print(f"[generate_media] tuesday: ERROR — {msg}", flush=True, file=sys.stderr)
-                    errors["tuesday"] = msg
+                    print(f"[generate_media] tuesday: before/after failed (non-fatal): {e}", flush=True, file=sys.stderr)
+                    ba_path = None
 
-                # Also write a standalone before/after PNG as the story cover —
-                # the reel embeds this as its closing frame but Dan needs a
-                # separate image to post as a story on Instagram + Facebook.
-                if raw and edit:
+            if ffmpeg_available and not static_only and raw and edit:
+                # Screen recording reel takes priority when available
+                if rec:
                     try:
-                        story_cover_path = str(day_dir / "before_after.png")
-                        generate_before_after(
+                        from ..media.generate_reel_screen import generate_reel_screen
+                        reel_path = str(day_dir / "reel_screen.mp4")
+                        generate_reel_screen(
+                            recording_path=rec,
                             raw_path=raw,
                             edit_path=edit,
-                            output_path=story_cover_path,
-                            logo_path=None,
+                            audio_path=audio,
+                            event_name=event,
+                            org=org,
+                            venue=venue,
+                            output_path=reel_path,
+                            logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                            target_duration=target_duration,
                         )
-                        day_result["story_cover"] = story_cover_path
-                        print(f"[generate_media] tuesday: story cover → {story_cover_path}", flush=True)
+                        day_result["reel"] = reel_path
+                        print(f"[generate_media] tuesday: screen reel → {reel_path}", flush=True)
                     except Exception as e:
-                        print(f"[generate_media] tuesday: story cover failed (non-fatal): {e}", flush=True, file=sys.stderr)
+                        msg = f"speed edit reel failed: {e}"
+                        print(f"[generate_media] tuesday: ERROR — {msg}", flush=True, file=sys.stderr)
+                        errors["tuesday"] = msg
+                else:
+                    # Still-image reel: slider reveal or split-compare morph
+                    try:
+                        if reel_style == "morph":
+                            from ..media.generate_reel_morph import generate_reel_morph
+                            reel_path = str(day_dir / "reel_morph.mp4")
+                            generate_reel_morph(
+                                raw_path=raw,
+                                edit_path=edit,
+                                audio_path=audio,
+                                output_path=reel_path,
+                                event_name=event,
+                                org=org,
+                                venue=venue,
+                                closing_frame_path=ba_path,
+                                logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                            )
+                        else:  # slider (default)
+                            from ..media.generate_reel_slider import generate_reel_slider
+                            reel_path = str(day_dir / "reel_slider.mp4")
+                            generate_reel_slider(
+                                raw_path=raw,
+                                edit_path=edit,
+                                audio_path=audio,
+                                output_path=reel_path,
+                                event_name=event,
+                                org=org,
+                                venue=venue,
+                                closing_frame_path=ba_path,
+                                logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                            )
+                        day_result["reel"] = reel_path
+                        print(f"[generate_media] tuesday: {reel_style} reel → {reel_path}", flush=True)
+                    except Exception as e:
+                        msg = f"{reel_style} reel failed: {e}"
+                        print(f"[generate_media] tuesday: ERROR — {msg}", flush=True, file=sys.stderr)
+                        errors["tuesday"] = msg
+            elif not ffmpeg_available:
+                print("[generate_media] tuesday: reel skipped (ffmpeg not available)", flush=True)
+            elif static_only:
+                print("[generate_media] tuesday: reel skipped (static-only preview)", flush=True)
             else:
-                # Fallback: story template from first photo
-                reason = "ffmpeg not available" if not ffmpeg_available else "missing screen_recording/raw_photo/edited_photo"
-                print(f"[generate_media] tuesday: reel skipped ({reason}), generating story", flush=True)
+                print("[generate_media] tuesday: reel skipped (no raw/edited photos assigned)", flush=True)
+
+            # Story fallback if no reel was produced
+            if "reel" not in day_result:
                 try:
                     story_path = str(day_dir / "story.png")
                     generate_story(
@@ -215,13 +330,15 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                 try:
                     collage_path = str(day_dir / "collage.png")
                     selected = photos[:COLLAGE_PHOTO_COUNT]
-                    # crop_offsets: list of [x, y] pairs from manifest
+                    # crop_offsets: list of [x, y, zoom] triples from manifest
                     raw_offsets = day_info.get("crop_offsets")
                     crop_offsets = (
                         [tuple(o) for o in raw_offsets[:COLLAGE_PHOTO_COUNT]]
                         if raw_offsets else None
                     )
                     seed = day_info.get("collage_seed")
+                    # cell_layout: user-dragged frame positions — skips masonry if present
+                    cell_layout = day_info.get("cell_layout")
                     generate_collage(
                         photo_paths=selected,
                         output_path=collage_path,
@@ -231,6 +348,7 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                         logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
                         seed=seed,
                         crop_offsets=crop_offsets,
+                        cell_layout=cell_layout,
                     )
                     day_result["collage"] = collage_path
                     print(f"[generate_media] wednesday: collage → {collage_path}", flush=True)
@@ -248,16 +366,20 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
         # Requires ffmpeg.
         # ──────────────────────────────────────────────────────────────
         elif day_name == "thursday":
-            if ffmpeg_available:
+            if ffmpeg_available and not static_only:
                 audio           = day_info.get("audio")
                 scroll_duration = float(day_info.get("scroll_duration", 30.0))
                 seed            = day_info.get("reel_seed")
+                crop_offsets    = day_info.get("crop_offsets")  # list[(x, y, zoom)] parallel to photos
+                audio_tags      = _derive_audio_tags(shoot_type, pieces)
+                print(f"[generate_media] thursday: audio tags → {audio_tags!r}", flush=True)
                 try:
-                    from ..media.generate_reel_scroll import generate_reel_scroll
+                    from ..media.generate_reel_scroll import generate_reel_scroll, build_reel_preview
                     reel_path = str(day_dir / "reel_scroll.mp4")
                     generate_reel_scroll(
                         photo_paths=photos,
                         audio_path=audio,
+                        audio_tags=audio_tags,
                         event_name=event,
                         org=org,
                         venue=venue,
@@ -265,7 +387,21 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                         logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
                         scroll_duration=scroll_duration,
                         seed=seed,
+                        crop_offsets=crop_offsets,
                     )
+                    # Also write a fast preview PNG + layout sidecar so the caption
+                    # review step can open the per-cell editor without re-running ffmpeg.
+                    try:
+                        preview_png = str(day_dir / "reel_preview.png")
+                        build_reel_preview(
+                            photo_paths=photos,
+                            output_path=preview_png,
+                            seed=seed,
+                            crop_offsets=crop_offsets,
+                        )
+                        day_result["reel_preview"] = preview_png
+                    except Exception as preview_err:
+                        print(f"[generate_media] thursday: preview skipped — {preview_err}", flush=True)
                     day_result["reel"] = reel_path
                     print(f"[generate_media] thursday: reel → {reel_path}", flush=True)
                 except Exception as e:
@@ -273,8 +409,24 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                     print(f"[generate_media] thursday: ERROR — {msg}", flush=True, file=sys.stderr)
                     errors["thursday"] = msg
             else:
-                print("[generate_media] thursday: reel skipped — ffmpeg not available", flush=True)
-                errors["thursday"] = "ffmpeg not available — install ffmpeg to generate Thursday reel"
+                if static_only:
+                    print("[generate_media] thursday: reel skipped (static-only preview), generating story", flush=True)
+                    try:
+                        story_path = str(day_dir / "story.png")
+                        generate_story(
+                            photo_path=photos[0],
+                            event_name=event,
+                            org=org,
+                            venue=venue,
+                            output_path=story_path,
+                            logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                        )
+                        day_result["story"] = story_path
+                    except Exception as e:
+                        errors["thursday"] = f"story fallback failed: {e}"
+                else:
+                    print("[generate_media] thursday: reel skipped — ffmpeg not available", flush=True)
+                    errors["thursday"] = "ffmpeg not available — install ffmpeg to generate Thursday reel"
 
         # ──────────────────────────────────────────────────────────────
         # Friday — before/after story (RAW + edited)
@@ -291,7 +443,10 @@ def generate_media(manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]
                         raw_path=raw,
                         edit_path=edit,
                         output_path=ba_path,
-                        logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                        event_name=event,
+                        org=org,
+                        venue=venue,
+                        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
                     )
                     day_result["before_after"] = ba_path
                     print(f"[generate_media] friday: before/after → {ba_path}", flush=True)
@@ -331,6 +486,19 @@ if __name__ == "__main__":
     parser.add_argument("--manifest", required=True, help="Path to manifest JSON")
     parser.add_argument("--output-dir", required=True, help="Root directory for generated assets")
     parser.add_argument("--output", required=True, help="Path to write output JSON")
+    parser.add_argument(
+        "--static-only",
+        action="store_true",
+        help="Skip video reel generation (Tuesday speed edit and Thursday scroll). "
+             "Use for fast preview generation before export.",
+    )
+    parser.add_argument(
+        "--only-days",
+        nargs="+",
+        metavar="DAY",
+        help="Regenerate only these days (e.g. --only-days sunday wednesday). "
+             "Other days are skipped entirely.",
+    )
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -342,7 +510,12 @@ if __name__ == "__main__":
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    result = generate_media(manifest_data, output_dir)
+    result = generate_media(
+        manifest_data,
+        output_dir,
+        static_only=args.static_only,
+        only_days=set(args.only_days) if args.only_days else None,
+    )
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)

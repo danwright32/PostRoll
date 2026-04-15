@@ -80,7 +80,8 @@ Event details:
 - Venue: {venue}
 - Date: {date}
 - Day of week posting: {day}
-- Shoot type: {shoot_type}  ← CRITICAL: match the caption to what Dan
+- Shoot type: {shoot_type}
+{event_url_line}  ← CRITICAL: match the caption to what Dan
   actually witnessed. If shoot_type is photo_call, do NOT mention
   applause, audience reactions, or performance moments that require
   an audience.
@@ -512,6 +513,7 @@ def generate_caption(
     name_mentions: list[str] | None = None,
     notes: str = "",
     existing_captions: list[str] | None = None,
+    event_url: str = "",
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
@@ -582,6 +584,11 @@ def generate_caption(
             f" — use these to write a more specific, voice-y caption):\n{notes.strip()}\n\n"
         ) if notes.strip() else ""
 
+        event_url_line = (
+            f"- Event page URL (additional context): {event_url}"
+            if event_url else ""
+        )
+
         # === Pass 1: generate the draft ===
         prompt = PROMPT_TEMPLATE.format(
             brand_voice=brand_voice_text,
@@ -591,6 +598,7 @@ def generate_caption(
             date=date,
             day=day,
             shoot_type=shoot_type,
+            event_url_line=event_url_line,
             post_type=post_type,
             post_type_framing=post_type_framing,
             scope_rule=scope_rule,

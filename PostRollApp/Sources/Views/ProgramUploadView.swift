@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import CoreGraphics
 import ImageIO
+import PDFKit
 
 struct ProgramUploadView: View {
     let event: Event
@@ -9,6 +10,12 @@ struct ProgramUploadView: View {
     @State private var isTargeted = false
     @State private var showingFilePicker = false
     @State private var isImporting = false
+    @State private var eventURL: String = ""
+
+    init(event: Event) {
+        self.event = event
+        _eventURL = State(initialValue: event.eventURL)
+    }
 
     var body: some View {
         ScrollView {
@@ -20,8 +27,32 @@ struct ProgramUploadView: View {
                 // Reminder banner — brand-toned, not generic orange
                 BrandBanner(
                     icon: "arrow.down.circle",
-                    message: "Download the program from your browser first. Salesforce ticketing sites block direct downloads."
+                    message: "Download the program from your browser first. Salesforce ticketing sites block direct downloads. For faster OCR, remove bio pages and ads — cast list and program pages only."
                 )
+
+                // Optional event page URL — used by caption + blog generators
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text("EVENT PAGE URL (OPTIONAL)")
+                        .font(.system(size: 10, weight: .medium))
+                        .tracking(1.2)
+                        .foregroundStyle(Color.roseGold)
+                    TextField("https://dciny.org/events/…", text: $eventURL)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.warmDark)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: Radius.xs)
+                                .fill(Color.creamDeep)
+                                .overlay(RoundedRectangle(cornerRadius: Radius.xs)
+                                    .strokeBorder(Color.creamEdge, lineWidth: 1))
+                        )
+                        .onChange(of: eventURL) { _, url in
+                            var ev = event
+                            ev.eventURL = url
+                            appState.updateEvent(ev)
+                        }
+                }
 
                 // Drop zone
                 ProgramDropZone(
@@ -35,9 +66,13 @@ struct ProgramUploadView: View {
                     handleDrop(providers)
                 }
 
-                if !event.programImagePaths.isEmpty && !isImporting {
-                    HStack {
-                        Spacer()
+                HStack {
+                    Button("No program") { skipProgram() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warmMid)
+                    Spacer()
+                    if !event.programImagePaths.isEmpty && !isImporting {
                         Button("Run OCR") { advanceToOCR() }
                             .buttonStyle(BrandButtonStyle())
                     }
@@ -104,41 +139,30 @@ struct ProgramUploadView: View {
     }
 
     /// Renders each PDF page to a 2× PNG in ~/Documents/PostRoll/programs/.
-    /// Uses CoreGraphics throughout — safe to call from a non-main-actor context.
+    /// Uses PDFKit so page orientation (including /Rotate metadata) is handled correctly.
     private nonisolated static func rasterisePDF(at url: URL) -> [URL] {
-        guard let doc = CGPDFDocument(url as CFURL), doc.numberOfPages > 0 else { return [] }
+        guard let doc = PDFDocument(url: url), doc.pageCount > 0 else { return [] }
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Documents/PostRoll/programs")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let stem = url.deletingPathExtension().lastPathComponent
         var results: [URL] = []
+        let scale = CGFloat(2)
 
-        for i in 1...doc.numberOfPages {
+        for i in 0..<doc.pageCount {
             guard let page = doc.page(at: i) else { continue }
-            let box   = page.getBoxRect(.mediaBox)
-            let scale = CGFloat(2)
-            let w     = Int(box.width  * scale)
-            let h     = Int(box.height * scale)
+            let bounds = page.bounds(for: .mediaBox)
+            let size   = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+            let image  = page.thumbnail(of: size, for: .mediaBox)
 
-            let cs   = CGColorSpaceCreateDeviceRGB()
-            let info = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
-            guard let ctx = CGContext(data: nil, width: w, height: h,
-                                      bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: cs, bitmapInfo: info.rawValue) else { continue }
+            guard let tiff      = image.tiffRepresentation,
+                  let bitmapRep = NSBitmapImageRep(data: tiff),
+                  let pngData   = bitmapRep.representation(using: .png, properties: [:])
+            else { continue }
 
-            // White background, then flip-and-scale so PDF draws right-side up
-            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-            ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-            ctx.translateBy(x: 0, y: CGFloat(h))
-            ctx.scaleBy(x: scale, y: -scale)
-            ctx.drawPDFPage(page)
-
-            guard let img = ctx.makeImage() else { continue }
-            let dest = dir.appendingPathComponent("\(stem)_p\(i).png")
-            if let dst = CGImageDestinationCreateWithURL(dest as CFURL, "public.png" as CFString, 1, nil) {
-                CGImageDestinationAddImage(dst, img, nil)
-                if CGImageDestinationFinalize(dst) { results.append(dest) }
-            }
+            let dest = dir.appendingPathComponent("\(stem)_p\(i + 1).png")
+            try? pngData.write(to: dest)
+            results.append(dest)
         }
         return results
     }
@@ -152,6 +176,14 @@ struct ProgramUploadView: View {
     private func advanceToOCR() {
         var ev = event
         ev.stage = .programUploaded
+        appState.updateEvent(ev)
+    }
+
+    private func skipProgram() {
+        var ev = event
+        ev.ocrResult = OCRResult()
+        ev.ocrReviewDone = true
+        ev.stage = .ocrDone
         appState.updateEvent(ev)
     }
 
@@ -172,12 +204,35 @@ struct ProgramUploadView: View {
 struct EventHeader: View {
     let event: Event
     let subtitle: String
+    @Environment(AppState.self) private var appState
+    @State private var isEditing = false
+    @State private var editName = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(event.name)
-                .font(.signPainter(28))
-                .foregroundStyle(Color.warmDark)
+            if isEditing {
+                TextField("Event name", text: $editName, onCommit: commitRename)
+                    .font(.signPainter(28))
+                    .foregroundStyle(Color.warmDark)
+                    .textFieldStyle(.plain)
+                    .onExitCommand { isEditing = false }
+            } else {
+                HStack(spacing: 6) {
+                    Text(event.name)
+                        .font(.signPainter(28))
+                        .foregroundStyle(Color.warmDark)
+                    Button {
+                        editName = event.name
+                        isEditing = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.warmMid.opacity(0.6))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Rename event")
+                }
+            }
             Text(subtitle.uppercased())
                 .font(.system(size: 10, weight: .medium))
                 .tracking(1.4)
@@ -185,6 +240,16 @@ struct EventHeader: View {
             RoseGoldDivider()
                 .padding(.top, 6)
         }
+    }
+
+    private func commitRename() {
+        let trimmed = editName.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty {
+            var ev = event
+            ev.name = trimmed
+            appState.updateEvent(ev)
+        }
+        isEditing = false
     }
 }
 
