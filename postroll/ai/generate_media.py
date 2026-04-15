@@ -58,6 +58,7 @@ import json
 import random
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -150,6 +151,7 @@ def generate_media(
     *,
     static_only: bool = False,
     only_days: set[str] | None = None,
+    final_export: bool = False,
 ) -> dict[str, Any]:
     """Generate all visual assets for one event week.
 
@@ -161,6 +163,11 @@ def generate_media(
             raw/edited photos are available, or falls back to a story template.
             Thursday generates a story template from its first photo. Use this
             for fast preview generation before export.
+        final_export: When True, suppress caption-review editor sidecars —
+            Wednesday's collage_layout.json, Thursday's reel_preview.png +
+            reel_preview_layout.json — and write Tuesday's before/after PNG
+            to a temp path (still needed as the reel's closing frame) so it
+            doesn't end up in the final export folder.
 
     Returns a dict mapping day names → generated file paths, plus an
     'errors' dict for any days that failed.
@@ -229,9 +236,20 @@ def generate_media(
 
             reel_style = day_info.get("reel_style") or random.choice(["slider", "morph"])
 
-            # Also generate the standalone before/after PNG (story cover) whenever
-            # raw + edited are available — used for Instagram/Facebook stories.
-            ba_path = str(day_dir / "before_after.png")
+            # Also generate the standalone before/after PNG. Serves two roles:
+            #   1. Closing frame for the slider/morph reel (always needed on disk).
+            #   2. Standalone story cover in the final export folder.
+            # On final export we only need (1), so write to a temp path that
+            # gets cleaned up at the end of this branch.
+            tuesday_ba_tempfile: tempfile._TemporaryFileWrapper | None = None
+            if final_export:
+                tuesday_ba_tempfile = tempfile.NamedTemporaryFile(
+                    suffix="_tuesday_before_after.png", delete=False,
+                )
+                tuesday_ba_tempfile.close()
+                ba_path = tuesday_ba_tempfile.name
+            else:
+                ba_path = str(day_dir / "before_after.png")
             if raw and edit:
                 try:
                     generate_before_after(
@@ -243,7 +261,8 @@ def generate_media(
                         venue=venue,
                         logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
                     )
-                    day_result["story_cover"] = ba_path
+                    if not final_export:
+                        day_result["story_cover"] = ba_path
                     print(f"[generate_media] tuesday: before/after → {ba_path}", flush=True)
                 except Exception as e:
                     print(f"[generate_media] tuesday: before/after failed (non-fatal): {e}", flush=True, file=sys.stderr)
@@ -333,6 +352,14 @@ def generate_media(
                 except Exception as e:
                     errors["tuesday"] = f"story fallback failed: {e}"
 
+            # Clean up the temp before/after PNG (used only as the reel's
+            # closing frame during final export).
+            if tuesday_ba_tempfile is not None:
+                try:
+                    Path(tuesday_ba_tempfile.name).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
         # ──────────────────────────────────────────────────────────────
         # Wednesday — masonry collage (the collage IS the story)
         # ──────────────────────────────────────────────────────────────
@@ -360,6 +387,7 @@ def generate_media(
                         seed=seed,
                         crop_offsets=crop_offsets,
                         cell_layout=cell_layout,
+                        write_layout_sidecar=not final_export,
                     )
                     day_result["collage"] = collage_path
                     print(f"[generate_media] wednesday: collage → {collage_path}", flush=True)
@@ -400,19 +428,22 @@ def generate_media(
                         seed=seed,
                         crop_offsets=crop_offsets,
                     )
-                    # Also write a fast preview PNG + layout sidecar so the caption
-                    # review step can open the per-cell editor without re-running ffmpeg.
-                    try:
-                        preview_png = str(day_dir / "reel_preview.png")
-                        build_reel_preview(
-                            photo_paths=photos,
-                            output_path=preview_png,
-                            seed=seed,
-                            crop_offsets=crop_offsets,
-                        )
-                        day_result["reel_preview"] = preview_png
-                    except Exception as preview_err:
-                        print(f"[generate_media] thursday: preview skipped — {preview_err}", flush=True)
+                    # Also write a fast preview PNG + layout sidecar so the
+                    # caption-review step can open the per-cell editor without
+                    # re-running ffmpeg. Skipped on final export — these are
+                    # review-only artifacts.
+                    if not final_export:
+                        try:
+                            preview_png = str(day_dir / "reel_preview.png")
+                            build_reel_preview(
+                                photo_paths=photos,
+                                output_path=preview_png,
+                                seed=seed,
+                                crop_offsets=crop_offsets,
+                            )
+                            day_result["reel_preview"] = preview_png
+                        except Exception as preview_err:
+                            print(f"[generate_media] thursday: preview skipped — {preview_err}", flush=True)
                     day_result["reel"] = reel_path
                     print(f"[generate_media] thursday: reel → {reel_path}", flush=True)
                 except Exception as e:
@@ -510,6 +541,14 @@ if __name__ == "__main__":
         help="Regenerate only these days (e.g. --only-days sunday wednesday). "
              "Other days are skipped entirely.",
     )
+    parser.add_argument(
+        "--final-export",
+        action="store_true",
+        help="Suppress caption-review editor sidecars (collage_layout.json, "
+             "reel_preview.png, reel_preview_layout.json) and write Tuesday's "
+             "before/after PNG to a temp path. Use when generating into the "
+             "user's final export folder.",
+    )
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -526,6 +565,7 @@ if __name__ == "__main__":
         output_dir,
         static_only=args.static_only,
         only_days=set(args.only_days) if args.only_days else None,
+        final_export=args.final_export,
     )
 
     output_path = Path(args.output)

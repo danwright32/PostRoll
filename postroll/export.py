@@ -175,6 +175,8 @@ def _export_tuesday(day: TuesdayData, day_dir: Path) -> None:
     shutil.copy2(day.reel, day_dir / f"reel{day.reel.suffix}")
     shutil.copy2(day.story_cover, day_dir / f"story_cover{day.story_cover.suffix}")
     (day_dir / "caption.txt").write_text(_format_caption(day.caption), encoding="utf-8")
+    alt_texts = day.caption.get("alt_texts") or []
+    (day_dir / "alt_text.txt").write_text(alt_texts[0] if alt_texts else "", encoding="utf-8")
 
 
 def _export_wednesday(day: WednesdayData, day_dir: Path) -> None:
@@ -194,6 +196,8 @@ def _export_thursday(day: ThursdayData, day_dir: Path) -> None:
     day_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(day.reel, day_dir / f"reel{day.reel.suffix}")
     (day_dir / "caption.txt").write_text(_format_caption(day.caption), encoding="utf-8")
+    alt_texts = day.caption.get("alt_texts") or []
+    (day_dir / "alt_text.txt").write_text(alt_texts[0] if alt_texts else "", encoding="utf-8")
 
 
 def _export_friday(day: FridayData, day_dir: Path) -> None:

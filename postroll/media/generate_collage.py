@@ -413,6 +413,7 @@ def generate_collage(
     seed: int | None = None,
     crop_offsets: list[tuple[float, float, float]] | None = None,
     cell_layout: list[dict] | None = None,
+    write_layout_sidecar: bool = True,
 ) -> str:
     """Generate a masonry collage with branded center strip.
 
@@ -495,10 +496,13 @@ def generate_collage(
     canvas_rgb = canvas.convert("RGB") if canvas.mode != "RGB" else canvas
     canvas_rgb.save(str(output), "PNG", quality=95)
 
-    # Save layout sidecar — used by the app to overlay crop controls on the collage
-    layout_path = output.parent / (output.stem + "_layout.json")
-    with open(layout_path, "w") as lf:
-        json.dump(cells, lf)
+    # Save layout sidecar — used by the caption-review editor to overlay
+    # crop controls. Suppressed on final export since nothing in the
+    # export folder consumes it.
+    if write_layout_sidecar:
+        layout_path = output.parent / (output.stem + "_layout.json")
+        with open(layout_path, "w") as lf:
+            json.dump(cells, lf)
 
     print(f"Collage generated: {output} ({CANVAS_W}x{CANVAS_H}, {mode_desc})")
     return str(output)

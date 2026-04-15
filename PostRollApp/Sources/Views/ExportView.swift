@@ -9,6 +9,7 @@ struct ExportView: View {
     @State private var exportedFolder: URL? = nil   // set after text export so media gen can use it
     @State private var lastExportFolder: URL? = nil
     @State private var mediaGenerationError: String? = nil
+    @State private var pendingSingleDay: DayName? = nil
 
     enum ExportState {
         case ready
@@ -57,7 +58,11 @@ struct ExportView: View {
             allowsMultipleSelection: false
         ) { result in
             if case .success(let urls) = result, let dest = urls.first {
-                runExport(to: dest)
+                let scopedDay = pendingSingleDay
+                pendingSingleDay = nil
+                runExport(to: dest, onlyDay: scopedDay)
+            } else {
+                pendingSingleDay = nil
             }
         }
     }
@@ -80,8 +85,15 @@ struct ExportView: View {
             )
             .padding(.horizontal, Spacing.xl)
 
-            ExportSummaryCard(event: event, result: result)
-                .padding(.horizontal, Spacing.xl)
+            ExportSummaryCard(event: event, result: result) { day in
+                if let dest = lastExportFolder {
+                    runExport(to: dest, onlyDay: day)
+                } else {
+                    pendingSingleDay = day
+                    showingFolderPicker = true
+                }
+            }
+            .padding(.horizontal, Spacing.xl)
 
             VStack(alignment: .trailing, spacing: Spacing.sm) {
                 if let last = lastExportFolder {
@@ -217,7 +229,7 @@ struct ExportView: View {
 
     // MARK: - Export logic
 
-    private func runExport(to destinationRoot: URL) {
+    private func runExport(to destinationRoot: URL, onlyDay: DayName? = nil) {
         guard destinationRoot.startAccessingSecurityScopedResource() else {
             exportState = .failed("Could not access the selected folder.")
             return
@@ -227,12 +239,19 @@ struct ExportView: View {
         lastExportFolder = destinationRoot
         exportState = .exportingText
 
+        let scopedDays: Set<DayName>? = onlyDay.map { [$0] }
+        let mediaDays: [String]? = onlyDay.map { [$0.rawValue] }
+
         Task {
             do {
                 // Step 1: text export (fast, on background thread)
                 let folder = try await Task.detached {
                     defer { destinationRoot.stopAccessingSecurityScopedResource() }
-                    return try EventExporter.export(event: self.event, to: destinationRoot)
+                    return try EventExporter.export(
+                        event: self.event,
+                        to: destinationRoot,
+                        days: scopedDays
+                    )
                 }.value
 
                 // Step 2: generate stories + collage via Python
@@ -240,7 +259,8 @@ struct ExportView: View {
                 do {
                     let imagePaths = try await PythonBridge.shared.runMediaGeneration(
                         event: event,
-                        outputDir: folder.deletingLastPathComponent()
+                        outputDir: folder.deletingLastPathComponent(),
+                        days: mediaDays
                     )
 
                     // Overwrite freshly-generated static PNGs with the exact approved
@@ -304,6 +324,7 @@ struct ExportView: View {
 private struct ExportSummaryCard: View {
     let event: Event
     let result: WeekGenerationResult?
+    let onExportDay: (DayName) -> Void
 
     private var daysWithContent: [DayName] {
         DayName.allCases.filter { day in
@@ -319,7 +340,9 @@ private struct ExportSummaryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             ForEach(daysWithContent, id: \.self) { day in
-                ExportDayRow(day: day, caption: result?[day])
+                ExportDayRow(day: day, caption: result?[day]) {
+                    onExportDay(day)
+                }
             }
             if result?.blog != nil {
                 Divider().background(Color.creamEdge)
@@ -339,6 +362,7 @@ private struct ExportSummaryCard: View {
 private struct ExportDayRow: View {
     let day: DayName
     let caption: DayCaption?
+    let onExportJustThisDay: () -> Void
 
     private var summary: String {
         if day == .friday { return "Before / after story" }
@@ -360,6 +384,11 @@ private struct ExportDayRow: View {
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
                 .lineLimit(1)
+            Spacer(minLength: Spacing.sm)
+            Button("Export just this day", action: onExportJustThisDay)
+                .buttonStyle(.plain)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.roseGold)
         }
     }
 }
@@ -388,42 +417,32 @@ private struct ExportBlogRow: View {
 // MARK: - EventExporter
 
 struct EventExporter {
-    static func export(event: Event, to root: URL) throws -> URL {
+    /// Export one event. Pass `days = nil` (the default) to export the whole week;
+    /// pass a specific set to export only those days — in which case the master
+    /// CAPTIONS.txt / CHECKLIST.md and Blog are left untouched so they keep
+    /// reflecting the last full export.
+    static func export(event: Event, to root: URL, days: Set<DayName>? = nil) throws -> URL {
         let folderName = "\(slug(event.org))_\(slug(event.name))_\(event.isoDate)"
         let folder = root.appendingPathComponent(folderName)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         let result = event.weekResult
+        let isFullExport = (days == nil)
 
-        // Per-day folders
+        // Per-day folders — only Wednesday's carousel photos are copied
+        // directly by Swift (in the user's assigned order). All other day
+        // artifacts — story.png, reels, collage, before/after — come from
+        // the Python media generator. Per-day caption.txt / alt_text.txt
+        // files are no longer written; the master CAPTIONS.txt at the root
+        // is the single source of truth for caption + alt text.
         for day in DayName.allCases {
-            guard let caption = result?[day] else { continue }
+            if let days, !days.contains(day) { continue }
+            guard result?[day] != nil else { continue }
             let dayDir = folder.appendingPathComponent(day.folderName)
             try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
 
-            // caption.txt
-            let captionText = caption.formatted
-            try captionText.write(to: dayDir.appendingPathComponent("caption.txt"),
-                                  atomically: true, encoding: .utf8)
-
-            // alt_texts.txt
-            if !caption.altTexts.isEmpty {
-                let altBody = caption.altTexts.enumerated()
-                    .map { "Photo \($0.offset + 1): \($0.element)" }
-                    .joined(separator: "\n")
-                try altBody.write(to: dayDir.appendingPathComponent("alt_texts.txt"),
-                                  atomically: true, encoding: .utf8)
-            }
-
-            // Copy photos — day-specific rules:
-            // • Tuesday/Thursday: reel is the deliverable; source photos not copied.
-            // • Wednesday: photos go in a carousel/ subfolder (10 for the carousel post).
-            // • All other days: copy all assigned photos flat.
-            let photos = event.days[day.rawValue]?.photoPaths ?? []
-            switch day {
-            case .tuesday, .thursday:
-                break  // reel handles these days; no need to copy source photos
-            case .wednesday:
+            if day == .wednesday {
+                let photos = event.days[day.rawValue]?.photoPaths ?? []
                 if !photos.isEmpty {
                     let carouselDir = dayDir.appendingPathComponent("carousel")
                     try? FileManager.default.createDirectory(at: carouselDir, withIntermediateDirectories: true)
@@ -433,39 +452,31 @@ struct EventExporter {
                         try? FileManager.default.copyItem(at: photo, to: dest)
                     }
                 }
-            default:
-                for (i, photo) in photos.enumerated() {
+            }
+        }
+
+        // Blog draft and master CAPTIONS.txt are only written on a full
+        // export. Single-day exports leave them untouched so they keep
+        // reflecting the last full export.
+        if isFullExport {
+            if let blog = result?.blog {
+                let blogDir = folder.appendingPathComponent("0. Blog")
+                try FileManager.default.createDirectory(at: blogDir, withIntermediateDirectories: true)
+                let md = "# \(blog.title)\n\n\(blog.body)\n"
+                try md.write(to: blogDir.appendingPathComponent("draft.md"),
+                             atomically: true, encoding: .utf8)
+
+                for (i, photo) in event.blogPhotoPaths.enumerated() {
                     let ext = photo.pathExtension
-                    let dest = dayDir.appendingPathComponent("photo_\(String(format: "%02d", i + 1)).\(ext)")
+                    let dest = blogDir.appendingPathComponent("photo_\(String(format: "%02d", i + 1)).\(ext)")
                     try? FileManager.default.copyItem(at: photo, to: dest)
                 }
             }
+
+            let masterCaptions = masterCaptionText(event: event, result: result)
+            try masterCaptions.write(to: folder.appendingPathComponent("CAPTIONS.txt"),
+                                      atomically: true, encoding: .utf8)
         }
-
-        // Blog draft
-        if let blog = result?.blog {
-            let blogDir = folder.appendingPathComponent("0. Blog")
-            try FileManager.default.createDirectory(at: blogDir, withIntermediateDirectories: true)
-            let md = "# \(blog.title)\n\n\(blog.body)\n"
-            try md.write(to: blogDir.appendingPathComponent("draft.md"),
-                         atomically: true, encoding: .utf8)
-
-            for (i, photo) in event.blogPhotoPaths.enumerated() {
-                let ext = photo.pathExtension
-                let dest = blogDir.appendingPathComponent("photo_\(String(format: "%02d", i + 1)).\(ext)")
-                try? FileManager.default.copyItem(at: photo, to: dest)
-            }
-        }
-
-        // Master CAPTIONS.txt
-        let masterCaptions = masterCaptionText(event: event, result: result)
-        try masterCaptions.write(to: folder.appendingPathComponent("CAPTIONS.txt"),
-                                  atomically: true, encoding: .utf8)
-
-        // CHECKLIST.md
-        let checklist = checklistText(event: event)
-        try checklist.write(to: folder.appendingPathComponent("CHECKLIST.md"),
-                             atomically: true, encoding: .utf8)
 
         return folder
     }
@@ -476,92 +487,21 @@ struct EventExporter {
         var sections: [String] = []
         for day in DayName.allCases {
             guard let cap = result?[day] else { continue }
-            sections.append("=== \(day.displayName.uppercased()) ===\n\(cap.formatted)")
+            var block = "=== \(day.displayName.uppercased()) ===\n\(cap.formatted)"
+            if !cap.altTexts.isEmpty {
+                let altBody: String
+                if day == .wednesday {
+                    altBody = cap.altTexts.enumerated()
+                        .map { "Photo \($0.offset + 1): \($0.element)" }
+                        .joined(separator: "\n")
+                } else {
+                    altBody = cap.altTexts[0]
+                }
+                block += "\n\nALT TEXT:\n\(altBody)"
+            }
+            sections.append(block)
         }
         return sections.joined(separator: "\n\n") + "\n"
-    }
-
-    private static func checklistText(event: Event) -> String {
-        let performers = event.ocrResult?.performers ?? []
-        let fallbackCollabs = performers.compactMap { $0.name.isEmpty ? nil : $0.name }.joined(separator: ", ")
-        let fallbackCollabLine = fallbackCollabs.isEmpty ? "(no performers listed)" : fallbackCollabs
-
-        var lines: [String] = [
-            "# PostRoll: \(event.name) (\(event.isoDate))",
-            "",
-        ]
-
-        for day in DayName.allCases {
-            let pd = event.days[day.rawValue]
-            guard !(pd?.photoPaths.isEmpty ?? true) else { continue }
-
-            // Prefer day-specific handles + names; fall back to OCR performers
-            let handles = pd?.tagHandles ?? []
-            let names   = pd?.nameMentions ?? []
-            let collabParts = handles + names
-            let collabLine = collabParts.isEmpty ? fallbackCollabLine : collabParts.joined(separator: ", ")
-
-            lines += ["### \(day.displayName)", ""]
-
-            switch day {
-            case .sunday, .monday:
-                lines += [
-                    "- [ ] Post photo + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
-                    "- [ ] Add as Instagram collaborators: \(collabLine)",
-                    "- [ ] Post \(day.folderName)/story.png as story to Instagram + Facebook",
-                    "- [ ] Tag story with performer and venue accounts",
-                ]
-            case .tuesday:
-                let hasReel = pd?.screenRecordingPath != nil
-                    && pd?.rawPhotoPath != nil
-                    && pd?.editedPhotoPath != nil
-                if hasReel {
-                    lines += [
-                        "- [ ] Post speed edit reel + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
-                        "- [ ] Add as Instagram collaborators: \(collabLine)",
-                        "- [ ] Post \(day.folderName)/before_after.png as story to Instagram + Facebook",
-                        "- [ ] Tag story with performer and venue accounts",
-                    ]
-                } else {
-                    lines += [
-                        "- [ ] Post photo + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
-                        "- [ ] Add as Instagram collaborators: \(collabLine)",
-                        "- [ ] Post \(day.folderName)/story.png as story to Instagram + Facebook",
-                        "- [ ] Tag story with performer and venue accounts",
-                    ]
-                }
-            case .wednesday:
-                lines += [
-                    "- [ ] Post carousel (10 photos) + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
-                    "- [ ] Add as Instagram collaborators: \(collabLine)",
-                    "- [ ] Post \(day.folderName)/collage.png as story to Instagram + Facebook",
-                    "- [ ] Tag story with performer and venue accounts",
-                ]
-            case .thursday:
-                lines += [
-                    "- [ ] Post scroll reel + caption to Instagram, Facebook, TikTok, Pinterest, Bluesky",
-                    "- [ ] Add as Instagram collaborators: \(collabLine)",
-                ]
-            case .friday:
-                let hasBeforeAfter = pd?.rawPhotoPath != nil && pd?.editedPhotoPath != nil
-                lines += [
-                    "- [ ] Post \(day.folderName)/\(hasBeforeAfter ? "before_after" : "story").png as story to Instagram + Facebook",
-                    "- [ ] Save story to Instagram highlights",
-                ]
-            }
-
-            lines += [""]
-        }
-
-        lines += [
-            "## Post-Week",
-            "",
-            "- [ ] Add Instagram post link to OmniFocus one-year follow-up",
-            "- [ ] Promote Tuesday reel to followers",
-            "",
-        ]
-
-        return lines.joined(separator: "\n")
     }
 
     // MARK: - Slug

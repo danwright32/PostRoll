@@ -114,35 +114,34 @@ handles — appear as plain text in the caption, NOT as #-tags):
 
 You will work in four explicit ordered stages. Do them IN ORDER.
 
-**Stage 1 — alt text per photo.** Read each photo carefully and write
-a rich, specific alt-text description of what's actually visible in
-that photo: who, what, where, lighting, gestures, set design, props.
-15–35 words per photo. No constraints on style; describe what's
-there. Put each photo's alt text into the `alt_texts` list IN THE
-SAME ORDER as the photos listed above.
+**Stage 1 — alt text.** {alt_text_instruction}
 
-**Stage 2 — scene match per photo.** For each photo, use the structured
-scenes list above to decide which scene/section it shows. Match by
-comparing the alt text against each scene's `visual_cues`. Be DECISIVE
-— if the visual evidence points clearly to one scene, pick it.
+**Stage 2 — scene match.** For EACH entry you just wrote in
+`alt_texts` (so one total for most post types, one per photo only for
+carousels), use the structured scenes list above to decide which
+scene/section it shows. Match by comparing the alt text against each
+scene's `visual_cues`. Be DECISIVE — if the visual evidence points
+clearly to one scene, pick it.
 
-For each photo, write a short phrase like "[Scene name]" or null if
-no scene from the list matches. Put each photo's label into the
-`scene_labels` list IN THE SAME ORDER as the photos.
+Write a short phrase like "[Scene name]" or null if no scene from the
+list matches. Put the labels into `scene_labels` IN THE SAME ORDER
+and at the SAME LENGTH as `alt_texts`.
 
 **Stage 3 — unified caption.** Now write ONE caption for the whole
 post. You are NOT allowed to look back at the photos for this stage —
 work from the alt texts, the scene labels, and the event metadata.
 
-How to write it depends on the scene labels from stage 2:
+How to write it depends on `scene_labels`:
 
-- If ALL photos share ONE scene label, lead the caption with (or weave
-  in) that scene as the differentiating context.
-- If photos span MULTIPLE scenes (e.g. a carousel showing several
-  parts of the show), DO NOT pick one — write a more general
-  caption about the event/show as a whole. Don't try to mention every
-  scene; pick a unifying frame ("highlights from", "selected
-  moments from", "scenes from", etc.) and stay general.
+- If `scene_labels` has ONE entry (single-subject posts, scroll reels,
+  or a carousel where every photo matched the same scene): use that
+  label as the differentiating context when it is non-null, or fall
+  back to a generic event-level frame when it is null.
+- If `scene_labels` has MULTIPLE entries that span different scenes
+  (carousels with mixed scenes), DO NOT pick one — write a more
+  general caption about the event/show as a whole. Don't try to
+  mention every scene; pick a unifying frame ("highlights from",
+  "selected moments from", "scenes from", etc.) and stay general.
 - If there are NO scene labels (scenes list was empty or no matches),
   fall back to a generic event-level caption.
 
@@ -198,11 +197,13 @@ org/show, composer/playwright/band, performers visible, genre. Plus
 one #-tag per @ handle in tag_handles (so they're searchable too).
 
 Return JSON ONLY in this exact shape (no markdown fences, no
-commentary):
+commentary). `alt_texts` and `scene_labels` are arrays but their
+length follows Stage 1: one entry for most post types, one entry
+per photo only for carousels.
 
 {{
-  "alt_texts": ["<photo 1 alt text>", "<photo 2 alt text>", ...],
-  "scene_labels": ["<photo 1 scene>", "<photo 2 scene>", ...],
+  "alt_texts": ["<stage 1 output>", ...],
+  "scene_labels": ["<stage 2 output>", ...],
   "caption": "<stage 3 output, including @ mentions>",
   "hashtags": ["#dwphotony", ...]
 }}
@@ -498,6 +499,57 @@ POST_TYPE_FRAMING = {
 }
 
 
+# Per-post-type Stage 1 (alt text) instructions. Wed carousels get one
+# alt per photo; everything else gets ONE alt text in the list.
+# Instagram only attaches one alt text to a single feed post, story,
+# or reel — per-photo alt texts on scroll reels never get used.
+ALT_TEXT_INSTRUCTION = {
+    "carousel": (
+        "Write ONE alt text per photo in the `alt_texts` list — 15-35 "
+        "words each — IN THE SAME ORDER as the photos listed above. "
+        "Describe what is actually visible in each frame: who, what, "
+        "where, lighting, gestures, set design, props."
+    ),
+    "scroll_reel": (
+        "Write ONE alt text for the reel AS A WHOLE and put it as a "
+        "SINGLE entry in the `alt_texts` list. Describe the overall "
+        "arc — what the reel shows across its photos collectively "
+        "(themes, sections, who appears, the room) — NOT per-frame "
+        "detail. 25-50 words. Instagram attaches one alt text to the "
+        "reel, not per source frame."
+    ),
+    "slider_reel": (
+        "These photos are the before (RAW) and after (edited) versions "
+        "of the SAME single moment. Write ONE alt text describing that "
+        "one moment and put it as a SINGLE entry in `alt_texts`. 15-35 "
+        "words. Do not write one per file."
+    ),
+}
+ALT_TEXT_INSTRUCTION["morph_reel"]  = ALT_TEXT_INSTRUCTION["slider_reel"]
+ALT_TEXT_INSTRUCTION["screen_reel"] = ALT_TEXT_INSTRUCTION["slider_reel"]
+
+DEFAULT_ALT_TEXT_INSTRUCTION = (
+    "Write ONE alt text for the photo and put it as a SINGLE entry in "
+    "the `alt_texts` list. 15-35 words. Describe what is actually "
+    "visible: who, what, where, lighting, gestures, set design, props."
+)
+
+# Post types where alt_texts should collapse to one entry.
+SINGLE_ALT_POST_TYPES = {
+    "feed_photo",
+    "slider_reel",
+    "morph_reel",
+    "screen_reel",
+    "before_after_story",
+    "performance",
+    "scroll_reel",
+}
+
+
+def _alt_text_instruction_for(post_type: str) -> str:
+    return ALT_TEXT_INSTRUCTION.get(post_type, DEFAULT_ALT_TEXT_INSTRUCTION)
+
+
 def generate_caption(
     *,
     event: str,
@@ -610,6 +662,7 @@ def generate_caption(
             post_type=post_type,
             post_type_framing=post_type_framing,
             scope_rule=scope_rule,
+            alt_text_instruction=_alt_text_instruction_for(post_type),
             performers=_format_performers(program.get("performers", [])),
             pieces=_format_pieces(program.get("pieces", [])),
             scenes=_format_scenes(program.get("scenes", [])),
@@ -674,13 +727,19 @@ def generate_caption(
                     f"Humanizer pass returned {type(data).__name__}, expected JSON object"
                 )
 
-    # Normalize alt_texts and scene_labels to lists matching photo_count
+    # Normalize alt_texts and scene_labels. For single-alt post types,
+    # collapse to the first entry defensively in case Claude wrote one
+    # per photo anyway.
     alt_texts = data.get("alt_texts") or []
     scene_labels = data.get("scene_labels") or []
     if not isinstance(alt_texts, list):
         alt_texts = [str(alt_texts)]
     if not isinstance(scene_labels, list):
         scene_labels = [scene_labels]
+
+    if post_type in SINGLE_ALT_POST_TYPES:
+        alt_texts = alt_texts[:1]
+        scene_labels = scene_labels[:1]
 
     return {
         "caption": data.get("caption", "").strip(),
@@ -742,14 +801,18 @@ Posts in this week ({post_count} total):
 You will work in FOUR explicit ordered stages for EACH post, then
 return all results as one JSON array. Do them IN ORDER per post.
 
-**Stage 1 — alt texts per photo.** For each post, read each photo
-carefully and write a rich, specific alt-text description. 15–35
-words per photo. Put each post's alt texts into its `alt_texts` list
-IN THE SAME ORDER as the photos listed for that post.
+**Stage 1 — alt text.** For each post, follow the "Alt text
+instruction" listed for THAT post in the block above. Most post
+types take ONE alt text total (the whole reel or the whole feed
+photo); carousels take ONE alt text per photo. Put the result(s)
+into that post's `alt_texts` list.
 
-**Stage 2 — scene match per photo.** For each photo, use the
-structured scenes list above to decide which scene it shows. Be
-decisive — if the visual evidence points clearly, pick it.
+**Stage 2 — scene match.** For EACH entry in each post's `alt_texts`
+(so one total for most post types, one per photo only for carousels),
+use the structured scenes list above to decide which scene it shows.
+Be decisive — if the visual evidence points clearly, pick it. Put
+the labels into `scene_labels` at the SAME LENGTH and ORDER as
+`alt_texts`.
 
 **Stage 3 — unified caption per post.** For each post, write ONE
 caption following the brand voice rules, the post-type-specific
@@ -790,15 +853,16 @@ venue, org/show, composer/playwright/band, performers, genre. Plus
 one #-tag per @ handle in that post's tag_handles.
 
 Return JSON ONLY in this exact shape (no markdown fences, no
-commentary):
+commentary). `alt_texts` and `scene_labels` per post follow Stage 1:
+one entry for most post types, one entry per photo only for carousels.
 
 {{
   "posts": [
     {{
       "day": "<the day key from the input, e.g. 'sunday'>",
       "post_type": "<the post_type from the input>",
-      "alt_texts": ["<photo 1 alt>", "<photo 2 alt>", ...],
-      "scene_labels": ["<scene 1>", "<scene 2>", ...],
+      "alt_texts": ["<stage 1 output>", ...],
+      "scene_labels": ["<stage 2 output>", ...],
       "caption": "<stage 3 output, including @ mentions and plain names>",
       "hashtags": ["#dwphotony", ...]
     }},
@@ -833,6 +897,7 @@ def _format_week_posts(posts: list[dict[str, Any]]) -> str:
         lines.append(f"### Post {i}: {day.upper()} ({post_type})")
         lines.append(f"Scope: {scope_kind}")
         lines.append(f"Framing: {framing}")
+        lines.append(f"Alt text instruction: {_alt_text_instruction_for(post_type)}")
         lines.append(f"Required @ handles: {', '.join(tag_handles) if tag_handles else '(none)'}")
         lines.append(
             f"Required plain-name credits: {', '.join(name_mentions) if name_mentions else '(none)'}"
@@ -990,7 +1055,9 @@ def generate_week_captions(
                     f"Humanizer pass returned {type(data).__name__}, expected object with 'posts'"
                 )
 
-    # Normalize each result
+    # Normalize each result. For single-alt post types, collapse
+    # alt_texts/scene_labels to the first entry defensively in case
+    # Claude ignored the Stage 1 instruction.
     results: list[dict[str, Any]] = []
     for post_data in data.get("posts", []):
         if not isinstance(post_data, dict):
@@ -1001,10 +1068,14 @@ def generate_week_captions(
             alt_texts = [str(alt_texts)]
         if not isinstance(scene_labels, list):
             scene_labels = [scene_labels]
+        post_type_out = post_data.get("post_type", "")
+        if post_type_out in SINGLE_ALT_POST_TYPES:
+            alt_texts = alt_texts[:1]
+            scene_labels = scene_labels[:1]
         results.append(
             {
                 "day": post_data.get("day", ""),
-                "post_type": post_data.get("post_type", ""),
+                "post_type": post_type_out,
                 "caption": post_data.get("caption", "").strip(),
                 "hashtags": post_data.get("hashtags", []),
                 "alt_texts": [str(a).strip() for a in alt_texts],

@@ -151,8 +151,10 @@ actor PythonBridge {
 
     /// Generates story images for each day and a masonry collage for Wednesday.
     /// Throws on Python error; individual day failures are logged but non-fatal.
+    /// Pass `days = nil` (the default) to render the whole week or a specific
+    /// set to scope generation to just those days.
     /// Returns URLs of all static images (PNG) that were successfully written.
-    func runMediaGeneration(event: Event, outputDir: URL) async throws -> [URL] {
+    func runMediaGeneration(event: Event, outputDir: URL, days: [String]? = nil) async throws -> [URL] {
         let tmp = FileManager.default.temporaryDirectory
         let manifestFile = tmp.appendingPathComponent("postroll_media_manifest_\(UUID().uuidString).json")
         let outputFile   = tmp.appendingPathComponent("postroll_media_\(UUID().uuidString).json")
@@ -167,12 +169,16 @@ actor PythonBridge {
         )
         try manifestData.write(to: manifestFile)
 
-        let args = [
+        var args = [
             "-m", "postroll.ai.generate_media",
             "--manifest",   manifestFile.path,
             "--output-dir", outputDir.path,
             "--output",     outputFile.path,
+            "--final-export",
         ]
+        if let days, !days.isEmpty {
+            args += ["--only-days"] + days
+        }
         try await runProcess(args: args)
 
         guard FileManager.default.fileExists(atPath: outputFile.path) else {

@@ -177,6 +177,7 @@ def test_single_day_alt_text_txt(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
     text = (out / "1. Sunday" / "alt_text.txt").read_text()
     assert "Soprano soloist" in text
+    assert "Photo 1:" not in text
 
 
 # ===================================================================
@@ -194,9 +195,11 @@ def test_tuesday_story_cover_copied(week_data, tmp_path):
     assert (out / "3. Tuesday" / "story_cover.png").exists()
 
 
-def test_tuesday_has_no_alt_text(week_data, tmp_path):
+def test_tuesday_alt_text_raw(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert not (out / "3. Tuesday" / "alt_text.txt").exists()
+    text = (out / "3. Tuesday" / "alt_text.txt").read_text()
+    assert text == "Soprano soloist at center stage, arms raised."
+    assert "Photo 1:" not in text
 
 
 # ===================================================================
@@ -227,9 +230,11 @@ def test_thursday_reel_copied(week_data, tmp_path):
     assert (out / "5. Thursday" / "reel.mp4").exists()
 
 
-def test_thursday_has_no_alt_text(week_data, tmp_path):
+def test_thursday_alt_text_raw(week_data, tmp_path):
     out = export_week(week_data, tmp_path)
-    assert not (out / "5. Thursday" / "alt_text.txt").exists()
+    text = (out / "5. Thursday" / "alt_text.txt").read_text()
+    assert text == "Soprano soloist at center stage, arms raised."
+    assert "Photo 1:" not in text
 
 
 # ===================================================================
