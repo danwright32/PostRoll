@@ -81,7 +81,7 @@ def test_caption_runs_humanizer_review_when_available(sample_photo, tmp_path):
 
     calls: list[str] = []
 
-    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None):
+    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None):
         calls.append(prompt)
         if len(calls) == 1:
             # Pass 1: draft with AI tells
@@ -144,7 +144,7 @@ def test_caption_skips_humanizer_when_skip_flag_set(sample_photo, tmp_path):
 
     calls: list[str] = []
 
-    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None):
+    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None):
         calls.append(prompt)
         return {"alt_texts": ["alt"], "scene_labels": [None], "caption": "x", "hashtags": []}
 
@@ -174,7 +174,7 @@ def test_caption_skips_humanizer_when_not_installed(sample_photo, tmp_path):
 
     calls: list[str] = []
 
-    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None):
+    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None):
         calls.append(prompt)
         return {"alt_texts": ["alt"], "scene_labels": [None], "caption": "x", "hashtags": []}
 
@@ -205,7 +205,7 @@ def test_blog_runs_humanizer_review_when_available(sample_photo, tmp_path):
 
     calls: list[str] = []
 
-    def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None):
+    def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None):
         calls.append(prompt)
         if len(calls) == 1:
             return {"title": "Pivotal moment", "body": "It delves into a tapestry.", "photo_count": 4}
@@ -237,7 +237,7 @@ def test_blog_skips_humanizer_when_skip_flag_set(sample_photo, tmp_path):
 
     calls: list[str] = []
 
-    def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None):
+    def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None):
         calls.append(prompt)
         return {"title": "x", "body": "x", "photo_count": 4}
 
