@@ -21,7 +21,15 @@ struct DayCaption: Codable, Hashable {
     /// Caption + hashtags as a ready-to-paste string.
     var formatted: String {
         let tags = hashtags.joined(separator: " ")
-        return caption.isEmpty ? tags : "\(caption)\n\n\(tags)"
+        guard !tags.isEmpty else { return caption }
+        guard !caption.isEmpty else { return tags }
+        // Don't append if the hashtags are already the last non-empty line of the caption
+        let lastLine = caption
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .last(where: { !$0.isEmpty }) ?? ""
+        if lastLine == tags { return caption }
+        return "\(caption)\n\n\(tags)"
     }
 
     var wasEdited: Bool {

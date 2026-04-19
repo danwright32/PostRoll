@@ -18,6 +18,9 @@ struct PostRollApp: App {
                 .environment(analyticsStore)
                 .preferredColorScheme(.light)
                 .tint(Color.roseGold)
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    NotificationService.shared.clearDelivered()
+                }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
@@ -35,6 +38,10 @@ struct PostRollApp: App {
                     NSPasteboard.general.setString("postroll", forType: .string)
                 }
             }
+        }
+
+        Settings {
+            SettingsView()
         }
     }
 }

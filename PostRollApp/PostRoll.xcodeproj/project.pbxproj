@@ -22,6 +22,9 @@
 		AA11BB22CC33DD44EE55FF66 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB22CC33DD44EE55FF66AA11 /* NotificationService.swift */; };
 		CC33DD44EE55FF66AA11BB22 /* TimingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD44EE55FF66AA11BB22CC33 /* TimingStore.swift */; };
 		EE55FF66AA11BB22CC33DD44 /* HandleBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF66AA11BB22CC33DD44EE55 /* HandleBook.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* KeychainStore.swift */; };
+		C3D4E5F6A7B8C9D0E1F2A3B4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6A7B8C9D0E1F2A3B4C5 /* SettingsView.swift */; };
+		E5F6A7B8C9D0E1F2A3B4C5D6 /* SpellCheckingTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6A7B8C9D0E1F2A3B4C5D6E7 /* SpellCheckingTextEditor.swift */; };
 		969E9EC496F1A23AB7D5B335 /* InsightsPostsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F05063CB9D037B1C17C3543 /* InsightsPostsView.swift */; };
 		96C960D3A4E030937E9B5DDE /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8709408F930801E3507C477 /* MainWindowView.swift */; };
 		9999F69184557C54644F4D9B /* InsightsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE82B7DB7FECF4341E6A2067 /* InsightsDetailView.swift */; };
@@ -54,6 +57,9 @@
 		BB22CC33DD44EE55FF66AA11 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		DD44EE55FF66AA11BB22CC33 /* TimingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimingStore.swift; sourceTree = "<group>"; };
 		FF66AA11BB22CC33DD44EE55 /* HandleBook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleBook.swift; sourceTree = "<group>"; };
+		B2C3D4E5F6A7B8C9D0E1F2A3 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		D4E5F6A7B8C9D0E1F2A3B4C5 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F6A7B8C9D0E1F2A3B4C5D6E7 /* SpellCheckingTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpellCheckingTextEditor.swift; sourceTree = "<group>"; };
 		6F05063CB9D037B1C17C3543 /* InsightsPostsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsPostsView.swift; sourceTree = "<group>"; };
 		8089518478AA10F4DC5A9A83 /* EventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStore.swift; sourceTree = "<group>"; };
 		871FEB947457130340BB8140 /* NewEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewEventSheet.swift; sourceTree = "<group>"; };
@@ -115,6 +121,8 @@
 				C01C45B805CCDAE330D2F89C /* OCRReviewView.swift */,
 				89580BC6221599F5163857E3 /* PhotoAssignmentView.swift */,
 				A0446FB348B393437FB313CD /* ProgramUploadView.swift */,
+				D4E5F6A7B8C9D0E1F2A3B4C5 /* SettingsView.swift */,
+				F6A7B8C9D0E1F2A3B4C5D6E7 /* SpellCheckingTextEditor.swift */,
 				45C73EC9F2EFF2AC96CE4C6C /* Insights */,
 			);
 			path = Views;
@@ -141,6 +149,7 @@
 				DD44EE55FF66AA11BB22CC33 /* TimingStore.swift */,
 				FF66AA11BB22CC33DD44EE55 /* HandleBook.swift */,
 				6E176B25F0D09B134F669698 /* PythonBridge.swift */,
+				B2C3D4E5F6A7B8C9D0E1F2A3 /* KeychainStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -262,6 +271,9 @@
 				AA11BB22CC33DD44EE55FF66 /* NotificationService.swift in Sources */,
 				CC33DD44EE55FF66AA11BB22 /* TimingStore.swift in Sources */,
 				EE55FF66AA11BB22CC33DD44 /* HandleBook.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* KeychainStore.swift in Sources */,
+				C3D4E5F6A7B8C9D0E1F2A3B4 /* SettingsView.swift in Sources */,
+				E5F6A7B8C9D0E1F2A3B4C5D6 /* SpellCheckingTextEditor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

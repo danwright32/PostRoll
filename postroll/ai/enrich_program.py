@@ -343,6 +343,120 @@ def fetch_performers_from_url(url: str) -> list[dict]:
     return data
 
 
+SUGGEST_HANDLES_PROMPT = """\
+Search the web for the official Instagram accounts of the following
+performing artists / ensembles / organizations. The context is a live
+performance event — these are musicians, conductors, theater companies,
+choirs, orchestras, etc.
+
+Event context (use this to disambiguate common names):
+- Organization: {org}
+- Venue: {venue}
+- Event: {event}
+
+Performers to look up:
+{performer_list}
+
+For EACH performer, use WebSearch with MULTIPLE search strategies until
+you find a result or exhaust all options:
+
+1. **Site-restricted search first**: "<name> site:instagram.com"
+   This surfaces Instagram profiles directly and is the most reliable.
+2. **General search**: "<name> instagram"
+3. **Keyword variations for ensembles/orgs**: try abbreviations, initials,
+   or key words. E.g. for "Eastern Sierra Community Chorus" also try
+   "eastern sierra chorus site:instagram.com" or "ESCC instagram".
+4. **Parent organization search** (for school/church/community groups):
+   if the ensemble is part of a larger org (e.g. "Singing Sergeants of
+   Wilson Memorial High School"), also search for the school/church/org
+   instagram — the ensemble often posts from the parent account, not its
+   own. Try "<school name> instagram" or "<school name> choir instagram".
+5. **Verify the profile**: When you find a candidate handle, use WebFetch
+   on "https://www.instagram.com/<handle>/" to confirm the profile exists
+   and matches the performer. Check that the bio or page title relates to
+   performing arts / the organization in question.
+
+Do NOT stop after the first search if it returns no results — try at
+least 3-4 different query variations before giving up.
+
+Return JSON ONLY (no markdown fences) as an array with one entry per
+performer, in the SAME ORDER as the input list:
+
+[
+  {{
+    "name": "exact name from the input list",
+    "handle": "@theirhandle or null if not found",
+    "profile_url": "https://www.instagram.com/theirhandle/ or null",
+    "confidence": "high | medium | low",
+    "note": "short reason for confidence level, e.g. 'verified account' or 'common name, multiple matches'"
+  }}
+]
+
+Rules:
+- Only suggest handles you actually found via search. NEVER guess or fabricate.
+- "high" confidence: the account name/bio clearly matches the performer
+  and the content is consistent (photos of performances, music, etc.).
+  Also "high" if you successfully fetched the Instagram profile page and
+  confirmed the bio matches.
+- "medium": likely match but can't be 100% certain (e.g. no verification,
+  bio is vague but name matches).
+- "low": possible match but ambiguous (common name, multiple candidates).
+- If you can't find an Instagram account at all, set handle and
+  profile_url to null with confidence "low" and note "not found".
+- For ensembles/organizations, look for their official org account.
+- Return ONLY the JSON array. No explanation.
+"""
+
+
+def suggest_handles(
+    performers: list[dict[str, Any]],
+    org: str = "",
+    venue: str = "",
+    event: str = "",
+) -> list[dict[str, Any]]:
+    """Search the web for Instagram handles for a list of performers.
+
+    Returns a list of suggestions with handle, profile_url, confidence, and note.
+    """
+    names = [p.get("name", "?") for p in performers if p.get("name")]
+    if not names:
+        return []
+
+    performer_list = "\n".join(f"- {n}" for n in names)
+    prompt = SUGGEST_HANDLES_PROMPT.format(
+        org=org or "(not specified)",
+        venue=venue or "(not specified)",
+        event=event or "(not specified)",
+        performer_list=performer_list,
+    )
+    data = run_json_prompt(
+        prompt,
+        timeout=600,
+        allowed_tools=["WebSearch", "WebFetch"],
+    )
+    # Claude sometimes wraps the array in an object — unwrap it
+    if isinstance(data, dict):
+        # Try common wrapper keys
+        for key in ("suggestions", "performers", "results", "data"):
+            if key in data and isinstance(data[key], list):
+                data = data[key]
+                break
+        else:
+            # If there's exactly one key whose value is a list, use it
+            lists = [v for v in data.values() if isinstance(v, list)]
+            if len(lists) == 1:
+                data = lists[0]
+            elif "name" in data:
+                # Single suggestion returned as a bare dict — wrap it
+                data = [data]
+    if not isinstance(data, list):
+        keys = list(data.keys()) if isinstance(data, dict) else []
+        raise ClaudeError(
+            f"Expected JSON array, got {type(data).__name__} with keys {keys}"
+        )
+    return data
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Enrich thin OCR output via web research"
@@ -367,6 +481,12 @@ def main() -> int:
         help="Optional URL or text hint about the event (e.g. 'https://chaintheatre.org/the-pushover' or 'The Pushover at Chain Theatre')",
     )
     parser.add_argument(
+        "--suggest-handles",
+        type=Path,
+        metavar="JSON",
+        help="Path to a JSON file with {performers, org, venue, event}. Searches the web for Instagram handles.",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Run enrichment even if the OCR data doesn't look thin",
@@ -377,6 +497,28 @@ def main() -> int:
         help="Where to write enriched JSON (defaults to stdout)",
     )
     args = parser.parse_args()
+
+    # --suggest-handles mode: search for Instagram handles for performers
+    if args.suggest_handles:
+        try:
+            input_data = json.loads(args.suggest_handles.read_text(encoding="utf-8"))
+            suggestions = suggest_handles(
+                performers=input_data.get("performers", []),
+                org=input_data.get("org", ""),
+                venue=input_data.get("venue", ""),
+                event=input_data.get("event", ""),
+            )
+        except (ClaudeError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        text = json.dumps(suggestions, indent=2, ensure_ascii=False)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(text + "\n", encoding="utf-8")
+            print(f"wrote {args.output} ({len(suggestions)} suggestions)")
+        else:
+            print(text)
+        return 0
 
     # --fetch-performers mode: fetch a URL and return just the performers array
     if args.fetch_performers:

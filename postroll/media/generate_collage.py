@@ -157,7 +157,7 @@ def _place_on_blur(
     bg_left = (bg_w - target_w) // 2
     bg_top  = (bg_h - target_h) // 2
     bg = bg.crop((bg_left, bg_top, bg_left + target_w, bg_top + target_h))
-    bg = bg.filter(ImageFilter.GaussianBlur(radius=18))
+    bg = bg.filter(ImageFilter.GaussianBlur(radius=30))
     darken = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 80))
     bg = Image.alpha_composite(bg.convert("RGBA"), darken).convert("RGB")
 

@@ -56,14 +56,50 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )
     }
 
+    func notifyHandleLookupComplete(eventName: String, count: Int) {
+        send(
+            title: "\(eventName): Handle Lookup Done",
+            body: count > 0
+                ? "Found \(count) Instagram suggestion\(count == 1 ? "" : "s"). Verify and accept below."
+                : "No Instagram accounts found for these performers."
+        )
+    }
+
+    func notifyWebPerformersFetched(eventName: String, count: Int) {
+        send(
+            title: "\(eventName): Performers Fetched",
+            body: "Found \(count) performer\(count == 1 ? "" : "s") from the event page."
+        )
+    }
+
+    func notifyEnrichmentComplete(eventName: String) {
+        send(
+            title: "\(eventName): Enrichment Done",
+            body: "Web research complete. Review the updated program data."
+        )
+    }
+
     // MARK: - Dock badge
 
-    /// Call after every event list change. Badge = events awaiting review.
+    /// Show badge only when the app is in the background — the user doesn't
+    /// need a badge while they're actively looking at the window.
     func updateBadge(events: [Event]) {
+        guard !NSApplication.shared.isActive else {
+            NSApplication.shared.dockTile.badgeLabel = nil
+            return
+        }
         let count = events.filter {
             $0.stage == .ocrDone || $0.stage == .assetsGenerated
         }.count
         NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+    }
+
+    // MARK: - Clear on activate
+
+    /// Remove all delivered notifications from Notification Center.
+    /// Call when the app becomes active so banners don't linger.
+    func clearDelivered() {
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
     }
 
     // MARK: - Private

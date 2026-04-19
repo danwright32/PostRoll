@@ -26,9 +26,10 @@ struct Performer: Identifiable, Codable, Hashable {
     var name: String
     var role: String
     var voiceOrInstrument: String
+    var handle: String
 
-    init(id: UUID = UUID(), name: String = "", role: String = "", voiceOrInstrument: String = "") {
-        self.id = id; self.name = name; self.role = role; self.voiceOrInstrument = voiceOrInstrument
+    init(id: UUID = UUID(), name: String = "", role: String = "", voiceOrInstrument: String = "", handle: String = "") {
+        self.id = id; self.name = name; self.role = role; self.voiceOrInstrument = voiceOrInstrument; self.handle = handle
     }
 
     // Python JSON won't include id — generate one on decode
@@ -38,10 +39,11 @@ struct Performer: Identifiable, Codable, Hashable {
         name              = (try? c.decode(String.self, forKey: .name)) ?? ""
         role              = (try? c.decode(String.self, forKey: .role)) ?? ""
         voiceOrInstrument = (try? c.decode(String.self, forKey: .voiceOrInstrument)) ?? ""
+        handle            = (try? c.decode(String.self, forKey: .handle)) ?? ""
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, role
+        case id, name, role, handle
         case voiceOrInstrument = "voice_or_instrument"
     }
 }

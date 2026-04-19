@@ -64,7 +64,7 @@ FONT_DETAIL_THIN = 12
 LOGO_WIDTH = 200
 
 # Audio
-AUDIO_FADE_DURATION = 2.0
+AUDIO_FADE_DURATION = 5.0
 
 
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
@@ -310,6 +310,28 @@ def generate_reel_scroll(
         from postroll.audio import fetch_audio
         audio_path = fetch_audio(audio_tags or _DEFAULT_AUDIO_TAGS)
 
+    # Sort photos by filename using natural (numeric) order so that
+    # "-3" comes before "-13" comes before "-101".
+    import re as _re
+    from pathlib import Path as _Path
+
+    def _natural_key(name: str) -> list:
+        """Split filename into text/number chunks for natural sorting."""
+        return [int(c) if c.isdigit() else c.lower() for c in _re.split(r'(\d+)', name)]
+
+    print(f"[generate_reel_scroll] BEFORE sort ({len(photo_paths)} photos):", flush=True)
+    for i, p in enumerate(photo_paths):
+        print(f"  [{i}] {_Path(p).name}", flush=True)
+    if crop_offsets:
+        paired = sorted(zip(photo_paths, crop_offsets), key=lambda p: _natural_key(_Path(p[0]).name))
+        photo_paths = [p for p, _ in paired]
+        crop_offsets = [o for _, o in paired]
+    else:
+        photo_paths = sorted(photo_paths, key=lambda p: _natural_key(_Path(p).name))
+    print(f"[generate_reel_scroll] AFTER sort ({len(photo_paths)} photos):", flush=True)
+    for i, p in enumerate(photo_paths):
+        print(f"  [{i}] {_Path(p).name}", flush=True)
+
     n = len(photo_paths)
     total_duration = scroll_duration + HOLD_END + CLOSING_FRAME_DURATION
 
@@ -386,7 +408,11 @@ def generate_reel_scroll(
             "-i", audio_path,
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac",
-            "-af", f"afade=t=out:st={total_duration - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION},apad",
+            "-af", (
+                f"atrim=0:{total_duration},"
+                f"afade=t=out:st={total_duration - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION},"
+                f"apad"
+            ),
             "-t", str(total_duration),
             str(output),
         ]

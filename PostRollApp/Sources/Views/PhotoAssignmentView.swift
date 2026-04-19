@@ -32,6 +32,11 @@ struct PhotoAssignmentView: View {
     // Shooter observations per day — passed to caption generator
     @State private var dayNotes: [DayName: String] = [:]
 
+    // Per-day performer assignments and extra handles
+    @State private var dayHandles: [DayName: String] = [:]       // comma-separated @handles
+    @State private var dayPlainNames: [DayName: String] = [:]    // comma-separated plain names
+    @State private var dayPerformers: [DayName: Set<UUID>] = [:] // selected performer IDs
+
     var totalPhotos: Int { dayPhotos.values.reduce(0) { $0 + $1.count } }
 
     enum PickerTarget: Equatable {
@@ -77,6 +82,21 @@ struct PhotoAssignmentView: View {
             notes[day] = event.days[day.rawValue]?.notes ?? ""
         }
         _dayNotes = State(initialValue: notes)
+
+        // Load per-day performer assignments and handles
+        var handles: [DayName: String] = [:]
+        var plains: [DayName: String] = [:]
+        var perfs: [DayName: Set<UUID>] = [:]
+        for day in DayName.allCases {
+            if let pd = event.days[day.rawValue] {
+                if !pd.tagHandles.isEmpty { handles[day] = pd.tagHandles.joined(separator: ", ") }
+                if !pd.nameMentions.isEmpty { plains[day] = pd.nameMentions.joined(separator: ", ") }
+                if !pd.selectedPerformerIDs.isEmpty { perfs[day] = Set(pd.selectedPerformerIDs) }
+            }
+        }
+        _dayHandles = State(initialValue: handles)
+        _dayPlainNames = State(initialValue: plains)
+        _dayPerformers = State(initialValue: perfs)
     }
 
     var body: some View {
@@ -199,6 +219,18 @@ struct PhotoAssignmentView: View {
                         EmptyView()
                     }
 
+                    // Performer assignment (not on Friday — it's story-only from Tuesday)
+                    if day != .friday, !(dayPhotos[day]?.isEmpty ?? true) {
+                        PerformerAssignmentSection(
+                            day: day,
+                            performers: event.ocrResult?.performers ?? [],
+                            selectedPerformerIDs: performerBinding(day),
+                            handles: handleBinding(day),
+                            names: plainNameBinding(day),
+                            onChanged: { save() }
+                        )
+                    }
+
                 }
 
                 VStack(alignment: .trailing, spacing: Spacing.sm) {
@@ -278,6 +310,27 @@ struct PhotoAssignmentView: View {
         Binding(
             get: { dayNotes[day] ?? "" },
             set: { dayNotes[day] = $0; save() }
+        )
+    }
+
+    private func performerBinding(_ day: DayName) -> Binding<Set<UUID>> {
+        Binding(
+            get: { dayPerformers[day] ?? [] },
+            set: { dayPerformers[day] = $0; save() }
+        )
+    }
+
+    private func handleBinding(_ day: DayName) -> Binding<String> {
+        Binding(
+            get: { dayHandles[day] ?? "" },
+            set: { dayHandles[day] = $0; save() }
+        )
+    }
+
+    private func plainNameBinding(_ day: DayName) -> Binding<String> {
+        Binding(
+            get: { dayPlainNames[day] ?? "" },
+            set: { dayPlainNames[day] = $0; save() }
         )
     }
 
@@ -380,6 +433,9 @@ struct PhotoAssignmentView: View {
             pd.photoPaths  = dayPhotos[day] ?? []
             pd.cropOffsets = dayCropOffsets[day] ?? [:]
             pd.notes       = dayNotes[day] ?? ""
+            pd.tagHandles          = parseHandles(dayHandles[day] ?? "")
+            pd.nameMentions        = parseHandles(dayPlainNames[day] ?? "")
+            pd.selectedPerformerIDs = Array(dayPerformers[day] ?? [])
             switch day {
             case .tuesday:
                 pd.screenRecordingPath = tuesdayScreenRecording
@@ -403,6 +459,12 @@ struct PhotoAssignmentView: View {
         // Blog photos auto-derived from Sunday + Monday + Wednesday
         ev.blogPhotoPaths = (dayPhotos[.sunday] ?? []) + (dayPhotos[.monday] ?? []) + (dayPhotos[.wednesday] ?? [])
         appState.updateEvent(ev)
+    }
+
+    private func parseHandles(_ raw: String) -> [String] {
+        raw.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 
     private func advance() {
@@ -738,20 +800,20 @@ private struct TuesdayReelSection: View {
     @State private var isExpanded = false
     @State private var recordingSeconds: Double? = nil
 
-    var hasAllInputs: Bool { screenRecording != nil && rawPhoto != nil && editedPhoto != nil }
+    var hasReelInputs: Bool { rawPhoto != nil && editedPhoto != nil }
 
     var body: some View {
         VStack(spacing: 0) {
             Button(action: { isExpanded.toggle() }) {
                 HStack(spacing: Spacing.sm) {
-                    Image(systemName: hasAllInputs ? "film.fill" : "film")
+                    Image(systemName: hasReelInputs ? "film.fill" : "film")
                         .font(.system(size: 11))
-                        .foregroundStyle(hasAllInputs ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(hasReelInputs ? Color.roseGold : Color.warmMid)
                     Text("SPEED EDIT REEL")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
                         .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
-                    if hasAllInputs {
+                    if hasReelInputs {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 10))
                             .foregroundStyle(Color.roseGold.opacity(0.8))
@@ -769,19 +831,33 @@ private struct TuesdayReelSection: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text("Screen recording + RAW and edited photos are combined into a timelapse reel.")
+                    Text("RAW and edited photos become a before/after reel. Add a screen recording for a timelapse version.")
                         .font(.light(11))
                         .foregroundStyle(Color.warmMid)
                         .padding(.bottom, 4)
 
-                    SingleFilePicker(label: "Screen Recording", url: screenRecording,
-                                     onPick: onPickScreenRecording, onClear: { screenRecording = nil })
                     SingleFilePicker(label: "RAW Photo",        url: rawPhoto,
                                      onPick: onPickRawPhoto,        onClear: { rawPhoto = nil })
                     SingleFilePicker(label: "Edited Photo",     url: editedPhoto,
                                      onPick: onPickEditedPhoto,     onClear: { editedPhoto = nil })
 
-                    if hasAllInputs {
+                    if rawPhoto != nil && editedPhoto != nil {
+                        Button {
+                            let tmp = rawPhoto
+                            rawPhoto = editedPhoto
+                            editedPhoto = tmp
+                        } label: {
+                            Label("Swap RAW ↔ Edited", systemImage: "arrow.up.arrow.down")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.roseGold)
+                    }
+
+                    SingleFilePicker(label: "Screen Recording", url: screenRecording,
+                                     onPick: onPickScreenRecording, onClear: { screenRecording = nil })
+
+                    if screenRecording != nil && hasReelInputs {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text("TARGET DURATION")
@@ -1268,6 +1344,192 @@ private struct PhotoPreviewOverlay: View {
             }
         }
         .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+    }
+}
+
+// MARK: - Performer Assignment Section
+
+private struct PerformerAssignmentSection: View {
+    let day: DayName
+    let performers: [Performer]
+    @Binding var selectedPerformerIDs: Set<UUID>
+    @Binding var handles: String
+    @Binding var names: String
+    let onChanged: () -> Void
+
+    @State private var isExpanded = false
+
+    private var hasContent: Bool {
+        !handles.isEmpty || !names.isEmpty || !selectedPerformerIDs.isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: { isExpanded.toggle() }) {
+                HStack(alignment: .center, spacing: Spacing.sm) {
+                    Image(systemName: hasContent ? "person.crop.rectangle.stack.fill" : "person.crop.rectangle.stack")
+                        .font(.system(size: 11))
+                        .foregroundStyle(hasContent ? Color.roseGold : Color.warmMid)
+                    Text("ASSIGN PERFORMERS")
+                        .font(.system(size: 10, weight: .medium))
+                        .tracking(1.2)
+                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                    if hasContent {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.roseGold.opacity(0.8))
+                    }
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Color.warmMid)
+                }
+                .contentShape(Rectangle())
+                .padding(.horizontal, Spacing.xl)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    if !performers.isEmpty {
+                        PerformerCheckboxGrid(
+                            performers: performers,
+                            selectedIDs: $selectedPerformerIDs
+                        )
+                        .onChange(of: selectedPerformerIDs) { _, _ in onChanged() }
+                    }
+
+                    HandleField(
+                        label: "additional @handles (comma-separated)",
+                        placeholder: "@dciny, @lincolncenter",
+                        text: $handles
+                    )
+                    .onChange(of: handles) { _, _ in onChanged() }
+
+                    HandleField(
+                        label: "additional plain names (no @, comma-separated)",
+                        placeholder: "Jordan Langworthy, Maria Smith",
+                        text: $names
+                    )
+                    .onChange(of: names) { _, _ in onChanged() }
+                }
+                .padding(.horizontal, Spacing.xl)
+                .padding(.bottom, Spacing.md)
+            }
+
+            RoseGoldDivider(opacity: 0.15)
+        }
+        .background(Color.roseGold.opacity(0.02))
+    }
+}
+
+private struct PerformerCheckboxGrid: View {
+    let performers: [Performer]
+    @Binding var selectedIDs: Set<UUID>
+
+    private var allSelected: Bool {
+        performers.allSatisfy { selectedIDs.contains($0.id) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                if allSelected {
+                    selectedIDs = []
+                } else {
+                    selectedIDs = Set(performers.map(\.id))
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: allSelected ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 12))
+                        .foregroundStyle(allSelected ? Color.roseGold : Color.warmMid.opacity(0.5))
+                    Text(allSelected ? "Deselect all" : "Select all")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.warmMid)
+                }
+            }
+            .buttonStyle(.plain)
+
+            let columns = [GridItem(.adaptive(minimum: 180), spacing: 6)]
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
+                ForEach(performers) { performer in
+                    PerformerCheckbox(
+                        performer: performer,
+                        isSelected: selectedIDs.contains(performer.id)
+                    ) { selected in
+                        if selected {
+                            selectedIDs.insert(performer.id)
+                        } else {
+                            selectedIDs.remove(performer.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct PerformerCheckbox: View {
+    let performer: Performer
+    let isSelected: Bool
+    let onToggle: (Bool) -> Void
+
+    var body: some View {
+        Button { onToggle(!isSelected) } label: {
+            HStack(spacing: 5) {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 12))
+                    .foregroundStyle(isSelected ? Color.roseGold : Color.warmMid.opacity(0.5))
+                Text(performer.name)
+                    .font(.system(size: 11))
+                    .foregroundStyle(isSelected ? Color.warmDark : Color.warmMid)
+                    .lineLimit(1)
+                if PythonBridge.isRealHandle(performer.handle) {
+                    Text(performer.handle.hasPrefix("@") ? performer.handle : "@\(performer.handle)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.warmMid.opacity(0.6))
+                        .lineLimit(1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct HandleField: View {
+    let label: String
+    let placeholder: String
+    @Binding var text: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.warmMid)
+            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color.warmMid.opacity(0.30)))
+                .focused($focused)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.warmDark)
+                .focusEffectDisabled()
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.xs)
+                        .fill(Color.creamDeep)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Radius.xs)
+                                .strokeBorder(
+                                    focused ? Color.roseGold : Color.creamEdge,
+                                    lineWidth: focused ? 1.5 : 1
+                                )
+                        )
+                )
+                .animation(.easeOut(duration: 0.12), value: focused)
+        }
     }
 }
 

@@ -276,6 +276,9 @@ ABSOLUTELY NEVER:
 - Fabricate observations, durations, counts, activities, audience
   reactions, what the cast was doing before/after the photo, what
   characters were thinking, or anything not in the inputs.
+- Fabricate or guess @ handles. ONLY use handles from the tag_handles
+  list above. If tag_handles is "(none)", do NOT invent any @ mentions.
+  A wrong handle tags the wrong account — this is a hard rule.
 - Copy any specific phrase, person, venue, or detail from the
   example captions in the brand voice doc. Those are STRUCTURAL
   patterns from other events.
@@ -290,6 +293,13 @@ Lowercase or sentence case is fine — match Dan's natural register.
 """
 
 
+_HANDLE_SENTINELS = {"unknown", "n/a", "na", "none", "-", "no", "skip"}
+
+
+def _is_real_handle(handle: str) -> bool:
+    return bool(handle) and handle.strip().lower() not in _HANDLE_SENTINELS
+
+
 def _format_performers(performers: list[dict[str, Any]]) -> str:
     if not performers:
         return "(none listed)"
@@ -298,7 +308,10 @@ def _format_performers(performers: list[dict[str, Any]]) -> str:
         name = p.get("name", "?")
         role = p.get("role", "")
         instr = p.get("voice_or_instrument") or ""
+        handle = p.get("handle") or ""
         bits = [name]
+        if _is_real_handle(handle):
+            bits.append(f"[{handle}]")
         if role:
             bits.append(f"({role}{', ' + instr if instr else ''})")
         elif instr:
@@ -511,12 +524,15 @@ ALT_TEXT_INSTRUCTION = {
         "where, lighting, gestures, set design, props."
     ),
     "scroll_reel": (
-        "Write ONE alt text for the reel AS A WHOLE and put it as a "
-        "SINGLE entry in the `alt_texts` list. Describe the overall "
-        "arc — what the reel shows across its photos collectively "
-        "(themes, sections, who appears, the room) — NOT per-frame "
-        "detail. 25-50 words. Instagram attaches one alt text to the "
-        "reel, not per source frame."
+        "Write ONE alt text for the reel AS A WHOLE. Put it as a SINGLE "
+        "entry in the `alt_texts` list — the list must have exactly 1 entry. "
+        "Write a UNIFIED NARRATIVE summary: what is this reel about, who "
+        "appears, what is the setting. Do NOT list what individual photos "
+        "show. Do NOT use semicolons or 'and' to chain descriptions of "
+        "separate frames — that is just per-frame alt text in disguise. "
+        "Think of it as one sentence describing the reel the way a human "
+        "would describe a video: 'A photo scroll through [event] at [venue], "
+        "covering [subject].' 25-50 words."
     ),
     "slider_reel": (
         "These photos are the before (RAW) and after (edited) versions "
@@ -626,7 +642,7 @@ def generate_caption(
 
         brand_voice_text = load_brand_voice()
         photo_count = len(staged_paths)
-        photo_list = "\n".join(f"- {p}" for p in staged_paths)
+        photo_list = "\n".join(f"- {Path(p).name}" for p in staged_paths)
         post_type_framing = POST_TYPE_FRAMING.get(
             post_type, POST_TYPE_FRAMING["feed_photo"]
         )
@@ -677,8 +693,7 @@ def generate_caption(
         data = run_json_prompt(
             prompt,
             timeout=600,
-            allowed_dirs=[tmp_path],
-            allowed_tools=["Read"],
+            image_paths=staged_paths,
         )
 
         if not isinstance(data, dict):
@@ -839,6 +854,10 @@ single-subject posts, "somewhere" often means the trailing stack, not
 the body. Do not force in-frame naming of people who aren't in the
 frame.
 
+**NEVER fabricate or guess @ handles.** ONLY use handles from each
+post's tag_handles list. If tag_handles is "(none)", do NOT invent any
+@ mentions. A wrong handle tags the wrong account — this is a hard rule.
+
 **Stage 4 — VARY across the whole week.** This is the key advantage
 of generating all 5 at once: the captions must NOT share openers,
 credit shapes, or sentence structures across the week. Use a
@@ -995,11 +1014,11 @@ def generate_week_captions(
             posts_section=_format_week_posts(staged_posts),
         )
 
+        all_staged = [p for post in staged_posts for p in post["photo_paths"]]
         data = run_json_prompt(
             prompt,
             timeout=900,
-            allowed_dirs=[tmp_path],
-            allowed_tools=["Read"],
+            image_paths=all_staged,
         )
 
         if not isinstance(data, dict) or "posts" not in data:

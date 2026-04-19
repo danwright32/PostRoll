@@ -57,6 +57,9 @@ def _main() -> int:
             for t in raw_offsets if len(t) >= 3
         ]
 
+    print(f"[build_reel_preview] photos from manifest ({len(photos)}):", flush=True)
+    for i, p in enumerate(photos):
+        print(f"  [{i}] {Path(p).name}", flush=True)
     try:
         png_path = build_reel_preview(
             photo_paths=photos,

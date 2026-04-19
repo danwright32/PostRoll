@@ -65,6 +65,18 @@ enum PythonBridgeError: LocalizedError {
 actor PythonBridge {
     static let shared = PythonBridge()
 
+    /// Sentinel values that mark "I looked this up and there's no Instagram."
+    /// Stored in the handle book so we don't re-search, but not passed to captions.
+    private static let handleSentinels: Set<String> = [
+        "unknown", "n/a", "na", "none", "-", "no", "skip",
+    ]
+
+    nonisolated static func isRealHandle(_ handle: String) -> Bool {
+        var h = handle.trimmingCharacters(in: .whitespaces).lowercased()
+        if h.hasPrefix("@") { h = String(h.dropFirst()) }
+        return !h.isEmpty && !handleSentinels.contains(h)
+    }
+
     // nonisolated lets these be read from Task.detached without hopping back to the actor
     nonisolated let projectRoot: URL
     nonisolated let python3: String
@@ -281,6 +293,10 @@ actor PythonBridge {
             let o = pd.reelCropOffsets[url.absoluteString] ?? CropOffset()
             return [o.x, o.y, o.scale]
         }
+        print("[PostRoll:runBuildReelPreview] photoPaths (\(pd.photoPaths.count)):")
+        for (i, url) in pd.photoPaths.enumerated() {
+            print("  [\(i)] \(url.lastPathComponent)")
+        }
         var manifest: [String: Any] = [
             "photos": pd.photoPaths.map { $0.path },
         ]
@@ -343,6 +359,46 @@ actor PythonBridge {
         return json["audio_source"] as? String
     }
 
+    /// Like `runSwapReelAudio` but uses a user-provided audio file instead of
+    /// fetching from Jamendo.
+    func runSwapReelAudioWithFile(event: Event, day: DayName, audioPath: String) async throws -> String? {
+        guard let reelPath = event.previewMediaPaths[day.rawValue]?["reel"],
+              FileManager.default.fileExists(atPath: reelPath) else {
+            return nil
+        }
+
+        let tmp = FileManager.default.temporaryDirectory
+        let manifestFile = tmp.appendingPathComponent("postroll_swap_manifest_\(UUID().uuidString).json")
+        let outputFile   = tmp.appendingPathComponent("postroll_swap_result_\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: manifestFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        let pieces: [[String: String]] = (event.ocrResult?.pieces ?? []).map {
+            ["title": $0.title, "composer": $0.composer]
+        }
+        let manifest: [String: Any] = [
+            "shoot_type": event.shootType.pythonValue,
+            "pieces": pieces,
+        ]
+        let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
+        try manifestData.write(to: manifestFile)
+
+        try await runProcess(args: [
+            "-m", "postroll.ai.swap_reel_audio",
+            "--reel", reelPath,
+            "--manifest", manifestFile.path,
+            "--output", outputFile.path,
+            "--audio", audioPath,
+        ])
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else { return nil }
+        let data = try Data(contentsOf: outputFile)
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["audio_source"] as? String
+    }
+
     // MARK: - Music picker (candidate tracks)
 
     /// Fetch a batch of candidate Jamendo tracks matching `tags`. Each candidate is
@@ -382,8 +438,20 @@ actor PythonBridge {
     private func buildMediaManifest(event: Event) -> [String: Any] {
         var daysDict: [String: Any] = [:]
         for dayName in DayName.allCases {
-            guard let pd = event.days[dayName.rawValue], !pd.photoPaths.isEmpty else { continue }
-            var entry: [String: Any] = ["photos": pd.photoPaths.map { $0.path }]
+            guard let pd = event.days[dayName.rawValue],
+                  !pd.photoPaths.isEmpty || pd.rawPhotoPath != nil || pd.editedPhotoPath != nil
+            else { continue }
+            // Thursday photos sorted by filename so the reel order is predictable
+            let sortedPhotos = dayName == .thursday
+                ? pd.photoPaths.sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending }
+                : pd.photoPaths
+            var entry: [String: Any] = ["photos": sortedPhotos.map { $0.path }]
+            if dayName == .thursday {
+                print("[PostRoll:buildMediaManifest] Thursday photos in manifest (\(sortedPhotos.count)):")
+                for (i, url) in sortedPhotos.enumerated() {
+                    print("  [\(i)] \(url.lastPathComponent)")
+                }
+            }
             switch dayName {
             case .tuesday:
                 if let rec  = pd.screenRecordingPath { entry["screen_recording"]  = rec.path }
@@ -395,7 +463,7 @@ actor PythonBridge {
                 if let aud  = pd.audioPath           { entry["audio"]             = aud.path }
                 entry["scroll_duration"] = pd.scrollDuration
                 if let seed = pd.reelSeed            { entry["reel_seed"]         = seed }
-                let offsets = pd.photoPaths.map { url -> [Double] in
+                let offsets = sortedPhotos.map { url -> [Double] in
                     let o = pd.reelCropOffsets[url.absoluteString] ?? CropOffset()
                     return [o.x, o.y, o.scale]
                 }
@@ -588,6 +656,48 @@ actor PythonBridge {
         }
     }
 
+    // MARK: - Blog photo swap
+
+    /// Replace [PHOTO: ...] markers in the existing blog body with new markers
+    /// for a different set of photos. All prose is preserved verbatim.
+    func runBlogPhotoSwap(currentBody: String, photoPaths: [URL]) async throws -> BlogOutput {
+        let tmp = FileManager.default.temporaryDirectory
+        let manifestFile = tmp.appendingPathComponent("postroll_swap_photos_\(UUID().uuidString).json")
+        let outputFile   = tmp.appendingPathComponent("postroll_swapped_\(UUID().uuidString).json")
+
+        defer {
+            try? FileManager.default.removeItem(at: manifestFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        let manifest: [String: Any] = [
+            "body":        currentBody,
+            "photo_paths": photoPaths.map { $0.path },
+        ]
+        let manifestData = try JSONSerialization.data(
+            withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
+        )
+        try manifestData.write(to: manifestFile)
+
+        let args = [
+            "-m", "postroll.ai.swap_blog_photos",
+            "--manifest", manifestFile.path,
+            "--output",   outputFile.path,
+        ]
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+
+        let data = try Data(contentsOf: outputFile)
+        do {
+            return try JSONDecoder().decode(BlogOutput.self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
     // MARK: - Manifest builder
 
     private func buildManifest(event: Event, onlyDays: Set<String>? = nil) throws -> [String: Any] {
@@ -607,18 +717,36 @@ actor PythonBridge {
             .filter { !$0.isEmpty }
 
         // Build per-day entries, optionally filtered to a subset
+        let performers = ocr.performers
         var daysDict: [String: Any] = [:]
         for dayName in DayName.allCases {
             if let only = onlyDays, !only.contains(dayName.rawValue) { continue }
-            guard let pd = event.days[dayName.rawValue], !pd.photoPaths.isEmpty else { continue }
+            guard let pd = event.days[dayName.rawValue],
+                  !pd.photoPaths.isEmpty || pd.rawPhotoPath != nil || pd.editedPhotoPath != nil
+            else { continue }
             var dayEntry: [String: Any] = [
                 "photos": pd.photoPaths.map { $0.path },
             ]
-            // Event-wide handles (org, venue) + any day-specific performer handles
-            let allHandles = eventHandleList + pd.tagHandles
-            if !allHandles.isEmpty      { dayEntry["tag_handles"]   = allHandles }
-            if !pd.nameMentions.isEmpty { dayEntry["name_mentions"] = pd.nameMentions }
-            if !pd.notes.isEmpty        { dayEntry["notes"]         = pd.notes }
+
+            // Merge selected performers into handles / name mentions
+            let selectedIDs = Set(pd.selectedPerformerIDs)
+            var performerHandles: [String] = []
+            var performerNames: [String] = []
+            for p in performers where selectedIDs.contains(p.id) {
+                let h = p.handle.trimmingCharacters(in: .whitespaces)
+                if !h.isEmpty && Self.isRealHandle(h) {
+                    performerHandles.append(h.hasPrefix("@") ? h : "@\(h)")
+                } else if !p.name.isEmpty {
+                    performerNames.append(p.name)
+                }
+            }
+
+            // Event-wide handles (org, venue) + selected performer handles + manual day handles
+            let allHandles = eventHandleList + performerHandles + pd.tagHandles
+            let allNames   = performerNames + pd.nameMentions
+            if !allHandles.isEmpty { dayEntry["tag_handles"]   = allHandles }
+            if !allNames.isEmpty   { dayEntry["name_mentions"] = allNames }
+            if !pd.notes.isEmpty   { dayEntry["notes"]         = pd.notes }
             daysDict[dayName.rawValue] = dayEntry
         }
 
@@ -664,6 +792,83 @@ actor PythonBridge {
         do {
             let performers = try JSONDecoder().decode([Performer].self, from: data)
             return performers.map(coalesceDescription)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Handle Suggestions
+
+    struct HandleSuggestion: Codable {
+        var name: String
+        var handle: String?
+        var profileURL: String?
+        var confidence: String
+        var note: String?
+
+        enum CodingKeys: String, CodingKey {
+            case name, handle, confidence, note
+            case profileURL = "profile_url"
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name       = (try? c.decode(String.self, forKey: .name)) ?? ""
+            handle     = try? c.decode(String.self, forKey: .handle)
+            profileURL = try? c.decode(String.self, forKey: .profileURL)
+            confidence = (try? c.decode(String.self, forKey: .confidence)) ?? "low"
+            note       = try? c.decode(String.self, forKey: .note)
+        }
+    }
+
+    func suggestHandles(performers: [Performer], org: String, venue: String, event: String) async throws -> [HandleSuggestion] {
+        let inputFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_suggest_input_\(UUID().uuidString).json")
+        let outputFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_suggest_output_\(UUID().uuidString).json")
+
+        defer {
+            try? FileManager.default.removeItem(at: inputFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        // Build the input JSON
+        let performerDicts: [[String: String]] = performers.map {
+            ["name": $0.name, "role": $0.role, "voice_or_instrument": $0.voiceOrInstrument]
+        }
+        let inputDict: [String: Any] = [
+            "performers": performerDicts,
+            "org": org,
+            "venue": venue,
+            "event": event,
+        ]
+        let inputData = try JSONSerialization.data(withJSONObject: inputDict)
+        try inputData.write(to: inputFile)
+
+        let args = [
+            "-m", "postroll.ai.enrich_program",
+            "--suggest-handles", inputFile.path,
+            "--output", outputFile.path,
+        ]
+
+        do {
+            try await runProcess(args: args)
+        } catch {
+            // runProcess stderr is empty (redirected to log file) — provide a useful message
+            throw PythonBridgeError.invalidOutput(
+                "Handle lookup failed. The web search may have timed out — try again with fewer performers, or check ~/Documents/PostRoll/logs."
+            )
+        }
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.invalidOutput(
+                "Handle lookup produced no output. Check ~/Documents/PostRoll/logs for details."
+            )
+        }
+
+        let data = try Data(contentsOf: outputFile)
+        do {
+            return try JSONDecoder().decode([HandleSuggestion].self, from: data)
         } catch {
             throw PythonBridgeError.invalidOutput(error.localizedDescription)
         }
@@ -913,9 +1118,18 @@ actor PythonBridge {
         // `exec` replaces the shell with the Python process so that terminating
         // this Process object directly kills the Python subprocess, not just the
         // shell wrapper.
+        let apiKeyExport: String
+        if let key = KeychainStore.readAPIKey() {
+            let escaped = key.replacingOccurrences(of: "'", with: "'\"'\"'")
+            apiKeyExport = "export ANTHROPIC_API_KEY='\(escaped)'"
+        } else {
+            apiKeyExport = ""
+        }
+
         let script = """
             export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
             [ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc"
+            \(apiKeyExport)
             cd '\(root.path)'
             if [ -f '\(logPath)' ]; then
                 tail -n 500 '\(logPath)' > '\(logPath).tmp' && mv '\(logPath).tmp' '\(logPath)'

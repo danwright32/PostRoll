@@ -23,7 +23,9 @@ struct OCRReviewView: View {
 
     init(event: Event) {
         self.event = event
-        _ocr = State(initialValue: event.ocrResult ?? OCRResult())
+        var ocrData = event.ocrResult ?? OCRResult()
+        HandleBook.shared.autoFill(performers: &ocrData.performers)
+        _ocr = State(initialValue: ocrData)
         _orgHandles = State(initialValue: HandleBook.shared.handles(forOrg: event.org))
         _venueHandles = State(initialValue: HandleBook.shared.handles(forVenue: event.venue))
     }
@@ -142,6 +144,9 @@ struct OCRReviewView: View {
             PerformersEditor(
                 performers: $ocr.performers,
                 eventURL: event.eventURL.isEmpty ? nil : event.eventURL,
+                org: event.org,
+                venue: event.venue,
+                eventName: event.name,
                 onDeleted: { performer, idx in
                     scheduleUndo(message: "Performer removed") {
                         ocr.performers.insert(performer, at: min(idx, ocr.performers.count))
@@ -175,6 +180,7 @@ struct OCRReviewView: View {
         // Save handles to HandleBook so future events at same org/venue auto-fill
         HandleBook.shared.record(org: event.org, handles: orgHandles)
         HandleBook.shared.record(venue: event.venue, handles: venueHandles)
+        HandleBook.shared.recordAll(performers: ocr.performers)
         // Combine org + venue handles into the event-wide string (comma-separated, deduped)
         let combined = [orgHandles, venueHandles]
             .flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
@@ -240,12 +246,22 @@ private struct ReviewSectionRow<Content: View>: View {
 private struct PerformersEditor: View {
     @Binding var performers: [Performer]
     var eventURL: String?
+    var org: String = ""
+    var venue: String = ""
+    var eventName: String = ""
     let onDeleted: (Performer, Int) -> Void
     var onReplacedFromWeb: (([Performer]) -> Void)?
 
     @State private var isFetchingFromWeb = false
     @State private var fetchError: String?
+    @State private var isLookingUpHandles = false
+    @State private var handleSuggestions: [PythonBridge.HandleSuggestion] = []
+    @State private var handleLookupError: String?
     @Environment(AppState.self) private var appState
+
+    private var performersWithoutHandles: Bool {
+        performers.contains { !$0.name.isEmpty && $0.handle.isEmpty }
+    }
 
     var body: some View {
         VStack(spacing: Spacing.sm) {
@@ -262,10 +278,59 @@ private struct PerformersEditor: View {
                 performers.append(Performer())
             }
 
-            if let url = eventURL {
-                Divider()
-                    .padding(.vertical, 4)
+            // Handle suggestions
+            if !handleSuggestions.isEmpty {
+                Divider().padding(.vertical, 4)
+                HandleSuggestionsView(
+                    suggestions: handleSuggestions,
+                    onAccept: { suggestion in
+                        applyHandleSuggestion(suggestion)
+                    },
+                    onDismiss: { suggestion in
+                        handleSuggestions.removeAll { $0.name == suggestion.name }
+                    },
+                    onDismissAll: {
+                        handleSuggestions = []
+                    }
+                )
+            }
 
+            Divider().padding(.vertical, 4)
+
+            // Look up handles button
+            if isLookingUpHandles {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small).tint(Color.roseGold)
+                    Text("Searching for Instagram handles…")
+                        .font(.light(11))
+                        .foregroundStyle(Color.warmMid)
+                }
+                .padding(.top, 2)
+            } else if performersWithoutHandles {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button {
+                        Task { await lookUpHandles() }
+                    } label: {
+                        Label("Look up handles", systemImage: "magnifyingglass")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.roseGold)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text("Searches the web for Instagram accounts matching your performers. You'll verify each one before it's applied.")
+                        .font(.light(10))
+                        .foregroundStyle(Color.warmFaint)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let err = handleLookupError {
+                        Text(err)
+                            .font(.light(10))
+                            .foregroundStyle(Color.roseDeep)
+                    }
+                }
+            }
+
+            if let url = eventURL {
                 if isFetchingFromWeb {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small).tint(Color.roseGold)
@@ -311,9 +376,169 @@ private struct PerformersEditor: View {
             let old = performers
             performers = fetched
             onReplacedFromWeb?(old)
+            NotificationService.shared.notifyWebPerformersFetched(
+                eventName: eventName,
+                count: fetched.count
+            )
         } catch {
             fetchError = error.localizedDescription
         }
+    }
+
+    @MainActor
+    private func lookUpHandles() async {
+        handleLookupError = nil
+        isLookingUpHandles = true
+        defer { isLookingUpHandles = false }
+
+        // First pass: fill from the handle book (instant, no web search)
+        var bookFilled = 0
+        for i in performers.indices {
+            if performers[i].handle.isEmpty && !performers[i].name.isEmpty {
+                let saved = HandleBook.shared.handle(forPerformer: performers[i].name)
+                if !saved.isEmpty {
+                    performers[i].handle = saved
+                    bookFilled += 1
+                }
+            }
+        }
+
+        // Second pass: search the web for any still missing
+        let needsLookup = performers.filter { !$0.name.isEmpty && $0.handle.isEmpty }
+        guard !needsLookup.isEmpty else {
+            // All handles resolved from the book — no web search needed
+            NotificationService.shared.notifyHandleLookupComplete(
+                eventName: eventName,
+                count: bookFilled
+            )
+            return
+        }
+
+        do {
+            let suggestions = try await PythonBridge.shared.suggestHandles(
+                performers: needsLookup,
+                org: org,
+                venue: venue,
+                event: eventName
+            )
+            // Only show suggestions that actually found something
+            handleSuggestions = suggestions.filter { $0.handle != nil }
+            NotificationService.shared.notifyHandleLookupComplete(
+                eventName: eventName,
+                count: handleSuggestions.count + bookFilled
+            )
+        } catch {
+            handleLookupError = error.localizedDescription
+        }
+    }
+
+    private func applyHandleSuggestion(_ suggestion: PythonBridge.HandleSuggestion) {
+        guard let handle = suggestion.handle else { return }
+        if let idx = performers.firstIndex(where: { $0.name == suggestion.name && $0.handle.isEmpty }) {
+            performers[idx].handle = handle
+        }
+        handleSuggestions.removeAll { $0.name == suggestion.name }
+    }
+}
+
+private struct HandleSuggestionsView: View {
+    let suggestions: [PythonBridge.HandleSuggestion]
+    let onAccept: (PythonBridge.HandleSuggestion) -> Void
+    let onDismiss: (PythonBridge.HandleSuggestion) -> Void
+    let onDismissAll: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("HANDLE SUGGESTIONS")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.warmMid)
+                Spacer()
+                Button("Dismiss all") { onDismissAll() }
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.warmMid)
+                    .buttonStyle(.plain)
+            }
+
+            ForEach(suggestions, id: \.name) { suggestion in
+                HandleSuggestionRow(
+                    suggestion: suggestion,
+                    onAccept: { onAccept(suggestion) },
+                    onDismiss: { onDismiss(suggestion) }
+                )
+            }
+        }
+    }
+}
+
+private struct HandleSuggestionRow: View {
+    let suggestion: PythonBridge.HandleSuggestion
+    let onAccept: () -> Void
+    let onDismiss: () -> Void
+
+    private var confidenceColor: Color {
+        switch suggestion.confidence {
+        case "high":   return Color.green.opacity(0.8)
+        case "medium": return Color.orange.opacity(0.8)
+        default:       return Color.warmMid.opacity(0.6)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(suggestion.name)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.warmDark)
+                    Circle()
+                        .fill(confidenceColor)
+                        .frame(width: 6, height: 6)
+                        .help(suggestion.confidence + " confidence" + (suggestion.note.map { ": \($0)" } ?? ""))
+                }
+                if let handle = suggestion.handle {
+                    Text(handle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.roseGold)
+                }
+            }
+
+            Spacer()
+
+            // Verify link — opens Instagram profile
+            if let urlString = suggestion.profileURL, let url = URL(string: urlString) {
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Text("Verify")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.warmMid)
+                }
+                .buttonStyle(.plain)
+                .help("Open Instagram profile to verify")
+            }
+
+            Button { onAccept() } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.green.opacity(0.8))
+            }
+            .buttonStyle(.plain)
+            .help("Apply this handle")
+
+            Button { onDismiss() } label: {
+                Image(systemName: "xmark.circle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.warmMid.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss this suggestion")
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(Color.warmDark.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 
@@ -327,6 +552,8 @@ private struct PerformerRow: View {
                 BrandField("Name", text: $performer.name)
                 BrandField("Description (optional)", text: $performer.voiceOrInstrument)
                     .frame(maxWidth: 200)
+                BrandField("@handle", text: $performer.handle)
+                    .frame(maxWidth: 150)
             }
             Button {
                 let query = performer.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? performer.name
@@ -378,8 +605,8 @@ private struct PieceRow: View {
         HStack(alignment: .top, spacing: Spacing.sm) {
             VStack(spacing: 6) {
                 HStack(spacing: Spacing.sm) {
-                    BrandField("Composer / Playwright / Artist", text: $piece.composer)
                     BrandField("Title", text: $piece.title)
+                    BrandField("Composer / Playwright / Artist", text: $piece.composer)
                 }
                 BrandField("Notes (optional)", text: $piece.notes)
             }

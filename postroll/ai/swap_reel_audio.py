@@ -34,6 +34,7 @@ def swap_reel_audio(
     shoot_type: str,
     pieces: list[dict],
     seed: int | None = None,
+    audio_file: str | Path | None = None,
 ) -> dict:
     """Replace the audio track on `reel_path` in place using ffmpeg stream-copy.
 
@@ -42,6 +43,7 @@ def swap_reel_audio(
         shoot_type: Same shoot_type used when the reel was originally generated.
         pieces: Program pieces list (title + composer) for mood tag derivation.
         seed: Jamendo selection seed; None = random (so each call picks fresh).
+        audio_file: If provided, use this audio file instead of fetching from Jamendo.
 
     Returns:
         {"reel": <path>, "audio_source": <cached track path>, "tags": <tags>}
@@ -50,12 +52,28 @@ def swap_reel_audio(
     if not reel.exists():
         raise FileNotFoundError(f"Reel not found: {reel}")
 
-    tags = _derive_audio_tags(shoot_type, pieces)
-    effective_seed = seed if seed is not None else random.randint(1, 10_000_000)
-    audio_path = fetch_audio(tags, seed=effective_seed)
+    if audio_file:
+        audio_path = str(Path(audio_file).resolve())
+        if not Path(audio_path).exists():
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        tags = "user-provided"
+    else:
+        tags = _derive_audio_tags(shoot_type, pieces)
+        effective_seed = seed if seed is not None else random.randint(1, 10_000_000)
+        audio_path = fetch_audio(tags, seed=effective_seed)
 
-    # Copy video stream, replace audio stream. `-shortest` trims output to the
-    # shorter of the two inputs so the reel keeps its original visual length.
+    # Probe video duration so we can fade the audio out before it ends.
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(reel)],
+        capture_output=True, text=True,
+    )
+    video_dur = float(probe.stdout.strip()) if probe.returncode == 0 else 36.0
+    fade_dur = 5.0
+    fade_start = max(0, video_dur - fade_dur)
+
+    # Copy video stream, re-encode audio with trim + fade-out so the music
+    # doesn't cut off abruptly regardless of the source track length.
     tmp = reel.with_suffix(".swap.mp4")
     cmd = [
         "ffmpeg", "-y", "-loglevel", "error",
@@ -66,7 +84,8 @@ def swap_reel_audio(
         "-c:v", "copy",
         "-c:a", "aac",
         "-b:a", "192k",
-        "-shortest",
+        "-af", f"atrim=0:{video_dur},afade=t=out:st={fade_start}:d={fade_dur}",
+        "-t", str(video_dur),
         str(tmp),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -89,6 +108,7 @@ def _main() -> int:
     parser.add_argument("--manifest", required=True, help="JSON with shoot_type + pieces")
     parser.add_argument("--output", required=True, help="Where to write the JSON result")
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--audio", default=None, help="Path to a user-provided audio file (skips Jamendo)")
     args = parser.parse_args()
 
     try:
@@ -103,6 +123,7 @@ def _main() -> int:
             shoot_type=manifest.get("shoot_type", "performance"),
             pieces=manifest.get("pieces", []),
             seed=args.seed,
+            audio_file=args.audio,
         )
     except Exception as e:
         print(f"error: {e}", file=sys.stderr)

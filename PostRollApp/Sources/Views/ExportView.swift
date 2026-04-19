@@ -240,7 +240,7 @@ struct ExportView: View {
         exportState = .exportingText
 
         let scopedDays: Set<DayName>? = onlyDay.map { [$0] }
-        let mediaDays: [String]? = onlyDay.map { [$0.rawValue] }
+        let capturedEvent = event
 
         Task {
             do {
@@ -248,61 +248,79 @@ struct ExportView: View {
                 let folder = try await Task.detached {
                     defer { destinationRoot.stopAccessingSecurityScopedResource() }
                     return try EventExporter.export(
-                        event: self.event,
+                        event: capturedEvent,
                         to: destinationRoot,
                         days: scopedDays
                     )
                 }.value
 
-                // Step 2: generate stories + collage via Python
                 await MainActor.run { exportState = .generatingMedia(folder) }
-                do {
-                    let imagePaths = try await PythonBridge.shared.runMediaGeneration(
-                        event: event,
-                        outputDir: folder.deletingLastPathComponent(),
-                        days: mediaDays
-                    )
 
-                    // Overwrite freshly-generated static PNGs with the exact approved
-                    // preview files. This guarantees the exported graphics match what
-                    // was reviewed, pixel-for-pixel. Videos (reels) come from the
-                    // fresh run above and are left untouched.
-                    var approvedPNGPaths: [URL] = []
-                    if !event.previewMediaPaths.isEmpty {
-                        let destSlug = "\(EventExporter.slug(event.org))_\(EventExporter.slug(event.name))_\(event.isoDate)"
-                        let mediaBase = folder.deletingLastPathComponent().appendingPathComponent(destSlug)
-                        for (dayKey, assetPaths) in event.previewMediaPaths {
-                            let dayFolder = DayName(rawValue: dayKey)?.folderName ?? dayKey
-                            for (_, srcPath) in assetPaths {
-                                guard srcPath.hasSuffix(".png"),
-                                      FileManager.default.fileExists(atPath: srcPath) else { continue }
+                // Step 2: copy assets from the already-approved preview files where
+                // possible, and only invoke Python for days whose preview files are
+                // missing or stale. The common case (everything previewed on the
+                // previous screen) skips Python entirely.
+                let previewPaths = capturedEvent.previewMediaPaths
+                let daysToProcess: [DayName] = onlyDay.map { [$0] } ?? DayName.allCases
+
+                var daysNeedingPython: [String] = []
+                var copiedURLs: [URL] = []
+
+                for day in daysToProcess {
+                    let hasContent = (capturedEvent.weekResult?[day] != nil)
+                        || (day == .friday && capturedEvent.days[day.rawValue] != nil)
+                    guard hasContent else { continue }
+
+                    if let assets = previewPaths[day.rawValue],
+                       !assets.isEmpty,
+                       assets.values.allSatisfy({ FileManager.default.fileExists(atPath: $0) }) {
+                        // All preview files for this day exist — copy directly, no Python needed
+                        let dayDir = folder.appendingPathComponent(day.folderName)
+                        try? FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
+                        for (_, srcPath) in assets {
+                            let src = URL(fileURLWithPath: srcPath)
+                            let dest = dayDir.appendingPathComponent(src.lastPathComponent)
+                            try? FileManager.default.removeItem(at: dest)
+                            if (try? FileManager.default.copyItem(at: src, to: dest)) != nil {
+                                copiedURLs.append(dest)
+                            }
+                        }
+                    } else {
+                        // Preview missing or files deleted — Python will regenerate this day
+                        daysNeedingPython.append(day.rawValue)
+                    }
+                }
+
+                if daysNeedingPython.isEmpty {
+                    // Every asset was copied from preview — skip Python entirely
+                } else {
+                    // Run Python only for the days that don't have complete previews
+                    do {
+                        let freshPaths = try await PythonBridge.shared.runMediaGeneration(
+                            event: capturedEvent,
+                            outputDir: folder.deletingLastPathComponent(),
+                            days: daysNeedingPython
+                        )
+                        // For the Python-regenerated days, overwrite fresh PNGs with any
+                        // approved previews that do exist (partial-preview edge case)
+                        var overriddenPNGs: [URL] = []
+                        for day in daysToProcess where daysNeedingPython.contains(day.rawValue) {
+                            guard let assets = previewPaths[day.rawValue] else { continue }
+                            let dayDir = folder.appendingPathComponent(day.folderName)
+                            for (_, srcPath) in assets where srcPath.hasSuffix(".png") {
+                                guard FileManager.default.fileExists(atPath: srcPath) else { continue }
                                 let src = URL(fileURLWithPath: srcPath)
-                                let dayDir = mediaBase.appendingPathComponent(dayFolder)
                                 let dest = dayDir.appendingPathComponent(src.lastPathComponent)
                                 try? FileManager.default.removeItem(at: dest)
                                 if (try? FileManager.default.copyItem(at: src, to: dest)) != nil {
-                                    approvedPNGPaths.append(dest)
+                                    overriddenPNGs.append(dest)
                                 }
                             }
                         }
+                        _ = freshPaths  // generated to disk; user opens via Finder
+                    } catch {
+                        await MainActor.run { mediaGenerationError = error.localizedDescription }
                     }
-
-                    // Open the approved PNGs in Preview (fall back to fresh ones if no preview was done)
-                    let pngsToOpen = approvedPNGPaths.isEmpty ? imagePaths : approvedPNGPaths
-                    if !pngsToOpen.isEmpty {
-                        let previewApp = URL(fileURLWithPath: "/System/Applications/Preview.app")
-                        if FileManager.default.fileExists(atPath: previewApp.path) {
-                            NSWorkspace.shared.open(
-                                pngsToOpen,
-                                withApplicationAt: previewApp,
-                                configuration: .init(),
-                                completionHandler: nil
-                            )
-                        }
-                    }
-                } catch {
-                    // Media generation failure is non-fatal — text export already succeeded
-                    await MainActor.run { mediaGenerationError = error.localizedDescription }
                 }
 
                 await MainActor.run {
@@ -317,6 +335,7 @@ struct ExportView: View {
             }
         }
     }
+
 }
 
 // MARK: - Export summary card
@@ -491,8 +510,25 @@ struct EventExporter {
             if !cap.altTexts.isEmpty {
                 let altBody: String
                 if day == .wednesday {
+                    let photoPaths = event.days[day.rawValue]?.photoPaths ?? []
                     altBody = cap.altTexts.enumerated()
-                        .map { "Photo \($0.offset + 1): \($0.element)" }
+                        .map { idx, altText in
+                            // Use the trailing number from the filename (e.g. "-277.jpg" → "277")
+                            // and fall back to position if the pattern isn't found.
+                            let label: String
+                            if idx < photoPaths.count {
+                                let stem = photoPaths[idx].deletingPathExtension().lastPathComponent
+                                if let dash = stem.range(of: "-", options: .backwards) {
+                                    let num = String(stem[dash.upperBound...])
+                                    label = num.isEmpty ? "\(idx + 1)" : num
+                                } else {
+                                    label = "\(idx + 1)"
+                                }
+                            } else {
+                                label = "\(idx + 1)"
+                            }
+                            return "\(label): \(altText)"
+                        }
                         .joined(separator: "\n")
                 } else {
                     altBody = cap.altTexts[0]

@@ -205,8 +205,7 @@ def respond_to_flag(
         data = run_json_prompt(
             prompt,
             timeout=300,
-            allowed_dirs=[tmp_path],
-            allowed_tools=["Read"],
+            image_paths=staged,
         )
 
     if not isinstance(data, dict):

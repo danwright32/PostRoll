@@ -51,6 +51,14 @@ struct CaptionReviewView: View {
 
     @State private var previewURL: URL? = nil
 
+    // Upload-your-own reel audio
+    @State private var showingReelAudioPicker = false
+    @State private var uploadReelAudioDay: DayName = .tuesday
+
+    // Inline RAW/Edited photo state (used by InlineReelPhotoAssignment)
+    @State private var inlineRawPhoto: URL? = nil
+    @State private var inlineEditedPhoto: URL? = nil
+
     // Learning flow
     @State private var isAnalyzingEdits = false
     @State private var learningSuggestion: String? = nil
@@ -117,6 +125,31 @@ struct CaptionReviewView: View {
                             graphicVersion: graphicVersions[day] ?? 0,
                             onRegenerateGraphic: { regenerateGraphic(day: day) },
                             onSwapReelAudio: { swapReelAudio(day: day) },
+                            onUploadReelAudio: { uploadReelAudioDay = day; showingReelAudioPicker = true },
+                            onChangeReelPhotos: (day == .tuesday || day == .thursday) ? { changeReelPhotos(day: day) } : nil,
+                            onAssignReelPhotos: day == .tuesday ? { raw, edited in
+                                assignReelPhotosAndGenerate(raw: raw, edited: edited)
+                            } : nil,
+                            onPickInlineRaw: day == .tuesday ? {
+                                let panel = NSOpenPanel()
+                                panel.title = "Select RAW (unedited) photo"
+                                panel.allowedContentTypes = [.image]
+                                panel.allowsMultipleSelection = false
+                                if panel.runModal() == .OK, let url = panel.url {
+                                    inlineRawPhoto = url
+                                }
+                            } : nil,
+                            onPickInlineEdited: day == .tuesday ? {
+                                let panel = NSOpenPanel()
+                                panel.title = "Select Edited photo"
+                                panel.allowedContentTypes = [.image]
+                                panel.allowsMultipleSelection = false
+                                if panel.runModal() == .OK, let url = panel.url {
+                                    inlineEditedPhoto = url
+                                }
+                            } : nil,
+                            inlineRawPhoto: inlineRawPhoto,
+                            inlineEditedPhoto: inlineEditedPhoto,
                             collageCropOffsets: day == .wednesday ? collageOffsetsBinding(day) : nil,
                             collageCellOverride: day == .wednesday ? collageCellOverrideBinding(day) : nil,
                             reelCropOffsets: day == .thursday ? reelOffsetsBinding(day) : nil,
@@ -129,11 +162,11 @@ struct CaptionReviewView: View {
                     if result.blog != nil {
                         BlogSection(
                             blog: blogBinding,
+                            photoCount: event.blogPhotoPaths.count,
                             isExpanded: expanded == .blog,
                             onToggle: { expanded = expanded == .blog ? nil : .blog },
-                            onRevise: { feedback in
-                                try await reviseBlog(feedback: feedback)
-                            }
+                            onRevise: { feedback in try await reviseBlog(feedback: feedback) },
+                            onSwapPhotos: { urls in try await swapBlogPhotos(urls: urls) }
                         )
                         .disabled(isRegenerating)
                     }
@@ -229,6 +262,15 @@ struct CaptionReviewView: View {
                         finalizeAdvance()
                     }
                 )
+            }
+        }
+        .fileImporter(
+            isPresented: $showingReelAudioPicker,
+            allowedContentTypes: [.audio, .mp3, .wav, .aiff, .mpeg4Audio],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                uploadReelAudio(day: uploadReelAudioDay, url: url)
             }
         }
     }
@@ -360,6 +402,13 @@ struct CaptionReviewView: View {
     }
 
     private func swapReelAudio(day: DayName) {
+        // Clear any uploaded audio so regeneration fetches fresh Jamendo
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
+        pd.audioPath = nil
+        ev.days[day.rawValue] = pd
+        appState.updateEvent(ev)
+
         regeneratingDays.insert(day)
         Task {
             _ = try? await PythonBridge.shared.runSwapReelAudio(event: event, day: day)
@@ -372,6 +421,99 @@ struct CaptionReviewView: View {
                     what: "\(day.displayName) audio"
                 )
             }
+        }
+    }
+
+    private func uploadReelAudio(day: DayName, url: URL) {
+        guard url.startAccessingSecurityScopedResource() else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
+
+        // Copy to a stable location so the sandbox bookmark survives.
+        let dest = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_upload_\(UUID().uuidString)_\(url.lastPathComponent)")
+        try? FileManager.default.copyItem(at: url, to: dest)
+
+        // Persist the audio path on the event so regeneration reuses it
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
+        pd.audioPath = dest
+        ev.days[day.rawValue] = pd
+        appState.updateEvent(ev)
+
+        regeneratingDays.insert(day)
+        Task {
+            _ = try? await PythonBridge.shared.runSwapReelAudioWithFile(
+                event: event, day: day, audioPath: dest.path
+            )
+            await MainActor.run {
+                graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                regeneratingDays.remove(day)
+                NotificationService.shared.notifyRegenerationComplete(
+                    eventName: event.name,
+                    what: "\(day.displayName) audio"
+                )
+            }
+        }
+    }
+
+    private func assignReelPhotosAndGenerate(raw: URL, edited: URL) {
+        // Save the RAW + Edited photos to the event model for Tuesday (and Friday).
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        var tue = ev.days[DayName.tuesday.rawValue] ?? PostingDay(day: .tuesday)
+        tue.rawPhotoPath = raw
+        tue.editedPhotoPath = edited
+        ev.days[DayName.tuesday.rawValue] = tue
+        // Friday reuses Tuesday's RAW/Edited for before/after
+        var fri = ev.days[DayName.friday.rawValue] ?? PostingDay(day: .friday)
+        fri.rawPhotoPath = raw
+        fri.editedPhotoPath = edited
+        ev.days[DayName.friday.rawValue] = fri
+        appState.updateEvent(ev)
+
+        // Now generate the reel for Tuesday and the Friday before/after story
+        regenerateGraphic(day: .tuesday)
+        regenerateGraphic(day: .friday)
+    }
+
+    private func changeReelPhotos(day: DayName) {
+        if day == .tuesday {
+            // Step 1: Pick RAW photo
+            let rawPanel = NSOpenPanel()
+            rawPanel.title = "Select RAW (unedited) photo"
+            rawPanel.allowedContentTypes = [.image]
+            rawPanel.allowsMultipleSelection = false
+            guard rawPanel.runModal() == .OK, let rawURL = rawPanel.url else { return }
+
+            // Step 2: Pick Edited photo
+            let editedPanel = NSOpenPanel()
+            editedPanel.title = "Select Edited photo"
+            editedPanel.allowedContentTypes = [.image]
+            editedPanel.allowsMultipleSelection = false
+            guard editedPanel.runModal() == .OK, let editedURL = editedPanel.url else { return }
+
+            assignReelPhotosAndGenerate(raw: rawURL, edited: editedURL)
+        } else {
+            // Thursday: multi-select
+            let panel = NSOpenPanel()
+            panel.title = "Select photos for Thursday reel"
+            panel.allowedContentTypes = [.image]
+            panel.allowsMultipleSelection = true
+            guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+
+            print("[PostRoll:changeReelPhotos] NSOpenPanel returned \(panel.urls.count) files:")
+            for (i, url) in panel.urls.enumerated() {
+                print("  [\(i)] \(url.lastPathComponent)")
+            }
+            var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+            var thu = ev.days[DayName.thursday.rawValue] ?? PostingDay(day: .thursday)
+            thu.photoPaths = panel.urls.sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending }
+            print("[PostRoll:changeReelPhotos] After sort, \(thu.photoPaths.count) photos:")
+            for (i, url) in thu.photoPaths.enumerated() {
+                print("  [\(i)] \(url.lastPathComponent)")
+            }
+            ev.days[DayName.thursday.rawValue] = thu
+            appState.updateEvent(ev)
+            regenerateGraphic(day: .thursday)
         }
     }
 
@@ -399,7 +541,9 @@ struct CaptionReviewView: View {
                 event: eventSnapshot, days: [day.rawValue]
             ), let dayPaths = newPaths[day.rawValue], !dayPaths.isEmpty {
                 await MainActor.run {
-                    var ev = event
+                    // Read the CURRENT event — not self.event which may be stale
+                    // (e.g. after assignReelPhotosAndGenerate saved new photos).
+                    var ev = appState.events.first(where: { $0.id == event.id }) ?? event
                     ev.previewMediaPaths[day.rawValue] = dayPaths
                     appState.updateEvent(ev)
                     graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
@@ -440,10 +584,28 @@ struct CaptionReviewView: View {
         save()
     }
 
+    private func swapBlogPhotos(urls: [URL]) async throws {
+        guard let current = result.blog else { return }
+        let updated = try await PythonBridge.shared.runBlogPhotoSwap(
+            currentBody: current.body,
+            photoPaths: urls
+        )
+        var updatedBlog = current
+        updatedBlog.body = updated.body
+        updatedBlog.photoCount = urls.count
+        result.blog = updatedBlog
+        save()
+        // blogPhotoPaths lives outside weekResult — re-read live event so
+        // this write lands on top of what save() just persisted.
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        ev.blogPhotoPaths = urls
+        appState.updateEvent(ev)
+    }
+
     // MARK: - Persistence
 
     private func save() {
-        var ev = event
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.weekResult = result
         for (dayKey, offsets) in dayCollageCropOffsets {
             if var pd = ev.days[dayKey] {
@@ -489,7 +651,7 @@ struct CaptionReviewView: View {
     }
 
     private func finalizeAdvance() {
-        var ev = event
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.weekResult = result
         for (dayKey, offsets) in dayCollageCropOffsets {
             if var pd = ev.days[dayKey] {
@@ -529,6 +691,15 @@ private struct CaptionSection: View {
     var graphicVersion: Int = 0
     var onRegenerateGraphic: (() -> Void)? = nil
     var onSwapReelAudio: (() -> Void)? = nil
+    var onUploadReelAudio: (() -> Void)? = nil
+    var onChangeReelPhotos: (() -> Void)? = nil
+    /// Called when the user assigns RAW + Edited photos inline (review screen fallback).
+    var onAssignReelPhotos: ((URL, URL) -> Void)? = nil
+    /// Inline photo picker callbacks (hoisted to parent for fileImporter presentation)
+    var onPickInlineRaw: (() -> Void)? = nil
+    var onPickInlineEdited: (() -> Void)? = nil
+    var inlineRawPhoto: URL? = nil
+    var inlineEditedPhoto: URL? = nil
     var collageCropOffsets: Binding<[String: CropOffset]>? = nil
     var collageCellOverride: Binding<[CollageCell]?>? = nil
     var reelCropOffsets: Binding<[String: CropOffset]>? = nil
@@ -714,8 +885,11 @@ private struct CaptionSection: View {
                                     cardWidth: tuesdayReelCardWidth,
                                     onRegenerate: onRegenerateGraphic,
                                     onSwapAudio: onSwapReelAudio,
+                                    onUploadAudio: onUploadReelAudio,
+                                    onChangePhotos: onChangeReelPhotos,
                                     isRegenerating: isRegeneratingGraphic
                                 )
+                                .id("tuesday-reel-\(graphicVersion)")
                                 Spacer(minLength: 0)
                             }
                             .padding(.top, 16)
@@ -809,11 +983,18 @@ private struct CaptionSection: View {
                                 InstagramMockup(
                                     photoURL: postingDay?.photoPaths.first,
                                     photoURLs: day == .wednesday ? (postingDay?.photoPaths ?? []) : [],
+                                    videoURL: day == .thursday ? previewPaths?["reel"].flatMap({ URL(fileURLWithPath: $0) }) : nil,
                                     dayLabel: day.displayName,
                                     caption: caption.caption,
                                     hashtags: caption.hashtags,
-                                    cardWidth: mockupWidth
+                                    cardWidth: mockupWidth,
+                                    onRegenerate: day == .thursday ? onRegenerateGraphic : nil,
+                                    onSwapAudio: day == .thursday ? onSwapReelAudio : nil,
+                                    onUploadAudio: day == .thursday ? onUploadReelAudio : nil,
+                                    onChangePhotos: day == .thursday ? onChangeReelPhotos : nil,
+                                    isRegenerating: day == .thursday ? isRegeneratingGraphic : false
                                 )
+                                .id(day == .thursday ? "thu-mockup-\(graphicVersion)" : nil)
                                 Spacer(minLength: 0)
                             }
                             .padding(.horizontal, Spacing.xl)
@@ -943,13 +1124,13 @@ private struct CaptionSection: View {
                                             isRegenerating: isRegeneratingGraphic,
                                             onRegenerate: onRegenerateGraphic,
                                             onSwapAudio: onSwapReelAudio,
+                                            onUploadAudio: onUploadReelAudio,
+                                            onChangePhotos: onChangeReelPhotos,
                                             maxHeight: storyExpandedMaxHeight - 60
                                         )
                                         .id("\(pngURL.path)-\(graphicVersion)")
                                         .padding(Spacing.md)
                                     } else if day == .thursday {
-                                        // Parent kicked off the build eagerly on view appear;
-                                        // fall through to a loading placeholder until it lands.
                                         VStack(spacing: 10) {
                                             ProgressView().controlSize(.small).tint(.white)
                                             Text(isBuildingThursdayEditor ? "Preparing editor…" : "Loading…")
@@ -959,48 +1140,64 @@ private struct CaptionSection: View {
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                                         .padding(Spacing.md)
                                     } else {
-                                        ReelPreviewPlayer(
-                                            url: previewURL,
-                                            onRegenerate: onRegenerateGraphic,
-                                            isRegenerating: isRegeneratingGraphic
-                                        )
-                                        .id("\(previewURL.path)-\(graphicVersion)")
-                                        .aspectRatio(9/16, contentMode: .fit)
-                                        .frame(maxWidth: .infinity, maxHeight: expandedCardMinHeight)
-                                        .overlay(alignment: .topTrailing) {
-                                            if onRegenerateGraphic != nil || onSwapReelAudio != nil {
-                                                Menu {
-                                                    if let onRegenerate = onRegenerateGraphic {
-                                                        Button {
-                                                            onRegenerate()
-                                                        } label: {
-                                                            Label(isRegeneratingGraphic ? "Regenerating…" : "Regenerate reel", systemImage: "arrow.clockwise")
-                                                        }
-                                                        .disabled(isRegeneratingGraphic)
+                                    ReelPreviewPlayer(
+                                        url: previewURL,
+                                        onRegenerate: onRegenerateGraphic,
+                                        isRegenerating: isRegeneratingGraphic
+                                    )
+                                    .id("\(previewURL.path)-\(graphicVersion)")
+                                    .aspectRatio(9/16, contentMode: .fit)
+                                    .frame(maxWidth: .infinity, maxHeight: expandedCardMinHeight)
+                                    .overlay(alignment: .topTrailing) {
+                                        if onRegenerateGraphic != nil || onSwapReelAudio != nil || onUploadReelAudio != nil || onChangeReelPhotos != nil {
+                                            Menu {
+                                                if let onRegenerate = onRegenerateGraphic {
+                                                    Button {
+                                                        onRegenerate()
+                                                    } label: {
+                                                        Label(isRegeneratingGraphic ? "Regenerating…" : "Regenerate reel", systemImage: "arrow.clockwise")
                                                     }
-                                                    if let onSwap = onSwapReelAudio {
-                                                        Button {
-                                                            onSwap()
-                                                        } label: {
-                                                            Label("Swap audio only", systemImage: "music.note")
-                                                        }
-                                                        .disabled(isRegeneratingGraphic)
-                                                    }
-                                                } label: {
-                                                    Image(systemName: "ellipsis")
-                                                        .font(.system(size: 13, weight: .medium))
-                                                        .foregroundStyle(Color.white.opacity(0.9))
-                                                        .padding(8)
-                                                        .background(Color.black.opacity(0.4))
-                                                        .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
+                                                    .disabled(isRegeneratingGraphic)
                                                 }
-                                                .menuStyle(.borderlessButton)
-                                                .menuIndicator(.hidden)
-                                                .fixedSize()
-                                                .padding(10)
+                                                if let onChange = onChangeReelPhotos {
+                                                    Button {
+                                                        onChange()
+                                                    } label: {
+                                                        Label("Change photos", systemImage: "photo.on.rectangle.angled")
+                                                    }
+                                                    .disabled(isRegeneratingGraphic)
+                                                }
+                                                if let onSwap = onSwapReelAudio {
+                                                    Button {
+                                                        onSwap()
+                                                    } label: {
+                                                        Label("New Jamendo audio", systemImage: "music.note")
+                                                    }
+                                                    .disabled(isRegeneratingGraphic)
+                                                }
+                                                if let onUpload = onUploadReelAudio {
+                                                    Button {
+                                                        onUpload()
+                                                    } label: {
+                                                        Label("Upload my own audio", systemImage: "square.and.arrow.down")
+                                                    }
+                                                    .disabled(isRegeneratingGraphic)
+                                                }
+                                            } label: {
+                                                Image(systemName: "ellipsis")
+                                                    .font(.system(size: 13, weight: .medium))
+                                                    .foregroundStyle(Color.white.opacity(0.9))
+                                                    .padding(8)
+                                                    .background(Color.black.opacity(0.4))
+                                                    .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                                             }
+                                            .menuStyle(.borderlessButton)
+                                            .menuIndicator(.hidden)
+                                            .fixedSize()
+                                            .padding(10)
                                         }
-                                        .padding(Spacing.md)
+                                    }
+                                    .padding(Spacing.md)
                                     }
                                 } else {
                                     PreviewGraphicThumbnail(
@@ -1029,7 +1226,23 @@ private struct CaptionSection: View {
                 } else {
                     // ── Stacked layout: days with no generated preview yet ────────
                     VStack(alignment: .leading, spacing: Spacing.md) {
-                        if let pd = postingDay {
+                        if day == .tuesday,
+                           (postingDay?.rawPhotoPath == nil || postingDay?.editedPhotoPath == nil),
+                           previewPaths?["reel"] == nil {
+                            // Inline RAW/Edited upload when reel inputs are missing
+                            InlineReelPhotoAssignment(
+                                rawPhoto: inlineRawPhoto,
+                                editedPhoto: inlineEditedPhoto,
+                                isRegenerating: isRegeneratingGraphic,
+                                onPickRaw: { onPickInlineRaw?() },
+                                onPickEdited: { onPickInlineEdited?() },
+                                onGenerate: {
+                                    if let raw = inlineRawPhoto, let edited = inlineEditedPhoto {
+                                        onAssignReelPhotos?(raw, edited)
+                                    }
+                                }
+                            )
+                        } else if let pd = postingDay {
                             ReviewMediaStrip(
                                 day: day,
                                 postingDay: pd,
@@ -1227,15 +1440,19 @@ private struct RevisionPanel: View {
 
 private struct BlogSection: View {
     @Binding var blog: BlogOutput
+    var photoCount: Int = 0
     let isExpanded: Bool
     let onToggle: () -> Void
     let onRevise: (String) async throws -> Void
+    var onSwapPhotos: (([URL]) async throws -> Void)? = nil
     @State private var showingPreview = false
     @State private var showingRevision = false
     @State private var feedbackText = ""
     @State private var saveToBrandVoice = false
     @State private var isRevising = false
     @State private var revisionError: String?
+    @State private var isSwappingPhotos = false
+    @State private var photoSwapError: String?
     @State private var undoBlog: BlogOutput? = nil
 
     var body: some View {
@@ -1331,6 +1548,21 @@ private struct BlogSection: View {
                                 .buttonStyle(.plain)
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color.roseGold)
+                            if onSwapPhotos != nil {
+                                if isSwappingPhotos {
+                                    HStack(spacing: 4) {
+                                        ProgressView().controlSize(.mini).tint(Color.warmMid)
+                                        Text("Updating photos…")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(Color.warmMid)
+                                    }
+                                } else {
+                                    Button("Change photos (\(photoCount))…") { pickAndSwapPhotos() }
+                                        .buttonStyle(.plain)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Color.warmMid)
+                                }
+                            }
                             if undoBlog != nil {
                                 Button("Restore previous") {
                                     if let prev = undoBlog {
@@ -1343,6 +1575,11 @@ private struct BlogSection: View {
                                 .foregroundStyle(Color.warmMid)
                             }
                         }
+                        if let err = photoSwapError {
+                            Text(err)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.red)
+                        }
                     }
                 }
                 .padding(.horizontal, Spacing.xl)
@@ -1350,6 +1587,35 @@ private struct BlogSection: View {
             }
 
             RoseGoldDivider(opacity: 0.3)
+        }
+    }
+
+    private func pickAndSwapPhotos() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.jpeg, .png, .heic, .image]
+        panel.title = "Select Blog Photos"
+        panel.message = "Choose photos for the blog post (4–7 recommended)"
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        let urls = panel.urls
+        let snapshot = blog
+        isSwappingPhotos = true
+        photoSwapError = nil
+        Task {
+            do {
+                try await onSwapPhotos?(urls)
+                await MainActor.run {
+                    undoBlog = snapshot
+                    isSwappingPhotos = false
+                }
+            } catch {
+                await MainActor.run {
+                    isSwappingPhotos = false
+                    photoSwapError = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -1388,13 +1654,11 @@ private struct BlogBodyEditor: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextEditor(text: $text)
+        SpellCheckingTextEditor(text: $text)
+            .nsFont(.systemFont(ofSize: 12))
+            .nsTextColor(NSColor(Color.warmDark))
             .focused($focused)
-            .font(.system(size: 12))
-            .foregroundStyle(Color.warmDark)
-            .focusEffectDisabled()
             .frame(minHeight: 280)
-            .scrollContentBackground(.hidden)
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm)
@@ -1543,13 +1807,11 @@ private struct AltTextRow: View {
                 .foregroundStyle(Color.warmMid)
                 .padding(.top, 8)
                 .frame(width: 20, alignment: .leading)
-            TextEditor(text: $text)
+            SpellCheckingTextEditor(text: $text)
+                .nsFont(.systemFont(ofSize: 11))
+                .nsTextColor(NSColor(Color.warmDark))
                 .focused($focused)
-                .font(.system(size: 11))
-                .foregroundStyle(Color.warmDark)
-                .focusEffectDisabled()
                 .frame(minHeight: 44)
-                .scrollContentBackground(.hidden)
                 .padding(6)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.xs)
@@ -1581,13 +1843,11 @@ private struct ReviewTextArea: View {
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
                 .foregroundStyle(Color.warmMid)
-            TextEditor(text: $text)
+            SpellCheckingTextEditor(text: $text)
+                .nsFont(.systemFont(ofSize: 12))
+                .nsTextColor(NSColor(Color.warmDark))
                 .focused($focused)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.warmDark)
-                .focusEffectDisabled()
                 .frame(minHeight: minHeight)
-                .scrollContentBackground(.hidden)
                 .padding(8)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.sm)
@@ -1671,6 +1931,24 @@ private struct ReviewMediaStrip: View {
                         .frame(maxWidth: .infinity, maxHeight: max(440, (NSScreen.main?.visibleFrame.height ?? 800) * 0.82))
                         .padding(.horizontal, Spacing.xl)
                 }
+            } else if !hideMainGraphic, reelURL == nil, (day == .tuesday || day == .thursday) {
+                // No reel generated yet — offer a button to generate it
+                VStack(spacing: Spacing.sm) {
+                    Text("No reel generated yet")
+                        .font(.light(12))
+                        .foregroundStyle(Color.warmMid)
+                    if isRegenerating {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(Color.roseGold)
+                    } else if let onRegenerate {
+                        Button("Generate Reel") { onRegenerate() }
+                            .buttonStyle(BrandButtonStyle())
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Spacing.lg)
+                .padding(.horizontal, Spacing.xl)
             }
 
             // Wednesday: interactive collage with per-cell crop controls
@@ -1795,6 +2073,8 @@ private struct InstagramMockup: View {
     let cardWidth: CGFloat
     var onRegenerate: (() -> Void)? = nil
     var onSwapAudio: (() -> Void)? = nil
+    var onUploadAudio: (() -> Void)? = nil
+    var onChangePhotos: (() -> Void)? = nil
     var isRegenerating: Bool = false
 
     @State private var photo: NSImage? = nil
@@ -1847,7 +2127,7 @@ private struct InstagramMockup: View {
 
                 Spacer()
 
-                if onRegenerate != nil || onSwapAudio != nil {
+                if onRegenerate != nil || onSwapAudio != nil || onUploadAudio != nil || onChangePhotos != nil {
                     Menu {
                         if let onRegenerate {
                             Button {
@@ -1857,11 +2137,27 @@ private struct InstagramMockup: View {
                             }
                             .disabled(isRegenerating)
                         }
+                        if let onChangePhotos {
+                            Button {
+                                onChangePhotos()
+                            } label: {
+                                Label("Change photos", systemImage: "photo.on.rectangle.angled")
+                            }
+                            .disabled(isRegenerating)
+                        }
                         if let onSwapAudio {
                             Button {
                                 onSwapAudio()
                             } label: {
-                                Label("Swap audio only", systemImage: "music.note")
+                                Label("New Jamendo audio", systemImage: "music.note")
+                            }
+                            .disabled(isRegenerating)
+                        }
+                        if let onUploadAudio {
+                            Button {
+                                onUploadAudio()
+                            } label: {
+                                Label("Upload my own audio", systemImage: "square.and.arrow.down")
                             }
                             .disabled(isRegenerating)
                         }
@@ -2319,6 +2615,7 @@ private struct CollagePreviewThumbnail: View {
                                     cellOverride.wrappedValue = applyCollageDividerDelta(
                                         to: baseCells, divider: div,
                                         delta: Int(finalDeltaPx / sy))
+                                    onRegenerate?()
                                 }
                                 .position(
                                     x: geo.size.width / 2,
@@ -2334,6 +2631,7 @@ private struct CollagePreviewThumbnail: View {
                                     cellOverride.wrappedValue = applyCollageDividerDelta(
                                         to: baseCells, divider: div,
                                         delta: Int(finalDeltaPx / sx))
+                                    onRegenerate?()
                                 }
                                 .position(
                                     x: CGFloat(div.canvasPos) * sx,
@@ -2401,6 +2699,7 @@ private struct CollagePreviewThumbnail: View {
                             }
                             newCells[idx].photoPath = droppedPath
                             cellOverride.wrappedValue = newCells
+                            onRegenerate?()
                         }
                     }
                     dropTargetIdx = nil
@@ -2569,6 +2868,8 @@ private struct ReelStripPreviewThumbnail: View {
     var isRegenerating: Bool = false
     var onRegenerate: (() -> Void)? = nil
     var onSwapAudio: (() -> Void)? = nil
+    var onUploadAudio: (() -> Void)? = nil
+    var onChangePhotos: (() -> Void)? = nil
     var maxHeight: CGFloat = 600
 
     @State private var image: NSImage?
@@ -2644,7 +2945,7 @@ private struct ReelStripPreviewThumbnail: View {
                     .strokeBorder(Color.creamEdge, lineWidth: 0.5)
             )
             .overlay(alignment: .topTrailing) {
-                if onRegenerate != nil || onSwapAudio != nil {
+                if onRegenerate != nil || onSwapAudio != nil || onUploadAudio != nil || onChangePhotos != nil {
                     Menu {
                         if let onRegenerate {
                             Button {
@@ -2654,11 +2955,27 @@ private struct ReelStripPreviewThumbnail: View {
                             }
                             .disabled(isRegenerating)
                         }
+                        if let onChangePhotos {
+                            Button {
+                                onChangePhotos()
+                            } label: {
+                                Label("Change photos", systemImage: "photo.on.rectangle.angled")
+                            }
+                            .disabled(isRegenerating)
+                        }
                         if let onSwapAudio {
                             Button {
                                 onSwapAudio()
                             } label: {
-                                Label("Swap audio only", systemImage: "music.note")
+                                Label("New Jamendo audio", systemImage: "music.note")
+                            }
+                            .disabled(isRegenerating)
+                        }
+                        if let onUploadAudio {
+                            Button {
+                                onUploadAudio()
+                            } label: {
+                                Label("Upload my own audio", systemImage: "square.and.arrow.down")
                             }
                             .disabled(isRegenerating)
                         }
@@ -2891,9 +3208,15 @@ private struct CollageCellOverlay: View {
                     context.draw(img, in: drawRect)
                 } else {
                     // Blur mode: blurred background + centered sharp photo.
+                    // Opaque base prevents the underlying collage PNG from bleeding
+                    // through the Gaussian filter's semi-transparent edge fringe.
+                    context.fill(
+                        Path(CGRect(origin: .zero, size: size)),
+                        with: .color(Color(white: 0.08))
+                    )
                     if blurOpacity > 0 {
                         var blurCtx = context
-                        blurCtx.addFilter(.blur(radius: 14))
+                        blurCtx.addFilter(.blur(radius: 24))
                         blurCtx.draw(img, in: CGRect(origin: .zero, size: size))
                         // Darkening scrim proportional to blur opacity
                         context.fill(
@@ -3284,10 +3607,9 @@ private struct LearningSuggestionSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            TextEditor(text: $editedSuggestion)
-                .font(.system(size: 13))
-                .foregroundStyle(Color.warmDark)
-                .scrollContentBackground(.hidden)
+            SpellCheckingTextEditor(text: $editedSuggestion)
+                .nsFont(.systemFont(ofSize: 13))
+                .nsTextColor(NSColor(Color.warmDark))
                 .padding(Spacing.sm)
                 .frame(minHeight: 120, maxHeight: 220)
                 .background(
@@ -3364,5 +3686,83 @@ private struct ReviewPhotoOverlay: View {
             }
         }
         .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+    }
+}
+
+// MARK: - Inline RAW/Edited photo assignment for reel generation
+
+private struct InlineReelPhotoAssignment: View {
+    var rawPhoto: URL?
+    var editedPhoto: URL?
+    var isRegenerating: Bool = false
+    var onPickRaw: () -> Void
+    var onPickEdited: () -> Void
+    var onGenerate: () -> Void
+
+    private var hasAll: Bool { rawPhoto != nil && editedPhoto != nil }
+
+    var body: some View {
+        VStack(spacing: Spacing.md) {
+            Text("REEL")
+                .font(.system(size: 9, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.warmMid)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("Assign the RAW and Edited photos to generate a speed-edit reel.")
+                .font(.light(12))
+                .foregroundStyle(Color.warmMid)
+
+            HStack(spacing: Spacing.md) {
+                photoSlot(label: "RAW (unedited)", url: rawPhoto, action: onPickRaw)
+                photoSlot(label: "Edited", url: editedPhoto, action: onPickEdited)
+            }
+
+            if hasAll {
+                if isRegenerating {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color.roseGold)
+                } else {
+                    Button("Generate Reel") { onGenerate() }
+                        .buttonStyle(BrandButtonStyle())
+                }
+            }
+        }
+        .padding(.horizontal, Spacing.xl)
+        .padding(.vertical, Spacing.lg)
+    }
+
+    @ViewBuilder
+    private func photoSlot(label: String, url: URL?, action: @escaping () -> Void) -> some View {
+        VStack(spacing: Spacing.xs) {
+            Button { action() } label: {
+                if let url, let img = NSImage(contentsOf: url) {
+                    Image(nsImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 120, height: 80)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+                } else {
+                    RoundedRectangle(cornerRadius: Radius.sm)
+                        .fill(Color.warmFaint.opacity(0.3))
+                        .frame(width: 120, height: 80)
+                        .overlay {
+                            VStack(spacing: 4) {
+                                Image(systemName: "plus.circle")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(Color.warmMid)
+                                Text("Choose")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.warmMid)
+                            }
+                        }
+                }
+            }
+            .buttonStyle(.plain)
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Color.warmMid)
+        }
     }
 }

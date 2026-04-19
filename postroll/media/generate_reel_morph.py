@@ -39,13 +39,13 @@ TOTAL_DURATION = (HOLD_RAW + SPLIT_DURATION + HOLD_EDIT +
                   TRANSITION_DURATION + CLOSING_FRAME_DURATION)
 
 # RAW treatment
-RAW_DESATURATION = 0.5
-RAW_DARKEN = 0.88
-RAW_COOL_SHIFT = 12
+RAW_DESATURATION = 0.0
+RAW_DARKEN = 1.0
+RAW_COOL_SHIFT = 0
 
-# Ken Burns
+# Ken Burns — disabled (was causing visible shaking)
 ZOOM_START = 1.0
-ZOOM_END = 1.04
+ZOOM_END = 1.0
 
 # Split divider
 DIVIDER_WIDTH = 4

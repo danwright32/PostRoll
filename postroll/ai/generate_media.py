@@ -194,8 +194,13 @@ def generate_media(
         photos = day_info.get("photos", [])
 
         if not photos:
-            results[day_name] = None
-            continue
+            # Tuesday and Friday can operate without the generic photos list —
+            # they use raw_photo / edited_photo instead.
+            if day_name not in ("tuesday", "friday") or (
+                not day_info.get("raw_photo") and not day_info.get("edited_photo")
+            ):
+                results[day_name] = None
+                continue
 
         day_dir = base_dir / DAY_FOLDER_NAMES[day_name]
         day_dir.mkdir(parents=True, exist_ok=True)
@@ -337,7 +342,7 @@ def generate_media(
                 print("[generate_media] tuesday: reel skipped (no raw/edited photos assigned)", flush=True)
 
             # Story fallback if no reel was produced
-            if "reel" not in day_result:
+            if "reel" not in day_result and photos:
                 try:
                     story_path = str(day_dir / "story.png")
                     generate_story(
@@ -412,6 +417,9 @@ def generate_media(
                 crop_offsets    = day_info.get("crop_offsets")  # list[(x, y, zoom)] parallel to photos
                 audio_tags      = _derive_audio_tags(shoot_type, pieces)
                 print(f"[generate_media] thursday: audio tags → {audio_tags!r}", flush=True)
+                print(f"[generate_media] thursday: {len(photos)} photos from manifest:", flush=True)
+                for i, p in enumerate(photos):
+                    print(f"  [{i}] {Path(p).name}", flush=True)
                 try:
                     from ..media.generate_reel_scroll import generate_reel_scroll, build_reel_preview
                     reel_path = str(day_dir / "reel_scroll.mp4")
@@ -500,19 +508,20 @@ def generate_media(
                 # Fallback: story template
                 reason = "missing raw_photo/edited_photo"
                 print(f"[generate_media] friday: before/after skipped ({reason}), generating story", flush=True)
-                try:
-                    story_path = str(day_dir / "story.png")
-                    generate_story(
-                        photo_path=photos[0],
-                        event_name=event,
-                        org=org,
-                        venue=venue,
-                        output_path=story_path,
-                        logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
-                    )
-                    day_result["story"] = story_path
-                except Exception as e:
-                    errors["friday"] = f"story fallback failed: {e}"
+                if photos:
+                    try:
+                        story_path = str(day_dir / "story.png")
+                        generate_story(
+                            photo_path=photos[0],
+                            event_name=event,
+                            org=org,
+                            venue=venue,
+                            output_path=story_path,
+                            logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                        )
+                        day_result["story"] = story_path
+                    except Exception as e:
+                        errors["friday"] = f"story fallback failed: {e}"
 
         results[day_name] = day_result or None
 

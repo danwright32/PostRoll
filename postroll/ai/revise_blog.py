@@ -48,7 +48,7 @@ from .ai_tells import (
     load_humanizer_rules,
 )
 from .claude_client import run_json_prompt, load_brand_voice, ClaudeError
-from .generate_blog import _format_performers, _format_pieces
+from .generate_blog import _format_performers, _format_pieces, BLOG_WRITING_RULES
 
 
 REVISE_PROMPT = """\
@@ -90,9 +90,10 @@ Apply Dan's feedback to revise the title and body. Rules:
    the only photos available; you cannot invent new ones.
 2. Keep 10-12 short paragraphs separated by blank lines.
 3. No headings, no bullets, no section breaks.
-4. No banned hype words (stunning, magical, breathtaking, unforgettable).
-5. No AI tells (in a world where, it's not just X it's Y, rule-of-three tics).
-6. Do NOT invent details Dan didn't witness.
+
+Prose rules (same as initial generation — all apply):
+{blog_writing_rules}
+- Inside the JSON "body" string, escape newlines as \\n so the JSON parses cleanly.
 
 Return JSON ONLY (no markdown fences, no commentary) in this shape:
 
@@ -100,8 +101,6 @@ Return JSON ONLY (no markdown fences, no commentary) in this shape:
   "title": "<revised title>",
   "body":  "<revised markdown body with [PHOTO: ...] markers preserved>"
 }}
-
-Inside the JSON "body" string, escape newlines as \\n so the JSON parses cleanly.
 """
 
 
@@ -138,6 +137,7 @@ def revise_blog(
 
     prompt = REVISE_PROMPT.format(
         brand_voice=brand_voice_text,
+        blog_writing_rules=BLOG_WRITING_RULES,
         event=event,
         org=org,
         venue=venue,

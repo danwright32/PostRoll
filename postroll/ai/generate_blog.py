@@ -49,6 +49,50 @@ from .claude_client import run_json_prompt, load_brand_voice, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
+# Shared prose rules — imported by revise_blog.py so both prompts stay in sync.
+# Update here; revise_blog picks up the change automatically.
+BLOG_WRITING_RULES = """\
+- NO banned hype words (stunning, magical, breathtaking, unforgettable, etc.).
+- NO AI tells (in a world where, it's not just X it's Y, rule-of-three tics).
+- NO false intimacy about what performers were feeling.
+- Open with a specific observation, NOT "Last Saturday I had the pleasure of...".
+- Close with one short, useful sentence. No hard sell. The CTA must use specific
+  language grounded in this post — not vague gestures like "this kind of attention"
+  or "this kind of work." Name the actual thing: "photography that's watching the
+  stage, not waiting for a pose" is better than "photography that pays this kind
+  of attention to what happens on stage."
+  The CTA cannot arrive as a non-sequitur from the last paragraph about the
+  performance. Before the ask, there must be a short transitional beat that places
+  Dan in the room — a quiet, factual sentence about what he was doing there while
+  all of this was happening. Something like: "I was at the back of the hall for
+  most of the night, working quietly while all of that happened." That bridge is
+  not optional. The closing moves: [last observation about the performance] →
+  [one sentence placing Dan in the room] → [CTA].
+- FACTUAL ACCURACY — CRITICAL: Only attribute conducting, soloist roles,
+  speaking roles, or any specific performance duties to a named individual
+  if the program text EXPLICITLY states it. Do NOT infer from a person's
+  title, billing order, or presence on stage that they took a particular
+  role in the performance. If the program lists "Jennifer Lucy Cook —
+  composer/arranger" and her pieces appear on the program, that does NOT
+  mean she conducted them. When attribution is uncertain, describe what is
+  visible in the photos instead of asserting a role.
+- NOT a program breakdown. Do NOT move piece by piece through the repertoire
+  as if reviewing a setlist. The program notes and repertoire are context, not
+  an outline. Pick the two or three moments that actually say something and
+  build the post around those. A piece that isn't worth a specific observation
+  doesn't need a paragraph.
+- NO gestural phrases: "that kind of X," "this kind of Y," "that sort of thing."
+  Name what the X actually is. If you wrote "that kind of history reads as ease,"
+  say what the history IS and why it produces ease.
+- NO soft-landing abstractions as substitutes for specific observations: "room to
+  open up," "landed differently," "carried the room." If you need to explain what
+  you mean in the next sentence, fold the explanation forward into this sentence
+  and cut the abstraction.
+- NO inanimate objects performing human actions: "The hall took it," "the room
+  held," "the stage gave." Rewrite with a human subject or cut the sentence.\
+"""
+
+
 PROMPT_TEMPLATE = """\
 {brand_voice}
 
@@ -125,11 +169,7 @@ commentary) in this shape:
 }}
 
 Reminders:
-- NO banned hype words (stunning, magical, breathtaking, unforgettable, etc.).
-- NO AI tells (in a world where, it's not just X it's Y, rule-of-three tics).
-- NO false intimacy about what performers were feeling.
-- Open with a specific observation, NOT "Last Saturday I had the pleasure of...".
-- Close with one short, useful sentence. No hard sell.
+{blog_writing_rules}
 - Inside the JSON "body" string, escape newlines as \\n so the JSON parses cleanly.
 """
 
@@ -218,7 +258,12 @@ def generate_blog(
                 shutil.copy2(path, staged)
             resolved.append(str(staged))
 
-        photo_list = "\n".join(f"- {p}" for p in resolved)
+        # Show clean filenames (without the 000_ staging prefix) in the
+        # prompt so [PHOTO:] markers use the original name.
+        photo_list = "\n".join(
+            f"- {Path(p).name.split('_', 1)[1] if '_' in Path(p).name else Path(p).name}"
+            for p in resolved
+        )
 
         brand_voice_text = load_brand_voice()
 
@@ -236,6 +281,7 @@ def generate_blog(
         # === Pass 1: generate the draft ===
         prompt = PROMPT_TEMPLATE.format(
             brand_voice=brand_voice_text,
+            blog_writing_rules=BLOG_WRITING_RULES,
             event=event,
             org=org,
             venue=venue,
@@ -257,8 +303,7 @@ def generate_blog(
         data = run_json_prompt(
             prompt,
             timeout=600,
-            allowed_dirs=[tmp_path],
-            allowed_tools=["Read"],
+            image_paths=resolved,
         )
 
         if not isinstance(data, dict):

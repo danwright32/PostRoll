@@ -224,8 +224,7 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
         data = run_json_prompt(
             prompt,
             timeout=600,
-            allowed_dirs=[tmp_path],
-            allowed_tools=["Read"],
+            image_paths=resolved,
         )
 
     if not isinstance(data, dict):

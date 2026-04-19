@@ -46,9 +46,9 @@ DIVIDER_WIDTH = 3
 DIVIDER_COLOR = (255, 255, 255)
 GAP = 6  # thin gap between triptych strips
 
-# Ken Burns zoom (subtle, across entire duration)
+# Ken Burns zoom — disabled (was causing visible shaking)
 ZOOM_START = 1.0
-ZOOM_END = 1.04
+ZOOM_END = 1.0
 
 # Branded chrome (matching before/after template)
 CREAM = (252, 250, 247)
@@ -59,8 +59,8 @@ HEADER_H = 220  # cream header with event info
 FOOTER_H = 100  # cream footer with logo
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 
-# RAW desaturation — makes the edit side pop by contrast
-RAW_DESATURATION = 0.4  # 0 = full color, 1 = grayscale
+# RAW desaturation — disabled (photos should be shown unaltered)
+RAW_DESATURATION = 0.0  # 0 = full color, 1 = grayscale
 
 # Labels
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"

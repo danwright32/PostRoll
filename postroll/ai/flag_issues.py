@@ -129,8 +129,7 @@ def flag_issues(
         data = run_json_prompt(
             prompt,
             timeout=600,
-            allowed_dirs=[tmp_path],
-            allowed_tools=["Read"],
+            image_paths=staged,
         )
 
     if not isinstance(data, list):

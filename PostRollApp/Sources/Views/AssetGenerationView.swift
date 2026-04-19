@@ -1,12 +1,11 @@
 import SwiftUI
 import AVKit
+import UniformTypeIdentifiers
 
 struct AssetGenerationView: View {
     let event: Event
     @Environment(AppState.self) private var appState
 
-    @State private var dayHandles: [DayName: String] = [:]   // comma-separated @handles
-    @State private var dayNames: [DayName: String] = [:]     // comma-separated plain names
     @State private var generationState: GenState
 
     init(event: Event) {
@@ -158,7 +157,7 @@ struct AssetGenerationView: View {
 
     var daysWithPhotos: [DayName] {
         DayName.allCases.filter {
-            !(event.days[$0.rawValue]?.photoPaths.isEmpty ?? true)
+            $0 != .friday && !(event.days[$0.rawValue]?.photoPaths.isEmpty ?? true)
         }
     }
 
@@ -197,33 +196,12 @@ struct AssetGenerationView: View {
                     .padding(.bottom, Spacing.sm)
 
                 StageBackButton(label: "Back to photo assignment") {
-                    var ev = eventWithHandlesSaved()
+                    var ev = event
                     ev.stage = .photosAssigned
                     appState.updateEvent(ev)
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.md)
-
-                BrandBanner(
-                    icon: "sparkles",
-                    message: "Add @handles for each day if you want to tag accounts. Plain names (no @) go in the second field, for people without Instagram."
-                )
-                .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.sm)
-
-                if let prev = previousEventWithHandles {
-                    HStack {
-                        Spacer()
-                        Button("Copy handles from \"\(prev.name)\"") {
-                            copyHandlesFromEvent(prev)
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.roseGold)
-                    }
-                    .padding(.horizontal, Spacing.xl)
-                    .padding(.bottom, Spacing.sm)
-                }
 
                 // Summary row
                 GenerationSummaryRow(
@@ -233,16 +211,6 @@ struct AssetGenerationView: View {
                 )
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.lg)
-
-                // Per-day handle entry
-                ForEach(daysWithPhotos, id: \.self) { day in
-                    DayHandleSection(
-                        day: day,
-                        photoCount: event.days[day.rawValue]?.photoPaths.count ?? 0,
-                        handles: handleBinding(day),
-                        names: namesBinding(day)
-                    )
-                }
 
                 VStack(alignment: .trailing, spacing: Spacing.sm) {
                     if !canGenerate {
@@ -261,7 +229,6 @@ struct AssetGenerationView: View {
             }
         }
         .background(Color.cream)
-        .onAppear { loadHandlesFromModel() }
     }
 
     // MARK: - Running
@@ -315,6 +282,9 @@ struct AssetGenerationView: View {
         }
     }
 
+    @State private var showingMusicFilePicker = false
+    @State private var musicFilePickerDay: DayName = .tuesday
+
     @ViewBuilder
     private var musicPickerColumn: some View {
         if musicPass != .idle {
@@ -335,9 +305,35 @@ struct AssetGenerationView: View {
                 onRefetchTuesday: refetchTuesday,
                 onRefetchThursday: refetchThursday,
                 onTuesdayMood: changeTuesdayMood,
-                onThursdayMood: changeThursdayMood
+                onThursdayMood: changeThursdayMood,
+                onConfirm: { confirmMusicPick() },
+                onUpload: { day in
+                    musicFilePickerDay = day
+                    showingMusicFilePicker = true
+                }
             )
+            .fileImporter(
+                isPresented: $showingMusicFilePicker,
+                allowedContentTypes: [.audio, .mp3, .aiff,
+                                      UTType(filenameExtension: "m4a") ?? .audio,
+                                      UTType(filenameExtension: "aac") ?? .audio],
+                allowsMultipleSelection: false
+            ) { result in
+                if case .success(let urls) = result, let url = urls.first {
+                    applyUploadedAudio(day: musicFilePickerDay, url: url)
+                }
+            }
         }
+    }
+
+    private func applyUploadedAudio(day: DayName, url: URL) {
+        var saved = appState.events.first(where: { $0.id == event.id }) ?? event
+        if saved.days[day.rawValue] != nil {
+            saved.days[day.rawValue]!.audioPath = url
+            appState.updateEvent(saved)
+        }
+        if day == .tuesday { tuesdayPickedID = "uploaded" }
+        else if day == .thursday { thursdayPickedID = "uploaded" }
     }
 
     private var runningView: some View {
@@ -536,83 +532,14 @@ struct AssetGenerationView: View {
 
     // MARK: - Helpers
 
-    /// Most recent other event that has at least one day with saved handles.
-    private var previousEventWithHandles: Event? {
-        appState.events
-            .filter { $0.id != event.id }
-            .sorted { $0.date > $1.date }
-            .first { ev in
-                ev.days.values.contains { !$0.tagHandles.isEmpty || !$0.nameMentions.isEmpty }
-            }
-    }
-
-    private func copyHandlesFromEvent(_ source: Event) {
-        for day in DayName.allCases {
-            guard let pd = source.days[day.rawValue] else { continue }
-            if !pd.tagHandles.isEmpty {
-                dayHandles[day] = pd.tagHandles.joined(separator: ", ")
-            }
-            if !pd.nameMentions.isEmpty {
-                dayNames[day] = pd.nameMentions.joined(separator: ", ")
-            }
-        }
-    }
-
-    /// Pre-populate handle fields from saved model so returning to this screen
-    /// after generation shows previously entered values.
-    private func loadHandlesFromModel() {
-        for day in daysWithPhotos {
-            guard let pd = event.days[day.rawValue] else { continue }
-            if !pd.tagHandles.isEmpty {
-                dayHandles[day] = pd.tagHandles.joined(separator: ", ")
-            }
-            if !pd.nameMentions.isEmpty {
-                dayNames[day] = pd.nameMentions.joined(separator: ", ")
-            }
-        }
-    }
-
     private var totalPhotoCount: Int {
         daysWithPhotos.reduce(0) {
             $0 + (event.days[$1.rawValue]?.photoPaths.count ?? 0)
         } + event.blogPhotoPaths.count
     }
 
-    private func handleBinding(_ day: DayName) -> Binding<String> {
-        Binding(
-            get: { dayHandles[day] ?? "" },
-            set: { dayHandles[day] = $0 }
-        )
-    }
-
-    private func namesBinding(_ day: DayName) -> Binding<String> {
-        Binding(
-            get: { dayNames[day] ?? "" },
-            set: { dayNames[day] = $0 }
-        )
-    }
-
-    private func parseHandles(_ raw: String) -> [String] {
-        raw.split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-    }
-
-    /// Returns a copy of `event` with current handle/name field values baked in.
-    private func eventWithHandlesSaved() -> Event {
-        var ev = event
-        for day in daysWithPhotos {
-            if ev.days[day.rawValue] != nil {
-                ev.days[day.rawValue]!.tagHandles   = parseHandles(dayHandles[day] ?? "")
-                ev.days[day.rawValue]!.nameMentions = parseHandles(dayNames[day] ?? "")
-            }
-        }
-        return ev
-    }
-
     private func startGeneration() {
-        let ev = eventWithHandlesSaved()
-        appState.updateEvent(ev)
+        let ev = event
 
         elapsedSeconds = 0
         withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
@@ -732,8 +659,8 @@ struct AssetGenerationView: View {
                 }
                 musicPass = .pickingTuesday
             }
-            // Give the user a brief moment to override auto-pick before advancing.
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            // Wait for user to confirm Tuesday pick before advancing.
+            await waitForConfirm()
         }
 
         // Thursday — only if there are photos for the scroll reel.
@@ -746,12 +673,33 @@ struct AssetGenerationView: View {
                 }
                 musicPass = .pickingThursday
             }
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            // Wait for user to confirm Thursday pick.
+            await waitForConfirm()
         }
 
         await MainActor.run {
+            audioPlayer.pause()
+            nowPlayingID = nil
             musicPass = .done
             musicBlockingReady = true
+        }
+    }
+
+    /// Set by the confirm button; cleared by waitForConfirm after it fires.
+    @State private var musicConfirmed = false
+
+    private func confirmMusicPick() {
+        audioPlayer.pause()
+        nowPlayingID = nil
+        musicConfirmed = true
+    }
+
+    private func waitForConfirm() async {
+        await MainActor.run { musicConfirmed = false }
+        let deadline = Date().addingTimeInterval(300) // safety timeout
+        while await MainActor.run(body: { !musicConfirmed }) {
+            if Date() >= deadline { return }
+            try? await Task.sleep(nanoseconds: 200_000_000)
         }
     }
 
@@ -768,9 +716,9 @@ struct AssetGenerationView: View {
 
     private func shouldFetchMusicForTuesday(event ev: Event) -> Bool {
         guard let pd = ev.days[DayName.tuesday.rawValue] else { return false }
-        // Speed edit reel needs both a raw and edited photo plus a screen recording.
-        // If any is missing, the reel isn't generated and music is irrelevant.
-        return pd.rawPhotoPath != nil && pd.editedPhotoPath != nil && pd.screenRecordingPath != nil
+        // A reel is generated whenever raw + edited photos exist — either a screen
+        // recording timelapse or a slider/morph reel. Both need audio.
+        return pd.rawPhotoPath != nil && pd.editedPhotoPath != nil
     }
 
     private func shouldFetchMusicForThursday(event ev: Event) -> Bool {
@@ -988,103 +936,6 @@ private struct SummaryStat: View {
     }
 }
 
-// MARK: - Day handle section
-
-private struct DayHandleSection: View {
-    let day: DayName
-    let photoCount: Int
-    @Binding var handles: String
-    @Binding var names: String
-
-    @State private var isExpanded = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Button(action: { isExpanded.toggle() }) {
-                HStack(alignment: .center, spacing: Spacing.sm) {
-                    Text(day.displayName.uppercased())
-                        .font(.system(size: 10, weight: .medium))
-                        .tracking(1.2)
-                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
-
-                    Text("\(photoCount) photo\(photoCount == 1 ? "" : "s")")
-                        .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
-
-                    if !handles.isEmpty || !names.isEmpty {
-                        Image(systemName: "at")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(Color.roseGold.opacity(0.7))
-                    }
-
-                    Spacer()
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
-                }
-                .contentShape(Rectangle())
-                .padding(.horizontal, Spacing.xl)
-                .padding(.vertical, 14)
-            }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    HandleField(
-                        label: "@handles (comma-separated)",
-                        placeholder: "@dciny, @lincolncenter",
-                        text: $handles
-                    )
-                    HandleField(
-                        label: "plain names (no @, comma-separated)",
-                        placeholder: "Jordan Langworthy, Maria Smith",
-                        text: $names
-                    )
-                }
-                .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.md)
-            }
-
-            RoseGoldDivider(opacity: 0.3)
-        }
-    }
-}
-
-private struct HandleField: View {
-    let label: String
-    let placeholder: String
-    @Binding var text: String
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased())
-                .font(.system(size: 9, weight: .medium))
-                .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
-            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color.warmMid.opacity(0.30)))
-                .focused($focused)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.warmDark)
-                .focusEffectDisabled()
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.xs)
-                        .fill(Color.creamDeep)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Radius.xs)
-                                .strokeBorder(
-                                    focused ? Color.roseGold : Color.creamEdge,
-                                    lineWidth: focused ? 1.5 : 1
-                                )
-                        )
-                )
-                .animation(.easeOut(duration: 0.12), value: focused)
-        }
-    }
-}
-
 // MARK: - Music mood
 
 /// Preset moods the user can pick from during music fetching. Each resolves
@@ -1097,6 +948,7 @@ enum MusicMood: String, CaseIterable, Identifiable {
     case jazz
     case gospel
     case spiritual
+    case choral
 
     var id: String { rawValue }
 
@@ -1108,6 +960,7 @@ enum MusicMood: String, CaseIterable, Identifiable {
         case .jazz:       return "Jazz"
         case .gospel:     return "Gospel"
         case .spiritual:  return "Spiritual"
+        case .choral:     return "A Cappella"
         }
     }
 
@@ -1121,6 +974,7 @@ enum MusicMood: String, CaseIterable, Identifiable {
         case .jazz:       return "jazz"
         case .gospel:     return "gospel"
         case .spiritual:  return "spiritual"
+        case .choral:     return "choir,acapella"
         }
     }
 }
@@ -1149,6 +1003,8 @@ private struct MusicPickerPane: View {
     let onRefetchThursday: () -> Void
     let onTuesdayMood: (MusicMood) -> Void
     let onThursdayMood: (MusicMood) -> Void
+    let onConfirm: () -> Void
+    let onUpload: (DayName) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -1160,7 +1016,9 @@ private struct MusicPickerPane: View {
             if tuesdayVisible {
                 section(
                     title: "Tuesday — Edit Reel",
+                    day: .tuesday,
                     active: musicPass == .fetchingTuesday || musicPass == .pickingTuesday,
+                    showConfirm: musicPass == .pickingTuesday,
                     mood: tuesdayMood,
                     candidates: tuesdayCandidates,
                     pickedID: tuesdayPickedID,
@@ -1175,7 +1033,9 @@ private struct MusicPickerPane: View {
             if thursdayVisible {
                 section(
                     title: "Thursday — Scroll Reel",
+                    day: .thursday,
                     active: musicPass == .fetchingThursday || musicPass == .pickingThursday || musicPass == .done,
+                    showConfirm: musicPass == .pickingThursday,
                     mood: thursdayMood,
                     candidates: thursdayCandidates,
                     pickedID: thursdayPickedID,
@@ -1201,7 +1061,9 @@ private struct MusicPickerPane: View {
     @ViewBuilder
     private func section(
         title: String,
+        day: DayName,
         active: Bool,
+        showConfirm: Bool,
         mood: MusicMood,
         candidates: [TrackCandidate],
         pickedID: String?,
@@ -1262,6 +1124,15 @@ private struct MusicPickerPane: View {
                     .foregroundStyle(Color.roseGold)
                     .disabled(isFetching)
 
+                    Button {
+                        onUpload(day)
+                    } label: {
+                        Label("Upload audio", systemImage: "square.and.arrow.down")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.roseGold)
+
                     Spacer()
 
                     if pickedID != nil {
@@ -1272,6 +1143,25 @@ private struct MusicPickerPane: View {
                     }
                 }
                 .padding(.top, Spacing.xs)
+
+                if showConfirm {
+                    Button(action: onConfirm) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                            Text(pickedID != nil ? "Confirm & continue" : "Skip & continue")
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.cream)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.roseGold)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, Spacing.xs)
+                }
             } else {
                 Text("Will start after \(title.contains("Tuesday") ? "…" : "Tuesday")")
                     .font(.light(11))
