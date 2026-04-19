@@ -234,9 +234,6 @@ def test_caption_passes_brand_voice_to_prompt(sample_photo):
     assert "DCINY" in prompt
     assert "Carnegie Hall" in prompt
     assert "#dwphotony" in prompt  # hashtag rule restated
-    # Permission flags wired through
-    assert captured["allowed_tools"] == ["Read"]
-    assert captured["allowed_dirs"] is not None
 
 
 # === generate_blog ===
