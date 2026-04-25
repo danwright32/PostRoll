@@ -362,34 +362,65 @@ facing a choir in red robes, mid-phrase." Done.
 
 ## Blog posts
 
-**Length:** 10–12 short paragraphs. Continuous prose — no headings, no bullet
-points, no section breaks.
+**Audience:** This blog is for **performing arts directors, presenters,
+producers, and managers** — the people who hire Dan. NOT general classical
+music fans, NOT concertgoers. Every blog post is reaching someone who books
+photographers for their season, their grant deck, their press kit. Write
+with that reader in mind. They want to know: was Dan there? Did he notice
+the right things? Would he be unobtrusive at our event? Does his work
+serve our marketing / archive / grant-application needs?
 
-**Opening:** Start with one specific observation from the night. A sound, a
-moment, a detail you noticed from behind the camera. Not "Last Saturday I had
-the pleasure of photographing…" — just drop the reader into the room.
+**Voice:** First-person, always. **"I" and "my" throughout** — Dan was
+there with a camera. He's not a music critic, not a reviewer, not a fan.
+He's a photographer who happened to be in the room and noticed things
+while working. If a draft reads like a concert review with Dan absent
+until the end, it's wrong. He's the protagonist of the post, not an
+afterthought tacked on before the CTA.
 
-**Middle:** Move through the performance with the program — or with the arc
-of the show. Name the pieces / scenes / songs / numbers / bits and why they
-mattered (use program notes or research context if available). Name the
-people: soloists, conductors, actors, directors, choreographers, band
-members, troupe. If the company / organization / band has a mission or
-history worth mentioning, work it in once, naturally, not as a press
-release paragraph.
+**Length:** 10–12 short paragraphs. Continuous prose — no headings, no
+bullet points, no section breaks.
+
+**Required structure** (the post must have all five beats, in this order):
+
+1. **Venue / opening** — drop the reader into the room with one specific
+   observation from where Dan was working. Sound, light, the angle he
+   was shooting from, a detail he noticed before the show started. NOT
+   "Last Saturday I had the pleasure of…". 1–2 paragraphs.
+
+2. **Performance moments** — two or three specific moments that mattered,
+   from a photographer's perspective. What did Dan see in the viewfinder
+   that he wanted to keep? What was hard to catch? Name the pieces,
+   scenes, songs, performers, conductors involved. Pick moments worth a
+   specific observation — do NOT march through the program piece by
+   piece like a setlist review. Use program notes for context, not as a
+   recap. 3–5 paragraphs.
+
+3. **Approach** — how Dan worked the room. Where he stood, what he was
+   watching for, what he chose to shoot vs. let go, how he stayed out of
+   the way. This is the section that signals professionalism to a
+   presenter reading the post. NOT optional. 1–2 paragraphs.
+
+4. **Practical value** — why documentation of an event like this matters
+   for the people who put it on. Tie it to the kind of work the
+   organization actually does: grant applications, season announcement
+   materials, artist portfolios, press kits, fundraising decks, archive.
+   Be specific to the event type — a debut recital, a season opener, a
+   touring production each have different practical uses. 1 paragraph.
+
+5. **Closing + CTA** — one sentence placing Dan in the room (e.g. "I was
+   working from the back of the hall most of the night"), then ONE
+   short, useful CTA. Specific language grounded in this post — not
+   "this kind of attention" or "this kind of work."
 
 **Photos:** 4–7 photos embedded directly in the prose. The text refers to
 what's visible — "this moment from the second movement," not just dropping
-images randomly. Photo placement is marked in the draft as `[PHOTO: short
-description]` so the GUI can match them up later.
+images randomly. Photo placement is marked in the draft as
+`[PHOTO: filename | alt text]`.
 
-**Closing:** Quiet, useful, no hard sell. Something like "If you're with an
-ensemble that wants concert photography that pays this kind of attention, I'd
-love to talk." One sentence. Then stop.
-
-**Tone reminder:** This is a photographer's blog about a show he shot — could
-be a concert, a play, a musical, a rock gig, a dance performance, an improv
-night. Not a review and not an ad. Be the person who was there with a camera
-and noticed things.
+**Tone reminder:** This is a photographer's working notes from a show he
+shot, written for someone who might hire him. Not a review. Not a fan
+post. Not an ad. Be the person who was there with a camera, was paying
+attention, and is showing potential clients how he thinks while working.
 
 ## Examples of what to avoid
 
@@ -472,3 +503,5 @@ generic enough to fit any event ever; it tells the reader nothing.
 - (Apr 18, 2026) Tag venues, organizations, and people as @mentions in the caption body — not just in hashtags. Use @carnegiehall, @dciny, etc. inline where the name appears naturally in a sentence, rather than listing them as bare text or pushing them down to the hashtag block.
 - (Apr 25, 2026) Don't use em dashes
 - (Apr 25, 2026) The blog should be more about the night, not a breakdown of the program
+- (Apr 25, 2026) at carnegie hall I'm always at the back of the house, behind the audience.
+- (Apr 25, 2026) Don't list the program repertoire in captions. The setlist belongs in the program, not the post. Drop it unless a specific piece is the point of the caption.
