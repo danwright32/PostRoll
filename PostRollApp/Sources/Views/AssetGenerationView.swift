@@ -30,6 +30,11 @@ struct AssetGenerationView: View {
     @State private var thursdayCandidates: [TrackCandidate] = []
     @State private var tuesdayPickedID: String? = nil
     @State private var thursdayPickedID: String? = nil
+    /// Local-file uploads for either day. Surfaced in the picker as a
+    /// distinct "uploaded" row so the user can see what they just picked
+    /// before hitting Confirm.
+    @State private var tuesdayUploadedURL: URL? = nil
+    @State private var thursdayUploadedURL: URL? = nil
     @State private var tuesdayMood: MusicMood = .auto
     @State private var thursdayMood: MusicMood = .auto
     @State private var tuesdaySeenIDs: Set<String> = []
@@ -296,6 +301,8 @@ struct AssetGenerationView: View {
                 thursdayCandidates: thursdayCandidates,
                 tuesdayPickedID: tuesdayPickedID,
                 thursdayPickedID: thursdayPickedID,
+                tuesdayUploadedURL: tuesdayUploadedURL,
+                thursdayUploadedURL: thursdayUploadedURL,
                 tuesdayMood: tuesdayMood,
                 thursdayMood: thursdayMood,
                 nowPlayingID: nowPlayingID,
@@ -332,8 +339,13 @@ struct AssetGenerationView: View {
             saved.days[day.rawValue]!.audioPath = url
             appState.updateEvent(saved)
         }
-        if day == .tuesday { tuesdayPickedID = "uploaded" }
-        else if day == .thursday { thursdayPickedID = "uploaded" }
+        if day == .tuesday {
+            tuesdayPickedID = "uploaded"
+            tuesdayUploadedURL = url
+        } else if day == .thursday {
+            thursdayPickedID = "uploaded"
+            thursdayUploadedURL = url
+        }
     }
 
     private var runningView: some View {
@@ -411,6 +423,10 @@ struct AssetGenerationView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmMid)
                     }
+                    Button("Fix inputs") { goFixInputs() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.roseGold)
                     Button("Try Again") {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
                             generationState = .configuring
@@ -431,6 +447,32 @@ struct AssetGenerationView: View {
             .map { Array($0).sorted() } ?? []
     }
 
+    /// Days the user can re-run individually. Includes any day they assigned
+    /// photos to (or the Tuesday/Friday RAW+edited pair), in DAY_ORDER. Friday
+    /// is included only if Tuesday's RAW+edited are set, since Friday's story
+    /// derives from those.
+    private var regenerableDayKeys: [String] {
+        DayName.allCases.compactMap { day in
+            guard let pd = event.days[day.rawValue] else { return nil }
+            let hasPhotos = !pd.photoPaths.isEmpty
+            let hasReelInputs = pd.rawPhotoPath != nil && pd.editedPhotoPath != nil
+            let tuesday = event.days[DayName.tuesday.rawValue]
+            let tuesdayReelInputs = (tuesday?.rawPhotoPath != nil && tuesday?.editedPhotoPath != nil)
+            switch day {
+            case .friday:
+                return tuesdayReelInputs ? day.rawValue : nil
+            case .tuesday:
+                return (hasPhotos || hasReelInputs) ? day.rawValue : nil
+            default:
+                return hasPhotos ? day.rawValue : nil
+            }
+        }
+    }
+
+    private func regenerableDayLabel(_ key: String) -> String {
+        key.capitalized
+    }
+
     private func failedDayLabel(_ key: String) -> String {
         key == "blog" ? "Blog post" : key.capitalized
     }
@@ -447,11 +489,105 @@ struct AssetGenerationView: View {
         }
     }
 
+    /// Pick an actionable summary for a Python-side error and decide whether
+    /// the photographer can resolve it by re-editing inputs. The displayed
+    /// message always includes the raw error so Dan can see what actually
+    /// happened — the summary is a hint, not a replacement.
+    private func humanizeError(day: String, raw: String) -> (text: String, fixable: Bool) {
+        let (summary, fixable) = humanizeSummary(day: day, raw: raw)
+        if summary.isEmpty {
+            return (raw, fixable)
+        }
+        return ("\(summary)\n\nRaw: \(raw)", fixable)
+    }
+
+    /// Returns just the actionable summary — no raw error appended. Empty
+    /// string when we don't have a useful translation.
+    private func humanizeSummary(day: String, raw: String) -> (text: String, fixable: Bool) {
+        let lower = raw.lowercased()
+
+        // ffmpeg / system-level issues — not fixable from the GUI
+        if lower.contains("ffmpeg") {
+            return ("ffmpeg isn't installed. Run `brew install ffmpeg` in Terminal, then retry.", false)
+        }
+        if lower.contains("jamendo") || lower.contains("jamendo_client_id") {
+            return ("Couldn't reach Jamendo for background audio. Check your JAMENDO_CLIENT_ID env var or upload your own audio file.", false)
+        }
+
+        // Claude API errors — distinguish between distinct failure modes.
+        // Matches must be specific enough that an "anthropic" mention in a
+        // stack-trace doesn't get mis-classified as an auth failure.
+        if lower.contains("request_too_large") || lower.contains("413") {
+            return ("\(failedDayLabel(day)) sent too much data to Claude in one request. Reduce inputs (fewer photos, shorter notes) and retry.", true)
+        }
+        if lower.contains("rate_limit") || lower.contains("429") {
+            return ("Hit Claude's rate limit. Wait ~30 seconds and retry — no input changes needed.", false)
+        }
+        if lower.contains("invalid_api_key") || lower.contains("401") || lower.contains("authentication") {
+            return ("Claude API key is invalid or missing. Set ANTHROPIC_API_KEY and retry.", false)
+        }
+        if lower.contains("overloaded_error") || lower.contains("529") {
+            return ("Claude is overloaded right now. Wait a minute and retry — no input changes needed.", false)
+        }
+        if lower.contains("anthropic api error") {
+            return ("Claude API error during \(failedDayLabel(day)). Often resolves on retry.", false)
+        }
+
+        // Common input-missing patterns — fixable on the photo-assignment screen
+        if day == "wednesday" && (lower.contains("collage skipped") || lower.contains("collage_min")) {
+            return ("Collage needs at least 10 photos. Add more photos to Wednesday and retry.", true)
+        }
+        if day == "tuesday" && (lower.contains("raw") || lower.contains("edited")) {
+            return ("Tuesday's before/after reel needs a RAW + edited photo. Assign them and retry.", true)
+        }
+        if day == "friday" && (lower.contains("raw") || lower.contains("edited")) {
+            return ("Friday's before/after story reuses Tuesday's RAW + edited. Assign them on Tuesday and retry.", true)
+        }
+        if day == "thursday" && lower.contains("photo") && lower.contains("empty") {
+            return ("Thursday's scroll reel needs at least one photo. Add photos to Thursday and retry.", true)
+        }
+        if lower.contains("no such file") || lower.contains("filenotfounderror") {
+            return ("A photo or audio file was moved or deleted. Re-assign your photos on the photo screen and retry.", true)
+        }
+
+        if lower.contains("story fallback failed") {
+            return ("Even the static-image fallback for \(failedDayLabel(day)) couldn't run. Often fixed by re-uploading the day's photos.", true)
+        }
+
+        // No specific summary — caller will display the raw error verbatim.
+        return ("", true)
+    }
+
+    private struct FailedDayInfo: Identifiable {
+        let id: String      // day key
+        let label: String
+        let message: String
+        let fixable: Bool
+    }
+
+    private var failedDayInfos: [FailedDayInfo] {
+        guard let errors = event.weekResult?.errors else { return [] }
+        return failedDayKeys.compactMap { key in
+            guard let raw = errors[key] else { return nil }
+            let (text, fixable) = humanizeError(day: key, raw: raw)
+            return FailedDayInfo(id: key, label: failedDayLabel(key), message: text, fixable: fixable)
+        }
+    }
+
+    /// Send the user back to the photo-assignment stage so they can fix
+    /// missing inputs, then return here when they click forward again.
+    private func goFixInputs() {
+        var ev = event
+        ev.stage = .photosAssigned
+        appState.updateEvent(ev)
+    }
+
     private var doneView: some View {
         let errorCount = failedDayKeys.count
 
-        return VStack(spacing: Spacing.lg) {
-            Spacer()
+        return ScrollView {
+        VStack(spacing: Spacing.lg) {
+            Spacer(minLength: Spacing.xl)
 
             Text(event.name)
                 .font(.signPainter(28))
@@ -470,11 +606,26 @@ struct AssetGenerationView: View {
                 .offset(y: showCheckmark ? 0 : 8)
 
             if errorCount > 0 {
-                Text("\(failedDaysSummary) failed to generate.")
-                    .font(.light(12))
-                    .foregroundStyle(Color.warmMid)
-                    .multilineTextAlignment(.center)
-                    .opacity(showCheckmark ? 1 : 0)
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    ForEach(failedDayInfos) { info in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(info.label.uppercased())
+                                .font(.system(size: 9, weight: .medium))
+                                .tracking(1.1)
+                                .foregroundStyle(Color.roseDeep)
+                            Text(info.message)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.warmDark)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Spacing.sm)
+                        .background(Color.roseDeep.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
+                    }
+                }
+                .frame(maxWidth: 460)
+                .opacity(showCheckmark ? 1 : 0)
             }
 
             RoseGoldDivider()
@@ -485,6 +636,14 @@ struct AssetGenerationView: View {
                     .buttonStyle(BrandButtonStyle())
 
                 if errorCount > 0 {
+                    // If any failed day is fixable, give the user a clear path
+                    // back to the input screen before retrying.
+                    if failedDayInfos.contains(where: \.fixable) {
+                        Button("Fix inputs") { goFixInputs() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.roseGold)
+                    }
                     Button("Retry \(failedDaysSummary)") {
                         retryDays = Set(failedDayKeys)
                         startGeneration()
@@ -492,6 +651,28 @@ struct AssetGenerationView: View {
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.roseGold)
+                }
+
+                // Regenerate any single day. Lists every day that has photos
+                // assigned (so the user can re-roll captions / graphics for it
+                // without nuking the others). Blog and "all" stay as separate
+                // shortcuts below.
+                if !regenerableDayKeys.isEmpty {
+                    Menu {
+                        ForEach(regenerableDayKeys, id: \.self) { dayKey in
+                            Button(regenerableDayLabel(dayKey)) {
+                                retryDays = Set([dayKey])
+                                startGeneration()
+                            }
+                        }
+                    } label: {
+                        Label("Regenerate one day…", systemImage: "arrow.clockwise")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.roseGold)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
                 }
 
                 if !event.blogPhotoPaths.isEmpty {
@@ -516,7 +697,10 @@ struct AssetGenerationView: View {
             }
             .opacity(showCheckmark ? 1 : 0)
 
-            Spacer()
+            Spacer(minLength: Spacing.xl)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Spacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cream)
@@ -597,7 +781,13 @@ struct AssetGenerationView: View {
 
                 await MainActor.run {
                     stopTimer()
-                    TimingStore.shared.recordGeneration(seconds: Double(elapsedSeconds))
+                    // Only record the run's duration when something actually
+                    // generated (caption OR media). Otherwise an immediate
+                    // failure pulls the rolling-mean estimate toward zero.
+                    let producedSomething = result.hasAnyContent || !(mediaPaths?.isEmpty ?? true)
+                    if producedSomething {
+                        TimingStore.shared.recordGeneration(seconds: Double(elapsedSeconds))
+                    }
                     var saved = ev
 
                     if let only = onlyDays,
@@ -726,39 +916,11 @@ struct AssetGenerationView: View {
         return !pd.photoPaths.isEmpty
     }
 
-    /// Tuesday defaults to ambient/cinematic framing since the speed edit reel
-    /// doesn't have program content to key off of.
-    private var tuesdayAutoTags: String { "ambient,atmospheric" }
-
-    /// Thursday defaults to program-derived tags (sacred/orchestral/jazz/etc).
-    /// We approximate Python's `_derive_audio_tags` on the Swift side so the first
-    /// fetch matches what Python would pick if we didn't override.
-    private var thursdayAutoTags: String {
-        let pieces = event.ocrResult?.pieces ?? []
-        let text = pieces
-            .map { "\($0.title) \($0.composer)" }
-            .joined(separator: " ")
-            .lowercased()
-
-        let sacredKeywords = [
-            "gospel", "praise", "hymn", "church", "sacred", "amen", "hallelujah",
-            "spiritual", "requiem", "kyrie", "sanctus", "mass ", "motet", "anthem",
-            "cantata", "gloria", "agnus dei", "pie jesu", "magnificat",
-        ]
-        let jazzKeywords = ["jazz", "blues", "swing", "bebop", "ellington", "coltrane"]
-        let orchestralKeywords = [
-            "symphony", "concerto", "orchestra", "beethoven", "mozart", "brahms",
-            "tchaikovsky", "mahler", "strauss", "bach", "handel", "haydn",
-        ]
-
-        if sacredKeywords.contains(where: text.contains) { return "inspirational,orchestral" }
-        if jazzKeywords.contains(where: text.contains)   { return "jazz" }
-        if orchestralKeywords.contains(where: text.contains) { return "orchestral,classical" }
-        return "ambient,atmospheric"
-    }
-
     private func fetchTuesdayCandidates(event ev: Event, resetSeen: Bool) async {
-        let tags = tuesdayMood.tags(autoTags: tuesdayAutoTags)
+        let auto = await PythonBridge.shared.suggestAudioTags(
+            day: .tuesday, shootType: ev.shootType, pieces: ev.ocrResult?.pieces ?? []
+        )
+        let tags = tuesdayMood.tags(autoTags: auto)
         let exclude = Array(tuesdaySeenIDs)
         do {
             let tracks = try await PythonBridge.shared.runFetchTrackCandidates(
@@ -775,11 +937,19 @@ struct AssetGenerationView: View {
     }
 
     private func fetchThursdayCandidates(event ev: Event, resetSeen: Bool) async {
-        let tags = thursdayMood.tags(autoTags: thursdayAutoTags)
+        let pieces = ev.ocrResult?.pieces ?? []
+        let auto = await PythonBridge.shared.suggestAudioTags(
+            day: .thursday, shootType: ev.shootType, pieces: pieces
+        )
+        let tags = thursdayMood.tags(autoTags: auto)
         let exclude = Array(thursdaySeenIDs)
+        // Pieces are passed in only when the user is in "auto" mood — picking
+        // a specific mood like "Cinematic" should respect that choice and
+        // skip the program-match pre-pend.
+        let usePieces = thursdayMood == .auto ? pieces : []
         do {
             let tracks = try await PythonBridge.shared.runFetchTrackCandidates(
-                tags: tags, count: 5, excludeIds: exclude
+                tags: tags, count: 5, excludeIds: exclude, programPieces: usePieces
             )
             await MainActor.run {
                 if resetSeen { thursdaySeenIDs = [] }
@@ -799,8 +969,13 @@ struct AssetGenerationView: View {
             saved.days[day.rawValue]!.audioPath = candidate.localURL
             appState.updateEvent(saved)
         }
-        if day == .tuesday { tuesdayPickedID = candidate.id }
-        else if day == .thursday { thursdayPickedID = candidate.id }
+        if day == .tuesday {
+            tuesdayPickedID = candidate.id
+            tuesdayUploadedURL = nil   // picking a Jamendo track replaces any prior upload
+        } else if day == .thursday {
+            thursdayPickedID = candidate.id
+            thursdayUploadedURL = nil
+        }
     }
 
     /// Clear a pick so Python falls back to its derived audio.
@@ -810,8 +985,8 @@ struct AssetGenerationView: View {
             saved.days[day.rawValue]!.audioPath = nil
             appState.updateEvent(saved)
         }
-        if day == .tuesday { tuesdayPickedID = nil }
-        else if day == .thursday { thursdayPickedID = nil }
+        if day == .tuesday { tuesdayPickedID = nil; tuesdayUploadedURL = nil }
+        else if day == .thursday { thursdayPickedID = nil; thursdayUploadedURL = nil }
     }
 
     private func previewTrack(_ candidate: TrackCandidate) {
@@ -993,6 +1168,8 @@ private struct MusicPickerPane: View {
     let thursdayCandidates: [TrackCandidate]
     let tuesdayPickedID: String?
     let thursdayPickedID: String?
+    let tuesdayUploadedURL: URL?
+    let thursdayUploadedURL: URL?
     let tuesdayMood: MusicMood
     let thursdayMood: MusicMood
     let nowPlayingID: String?
@@ -1022,6 +1199,7 @@ private struct MusicPickerPane: View {
                     mood: tuesdayMood,
                     candidates: tuesdayCandidates,
                     pickedID: tuesdayPickedID,
+                    uploadedURL: tuesdayUploadedURL,
                     isFetching: musicPass == .fetchingTuesday,
                     onMood: onTuesdayMood,
                     onRefetch: onRefetchTuesday,
@@ -1039,6 +1217,7 @@ private struct MusicPickerPane: View {
                     mood: thursdayMood,
                     candidates: thursdayCandidates,
                     pickedID: thursdayPickedID,
+                    uploadedURL: thursdayUploadedURL,
                     isFetching: musicPass == .fetchingThursday,
                     onMood: onThursdayMood,
                     onRefetch: onRefetchThursday,
@@ -1067,6 +1246,7 @@ private struct MusicPickerPane: View {
         mood: MusicMood,
         candidates: [TrackCandidate],
         pickedID: String?,
+        uploadedURL: URL?,
         isFetching: Bool,
         onMood: @escaping (MusicMood) -> Void,
         onRefetch: @escaping () -> Void,
@@ -1088,6 +1268,12 @@ private struct MusicPickerPane: View {
 
             if active {
                 moodRow(selected: mood, onMood: onMood)
+
+                // Uploaded local file — pinned at the top of the section so
+                // the user can see exactly what they're confirming.
+                if let uploadedURL, pickedID == "uploaded" {
+                    UploadedTrackRow(url: uploadedURL, onClear: onSkip)
+                }
 
                 if isFetching {
                     HStack(spacing: Spacing.xs) {
@@ -1149,7 +1335,7 @@ private struct MusicPickerPane: View {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 11, weight: .bold))
-                            Text(pickedID != nil ? "Confirm & continue" : "Skip & continue")
+                            Text(confirmButtonText(pickedID: pickedID, uploadedURL: uploadedURL))
                         }
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.cream)
@@ -1173,6 +1359,13 @@ private struct MusicPickerPane: View {
             RoundedRectangle(cornerRadius: Radius.sm)
                 .fill(active ? Color.cream : Color.clear)
         )
+    }
+
+    private func confirmButtonText(pickedID: String?, uploadedURL: URL?) -> String {
+        if pickedID == "uploaded", let uploadedURL {
+            return "Confirm uploaded: \(uploadedURL.lastPathComponent)"
+        }
+        return pickedID != nil ? "Confirm & continue" : "Skip & continue"
     }
 
     private func moodRow(selected: MusicMood, onMood: @escaping (MusicMood) -> Void) -> some View {
@@ -1199,6 +1392,66 @@ private struct MusicPickerPane: View {
     }
 }
 
+/// Pinned row shown above the Jamendo candidates when the user has uploaded
+/// their own audio file. Distinct from `TrackRow` so it can use the actual
+/// filename and signal "you picked this" without competing with the
+/// Jamendo cards.
+private struct UploadedTrackRow: View {
+    let url: URL
+    let onClear: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "music.note.list")
+                .font(.system(size: 16))
+                .foregroundStyle(Color.roseGold)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Text("UPLOADED")
+                        .font(.system(size: 8, weight: .medium))
+                        .tracking(0.6)
+                        .foregroundStyle(Color.cream)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.roseGold.opacity(0.85))
+                        .clipShape(Capsule())
+                    Text(url.lastPathComponent)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.warmDark)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Text("Will be used for the reel")
+                    .font(.light(10))
+                    .foregroundStyle(Color.warmMid)
+            }
+            Spacer()
+            Image(systemName: "checkmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.roseGold)
+            Button(action: onClear) {
+                Image(systemName: "xmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Color.warmMid.opacity(0.6), Color.creamEdge)
+                    .font(.system(size: 14))
+            }
+            .buttonStyle(.plain)
+            .help("Remove uploaded audio")
+        }
+        .padding(.horizontal, Spacing.xs)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.xs)
+                .fill(Color.roseGold.opacity(0.12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.xs)
+                        .strokeBorder(Color.roseGold.opacity(0.4), lineWidth: 1)
+                )
+        )
+    }
+}
+
 private struct TrackRow: View {
     let candidate: TrackCandidate
     let isPicked: Bool
@@ -1216,14 +1469,33 @@ private struct TrackRow: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(candidate.name)
-                    .font(.system(size: 12, weight: isPicked ? .medium : .regular))
-                    .foregroundStyle(Color.warmDark)
-                    .lineLimit(1)
-                Text(candidate.artistName)
-                    .font(.light(10))
-                    .foregroundStyle(Color.warmMid)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(candidate.name)
+                        .font(.system(size: 12, weight: isPicked ? .medium : .regular))
+                        .foregroundStyle(Color.warmDark)
+                        .lineLimit(1)
+                    if candidate.isProgramMatch {
+                        Text("FROM PROGRAM")
+                            .font(.system(size: 8, weight: .medium))
+                            .tracking(0.6)
+                            .foregroundStyle(Color.cream)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.roseGold.opacity(0.85))
+                            .clipShape(Capsule())
+                    }
+                }
+                if let label = candidate.matchLabel, candidate.isProgramMatch {
+                    Text(label)
+                        .font(.system(size: 9).italic())
+                        .foregroundStyle(Color.roseGold.opacity(0.85))
+                        .lineLimit(1)
+                } else {
+                    Text(candidate.artistName)
+                        .font(.light(10))
+                        .foregroundStyle(Color.warmMid)
+                        .lineLimit(1)
+                }
             }
 
             Spacer()

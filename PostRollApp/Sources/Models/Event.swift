@@ -19,6 +19,10 @@ struct Event: Identifiable, Codable, Hashable {
     var ocrReviewDone: Bool = false
     var eventURL: String = ""  // Optional event page URL — used to enrich OCR data
 
+    // Flags raised by postroll.ai.flag_issues after OCR — items the user
+    // should accept or correct before continuing. Cleared once review is done.
+    var pendingFlags: [OCRFlag] = []
+
     // Event-wide handles applied to every day's caption (org, venue, recurring tags)
     var eventHandles: String = ""
 
@@ -68,6 +72,7 @@ extension Event {
         programImagePaths = try c.decodeIfPresent([URL].self,                      forKey: .programImagePaths) ?? []
         ocrResult         = try c.decodeIfPresent(OCRResult.self,                  forKey: .ocrResult)
         ocrReviewDone     = try c.decodeIfPresent(Bool.self,                       forKey: .ocrReviewDone)     ?? false
+        pendingFlags      = try c.decodeIfPresent([OCRFlag].self,                  forKey: .pendingFlags)      ?? []
         eventURL          = try c.decodeIfPresent(String.self,                     forKey: .eventURL)          ?? ""
         eventHandles      = try c.decodeIfPresent(String.self,                     forKey: .eventHandles)      ?? ""
         days              = try c.decodeIfPresent([String: PostingDay].self,       forKey: .days)              ?? [:]

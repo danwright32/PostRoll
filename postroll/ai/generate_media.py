@@ -99,50 +99,9 @@ def _has_ffmpeg() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
-def _derive_audio_tags(shoot_type: str, pieces: list[dict]) -> str:
-    """Derive Jamendo search tags from the event's shoot type and program pieces.
-
-    Uses only tag combinations verified to return results on Jamendo:
-      gospel               — 20 tracks (gospel/spiritual content)
-      inspirational,orchestral — 11 tracks (sacred/choral/classical)
-      orchestral,classical — 12 tracks (classical orchestral)
-      jazz                 — abundant  (jazz/blues content)
-      spiritual            — 16 tracks (spiritual/soul content)
-      ambient,atmospheric  — default   (photo calls / light shoots)
-    """
-    all_text = " ".join(
-        f"{p.get('title', '')} {p.get('composer', '')}" for p in pieces
-    ).lower()
-
-    # Genre signals from program content
-    # Note: Jamendo's "gospel" tag skews acoustic/slow guitar — not right for
-    # orchestral concert settings. Use "inspirational,orchestral" for any sacred/
-    # choral/gospel content performed in a classical concert context.
-    sacred_choral_keywords = (
-        "gospel", "praise", "hymn", "church", "sacred", "amen", "hallelujah",
-        "smallwood", "total praise", "african spiritual", "negro spiritual",
-        "soon we will", "freedom song", "traditional spiritual",
-        "requiem", "kyrie", "sanctus", "mass ", "motet", "anthem",
-        "cantata", "gloria", "agnus dei", "pie jesu", "magnificat",
-    )
-    jazz_keywords = ("jazz", "blues", "swing", "bebop", "coltrane", "ellington",
-                     "monk", "mingus")
-
-    has_sacred_choral = any(k in all_text for k in sacred_choral_keywords)
-    has_jazz          = any(k in all_text for k in jazz_keywords)
-
-    if has_jazz:
-        return "jazz"
-    if has_sacred_choral:
-        # Classical/orchestral concert setting, even with gospel/spiritual repertoire
-        return "inspirational,orchestral"
-
-    # Shoot-type fallback when program gives no clear signal
-    if shoot_type in ("performance", "rehearsal_and_performance"):
-        return "orchestral,classical"
-    if shoot_type == "photo_call":
-        return "ambient,atmospheric"
-    return "ambient,atmospheric"
+# Thursday's audio tag derivation lives in postroll.ai.audio_tags so the
+# Swift-side track picker can call the same logic via a CLI shim.
+from .audio_tags import thursday_tags as _derive_audio_tags  # noqa: E402
 
 
 def generate_media(
@@ -427,6 +386,7 @@ def generate_media(
                         photo_paths=photos,
                         audio_path=audio,
                         audio_tags=audio_tags,
+                        pieces=pieces,
                         event_name=event,
                         org=org,
                         venue=venue,

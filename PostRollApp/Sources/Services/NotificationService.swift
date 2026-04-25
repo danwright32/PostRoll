@@ -1,12 +1,32 @@
 import AppKit
 import UserNotifications
 
+/// Deletes program-image copies that PostRoll wrote into
+/// ~/Documents/PostRoll/programs/. Refuses to touch URLs outside that folder
+/// so a user's source files (e.g. originals in ~/Downloads) are never deleted.
+enum ProgramImageCleanup {
+    static func delete(urls: [URL]) {
+        let programsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents/PostRoll/programs")
+            .standardizedFileURL.path
+        for url in urls {
+            let path = url.standardizedFileURL.path
+            guard path.hasPrefix(programsDir + "/") else { continue }
+            try? FileManager.default.removeItem(atPath: path)
+        }
+    }
+}
+
 /// Handles macOS notifications and Dock badge for PostRoll background steps.
 /// Badge count = events where a background process just finished and needs review.
 @MainActor
 final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationService()
     private override init() { super.init() }
+
+    /// Count of completed background processes that the user hasn't acknowledged
+    /// yet (by activating the app). Reset to 0 on `clearBadge()`.
+    private var pendingCount: Int = 0
 
     // MARK: - Permission
 
@@ -81,17 +101,20 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Dock badge
 
-    /// Show badge only when the app is in the background — the user doesn't
-    /// need a badge while they're actively looking at the window.
-    func updateBadge(events: [Event]) {
-        guard !NSApplication.shared.isActive else {
-            NSApplication.shared.dockTile.badgeLabel = nil
-            return
-        }
-        let count = events.filter {
-            $0.stage == .ocrDone || $0.stage == .assetsGenerated
-        }.count
-        NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+    /// Increment the unacknowledged-process count and refresh the dock badge.
+    /// If the app is currently active the badge stays hidden — the user is
+    /// already looking, so the count starts accumulating from 0 again.
+    func incrementBadge() {
+        guard !NSApplication.shared.isActive else { return }
+        pendingCount += 1
+        NSApplication.shared.dockTile.badgeLabel = "\(pendingCount)"
+    }
+
+    /// Clear the badge and reset the pending count. Called when the app
+    /// becomes active — the user has now seen whatever finished.
+    func clearBadge() {
+        pendingCount = 0
+        NSApplication.shared.dockTile.badgeLabel = nil
     }
 
     // MARK: - Clear on activate
@@ -112,5 +135,6 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         )
+        incrementBadge()
     }
 }

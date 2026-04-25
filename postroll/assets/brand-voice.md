@@ -470,3 +470,5 @@ generic enough to fit any event ever; it tells the reader nothing.
 - (Apr 18, 2026) "@jenlucycook and @dolcekelly_pianist on piano" makes it sound like both of them are on the piano. it shoudl be clear who they both are. we should also tag all of the other performers in the post
 - (Apr 18, 2026) it shouldn't just be a breakdown of the program.
 - (Apr 18, 2026) Tag venues, organizations, and people as @mentions in the caption body — not just in hashtags. Use @carnegiehall, @dciny, etc. inline where the name appears naturally in a sentence, rather than listing them as bare text or pushing them down to the hashtag block.
+- (Apr 25, 2026) Don't use em dashes
+- (Apr 25, 2026) The blog should be more about the night, not a breakdown of the program

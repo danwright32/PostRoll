@@ -165,8 +165,21 @@ struct OCRProgressView: View {
             }
 
             TimingStore.shared.recordOCR(seconds: Double(elapsed))
+
+            // Second pass: ask Claude to flag suspicious items in the OCR output.
+            // The user resolves these on the OCR review screen before continuing.
+            phaseOverride = "Checking for issues…"
+            let flags: [OCRFlag] = (try? await PythonBridge.shared.runFlagIssues(
+                ocr: result,
+                imagePaths: event.programImagePaths
+            )) ?? []
+
+            // Program images stay on disk through the review step — flag review
+            // could conceivably need them later. They're cleaned up when the
+            // user confirms OCR review, in OCRReviewView.confirmAndAdvance().
             var updated = event
             updated.ocrResult = result
+            updated.pendingFlags = flags
             updated.stage = .ocrDone
             appState.updateEvent(updated)
             NotificationService.shared.notifyOCRComplete(eventName: event.name)

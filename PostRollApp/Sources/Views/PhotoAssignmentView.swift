@@ -164,15 +164,19 @@ struct PhotoAssignmentView: View {
                         ? "Collage uses the first 10 photos (\(wednesdayCount) assigned). Drag to reorder."
                         : nil
 
-                    PhotoDaySection(
-                        label: day.displayName,
-                        collageNote: note,
-                        photos: dayBinding(day),
-                        cropOffsets: enableCrop ? cropOffsetsBinding(day) : nil,
-                        notes: noteBinding(day),
-                        onPreview: { previewURL = $0 },
-                        onAddPhotos: { pickerTarget = .day(day) }
-                    )
+                    // Friday is the before/after story — it reuses Tuesday's RAW + Edited
+                    // photos, so there's no separate upload area for it.
+                    if day != .friday {
+                        PhotoDaySection(
+                            label: day.displayName,
+                            collageNote: note,
+                            photos: dayBinding(day),
+                            cropOffsets: enableCrop ? cropOffsetsBinding(day) : nil,
+                            notes: noteBinding(day),
+                            onPreview: { previewURL = $0 },
+                            onAddPhotos: { pickerTarget = .day(day) }
+                        )
+                    }
 
                     // Day-specific special input sections
                     switch day {
@@ -182,6 +186,7 @@ struct PhotoAssignmentView: View {
                             rawPhoto:        $tuesdayRawPhoto,
                             editedPhoto:     $tuesdayEditedPhoto,
                             targetDuration:  $tuesdayTargetDuration,
+                            dayPhotos:       dayPhotos[.tuesday] ?? [],
                             onPickScreenRecording: { pickerTarget = .tuesdayScreenRecording },
                             onPickRawPhoto:        { pickerTarget = .tuesdayRawPhoto },
                             onPickEditedPhoto:     { pickerTarget = .tuesdayEditedPhoto }
@@ -224,6 +229,7 @@ struct PhotoAssignmentView: View {
                         PerformerAssignmentSection(
                             day: day,
                             performers: event.ocrResult?.performers ?? [],
+                            eventHandles: event.eventHandles,
                             selectedPerformerIDs: performerBinding(day),
                             handles: handleBinding(day),
                             names: plainNameBinding(day),
@@ -449,9 +455,11 @@ struct PhotoAssignmentView: View {
             case .wednesday:
                 pd.collageSeed = wednesdayCollageSeed
             case .friday:
-                // Before/after story uses Tuesday's RAW and edited photos
+                // Before/after story uses Tuesday's RAW and edited photos.
+                // Friday has no separate photo grid, so wipe any stale paths.
                 pd.rawPhotoPath    = tuesdayRawPhoto
                 pd.editedPhotoPath = tuesdayEditedPhoto
+                pd.photoPaths      = []
             default: break
             }
             ev.days[day.rawValue] = pd
@@ -793,11 +801,12 @@ private struct TuesdayReelSection: View {
     @Binding var rawPhoto: URL?
     @Binding var editedPhoto: URL?
     @Binding var targetDuration: Double
+    let dayPhotos: [URL]
     let onPickScreenRecording: () -> Void
     let onPickRawPhoto: () -> Void
     let onPickEditedPhoto: () -> Void
 
-    @State private var isExpanded = false
+    @State private var isExpanded = true
     @State private var recordingSeconds: Double? = nil
 
     var hasReelInputs: Bool { rawPhoto != nil && editedPhoto != nil }
@@ -836,10 +845,38 @@ private struct TuesdayReelSection: View {
                         .foregroundStyle(Color.warmMid)
                         .padding(.bottom, 4)
 
-                    SingleFilePicker(label: "RAW Photo",        url: rawPhoto,
-                                     onPick: onPickRawPhoto,        onClear: { rawPhoto = nil })
-                    SingleFilePicker(label: "Edited Photo",     url: editedPhoto,
-                                     onPick: onPickEditedPhoto,     onClear: { editedPhoto = nil })
+                    BeforeAfterPicker(
+                        label: "RAW Photo",
+                        selected: rawPhoto,
+                        otherSelected: editedPhoto,
+                        dayPhotos: dayPhotos,
+                        onSelect: { url in
+                            rawPhoto = url
+                            // Auto-pair: with exactly two day photos, picking one
+                            // for RAW automatically picks the other for Edited.
+                            if editedPhoto == nil, dayPhotos.count == 2,
+                               let other = dayPhotos.first(where: { $0 != url }) {
+                                editedPhoto = other
+                            }
+                        },
+                        onClear: { rawPhoto = nil },
+                        onPickFromFile: onPickRawPhoto
+                    )
+                    BeforeAfterPicker(
+                        label: "Edited Photo",
+                        selected: editedPhoto,
+                        otherSelected: rawPhoto,
+                        dayPhotos: dayPhotos,
+                        onSelect: { url in
+                            editedPhoto = url
+                            if rawPhoto == nil, dayPhotos.count == 2,
+                               let other = dayPhotos.first(where: { $0 != url }) {
+                                rawPhoto = other
+                            }
+                        },
+                        onClear: { editedPhoto = nil },
+                        onPickFromFile: onPickEditedPhoto
+                    )
 
                     if rawPhoto != nil && editedPhoto != nil {
                         Button {
@@ -911,7 +948,7 @@ private struct WednesdayCollageSection: View {
     let photoCount: Int
     @Binding var collageSeed: Int?
 
-    @State private var isExpanded = false
+    @State private var isExpanded = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -977,7 +1014,7 @@ private struct ThursdayReelSection: View {
     @Binding var reelSeed: Int?
     let onPickAudio: () -> Void
 
-    @State private var isExpanded = false
+    @State private var isExpanded = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1028,10 +1065,15 @@ private struct ThursdayReelSection: View {
                     }
 
                     // Layout seed
-                    Button("New layout") { reelSeed = Int.random(in: 1...99999) }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.roseGold)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Button("New layout") { reelSeed = Int.random(in: 1...99999) }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.roseGold)
+                        Text("Re-rolls the photo arrangement. Takes effect when the reel is generated.")
+                            .font(.light(10))
+                            .foregroundStyle(Color.warmFaint)
+                    }
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.md)
@@ -1053,25 +1095,164 @@ private struct FridayBeforeAfterSection: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: Spacing.sm) {
-                Image(systemName: hasPhotos ? "rectangle.split.2x1.fill" : "rectangle.split.2x1")
-                    .font(.system(size: 11))
-                    .foregroundStyle(hasPhotos ? Color.roseGold : Color.warmMid)
-                Text("BEFORE/AFTER STORY")
-                    .font(.system(size: 10, weight: .medium))
-                    .tracking(1.2)
-                    .foregroundStyle(Color.warmMid)
+            // Day header — matches PhotoDaySection styling so Friday reads as a real day
+            HStack(alignment: .center, spacing: Spacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("FRIDAY")
+                        .font(.system(size: 10, weight: .medium))
+                        .tracking(1.2)
+                        .foregroundStyle(hasPhotos ? Color.roseGold : Color.warmMid)
+                    Text("Before/after story — reuses Tuesday's RAW + edited photos")
+                        .font(.light(11))
+                        .foregroundStyle(Color.warmMid)
+                }
                 Spacer()
-                Text(hasPhotos ? "ready" : "assign Tuesday's RAW + edited first")
-                    .font(.light(10))
-                    .foregroundStyle(hasPhotos ? Color.roseGold.opacity(0.7) : Color.warmMid.opacity(0.5))
+                if hasPhotos {
+                    Text("ready")
+                        .font(.light(11))
+                        .foregroundStyle(Color.roseGold.opacity(0.7))
+                }
             }
             .padding(.horizontal, Spacing.xl)
-            .padding(.vertical, 10)
+            .padding(.vertical, 14)
 
-            RoseGoldDivider(opacity: 0.15)
+            RoseGoldDivider(opacity: 0.3)
         }
-        .background(Color.roseGold.opacity(0.02))
+    }
+}
+
+// MARK: - Before/After Photo Picker
+//
+// Lets the user assign one of Tuesday's already-uploaded photos as the RAW or
+// Edited photo for the speed-edit reel. Shows a horizontal thumbnail strip;
+// clicking a thumbnail assigns it. Falls back to a file picker if the photo
+// they want isn't in Tuesday's day photos.
+
+private struct BeforeAfterPicker: View {
+    let label: String
+    let selected: URL?
+    let otherSelected: URL?       // Hidden from this row's strip
+    let dayPhotos: [URL]
+    let onSelect: (URL) -> Void
+    let onClear: () -> Void
+    let onPickFromFile: () -> Void
+
+    /// Photos available for THIS role: day photos minus whatever the other role uses.
+    private var availablePhotos: [URL] {
+        dayPhotos.filter { $0 != otherSelected }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Spacing.sm) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.warmMid)
+                .frame(width: 110, alignment: .leading)
+                .padding(.top, 16)  // Aligns with thumbnail centers
+
+            if dayPhotos.isEmpty {
+                HStack(spacing: 6) {
+                    Button("Choose…", action: onPickFromFile)
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.roseGold)
+                    if selected != nil {
+                        Spacer()
+                        Button(action: onClear) {
+                            Image(systemName: "xmark.circle.fill")
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(Color.warmMid.opacity(0.6), Color.creamEdge)
+                                .font(.system(size: 14))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
+            } else {
+                HStack(spacing: 6) {
+                    ForEach(availablePhotos, id: \.self) { url in
+                        BeforeAfterThumb(
+                            url: url,
+                            isSelected: selected == url,
+                            onTap: {
+                                if selected == url { onClear() } else { onSelect(url) }
+                            }
+                        )
+                    }
+                    Button(action: onPickFromFile) {
+                        VStack(spacing: 2) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 14))
+                                .foregroundStyle(Color.roseGold)
+                            Text("File")
+                                .font(.system(size: 8))
+                                .foregroundStyle(Color.warmMid)
+                        }
+                        .frame(width: 40, height: 40)
+                        .background(Color.creamDeep)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(Color.creamEdge, lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Pick from a different folder")
+                }
+            }
+            Spacer()
+        }
+    }
+}
+
+private struct BeforeAfterThumb: View {
+    let url: URL
+    let isSelected: Bool
+    let onTap: () -> Void
+    @State private var image: NSImage?
+
+    var body: some View {
+        Button(action: onTap) {
+            ZStack(alignment: .topTrailing) {
+                Group {
+                    if let image {
+                        Image(nsImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Color.creamDeep
+                    }
+                }
+                .frame(width: 40, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .opacity(isSelected ? 1.0 : 0.55)        // Unselected dim → "click me"
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(
+                            isSelected ? Color.roseGold : Color.creamEdge,
+                            lineWidth: isSelected ? 3 : 1
+                        )
+                )
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.cream, Color.roseGold)
+                        .font(.system(size: 14))
+                        .offset(x: 4, y: -4)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .help(isSelected ? "Tap to clear" : "Tap to assign")
+        .task {
+            let captured = url
+            image = await Task.detached {
+                guard FileManager.default.fileExists(atPath: captured.path) else { return nil }
+                return NSImage(contentsOf: captured)
+            }.value
+        }
     }
 }
 
@@ -1352,12 +1533,13 @@ private struct PhotoPreviewOverlay: View {
 private struct PerformerAssignmentSection: View {
     let day: DayName
     let performers: [Performer]
+    let eventHandles: String     // Org + venue handles applied to every post
     @Binding var selectedPerformerIDs: Set<UUID>
     @Binding var handles: String
     @Binding var names: String
     let onChanged: () -> Void
 
-    @State private var isExpanded = false
+    @State private var isExpanded = true
 
     private var hasContent: Bool {
         !handles.isEmpty || !names.isEmpty || !selectedPerformerIDs.isEmpty
@@ -1400,12 +1582,20 @@ private struct PerformerAssignmentSection: View {
                         .onChange(of: selectedPerformerIDs) { _, _ in onChanged() }
                     }
 
-                    HandleField(
-                        label: "additional @handles (comma-separated)",
-                        placeholder: "@dciny, @lincolncenter",
-                        text: $handles
-                    )
-                    .onChange(of: handles) { _, _ in onChanged() }
+                    VStack(alignment: .leading, spacing: 4) {
+                        HandleField(
+                            label: "additional @handles (comma-separated)",
+                            placeholder: "@guestartist, @ensemble",
+                            text: $handles
+                        )
+                        .onChange(of: handles) { _, _ in onChanged() }
+
+                        if !eventHandles.trimmingCharacters(in: .whitespaces).isEmpty {
+                            Text("Already tagged on every post: \(eventHandles)")
+                                .font(.system(size: 10).italic())
+                                .foregroundStyle(Color.warmFaint.opacity(0.85))
+                        }
+                    }
 
                     HandleField(
                         label: "additional plain names (no @, comma-separated)",
@@ -1510,12 +1700,21 @@ private struct HandleField: View {
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
                 .foregroundStyle(Color.warmMid)
-            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color.warmMid.opacity(0.30)))
-                .focused($focused)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.warmDark)
-                .focusEffectDisabled()
-                .padding(.horizontal, 8)
+            ZStack(alignment: .leading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .font(.system(size: 12).italic())
+                        .foregroundStyle(Color.warmFaint.opacity(0.45))
+                        .padding(.horizontal, 8)
+                        .allowsHitTesting(false)
+                }
+                TextField("", text: $text)
+                    .focused($focused)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.warmDark)
+                    .focusEffectDisabled()
+                    .padding(.horizontal, 8)
+            }
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.xs)

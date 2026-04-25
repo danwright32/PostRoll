@@ -55,7 +55,8 @@ CREAM = (252, 250, 247)
 CREAM_OPACITY = 210
 TEXT_DARK = (60, 55, 50)
 ROSE_GOLD = (160, 105, 95)
-HEADER_H = 220  # cream header with event info
+HEADER_H = 340  # cream header with event info — tall enough to push title clear of the iPhone notch / Dynamic Island
+TITLE_TOP_Y = 170  # clears notch (~120px) + Dynamic Island with breathing room
 FOOTER_H = 100  # cream footer with logo
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 
@@ -154,11 +155,11 @@ def draw_branded_chrome(
     bbox = draw.textbbox((0, 0), event_name, font=title_font)
     tw = bbox[2] - bbox[0]
     tx = (CANVAS_W - tw) // 2
-    draw.text((tx, 35), event_name, font=title_font, fill=TEXT_DARK)
+    draw.text((tx, TITLE_TOP_Y), event_name, font=title_font, fill=TEXT_DARK)
 
     # Org + Venue
     title_h = bbox[3] - bbox[1]
-    info_y = 35 + title_h + 20
+    info_y = TITLE_TOP_Y + title_h + 20
     for j, line in enumerate([org, venue]):
         if line:
             # Centered with letter spacing
@@ -323,7 +324,7 @@ def generate_frame(
     return frame
 
 
-_DEFAULT_AUDIO_TAGS = "electronic,upbeat"
+from postroll.ai.audio_tags import TUESDAY_DEFAULT_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
 
 
 def generate_reel_slider(
@@ -432,14 +433,18 @@ def generate_reel_slider(
                 )
 
             elif i < phase_end_4:
-                # Crossfade to closing frame.
-                # closing_frame has chrome baked in at a different size/style
-                # than the reel chrome — blending both produces ghost text.
-                # Drop the reel chrome during this transition so only the
-                # still image's text fades in, with no duplicate behind it.
+                # Crossfade to closing frame. Keep the reel chrome through
+                # this transition — the previous "drop chrome to avoid ghost
+                # text" approach produced a visible flash of unbranded photo
+                # at the start of the crossfade. A brief overlap of reel
+                # header and closing-frame header during the blend is far
+                # less jarring than the flash.
                 blend_t = ease_in_out((i - phase_end_3) / transition_frames)
                 if closing_frame:
                     edit_frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0)
+                    edit_frame = draw_branded_chrome(
+                        edit_frame, event_name, org, venue, logo, photo_y, photo_h
+                    )
                     frame = Image.blend(edit_frame, closing_frame, blend_t)
                 else:
                     edit_frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0)

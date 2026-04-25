@@ -98,7 +98,7 @@ Return JSON ONLY (no commentary, no markdown fences) matching this schema:
       "composer": "string — the creator of this work. Composer for music, playwright for plays, book writer or composer for musicals, choreographer for dance, artist or band for rock, troupe for improv. Use whichever fits.",
       "title": "string",
       "movements": ["string", ...],
-      "notes": "string or null — anything printed about this specific piece/scene/song"
+      "notes": "string or null — prose about THIS piece only (premiere date, dedicatee, programmatic meaning, structure, what the music does). If the program has a separate 'Program Notes' / 'About the Music' section anywhere in the document — even on a later page — find the paragraph(s) about this specific piece and put them here verbatim. Do NOT include the composer's name, life dates, or biography. Leave null only if no piece-specific prose appears anywhere in the program."
     }}
   ],
   "scenes": [
@@ -126,6 +126,21 @@ Rules:
   Don't summarize aggressively.
 - `composer` is used loosely for the work's originator across all genres.
   Don't leave it blank just because the event isn't classical.
+- **Do not duplicate the composer in `notes`.** Program books often print the
+  composer's last name and life dates (e.g. "Shostakovich (1906–1975)") next
+  to a piece — that's still composer/biographical info, not piece notes.
+  Capture it once in `composer` (full name) and, if the program has a longer
+  composer paragraph, put that in `program_notes`. Set `notes` to null when
+  no piece-specific prose appears anywhere in the program.
+- **Pull piece notes from a separate Program Notes section if one exists.**
+  Many programs put a brief title/composer page up front and then a multi-page
+  "Program Notes" or "About the Music" section later with paragraphs about
+  each piece. Cross-reference: for every entry in `pieces`, scan the entire
+  program for a matching paragraph (often headed by the piece title or
+  composer name) and copy that prose verbatim into the piece's `notes` field.
+  The same prose should also appear in the top-level `program_notes` blob —
+  that's expected; piece-level `notes` is the per-piece slice for the
+  caption/blog generator.
 - If a piece has multiple movements/acts/scenes listed, capture all of them.
 - For `scenes`, populate one entry per distinct scene/section/set/
   movement/act mentioned in the program. The caption generator uses

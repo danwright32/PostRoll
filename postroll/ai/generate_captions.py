@@ -443,6 +443,18 @@ Violations to avoid:
 - "Earlier in the night [other conductor] did [other thing]" — banned.
   You are not the program notes.
 - Naming a performer who is not visibly in this frame in the body.
+- **Backhanded compliments / faint praise.** Phrasings like "held his
+  own", "kept up", "more than capable", "did her best", "managed",
+  "tried hard", "respectable showing", or any descriptive stand-in for
+  a performer's name (e.g. "a pianist who…", "the accompanist who…")
+  are BANNED. They sound condescending. If a performer is in the frame
+  with a tag handle or name_mention, name them by that handle / name —
+  never by a generic role noun followed by faint praise.
+- **Reducing a tagged performer to a description.** If `@filam_pianist`
+  is in the required tag_handles list and they are visibly in this
+  frame, the caption must use `@filam_pianist` (in body or stack) — not
+  "a pianist". The same rule applies to name_mentions: use the actual
+  name, not "a pianist named such-and-such" or any role-noun substitute.
 """
 
 SCOPE_RULE_EVENT_LEVEL = """\
@@ -857,6 +869,16 @@ frame.
 **NEVER fabricate or guess @ handles.** ONLY use handles from each
 post's tag_handles list. If tag_handles is "(none)", do NOT invent any
 @ mentions. A wrong handle tags the wrong account — this is a hard rule.
+
+**NEVER reduce a tagged performer to a faint-praise role noun.** If a
+performer is in the required tag_handles or name_mentions list, you
+must credit them by their @handle or actual name — never as "a pianist
+who held his own", "an accompanist who kept up", "a soloist who tried
+their best", or any descriptive substitute. Phrasings like "held his
+own", "kept up", "more than capable", "managed", "respectable showing"
+read as backhanded compliments and are banned across ALL post types
+(both single-subject and event-level). Treat every tagged performer
+with the same warmth — Dan won't post a caption that demeans a client.
 
 **Stage 4 — VARY across the whole week.** This is the key advantage
 of generating all 5 at once: the captions must NOT share openers,

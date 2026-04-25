@@ -20,7 +20,7 @@ import json
 import sys
 from pathlib import Path
 
-from ..audio import fetch_audio_candidates
+from ..audio import fetch_audio_candidates, fetch_program_audio_candidates
 
 
 def _main() -> int:
@@ -32,6 +32,18 @@ def _main() -> int:
         default="",
         help="Comma-separated Jamendo track IDs to exclude",
     )
+    p.add_argument(
+        "--program",
+        default="",
+        help="Path to program JSON (with `pieces`). When set, program-matched "
+             "tracks are prepended to the tag-matched candidates.",
+    )
+    p.add_argument(
+        "--program-count",
+        type=int,
+        default=2,
+        help="Up to how many program-matched tracks to prepend",
+    )
     p.add_argument("--output", required=True, help="Where to write the JSON result")
     p.add_argument("--seed", type=int, default=None)
     args = p.parse_args()
@@ -40,21 +52,46 @@ def _main() -> int:
         x.strip() for x in args.exclude_ids.split(",") if x.strip()
     )
 
-    try:
-        tracks = fetch_audio_candidates(
-            tags=args.tags,
-            count=args.count,
-            exclude_ids=exclude_ids,
-            seed=args.seed,
-        )
-    except Exception as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
+    program_tracks: list = []
+    if args.program:
+        program_path = Path(args.program)
+        if program_path.exists():
+            try:
+                program_data = json.loads(program_path.read_text(encoding="utf-8"))
+                pieces = program_data.get("pieces", []) or []
+                if pieces:
+                    program_tracks = fetch_program_audio_candidates(
+                        pieces=pieces,
+                        count=args.program_count,
+                        exclude_ids=exclude_ids,
+                        seed=args.seed,
+                    )
+            except Exception as e:
+                print(f"warning: program match failed: {e}", file=sys.stderr)
 
+    # Tag-matched candidates fill the remaining slots, excluding any IDs we
+    # already returned via program match so we don't show duplicates.
+    program_ids = tuple(t["id"] for t in program_tracks)
+    remaining = max(0, args.count - len(program_tracks))
+    tag_tracks: list = []
+    if remaining > 0:
+        try:
+            tag_tracks = fetch_audio_candidates(
+                tags=args.tags,
+                count=remaining,
+                exclude_ids=exclude_ids + program_ids,
+                seed=args.seed,
+            )
+        except Exception as e:
+            print(f"error: {e}", file=sys.stderr)
+            if not program_tracks:
+                return 1
+
+    tracks = program_tracks + tag_tracks
     Path(args.output).write_text(json.dumps({"tracks": tracks}, indent=2))
     print(
-        f"[fetch_tracks] tags={args.tags!r} returned={len(tracks)} "
-        f"excluded={len(exclude_ids)}",
+        f"[fetch_tracks] tags={args.tags!r} program_matches={len(program_tracks)} "
+        f"tag_matches={len(tag_tracks)} excluded={len(exclude_ids)}",
         flush=True,
     )
     return 0

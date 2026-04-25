@@ -8,14 +8,21 @@ struct TrackCandidate: Codable, Hashable, Identifiable {
     var duration: Double
     var tags: String
     var localPath: String
+    /// "program" when the track was matched by piece search; nil otherwise.
+    var source: String?
+    /// "<title> — <composer>" of the program piece this track was matched
+    /// against. Only populated when source == "program".
+    var matchLabel: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, duration, tags
+        case id, name, duration, tags, source
         case artistName = "artist_name"
         case localPath  = "local_path"
+        case matchLabel = "match_label"
     }
 
     var localURL: URL { URL(fileURLWithPath: localPath) }
+    var isProgramMatch: Bool { source == "program" }
 }
 
 enum PythonBridgeError: LocalizedError {
@@ -135,16 +142,6 @@ actor PythonBridge {
         ]
         try await runProcess(args: args)
 
-        // Parse per-phase timing if available
-        if let timingData = try? Data(contentsOf: timingFile),
-           let timing = try? JSONDecoder().decode([String: Double?].self, from: timingData) {
-            TimingStore.shared.recordGenerationPhases(
-                captions:  timing["captions"]  ?? nil,
-                blog:      timing["blog"]      ?? nil,
-                packaging: timing["packaging"] ?? nil
-            )
-        }
-
         guard FileManager.default.fileExists(atPath: outputFile.path) else {
             throw PythonBridgeError.outputMissing
         }
@@ -153,6 +150,20 @@ actor PythonBridge {
         do {
             var result = try JSONDecoder().decode(WeekGenerationResult.self, from: data)
             result.stampOriginals()
+
+            // Only record per-phase timings when at least one caption or blog
+            // actually got produced. Pure-error runs are usually <10s and would
+            // pull the rolling-mean estimate down toward zero.
+            if result.hasAnyContent,
+               let timingData = try? Data(contentsOf: timingFile),
+               let timing = try? JSONDecoder().decode([String: Double?].self, from: timingData) {
+                TimingStore.shared.recordGenerationPhases(
+                    captions:  timing["captions"]  ?? nil,
+                    blog:      timing["blog"]      ?? nil,
+                    packaging: timing["packaging"] ?? nil
+                )
+            }
+
             return result
         } catch {
             throw PythonBridgeError.invalidOutput(error.localizedDescription)
@@ -408,11 +419,16 @@ actor PythonBridge {
     func runFetchTrackCandidates(
         tags: String,
         count: Int = 5,
-        excludeIds: [String] = []
+        excludeIds: [String] = [],
+        programPieces: [Piece]? = nil
     ) async throws -> [TrackCandidate] {
         let tmp = FileManager.default.temporaryDirectory
         let outputFile = tmp.appendingPathComponent("postroll_tracks_\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: outputFile) }
+        let programFile = tmp.appendingPathComponent("postroll_tracks_program_\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: outputFile)
+            try? FileManager.default.removeItem(at: programFile)
+        }
 
         var args: [String] = [
             "-m", "postroll.ai.fetch_tracks",
@@ -423,6 +439,16 @@ actor PythonBridge {
         if !excludeIds.isEmpty {
             args.append("--exclude-ids")
             args.append(excludeIds.joined(separator: ","))
+        }
+        if let pieces = programPieces, !pieces.isEmpty {
+            let dict: [String: Any] = [
+                "pieces": pieces.map { ["title": $0.title, "composer": $0.composer] }
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: dict) {
+                try data.write(to: programFile)
+                args.append("--program")
+                args.append(programFile.path)
+            }
         }
 
         try await runProcess(args: args)
@@ -760,6 +786,18 @@ actor PythonBridge {
             "program":       programDict,
             "days":          daysDict,
         ]
+
+        // Wednesday's collage photos (always 10 or fewer) are reused as
+        // Thursday's caption context — small, curated, never blows past the
+        // Claude request size limit. Always include them in the manifest so
+        // they're available even when the user retries just Thursday and
+        // Wednesday is otherwise filtered out of `daysDict`.
+        if let wednesday = event.days[DayName.wednesday.rawValue],
+           !wednesday.photoPaths.isEmpty {
+            manifest["caption_context_photos"] = [
+                "wednesday": wednesday.photoPaths.map { $0.path }
+            ]
+        }
         // Include blog photos only when not filtering, or when "blog" is in the retry set
         let includeBlog = onlyDays == nil || onlyDays?.contains("blog") == true
         if includeBlog, !event.blogPhotoPaths.isEmpty {
@@ -869,6 +907,155 @@ actor PythonBridge {
         let data = try Data(contentsOf: outputFile)
         do {
             return try JSONDecoder().decode([HandleSuggestion].self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Piece Notes (web)
+
+    /// One result from fetch-piece-notes — title/composer echo the input so we
+    /// can match by content in case the Claude call returns them out of order.
+    struct PieceNoteResult: Codable {
+        var title: String
+        var composer: String
+        var notes: String?
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            title    = (try? c.decode(String.self, forKey: .title))    ?? ""
+            composer = (try? c.decode(String.self, forKey: .composer)) ?? ""
+            notes    = try? c.decode(String.self, forKey: .notes)
+        }
+
+        enum CodingKeys: String, CodingKey { case title, composer, notes }
+    }
+
+    /// Fetch short web-sourced program notes for the given pieces.
+    /// Caller filters to pieces with empty notes — this method sends whatever
+    /// it's given.
+    func fetchPieceNotes(pieces: [Piece], org: String, event: String) async throws -> [PieceNoteResult] {
+        let inputFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_piece_notes_in_\(UUID().uuidString).json")
+        let outputFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_piece_notes_out_\(UUID().uuidString).json")
+
+        defer {
+            try? FileManager.default.removeItem(at: inputFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        let pieceDicts: [[String: String]] = pieces.map {
+            ["title": $0.title, "composer": $0.composer]
+        }
+        let inputDict: [String: Any] = [
+            "pieces": pieceDicts,
+            "org": org,
+            "event": event,
+        ]
+        let inputData = try JSONSerialization.data(withJSONObject: inputDict)
+        try inputData.write(to: inputFile)
+
+        let args = [
+            "-m", "postroll.ai.enrich_program",
+            "--fetch-piece-notes", inputFile.path,
+            "--output", outputFile.path,
+        ]
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+
+        let data = try Data(contentsOf: outputFile)
+        do {
+            return try JSONDecoder().decode([PieceNoteResult].self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Audio Tags
+    //
+    // Calls postroll.ai.audio_tags via CLI to fetch the canonical Jamendo
+    // tags for a posting day. Single source of truth so the Swift track
+    // picker matches what the Python reel generators auto-fetch.
+
+    func suggestAudioTags(day: DayName, shootType: ShootType, pieces: [Piece]) async -> String {
+        let tmp = FileManager.default.temporaryDirectory
+        let programFile = tmp.appendingPathComponent("postroll_audio_tags_in_\(UUID().uuidString).json")
+        let outputFile = tmp.appendingPathComponent("postroll_audio_tags_out_\(UUID().uuidString).txt")
+        defer {
+            try? FileManager.default.removeItem(at: programFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        // Thursday is the only day that consumes pieces — writing them
+        // unconditionally keeps the call site simple.
+        let dict: [String: Any] = [
+            "pieces": pieces.map { ["title": $0.title, "composer": $0.composer] }
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: dict) {
+            try? data.write(to: programFile)
+        }
+
+        let args = [
+            "-m", "postroll.ai.audio_tags",
+            "--day", day.rawValue,
+            "--shoot-type", shootType.pythonValue,
+            "--program", programFile.path,
+            "--output", outputFile.path,
+        ]
+        do {
+            try await runProcess(args: args)
+            if let data = try? Data(contentsOf: outputFile),
+               let text = String(data: data, encoding: .utf8) {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        } catch {
+            // Fall through to the static default below
+        }
+        return day == .tuesday ? "electronic,upbeat" : "ambient,atmospheric"
+    }
+
+    // MARK: - Flag Issues
+
+    /// Run postroll.ai.flag_issues against the OCR result + program images.
+    /// Returns the flags Claude raised — empty array means OCR looked clean.
+    func runFlagIssues(ocr: OCRResult, imagePaths: [URL]) async throws -> [OCRFlag] {
+        guard !imagePaths.isEmpty else { return [] }
+
+        let programFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_flag_program_\(UUID().uuidString).json")
+        let outputFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_flag_out_\(UUID().uuidString).json")
+
+        defer {
+            try? FileManager.default.removeItem(at: programFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        let programData = try JSONEncoder().encode(ocr)
+        try programData.write(to: programFile)
+
+        var args = ["-m", "postroll.ai.flag_issues", "--program", programFile.path]
+        for url in imagePaths {
+            args.append("--image")
+            args.append(url.path)
+        }
+        args.append("--output")
+        args.append(outputFile.path)
+
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+
+        let data = try Data(contentsOf: outputFile)
+        do {
+            return try JSONDecoder().decode([OCRFlag].self, from: data)
         } catch {
             throw PythonBridgeError.invalidOutput(error.localizedDescription)
         }

@@ -126,8 +126,10 @@ def create_blurred_background(photo: Image.Image) -> Image.Image:
     return bg
 
 
-def place_photo(canvas: Image.Image, photo: Image.Image) -> Image.Image:
-    """Place the original photo in the upper portion of the canvas."""
+def place_photo(canvas: Image.Image, photo: Image.Image) -> tuple[Image.Image, int]:
+    """Place the original photo in the upper portion of the canvas.
+    Returns (canvas, actual_photo_top_y) so callers can layout against the
+    photo's real top edge instead of the wider available band."""
     # Available area for the photo
     avail_w = CANVAS_W - (2 * PHOTO_SIDE_MARGIN)
     avail_h = PHOTO_BOTTOM_Y - PHOTO_TOP_Y
@@ -172,7 +174,7 @@ def place_photo(canvas: Image.Image, photo: Image.Image) -> Image.Image:
     resized_rgba = resized.convert("RGBA")
     canvas.paste(resized_rgba, (x, y), resized_rgba)
 
-    return canvas
+    return canvas, y
 
 
 def draw_divider(draw: ImageDraw.ImageDraw):
@@ -183,39 +185,130 @@ def draw_divider(draw: ImageDraw.ImageDraw):
     draw.line([(x1, y), (x2, y)], fill=ROSE_GOLD_DARK, width=DIVIDER_THICKNESS)
 
 
-def draw_title(canvas: Image.Image, event_name: str):
-    """Draw the event name with inline rose-gold rules — editorial framing device."""
-    event_font = load_font(FONT_SCRIPT, 110)
+def _fit_script_title(
+    event_name: str,
+    canvas: Image.Image,
+    max_width: int,
+    max_size: int = 110,
+    min_size: int = 64,
+) -> tuple[list[str], ImageFont.FreeTypeFont]:
+    """Pick a layout for `event_name` that fits in `max_width`.
+
+    Preference order:
+      1. Single line at `max_size` if it fits.
+      2. Two balanced lines at `max_size` — split at the word boundary that
+         minimises max(line1_width, line2_width). Ties break in favour of the
+         split with MORE words on the top line so we never end up with a
+         single trailing word on line 2.
+      3. Same balanced split, shrunk in 4px steps until both lines fit.
+
+    Returns (lines, font).
+    """
+    tmp = ImageDraw.Draw(canvas)
+
+    # 1. Try the original at max_size as a single line.
+    max_font = load_font(FONT_SCRIPT, max_size)
+    bbox = tmp.textbbox((0, 0), event_name, font=max_font)
+    if (bbox[2] - bbox[0]) <= max_width:
+        return [event_name], max_font
+
+    words = event_name.split()
+    if len(words) < 2:
+        # Single word doesn't fit — fall back to shrinking it.
+        for size in range(max_size, min_size - 1, -4):
+            font = load_font(FONT_SCRIPT, size)
+            b = tmp.textbbox((0, 0), event_name, font=font)
+            if (b[2] - b[0]) <= max_width:
+                return [event_name], font
+        return [event_name], load_font(FONT_SCRIPT, min_size)
+
+    # 2. Find the best balanced split. Tiebreak rule: when two splits have
+    # equal max_w (within 1% of each other), prefer the one with MORE words
+    # on line 1 — the top line can be slightly longer, but a one-word orphan
+    # on line 2 looks bad.
+    best_split = len(words) // 2
+    best_max_w = float("inf")
+    for split in range(1, len(words)):
+        line1 = " ".join(words[:split])
+        line2 = " ".join(words[split:])
+        b1 = tmp.textbbox((0, 0), line1, font=max_font)
+        b2 = tmp.textbbox((0, 0), line2, font=max_font)
+        max_w = max(b1[2] - b1[0], b2[2] - b2[0])
+        # `<=` (not `<`) means later splits — with more words on the top
+        # line — win ties, biasing toward a longer first line.
+        if max_w <= best_max_w:
+            best_max_w = max_w
+            best_split = split
+
+    line1 = " ".join(words[:best_split])
+    line2 = " ".join(words[best_split:])
+
+    # 3. Try the wrapped layout at max_size first; only shrink if it doesn't fit.
+    for size in range(max_size, min_size - 1, -4):
+        font = load_font(FONT_SCRIPT, size)
+        b1 = tmp.textbbox((0, 0), line1, font=font)
+        b2 = tmp.textbbox((0, 0), line2, font=font)
+        if (b1[2] - b1[0]) <= max_width and (b2[2] - b2[0]) <= max_width:
+            return [line1, line2], font
+
+    # Last resort — wrapped at min_size even if it overflows slightly.
+    return [line1, line2], load_font(FONT_SCRIPT, min_size)
+
+
+def draw_title(canvas: Image.Image, event_name: str, photo_top_y: int):
+    """Draw the event name with inline rose-gold rules — editorial framing device.
+
+    Bottom-anchored to the actual photo top so the gap between title and image
+    stays tight regardless of line count or photo aspect ratio. Single-line
+    titles and two-line titles both end ~32px above the photo; multi-line
+    titles grow upward toward the canvas top."""
+    margin = PHOTO_SIDE_MARGIN + 30
+    max_text_w = CANVAS_W - 2 * margin - 2 * 28  # room for inline rules + gap
+    lines, event_font = _fit_script_title(event_name, canvas, max_text_w)
+
     tmp_draw = ImageDraw.Draw(canvas)
-    bbox = tmp_draw.textbbox((0, 0), event_name, font=event_font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    x = (CANVAS_W - text_w) // 2
+    line_metrics: list[tuple[int, int]] = []  # (x, width) per line
+    text_h_single = 0
+    for line in lines:
+        bbox = tmp_draw.textbbox((0, 0), line, font=event_font)
+        line_w = bbox[2] - bbox[0]
+        text_h_single = max(text_h_single, bbox[3] - bbox[1])
+        line_metrics.append(((CANVAS_W - line_w) // 2, line_w))
+    line_gap = int(text_h_single * 0.85)
+
+    # Anchor the last line ~32px above the photo's actual top. Previous lines
+    # stack upward.
+    GAP_TO_PHOTO = 32
+    last_line_y = photo_top_y - GAP_TO_PHOTO - text_h_single
+    first_line_y = last_line_y - (len(lines) - 1) * line_gap
 
     canvas_rgba = canvas.convert("RGBA")
 
-    # Soft drop shadow — modest, just takes the raw edge off the letterforms
+    # Soft drop shadow — same on every line
     shadow = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
     sd = ImageDraw.Draw(shadow)
-    sd.text((x + 2, EVENT_NAME_Y + 3), event_name, font=event_font, fill=(0, 0, 0, 120))
+    for i, (line, (lx, _)) in enumerate(zip(lines, line_metrics)):
+        ly = first_line_y + i * line_gap
+        sd.text((lx + 2, ly + 3), line, font=event_font, fill=(0, 0, 0, 120))
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=8))
     canvas_rgba = Image.alpha_composite(canvas_rgba, shadow)
 
-    # Inline rose-gold rules — lines extend from text edges to canvas margins,
-    # optically centred on the script x-height (~55% down the em)
-    line_y = EVENT_NAME_Y + int(text_h * 0.52)
-    gap = 28  # breathing room between line and text edge
-    margin = PHOTO_SIDE_MARGIN + 30
+    # Inline rose-gold rules — only on the LAST line (most natural editorial framing)
+    last_x, last_w = line_metrics[-1]
+    line_y = last_line_y + int(text_h_single * 0.52)
+    gap = 28
 
     line_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
     ld = ImageDraw.Draw(line_layer)
-    ld.line([(margin, line_y), (x - gap, line_y)], fill=(*ROSE_GOLD_DARK, 170), width=1)
-    ld.line([(x + text_w + gap, line_y), (CANVAS_W - margin, line_y)], fill=(*ROSE_GOLD_DARK, 170), width=1)
+    ld.line([(margin, line_y), (last_x - gap, line_y)], fill=(*ROSE_GOLD_DARK, 170), width=1)
+    ld.line([(last_x + last_w + gap, line_y), (CANVAS_W - margin, line_y)], fill=(*ROSE_GOLD_DARK, 170), width=1)
     canvas_rgba = Image.alpha_composite(canvas_rgba, line_layer)
 
     # Crisp text on top
     draw = ImageDraw.Draw(canvas_rgba)
-    draw.text((x, EVENT_NAME_Y), event_name, font=event_font, fill=TEXT_WHITE)
+    for i, (line, (lx, _)) in enumerate(zip(lines, line_metrics)):
+        ly = first_line_y + i * line_gap
+        draw.text((lx, ly), line, font=event_font, fill=TEXT_WHITE)
 
     return canvas_rgba
 
@@ -305,10 +398,10 @@ def generate_story(
     canvas = create_blurred_background(photo)
 
     # 2. Place original photo
-    canvas = place_photo(canvas, photo)
+    canvas, photo_top_y = place_photo(canvas, photo)
 
     # 3. Draw title with shadow (returns new RGBA canvas)
-    canvas = draw_title(canvas, event_name)
+    canvas = draw_title(canvas, event_name, photo_top_y=photo_top_y)
 
     # 4. Draw divider and org/venue text
     draw = ImageDraw.Draw(canvas)

@@ -113,23 +113,47 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
         name_mentions = day_info.get("name_mentions") or None
         notes        = day_info.get("notes", "")
 
-        # For large scroll reels, let Claude pick the best representative subset
-        if post_type == "scroll_reel" and len(photos) >= REEL_SELECTION_THRESHOLD:
-            print(
-                f"[generate_week] {day_name}: selecting best {DEFAULT_MAX_REEL_PHOTOS} "
-                f"from {len(photos)} photos for reel",
-                flush=True,
-            )
-            try:
-                selected = select_reel_photos(photos, count=DEFAULT_MAX_REEL_PHOTOS)
-                photos = [str(p) for p in selected]
-                print(f"[generate_week] {day_name}: selected {len(photos)} photos", flush=True)
-            except Exception as e:
+        # For Thursday's scroll reel: the reel itself can have 50-200+ photos
+        # (the visual asset is generated locally by ffmpeg), but Claude only
+        # needs a representative sample to write the caption. Wednesday's
+        # collage photos are already the curated 10-photo sample of the event,
+        # so reuse them as Claude's context — same event, same shoot, no extra
+        # selection step, never blows past Claude's request size limit.
+        if day_name == "thursday" and post_type == "scroll_reel":
+            # Look up Wednesday's photos from either the days dict (when
+            # Wednesday is included in this run) OR from the dedicated
+            # caption_context_photos field (always present, survives single-day
+            # retries that filter Wednesday out of the days dict).
+            wed_photos = (days_data.get("wednesday") or {}).get("photos") or []
+            if not wed_photos:
+                wed_photos = (
+                    manifest.get("caption_context_photos") or {}
+                ).get("wednesday") or []
+            if wed_photos:
                 print(
-                    f"[generate_week] {day_name}: photo selection failed ({e}), using all {len(photos)} photos",
+                    f"[generate_week] thursday: using {len(wed_photos)} wednesday "
+                    f"photo(s) as caption context (reel uses all {len(photos)})",
                     flush=True,
-                    file=sys.stderr,
                 )
+                photos = list(wed_photos)
+            elif len(photos) >= REEL_SELECTION_THRESHOLD:
+                # Fallback: no Wednesday photos available — fall back to the
+                # old representative-selection path.
+                print(
+                    f"[generate_week] thursday: no wednesday photos; selecting "
+                    f"best {DEFAULT_MAX_REEL_PHOTOS} from {len(photos)} for caption",
+                    flush=True,
+                )
+                try:
+                    selected = select_reel_photos(photos, count=DEFAULT_MAX_REEL_PHOTOS)
+                    photos = [str(p) for p in selected]
+                except Exception as e:
+                    print(
+                        f"[generate_week] thursday: photo selection failed ({e}); "
+                        f"capping at first {DEFAULT_MAX_REEL_PHOTOS} as a safeguard",
+                        flush=True, file=sys.stderr,
+                    )
+                    photos = photos[:DEFAULT_MAX_REEL_PHOTOS]
 
         print(f"[generate_week] {day_name}: generating {len(photos)} photo(s) ({post_type})", flush=True)
         if t_captions_start is None:

@@ -457,6 +457,97 @@ def suggest_handles(
     return data
 
 
+FETCH_PIECE_NOTES_PROMPT = """\
+Find brief, factual program notes for each of these works. The user is a
+photographer writing captions and a blog post about a live performance — they
+need 1-2 sentences (3-4 max if absolutely necessary) per piece that capture
+something interesting and concrete: when it was written, what it's about,
+why it's notable, or a specific musical/dramatic feature. NOT composer
+biography (we already have that elsewhere).
+
+Event context (for disambiguation only — don't infer arrangements or versions
+that aren't stated):
+- Organization: {org}
+- Event: {event}
+
+Pieces to research (preserving the order — return notes in the same order):
+{piece_list}
+
+For each piece, use WebSearch to find what's commonly written about it in
+program notes / liner notes / scholarly summaries. Then distill into 1-2
+sentences. Hard cap: 4 sentences.
+
+Style:
+- Concrete facts, not adjectives. "Premiered in 1934 in Leningrad and dedicated
+  to cellist Viktor Kubatsky" beats "a beloved staple of the cello repertoire".
+- Specific over general. "Four movements, with a haunting Largo at the heart"
+  beats "a deeply emotional work".
+- No composer biography. We already have the composer field.
+- No filler ("This piece is a wonderful example of…").
+- If you genuinely can't find anything specific, return null for that entry —
+  do NOT pad with generic prose.
+
+Return JSON ONLY (no markdown fences, no commentary) as an array with one
+entry per piece, in the SAME ORDER as the input list:
+
+[
+  {{
+    "title": "exact title from the input",
+    "composer": "exact composer from the input",
+    "notes": "1-2 sentence note, or null if nothing solid was found"
+  }}
+]
+
+Return ONLY the JSON array. No explanation.
+"""
+
+
+def fetch_piece_notes(
+    pieces: list[dict[str, Any]],
+    org: str = "",
+    event: str = "",
+) -> list[dict[str, Any]]:
+    """Search the web for short program notes for a list of pieces.
+
+    Returns a list aligned to the input order, each with `title`, `composer`,
+    and `notes` (string or None). Pieces are not filtered here — the caller
+    decides which ones to send.
+    """
+    if not pieces:
+        return []
+
+    lines = []
+    for i, p in enumerate(pieces, start=1):
+        composer = (p.get("composer") or "").strip() or "(unknown)"
+        title    = (p.get("title")    or "").strip() or "(untitled)"
+        lines.append(f"{i}. \"{title}\" — {composer}")
+    piece_list = "\n".join(lines)
+
+    prompt = FETCH_PIECE_NOTES_PROMPT.format(
+        org=org or "(not specified)",
+        event=event or "(not specified)",
+        piece_list=piece_list,
+    )
+    data = run_json_prompt(
+        prompt,
+        timeout=600,
+        allowed_tools=["WebSearch", "WebFetch"],
+    )
+    # Unwrap if Claude wrapped the array in an object
+    if isinstance(data, dict):
+        for key in ("notes", "pieces", "results", "data"):
+            if key in data and isinstance(data[key], list):
+                data = data[key]
+                break
+        else:
+            lists = [v for v in data.values() if isinstance(v, list)]
+            if len(lists) == 1:
+                data = lists[0]
+    if not isinstance(data, list):
+        raise ClaudeError(f"Expected JSON array, got {type(data).__name__}")
+    return data
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Enrich thin OCR output via web research"
@@ -487,6 +578,12 @@ def main() -> int:
         help="Path to a JSON file with {performers, org, venue, event}. Searches the web for Instagram handles.",
     )
     parser.add_argument(
+        "--fetch-piece-notes",
+        type=Path,
+        metavar="JSON",
+        help="Path to a JSON file with {pieces, org, event}. Searches the web for short program notes per piece.",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Run enrichment even if the OCR data doesn't look thin",
@@ -497,6 +594,27 @@ def main() -> int:
         help="Where to write enriched JSON (defaults to stdout)",
     )
     args = parser.parse_args()
+
+    # --fetch-piece-notes mode: short program notes per piece via web search
+    if args.fetch_piece_notes:
+        try:
+            input_data = json.loads(args.fetch_piece_notes.read_text(encoding="utf-8"))
+            results = fetch_piece_notes(
+                pieces=input_data.get("pieces", []),
+                org=input_data.get("org", ""),
+                event=input_data.get("event", ""),
+            )
+        except (ClaudeError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        text = json.dumps(results, indent=2, ensure_ascii=False)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(text + "\n", encoding="utf-8")
+            print(f"wrote {args.output} ({len(results)} piece notes)")
+        else:
+            print(text)
+        return 0
 
     # --suggest-handles mode: search for Instagram handles for performers
     if args.suggest_handles:

@@ -92,6 +92,14 @@ struct WeekGenerationResult: Codable, Hashable {
         }
     }
 
+    /// True when the run produced at least one caption (or blog), regardless
+    /// of whether other days errored. Used to gate timing-store updates so a
+    /// run that fails immediately and produces nothing doesn't skew the
+    /// rolling-mean estimate downward.
+    var hasAnyContent: Bool {
+        blog != nil || DayName.allCases.contains { self[$0] != nil }
+    }
+
     var daysWithContent: [DayName] {
         DayName.allCases.filter { self[$0] != nil }
     }

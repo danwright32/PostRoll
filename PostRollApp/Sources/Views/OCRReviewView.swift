@@ -7,6 +7,7 @@ struct OCRReviewView: View {
     @State private var orgHandles: String
     @State private var venueHandles: String
     @State private var expanded: ReviewSection? = .performers
+    @State private var flags: [OCRFlag]
 
     // Undo state
     @State private var undoMessage: String? = nil
@@ -28,7 +29,10 @@ struct OCRReviewView: View {
         _ocr = State(initialValue: ocrData)
         _orgHandles = State(initialValue: HandleBook.shared.handles(forOrg: event.org))
         _venueHandles = State(initialValue: HandleBook.shared.handles(forVenue: event.venue))
+        _flags = State(initialValue: event.pendingFlags)
     }
+
+    private var unresolvedFlags: [OCRFlag] { flags.filter { !$0.resolved } }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -53,6 +57,16 @@ struct OCRReviewView: View {
                         .padding(.bottom, Spacing.md)
                     }
 
+                    if !flags.isEmpty {
+                        FlagReviewSection(
+                            flags: $flags,
+                            onApply: { flag, newValue in applyFlag(flag, newValue: newValue) },
+                            onDismiss: { flag in dismissFlag(flag) }
+                        )
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.md)
+                    }
+
                     ForEach(ReviewSection.allCases, id: \.self) { section in
                         ReviewSectionRow(
                             title: sectionTitle(section),
@@ -67,13 +81,12 @@ struct OCRReviewView: View {
 
                     HStack {
                         Spacer()
-                        Button(detectedIssues != nil ? "Continue Anyway" : "Looks Good") {
+                        Button(confirmButtonLabel) {
                             confirmAndAdvance()
                         }
                         .buttonStyle(BrandButtonStyle())
-                        .help(detectedIssues != nil
-                              ? "Missing data may produce generic captions. You can add performers or works now, or revise captions after generation."
-                              : "")
+                        .disabled(!unresolvedFlags.isEmpty)
+                        .help(confirmButtonHelp)
                     }
                     .padding(Spacing.xl)
                 }
@@ -166,13 +179,105 @@ struct OCRReviewView: View {
                 venueName: event.venue
             )
         case .pieces:
-            PiecesEditor(pieces: $ocr.pieces) { piece, idx in
+            PiecesEditor(
+                pieces: $ocr.pieces,
+                org: event.org,
+                eventName: event.name
+            ) { piece, idx in
                 scheduleUndo(message: "Work removed") {
                     ocr.pieces.insert(piece, at: min(idx, ocr.pieces.count))
                 }
             }
         case .scenes:     ScenesEditor(scenes: $ocr.scenes)
         case .notes:      NotesEditor(ocr: $ocr)
+        }
+    }
+
+    // MARK: - Flag handling
+
+    private var confirmButtonLabel: String {
+        if !unresolvedFlags.isEmpty {
+            return "Resolve \(unresolvedFlags.count) issue\(unresolvedFlags.count == 1 ? "" : "s")"
+        }
+        return detectedIssues != nil ? "Continue Anyway" : "Looks Good"
+    }
+
+    private var confirmButtonHelp: String {
+        if !unresolvedFlags.isEmpty {
+            return "Apply or dismiss each flagged issue above before continuing."
+        }
+        return detectedIssues != nil
+            ? "Missing data may produce generic captions. You can add performers or works now, or revise captions after generation."
+            : ""
+    }
+
+    private func applyFlag(_ flag: OCRFlag, newValue: String) {
+        if applyValue(newValue, atPath: flag.fieldPath, to: &ocr) {
+            markResolved(flag)
+        }
+        // Apply failed silently (path drifted etc.) — leave unresolved so the user
+        // can dismiss it once they've made the matching edit in the section editor.
+    }
+
+    private func dismissFlag(_ flag: OCRFlag) {
+        markResolved(flag)
+    }
+
+    private func markResolved(_ flag: OCRFlag) {
+        guard let idx = flags.firstIndex(where: { $0.id == flag.id }) else { return }
+        flags[idx].resolved = true
+    }
+
+    /// Walk OCRResult as a JSON tree and overwrite the leaf at `path`.
+    /// Returns false if the path doesn't resolve (stale index, missing key, etc.).
+    private func applyValue(_ newValue: String, atPath path: [FlagPathSegment], to ocr: inout OCRResult) -> Bool {
+        guard !path.isEmpty else { return false }
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        guard let data = try? encoder.encode(ocr),
+              var tree: Any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+            return false
+        }
+        guard Self.setStringValue(newValue, atPath: path, in: &tree) else { return false }
+        guard let updated = try? JSONSerialization.data(withJSONObject: tree),
+              let decoded = try? decoder.decode(OCRResult.self, from: updated) else {
+            return false
+        }
+        ocr = decoded
+        return true
+    }
+
+    private static func setStringValue(_ value: String, atPath path: [FlagPathSegment], in tree: inout Any) -> Bool {
+        guard let head = path.first else { return false }
+        let tail = Array(path.dropFirst())
+
+        if tail.isEmpty {
+            switch head {
+            case .key(let k):
+                guard var dict = tree as? [String: Any] else { return false }
+                dict[k] = value
+                tree = dict
+                return true
+            case .index(let i):
+                guard var arr = tree as? [Any], i >= 0, i < arr.count else { return false }
+                arr[i] = value
+                tree = arr
+                return true
+            }
+        }
+
+        switch head {
+        case .key(let k):
+            guard var dict = tree as? [String: Any], var child = dict[k] else { return false }
+            let ok = setStringValue(value, atPath: tail, in: &child)
+            if ok { dict[k] = child; tree = dict }
+            return ok
+        case .index(let i):
+            guard var arr = tree as? [Any], i >= 0, i < arr.count else { return false }
+            var child = arr[i]
+            let ok = setStringValue(value, atPath: tail, in: &child)
+            if ok { arr[i] = child; tree = arr }
+            return ok
         }
     }
 
@@ -186,10 +291,18 @@ struct OCRReviewView: View {
             .flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
             .filter { !$0.isEmpty }
         let deduped = Array(NSOrderedSet(array: combined)) as? [String] ?? combined
+
+        // Now that the user has finalized the OCR, the program images are no
+        // longer needed. (Cleanup is gated here, not at OCR completion, so the
+        // flag-review step can re-read images if needed.)
+        ProgramImageCleanup.delete(urls: event.programImagePaths)
+
         var ev = event
         ev.ocrResult = ocr
         ev.ocrReviewDone = true
         ev.eventHandles = deduped.joined(separator: ", ")
+        ev.programImagePaths = []
+        ev.pendingFlags = []
         ev.stage = .photosAssigned
         appState.updateEvent(ev)
     }
@@ -556,8 +669,12 @@ private struct PerformerRow: View {
                     .frame(maxWidth: 150)
             }
             Button {
-                let query = performer.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? performer.name
-                if let url = URL(string: "https://www.google.com/search?q=instagram+\(query)") {
+                let parts = ["instagram", performer.name, performer.voiceOrInstrument]
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+                let query = parts.joined(separator: " ")
+                    .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? parts.joined(separator: "+")
+                if let url = URL(string: "https://www.google.com/search?q=\(query)") {
                     NSWorkspace.shared.open(url)
                 }
             } label: {
@@ -579,40 +696,153 @@ private struct PerformerRow: View {
 
 private struct PiecesEditor: View {
     @Binding var pieces: [Piece]
+    let org: String
+    let eventName: String
     let onDeleted: (Piece, Int) -> Void
+
+    @State private var isFetchingNotes = false
+    @State private var fetchError: String?
+    @State private var reorderTargetID: UUID?
+
+    private var missingNotesCount: Int {
+        pieces.filter { $0.notes.trimmingCharacters(in: .whitespaces).isEmpty }.count
+    }
 
     var body: some View {
         VStack(spacing: Spacing.sm) {
             ForEach($pieces) { $p in
-                PieceRow(piece: $p) {
+                PieceRow(piece: $p, isReorderTarget: reorderTargetID == p.id) {
                     if let idx = pieces.firstIndex(where: { $0.id == p.id }) {
                         let snapshot = pieces[idx]
                         pieces.remove(at: idx)
                         onDeleted(snapshot, idx)
                     }
                 }
+                .draggable(p.id.uuidString)
+                .dropDestination(for: String.self) { items, _ in
+                    guard let srcIDString = items.first,
+                          let srcID = UUID(uuidString: srcIDString),
+                          srcID != p.id,
+                          let srcIdx = pieces.firstIndex(where: { $0.id == srcID }),
+                          let dstIdx = pieces.firstIndex(where: { $0.id == p.id })
+                    else { return false }
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        pieces.move(
+                            fromOffsets: IndexSet(integer: srcIdx),
+                            toOffset: srcIdx < dstIdx ? dstIdx + 1 : dstIdx
+                        )
+                    }
+                    return true
+                } isTargeted: { targeted in
+                    reorderTargetID = targeted ? p.id : (reorderTargetID == p.id ? nil : reorderTargetID)
+                }
             }
             BrandAddButton(label: "Add Work") { pieces.append(Piece()) }
+
+            if missingNotesCount > 0 {
+                VStack(alignment: .leading, spacing: 4) {
+                    if isFetchingNotes {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small).tint(Color.roseGold)
+                            Text("Searching the web…")
+                                .font(.light(11))
+                                .foregroundStyle(Color.warmMid)
+                        }
+                    } else {
+                        Button {
+                            Task { await fetchMissingNotes() }
+                        } label: {
+                            Label(
+                                "Fetch missing notes from web (\(missingNotesCount))",
+                                systemImage: "globe"
+                            )
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.roseGold)
+                        }
+                        .buttonStyle(.plain)
+
+                        Text("Asks Claude to find 1-2 sentence program notes for each work without notes. Skips pieces that already have notes.")
+                            .font(.light(10))
+                            .foregroundStyle(Color.warmFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let err = fetchError {
+                        Text(err)
+                            .font(.light(10))
+                            .foregroundStyle(Color.roseDeep)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Spacing.xs)
+            }
+        }
+    }
+
+    @MainActor
+    private func fetchMissingNotes() async {
+        fetchError = nil
+        isFetchingNotes = true
+        defer { isFetchingNotes = false }
+
+        let missing = pieces.filter {
+            $0.notes.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        guard !missing.isEmpty else { return }
+
+        do {
+            let results = try await PythonBridge.shared.fetchPieceNotes(
+                pieces: missing,
+                org: org,
+                event: eventName
+            )
+            // Match results back by content (title + composer) — order isn't
+            // guaranteed and the live `pieces` may have been edited mid-fetch.
+            for r in results {
+                guard let note = r.notes?.trimmingCharacters(in: .whitespaces),
+                      !note.isEmpty else { continue }
+                let idx = pieces.firstIndex {
+                    $0.title.caseInsensitiveCompare(r.title) == .orderedSame
+                        && $0.composer.caseInsensitiveCompare(r.composer) == .orderedSame
+                        && $0.notes.trimmingCharacters(in: .whitespaces).isEmpty
+                }
+                if let idx { pieces[idx].notes = note }
+            }
+        } catch {
+            fetchError = error.localizedDescription
         }
     }
 }
 
 private struct PieceRow: View {
     @Binding var piece: Piece
+    var isReorderTarget: Bool = false
     let onDelete: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.sm) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmFaint)
+                .padding(.top, 9)
+                .help("Drag to reorder")
             VStack(spacing: 6) {
                 HStack(spacing: Spacing.sm) {
                     BrandField("Title", text: $piece.title)
                     BrandField("Composer / Playwright / Artist", text: $piece.composer)
                 }
-                BrandField("Notes (optional)", text: $piece.notes)
+                BrandField("Notes (optional)", text: $piece.notes, lineLimit: 3...10)
             }
             BrandDeleteButton(action: onDelete)
         }
         .padding(.vertical, 2)
+        .overlay(alignment: .top) {
+            if isReorderTarget {
+                Rectangle()
+                    .fill(Color.roseGold)
+                    .frame(height: 2)
+                    .offset(y: -3)
+            }
+        }
     }
 }
 
@@ -713,33 +943,42 @@ private struct BrandTextArea: View {
 private struct BrandField: View {
     let placeholder: String
     @Binding var text: String
+    let lineLimit: ClosedRange<Int>?
     @FocusState private var focused: Bool
 
-    init(_ placeholder: String, text: Binding<String>) {
+    init(_ placeholder: String, text: Binding<String>, lineLimit: ClosedRange<Int>? = nil) {
         self.placeholder = placeholder
         _text = text
+        self.lineLimit = lineLimit
     }
 
     var body: some View {
-        TextField(placeholder, text: $text)
-            .focused($focused)
-            .font(.system(size: 12))
-            .foregroundStyle(Color.warmDark)
-            .focusEffectDisabled()
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: Radius.xs)
-                    .fill(Color.creamDeep)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Radius.xs)
-                            .strokeBorder(
-                                focused ? Color.roseGold : Color.creamEdge,
-                                lineWidth: focused ? 1.5 : 1
-                            )
-                    )
-            )
-            .animation(.easeOut(duration: 0.12), value: focused)
+        Group {
+            if let lineLimit {
+                TextField(placeholder, text: $text, axis: .vertical)
+                    .lineLimit(lineLimit)
+            } else {
+                TextField(placeholder, text: $text)
+            }
+        }
+        .focused($focused)
+        .font(.system(size: 12))
+        .foregroundStyle(Color.warmDark)
+        .focusEffectDisabled()
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.xs)
+                .fill(Color.creamDeep)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.xs)
+                        .strokeBorder(
+                            focused ? Color.roseGold : Color.creamEdge,
+                            lineWidth: focused ? 1.5 : 1
+                        )
+                )
+        )
+        .animation(.easeOut(duration: 0.12), value: focused)
     }
 }
 
@@ -861,6 +1100,137 @@ private struct HandleRow: View {
                     )
             )
             .animation(.easeOut(duration: 0.12), value: focused)
+        }
+    }
+}
+
+// MARK: - Flag Review Section
+
+private struct FlagReviewSection: View {
+    @Binding var flags: [OCRFlag]
+    let onApply: (OCRFlag, String) -> Void
+    let onDismiss: (OCRFlag) -> Void
+
+    private var unresolvedCount: Int { flags.filter { !$0.resolved }.count }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.roseGold)
+                Text(unresolvedCount > 0
+                     ? "\(unresolvedCount) ISSUE\(unresolvedCount == 1 ? "" : "S") TO REVIEW"
+                     : "ALL ISSUES RESOLVED")
+                    .font(.system(size: 10, weight: .medium))
+                    .tracking(1.2)
+                    .foregroundStyle(Color.roseGold)
+            }
+            Text("Claude flagged these items as possibly wrong. Apply a correction or dismiss.")
+                .font(.light(11))
+                .foregroundStyle(Color.warmMid)
+
+            VStack(spacing: Spacing.xs) {
+                ForEach($flags) { $flag in
+                    FlagRow(
+                        flag: $flag,
+                        onApply:   { newValue in onApply(flag, newValue) },
+                        onDismiss: { onDismiss(flag) }
+                    )
+                }
+            }
+        }
+        .padding(Spacing.md)
+        .background(Color.roseGold.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.sm)
+                .strokeBorder(Color.roseGold.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
+private struct FlagRow: View {
+    @Binding var flag: OCRFlag
+    let onApply: (String) -> Void
+    let onDismiss: () -> Void
+
+    @State private var draftValue: String = ""
+    @State private var didInitDraft = false
+
+    private var pathLabel: String {
+        flag.fieldPath.map(\.displayString).joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: Spacing.sm) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pathLabel.uppercased())
+                        .font(.system(size: 9, weight: .medium))
+                        .tracking(1.1)
+                        .foregroundStyle(Color.roseGold.opacity(0.7))
+                    Text(flag.concern)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.warmDark)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !flag.programContext.isEmpty {
+                        Text(flag.programContext)
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+                if flag.resolved {
+                    Label("Resolved", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warmFaint)
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+
+            if !flag.resolved {
+                HStack(spacing: 6) {
+                    TextField("Corrected value (or leave to dismiss)", text: $draftValue)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.warmDark)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: Radius.xs)
+                                .fill(Color.cream)
+                                .overlay(RoundedRectangle(cornerRadius: Radius.xs)
+                                    .strokeBorder(Color.creamEdge, lineWidth: 1))
+                        )
+                    Button("Apply") {
+                        let v = draftValue.trimmingCharacters(in: .whitespaces)
+                        guard !v.isEmpty else { return }
+                        onApply(v)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(draftValue.trimmingCharacters(in: .whitespaces).isEmpty
+                                     ? Color.warmFaint : Color.roseGold)
+                    .disabled(draftValue.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                    Button("Dismiss", action: onDismiss)
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warmMid)
+                }
+            }
+        }
+        .padding(Spacing.sm)
+        .background(Color.cream.opacity(flag.resolved ? 0.5 : 1.0))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
+        .opacity(flag.resolved ? 0.6 : 1.0)
+        .onAppear {
+            if !didInitDraft {
+                draftValue = flag.currentValue
+                didInitDraft = true
+            }
         }
     }
 }

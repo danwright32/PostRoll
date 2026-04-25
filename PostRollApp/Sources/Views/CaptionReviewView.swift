@@ -124,6 +124,9 @@ struct CaptionReviewView: View {
                             isRegeneratingGraphic: regeneratingDays.contains(day),
                             graphicVersion: graphicVersions[day] ?? 0,
                             onRegenerateGraphic: { regenerateGraphic(day: day) },
+                            onNewLayout: (day == .wednesday || day == .thursday)
+                                ? { regenerateGraphic(day: day, newLayout: true) }
+                                : nil,
                             onSwapReelAudio: { swapReelAudio(day: day) },
                             onUploadReelAudio: { uploadReelAudioDay = day; showingReelAudioPicker = true },
                             onChangeReelPhotos: (day == .tuesday || day == .thursday) ? { changeReelPhotos(day: day) } : nil,
@@ -517,7 +520,7 @@ struct CaptionReviewView: View {
         }
     }
 
-    private func regenerateGraphic(day: DayName) {
+    private func regenerateGraphic(day: DayName, newLayout: Bool = false) {
         // Always read the CURRENT event from AppState — not self.event.
         // self.event is captured by value in the closure that calls this function and
         // may be stale (pre-save snapshot). appState is a reference type so .events
@@ -527,12 +530,21 @@ struct CaptionReviewView: View {
 
         // For Wednesday, lock the collage seed before the first regen so Python
         // always produces the same grid layout when only crop offsets change.
+        // When `newLayout` is true, force a fresh seed regardless.
         if day == .wednesday,
-           eventSnapshot.days[DayName.wednesday.rawValue]?.collageSeed == nil {
+           newLayout || eventSnapshot.days[DayName.wednesday.rawValue]?.collageSeed == nil {
             var pd = eventSnapshot.days[DayName.wednesday.rawValue] ?? PostingDay(day: .wednesday)
             pd.collageSeed = Int.random(in: 1...999_999_999)
+            // Drop any per-cell overrides — they're keyed to the previous layout.
+            pd.collageCellOverride = nil
             eventSnapshot.days[DayName.wednesday.rawValue] = pd
-            appState.updateEvent(eventSnapshot)  // persist so future sessions reuse same layout
+            appState.updateEvent(eventSnapshot)
+        }
+        if day == .thursday, newLayout {
+            var pd = eventSnapshot.days[DayName.thursday.rawValue] ?? PostingDay(day: .thursday)
+            pd.reelSeed = Int.random(in: 1...999_999_999)
+            eventSnapshot.days[DayName.thursday.rawValue] = pd
+            appState.updateEvent(eventSnapshot)
         }
 
         regeneratingDays.insert(day)
@@ -690,6 +702,8 @@ private struct CaptionSection: View {
     var isRegeneratingGraphic: Bool = false
     var graphicVersion: Int = 0
     var onRegenerateGraphic: (() -> Void)? = nil
+    /// Re-roll the layout seed and regenerate (Wednesday collage / Thursday reel).
+    var onNewLayout: (() -> Void)? = nil
     var onSwapReelAudio: (() -> Void)? = nil
     var onUploadReelAudio: (() -> Void)? = nil
     var onChangeReelPhotos: (() -> Void)? = nil
@@ -883,7 +897,9 @@ private struct CaptionSection: View {
                                     caption: caption.caption,
                                     hashtags: caption.hashtags,
                                     cardWidth: tuesdayReelCardWidth,
+                                    isReelDay: true,
                                     onRegenerate: onRegenerateGraphic,
+                                    onReviseCaption: { showingRevision = true },
                                     onSwapAudio: onSwapReelAudio,
                                     onUploadAudio: onUploadReelAudio,
                                     onChangePhotos: onChangeReelPhotos,
@@ -988,13 +1004,16 @@ private struct CaptionSection: View {
                                     caption: caption.caption,
                                     hashtags: caption.hashtags,
                                     cardWidth: mockupWidth,
-                                    onRegenerate: day == .thursday ? onRegenerateGraphic : nil,
+                                    isReelDay: day == .thursday,
+                                    onRegenerate: onRegenerateGraphic,
+                                    onReviseCaption: { showingRevision = true },
+                                    onNewLayout: (day == .wednesday || day == .thursday) ? onNewLayout : nil,
                                     onSwapAudio: day == .thursday ? onSwapReelAudio : nil,
                                     onUploadAudio: day == .thursday ? onUploadReelAudio : nil,
                                     onChangePhotos: day == .thursday ? onChangeReelPhotos : nil,
-                                    isRegenerating: day == .thursday ? isRegeneratingGraphic : false
+                                    isRegenerating: isRegeneratingGraphic
                                 )
-                                .id(day == .thursday ? "thu-mockup-\(graphicVersion)" : nil)
+                                .id("\(day.rawValue)-mockup-\(graphicVersion)")
                                 Spacer(minLength: 0)
                             }
                             .padding(.horizontal, Spacing.xl)
@@ -1123,6 +1142,7 @@ private struct CaptionSection: View {
                                             cropOffsets: offsets,
                                             isRegenerating: isRegeneratingGraphic,
                                             onRegenerate: onRegenerateGraphic,
+                                            onNewLayout: onNewLayout,
                                             onSwapAudio: onSwapReelAudio,
                                             onUploadAudio: onUploadReelAudio,
                                             onChangePhotos: onChangeReelPhotos,
@@ -1156,6 +1176,14 @@ private struct CaptionSection: View {
                                                         onRegenerate()
                                                     } label: {
                                                         Label(isRegeneratingGraphic ? "Regenerating…" : "Regenerate reel", systemImage: "arrow.clockwise")
+                                                    }
+                                                    .disabled(isRegeneratingGraphic)
+                                                }
+                                                if let onNewLayout {
+                                                    Button {
+                                                        onNewLayout()
+                                                    } label: {
+                                                        Label("New layout (re-roll)", systemImage: "shuffle")
                                                     }
                                                     .disabled(isRegeneratingGraphic)
                                                 }
@@ -1718,18 +1746,20 @@ private struct HashtagsEditor: View {
                     .help("Apply a hashtag preset")
                 }
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                TextField("#tag1 #tag2 #tag3", text: $raw)
-                    .focused($focused)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.warmDark)
-                    .focusEffectDisabled()
-                    .textFieldStyle(.plain)
-                    // Wide enough for ~30 hashtags; the ScrollView reveals them via swipe
-                    .frame(minWidth: 2000, maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            // Plain single-line TextField — TextField has its own internal
+            // cursor-following scroll for long content, so wrapping it in an
+            // outer ScrollView (with a hardcoded 2000pt minWidth) caused the
+            // visible scroll-past-end-of-text behavior.
+            TextField("#tag1 #tag2 #tag3", text: $raw)
+                .focused($focused)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.warmDark)
+                .focusEffectDisabled()
+                .textFieldStyle(.plain)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: Radius.xs)
                     .fill(Color.creamDeep)
@@ -2071,11 +2101,30 @@ private struct InstagramMockup: View {
     let caption: String
     let hashtags: [String]
     let cardWidth: CGFloat
+    /// Reel days use "Regenerate reel" copy and surface the layout / audio / photos
+    /// menu items. Non-reel (story) days only get "Regenerate graphic".
+    var isReelDay: Bool = false
     var onRegenerate: (() -> Void)? = nil
+    var onReviseCaption: (() -> Void)? = nil
+    var onNewLayout: (() -> Void)? = nil
     var onSwapAudio: (() -> Void)? = nil
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
     var isRegenerating: Bool = false
+
+    private var regenerateLabelText: String {
+        if isRegenerating { return "Regenerating…" }
+        return isReelDay ? "Regenerate reel" : "Regenerate graphic"
+    }
+
+    private var menuHasItems: Bool {
+        onRegenerate != nil
+            || onReviseCaption != nil
+            || onNewLayout != nil
+            || onSwapAudio != nil
+            || onUploadAudio != nil
+            || onChangePhotos != nil
+    }
 
     @State private var photo: NSImage? = nil
     @State private var carouselIndex: Int = 0
@@ -2127,13 +2176,28 @@ private struct InstagramMockup: View {
 
                 Spacer()
 
-                if onRegenerate != nil || onSwapAudio != nil || onUploadAudio != nil || onChangePhotos != nil {
+                if menuHasItems {
                     Menu {
                         if let onRegenerate {
                             Button {
                                 onRegenerate()
                             } label: {
-                                Label(isRegenerating ? "Regenerating…" : "Regenerate reel", systemImage: "arrow.clockwise")
+                                Label(regenerateLabelText, systemImage: "arrow.clockwise")
+                            }
+                            .disabled(isRegenerating)
+                        }
+                        if let onReviseCaption {
+                            Button {
+                                onReviseCaption()
+                            } label: {
+                                Label("Revise caption with feedback…", systemImage: "text.bubble")
+                            }
+                        }
+                        if let onNewLayout {
+                            Button {
+                                onNewLayout()
+                            } label: {
+                                Label("New layout (re-roll)", systemImage: "shuffle")
                             }
                             .disabled(isRegenerating)
                         }
@@ -2867,6 +2931,7 @@ private struct ReelStripPreviewThumbnail: View {
     @Binding var cropOffsets: [String: CropOffset]
     var isRegenerating: Bool = false
     var onRegenerate: (() -> Void)? = nil
+    var onNewLayout: (() -> Void)? = nil
     var onSwapAudio: (() -> Void)? = nil
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
@@ -2952,6 +3017,14 @@ private struct ReelStripPreviewThumbnail: View {
                                 onRegenerate()
                             } label: {
                                 Label(isRegenerating ? "Regenerating…" : "Regenerate reel", systemImage: "arrow.clockwise")
+                            }
+                            .disabled(isRegenerating)
+                        }
+                        if let onNewLayout {
+                            Button {
+                                onNewLayout()
+                            } label: {
+                                Label("New layout (re-roll)", systemImage: "shuffle")
                             }
                             .disabled(isRegenerating)
                         }

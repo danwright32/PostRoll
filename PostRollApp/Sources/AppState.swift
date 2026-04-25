@@ -17,6 +17,18 @@ final class AppState {
 
     init() {
         events = EventStore.load()
+        // One-time sweep: any event past OCR has program images we no longer
+        // need on disk. Going forward OCRProgressView cleans up automatically;
+        // this catches events that completed before that change shipped.
+        var dirty = false
+        for i in events.indices where events[i].stage != .created
+            && events[i].stage != .programUploaded
+            && !events[i].programImagePaths.isEmpty {
+            ProgramImageCleanup.delete(urls: events[i].programImagePaths)
+            events[i].programImagePaths = []
+            dirty = true
+        }
+        if dirty { EventStore.save(events) }
     }
 
     func addEvent(_ event: Event) {
@@ -29,7 +41,6 @@ final class AppState {
         guard let index = events.firstIndex(where: { $0.id == event.id }) else { return }
         events[index] = event
         EventStore.save(events)
-        NotificationService.shared.updateBadge(events: events)
     }
 
     func deleteEvent(id: Event.ID) {

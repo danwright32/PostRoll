@@ -103,11 +103,10 @@ struct ProgramUploadView: View {
             } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
                 provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, _ in
                     guard let url else { return }
-                    let captured = url
-                    Task { @MainActor in
-                        let dest = self.permanentCopy(of: captured)
-                        self.appendFiles([dest ?? captured])
-                    }
+                    // Copy synchronously here — the temp URL is invalidated as soon
+                    // as this closure returns, so the copy can't be deferred.
+                    guard let dest = Self.permanentCopy(of: url) else { return }
+                    Task { @MainActor in self.appendFiles([dest]) }
                 }
             }
         }
@@ -115,6 +114,8 @@ struct ProgramUploadView: View {
     }
 
     /// Accepts both image URLs and PDFs. PDFs are rasterised page-by-page to PNG.
+    /// Image files are copied into ~/Documents/PostRoll/programs/ so the stored
+    /// path stays valid even if the user later moves or deletes the source.
     private func appendFiles(_ urls: [URL]) {
         isImporting = true
         Task {
@@ -127,8 +128,13 @@ struct ProgramUploadView: View {
                     for page in pages where !ev.programImagePaths.contains(page) {
                         ev.programImagePaths.append(page)
                     }
-                } else if !ev.programImagePaths.contains(url) {
-                    ev.programImagePaths.append(url)
+                } else {
+                    let stored = await Task.detached(priority: .userInitiated) {
+                        Self.permanentCopy(of: url) ?? url
+                    }.value
+                    if !ev.programImagePaths.contains(stored) {
+                        ev.programImagePaths.append(stored)
+                    }
                 }
             }
             await MainActor.run {
@@ -187,15 +193,18 @@ struct ProgramUploadView: View {
         appState.updateEvent(ev)
     }
 
-    private func permanentCopy(of url: URL) -> URL? {
+    private nonisolated static func permanentCopy(of url: URL) -> URL? {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Documents/PostRoll/programs")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let dest = dir.appendingPathComponent(url.lastPathComponent)
-        if !FileManager.default.fileExists(atPath: dest.path) {
-            try? FileManager.default.copyItem(at: url, to: dest)
+        if FileManager.default.fileExists(atPath: dest.path) { return dest }
+        do {
+            try FileManager.default.copyItem(at: url, to: dest)
+            return dest
+        } catch {
+            return nil
         }
-        return dest
     }
 }
 
@@ -435,18 +444,32 @@ private struct ProgramDropZone: View {
 private struct ProgramThumbnail: View {
     let url: URL
     let onRemove: () -> Void
-    @State private var image: NSImage?
+
+    private enum LoadState { case loading, loaded(NSImage), missing }
+    @State private var state: LoadState = .loading
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Group {
-                if let image {
+                switch state {
+                case .loading:
+                    Color.creamDeep
+                        .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
+                case .loaded(let image):
                     Image(nsImage: image)
                         .resizable()
                         .scaledToFill()
-                } else {
-                    Color.creamDeep
-                        .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
+                case .missing:
+                    Color.creamDeep.overlay {
+                        VStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 18))
+                                .foregroundStyle(Color.roseDeep)
+                            Text("File missing")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.warmMid)
+                        }
+                    }
                 }
             }
             .frame(height: 96)
@@ -465,6 +488,14 @@ private struct ProgramThumbnail: View {
             .buttonStyle(.plain)
             .padding(4)
         }
-        .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+        .task {
+            let captured = url
+            let result: LoadState = await Task.detached {
+                guard FileManager.default.fileExists(atPath: captured.path) else { return .missing }
+                if let img = NSImage(contentsOf: captured) { return .loaded(img) }
+                return .missing
+            }.value
+            state = result
+        }
     }
 }

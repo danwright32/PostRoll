@@ -146,12 +146,14 @@ struct EventListView: View {
         .searchable(text: $searchText, placement: .sidebar, prompt: "Search events")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: Spacing.sm) {
+                HStack(spacing: 10) {
                     Button {
                         showingHashtagSettings = true
                     } label: {
                         Image(systemName: "tag.circle")
+                            .font(.system(size: 14))
                             .foregroundStyle(Color.warmMid)
+                            .frame(width: 18, height: 18)
                     }
                     .buttonStyle(.plain)
                     .focusEffectDisabled()
@@ -164,15 +166,17 @@ struct EventListView: View {
                         } label: {
                             ZStack(alignment: .topTrailing) {
                                 Image(systemName: "archivebox")
+                                    .font(.system(size: 14))
                                     .foregroundStyle(showExported ? Color.roseGold : Color.warmMid)
+                                    .frame(width: 18, height: 18)
                                 if !showExported {
                                     Text("\(exportedCount)")
-                                        .font(.system(size: 7, weight: .bold))
+                                        .font(.system(size: 8, weight: .bold))
                                         .foregroundStyle(Color.cream)
                                         .padding(.horizontal, 3)
-                                        .padding(.vertical, 1)
+                                        .padding(.vertical, 0.5)
                                         .background(Capsule().fill(Color.warmMid))
-                                        .offset(x: 6, y: -4)
+                                        .offset(x: 4, y: -2)
                                 }
                             }
                         }
@@ -185,19 +189,15 @@ struct EventListView: View {
                     Button {
                         appState.showingNewEvent = true
                     } label: {
-                        Label("New Event", systemImage: "plus")
-                            .font(.system(size: 12, weight: .medium))
+                        Image(systemName: "plus")
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Color.roseGold)
-                            .padding(.horizontal, Spacing.sm)
-                            .padding(.vertical, Spacing.xs)
-                            .background(
-                                Capsule()
-                                    .fill(Color.roseGold.opacity(0.10))
-                            )
+                            .frame(width: 18, height: 18)
                     }
                     .buttonStyle(.plain)
                     .focusEffectDisabled()
                     .help("New Event (⌘N)")
+                    .accessibilityLabel("New Event")
                 }
             }
         }

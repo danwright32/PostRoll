@@ -20,6 +20,7 @@ struct PostRollApp: App {
                 .tint(Color.roseGold)
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     NotificationService.shared.clearDelivered()
+                    NotificationService.shared.clearBadge()
                 }
         }
         .windowStyle(.titleBar)

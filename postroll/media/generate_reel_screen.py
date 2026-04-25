@@ -39,7 +39,8 @@ CREAM = (252, 250, 247)
 CREAM_OPACITY = 210
 TEXT_DARK = (60, 55, 50)
 ROSE_GOLD = (160, 105, 95)
-HEADER_H = 220
+HEADER_H = 340  # tall enough to push title clear of the iPhone notch / Dynamic Island
+TITLE_TOP_Y = 170  # clears notch (~120px) + Dynamic Island with breathing room
 FOOTER_H = 100
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
@@ -67,7 +68,7 @@ def get_video_duration(path: str) -> float:
     return float(result.stdout.strip())
 
 
-_DEFAULT_AUDIO_TAGS = "electronic,upbeat"
+from postroll.ai.audio_tags import TUESDAY_DEFAULT_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
 
 
 def generate_reel_screen(
@@ -163,10 +164,10 @@ def generate_reel_screen(
         detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_THIN)
         bbox = draw.textbbox((0, 0), event_name, font=title_font)
         tw = bbox[2] - bbox[0]
-        draw.text(((CANVAS_W - tw) // 2, 35), event_name, font=title_font, fill=TEXT_DARK)
+        draw.text(((CANVAS_W - tw) // 2, TITLE_TOP_Y), event_name, font=title_font, fill=TEXT_DARK)
 
         title_h = bbox[3] - bbox[1]
-        info_y = 35 + title_h + 20
+        info_y = TITLE_TOP_Y + title_h + 20
         for j, line in enumerate([org, venue]):
             if line:
                 total_w = sum(draw.textbbox((0, 0), ch, font=detail_font)[2] -

@@ -21,6 +21,10 @@ import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+# Reuse the title-fitting helper from the story template so single-line
+# shrink + two-line wrap behavior stays consistent across both layouts.
+from .generate_story import _fit_script_title
+
 
 # === Design Tokens (shared with story template) ===
 
@@ -37,10 +41,12 @@ ROSE_GOLD = (160, 105, 95)  # divider — same as story template
 DIVIDER_H = 2
 LABEL_FONT_SIZE = 28
 LABEL_LETTER_SPACING = 8
-LABEL_MARGIN = 20  # distance from photo edge
+LABEL_MARGIN = 40   # snug to the photo's top-left corner; reel closing-frame zoom may crop slightly but the label isn't load-bearing
 MID_STRIP_H = 55  # cream strip between photos with "Edit" label
 LOGO_WIDTH = 280
 BOTTOM_CREAM_H = 130  # taller bottom to balance the top
+HEADER_MIN_H = 400  # min header height to accommodate notch-safe title + org + venue
+TITLE_TOP_PADDING = 170  # clears iPhone notch/Dynamic Island (~120px) with breathing room
 
 # Fonts (same as story template)
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
@@ -213,34 +219,49 @@ def generate_before_after(
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
     label_font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_THIN)
-    title_font = load_font(FONT_SCRIPT, 90)
     detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_THIN)
 
     # Create blurred background
     canvas = create_blurred_background(edit_photo)
 
-    # Calculate photo sizes (fit to width, uncropped)
-    raw_resized = fit_photo(raw_photo, CANVAS_W, CANVAS_H)
-    edit_resized = fit_photo(edit_photo, CANVAS_W, CANVAS_H)
+    # Auto-fit the script title — wraps to two lines (or shrinks) if the title
+    # doesn't fit on one at max size.
+    title_max_w = CANVAS_W - 2 * 80  # 80px each side keeps title clear of zoom-crop area
+    title_lines, title_font = _fit_script_title(event_name, canvas, title_max_w)
+
+    # Compute the actual header height needed for THIS title + org/venue,
+    # before reserving photo space. Two-line titles at full size need more
+    # room than the static HEADER_MIN_H ever budgeted for.
+    draw_tmp = ImageDraw.Draw(canvas)
+    title_h_single = 0
+    for line in title_lines:
+        bbox = draw_tmp.textbbox((0, 0), line, font=title_font)
+        title_h_single = max(title_h_single, bbox[3] - bbox[1])
+    title_line_gap = int(title_h_single * 0.85)
+    title_block_bottom = (
+        TITLE_TOP_PADDING + (len(title_lines) - 1) * title_line_gap + title_h_single
+    )
+    org_venue_count = sum(1 for s in (org, venue) if s)
+    info_y = TITLE_TOP_PADDING + (len(title_lines) - 1) * title_line_gap + 110
+    info_block_bottom = info_y + max(0, org_venue_count - 1) * 42 + 36
+    header_min_needed = max(HEADER_MIN_H, info_block_bottom + 30)  # 30px breathing room
+
+    # Reserve header + footer + chrome first; photos share what's left, so the
+    # notch-safe title area is never squeezed by tall photos.
+    fixed_chrome = DIVIDER_H * 2 + MID_STRIP_H
+    photos_budget = CANVAS_H - header_min_needed - BOTTOM_CREAM_H - fixed_chrome
+    max_each_photo_h = photos_budget // 2
+
+    raw_resized = fit_photo(raw_photo, CANVAS_W, max_each_photo_h)
+    edit_resized = fit_photo(edit_photo, CANVAS_W, max_each_photo_h)
     total_photo_h = raw_resized.height + edit_resized.height
 
-    # Fixed header height — consistent across all events
-    header_cream_h = 280
-
-    draw_tmp = ImageDraw.Draw(canvas)
-    title_bbox = draw_tmp.textbbox((0, 0), event_name, font=title_font)
-    title_h = title_bbox[3] - title_bbox[1]
-
-    # Remaining space after photos + dividers + mid strip goes to header and footer
-    fixed_chrome = DIVIDER_H * 2 + MID_STRIP_H
+    # Any leftover space (when photos are shorter than their cap) is split
+    # between header and footer so the layout stays centered.
     remaining = CANVAS_H - total_photo_h - fixed_chrome
-
-    # Header gets what it needs, footer gets the rest
-    footer_cream_h = max(BOTTOM_CREAM_H, remaining - header_cream_h)
-    # If header + footer > remaining, scale header down
-    if header_cream_h + footer_cream_h > remaining:
-        footer_cream_h = BOTTOM_CREAM_H
-        header_cream_h = remaining - footer_cream_h
+    extra = remaining - header_min_needed - BOTTOM_CREAM_H
+    header_cream_h = header_min_needed + max(0, extra) // 2
+    footer_cream_h = remaining - header_cream_h
 
     y = 0
 
@@ -248,13 +269,18 @@ def generate_before_after(
     canvas = apply_cream_strip(canvas, 0, header_cream_h)
     draw = ImageDraw.Draw(canvas)
 
-    # Fixed positions within header for consistency
-    tw = title_bbox[2] - title_bbox[0]
-    tx = (CANVAS_W - tw) // 2
-    title_y = 35  # fixed top padding
-    draw.text((tx, title_y), event_name, font=title_font, fill=TEXT_DARK)
+    # Title — auto-shrunk and possibly two-line. Each line drawn centered.
+    # title_h_single, title_line_gap, info_y already computed above when we
+    # sized the header.
+    title_y = TITLE_TOP_PADDING
+    for i, line in enumerate(title_lines):
+        bbox = draw.textbbox((0, 0), line, font=title_font)
+        tw = bbox[2] - bbox[0]
+        tx = (CANVAS_W - tw) // 2
+        draw.text((tx, title_y + i * title_line_gap), line, font=title_font, fill=TEXT_DARK)
 
-    info_y = title_y + 110  # fixed distance from title top to org/venue
+    # Org/venue follow the title (single or wrapped). Fixed offset from the
+    # last title line so the spacing stays consistent regardless of wrap.
     for j, line in enumerate([org, venue]):
         if line:
             draw_spaced_text_centered(draw, line, detail_font, TEXT_DARK, CANVAS_W // 2, info_y + j * 42)

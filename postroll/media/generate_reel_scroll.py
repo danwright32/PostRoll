@@ -244,7 +244,7 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
     return frame_rgba.convert("RGB")
 
 
-_DEFAULT_AUDIO_TAGS = "ambient,atmospheric"
+from postroll.ai.audio_tags import THURSDAY_FALLBACK_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
 
 
 def build_reel_preview(
@@ -297,18 +297,28 @@ def generate_reel_scroll(
     seed: int | None = None,
     scroll_duration: float = SCROLL_DURATION,
     audio_tags: str | None = None,  # override default Jamendo search tags
+    pieces: list[dict] | None = None,  # OCR program pieces — for piece-match auto-fetch
     crop_offsets: list[tuple[float, float, float]] | None = None,
 ) -> str:
     """Generate a photo scroll reel with masonry collage layout.
 
     scroll_duration: seconds to scroll the full strip (default 30.0).
     audio_tags: comma-separated Jamendo tags; overrides _DEFAULT_AUDIO_TAGS when provided.
+    pieces: OCR program pieces. If audio_path is None, we'll try to find a
+            Jamendo recording of one of the program pieces before falling
+            back to the tag-based search.
     crop_offsets: optional per-photo (x, y, zoom) triples — lets the Thursday
                   editor override the default centred fill on a per-photo basis.
     """
     if audio_path is None:
-        from postroll.audio import fetch_audio
-        audio_path = fetch_audio(audio_tags or _DEFAULT_AUDIO_TAGS)
+        from postroll.audio import fetch_audio, fetch_audio_by_program
+        if pieces:
+            try:
+                audio_path = fetch_audio_by_program(pieces)
+            except Exception:
+                audio_path = None
+        if audio_path is None:
+            audio_path = fetch_audio(audio_tags or _DEFAULT_AUDIO_TAGS)
 
     # Sort photos by filename using natural (numeric) order so that
     # "-3" comes before "-13" comes before "-101".

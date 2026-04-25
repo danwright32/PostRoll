@@ -62,7 +62,8 @@ CREAM = (252, 250, 247)
 CREAM_OPACITY = 210
 TEXT_DARK = (60, 55, 50)
 ROSE_GOLD = (160, 105, 95)
-HEADER_H = 220
+HEADER_H = 340  # tall enough to push title clear of the iPhone notch / Dynamic Island
+TITLE_TOP_Y = 170  # clears notch (~120px) + Dynamic Island with breathing room
 FOOTER_H = 100
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 LOGO_WIDTH = 200
@@ -129,10 +130,10 @@ def draw_branded_chrome(frame, event_name, org, venue, logo):
     detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_THIN)
     bbox = draw.textbbox((0, 0), event_name, font=title_font)
     tw = bbox[2] - bbox[0]
-    draw.text(((CANVAS_W - tw) // 2, 35), event_name, font=title_font, fill=TEXT_DARK)
+    draw.text(((CANVAS_W - tw) // 2, TITLE_TOP_Y), event_name, font=title_font, fill=TEXT_DARK)
 
     title_h = bbox[3] - bbox[1]
-    info_y = 35 + title_h + 20
+    info_y = TITLE_TOP_Y + title_h + 20
     for j, line in enumerate([org, venue]):
         if line:
             total_w = sum(draw.textbbox((0, 0), ch, font=detail_font)[2] -
@@ -280,7 +281,7 @@ def generate_split_frame(
     return frame
 
 
-_DEFAULT_AUDIO_TAGS = "electronic,upbeat"
+from postroll.ai.audio_tags import TUESDAY_DEFAULT_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
 
 
 def generate_reel_morph(
@@ -362,14 +363,15 @@ def generate_reel_morph(
                                   int(CANVAS_H * 0.75), font)
 
             elif i < p4:
-                # Crossfade to closing frame.
-                # closing_frame has chrome (header/footer text) baked in;
-                # do NOT apply reel chrome here — blending two different chrome
-                # designs produces ghost text.  Drop the reel chrome for this
-                # transition so only the still image's text is visible.
+                # Crossfade to closing frame. Keep the reel chrome on the
+                # outgoing edit_z — the prior "drop chrome to avoid ghost
+                # text" approach produced a visible flash of unbranded photo
+                # at the start of the crossfade. Brief header overlap during
+                # the blend reads cleaner than the flash.
                 blend_t = ease_in_out((i - p3) / (p4 - p3))
                 if closing_frame:
-                    frame = Image.blend(edit_z, closing_frame, blend_t)
+                    branded = draw_branded_chrome(edit_z.copy(), event_name, org, venue, logo)
+                    frame = Image.blend(branded, closing_frame, blend_t)
                 else:
                     frame = draw_branded_chrome(edit_z.copy(), event_name, org, venue, logo)
 
