@@ -227,7 +227,8 @@ def test_blog_runs_humanizer_review_when_available(sample_photo, tmp_path):
     # Pipeline: draft (call 0) → voice pass (call 1) → humanizer (call 2)
     assert len(calls) == 3
     assert "Pivotal moment" in calls[1]  # voice pass receives the draft output
-    assert result["title"] == "A specific title"
+    # Title is deterministic: "{event} at {venue}".
+    assert result["title"] == "E at V"
     assert result["body"] == "A specific clean body."
 
 

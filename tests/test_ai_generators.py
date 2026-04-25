@@ -273,7 +273,8 @@ def test_blog_returns_title_and_body(sample_photo):
             },
             photo_paths=[sample_photo] * 4,
         )
-    assert result["title"] == "Mahler Resurrection at Carnegie Hall"
+    # Title is deterministic: "{event} at {venue}".
+    assert result["title"] == "Sing Play at Carnegie Hall"
     assert "[PHOTO:" in result["body"]
     assert result["photo_count"] == 4
 
