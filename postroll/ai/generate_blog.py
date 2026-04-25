@@ -494,9 +494,14 @@ Production details (director, creative team, run dates, tour info):
 Other printed content (from program OCR):
 {other}
 
-Photos selected for this post ({photo_count} total). READ EACH ONE so
-the prose can refer to what's actually visible in them, then place a
-marker in the body where each photo belongs:
+Photos selected for this post ({photo_count} total). Each image
+attached to this message is preceded by a `Photo N: filename.jpg`
+text block that names it EXACTLY. The order of the images and of this
+list is identical: the first attached image is the first item, the
+second image is the second item, and so on. READ EACH IMAGE so the
+prose can refer to what's actually visible in it, and use the
+filename from that image's own label when you write its [PHOTO:]
+marker — never guess a filename and never invent visuals.
 {photo_list}
 
 Photo placement rules:
@@ -505,10 +510,13 @@ Photo placement rules:
   shows.
 - Use this EXACT format on its own line between paragraphs:
     [PHOTO: filename.jpg | alt text description of what is in the photo]
-  Where "filename.jpg" is the base filename only (no directory path),
-  and the alt text is a specific, useful description for a reader who
-  cannot see the image (15-35 words: who, what, where, lighting,
-  gestures). Example:
+  The filename MUST be copied verbatim from the `Photo N: …` label
+  attached to that specific image — do NOT reorder, swap, or
+  hallucinate filenames. The alt text MUST describe what is actually
+  visible in THAT image (the one whose label you copied), 15-35 words:
+  who, what, where, lighting, gestures. If the photo is of a poster,
+  building exterior, empty stage, or program book, say so — do not
+  describe a performance that is not in the frame. Example:
     [PHOTO: 003_DSC4821.jpg | Conductor leading a full chorus from the
     podium at Carnegie Hall, arms raised mid-phrase, blue stage light
     behind the choir risers]
@@ -616,11 +624,15 @@ def generate_blog(
             resolved.append(str(staged))
 
         # Show clean filenames (without the 000_ staging prefix) in the
-        # prompt so [PHOTO:] markers use the original name.
-        photo_list = "\n".join(
-            f"- {Path(p).name.split('_', 1)[1] if '_' in Path(p).name else Path(p).name}"
+        # prompt so [PHOTO:] markers use the original name. The same clean
+        # names are passed as image_labels so each attached image is preceded
+        # by a `Photo N: filename.jpg` block, anchoring the file ↔ image
+        # correspondence unambiguously.
+        photo_filenames = [
+            Path(p).name.split('_', 1)[1] if '_' in Path(p).name else Path(p).name
             for p in resolved
-        )
+        ]
+        photo_list = "\n".join(f"- {n}" for n in photo_filenames)
 
         brand_voice_text = load_brand_voice()
 
@@ -661,6 +673,7 @@ def generate_blog(
             prompt,
             timeout=600,
             image_paths=resolved,
+            image_labels=photo_filenames,
         )
 
         if not isinstance(data, dict):

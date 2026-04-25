@@ -81,6 +81,7 @@ def _run_sdk(
     *,
     timeout: int,
     image_paths: list[str | Path] | None,
+    image_labels: list[str] | None,
     model: str,
 ) -> str:
     client = anthropic.Anthropic(
@@ -88,7 +89,15 @@ def _run_sdk(
         timeout=float(timeout),
     )
     content: list[dict] = []
-    for p in (image_paths or []):
+    paths = list(image_paths or [])
+    labels = list(image_labels) if image_labels is not None else None
+    if labels is not None and len(labels) != len(paths):
+        raise ValueError(
+            f"image_labels has {len(labels)} entries but image_paths has {len(paths)}"
+        )
+    for i, p in enumerate(paths):
+        if labels is not None:
+            content.append({"type": "text", "text": f"Photo {i + 1}: {labels[i]}"})
         content.append(_image_block(Path(p)))
     content.append({"type": "text", "text": prompt})
 
@@ -162,6 +171,7 @@ def run_prompt(
     *,
     timeout: int = 300,
     image_paths: list[str | Path] | None = None,
+    image_labels: list[str] | None = None,
     allowed_dirs: list[str | Path] | None = None,
     allowed_tools: list[str] | None = None,
     model: str = "sonnet",
@@ -172,6 +182,10 @@ def run_prompt(
     tools (WebSearch, WebFetch), in which case falls back to the claude CLI.
 
     image_paths: local files embedded as base64 vision blocks (SDK path).
+    image_labels: parallel list to image_paths. When provided, each image
+        is preceded in the message by a tiny `Photo N: <label>` text block,
+        giving the model an unambiguous local anchor between each image
+        and its filename. Length must match image_paths.
     allowed_dirs/allowed_tools: passed through to CLI when falling back.
     """
     if _needs_cli(allowed_tools):
@@ -182,7 +196,13 @@ def run_prompt(
             allowed_tools=allowed_tools,
             model=model,
         )
-    return _run_sdk(prompt, timeout=timeout, image_paths=image_paths, model=model)
+    return _run_sdk(
+        prompt,
+        timeout=timeout,
+        image_paths=image_paths,
+        image_labels=image_labels,
+        model=model,
+    )
 
 
 def run_json_prompt(
@@ -190,6 +210,7 @@ def run_json_prompt(
     *,
     timeout: int = 300,
     image_paths: list[str | Path] | None = None,
+    image_labels: list[str] | None = None,
     allowed_dirs: list[str | Path] | None = None,
     allowed_tools: list[str] | None = None,
     model: str = "sonnet",
@@ -199,6 +220,7 @@ def run_json_prompt(
         prompt,
         timeout=timeout,
         image_paths=image_paths,
+        image_labels=image_labels,
         allowed_dirs=allowed_dirs,
         allowed_tools=allowed_tools,
         model=model,

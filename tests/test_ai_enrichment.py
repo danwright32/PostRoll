@@ -170,7 +170,7 @@ def test_enrich_program_preserves_existing_ocr_fields(sample_photo):
 def test_enrich_program_passes_url_hint_to_prompt(sample_photo):
     captured = {}
 
-    def fake_run(prompt, timeout=900, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run(prompt, timeout=900, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         captured["allowed_tools"] = allowed_tools
         return {"_enrichment": {}}
@@ -200,7 +200,7 @@ def test_enrich_program_passes_url_hint_to_prompt(sample_photo):
 def test_enrich_program_text_hint_is_search_seed(sample_photo):
     captured = {}
 
-    def fake_run(prompt, timeout=900, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run(prompt, timeout=900, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         return {"_enrichment": {}}
 
@@ -215,7 +215,7 @@ def test_enrich_program_text_hint_is_search_seed(sample_photo):
 def test_enrich_program_no_hint_still_works(sample_photo):
     captured = {}
 
-    def fake_run(prompt, timeout=900, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run(prompt, timeout=900, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         return {"_enrichment": {}}
 
@@ -242,7 +242,7 @@ def test_enrich_program_raises_on_non_dict_response(sample_photo):
 def test_caption_passes_shoot_type_to_prompt(sample_photo):
     captured = {}
 
-    def fake_run(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         return {"caption": "x", "hashtags": [], "alt_text": "x"}
 
@@ -268,7 +268,7 @@ def test_caption_passes_shoot_type_to_prompt(sample_photo):
 def test_caption_defaults_to_performance(sample_photo):
     captured = {}
 
-    def fake_run(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         return {"caption": "x", "hashtags": [], "alt_text": "x"}
 
@@ -291,7 +291,7 @@ def test_caption_defaults_to_performance(sample_photo):
 def test_blog_passes_shoot_type_to_prompt(sample_photo):
     captured = {}
 
-    def fake_run(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         return {"title": "x", "body": "x", "photo_count": 4}
 
@@ -316,7 +316,7 @@ def test_blog_passes_shoot_type_to_prompt(sample_photo):
 def test_blog_passes_production_details_to_prompt(sample_photo):
     captured = {}
 
-    def fake_run(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         return {"title": "x", "body": "x", "photo_count": 4}
 

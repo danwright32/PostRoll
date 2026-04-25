@@ -125,7 +125,7 @@ def test_ocr_accepts_heic_path_and_converts(tmp_path):
         captured["dest"] = out
         return out
 
-    def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         captured["allowed_dirs"] = allowed_dirs
         captured["allowed_tools"] = allowed_tools
@@ -207,7 +207,7 @@ def test_caption_returns_normalized_dict(sample_photo):
 def test_caption_passes_brand_voice_to_prompt(sample_photo):
     captured = {}
 
-    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         captured["allowed_dirs"] = allowed_dirs
         captured["allowed_tools"] = allowed_tools
@@ -282,7 +282,7 @@ def test_blog_returns_title_and_body(sample_photo):
 def test_blog_passes_program_notes_to_prompt(sample_photo):
     captured = {}
 
-    def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
         return {"title": "x", "body": "x", "photo_count": 4}
 

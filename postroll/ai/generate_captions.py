@@ -654,7 +654,12 @@ def generate_caption(
 
         brand_voice_text = load_brand_voice()
         photo_count = len(staged_paths)
-        photo_list = "\n".join(f"- {Path(p).name}" for p in staged_paths)
+        # Each filename is also passed as image_labels so the model gets a
+        # `Photo N: filename.jpg` block right before each attached image.
+        # That eliminates the "alt text describes the wrong photo" failure
+        # mode where the model guessed at file ↔ image correspondence.
+        photo_filenames = [Path(p).name for p in staged_paths]
+        photo_list = "\n".join(f"- {n}" for n in photo_filenames)
         post_type_framing = POST_TYPE_FRAMING.get(
             post_type, POST_TYPE_FRAMING["feed_photo"]
         )
@@ -706,6 +711,7 @@ def generate_caption(
             prompt,
             timeout=600,
             image_paths=staged_paths,
+            image_labels=photo_filenames,
         )
 
         if not isinstance(data, dict):
@@ -1037,10 +1043,12 @@ def generate_week_captions(
         )
 
         all_staged = [p for post in staged_posts for p in post["photo_paths"]]
+        all_labels = [Path(p).name for p in all_staged]
         data = run_json_prompt(
             prompt,
             timeout=900,
             image_paths=all_staged,
+            image_labels=all_labels,
         )
 
         if not isinstance(data, dict) or "posts" not in data:
