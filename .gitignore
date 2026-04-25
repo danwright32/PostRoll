@@ -10,4 +10,12 @@ programs/
 
 # Build artifacts
 Test2
+build/
 PostRollApp/build/
+
+# Local generation outputs and logs
+logs/
+preview/
+
+# Editor/agent local state
+PostRollApp/.claude/
