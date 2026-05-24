@@ -84,7 +84,9 @@ Event details:
 {event_url_line}  ← CRITICAL: match the caption to what Dan
   actually witnessed. If shoot_type is photo_call, do NOT mention
   applause, audience reactions, or performance moments that require
-  an audience.
+  an audience. For photo_call, rehearsal, and dress_rehearsal, the
+  Repertoire below is the PLANNED program, not a transcript. Do NOT
+  describe how a piece sounded unless a photo clearly anchors it.
 
 Post type: {post_type}
 {post_type_framing}
@@ -279,6 +281,12 @@ ABSOLUTELY NEVER:
 - Fabricate or guess @ handles. ONLY use handles from the tag_handles
   list above. If tag_handles is "(none)", do NOT invent any @ mentions.
   A wrong handle tags the wrong account — this is a hard rule.
+- Pull handles from anywhere except `tag_handles`. The shared
+  Performers block lists names + roles only and contains NO handles by
+  design. If a performer's handle is not in tag_handles, that performer
+  must NOT be tagged in this post (not in the body, not in a trailing
+  stack, nowhere). Mention them by plain name only if they appear in
+  `name_mentions` — otherwise omit them entirely.
 - Copy any specific phrase, person, venue, or detail from the
   example captions in the brand voice doc. Those are STRUCTURAL
   patterns from other events.
@@ -301,6 +309,14 @@ def _is_real_handle(handle: str) -> bool:
 
 
 def _format_performers(performers: list[dict[str, Any]]) -> str:
+    """Format the shared performers context block for the caption prompt.
+
+    Intentionally omits @handles. Each post's `tag_handles` list (passed
+    separately, per post) is the authoritative source for which handles to
+    tag in that post's caption. Showing handles in this shared block leaks
+    them across posts — Claude sees all 13 handles and dumps them into a
+    single-subject post's trailing stack instead of obeying tag_handles.
+    """
     if not performers:
         return "(none listed)"
     lines = []
@@ -308,10 +324,7 @@ def _format_performers(performers: list[dict[str, Any]]) -> str:
         name = p.get("name", "?")
         role = p.get("role", "")
         instr = p.get("voice_or_instrument") or ""
-        handle = p.get("handle") or ""
         bits = [name]
-        if _is_real_handle(handle):
-            bits.append(f"[{handle}]")
         if role:
             bits.append(f"({role}{', ' + instr if instr else ''})")
         elif instr:
@@ -812,7 +825,9 @@ Event details (shared across all posts):
 - Shoot type: {shoot_type}  ← CRITICAL: match every caption to what
   Dan actually witnessed. If shoot_type is photo_call, do NOT mention
   applause, audience reactions, or performance moments that require
-  an audience.
+  an audience. For photo_call, rehearsal, and dress_rehearsal, the
+  Repertoire below is the PLANNED program, not a transcript. Do NOT
+  describe how a piece sounded unless a photo clearly anchors it.
 
 Performers (from program OCR / enrichment):
 {performers}
@@ -875,6 +890,16 @@ frame.
 **NEVER fabricate or guess @ handles.** ONLY use handles from each
 post's tag_handles list. If tag_handles is "(none)", do NOT invent any
 @ mentions. A wrong handle tags the wrong account — this is a hard rule.
+
+**The shared `Performers` block above contains NO handles by design.**
+It exists only so you know each performer's role / voice / instrument
+for context. To tag any performer in a caption, that performer's
+handle must appear in THAT post's `tag_handles` list. Do NOT pull
+handles from anywhere else, including: prior posts in this week, the
+event-wide org/venue handles you already have, or your training data.
+For single-subject posts: if a performer is NOT in this post's
+tag_handles, they are NOT tagged in this post — period. Don't sneak
+them into a trailing stack "for context."
 
 **NEVER reduce a tagged performer to a faint-praise role noun.** If a
 performer is in the required tag_handles or name_mentions list, you

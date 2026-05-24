@@ -52,6 +52,13 @@ enum PythonBridgeError: LocalizedError {
         if s.contains("ffmpeg") {
             return "Media generation failed: ffmpeg is not installed. Run `brew install ffmpeg` in Terminal, then try again."
         }
+        // Order matters: check 413 / request_too_large BEFORE the generic "anthropic" check.
+        if s.contains("413") || s.contains("request_too_large") || s.contains("request exceeds the maximum size") || s.contains("payload too large") {
+            return "The program photos are too large for the AI service to process in one call. Try uploading fewer pages at a time, or downscale the images (Preview › Tools › Adjust Size), then try again."
+        }
+        if s.contains("rate_limit") || s.contains("rate limit") || s.contains("429") || s.contains("overloaded") {
+            return "The AI service is rate-limiting or overloaded right now. Wait a minute and try again."
+        }
         if s.contains("anthropic") || s.contains("openai") || s.contains("api key") || s.contains("apikey") {
             return "Generation failed: could not connect to the AI service. Check that your API key is set correctly and that you have internet access."
         }
@@ -225,13 +232,23 @@ actor PythonBridge {
         return imagePaths
     }
 
-    /// Generates static-only preview graphics (no reels) to a stable preview
-    /// directory. Run after text generation so the user can see the graphics
-    /// in the caption review step. Non-throwing — caller handles errors.
+    /// Result of a preview-generation run. `paths` mirrors Python's per-day
+    /// output dict; `errors` carries the per-day failure messages Python writes
+    /// when a day couldn't be generated (e.g. missing photo, ffmpeg crash). A
+    /// successful run for a given day means `paths[day]` is non-empty AND
+    /// `errors[day]` is absent.
+    struct PreviewGenerationResult {
+        let paths: [String: [String: String]]
+        let errors: [String: String]
+    }
+
+    /// Generates preview graphics (Tuesday + Thursday reels included) to a
+    /// stable preview directory. Run after text generation so the user can
+    /// see the graphics in the caption review step.
     ///
-    /// Returns a dict mapping day name → asset type → absolute path,
-    /// mirroring the Python output JSON (e.g. ["sunday": ["story": "/path/..."]])
-    func runPreviewGeneration(event: Event, days: [String]? = nil) async throws -> [String: [String: String]] {
+    /// Throws when the Python process itself fails. Per-day failures are
+    /// non-fatal and surfaced via `PreviewGenerationResult.errors`.
+    func runPreviewGeneration(event: Event, days: [String]? = nil) async throws -> PreviewGenerationResult {
         let tmp = FileManager.default.temporaryDirectory
         let manifestFile = tmp.appendingPathComponent("postroll_preview_manifest_\(UUID().uuidString).json")
         let outputFile   = tmp.appendingPathComponent("postroll_preview_\(UUID().uuidString).json")
@@ -260,19 +277,24 @@ actor PythonBridge {
         }
         try await runProcess(args: args)
 
-        guard FileManager.default.fileExists(atPath: outputFile.path) else { return [:] }
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            return PreviewGenerationResult(paths: [:], errors: [:])
+        }
 
         let data = try Data(contentsOf: outputFile)
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return PreviewGenerationResult(paths: [:], errors: [:])
+        }
 
-        var result: [String: [String: String]] = [:]
+        var paths: [String: [String: String]] = [:]
         for dayKey in ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"] {
             guard let dayDict = json[dayKey] as? [String: String] else { continue }
             // Include both images and video files (.mp4)
             let existing = dayDict.filter { FileManager.default.fileExists(atPath: $0.value) }
-            if !existing.isEmpty { result[dayKey] = existing }
+            if !existing.isEmpty { paths[dayKey] = existing }
         }
-        return result
+        let errors = (json["errors"] as? [String: String]) ?? [:]
+        return PreviewGenerationResult(paths: paths, errors: errors)
     }
 
     /// Builds the Thursday reel's still preview PNG + layout sidecar (no ffmpeg encode).
@@ -467,14 +489,14 @@ actor PythonBridge {
             guard let pd = event.days[dayName.rawValue],
                   !pd.photoPaths.isEmpty || pd.rawPhotoPath != nil || pd.editedPhotoPath != nil
             else { continue }
-            // Thursday photos sorted by filename so the reel order is predictable
-            let sortedPhotos = dayName == .thursday
-                ? pd.photoPaths.sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending }
-                : pd.photoPaths
-            var entry: [String: Any] = ["photos": sortedPhotos.map { $0.path }]
+            // photoPaths is the source of truth for reel/collage order. It's
+            // sorted once at import (changeReelPhotos) and any user-driven
+            // reorders (e.g. Thursday swap) live there. Don't re-sort here —
+            // doing so would silently revert manual swaps on every regen.
+            var entry: [String: Any] = ["photos": pd.photoPaths.map { $0.path }]
             if dayName == .thursday {
-                print("[PostRoll:buildMediaManifest] Thursday photos in manifest (\(sortedPhotos.count)):")
-                for (i, url) in sortedPhotos.enumerated() {
+                print("[PostRoll:buildMediaManifest] Thursday photos in manifest (\(pd.photoPaths.count)):")
+                for (i, url) in pd.photoPaths.enumerated() {
                     print("  [\(i)] \(url.lastPathComponent)")
                 }
             }
@@ -483,13 +505,14 @@ actor PythonBridge {
                 if let rec  = pd.screenRecordingPath { entry["screen_recording"]  = rec.path }
                 if let raw  = pd.rawPhotoPath        { entry["raw_photo"]         = raw.path }
                 if let edit = pd.editedPhotoPath     { entry["edited_photo"]      = edit.path }
+                if let bw   = pd.bwPhotoPath         { entry["bw_photo"]          = bw.path }
                 if let aud  = pd.audioPath           { entry["audio"]             = aud.path }
                 entry["target_duration"] = pd.reelTargetDuration
             case .thursday:
                 if let aud  = pd.audioPath           { entry["audio"]             = aud.path }
                 entry["scroll_duration"] = pd.scrollDuration
                 if let seed = pd.reelSeed            { entry["reel_seed"]         = seed }
-                let offsets = sortedPhotos.map { url -> [Double] in
+                let offsets = pd.photoPaths.map { url -> [Double] in
                     let o = pd.reelCropOffsets[url.absoluteString] ?? CropOffset()
                     return [o.x, o.y, o.scale]
                 }
@@ -516,6 +539,7 @@ actor PythonBridge {
             case .friday:
                 if let raw  = pd.rawPhotoPath        { entry["raw_photo"]         = raw.path }
                 if let edit = pd.editedPhotoPath     { entry["edited_photo"]      = edit.path }
+                if let bw   = pd.bwPhotoPath         { entry["bw_photo"]          = bw.path }
             default:
                 break
             }
@@ -1061,6 +1085,139 @@ actor PythonBridge {
         }
     }
 
+    // MARK: - Flag review (natural-language reflow)
+
+    /// Result of asking Claude to reflow one flag given the user's plain-English correction.
+    struct FlagReviewResponse: Decodable {
+        let assistantReply: String
+        let patch: [PatchOp]?
+        let resolved: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case assistantReply = "assistant_reply"
+            case patch, resolved
+        }
+    }
+
+    /// One patch operation produced by review_flag.py. Stored as a JSON-passthrough
+    /// dict so we can hand it straight back to Python to apply (the apply path is
+    /// already implemented there). We don't introspect the patch on the Swift side
+    /// beyond showing the assistant_reply summary.
+    struct PatchOp: Codable {
+        let raw: [String: JSONValue]
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            raw = try c.decode([String: JSONValue].self)
+        }
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.singleValueContainer()
+            try c.encode(raw)
+        }
+    }
+
+    /// One-shot natural-language correction for a single flag. Calls
+    /// `python -m postroll.ai.review_flag` with the current OCR data + flag +
+    /// program images + the user's free-text feedback. Returns the model's
+    /// reply, optional patch (already validated server-side), and resolved flag.
+    /// Empty conversation — multi-turn isn't wired yet.
+    func reviewFlag(
+        flag: OCRFlag,
+        ocr: OCRResult,
+        imagePaths: [URL],
+        userMessage: String
+    ) async throws -> FlagReviewResponse {
+        guard !imagePaths.isEmpty else {
+            throw PythonBridgeError.invalidOutput("No program images available; can't run flag reflow.")
+        }
+        let tmp = FileManager.default.temporaryDirectory
+        let programFile = tmp.appendingPathComponent("postroll_review_program_\(UUID().uuidString).json")
+        let flagFile    = tmp.appendingPathComponent("postroll_review_flag_\(UUID().uuidString).json")
+        let outputFile  = tmp.appendingPathComponent("postroll_review_out_\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: programFile)
+            try? FileManager.default.removeItem(at: flagFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        let encoder = JSONEncoder()
+        try encoder.encode(ocr).write(to: programFile)
+        try encoder.encode(flag).write(to: flagFile)
+
+        var args = [
+            "-m", "postroll.ai.review_flag",
+            "--program", programFile.path,
+            "--flag",    flagFile.path,
+            "--message", userMessage,
+            "--output",  outputFile.path,
+        ]
+        for url in imagePaths {
+            args.append("--image")
+            args.append(url.path)
+        }
+
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+        let data = try Data(contentsOf: outputFile)
+        do {
+            return try JSONDecoder().decode(FlagReviewResponse.self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
+    /// Apply a patch (as returned by reviewFlag) to OCR data by shelling out
+    /// to `python -m postroll.ai.review_flag --apply-to`. The Python side has
+    /// the canonical patch-application logic; rather than reimplement it in
+    /// Swift, we round-trip through the same module.
+    func applyFlagPatch(
+        patch: [PatchOp],
+        flag: OCRFlag,
+        ocr: OCRResult,
+        imagePaths: [URL]
+    ) async throws -> OCRResult {
+        // Apply the patch locally using a tiny inline Python helper —
+        // we already have review_flag.apply_patch, but we don't want to
+        // re-run Claude. Shell out to a small adhoc script via -c.
+        let tmp = FileManager.default.temporaryDirectory
+        let programFile = tmp.appendingPathComponent("postroll_apply_in_\(UUID().uuidString).json")
+        let patchFile   = tmp.appendingPathComponent("postroll_apply_patch_\(UUID().uuidString).json")
+        let outputFile  = tmp.appendingPathComponent("postroll_apply_out_\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: programFile)
+            try? FileManager.default.removeItem(at: patchFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        let encoder = JSONEncoder()
+        try encoder.encode(ocr).write(to: programFile)
+        try encoder.encode(patch).write(to: patchFile)
+
+        let script = """
+            import json, sys
+            from pathlib import Path
+            from postroll.ai.review_flag import apply_patch
+            ocr = json.loads(Path(sys.argv[1]).read_text())
+            ops = json.loads(Path(sys.argv[2]).read_text())
+            out = apply_patch(ocr, ops)
+            Path(sys.argv[3]).write_text(json.dumps(out, ensure_ascii=False))
+            """
+        try await runProcess(args: ["-c", script, programFile.path, patchFile.path, outputFile.path])
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+        let data = try Data(contentsOf: outputFile)
+        do {
+            return try JSONDecoder().decode(OCRResult.self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
     func runOCR(imagePaths: [URL]) async throws -> OCRResult {
         let outputFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("postroll_ocr_\(UUID().uuidString).json")
@@ -1321,7 +1478,7 @@ actor PythonBridge {
             if [ -f '\(logPath)' ]; then
                 tail -n 500 '\(logPath)' > '\(logPath).tmp' && mv '\(logPath).tmp' '\(logPath)'
             fi
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: \(quotedArgs)" >> '\(logPath)'
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running:" \(quotedArgs) >> '\(logPath)'
             exec \(quotedArgs) 2>> '\(logPath)'
             """
 

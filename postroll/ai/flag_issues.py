@@ -53,12 +53,26 @@ Good reasons to flag:
   punctuation)
 - Pieces with composer/title swapped
 - Entries where the OCR clearly hallucinated content not in the image
-- Missing critical fields (e.g. a piece with no title)
+- Missing critical content: a piece with no title, a performer with no
+  name, a clearly-listed work that's absent from the pieces array
 
 Bad reasons to flag (do NOT flag these):
 - Long organization notes (they're supposed to be long)
 - Unusual but real composer names
 - Duplicates that are actually different performers/pieces
+- Empty `production_details`, `venue_notes`, `organization_notes`, or
+  `other` just because the program prints the event header (event name,
+  date, time, venue, presenter / org). Dan enters those four header
+  fields when he creates the event in the app, so a program that ONLY
+  contains the basic header at the top is not missing anything. Only
+  flag these prose fields when the program clearly contains substantive
+  printed content of that type — e.g. a director/creative-team list
+  (production_details), a paragraph about the venue (venue_notes), a
+  paragraph about the org's mission/history (organization_notes) — that
+  was NOT extracted.
+- Empty fields in general. The OCR schema is permissive; only flag a
+  missing field when there's identifiable printed content in the image
+  that should have populated it.
 
 Current OCR data:
 ```json
@@ -77,6 +91,7 @@ as an array of flag objects:
     "id": "short_stable_slug_like_this",
     "field_path": ["pieces", 5, "composer"],
     "current_value": "whatever is currently in the OCR data at that path",
+    "suggested_value": "your best guess at what this field should actually be, based on the printed image",
     "concern": "One sentence explaining why this looks wrong.",
     "program_context": "Short description of where this appeared in the program — which page/section, what surrounding text, what the printed characters actually look like."
   }},
@@ -89,6 +104,12 @@ Rules:
   or ["other"] or ["organization_notes"].
 - id is a short unique slug (lowercase, underscores). Stable within one
   flag run — doesn't need to match future runs.
+- suggested_value MUST be your best guess at the correct value, read
+  directly off the printed program image. This pre-fills the
+  correction box for Dan, so it should be the value he'd most likely
+  accept. If the field should be empty (e.g. a hallucinated entry that
+  isn't in the program), use an empty string. Do not echo
+  current_value back as the suggestion — that defeats the purpose.
 - program_context should give Dan enough to find it on the physical
   page without re-reading the whole program. Mention which image and
   roughly where on the page.
@@ -145,6 +166,7 @@ def flag_issues(
                 "id": raw.get("id") or f"flag_{i}",
                 "field_path": raw.get("field_path") or [],
                 "current_value": raw.get("current_value", ""),
+                "suggested_value": raw.get("suggested_value", ""),
                 "concern": raw.get("concern", ""),
                 "program_context": raw.get("program_context", ""),
             }

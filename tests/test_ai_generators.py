@@ -101,13 +101,232 @@ def test_ocr_returns_full_schema_with_defaults(sample_photo):
     assert result["organization_notes"] == ""
 
 
-def test_ocr_raises_when_response_not_object(sample_photo):
+def test_ocr_retry_succeeds_when_first_call_returns_list(sample_photo):
+    """If Claude returns a list initially but a dict on retry, OCR succeeds."""
+    # Retry returns a dict with pieces and program_notes already populated, so
+    # neither pieces nor prose fallback fires.
+    responses = [
+        ["array instead of object"],
+        {
+            "performers": [{"name": "A", "role": "conductor"}],
+            "pieces": [{"composer": "Bach", "title": "Cello Suite"}],
+            "program_notes": "Notes about the works.",
+        },
+    ]
     with patch(
         "postroll.ai.ocr_program.run_json_prompt",
-        return_value=["not", "an", "object"],
+        side_effect=responses,
+    ) as mock_run:
+        result = ocr_program.extract_program([sample_photo])
+
+    assert mock_run.call_count == 2
+    # Retry prompt should include the reinforced preamble
+    retry_prompt = mock_run.call_args_list[1][0][0]
+    assert "MUST be a single JSON object" in retry_prompt
+    assert result["performers"][0]["name"] == "A"
+
+
+def test_ocr_salvages_pieces_list_when_retry_also_returns_list(sample_photo):
+    """When Claude returns a list both times and the items look like pieces,
+    wrap them under 'pieces' rather than failing — performer info can come
+    from the event URL or be filled in by hand."""
+    pieces_list = [
+        {"composer": "Bach", "title": "Mass in B Minor", "movements": []},
+        {"composer": "Mozart", "title": "Requiem", "movements": []},
+    ]
+    # 1st: main call returns list. 2nd: retry returns list. After salvage,
+    # data has pieces but no performers → performers fallback fires (3rd call).
+    # Then program_notes is empty, so prose fallback fires (4th call).
+    with patch(
+        "postroll.ai.ocr_program.run_json_prompt",
+        side_effect=[pieces_list, pieces_list, [], {}],
     ):
-        with pytest.raises(ClaudeError, match="Expected JSON object"):
-            ocr_program.extract_program([sample_photo])
+        result = ocr_program.extract_program([sample_photo])
+
+    assert result["performers"] == []
+    assert len(result["pieces"]) == 2
+    assert result["pieces"][0]["title"] == "Mass in B Minor"
+
+
+def test_ocr_pieces_fallback_runs_when_main_returns_empty_pieces(sample_photo):
+    """When the main OCR call returns a dict with pieces=[] but the program
+    clearly contains works, a focused pieces-only call should recover them."""
+    main_response = {
+        "performers": [{"name": "Jane", "role": "conductor"}],
+        "pieces": [],
+        "scenes": [],
+        "program_notes": "Some notes about the works.",
+    }
+    pieces_only_response = [
+        {"composer": "Bach", "title": "Mass in B Minor", "movements": []},
+        {"composer": "Mozart", "title": "Requiem", "movements": []},
+    ]
+    # Performers is non-empty in main_response so only the pieces fallback runs
+    with patch(
+        "postroll.ai.ocr_program.run_json_prompt",
+        side_effect=[main_response, pieces_only_response],
+    ) as mock_run:
+        result = ocr_program.extract_program([sample_photo])
+
+    assert mock_run.call_count == 2
+    # Second call should be the focused pieces prompt
+    fallback_prompt = mock_run.call_args_list[1][0][0]
+    assert "ONLY the list of" in fallback_prompt
+    assert len(result["pieces"]) == 2
+    assert result["pieces"][0]["title"] == "Mass in B Minor"
+    # Other fields from the main call must be preserved
+    assert result["program_notes"] == "Some notes about the works."
+
+
+def test_ocr_pieces_fallback_skipped_when_main_already_has_pieces(sample_photo):
+    """Don't run the pieces fallback if the main call already returned pieces.
+    Performers and program_notes are also populated so no fallback runs —
+    only one call total.
+    """
+    main_response = {
+        "performers": [{"name": "A", "role": "conductor"}],
+        "pieces": [{"composer": "Bach", "title": "Cello Suite"}],
+        "program_notes": "Some notes.",
+    }
+    with patch(
+        "postroll.ai.ocr_program.run_json_prompt",
+        return_value=main_response,
+    ) as mock_run:
+        result = ocr_program.extract_program([sample_photo])
+
+    assert mock_run.call_count == 1
+    assert len(result["pieces"]) == 1
+
+
+def test_ocr_performers_fallback_runs_when_main_returns_empty_performers(sample_photo):
+    """When the main OCR call has pieces but no performers, the focused
+    performers-only call should recover them — useful for program-notes
+    booklets where performers are named in prose."""
+    main_response = {
+        "performers": [],
+        "pieces": [{"composer": "Bach", "title": "Cello Suite"}],
+        "program_notes": "Notes.",
+    }
+    performers_only_response = [
+        {"name": "Kathryn E. Schneider", "role": "conductor", "voice_or_instrument": None},
+        {"name": "Matthew V. Grieco", "role": "accompanist", "voice_or_instrument": "piano"},
+    ]
+    with patch(
+        "postroll.ai.ocr_program.run_json_prompt",
+        side_effect=[main_response, performers_only_response],
+    ) as mock_run:
+        result = ocr_program.extract_program([sample_photo])
+
+    assert mock_run.call_count == 2
+    fallback_prompt = mock_run.call_args_list[1][0][0]
+    assert "ONLY the people and" in fallback_prompt
+    assert len(result["performers"]) == 2
+    assert result["performers"][0]["name"] == "Kathryn E. Schneider"
+
+
+def test_ocr_prose_fallback_runs_when_program_notes_empty(sample_photo):
+    """When pieces are present but prose fields are empty, recover them via
+    the focused prose-only call."""
+    main_response = {
+        "performers": [{"name": "A", "role": "conductor"}],
+        "pieces": [{"composer": "Bach", "title": "Cello Suite"}],
+        "program_notes": "",
+    }
+    prose_response = {
+        "program_notes": "A long paragraph about the works.",
+        "organization_notes": "About the choir.",
+        "venue_notes": "",
+        "production_details": "",
+        "other": "",
+    }
+    with patch(
+        "postroll.ai.ocr_program.run_json_prompt",
+        side_effect=[main_response, prose_response],
+    ) as mock_run:
+        result = ocr_program.extract_program([sample_photo])
+
+    assert mock_run.call_count == 2
+    assert result["program_notes"] == "A long paragraph about the works."
+    assert result["organization_notes"] == "About the choir."
+
+
+def test_ocr_prose_fallback_skipped_when_no_pieces(sample_photo):
+    """If there are no pieces at all, the prose fallback shouldn't burn a
+    call — the document is probably not a real program."""
+    main_response = {
+        "performers": [{"name": "A", "role": "conductor"}],
+        "pieces": [],
+        "program_notes": "",
+    }
+    # Only the main call + pieces fallback (1 + 1 = 2). No prose call.
+    with patch(
+        "postroll.ai.ocr_program.run_json_prompt",
+        side_effect=[main_response, []],
+    ) as mock_run:
+        ocr_program.extract_program([sample_photo])
+
+    assert mock_run.call_count == 2
+
+
+def test_ocr_prose_fallback_does_not_overwrite_existing_fields(sample_photo):
+    """If the main call did populate venue_notes, the prose fallback's
+    venue_notes value must NOT clobber it."""
+    main_response = {
+        "performers": [{"name": "A", "role": "conductor"}],
+        "pieces": [{"composer": "Bach", "title": "Cello Suite"}],
+        "program_notes": "",
+        "venue_notes": "Original venue notes from main pass.",
+    }
+    prose_response = {
+        "program_notes": "Fallback program notes.",
+        "venue_notes": "Different fallback venue notes.",
+    }
+    with patch(
+        "postroll.ai.ocr_program.run_json_prompt",
+        side_effect=[main_response, prose_response],
+    ):
+        result = ocr_program.extract_program([sample_photo])
+
+    assert result["program_notes"] == "Fallback program notes."
+    # Main pass value preserved
+    assert result["venue_notes"] == "Original venue notes from main pass."
+
+
+def test_ocr_performers_fallback_unwraps_dict_response():
+    """If the focused performers call returns {performers: [...]}, unwrap it."""
+    with patch(
+        "postroll.ai.ocr_program.run_json_prompt",
+        return_value={"performers": [{"name": "X", "role": "soloist"}]},
+    ):
+        result = ocr_program._extract_performers_only(["/fake/path.jpg"])
+    assert len(result) == 1
+    assert result[0]["name"] == "X"
+
+
+def test_ocr_pieces_fallback_unwraps_dict_response():
+    """If the focused pieces call returns {pieces: [...]} instead of a bare
+    array, _extract_pieces_only should unwrap it."""
+    with patch(
+        "postroll.ai.ocr_program.run_json_prompt",
+        return_value={"pieces": [{"composer": "X", "title": "Y"}]},
+    ):
+        result = ocr_program._extract_pieces_only(["/fake/path.jpg"])
+    assert len(result) == 1
+    assert result[0]["title"] == "Y"
+
+
+def test_salvage_list_response_routes_by_item_shape():
+    """Unit test for the salvage helper: it should pick the right schema key
+    based on what fields the array items have."""
+    pieces = [{"title": "X", "composer": "Y"}]
+    performers = [{"name": "X", "role": "soloist"}]
+    scenes = [{"name": "Act I", "visual_cues": "spotlight"}]
+
+    assert ocr_program._salvage_list_response(pieces) == {"pieces": pieces}
+    assert ocr_program._salvage_list_response(performers) == {"performers": performers}
+    assert ocr_program._salvage_list_response(scenes) == {"scenes": scenes}
+    assert ocr_program._salvage_list_response([]) == {}
+    assert ocr_program._salvage_list_response(["just", "strings"]) == {}
 
 
 def test_ocr_accepts_heic_path_and_converts(tmp_path):
@@ -254,7 +473,7 @@ def test_blog_requires_at_least_one_photo():
 def test_blog_returns_title_and_body(sample_photo):
     fake = {
         "title": "Mahler Resurrection at Carnegie Hall",
-        "body": "Para 1.\n\n[PHOTO: conductor]\n\nPara 2.",
+        "body": "It's para one.\n\n[PHOTO: conductor]\n\nThat's para two.",
         "photo_count": 4,
     }
     with patch(
@@ -284,7 +503,7 @@ def test_blog_passes_program_notes_to_prompt(sample_photo):
 
     def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
-        return {"title": "x", "body": "x", "photo_count": 4}
+        return {"title": "x", "body": "I'm here.", "photo_count": 4}
 
     with patch(
         "postroll.ai.generate_blog.run_json_prompt", side_effect=fake_run_json
@@ -318,3 +537,45 @@ def test_blog_passes_program_notes_to_prompt(sample_photo):
     assert "Composed in 1894" in prompt
     # Brand voice loaded
     assert "Dan Wright" in prompt
+
+
+# === deterministic name backstop ===
+
+def test_fix_wrong_names_corrects_first_name_against_program():
+    program = {
+        "performers": [],
+        "production_details": "Conductors: Nicole Becker, Kate Logan.",
+    }
+    body = "conductor Beth Becker's gestures stayed small. Kate Logan sang."
+    fixed = generate_blog._fix_wrong_names(body, program)
+    # Wrong first name corrected; correct full name left alone; possessive kept.
+    assert "Nicole Becker's" in fixed
+    assert "Beth" not in fixed
+    assert "Kate Logan" in fixed
+
+
+# === per-paragraph contraction backstop ===
+
+def test_fix_missing_contractions_rewords_only_offending_paragraph():
+    body = (
+        "A frame with no contraction at all.\n\n"
+        "[PHOTO: x.jpg | alt]\n\n"
+        "It's already fine here."
+    )
+    # Only the first paragraph lacks a contraction; it's reworded per-paragraph.
+    with patch(
+        "postroll.ai.generate_blog.run_prompt",
+        return_value="A frame that's got one now.",
+    ):
+        out = generate_blog._fix_missing_contractions(body)
+    assert "that's got one now" in out
+    assert "[PHOTO: x.jpg | alt]" in out      # photo marker untouched
+    assert "It's already fine here." in out   # clean paragraph untouched
+
+
+def test_fix_missing_contractions_no_call_when_all_have_contractions():
+    body = "It's fine.\n\nThat's also fine."
+    with patch("postroll.ai.generate_blog.run_prompt") as m:
+        out = generate_blog._fix_missing_contractions(body)
+    m.assert_not_called()
+    assert out == body

@@ -11,6 +11,12 @@ struct ExportView: View {
     @State private var mediaGenerationError: String? = nil
     @State private var pendingSingleDay: DayName? = nil
 
+    // Visual asset generation timing — mirrors the first generation screen so
+    // the user sees an elapsed clock against an estimated total.
+    @State private var mediaElapsed: Int = 0
+    @State private var mediaTimer: Timer? = nil
+    @State private var estimatedMediaSeconds: Double? = nil
+
     enum ExportState {
         case ready
         case exportingText
@@ -44,6 +50,7 @@ struct ExportView: View {
             }
         }
         .background(Color.cream)
+        .onDisappear { stopMediaTimer() }
         .onAppear {
             if let path = UserDefaults.standard.string(forKey: "lastExportFolder") {
                 let candidate = URL(fileURLWithPath: path)
@@ -145,12 +152,31 @@ struct ExportView: View {
             Text("Generating visual assets…")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.warmDark)
-            Text("Stories + collage: ~30s. Reels: 2 to 5 min each.")
-                .font(.light(12))
-                .foregroundStyle(Color.warmMid)
+
+            // Elapsed clock vs estimated total — mirrors the first generation
+            // screen. The estimate is content-aware: copying approved previews
+            // is near-instant, regenerating reels takes minutes.
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: "timer")
+                    .font(.system(size: 11))
+                Text(mediaElapsedFormatted)
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+                if let est = estimatedMediaSeconds {
+                    Text("/ \(TimingStore.formatClock(est))")
+                        .font(.light(12))
+                }
+            }
+            .foregroundStyle(Color.warmMid)
+
+            Text("Approved previews copy instantly. Reels take longer only when they need regenerating.")
+                .font(.light(11))
+                .foregroundStyle(Color.warmMid.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
 
             // Let user skip media generation if they just want the text
             Button("Skip, text export only") {
+                stopMediaTimer()
                 exportState = .done(folder)
             }
             .buttonStyle(.plain)
@@ -160,6 +186,43 @@ struct ExportView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, Spacing.xl)
+    }
+
+    private var mediaElapsedFormatted: String {
+        String(format: "%d:%02d", mediaElapsed / 60, mediaElapsed % 60)
+    }
+
+    private func startMediaTimer() {
+        mediaElapsed = 0
+        mediaTimer?.invalidate()
+        mediaTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            MainActor.assumeIsolated { mediaElapsed += 1 }
+        }
+    }
+
+    private func stopMediaTimer() {
+        mediaTimer?.invalidate()
+        mediaTimer = nil
+    }
+
+    /// Rough estimate for the visual asset run. Days copied from approved
+    /// previews are near-instant; days that fall through to Python regen cost
+    /// real time, dominated by reel encoding.
+    private static func estimateMediaSeconds(
+        pythonDays: [String],
+        contentDayCount: Int
+    ) -> Double {
+        let copiedDays = max(0, contentDayCount - pythonDays.count)
+        var total = Double(copiedDays) * 2.5   // file copies + Wednesday live render
+        for key in pythonDays {
+            switch DayName(rawValue: key) {
+            case .tuesday, .thursday, .friday:
+                total += 150   // reels / before-after video are the slow path
+            default:
+                total += 18    // story image regen
+            }
+        }
+        return max(total, 6)
     }
 
     private func doneContent(folder: URL) -> some View {
@@ -254,7 +317,12 @@ struct ExportView: View {
                     )
                 }.value
 
-                await MainActor.run { exportState = .generatingMedia(folder) }
+                await MainActor.run {
+                    exportState = .generatingMedia(folder)
+                    startMediaTimer()
+                    // Provisional estimate until the copy-vs-Python split is known.
+                    estimatedMediaSeconds = TimingStore.shared.mediaExportEstimate
+                }
 
                 // Step 2: copy assets from the already-approved preview files where
                 // possible, and only invoke Python for days whose preview files are
@@ -265,13 +333,37 @@ struct ExportView: View {
 
                 var daysNeedingPython: [String] = []
                 var copiedURLs: [URL] = []
+                var contentDayCount = 0
 
                 for day in daysToProcess {
                     let hasContent = (capturedEvent.weekResult?[day] != nil)
                         || (day == .friday && capturedEvent.days[day.rawValue] != nil)
                     guard hasContent else { continue }
+                    contentDayCount += 1
 
-                    if let assets = previewPaths[day.rawValue],
+                    // Wednesday: render directly from the live SwiftUI overlay so
+                    // crop offsets / cell-frame edits match exactly what the user
+                    // saw on screen. Bypasses both copy-shortcut and Python regen.
+                    if day == .wednesday,
+                       let rendered = await renderWednesdayCollage(
+                           event: capturedEvent, exportFolder: folder
+                       ) {
+                        copiedURLs.append(rendered)
+                        continue
+                    }
+
+                    // Thursday reel renders a live overlay on the saved video frames.
+                    // If the user has crop offsets, force a Python regen so they bake in.
+                    let hasUnflattenedEdits: Bool = {
+                        guard let pd = capturedEvent.days[day.rawValue] else { return false }
+                        if day == .thursday {
+                            return !pd.reelCropOffsets.isEmpty
+                        }
+                        return false
+                    }()
+
+                    if !hasUnflattenedEdits,
+                       let assets = previewPaths[day.rawValue],
                        !assets.isEmpty,
                        assets.values.allSatisfy({ FileManager.default.fileExists(atPath: $0) }) {
                         // All preview files for this day exist — copy directly, no Python needed
@@ -290,6 +382,20 @@ struct ExportView: View {
                         daysNeedingPython.append(day.rawValue)
                     }
                 }
+
+                // Refine the estimate now that we know which days copy (fast) vs
+                // regenerate via Python (slow). Prefer the learned mean for the
+                // common copy-only path; otherwise estimate from content.
+                let refinedEstimate: Double = {
+                    if daysNeedingPython.isEmpty, let learned = TimingStore.shared.mediaExportEstimate {
+                        return learned
+                    }
+                    return Self.estimateMediaSeconds(
+                        pythonDays: daysNeedingPython,
+                        contentDayCount: contentDayCount
+                    )
+                }()
+                await MainActor.run { estimatedMediaSeconds = refinedEstimate }
 
                 if daysNeedingPython.isEmpty {
                     // Every asset was copied from preview — skip Python entirely
@@ -324,16 +430,59 @@ struct ExportView: View {
                 }
 
                 await MainActor.run {
+                    // Only learn from full copy-only runs so the mean stays a
+                    // clean signal for the common fast path.
+                    if onlyDay == nil && daysNeedingPython.isEmpty {
+                        TimingStore.shared.recordMediaExport(seconds: Double(mediaElapsed))
+                    }
+                    stopMediaTimer()
                     exportState = .done(folder)
                     NotificationService.shared.notifyExportComplete(eventName: event.name)
                 }
             } catch {
                 await MainActor.run {
+                    stopMediaTimer()
                     destinationRoot.stopAccessingSecurityScopedResource()
                     exportState = .failed(error.localizedDescription)
                 }
             }
         }
+    }
+
+    /// Render Wednesday's collage from the live SwiftUI overlay. Returns the
+    /// output URL on success, nil if any precondition is missing (preview file,
+    /// layout sidecar, etc.) — caller should fall through to other paths.
+    @MainActor
+    private func renderWednesdayCollage(event: Event, exportFolder: URL) async -> URL? {
+        guard let basePath = event.previewMediaPaths[DayName.wednesday.rawValue]?["collage"]
+        else { return nil }
+        let baseURL = URL(fileURLWithPath: basePath)
+        guard FileManager.default.fileExists(atPath: baseURL.path) else { return nil }
+
+        let pd = event.days[DayName.wednesday.rawValue]
+        let cells: [CollageCell]? = {
+            if let override = pd?.collageCellOverride, !override.isEmpty { return override }
+            let layoutURL = baseURL.deletingLastPathComponent()
+                .appendingPathComponent(baseURL.deletingPathExtension().lastPathComponent + "_layout.json")
+            guard let data = try? Data(contentsOf: layoutURL),
+                  let decoded = try? JSONDecoder().decode([CollageCell].self, from: data),
+                  !decoded.isEmpty
+            else { return nil }
+            return decoded
+        }()
+        guard let cells else { return nil }
+
+        let dayDir = exportFolder.appendingPathComponent(DayName.wednesday.folderName)
+        try? FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
+        let outputURL = dayDir.appendingPathComponent("collage.png")
+
+        let ok = CollageRenderer.render(
+            baseURL: baseURL,
+            cells: cells,
+            cropOffsets: pd?.collageCropOffsets ?? [:],
+            outputURL: outputURL
+        )
+        return ok ? outputURL : nil
     }
 
 }

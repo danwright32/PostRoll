@@ -186,6 +186,9 @@ def _search_tracks(tags: str, client_id: str) -> list[dict[str, Any]]:
 
 # Words that are too generic to count as title evidence on their own.
 # E.g. "Sonata", "Symphony No. 5" — every classical piece has these.
+# Also: header/admin lines that occasionally show up as "pieces" after OCR
+# ("Welcome", "Introduction", etc.). Those have no composer and shouldn't
+# drive Jamendo searches.
 _TITLE_STOPWORDS = frozenset({
     "the", "a", "an", "and", "or", "of", "in", "on", "for", "to",
     "no", "op", "opus", "k", "bwv", "kv",
@@ -194,6 +197,19 @@ _TITLE_STOPWORDS = frozenset({
     "fantasy", "variations", "rhapsody", "overture", "elegy", "ballade",
     "movement", "movements", "act", "scene", "song", "songs", "aria",
     "minor", "major", "sharp", "flat", "natural",
+    "welcome", "introduction", "intro", "opening", "openings",
+    "greeting", "greetings", "remarks", "announcement", "announcements",
+    "interlude", "intermission", "encore", "closing", "finale",
+    "preamble", "prologue", "epilogue", "presentation",
+})
+
+# Composer "names" that are really placeholders for unknown/missing data.
+# Treat these as if the composer field were empty — never use them as a
+# Jamendo search term or as a scoring signal, otherwise we match every
+# track with the literal word "unknown" in its name.
+_PLACEHOLDER_COMPOSERS = frozenset({
+    "unknown", "anon", "anonymous", "n/a", "na", "none", "various",
+    "traditional", "trad", "tbd", "tba",
 })
 
 # Anything below this score is "probably unrelated, skip it".
@@ -224,6 +240,8 @@ def _score_match(track: dict[str, Any], composer: str, title: str) -> int:
     name = (track.get("name") or "").lower()
     artist = (track.get("artist_name") or "").lower()
     composer_last = _last_name(composer).lower()
+    if composer_last in _PLACEHOLDER_COMPOSERS:
+        composer_last = ""
 
     score = 0
     # Composer's last name in the artist credit is the strongest signal:
@@ -297,8 +315,18 @@ def search_program_pieces(
             continue
 
         last = _last_name(composer)
+        if last.lower() in _PLACEHOLDER_COMPOSERS:
+            last = ""
         title_words = _meaningful_title_words(title)
         first_title_word = title_words[0] if title_words else ""
+
+        # If this "piece" has no real composer surname AND no meaningful
+        # title words left after stopword filtering, there's nothing to
+        # search on — skip it. Otherwise we'd send queries like "unknown"
+        # or "welcome" to Jamendo and pull in unrelated junk that scores
+        # only because the placeholder word literally appears in a track.
+        if not last and not first_title_word:
+            continue
 
         # Try the most-specific query first; stop early if we already have
         # plenty of candidates from this piece.

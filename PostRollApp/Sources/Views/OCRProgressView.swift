@@ -150,8 +150,22 @@ struct OCRProgressView: View {
     @MainActor
     private func runOCR() async {
         elapsed = 0
+
+        // Defensive guard: if program images are missing (e.g. cleaned up by
+        // a stale background sweep, or a Back-from-review path that lost them),
+        // route the user back to the upload screen instead of running the
+        // Python script with no --image args.
+        let livePaths = (appState.events.first(where: { $0.id == event.id }) ?? event)
+            .programImagePaths
+        if livePaths.isEmpty {
+            var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+            ev.stage = .created
+            appState.updateEvent(ev)
+            return
+        }
+
         do {
-            var result = try await PythonBridge.shared.runOCR(imagePaths: event.programImagePaths)
+            var result = try await PythonBridge.shared.runOCR(imagePaths: livePaths)
 
             // DCINY events: the website lists conductors + group names (preferred over
             // the program, which lists every individual choir/orchestra member).
@@ -168,11 +182,22 @@ struct OCRProgressView: View {
 
             // Second pass: ask Claude to flag suspicious items in the OCR output.
             // The user resolves these on the OCR review screen before continuing.
+            // If flagging fails (rate limit, payload size, etc.), don't block —
+            // the user can still review the OCR data manually. Capture the
+            // reason so OCRReviewView can surface it as a banner.
             phaseOverride = "Checking for issues…"
-            let flags: [OCRFlag] = (try? await PythonBridge.shared.runFlagIssues(
-                ocr: result,
-                imagePaths: event.programImagePaths
-            )) ?? []
+            var flags: [OCRFlag] = []
+            var flagError: String? = nil
+            do {
+                flags = try await PythonBridge.shared.runFlagIssues(
+                    ocr: result,
+                    imagePaths: livePaths
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                flagError = error.localizedDescription
+            }
 
             // Program images stay on disk through the review step — flag review
             // could conceivably need them later. They're cleaned up when the
@@ -180,6 +205,7 @@ struct OCRProgressView: View {
             var updated = event
             updated.ocrResult = result
             updated.pendingFlags = flags
+            updated.pendingFlagsError = flagError
             updated.stage = .ocrDone
             appState.updateEvent(updated)
             NotificationService.shared.notifyOCRComplete(eventName: event.name)
@@ -191,8 +217,12 @@ struct OCRProgressView: View {
     }
 
     private func cancelOCR() {
-        var ev = event
-        ev.stage = .programUploaded
+        // Read live from appState — `let event` at view init can go stale.
+        // Reverting to .created tears down this view, which cancels .task and
+        // sends SIGTERM to the Python OCR process (see PythonBridge.runProcess).
+        // programImagePaths are preserved so the user can retry from the upload screen.
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        ev.stage = .created
         appState.updateEvent(ev)
     }
 }

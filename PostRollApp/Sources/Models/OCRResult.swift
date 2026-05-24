@@ -116,6 +116,7 @@ struct OCRFlag: Identifiable, Codable, Hashable {
     var id: String
     var fieldPath: [FlagPathSegment]
     var currentValue: String      // Stringified for display; complex values become JSON text
+    var suggestedValue: String    // Claude's best guess at the corrected value
     var concern: String
     var programContext: String
     var resolved: Bool = false
@@ -124,12 +125,15 @@ struct OCRFlag: Identifiable, Codable, Hashable {
         case id, concern, resolved
         case fieldPath      = "field_path"
         case currentValue   = "current_value"
+        case suggestedValue = "suggested_value"
         case programContext = "program_context"
     }
 
     init(id: String = "", fieldPath: [FlagPathSegment] = [], currentValue: String = "",
-         concern: String = "", programContext: String = "", resolved: Bool = false) {
+         suggestedValue: String = "", concern: String = "", programContext: String = "",
+         resolved: Bool = false) {
         self.id = id; self.fieldPath = fieldPath; self.currentValue = currentValue
+        self.suggestedValue = suggestedValue
         self.concern = concern; self.programContext = programContext; self.resolved = resolved
     }
 
@@ -144,6 +148,14 @@ struct OCRFlag: Identifiable, Codable, Hashable {
             currentValue = any.displayString
         } else {
             currentValue = ""
+        }
+        // suggested_value, like current_value, may arrive as any JSON type
+        if let s = try? c.decode(String.self, forKey: .suggestedValue) {
+            suggestedValue = s
+        } else if let any = try? c.decode(JSONValue.self, forKey: .suggestedValue) {
+            suggestedValue = any.displayString
+        } else {
+            suggestedValue = ""
         }
         concern         = (try? c.decode(String.self,                forKey: .concern))         ?? ""
         programContext  = (try? c.decode(String.self,                forKey: .programContext))  ?? ""

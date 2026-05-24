@@ -45,9 +45,12 @@ ROW_SIZES = [2, 3, 2, 3, 2, 3, 3, 1, 2, 3, 2, 3]  # hero every ~8th row
 
 # Max height cap for hero (single photo) rows — prevents them dominating
 HERO_MAX_H = 480
+# Portrait heroes need more vertical room to read as hero rather than squashed.
+# 65% of canvas height feels impactful without swallowing the scroll.
+HERO_MAX_H_PORTRAIT = int(CANVAS_H * 0.65)
 
 # Scroll timing
-SCROLL_DURATION = 30.0   # seconds to scroll the full strip
+SCROLL_DURATION = 40.0   # seconds to scroll the full strip
 HOLD_END = 1.0           # hold at bottom before closing
 CLOSING_FRAME_DURATION = 5.0
 
@@ -94,8 +97,7 @@ def build_collage_strip(
     """Build a tall collage strip from photos arranged in masonry rows.
 
     crop_offsets: optional list of (x, y, zoom) triples in [-1, 1] / [≥1]
-                  parallel to photo_paths. Default (0, 0, 1) = centred fill
-                  with the original 0.4 top-bias used in generate_collage.
+                  parallel to photo_paths. Default (0, 0, 1) = centred fill.
     return_layout: when True, returns (strip_image, cells) where cells is a
                    list of {photo_path, x, y, w, h} dicts in strip-pixel
                    coordinates — used by the app to overlay crop controls.
@@ -131,9 +133,12 @@ def build_collage_strip(
         # Natural height where all photos fit side by side
         natural_h = int(row_avail_w / sum(ratios))
 
-        # Cap hero rows so they don't dominate scroll time
-        if photos_in_row == 1 and natural_h > HERO_MAX_H:
-            natural_h = HERO_MAX_H
+        # Cap hero rows so they don't dominate scroll time. Portraits get a
+        # taller cap so a single portrait reads as a hero instead of a stripe.
+        if photos_in_row == 1:
+            cap = HERO_MAX_H_PORTRAIT if ratios[0] < 1.0 else HERO_MAX_H
+            if natural_h > cap:
+                natural_h = cap
 
         # Compute widths with slight asymmetry
         if photos_in_row == 1:
@@ -302,7 +307,7 @@ def generate_reel_scroll(
 ) -> str:
     """Generate a photo scroll reel with masonry collage layout.
 
-    scroll_duration: seconds to scroll the full strip (default 30.0).
+    scroll_duration: seconds to scroll the full strip (default 40.0).
     audio_tags: comma-separated Jamendo tags; overrides _DEFAULT_AUDIO_TAGS when provided.
     pieces: OCR program pieces. If audio_path is None, we'll try to find a
             Jamendo recording of one of the program pieces before falling
@@ -320,25 +325,13 @@ def generate_reel_scroll(
         if audio_path is None:
             audio_path = fetch_audio(audio_tags or _DEFAULT_AUDIO_TAGS)
 
-    # Sort photos by filename using natural (numeric) order so that
-    # "-3" comes before "-13" comes before "-101".
-    import re as _re
+    # photo_paths is the source of truth — sorted once at import time on the
+    # Swift side. Do NOT re-sort here: any user reorder (e.g. the Thursday
+    # swap-photos feature) lives in this array and re-sorting silently
+    # discards it, producing an MP4 that disagrees with the strip PNG +
+    # layout JSON written by build_reel_preview (which doesn't sort).
     from pathlib import Path as _Path
-
-    def _natural_key(name: str) -> list:
-        """Split filename into text/number chunks for natural sorting."""
-        return [int(c) if c.isdigit() else c.lower() for c in _re.split(r'(\d+)', name)]
-
-    print(f"[generate_reel_scroll] BEFORE sort ({len(photo_paths)} photos):", flush=True)
-    for i, p in enumerate(photo_paths):
-        print(f"  [{i}] {_Path(p).name}", flush=True)
-    if crop_offsets:
-        paired = sorted(zip(photo_paths, crop_offsets), key=lambda p: _natural_key(_Path(p[0]).name))
-        photo_paths = [p for p, _ in paired]
-        crop_offsets = [o for _, o in paired]
-    else:
-        photo_paths = sorted(photo_paths, key=lambda p: _natural_key(_Path(p).name))
-    print(f"[generate_reel_scroll] AFTER sort ({len(photo_paths)} photos):", flush=True)
+    print(f"[generate_reel_scroll] photos in order ({len(photo_paths)}):", flush=True)
     for i, p in enumerate(photo_paths):
         print(f"  [{i}] {_Path(p).name}", flush=True)
 

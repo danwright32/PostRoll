@@ -29,13 +29,15 @@ Manifest format (input — same as generate_week.py):
                    "screen_recording": "/path/to/rec.mov",   # optional → enables reel
                    "raw_photo": "/path/to/raw.jpg",          # optional → enables reel
                    "edited_photo": "/path/to/edit.jpg",      # optional → enables reel
+                   "bw_photo": "/path/to/bw.jpg",            # optional → 3-photo reveal (color over B&W)
                    "audio": "/path/to/audio.m4a" },          # optional → Jamendo fallback
     "wednesday": { "photos": [...] },
     "thursday":  { "photos": [...],
                    "audio": "/path/to/audio.m4a" },          # optional → Jamendo fallback
     "friday":    { "photos": [...],
                    "raw_photo": "/path/to/raw.jpg",          # optional → enables before/after
-                   "edited_photo": "/path/to/edit.jpg" }     # optional → enables before/after
+                   "edited_photo": "/path/to/edit.jpg",      # optional → enables before/after
+                   "bw_photo": "/path/to/bw.jpg" }           # optional → 3-photo graphic (RAW / color / B&W)
   }
 }
 
@@ -195,10 +197,15 @@ def generate_media(
             rec            = day_info.get("screen_recording")
             raw            = day_info.get("raw_photo")
             edit           = day_info.get("edited_photo")
+            bw             = day_info.get("bw_photo")   # optional B&W after → 3-photo treatment
             audio          = day_info.get("audio")
             target_duration = float(day_info.get("target_duration", 20.0))
 
-            reel_style = day_info.get("reel_style") or random.choice(["slider", "morph"])
+            # 3-photo mode (B&W present) always uses the slider reveal so the
+            # color-over-B&W reveal reads consistently; otherwise pick a style.
+            reel_style = "slider" if bw else (
+                day_info.get("reel_style") or random.choice(["slider", "morph"])
+            )
 
             # Also generate the standalone before/after PNG. Serves two roles:
             #   1. Closing frame for the slider/morph reel (always needed on disk).
@@ -224,6 +231,7 @@ def generate_media(
                         org=org,
                         venue=venue,
                         logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                        bw_path=bw,
                     )
                     if not final_export:
                         day_result["story_cover"] = ba_path
@@ -233,8 +241,9 @@ def generate_media(
                     ba_path = None
 
             if ffmpeg_available and not static_only and raw and edit:
-                # Screen recording reel takes priority when available
-                if rec:
+                # Screen recording reel takes priority when available — except in
+                # 3-photo mode, which always uses the still-image slider reveal.
+                if rec and not bw:
                     try:
                         from ..media.generate_reel_screen import generate_reel_screen
                         reel_path = str(day_dir / "reel_screen.mp4")
@@ -286,6 +295,7 @@ def generate_media(
                                 venue=venue,
                                 closing_frame_path=ba_path,
                                 logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                                bw_path=bw,
                             )
                         day_result["reel"] = reel_path
                         print(f"[generate_media] tuesday: {reel_style} reel → {reel_path}", flush=True)
@@ -371,7 +381,7 @@ def generate_media(
         elif day_name == "thursday":
             if ffmpeg_available and not static_only:
                 audio           = day_info.get("audio")
-                scroll_duration = float(day_info.get("scroll_duration", 30.0))
+                scroll_duration = float(day_info.get("scroll_duration", 40.0))
                 seed            = day_info.get("reel_seed")
                 crop_offsets    = day_info.get("crop_offsets")  # list[(x, y, zoom)] parallel to photos
                 audio_tags      = _derive_audio_tags(shoot_type, pieces)
@@ -445,6 +455,7 @@ def generate_media(
         elif day_name == "friday":
             raw  = day_info.get("raw_photo")
             edit = day_info.get("edited_photo")
+            bw   = day_info.get("bw_photo")   # optional B&W after → 3-photo graphic
 
             if raw and edit:
                 try:
@@ -457,6 +468,7 @@ def generate_media(
                         org=org,
                         venue=venue,
                         logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                        bw_path=bw,
                     )
                     day_result["before_after"] = ba_path
                     print(f"[generate_media] friday: before/after → {ba_path}", flush=True)

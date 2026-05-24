@@ -63,12 +63,80 @@ def is_humanizer_available(path: str | Path | None = None) -> bool:
     return p.exists()
 
 
+# Blog-only hard ban injected into the humanizer (Pass 3) prompt via
+# build_review_prompt(extra_hard_bans=...). Captions have no practical-value
+# beat or CTA, so only the blog generators pass this. The Pass 1/2 rules
+# already forbid narrating the business case; this restates it as a Pass 3
+# hard ban because the humanizer kept letting it through in the CTA.
+BLOG_CTA_HARD_BAN = """\
+7. **HARD BAN (CTA): the practical value beat must NOT explain to the
+   reader why the photos matter.** Do not write sentences like "these
+   photos show kids who..." or "this kind of documentation holds up in
+   grant applications because...". Trust the audience: a presenter
+   reading this already knows why documentation matters. State what the
+   photos contain (briefly), then move to the CTA. If a sentence in the
+   CTA or the preceding paragraph could be prefaced with "in case you
+   didn't know," cut it."""
+
+
+# Blog-only Pass 3 hard ban. Complements BLOG_CTA_HARD_BAN: the humanizer kept
+# reintroducing business-case narration (where the files get used) even with
+# that ban present, so this restates the use-case angle explicitly.
+BLOG_BUSINESS_CASE_HARD_BAN = """\
+8. **HARD BAN: do not add sentences explaining what the photos will be
+   used for.** "These photos end up in grant applications" is the
+   pattern. The practical value beat establishes why documentation
+   matters by describing what's in the frames, not by telling the
+   reader where the files will be sent. If a sentence in the practical
+   value paragraph could appear in a sales deck, cut it."""
+
+
+# Blog-only voice check injected into the voice review (Pass 2) prompt via
+# build_voice_review_prompt(extra_checks=...). The brand voice requires
+# contractions throughout, but the blog draft kept coming back formal, so
+# this restates it as an explicit per-paragraph hard ban for blog posts.
+BLOG_VOICE_CONTRACTION_CHECK = """\
+6. **HARD BAN: contractions in every paragraph.** Every paragraph must
+   contain at least one contraction. No exceptions. A paragraph with
+   zero contractions reads clinical and formal. That's a voice failure.
+   If a paragraph has no contraction, rewrite it before returning.
+   BLOCKING GATE: before returning, go through the draft paragraph by
+   paragraph and, for each one, find the contraction it contains. If any
+   paragraph has none, rewrite it before returning. A draft returned
+   with any paragraph still missing a contraction has not finished this
+   pass. Do this paragraph-by-paragraph check as an INTERNAL scratchpad
+   only: do NOT print the list or any commentary, the returned output
+   must be only the post, valid JSON."""
+
+
+# Blog-only literal second-person scan. Pass 1 (BLOG_WRITING_RULES) already
+# runs this, but generic "you" kept surviving into the final draft, so the
+# voice (Pass 2) and humanizer (Pass 3) passes re-run the same token scan.
+BLOG_SECOND_PERSON_SCAN = """\
+HARD BAN (second person): scan the text for every instance of the word
+"you" or "your." Each one is a violation UNLESS it appears in the CTA
+("if you're planning…") or inside a direct quote. There are no other
+valid uses. Rewrite every other instance in Dan's first person before
+returning. Do this scan internally; the output stays valid JSON with no
+added commentary."""
+
+
+# Bundles of blog-only additions passed to the shared review prompts. Add
+# future blog-specific rules to the bundle so call sites never change.
+BLOG_VOICE_EXTRA_CHECKS = BLOG_VOICE_CONTRACTION_CHECK + "\n\n" + BLOG_SECOND_PERSON_SCAN
+BLOG_HUMANIZER_EXTRA_BANS = (
+    BLOG_CTA_HARD_BAN + "\n\n" + BLOG_BUSINESS_CASE_HARD_BAN
+    + "\n\n" + BLOG_SECOND_PERSON_SCAN
+)
+
+
 def build_review_prompt(
     *,
     draft_json: str,
     humanizer_rules: str,
     brand_voice: str,
     output_shape_description: str,
+    extra_hard_bans: str = "",
 ) -> str:
     """Build a second-pass prompt that reviews a draft and returns a cleaned version.
 
@@ -85,7 +153,15 @@ def build_review_prompt(
             than humanizer's default.
         output_shape_description: One-line description of what shape the
             cleaned JSON should keep.
+        extra_hard_bans: Optional extra numbered hard-ban text injected
+            after the built-in bans. Blog callers pass BLOG_CTA_HARD_BAN;
+            captions leave it empty.
     """
+    extra_block = (
+        "\n" + extra_hard_bans.strip() + "\n"
+        if extra_hard_bans and extra_hard_bans.strip()
+        else ""
+    )
     return f"""\
 You are humanizer, a writing editor. You apply the rules in the document
 below to remove AI writing tells from a draft, while matching the voice
@@ -156,15 +232,15 @@ contains any of these, you MUST rewrite. Do not leave them in.
 6. **NO "not X, Y" or "same X, same Y" rhetorical parallelism.**
    "Same bill, same night." "Not just a show, a night." Banned.
    Rewrite as a real sentence.
-
-Before you return anything, scan your output for each of these six
-and verify zero violations. If you catch one, fix it before
+{extra_block}
+Before you return anything, scan your output for each of the hard bans
+above and verify zero violations. If you catch one, fix it before
 returning.
 
 ## YOUR PROCESS
 
 1. Read the draft carefully.
-2. Scan for the six hard bans above. Flag every violation.
+2. Scan for the hard bans above. Flag every violation.
 3. Identify additional AI tells using the humanizer rules above.
 4. Identify brand voice violations using the voice calibration sample.
 5. Apply humanizer's "draft → audit → revise" loop:
@@ -172,8 +248,8 @@ returning.
    b. Ask yourself: "What makes this still obviously AI generated?"
    c. List the remaining tells in your head (do NOT output them).
    d. Revise once more to fix those.
-6. **Final hard-ban scan.** Re-read your rewrite and check all six
-   hard bans one more time. No em dashes. No parallel-three credits.
+6. **Final hard-ban scan.** Re-read your rewrite and check every
+   hard ban above one more time. No em dashes. No parallel-three credits.
    No comma-list openers. No copula avoidance. No photo description.
    No "same X, same Y" parallelism. If any remain, revise again.
 7. Return the final cleaned version in the SAME JSON shape as the
@@ -198,6 +274,7 @@ def build_voice_review_prompt(
     draft_json: str,
     brand_voice: str,
     output_shape_description: str,
+    extra_checks: str = "",
 ) -> str:
     """Build a third-pass prompt that reviews a draft ONLY against brand voice.
 
@@ -216,7 +293,15 @@ def build_voice_review_prompt(
         brand_voice: The brand voice doc text.
         output_shape_description: One-line description of the JSON shape
             to preserve.
+        extra_checks: Optional extra numbered checklist text injected
+            after the built-in voice checks. Blog callers pass
+            BLOG_VOICE_CONTRACTION_CHECK; captions leave it empty.
     """
+    checks_block = (
+        "\n" + extra_checks.strip() + "\n"
+        if extra_checks and extra_checks.strip()
+        else ""
+    )
     return f"""\
 You are Dan Wright's voice editor. Your ONLY job on this pass is to
 make the draft below sound like Dan actually wrote it, according to
@@ -271,7 +356,7 @@ Read the draft with the brand voice doc in mind and ask, per caption:
    copied from the brand voice example captions?** Those are
    STRUCTURAL samples, not content to reuse. Rewrite with the same
    shape but event-specific content.
-
+{checks_block}
 ## WHAT NOT TO CHANGE
 
 - Factual content from the program/enrichment data.

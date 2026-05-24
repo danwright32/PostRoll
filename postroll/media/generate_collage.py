@@ -129,7 +129,7 @@ def crop_to_fill(
     overflow_y = max(0, new_h - target_h)
     left = int(overflow_x * (0.5 + crop_offset_x * 0.5))
     left = max(0, min(overflow_x, left))
-    top  = int(overflow_y * (0.4 + crop_offset_y * 0.4))
+    top  = int(overflow_y * (0.5 + crop_offset_y * 0.5))
     top  = max(0, min(overflow_y, top))
     return resized.crop((left, top, left + target_w, top + target_h))
 
@@ -177,7 +177,7 @@ def _place_on_blur(
         paste_y = max(0, min(slack_y, paste_y))
     else:
         oy = -slack_y
-        paste_y = -int(oy * (0.4 + crop_offset_y * 0.4))
+        paste_y = -int(oy * (0.5 + crop_offset_y * 0.5))
 
     bg.paste(resized, (paste_x, paste_y))
     return bg

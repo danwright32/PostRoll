@@ -114,6 +114,52 @@ def prepare_photo_simple(photo: Image.Image, edit_photo: Image.Image) -> tuple[I
     return canvas, py
 
 
+def prepare_stacked_after(
+    color_photo: Image.Image,
+    bw_photo: Image.Image,
+    bg_photo: Image.Image,
+) -> Image.Image:
+    """Build the 'after' canvas for 3-photo mode: the color edit stacked above
+    the B&W edit, both fit within the clear area between the reel's header and
+    footer on a blurred background. Used as the slider's reveal target so both
+    afters are visible at once. Each photo fits to its own aspect, so the B&W
+    can be a different crop than the color.
+    """
+    canvas_ratio = CANVAS_W / CANVAS_H
+    if bg_photo.width / bg_photo.height > canvas_ratio:
+        bg_scale = CANVAS_H / bg_photo.height
+    else:
+        bg_scale = CANVAS_W / bg_photo.width
+    bg_w = int(bg_photo.width * bg_scale)
+    bg_h = int(bg_photo.height * bg_scale)
+    bg = bg_photo.resize((bg_w, bg_h), Image.LANCZOS)
+    bg_left = (bg_w - CANVAS_W) // 2
+    bg_top = (bg_h - CANVAS_H) // 2
+    bg = bg.crop((bg_left, bg_top, bg_left + CANVAS_W, bg_top + CANVAS_H))
+    bg = bg.filter(ImageFilter.GaussianBlur(radius=BG_BLUR_RADIUS))
+    canvas = bg.convert("RGB")
+
+    content_top = HEADER_H
+    content_bottom = CANVAS_H - FOOTER_H
+    gap = 8
+    half_h = (content_bottom - content_top - gap) // 2
+
+    for idx, photo in enumerate([color_photo, bw_photo]):
+        ratio = photo.width / photo.height
+        fit_w = CANVAS_W
+        fit_h = int(fit_w / ratio)
+        if fit_h > half_h:
+            fit_h = half_h
+            fit_w = int(fit_h * ratio)
+        resized = photo.convert("RGB").resize((fit_w, fit_h), Image.LANCZOS)
+        region_top = content_top + idx * (half_h + gap)
+        px = (CANVAS_W - fit_w) // 2
+        py = region_top + (half_h - fit_h) // 2
+        canvas.paste(resized, (px, py))
+
+    return canvas
+
+
 def ease_in_out(t: float) -> float:
     """Dramatic ease — slow start, fast middle, slow end."""
     if t < 0.3:
@@ -218,8 +264,13 @@ def generate_frame(
     zoom: float = 1.0,
     logo: Image.Image | None = None,
     show_logo: bool = False,
+    show_edit_label: bool = True,
 ) -> Image.Image:
-    """Generate a single frame with effects."""
+    """Generate a single frame with effects.
+
+    show_edit_label: suppressed in 3-photo mode, where the revealed side is a
+    color-over-B&W composite and a single "Edit" label would be misleading.
+    """
     # Apply zoom
     raw_zoomed = apply_zoom(raw_canvas, zoom) if zoom > 1.001 else raw_canvas
     edit_zoomed = apply_zoom(edit_canvas, zoom) if zoom > 1.001 else edit_canvas
@@ -254,7 +305,7 @@ def generate_frame(
     label_y = int(CANVAS_H * 0.75)
 
     # "Edit" label — revealed by the slider (clipped to left of divider)
-    if divider_x > LABEL_MARGIN:
+    if show_edit_label and divider_x > LABEL_MARGIN:
         lx = LABEL_MARGIN
 
         # Draw label on a separate layer, then mask to divider position
@@ -337,6 +388,7 @@ def generate_reel_slider(
     venue: str = "",
     closing_frame_path: str | None = None,
     logo_path: str | None = None,
+    bw_path: str | None = None,
 ) -> str:
     """Generate a slider reveal reel with branded chrome.
 
@@ -350,6 +402,8 @@ def generate_reel_slider(
         venue: Venue for header
         closing_frame_path: Optional path to before/after closing frame PNG
         logo_path: Optional path to DW logo for header/footer
+        bw_path: Optional B&W after. When set, the slider reveals RAW into a
+            color-over-B&W composite so both afters show at once (3-photo mode).
     """
     if audio_path is None:
         try:
@@ -362,10 +416,18 @@ def generate_reel_slider(
     edit_photo = Image.open(edit_path)
     font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_THIN)
 
-    # Pre-render both photos at fit-to-width
+    # 3-photo mode: the revealed "after" is the color edit stacked over the B&W.
+    three_photo = bool(bw_path) and Path(bw_path).exists()
+
+    # Pre-render the before (RAW) at fit-to-width
     raw_canvas, photo_y = prepare_photo_simple(raw_photo, edit_photo)
-    edit_canvas, _ = prepare_photo_simple(edit_photo, edit_photo)
+    if three_photo:
+        bw_photo = Image.open(bw_path)
+        edit_canvas = prepare_stacked_after(edit_photo, bw_photo, edit_photo)
+    else:
+        edit_canvas, _ = prepare_photo_simple(edit_photo, edit_photo)
     photo_h = int(CANVAS_W / (raw_photo.width / raw_photo.height))
+    show_edit = not three_photo
 
     # Load closing frame if provided
     closing_frame = None
@@ -411,7 +473,7 @@ def generate_reel_slider(
             phase_end_4 = phase_end_3 + transition_frames
 
             if i < phase_end_1:
-                frame = generate_frame(raw_z, edit_z, 0, font, zoom=1.0)
+                frame = generate_frame(raw_z, edit_z, 0, font, zoom=1.0, show_edit_label=show_edit)
                 frame = draw_branded_chrome(
                     frame, event_name, org, venue, logo, photo_y, photo_h
                 )
@@ -421,13 +483,13 @@ def generate_reel_slider(
                 t = sweep_i / reveal_frames
                 eased = ease_in_out(t)
                 divider_x = int(eased * CANVAS_W)
-                frame = generate_frame(raw_z, edit_z, divider_x, font, zoom=1.0)
+                frame = generate_frame(raw_z, edit_z, divider_x, font, zoom=1.0, show_edit_label=show_edit)
                 frame = draw_branded_chrome(
                     frame, event_name, org, venue, logo, photo_y, photo_h
                 )
 
             elif i < phase_end_3:
-                frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0)
+                frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0, show_edit_label=show_edit)
                 frame = draw_branded_chrome(
                     frame, event_name, org, venue, logo, photo_y, photo_h
                 )
@@ -441,13 +503,13 @@ def generate_reel_slider(
                 # less jarring than the flash.
                 blend_t = ease_in_out((i - phase_end_3) / transition_frames)
                 if closing_frame:
-                    edit_frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0)
+                    edit_frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0, show_edit_label=show_edit)
                     edit_frame = draw_branded_chrome(
                         edit_frame, event_name, org, venue, logo, photo_y, photo_h
                     )
                     frame = Image.blend(edit_frame, closing_frame, blend_t)
                 else:
-                    edit_frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0)
+                    edit_frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0, show_edit_label=show_edit)
                     frame = draw_branded_chrome(
                         edit_frame, event_name, org, venue, logo, photo_y, photo_h
                     )
@@ -457,7 +519,7 @@ def generate_reel_slider(
                 if closing_frame:
                     frame = closing_frame
                 else:
-                    frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0)
+                    frame = generate_frame(raw_z, edit_z, CANVAS_W, font, zoom=1.0, show_edit_label=show_edit)
                     frame = draw_branded_chrome(
                         frame, event_name, org, venue, logo, photo_y, photo_h
                     )
@@ -506,6 +568,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate a slider reveal reel")
     parser.add_argument("--raw", required=True, help="Path to RAW photo")
     parser.add_argument("--edit", required=True, help="Path to edited photo")
+    parser.add_argument("--bw", default=None, help="Optional B&W after — reveals color over B&W (3-photo mode)")
     parser.add_argument("--audio", default=None, help="Path to audio file (omit to auto-fetch from Jamendo)")
     parser.add_argument("--event", default="", help="Event name")
     parser.add_argument("--org", default="", help="Organization")
@@ -525,6 +588,7 @@ def main():
         venue=args.venue,
         closing_frame_path=args.closing_frame,
         logo_path=args.logo,
+        bw_path=args.bw,
     )
 
 

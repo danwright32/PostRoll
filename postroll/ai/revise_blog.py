@@ -42,13 +42,22 @@ from pathlib import Path
 from typing import Any
 
 from .ai_tells import (
+    BLOG_HUMANIZER_EXTRA_BANS,
+    BLOG_VOICE_EXTRA_CHECKS,
     build_review_prompt,
     build_voice_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
 )
 from .claude_client import run_json_prompt, load_brand_voice, ClaudeError
-from .generate_blog import _format_performers, _format_pieces, BLOG_WRITING_RULES
+from .generate_blog import (
+    _fix_missing_contractions,
+    _fix_wrong_names,
+    _format_performers,
+    _format_pieces,
+    BLOG_STRUCTURE,
+    BLOG_WRITING_RULES,
+)
 
 
 REVISE_PROMPT = """\
@@ -90,6 +99,8 @@ Apply Dan's feedback to revise the title and body. Rules:
    the only photos available; you cannot invent new ones.
 2. Keep 10-12 short paragraphs separated by blank lines.
 3. No headings, no bullets, no section breaks.
+
+{blog_structure}
 
 Prose rules (same as initial generation — all apply):
 {blog_writing_rules}
@@ -137,6 +148,7 @@ def revise_blog(
 
     prompt = REVISE_PROMPT.format(
         brand_voice=brand_voice_text,
+        blog_structure=BLOG_STRUCTURE,
         blog_writing_rules=BLOG_WRITING_RULES,
         event=event,
         org=org,
@@ -165,6 +177,7 @@ def revise_blog(
             draft_json=json.dumps(data, ensure_ascii=False, indent=2),
             brand_voice=brand_voice_text,
             output_shape_description=blog_shape,
+            extra_checks=BLOG_VOICE_EXTRA_CHECKS,
         )
         data = run_json_prompt(voice_prompt, timeout=600)
         if not isinstance(data, dict):
@@ -179,6 +192,7 @@ def revise_blog(
             humanizer_rules=humanizer_rules,
             brand_voice=brand_voice_text,
             output_shape_description=blog_shape,
+            extra_hard_bans=BLOG_HUMANIZER_EXTRA_BANS,
         )
         data = run_json_prompt(review_prompt, timeout=600)
         if not isinstance(data, dict):
@@ -186,9 +200,11 @@ def revise_blog(
                 f"Humanizer pass returned {type(data).__name__}, expected JSON object"
             )
 
+    final_body = _fix_wrong_names(data.get("body", body).strip(), program)
+    final_body = _fix_missing_contractions(final_body)
     return {
         "title":       data.get("title", title).strip(),
-        "body":        data.get("body", body).strip(),
+        "body":        final_body,
         "photo_count": photo_count,
     }
 

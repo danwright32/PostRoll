@@ -34,6 +34,13 @@ struct OCRReviewView: View {
 
     private var unresolvedFlags: [OCRFlag] { flags.filter { !$0.resolved } }
 
+    /// Read the live event from AppState so a re-run that updates the error
+    /// state reflects immediately. Falls back to the captured event.
+    private var liveFlagsError: String? {
+        (appState.events.first(where: { $0.id == event.id }) ?? event)
+            .pendingFlagsError
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
@@ -57,11 +64,24 @@ struct OCRReviewView: View {
                         .padding(.bottom, Spacing.md)
                     }
 
+                    if let flagError = liveFlagsError {
+                        BrandBanner(
+                            icon: "exclamationmark.triangle",
+                            message: "Auto-flagging didn't run: \(flagError) The data was extracted, but Claude couldn't double-check it for issues. Review the sections below manually before continuing.",
+                            style: .error
+                        )
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.md)
+                    }
+
                     if !flags.isEmpty {
                         FlagReviewSection(
                             flags: $flags,
                             onApply: { flag, newValue in applyFlag(flag, newValue: newValue) },
-                            onDismiss: { flag in dismissFlag(flag) }
+                            onDismiss: { flag in dismissFlag(flag) },
+                            onReflow: { flag, message in
+                                try await reflowFlag(flag, userMessage: message)
+                            }
                         )
                         .padding(.horizontal, Spacing.xl)
                         .padding(.bottom, Spacing.md)
@@ -223,6 +243,34 @@ struct OCRReviewView: View {
         markResolved(flag)
     }
 
+    /// Natural-language reflow: hand the flag + user feedback to Claude and
+    /// let it produce a multi-op patch. Returns the assistant's reply text
+    /// so the FlagRow can show it inline. Throws on bridge / patch failure.
+    @discardableResult
+    private func reflowFlag(_ flag: OCRFlag, userMessage: String) async throws -> String {
+        let liveImages = (appState.events.first(where: { $0.id == event.id }) ?? event)
+            .programImagePaths
+        let response = try await PythonBridge.shared.reviewFlag(
+            flag: flag,
+            ocr: ocr,
+            imagePaths: liveImages,
+            userMessage: userMessage
+        )
+        if let patch = response.patch, !patch.isEmpty {
+            let newOCR = try await PythonBridge.shared.applyFlagPatch(
+                patch: patch,
+                flag: flag,
+                ocr: ocr,
+                imagePaths: liveImages
+            )
+            ocr = newOCR
+        }
+        if response.resolved {
+            markResolved(flag)
+        }
+        return response.assistantReply
+    }
+
     private func markResolved(_ flag: OCRFlag) {
         guard let idx = flags.firstIndex(where: { $0.id == flag.id }) else { return }
         flags[idx].resolved = true
@@ -303,6 +351,7 @@ struct OCRReviewView: View {
         ev.eventHandles = deduped.joined(separator: ", ")
         ev.programImagePaths = []
         ev.pendingFlags = []
+        ev.pendingFlagsError = nil
         ev.stage = .photosAssigned
         appState.updateEvent(ev)
     }
@@ -376,11 +425,22 @@ private struct PerformersEditor: View {
         performers.contains { !$0.name.isEmpty && $0.handle.isEmpty }
     }
 
+    private func performerBinding(id: UUID, fallback: Performer) -> Binding<Performer> {
+        Binding(
+            get: { performers.first(where: { $0.id == id }) ?? fallback },
+            set: { newValue in
+                if let idx = performers.firstIndex(where: { $0.id == id }) {
+                    performers[idx] = newValue
+                }
+            }
+        )
+    }
+
     var body: some View {
         VStack(spacing: Spacing.sm) {
-            ForEach($performers) { $p in
-                PerformerRow(performer: $p) {
-                    if let idx = performers.firstIndex(where: { $0.id == p.id }) {
+            ForEach(performers) { performer in
+                PerformerRow(performer: performerBinding(id: performer.id, fallback: performer)) {
+                    if let idx = performers.firstIndex(where: { $0.id == performer.id }) {
                         let snapshot = performers[idx]
                         performers.remove(at: idx)
                         onDeleted(snapshot, idx)
@@ -708,23 +768,36 @@ private struct PiecesEditor: View {
         pieces.filter { $0.notes.trimmingCharacters(in: .whitespaces).isEmpty }.count
     }
 
+    private func pieceBinding(id: UUID, fallback: Piece) -> Binding<Piece> {
+        Binding(
+            get: { pieces.first(where: { $0.id == id }) ?? fallback },
+            set: { newValue in
+                if let idx = pieces.firstIndex(where: { $0.id == id }) {
+                    pieces[idx] = newValue
+                }
+            }
+        )
+    }
+
     var body: some View {
         VStack(spacing: Spacing.sm) {
-            ForEach($pieces) { $p in
-                PieceRow(piece: $p, isReorderTarget: reorderTargetID == p.id) {
-                    if let idx = pieces.firstIndex(where: { $0.id == p.id }) {
+            ForEach(pieces) { piece in
+                let pieceID = piece.id
+                PieceRow(piece: pieceBinding(id: pieceID, fallback: piece),
+                         isReorderTarget: reorderTargetID == pieceID) {
+                    if let idx = pieces.firstIndex(where: { $0.id == pieceID }) {
                         let snapshot = pieces[idx]
                         pieces.remove(at: idx)
                         onDeleted(snapshot, idx)
                     }
                 }
-                .draggable(p.id.uuidString)
+                .draggable(pieceID.uuidString)
                 .dropDestination(for: String.self) { items, _ in
                     guard let srcIDString = items.first,
                           let srcID = UUID(uuidString: srcIDString),
-                          srcID != p.id,
+                          srcID != pieceID,
                           let srcIdx = pieces.firstIndex(where: { $0.id == srcID }),
-                          let dstIdx = pieces.firstIndex(where: { $0.id == p.id })
+                          let dstIdx = pieces.firstIndex(where: { $0.id == pieceID })
                     else { return false }
                     withAnimation(.easeOut(duration: 0.2)) {
                         pieces.move(
@@ -734,7 +807,7 @@ private struct PiecesEditor: View {
                     }
                     return true
                 } isTargeted: { targeted in
-                    reorderTargetID = targeted ? p.id : (reorderTargetID == p.id ? nil : reorderTargetID)
+                    reorderTargetID = targeted ? pieceID : (reorderTargetID == pieceID ? nil : reorderTargetID)
                 }
             }
             BrandAddButton(label: "Add Work") { pieces.append(Piece()) }
@@ -851,6 +924,17 @@ private struct PieceRow: View {
 private struct ScenesEditor: View {
     @Binding var scenes: [ProgramScene]
 
+    private func sceneBinding(id: UUID, fallback: ProgramScene) -> Binding<ProgramScene> {
+        Binding(
+            get: { scenes.first(where: { $0.id == id }) ?? fallback },
+            set: { newValue in
+                if let idx = scenes.firstIndex(where: { $0.id == id }) {
+                    scenes[idx] = newValue
+                }
+            }
+        )
+    }
+
     var body: some View {
         if scenes.isEmpty {
             Text("No scenes. Normal for concerts; scenes apply to operas and plays.")
@@ -859,8 +943,11 @@ private struct ScenesEditor: View {
                 .padding(.bottom, Spacing.sm)
         } else {
             VStack(spacing: Spacing.sm) {
-                ForEach($scenes) { $s in
-                    SceneRow(scene: $s) { scenes.removeAll { $0.id == s.id } }
+                ForEach(scenes) { scene in
+                    let sceneID = scene.id
+                    SceneRow(scene: sceneBinding(id: sceneID, fallback: scene)) {
+                        scenes.removeAll { $0.id == sceneID }
+                    }
                 }
                 BrandAddButton(label: "Add Scene") { scenes.append(ProgramScene()) }
             }
@@ -1110,6 +1197,7 @@ private struct FlagReviewSection: View {
     @Binding var flags: [OCRFlag]
     let onApply: (OCRFlag, String) -> Void
     let onDismiss: (OCRFlag) -> Void
+    let onReflow: (OCRFlag, String) async throws -> String
 
     private var unresolvedCount: Int { flags.filter { !$0.resolved }.count }
 
@@ -1126,7 +1214,7 @@ private struct FlagReviewSection: View {
                     .tracking(1.2)
                     .foregroundStyle(Color.roseGold)
             }
-            Text("Claude flagged these items as possibly wrong. Apply a correction or dismiss.")
+            Text("Claude flagged these items as possibly wrong. Edit the value, keep the OCR text, or describe the correction in your own words.")
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
 
@@ -1135,7 +1223,8 @@ private struct FlagReviewSection: View {
                     FlagRow(
                         flag: $flag,
                         onApply:   { newValue in onApply(flag, newValue) },
-                        onDismiss: { onDismiss(flag) }
+                        onDismiss: { onDismiss(flag) },
+                        onReflow:  { message in try await onReflow(flag, message) }
                     )
                 }
             }
@@ -1154,12 +1243,146 @@ private struct FlagRow: View {
     @Binding var flag: OCRFlag
     let onApply: (String) -> Void
     let onDismiss: () -> Void
+    let onReflow: (String) async throws -> String
 
     @State private var draftValue: String = ""
     @State private var didInitDraft = false
 
+    // Reflow ("describe the correction") state
+    @State private var reflowOpen: Bool = false
+    @State private var reflowText: String = ""
+    @State private var isReflowing: Bool = false
+    @State private var reflowError: String? = nil
+    @State private var reflowConfirmation: String? = nil
+
     private var pathLabel: String {
         flag.fieldPath.map(\.displayString).joined(separator: " · ")
+    }
+
+    /// Last `key` segment of the field path, e.g. "name" or "composer".
+    /// Used in the "Replace [field] with:" label.
+    private var fieldName: String {
+        for seg in flag.fieldPath.reversed() {
+            if case .key(let s) = seg { return s }
+        }
+        return "value"
+    }
+
+    /// True only when Claude actually proposed a different value (not when
+    /// it just flagged the OCR text without a replacement).
+    private var hasRealSuggestion: Bool {
+        !flag.suggestedValue.isEmpty
+            && flag.suggestedValue.trimmingCharacters(in: .whitespaces)
+                != flag.currentValue.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var trimmedDraft: String {
+        draftValue.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// True when the user has changed the draft away from the current OCR value.
+    /// Save is only enabled when there's an actual change to save.
+    private var draftIsChange: Bool {
+        !trimmedDraft.isEmpty && trimmedDraft != flag.currentValue.trimmingCharacters(in: .whitespaces)
+    }
+
+    @ViewBuilder
+    private var reflowSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let confirmation = reflowConfirmation {
+                HStack(alignment: .top, spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.roseGold)
+                    Text(confirmation)
+                        .font(.light(11))
+                        .foregroundStyle(Color.warmDark)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 4)
+            } else if reflowOpen {
+                Text("Describe the correction in your own words (e.g. \"Ordway is the arranger; composer is Traditional Chinese\"). Claude can update multiple fields at once.")
+                    .font(.light(10))
+                    .foregroundStyle(Color.warmFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+                TextEditor(text: $reflowText)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.warmDark)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 56, maxHeight: 120)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.xs)
+                            .fill(Color.cream)
+                            .overlay(RoundedRectangle(cornerRadius: Radius.xs)
+                                .strokeBorder(Color.creamEdge, lineWidth: 1))
+                    )
+                    .disabled(isReflowing)
+                if let err = reflowError {
+                    Text(err)
+                        .font(.light(10))
+                        .foregroundStyle(Color.roseGold)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
+                    if isReflowing {
+                        ProgressView().controlSize(.small)
+                        Text("Asking Claude…")
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
+                    } else {
+                        Button("Send to Claude") { Task { await runReflow() } }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(reflowText.trimmingCharacters(in: .whitespaces).isEmpty
+                                             ? Color.warmFaint : Color.roseGold)
+                            .disabled(reflowText.trimmingCharacters(in: .whitespaces).isEmpty)
+                        Button("Cancel") {
+                            reflowOpen = false
+                            reflowText = ""
+                            reflowError = nil
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warmMid)
+                    }
+                }
+            } else {
+                Button {
+                    reflowOpen = true
+                    reflowError = nil
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "text.bubble")
+                            .font(.system(size: 10))
+                        Text("Describe the correction (let Claude rewrite)")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(Color.warmMid)
+                }
+                .buttonStyle(.plain)
+                .help("Type a plain-English correction. Claude will update one or more fields on this item — useful when the right fix doesn't fit a single field.")
+            }
+        }
+    }
+
+    @MainActor
+    private func runReflow() async {
+        let msg = reflowText.trimmingCharacters(in: .whitespaces)
+        guard !msg.isEmpty else { return }
+        isReflowing = true
+        reflowError = nil
+        do {
+            let reply = try await onReflow(msg)
+            reflowConfirmation = reply.isEmpty ? "Updated." : reply
+            reflowOpen = false
+            reflowText = ""
+        } catch {
+            reflowError = error.localizedDescription
+        }
+        isReflowing = false
     }
 
     var body: some View {
@@ -1191,8 +1414,46 @@ private struct FlagRow: View {
             }
 
             if !flag.resolved {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Text("OCR read:")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Color.warmFaint)
+                        Text(flag.currentValue)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.warmMid)
+                            .strikethrough(hasRealSuggestion)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+
+                    if hasRealSuggestion {
+                        HStack(spacing: 4) {
+                            Text("Claude suggests:")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Color.roseGold.opacity(0.8))
+                            Text(flag.suggestedValue)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.warmDark)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    } else {
+                        Text("Claude flagged this but didn't propose a replacement. Edit the value below if you can correct it, or click Keep OCR Text.")
+                            .font(.light(10))
+                            .foregroundStyle(Color.warmFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, 2)
+
+                Text("Replace \(fieldName) with:")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.warmMid)
+                    .padding(.top, 4)
+
                 HStack(spacing: 6) {
-                    TextField("Corrected value (or leave to dismiss)", text: $draftValue)
+                    TextField("", text: $draftValue)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmDark)
@@ -1204,22 +1465,24 @@ private struct FlagRow: View {
                                 .overlay(RoundedRectangle(cornerRadius: Radius.xs)
                                     .strokeBorder(Color.creamEdge, lineWidth: 1))
                         )
-                    Button("Apply") {
-                        let v = draftValue.trimmingCharacters(in: .whitespaces)
-                        guard !v.isEmpty else { return }
-                        onApply(v)
+                    Button("Save correction") {
+                        guard draftIsChange else { return }
+                        onApply(trimmedDraft)
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(draftValue.trimmingCharacters(in: .whitespaces).isEmpty
-                                     ? Color.warmFaint : Color.roseGold)
-                    .disabled(draftValue.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .foregroundStyle(draftIsChange ? Color.roseGold : Color.warmFaint)
+                    .disabled(!draftIsChange)
+                    .help("Replace the \(fieldName) value with what you typed.")
 
-                    Button("Dismiss", action: onDismiss)
+                    Button("Keep OCR Text", action: onDismiss)
                         .buttonStyle(.plain)
                         .font(.system(size: 11))
                         .foregroundStyle(Color.warmMid)
+                        .help("The OCR text was correct. Mark this flag reviewed and leave the value alone.")
                 }
+
+                reflowSection
             }
         }
         .padding(Spacing.sm)
@@ -1228,7 +1491,10 @@ private struct FlagRow: View {
         .opacity(flag.resolved ? 0.6 : 1.0)
         .onAppear {
             if !didInitDraft {
-                draftValue = flag.currentValue
+                // Pre-fill with Claude's proposed correction when there is one;
+                // otherwise fall back to the OCR text so the user has something
+                // to edit instead of an empty box.
+                draftValue = hasRealSuggestion ? flag.suggestedValue : flag.currentValue
                 didInitDraft = true
             }
         }

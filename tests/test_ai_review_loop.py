@@ -34,6 +34,7 @@ def test_flag_issues_normalizes_missing_fields(sample_photo):
             "id": "bad_composer",
             "field_path": ["pieces", 5, "composer"],
             "current_value": "Petale Minuet",
+            "suggested_value": "Petite Menuet",
             "concern": "Doesn't look like a composer",
             "program_context": "On page 2, under Sol Lee",
         },
@@ -48,10 +49,12 @@ def test_flag_issues_normalizes_missing_fields(sample_photo):
     assert len(result) == 2
     assert result[0]["id"] == "bad_composer"
     assert result[0]["field_path"] == ["pieces", 5, "composer"]
+    assert result[0]["suggested_value"] == "Petite Menuet"
     # Second flag should have defaults filled
     assert result[1]["id"] == "flag_1"
     assert result[1]["field_path"] == []
     assert result[1]["current_value"] == ""
+    assert result[1]["suggested_value"] == ""
     assert result[1]["concern"] == "suspicious"
 
 

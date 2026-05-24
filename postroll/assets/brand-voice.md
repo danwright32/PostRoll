@@ -53,6 +53,30 @@ When in doubt, stay closer to "what Dan saw with his eyes" and further
 from "what the event was in general." A photo call is a photographer's
 access, not a performance. Say so honestly.
 
+## Rehearsals: the program is a plan, not a setlist
+
+For `rehearsal`, `photo_call`, and (with care) `dress_rehearsal`, the
+printed program lists what was *planned*, not necessarily what Dan
+heard. Rehearsals routinely skip pieces, run only sections, stop and
+restart, or work the hard passages while leaving the easy ones alone.
+A photo call may stage two or three scenes for the camera and nothing
+else.
+
+Rules:
+
+1. Do NOT walk through the program piece-by-piece as if Dan witnessed
+   every work on it. The repertoire list is reference, not a transcript
+   of the session.
+2. Only describe a piece in sensory detail (how it sounded, tempo,
+   dynamics, how the room felt) if a photo clearly anchors that piece
+   or Dan's notes confirm it was run.
+3. It is fine to acknowledge the program at a high level ("the program
+   on the stand listed Brahms and Shostakovich") without claiming Dan
+   heard all of it.
+4. When uncertain, describe what the photos show (a string section
+   bowing together, the conductor mid-cue, a soloist waiting in the
+   wings) rather than the music itself.
+
 ## How Dan writes
 
 Dan's natural writing — the way he writes when he's not trying to sound like a
@@ -380,37 +404,10 @@ afterthought tacked on before the CTA.
 **Length:** 10–12 short paragraphs. Continuous prose — no headings, no
 bullet points, no section breaks.
 
-**Required structure** (the post must have all five beats, in this order):
-
-1. **Venue / opening** — drop the reader into the room with one specific
-   observation from where Dan was working. Sound, light, the angle he
-   was shooting from, a detail he noticed before the show started. NOT
-   "Last Saturday I had the pleasure of…". 1–2 paragraphs.
-
-2. **Performance moments** — two or three specific moments that mattered,
-   from a photographer's perspective. What did Dan see in the viewfinder
-   that he wanted to keep? What was hard to catch? Name the pieces,
-   scenes, songs, performers, conductors involved. Pick moments worth a
-   specific observation — do NOT march through the program piece by
-   piece like a setlist review. Use program notes for context, not as a
-   recap. 3–5 paragraphs.
-
-3. **Approach** — how Dan worked the room. Where he stood, what he was
-   watching for, what he chose to shoot vs. let go, how he stayed out of
-   the way. This is the section that signals professionalism to a
-   presenter reading the post. NOT optional. 1–2 paragraphs.
-
-4. **Practical value** — why documentation of an event like this matters
-   for the people who put it on. Tie it to the kind of work the
-   organization actually does: grant applications, season announcement
-   materials, artist portfolios, press kits, fundraising decks, archive.
-   Be specific to the event type — a debut recital, a season opener, a
-   touring production each have different practical uses. 1 paragraph.
-
-5. **Closing + CTA** — one sentence placing Dan in the room (e.g. "I was
-   working from the back of the hall most of the night"), then ONE
-   short, useful CTA. Specific language grounded in this post — not
-   "this kind of attention" or "this kind of work."
+**Required structure:** the post must hit five beats in order (venue/opening,
+performance moments, approach, practical value, closing + CTA). The
+authoritative beat-by-beat spec is enforced by the blog generator itself, so
+it isn't restated here.
 
 **Photos:** 4–7 photos embedded directly in the prose. The text refers to
 what's visible — "this moment from the second movement," not just dropping
@@ -505,3 +502,21 @@ generic enough to fit any event ever; it tells the reader nothing.
 - (Apr 25, 2026) The blog should be more about the night, not a breakdown of the program
 - (Apr 25, 2026) at carnegie hall I'm always at the back of the house, behind the audience.
 - (Apr 25, 2026) Don't list the program repertoire in captions. The setlist belongs in the program, not the post. Drop it unless a specific piece is the point of the caption.
+- (May 2, 2026) don't make up that the hall sold out. you don't know that.
+- (May 2, 2026) don't assume the hall was full
+- (May 2, 2026) no need to mention whether or not the house was full, nearly full, not full, etc. just don't mention how close to full or otherwise the house was
+- (May 2, 2026) When tagging a performer or ensemble whose social handle isn't self-explanatory, write the full name first and put the handle in parentheses immediately after — e.g. 'William Paterson University Choir (@wp_voice)' — rather than leading with the bare handle as if it stands in for the name.
+- (May 5, 2026) don't assume you know what song was happening in a photo
+- (May 5, 2026) The voice is conversational, not literary. Read every sentence aloud before including it. If it sounds like a magazine essay, a photography critic, or a short story opener, rewrite it. Deliberate stylistic fragments designed to sound spare or precise ("It doesn't require closeness. It requires timing.") are not Dan's voice. Natural sentence variation is fine. Crafted staccato for effect is not.
+The audience is performing arts directors and marketing coordinators, not photographers. Avoid photographic terminology (negative space, the frame, simultaneity, running underneath) unless it's immediately translated into plain language the client can use. When in doubt, cut the term entirely.
+Contractions are required throughout. A formal register is a red flag. If a sentence sounds like it belongs in a report, rewrite it until it sounds like speech.
+- (May 5, 2026) The performing arts organization should be introduced as what it actually is, not just treated as subject matter. A reader unfamiliar with the group should come away knowing something about them.
+The event name must appear in the post.
+Never use em dashes. Use a comma or break into two sentences instead.
+Avoid photographer-specific language like "that frame" or "the frame." If the sentence can't work without it, restructure it.
+- (May 6, 2026) For theatre specifically, When crediting the playwright, director, or other key creatives, include their full credentials inline the first time they appear — e.g. 'Pulitzer-, Oscar-, and Tony-winning playwright John Patrick Shanley (@johnp.shanley)' — rather than just a name or handle. Do the same for cast: list each performer's character name and two or three notable prior credits in parentheses before their handle. This context travels with the post and serves people who don't already know the production.
+- (May 23, 2026) Almost every paragraph follows the same pattern: describe what's on stage, describe what you were watching for, describe what you got. That's a shooting log, not a blog post. Your actual posts don't narrate your methodology this explicitly. You mention your process in passing, not as the backbone of every paragraph. Lines like "I was holding on the conductor's hands, waiting for a phrase where the kids in the front row had their chins up at the same time" and "With a group this size you get maybe two or three clean frames before the alignment breaks" are technically correct in voice, but stacked back to back across eight paragraphs, they become a formula. The reader can feel the LLM working through photos one by one.
+- (May 23, 2026) When there's no strong firsthand observation to build from, don't reach for a song title or a summary of what happened on stage as a substitute hook. A plain org + venue + event name caption is the honest floor. Picking out a song or narrating program moments ('the kids sang their own songs, then the full choir came together') without real grounding just looks like the AI filling space. Stop at the facts you actually have.
+- (May 23, 2026) When the caption leads with the organization and event name and no stronger hook is available, use a possessive construction that puts the org first: 'The [Org]'s [Event] at [Venue]' rather than '[Event] at [Venue]. [Org].' This keeps the organization as the subject of the sentence instead of an afterthought.
+- (May 23, 2026) Don't assign an instrument or role to a performer in a credit list unless it's confirmed in the program or enrichment data. A wrong instrument is worse than no instrument — if you're not sure who plays what, list the name without a parenthetical rather than guessing.
+- (May 23, 2026) When a conductor is identifiable from the program or enrichment data, include them in the caption credit — appended naturally after the org and venue, as ', conducted by @handle'. Don't omit the conductor the way you might omit a sideman. They're the credited lead on the performance.

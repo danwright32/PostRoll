@@ -23,6 +23,11 @@ struct Event: Identifiable, Codable, Hashable {
     // should accept or correct before continuing. Cleared once review is done.
     var pendingFlags: [OCRFlag] = []
 
+    /// Human-readable message if the post-OCR flagging step failed (e.g. payload
+    /// too large, rate limit). OCR data is still usable; the user just won't
+    /// have an auto-flagged review list. Cleared on confirm.
+    var pendingFlagsError: String? = nil
+
     // Event-wide handles applied to every day's caption (org, venue, recurring tags)
     var eventHandles: String = ""
 
@@ -73,6 +78,7 @@ extension Event {
         ocrResult         = try c.decodeIfPresent(OCRResult.self,                  forKey: .ocrResult)
         ocrReviewDone     = try c.decodeIfPresent(Bool.self,                       forKey: .ocrReviewDone)     ?? false
         pendingFlags      = try c.decodeIfPresent([OCRFlag].self,                  forKey: .pendingFlags)      ?? []
+        pendingFlagsError = try c.decodeIfPresent(String.self,                     forKey: .pendingFlagsError)
         eventURL          = try c.decodeIfPresent(String.self,                     forKey: .eventURL)          ?? ""
         eventHandles      = try c.decodeIfPresent(String.self,                     forKey: .eventHandles)      ?? ""
         days              = try c.decodeIfPresent([String: PostingDay].self,       forKey: .days)              ?? [:]
@@ -134,7 +140,10 @@ enum EventStage: String, Codable, CaseIterable {
         case .ocrDone:          return "Review Program"
         case .photosAssigned:   return "Assign Photos"
         case .assetsGenerated:  return "Assets Generated"
-        case .captionsReviewed: return "Captions Reviewed"
+        // .captionsReviewed is a navigation state — the user is in the caption
+        // review screen but hasn't approved yet. Approval jumps straight to
+        // .exported, so this stage shouldn't claim a "reviewed" milestone.
+        case .captionsReviewed: return "Assets Generated"
         case .exported:         return "Exported"
         }
     }
@@ -173,9 +182,10 @@ extension PostingDay {
         screenRecordingPath = try  c.decodeIfPresent(URL.self,                        forKey: .screenRecordingPath)
         rawPhotoPath        = try  c.decodeIfPresent(URL.self,                        forKey: .rawPhotoPath)
         editedPhotoPath     = try  c.decodeIfPresent(URL.self,                        forKey: .editedPhotoPath)
+        bwPhotoPath         = try  c.decodeIfPresent(URL.self,                        forKey: .bwPhotoPath)
         reelTargetDuration  = try  c.decodeIfPresent(Double.self,                     forKey: .reelTargetDuration)  ?? 20.0
         audioPath           = try  c.decodeIfPresent(URL.self,                        forKey: .audioPath)
-        scrollDuration      = try  c.decodeIfPresent(Double.self,                     forKey: .scrollDuration)      ?? 30.0
+        scrollDuration      = try  c.decodeIfPresent(Double.self,                     forKey: .scrollDuration)      ?? 40.0
         reelSeed            = try  c.decodeIfPresent(Int.self,                        forKey: .reelSeed)
         collageSeed         = try  c.decodeIfPresent(Int.self,                        forKey: .collageSeed)
         cropOffsets         = try  c.decodeIfPresent([String: CropOffset].self,       forKey: .cropOffsets)         ?? [:]
@@ -239,10 +249,11 @@ struct PostingDay: Codable, Hashable {
     var screenRecordingPath: URL? = nil
     var rawPhotoPath: URL? = nil       // Tuesday closing frame + Friday before/after
     var editedPhotoPath: URL? = nil    // Tuesday closing frame + Friday before/after
+    var bwPhotoPath: URL? = nil        // Optional B&W after. When set, Tuesday reel + Friday graphic become a 3-photo (RAW / color / B&W) treatment
     var reelTargetDuration: Double = 20.0  // Tuesday: timelapse target (seconds, 10–30)
     // Thursday scroll reel
     var audioPath: URL? = nil
-    var scrollDuration: Double = 30.0  // Thursday: scroll animation duration (seconds, 15–60)
+    var scrollDuration: Double = 40.0  // Thursday: scroll animation duration (seconds, 15–60)
     var reelSeed: Int? = nil           // Thursday: layout seed (nil = random each time)
     // Wednesday collage
     var collageSeed: Int? = nil        // nil = random each time

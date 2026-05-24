@@ -293,7 +293,7 @@ def test_blog_passes_shoot_type_to_prompt(sample_photo):
 
     def fake_run(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
-        return {"title": "x", "body": "x", "photo_count": 4}
+        return {"title": "x", "body": "I'm here.", "photo_count": 4}
 
     with patch(
         "postroll.ai.generate_blog.run_json_prompt", side_effect=fake_run
@@ -318,7 +318,7 @@ def test_blog_passes_production_details_to_prompt(sample_photo):
 
     def fake_run(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         captured["prompt"] = prompt
-        return {"title": "x", "body": "x", "photo_count": 4}
+        return {"title": "x", "body": "I'm here.", "photo_count": 4}
 
     with patch(
         "postroll.ai.generate_blog.run_json_prompt", side_effect=fake_run

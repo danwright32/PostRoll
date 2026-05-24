@@ -769,7 +769,7 @@ struct AssetGenerationView: View {
                     let latest = await MainActor.run { () -> Event in
                         appState.events.first(where: { $0.id == ev.id }) ?? ev
                     }
-                    return try? await PythonBridge.shared.runPreviewGeneration(event: latest)
+                    return (try? await PythonBridge.shared.runPreviewGeneration(event: latest))?.paths
                 }
                 : nil
 

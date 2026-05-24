@@ -167,6 +167,110 @@ Rules:
 """
 
 
+PIECES_PROMPT_TEMPLATE = """\
+Read the attached photos of an event program and extract ONLY the list of
+pieces / works / songs / numbers performed.
+
+This is a focused fallback call — the main OCR pass returned no pieces, so
+we're asking again with a smaller schema. KEEP THE RESPONSE COMPACT — do
+NOT include any prose, descriptions, or program notes. Just the structured
+fields below. The blog generator gets prose from a separate field.
+
+Image paths:
+{image_list}
+
+Return JSON ONLY (no commentary, no markdown fences) as an array of pieces:
+
+[
+  {{
+    "composer": "string — composer, playwright, choreographer, songwriter, band, or whichever creator label fits this work. For songs, this is the songwriter or band.",
+    "title": "string — exact title as printed",
+    "movements": ["string", ...]
+  }}
+]
+
+Rules:
+- Read EVERY page. Programs often span multiple pages, with pieces listed on
+  one page and program notes on later pages.
+- Capture EXACT titles and creator names as printed.
+- For concerts that mix classical works and popular songs, capture both —
+  songs by Bob Dylan, Billie Eilish, etc. count as pieces with the artist
+  or songwriter as `composer`.
+- DO NOT include a `notes` or `description` field. Just composer/title/movements.
+  Long prose causes truncation and JSON-parse failures.
+- Don't invent works. If you can't read clearly, skip that entry.
+- Return ONLY the JSON array. No explanation before or after.
+"""
+
+
+PROSE_PROMPT_TEMPLATE = """\
+Read the attached photos of an event program and extract the prose/free-text
+fields ONLY. This is a focused fallback call because the main extraction
+returned empty prose fields.
+
+Image paths:
+{image_list}
+
+Return JSON ONLY (no commentary, no markdown fences) as a single object:
+
+{{
+  "program_notes": "string — all paragraph-length prose about the works/pieces being performed. Include every per-piece descriptive paragraph in order. Empty string if none.",
+  "organization_notes": "string — paragraph(s) about the presenting organization, ensemble, choir, orchestra, theater company, etc. (history, mission, who they are). Empty string if none.",
+  "venue_notes": "string — anything printed about the venue. Empty string if nothing printed.",
+  "production_details": "string — director, creative team (designers, music director, choreographer), run dates, tour info, production-specific credits. Empty string if nothing printed.",
+  "other": "string — any other printed prose that could enrich a blog post. Empty string if nothing useful."
+}}
+
+Rules:
+- Read EVERY page. Prose is often spread across multiple pages.
+- Copy the prose VERBATIM from the program. Don't summarize.
+- IMPORTANT: when copying prose that contains quoted phrases, replace any
+  internal straight double quotes with single quotes (') so the JSON stays
+  valid. The blog generator doesn't care which quote style is used.
+- If a field has no content in the program, return an empty string for it.
+- Return ONLY the JSON object. No explanation before or after.
+"""
+
+
+PERFORMERS_PROMPT_TEMPLATE = """\
+Read the attached photos of an event program and extract ONLY the people and
+ensembles performing — including those mentioned in prose paragraphs, not
+just those listed in a formal cast list.
+
+This is a focused fallback call — the main OCR pass returned no performers,
+so we're asking again with a smaller schema. Many programs (especially
+program-notes booklets) name performers inside prose like "directed by Jane
+Smith and accompanied by John Doe" or "vocal soloists Alice Lee and Bob Park
+and violinist Mac Teng". Pull those out.
+
+Image paths:
+{image_list}
+
+Return JSON ONLY (no commentary, no markdown fences) as an array:
+
+[
+  {{
+    "name": "string — the person's name or the ensemble's name, exactly as printed",
+    "role": "soloist | conductor | ensemble | composer | actor | dancer | band_member | troupe | director | accompanist | other",
+    "voice_or_instrument": "string or null — soprano, violin, piano, lead guitar, principal dancer, etc."
+  }}
+]
+
+Rules:
+- Look at EVERY page. Performers may be named on a cast page, in the
+  introductory paragraph, or buried in piece-specific notes.
+- Capture EXACT names as printed (don't normalize spelling).
+- Each ensemble (choir, orchestra, band, troupe) is its own entry with
+  role="ensemble" and the full group name as `name`.
+- A piano accompanist gets role="accompanist" and voice_or_instrument="piano".
+- Solo performers named in piece notes (e.g. "violinist Mac Teng",
+  "flute obbligato by Adrienne Reina-Sinchak") count — extract them with
+  role="soloist" and the instrument/voice in voice_or_instrument.
+- NEVER invent names. If unsure, skip rather than guess.
+- Return ONLY the JSON array. No explanation before or after.
+"""
+
+
 def _convert_heic_to_jpeg(src: Path, dest_dir: Path) -> Path:
     """Convert a HEIC file to JPEG using macOS `sips`. Returns the new path.
 
@@ -218,6 +322,97 @@ def _normalize_image_paths(
     return resolved
 
 
+def _extract_pieces_only(resolved_paths: list[str]) -> list[dict[str, Any]]:
+    """Run a focused Claude call that asks ONLY for the pieces array.
+
+    Used as a fallback when the main multi-field extraction returns an empty
+    pieces list. A smaller, single-purpose schema is significantly more
+    reliable than the full eight-key schema for complex multi-page programs.
+    """
+    image_list = "\n".join(f"- {p}" for p in resolved_paths)
+    prompt = PIECES_PROMPT_TEMPLATE.format(image_list=image_list)
+    return _run_focused_array_prompt(
+        prompt, resolved_paths, ("pieces", "works", "songs", "items")
+    )
+
+
+def _extract_prose_only(resolved_paths: list[str]) -> dict[str, str]:
+    """Run a focused Claude call that asks ONLY for the prose fields.
+
+    Used when the main extraction returned a non-dict (so prose fields were
+    lost in salvage) or when prose fields came back empty despite obvious
+    program-notes content in the images.
+    """
+    image_list = "\n".join(f"- {p}" for p in resolved_paths)
+    prompt = PROSE_PROMPT_TEMPLATE.format(image_list=image_list)
+    data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths)
+    if not isinstance(data, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key in ("program_notes", "organization_notes", "venue_notes",
+                "production_details", "other"):
+        value = data.get(key)
+        if isinstance(value, str):
+            out[key] = value
+    return out
+
+
+def _extract_performers_only(resolved_paths: list[str]) -> list[dict[str, Any]]:
+    """Run a focused Claude call that asks ONLY for the performers array.
+
+    Mirrors _extract_pieces_only — used when the main extraction returns no
+    performers. Especially useful for program-notes booklets where performers
+    are named in prose (intro paragraph, piece notes) rather than a cast list.
+    """
+    image_list = "\n".join(f"- {p}" for p in resolved_paths)
+    prompt = PERFORMERS_PROMPT_TEMPLATE.format(image_list=image_list)
+    return _run_focused_array_prompt(
+        prompt, resolved_paths, ("performers", "people", "cast", "items")
+    )
+
+
+def _run_focused_array_prompt(
+    prompt: str,
+    resolved_paths: list[str],
+    unwrap_keys: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    """Shared helper for fallback calls that should return a JSON array of dicts.
+
+    Claude usually returns the array directly; if it wraps the array in a
+    single-key object, unwrap it under any of the expected key names.
+    """
+    data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths)
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        for key in unwrap_keys:
+            value = data.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _salvage_list_response(items: list[Any]) -> dict[str, Any]:
+    """Wrap a top-level JSON array under the schema key its items resemble.
+
+    Claude occasionally returns a bare array when given a PDF that doesn't
+    cover the full schema (e.g. program notes without a cast list). Inspect
+    item shape and slot the array under pieces / performers / scenes so the
+    user gets a usable starting point in OCR review.
+    """
+    sample = next((x for x in items if isinstance(x, dict)), None)
+    if sample is None:
+        return {}
+    keys = set(sample.keys())
+    if {"title", "composer"} <= keys or "movements" in keys:
+        return {"pieces": items}
+    if {"name", "role"} <= keys or "voice_or_instrument" in keys:
+        return {"performers": items}
+    if "visual_cues" in keys or {"name", "location"} <= keys:
+        return {"scenes": items}
+    return {}
+
+
 def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
     """Run OCR on one or more program images and return structured data.
 
@@ -234,16 +429,101 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
         resolved = _normalize_image_paths(image_paths, tmp_path)
 
         image_list = "\n".join(f"- {p}" for p in resolved)
-        prompt = PROMPT_TEMPLATE.format(image_list=image_list)
+        base_prompt = PROMPT_TEMPLATE.format(image_list=image_list)
 
-        data = run_json_prompt(
-            prompt,
-            timeout=600,
-            image_paths=resolved,
-        )
+        # First attempt
+        data = run_json_prompt(base_prompt, timeout=600, image_paths=resolved)
 
-    if not isinstance(data, dict):
-        raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
+        # Retry once if Claude returned a top-level array (or other non-dict).
+        # Some programs — especially notes/lyrics-only PDFs with no cast list —
+        # push Claude into returning just a single array (usually pieces).
+        if not isinstance(data, dict):
+            print(
+                f"warning: OCR returned {type(data).__name__}, retrying with reinforced prompt",
+                file=sys.stderr,
+            )
+            retry_prompt = (
+                "CRITICAL: Your response MUST be a single JSON object with the keys "
+                "performers, pieces, scenes, organization_notes, program_notes, "
+                "venue_notes, production_details, other. DO NOT return a top-level "
+                "JSON array — the array fields must be values inside the object. "
+                "Use empty arrays/strings for fields the program doesn't cover.\n\n"
+                + base_prompt
+            )
+            data = run_json_prompt(retry_prompt, timeout=600, image_paths=resolved)
+
+        # Last-resort salvage: if it's still a list, wrap it under whichever schema
+        # key the items resemble. Better to give the user partial OCR they can edit
+        # than to fail outright — performers can also come from the event URL.
+        if isinstance(data, list):
+            salvaged = _salvage_list_response(data)
+            print(
+                f"warning: OCR still a list after retry; salvaged as "
+                f"{[k for k, v in salvaged.items() if v]}",
+                file=sys.stderr,
+            )
+            data = salvaged
+
+        if not isinstance(data, dict):
+            raise ClaudeError(
+                f"OCR returned unexpected JSON ({type(data).__name__}). "
+                "Try uploading a different program PDF, or click 'No program' to skip OCR."
+            )
+
+        # Pieces fallback: complex multi-field schemas sometimes leave the
+        # pieces array empty even when the program clearly lists works. A
+        # focused single-purpose call recovers them. Done inside the temp-dir
+        # block so the resolved (possibly HEIC-converted) paths are still valid.
+        if not data.get("pieces"):
+            try:
+                recovered = _extract_pieces_only(resolved)
+                if recovered:
+                    data["pieces"] = recovered
+                    print(
+                        f"info: pieces fallback recovered {len(recovered)} works",
+                        file=sys.stderr,
+                    )
+            except ClaudeError as e:
+                print(f"warning: pieces fallback failed: {e}", file=sys.stderr)
+
+        # Performers fallback: same idea — performer names often hide in prose
+        # ("directed by …", "violinist …") that the main multi-field call
+        # misses. A focused performers-only prompt picks them up. If the
+        # program truly has no performers (rare), the fallback returns [] and
+        # nothing changes.
+        if not data.get("performers"):
+            try:
+                recovered = _extract_performers_only(resolved)
+                if recovered:
+                    data["performers"] = recovered
+                    print(
+                        f"info: performers fallback recovered {len(recovered)} entries",
+                        file=sys.stderr,
+                    )
+            except ClaudeError as e:
+                print(f"warning: performers fallback failed: {e}", file=sys.stderr)
+
+        # Prose fallback: program_notes drives the blog generator. When the
+        # main call returned a list and was salvaged, all prose fields are
+        # gone — recover them with a focused prose-only call. Trigger
+        # whenever program_notes is missing AND there's at least one piece
+        # to write about (avoids burning a call on truly empty programs).
+        if not data.get("program_notes") and data.get("pieces"):
+            try:
+                prose = _extract_prose_only(resolved)
+                # Don't overwrite anything that survived; only fill gaps.
+                filled = []
+                for key, value in prose.items():
+                    if value and not data.get(key):
+                        data[key] = value
+                        filled.append(key)
+                if filled:
+                    print(
+                        f"info: prose fallback recovered {filled}",
+                        file=sys.stderr,
+                    )
+            except ClaudeError as e:
+                print(f"warning: prose fallback failed: {e}", file=sys.stderr)
 
     # Fill in any missing keys with empty defaults so downstream code is safe
     return {

@@ -43,6 +43,7 @@ LABEL_FONT_SIZE = 28
 LABEL_LETTER_SPACING = 8
 LABEL_MARGIN = 40   # snug to the photo's top-left corner; reel closing-frame zoom may crop slightly but the label isn't load-bearing
 MID_STRIP_H = 55  # cream strip between photos with "Edit" label
+EDITED_PHOTO_SCALE = 1.12  # in 3-photo mode, edits render slightly larger than the RAW
 LOGO_WIDTH = 280
 BOTTOM_CREAM_H = 130  # taller bottom to balance the top
 HEADER_MIN_H = 400  # min header height to accommodate notch-safe title + org + venue
@@ -205,19 +206,25 @@ def generate_before_after(
     raw_label_pos: str = "left",  # "left" or "right"
     edit_label_color: str = "light",
     edit_label_pos: str = "left",
+    bw_path: str | None = None,
 ) -> str:
     """Generate a before/after comparison image.
 
-    Layout (top to bottom):
+    Two-photo layout (default, top to bottom):
         - Cream header (event name, org, venue — matching story template)
         - "RAW" label strip
         - RAW photo (fit to width, uncropped)
         - "Edit" label strip
         - Edited photo (fit to width, uncropped)
         - Bottom area with logo
+
+    When ``bw_path`` is provided, a third strip (the B&W after) is stacked
+    below the color edit, so the layout reads RAW / Edit / B&W. Each photo
+    fits to width at its own height, so the B&W can be a different crop.
     """
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
+    bw_photo = Image.open(bw_path) if bw_path else None
     label_font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_THIN)
     detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_THIN)
 
@@ -246,15 +253,32 @@ def generate_before_after(
     info_block_bottom = info_y + max(0, org_venue_count - 1) * 42 + 36
     header_min_needed = max(HEADER_MIN_H, info_block_bottom + 30)  # 30px breathing room
 
-    # Reserve header + footer + chrome first; photos share what's left, so the
-    # notch-safe title area is never squeezed by tall photos.
-    fixed_chrome = DIVIDER_H * 2 + MID_STRIP_H
-    photos_budget = CANVAS_H - header_min_needed - BOTTOM_CREAM_H - fixed_chrome
-    max_each_photo_h = photos_budget // 2
+    # Photos to stack: RAW + color edit, plus the B&W after when supplied.
+    source_photos = [raw_photo, edit_photo]
+    if bw_photo is not None:
+        source_photos.append(bw_photo)
+    photo_count = len(source_photos)
 
-    raw_resized = fit_photo(raw_photo, CANVAS_W, max_each_photo_h)
-    edit_resized = fit_photo(edit_photo, CANVAS_W, max_each_photo_h)
-    total_photo_h = raw_resized.height + edit_resized.height
+    # Reserve header + footer + chrome first; photos share what's left, so the
+    # notch-safe title area is never squeezed by tall photos. One mid-strip sits
+    # between each adjacent pair of photos.
+    fixed_chrome = DIVIDER_H * 2 + MID_STRIP_H * (photo_count - 1)
+    photos_budget = CANVAS_H - header_min_needed - BOTTOM_CREAM_H - fixed_chrome
+
+    # Height budget per photo. In 3-photo mode the edits (color + B&W) get a
+    # slightly larger share than the RAW so the "after" reads as the hero; the
+    # classic two-photo before/after keeps equal sizing.
+    if bw_photo is not None:
+        weights = [1.0, EDITED_PHOTO_SCALE, EDITED_PHOTO_SCALE]
+    else:
+        weights = [1.0] * photo_count
+    total_weight = sum(weights)
+    photo_caps = [int(photos_budget * (w / total_weight)) for w in weights]
+
+    resized_photos = [
+        fit_photo(p, CANVAS_W, cap) for p, cap in zip(source_photos, photo_caps)
+    ]
+    total_photo_h = sum(p.height for p in resized_photos)
 
     # Any leftover space (when photos are shorter than their cap) is split
     # between header and footer so the layout stays centered.
@@ -293,31 +317,44 @@ def generate_before_after(
 
     # === PHOTOS with configurable labels ===
     label_configs = [
-        (raw_resized, "RAW", raw_label_color, raw_label_pos),
-        (edit_resized, "Edit", edit_label_color, edit_label_pos),
+        (resized_photos[0], "RAW", raw_label_color, raw_label_pos),
+        (resized_photos[1], "Edit", edit_label_color, edit_label_pos),
     ]
+    if bw_photo is not None:
+        label_configs.append((resized_photos[2], "B&W", "light", "left"))
+
+    # In 3-photo mode the photos are inset, so labels sit in the left margin
+    # beside each photo rather than overlaid on the corner.
+    label_in_margin = bw_photo is not None
 
     for i, (photo_resized, label_text, label_color, label_pos) in enumerate(label_configs):
         px = (CANVAS_W - photo_resized.width) // 2
         canvas.paste(photo_resized.convert("RGBA"), (px, y), photo_resized.convert("RGBA"))
 
-        # Draw label on the photo
+        # Draw label
         draw = ImageDraw.Draw(canvas)
         fill = (255, 255, 255) if label_color == "light" else TEXT_DARK
         shadow_fill = (0, 0, 0, 140) if label_color == "light" else (255, 255, 255, 100)
 
-        if label_pos == "left":
-            lx = px + LABEL_MARGIN
-        else:
-            # Calculate text width for right alignment
-            total_w = 0
-            for ch in label_text:
-                bbox = draw.textbbox((0, 0), ch, font=label_font)
-                total_w += (bbox[2] - bbox[0]) + LABEL_LETTER_SPACING
-            total_w -= LABEL_LETTER_SPACING
-            lx = px + photo_resized.width - LABEL_MARGIN - total_w
+        # Total label width (with letter spacing) for alignment.
+        total_w = 0
+        for ch in label_text:
+            bbox = draw.textbbox((0, 0), ch, font=label_font)
+            total_w += (bbox[2] - bbox[0]) + LABEL_LETTER_SPACING
+        total_w -= LABEL_LETTER_SPACING
 
-        ly = y + LABEL_MARGIN
+        if label_in_margin:
+            # Left margin, snug to the photo's left edge, vertically centered.
+            lb = label_font.getbbox(label_text)
+            label_h = lb[3] - lb[1]
+            lx = max(LABEL_MARGIN, px - LABEL_MARGIN - total_w)
+            ly = y + (photo_resized.height - label_h) // 2
+        elif label_pos == "left":
+            lx = px + LABEL_MARGIN
+            ly = y + LABEL_MARGIN
+        else:
+            lx = px + photo_resized.width - LABEL_MARGIN - total_w
+            ly = y + LABEL_MARGIN
 
         # Shadow for readability
         shadow_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
@@ -340,8 +377,8 @@ def generate_before_after(
 
         y += photo_resized.height
 
-        # Mid-strip between photos
-        if i == 0:
+        # Mid-strip between adjacent photos (not after the last one)
+        if i < len(label_configs) - 1:
             canvas = apply_cream_strip(canvas, y, MID_STRIP_H)
             y += MID_STRIP_H
 
@@ -379,6 +416,7 @@ def main():
     )
     parser.add_argument("--raw", required=True, help="Path to RAW/unedited photo")
     parser.add_argument("--edit", required=True, help="Path to edited photo")
+    parser.add_argument("--bw", default=None, help="Optional path to B&W edit (adds a 3rd stacked strip)")
     parser.add_argument("--event", default="", help="Event name")
     parser.add_argument("--org", default="", help="Organization name")
     parser.add_argument("--venue", default="", help="Venue name")
@@ -404,6 +442,7 @@ def main():
         raw_label_pos=args.raw_label_pos,
         edit_label_color=args.edit_label_color,
         edit_label_pos=args.edit_label_pos,
+        bw_path=args.bw,
     )
 
 

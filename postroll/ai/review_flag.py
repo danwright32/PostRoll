@@ -338,6 +338,11 @@ def main() -> int:
         type=Path,
         help="If set and the response includes a patch, write the patched OCR data to this path",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write the response JSON ({assistant_reply, patch, resolved}) to this path. Without it, the response is printed to stdout.",
+    )
     args = parser.parse_args()
 
     ocr_data = json.loads(args.program.read_text(encoding="utf-8"))
@@ -358,7 +363,13 @@ def main() -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
 
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    response_text = json.dumps(result, indent=2, ensure_ascii=False)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(response_text + "\n", encoding="utf-8")
+        print(f"wrote {args.output}")
+    else:
+        print(response_text)
 
     if args.apply_to and result.get("patch"):
         patched = apply_patch(ocr_data, result["patch"])

@@ -17,6 +17,7 @@ struct PhotoAssignmentView: View {
     @State private var tuesdayScreenRecording: URL?
     @State private var tuesdayRawPhoto: URL?
     @State private var tuesdayEditedPhoto: URL?
+    @State private var tuesdayBWPhoto: URL?
     @State private var tuesdayTargetDuration: Double = 20.0
 
     // Thursday: scroll reel
@@ -44,6 +45,7 @@ struct PhotoAssignmentView: View {
         case tuesdayScreenRecording
         case tuesdayRawPhoto
         case tuesdayEditedPhoto
+        case tuesdayBWPhoto
         case thursdayAudio
     }
 
@@ -57,11 +59,12 @@ struct PhotoAssignmentView: View {
         _tuesdayScreenRecording = State(initialValue: tue?.screenRecordingPath)
         _tuesdayRawPhoto        = State(initialValue: tue?.rawPhotoPath)
         _tuesdayEditedPhoto     = State(initialValue: tue?.editedPhotoPath)
+        _tuesdayBWPhoto         = State(initialValue: tue?.bwPhotoPath)
         _tuesdayTargetDuration  = State(initialValue: tue?.reelTargetDuration ?? 20.0)
 
         let thu = event.days[DayName.thursday.rawValue]
         _thursdayAudio          = State(initialValue: thu?.audioPath)
-        _thursdayScrollDuration = State(initialValue: thu?.scrollDuration ?? 30.0)
+        _thursdayScrollDuration = State(initialValue: thu?.scrollDuration ?? 40.0)
         _thursdayReelSeed       = State(initialValue: thu?.reelSeed)
 
         let wed = event.days[DayName.wednesday.rawValue]
@@ -185,15 +188,18 @@ struct PhotoAssignmentView: View {
                             screenRecording: $tuesdayScreenRecording,
                             rawPhoto:        $tuesdayRawPhoto,
                             editedPhoto:     $tuesdayEditedPhoto,
+                            bwPhoto:         $tuesdayBWPhoto,
                             targetDuration:  $tuesdayTargetDuration,
                             dayPhotos:       dayPhotos[.tuesday] ?? [],
                             onPickScreenRecording: { pickerTarget = .tuesdayScreenRecording },
                             onPickRawPhoto:        { pickerTarget = .tuesdayRawPhoto },
-                            onPickEditedPhoto:     { pickerTarget = .tuesdayEditedPhoto }
+                            onPickEditedPhoto:     { pickerTarget = .tuesdayEditedPhoto },
+                            onPickBWPhoto:         { pickerTarget = .tuesdayBWPhoto }
                         )
                         .onChange(of: tuesdayScreenRecording) { _, _ in save() }
                         .onChange(of: tuesdayRawPhoto)        { _, _ in save() }
                         .onChange(of: tuesdayEditedPhoto)     { _, _ in save() }
+                        .onChange(of: tuesdayBWPhoto)         { _, _ in save() }
                         .onChange(of: tuesdayTargetDuration)  { _, _ in save() }
 
                     case .wednesday:
@@ -352,6 +358,7 @@ struct PhotoAssignmentView: View {
         case .tuesdayScreenRecording: tuesdayScreenRecording = url
         case .tuesdayRawPhoto:        tuesdayRawPhoto = url
         case .tuesdayEditedPhoto:     tuesdayEditedPhoto = url
+        case .tuesdayBWPhoto:         tuesdayBWPhoto = url
         case .thursdayAudio:          thursdayAudio = url
         case nil: break
         }
@@ -370,7 +377,7 @@ struct PhotoAssignmentView: View {
         func imageFiles(in dir: URL) -> [URL] {
             ((try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
                 .filter { imageExts.contains($0.pathExtension.lowercased()) }
-                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+                .sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending }
         }
 
         // "unedited" contains "edit" so check raw markers first, then edited
@@ -447,6 +454,7 @@ struct PhotoAssignmentView: View {
                 pd.screenRecordingPath = tuesdayScreenRecording
                 pd.rawPhotoPath        = tuesdayRawPhoto
                 pd.editedPhotoPath     = tuesdayEditedPhoto
+                pd.bwPhotoPath         = tuesdayBWPhoto
                 pd.reelTargetDuration  = tuesdayTargetDuration
             case .thursday:
                 pd.audioPath      = thursdayAudio
@@ -455,10 +463,12 @@ struct PhotoAssignmentView: View {
             case .wednesday:
                 pd.collageSeed = wednesdayCollageSeed
             case .friday:
-                // Before/after story uses Tuesday's RAW and edited photos.
-                // Friday has no separate photo grid, so wipe any stale paths.
+                // Before/after story uses Tuesday's RAW and edited photos (and
+                // the optional B&W). Friday has no separate photo grid, so wipe
+                // any stale paths.
                 pd.rawPhotoPath    = tuesdayRawPhoto
                 pd.editedPhotoPath = tuesdayEditedPhoto
+                pd.bwPhotoPath     = tuesdayBWPhoto
                 pd.photoPaths      = []
             default: break
             }
@@ -800,11 +810,13 @@ private struct TuesdayReelSection: View {
     @Binding var screenRecording: URL?
     @Binding var rawPhoto: URL?
     @Binding var editedPhoto: URL?
+    @Binding var bwPhoto: URL?
     @Binding var targetDuration: Double
     let dayPhotos: [URL]
     let onPickScreenRecording: () -> Void
     let onPickRawPhoto: () -> Void
     let onPickEditedPhoto: () -> Void
+    let onPickBWPhoto: () -> Void
 
     @State private var isExpanded = true
     @State private var recordingSeconds: Double? = nil
@@ -889,6 +901,24 @@ private struct TuesdayReelSection: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.roseGold)
+                    }
+
+                    // Optional B&W after. When set, the reel reveals color over
+                    // B&W and the Friday graphic stacks all three. Rare; leave
+                    // empty for the normal two-photo before/after.
+                    BeforeAfterPicker(
+                        label: "B&W Edit (optional)",
+                        selected: bwPhoto,
+                        otherSelected: nil,
+                        dayPhotos: dayPhotos,
+                        onSelect: { url in bwPhoto = url },
+                        onClear: { bwPhoto = nil },
+                        onPickFromFile: onPickBWPhoto
+                    )
+                    if bwPhoto != nil {
+                        Text("3-photo post: reel reveals color over B&W, Friday shows all three.")
+                            .font(.light(10))
+                            .foregroundStyle(Color.roseGold.opacity(0.9))
                     }
 
                     SingleFilePicker(label: "Screen Recording", url: screenRecording,

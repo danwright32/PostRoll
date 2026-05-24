@@ -121,3 +121,35 @@ def test_creates_output_directory(sample_photo, tmp_output):
         venue="Venue",
     )
     assert output.exists()
+
+
+def test_three_photo_with_bw(sample_photo, tmp_output):
+    """A B&W path adds a third stacked strip; canvas size is unchanged."""
+    output = tmp_output / "ba_3up.png"
+    generate_before_after(
+        raw_path=sample_photo,
+        edit_path=sample_photo,
+        output_path=str(output),
+        event_name="Test Event",
+        org="Org",
+        venue="Venue",
+        bw_path=sample_photo,
+    )
+    img = Image.open(output)
+    assert img.size == (1080, 1920)
+    assert img.format == "PNG"
+
+
+def test_three_photo_with_logo(sample_photo, sample_logo, tmp_output):
+    output = tmp_output / "ba_3up_logo.png"
+    generate_before_after(
+        raw_path=sample_photo,
+        edit_path=sample_photo,
+        output_path=str(output),
+        event_name="Test",
+        org="Org",
+        venue="Venue",
+        logo_path=sample_logo,
+        bw_path=sample_photo,
+    )
+    assert output.exists()

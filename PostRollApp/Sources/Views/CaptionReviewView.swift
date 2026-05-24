@@ -58,6 +58,9 @@ struct CaptionReviewView: View {
     // Inline RAW/Edited photo state (used by InlineReelPhotoAssignment)
     @State private var inlineRawPhoto: URL? = nil
     @State private var inlineEditedPhoto: URL? = nil
+    // Optional B&W after. When set, the reel reveals color over B&W and the
+    // Friday graphic stacks all three (RAW / color / B&W).
+    @State private var inlineBWPhoto: URL? = nil
 
     // Learning flow
     @State private var isAnalyzingEdits = false
@@ -110,10 +113,16 @@ struct CaptionReviewView: View {
 
                     ForEach(daysWithContent, id: \.self) { day in
                         let section = ReviewSection.caption(day)
+                        // Read postingDay + previewPaths from liveEvent, not the
+                        // captured `event` property. The captured value never
+                        // refreshes when AppState changes, so a regen that updates
+                        // previewMediaPaths in AppState wouldn't propagate to the
+                        // mockup — it would keep rendering the old MP4 path.
+                        let live = liveEvent
                         CaptionSection(
                             day: day,
-                            postingDay: event.days[day.rawValue],
-                            previewPaths: event.previewMediaPaths[day.rawValue],
+                            postingDay: live.days[day.rawValue],
+                            previewPaths: live.previewMediaPaths[day.rawValue],
                             caption: captionBinding(day),
                             isExpanded: expanded == section,
                             onToggle: { expanded = expanded == section ? nil : section },
@@ -123,15 +132,28 @@ struct CaptionReviewView: View {
                             onPreview: { previewURL = $0 },
                             isRegeneratingGraphic: regeneratingDays.contains(day),
                             graphicVersion: graphicVersions[day] ?? 0,
-                            onRegenerateGraphic: { regenerateGraphic(day: day) },
+                            onRegenerateGraphic: {
+                                regenerateGraphic(day: day)
+                                // Tuesday's before/after reel and Friday's before/after
+                                // graphic share the same RAW/Edited/B&W, so regenerate
+                                // Friday whenever the Tuesday reel does — but only when
+                                // Friday actually has before/after inputs to render.
+                                if day == .tuesday,
+                                   let fri = appState.events.first(where: { $0.id == event.id })?
+                                       .days[DayName.friday.rawValue],
+                                   fri.rawPhotoPath != nil, fri.editedPhotoPath != nil {
+                                    regenerateGraphic(day: .friday)
+                                }
+                            },
                             onNewLayout: (day == .wednesday || day == .thursday)
                                 ? { regenerateGraphic(day: day, newLayout: true) }
                                 : nil,
                             onSwapReelAudio: { swapReelAudio(day: day) },
                             onUploadReelAudio: { uploadReelAudioDay = day; showingReelAudioPicker = true },
                             onChangeReelPhotos: (day == .tuesday || day == .thursday) ? { changeReelPhotos(day: day) } : nil,
-                            onAssignReelPhotos: day == .tuesday ? { raw, edited in
-                                assignReelPhotosAndGenerate(raw: raw, edited: edited)
+                            onSwapReelPhotos: day == .thursday ? { a, b in swapReelPhotos(day: .thursday, a: a, b: b) } : nil,
+                            onAssignReelPhotos: day == .tuesday ? { raw, edited, bw in
+                                assignReelPhotosAndGenerate(raw: raw, edited: edited, bw: bw)
                             } : nil,
                             onPickInlineRaw: day == .tuesday ? {
                                 let panel = NSOpenPanel()
@@ -151,8 +173,21 @@ struct CaptionReviewView: View {
                                     inlineEditedPhoto = url
                                 }
                             } : nil,
+                            onPickInlineBW: day == .tuesday ? {
+                                let panel = NSOpenPanel()
+                                panel.title = "Select B&W edit (optional)"
+                                panel.allowedContentTypes = [.image]
+                                panel.allowsMultipleSelection = false
+                                if panel.runModal() == .OK, let url = panel.url {
+                                    inlineBWPhoto = url
+                                }
+                            } : nil,
+                            onClearInlineBW: day == .tuesday ? { inlineBWPhoto = nil } : nil,
+                            onChangeBW: day == .tuesday ? { changeBWPhoto() } : nil,
+                            onRemoveBW: day == .tuesday ? { removeBWPhoto() } : nil,
                             inlineRawPhoto: inlineRawPhoto,
                             inlineEditedPhoto: inlineEditedPhoto,
+                            inlineBWPhoto: inlineBWPhoto,
                             collageCropOffsets: day == .wednesday ? collageOffsetsBinding(day) : nil,
                             collageCellOverride: day == .wednesday ? collageCellOverrideBinding(day) : nil,
                             reelCropOffsets: day == .thursday ? reelOffsetsBinding(day) : nil,
@@ -321,14 +356,24 @@ struct CaptionReviewView: View {
 
     // MARK: - Regenerate all
 
+    /// Read the current event from AppState by id. The captured `event` value
+    /// can become stale relative to AppState (e.g. when @State leaks across
+    /// detail-pane switches), so any code path that hands an Event to Python
+    /// must use this — otherwise Python regenerates on stale data and saves
+    /// the wrong-event content back under the right-event id.
+    private var liveEvent: Event {
+        appState.events.first(where: { $0.id == event.id }) ?? event
+    }
+
     private func regenerateAll() async {
         isRegenerating = true
         regenerateError = nil
         do {
-            let newResult = try await PythonBridge.shared.runWeekGeneration(event: event)
+            let live = liveEvent
+            let newResult = try await PythonBridge.shared.runWeekGeneration(event: live)
             result = newResult
             mergeGlobalTags()
-            NotificationService.shared.notifyRegenerationComplete(eventName: event.name, what: "Captions")
+            NotificationService.shared.notifyRegenerationComplete(eventName: live.name, what: "Captions")
         } catch {
             regenerateError = error.localizedDescription
         }
@@ -357,11 +402,11 @@ struct CaptionReviewView: View {
     private func generateGraphics() {
         isGeneratingGraphics = true
         Task {
-            if let paths = try? await PythonBridge.shared.runPreviewGeneration(event: event),
-               !paths.isEmpty {
+            if let result = try? await PythonBridge.shared.runPreviewGeneration(event: liveEvent),
+               !result.paths.isEmpty {
                 await MainActor.run {
                     var ev = event
-                    ev.previewMediaPaths = paths
+                    ev.previewMediaPaths = result.paths
                     appState.updateEvent(ev)
                 }
             }
@@ -414,13 +459,13 @@ struct CaptionReviewView: View {
 
         regeneratingDays.insert(day)
         Task {
-            _ = try? await PythonBridge.shared.runSwapReelAudio(event: event, day: day)
+            _ = try? await PythonBridge.shared.runSwapReelAudio(event: liveEvent, day: day)
             await MainActor.run {
                 // Bump the version so SwiftUI rebuilds AVPlayer with the updated file.
                 graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
                 regeneratingDays.remove(day)
                 NotificationService.shared.notifyRegenerationComplete(
-                    eventName: event.name,
+                    eventName: liveEvent.name,
                     what: "\(day.displayName) audio"
                 )
             }
@@ -446,36 +491,66 @@ struct CaptionReviewView: View {
         regeneratingDays.insert(day)
         Task {
             _ = try? await PythonBridge.shared.runSwapReelAudioWithFile(
-                event: event, day: day, audioPath: dest.path
+                event: liveEvent, day: day, audioPath: dest.path
             )
             await MainActor.run {
                 graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
                 regeneratingDays.remove(day)
                 NotificationService.shared.notifyRegenerationComplete(
-                    eventName: event.name,
+                    eventName: liveEvent.name,
                     what: "\(day.displayName) audio"
                 )
             }
         }
     }
 
-    private func assignReelPhotosAndGenerate(raw: URL, edited: URL) {
+    private func assignReelPhotosAndGenerate(raw: URL, edited: URL, bw: URL?) {
         // Save the RAW + Edited photos to the event model for Tuesday (and Friday).
+        // `bw` is the optional B&W after; when set it flips both the Tuesday reel
+        // and the Friday graphic into the 3-photo treatment. When nil it clears
+        // any previously assigned B&W.
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         var tue = ev.days[DayName.tuesday.rawValue] ?? PostingDay(day: .tuesday)
         tue.rawPhotoPath = raw
         tue.editedPhotoPath = edited
+        tue.bwPhotoPath = bw
         ev.days[DayName.tuesday.rawValue] = tue
-        // Friday reuses Tuesday's RAW/Edited for before/after
+        // Friday reuses Tuesday's RAW/Edited (and B&W) for before/after
         var fri = ev.days[DayName.friday.rawValue] ?? PostingDay(day: .friday)
         fri.rawPhotoPath = raw
         fri.editedPhotoPath = edited
+        fri.bwPhotoPath = bw
         ev.days[DayName.friday.rawValue] = fri
         appState.updateEvent(ev)
 
         // Now generate the reel for Tuesday and the Friday before/after story
         regenerateGraphic(day: .tuesday)
         regenerateGraphic(day: .friday)
+    }
+
+    /// Add or change the optional B&W after on an already-generated before/after.
+    /// Reuses the saved Tuesday RAW/Edited (which exist once the reel has been
+    /// generated) and re-runs both the Tuesday reel and Friday graphic in the
+    /// 3-photo treatment.
+    private func changeBWPhoto() {
+        guard let live = appState.events.first(where: { $0.id == event.id }),
+              let tue = live.days[DayName.tuesday.rawValue],
+              let raw = tue.rawPhotoPath, let edited = tue.editedPhotoPath else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Select B&W edit"
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        assignReelPhotosAndGenerate(raw: raw, edited: edited, bw: url)
+    }
+
+    /// Remove the B&W after and fall back to the classic two-photo before/after,
+    /// regenerating both days.
+    private func removeBWPhoto() {
+        guard let live = appState.events.first(where: { $0.id == event.id }),
+              let tue = live.days[DayName.tuesday.rawValue],
+              let raw = tue.rawPhotoPath, let edited = tue.editedPhotoPath else { return }
+        assignReelPhotosAndGenerate(raw: raw, edited: edited, bw: nil)
     }
 
     private func changeReelPhotos(day: DayName) {
@@ -494,7 +569,10 @@ struct CaptionReviewView: View {
             editedPanel.allowsMultipleSelection = false
             guard editedPanel.runModal() == .OK, let editedURL = editedPanel.url else { return }
 
-            assignReelPhotosAndGenerate(raw: rawURL, edited: editedURL)
+            // Preserve any existing B&W assignment when re-picking RAW/Edited.
+            let existingBW = appState.events.first(where: { $0.id == event.id })?
+                .days[DayName.tuesday.rawValue]?.bwPhotoPath
+            assignReelPhotosAndGenerate(raw: rawURL, edited: editedURL, bw: existingBW)
         } else {
             // Thursday: multi-select
             let panel = NSOpenPanel()
@@ -518,6 +596,24 @@ struct CaptionReviewView: View {
             appState.updateEvent(ev)
             regenerateGraphic(day: .thursday)
         }
+    }
+
+    /// Swap two photos in a day's photoPaths. Persists the new order but
+    /// does NOT trigger regen — the user batches swaps with crop / resize
+    /// edits and bakes them all in one shot via "Apply changes".
+    private func swapReelPhotos(day: DayName, a: URL, b: URL) {
+        guard a.path != b.path else { return }
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        guard var pd = ev.days[day.rawValue] else { return }
+        // Compare by .path (decoded, normalized) — URL `==` uses absoluteString
+        // which can differ between URLs built from Python's plain-string layout
+        // JSON and URLs decoded from events.json's stored absoluteString.
+        guard let i = pd.photoPaths.firstIndex(where: { $0.path == a.path }),
+              let j = pd.photoPaths.firstIndex(where: { $0.path == b.path }),
+              i != j else { return }
+        pd.photoPaths.swapAt(i, j)
+        ev.days[day.rawValue] = pd
+        appState.updateEvent(ev)
     }
 
     private func regenerateGraphic(day: DayName, newLayout: Bool = false) {
@@ -548,25 +644,45 @@ struct CaptionReviewView: View {
         }
 
         regeneratingDays.insert(day)
+        regenerateError = nil
         Task {
-            if let newPaths = try? await PythonBridge.shared.runPreviewGeneration(
-                event: eventSnapshot, days: [day.rawValue]
-            ), let dayPaths = newPaths[day.rawValue], !dayPaths.isEmpty {
-                await MainActor.run {
-                    // Read the CURRENT event — not self.event which may be stale
-                    // (e.g. after assignReelPhotosAndGenerate saved new photos).
-                    var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-                    ev.previewMediaPaths[day.rawValue] = dayPaths
-                    appState.updateEvent(ev)
-                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
-                }
+            // Capture the result so we can distinguish "Python crashed" from
+            // "Python exited 0 but reported a per-day error". Both used to be
+            // swallowed by `try?`, which fired the success notification while
+            // the mockup silently kept showing the old MP4.
+            let outcome: Result<PythonBridge.PreviewGenerationResult, Error>
+            do {
+                let result = try await PythonBridge.shared.runPreviewGeneration(
+                    event: eventSnapshot, days: [day.rawValue]
+                )
+                outcome = .success(result)
+            } catch {
+                outcome = .failure(error)
             }
+
             await MainActor.run {
                 regeneratingDays.remove(day)
-                NotificationService.shared.notifyRegenerationComplete(
-                    eventName: event.name,
-                    what: day.displayName
-                )
+                switch outcome {
+                case .failure(let error):
+                    regenerateError = "\(day.displayName) regeneration failed: \(error.localizedDescription)"
+                case .success(let result):
+                    if let pyError = result.errors[day.rawValue] {
+                        regenerateError = "\(day.displayName) regeneration failed: \(pyError)"
+                    } else if let dayPaths = result.paths[day.rawValue], !dayPaths.isEmpty {
+                        // Read the CURRENT event — not self.event which may be stale
+                        // (e.g. after assignReelPhotosAndGenerate saved new photos).
+                        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+                        ev.previewMediaPaths[day.rawValue] = dayPaths
+                        appState.updateEvent(ev)
+                        graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                        NotificationService.shared.notifyRegenerationComplete(
+                            eventName: event.name,
+                            what: day.displayName
+                        )
+                    } else {
+                        regenerateError = "\(day.displayName) regeneration produced no output"
+                    }
+                }
             }
         }
     }
@@ -576,7 +692,7 @@ struct CaptionReviewView: View {
     private func reviseCaption(day: DayName, feedback: String) async throws {
         guard let current = result[day] else { return }
         let revised = try await PythonBridge.shared.runCaptionRevision(
-            event: event,
+            event: liveEvent,
             day: day,
             feedback: feedback,
             currentCaption: current
@@ -588,7 +704,7 @@ struct CaptionReviewView: View {
     private func reviseBlog(feedback: String) async throws {
         guard let current = result.blog else { return }
         let revised = try await PythonBridge.shared.runBlogRevision(
-            event: event,
+            event: liveEvent,
             feedback: feedback,
             currentBlog: current
         )
@@ -707,13 +823,20 @@ private struct CaptionSection: View {
     var onSwapReelAudio: (() -> Void)? = nil
     var onUploadReelAudio: (() -> Void)? = nil
     var onChangeReelPhotos: (() -> Void)? = nil
+    var onSwapReelPhotos: ((URL, URL) -> Void)? = nil
     /// Called when the user assigns RAW + Edited photos inline (review screen fallback).
-    var onAssignReelPhotos: ((URL, URL) -> Void)? = nil
+    var onAssignReelPhotos: ((URL, URL, URL?) -> Void)? = nil
     /// Inline photo picker callbacks (hoisted to parent for fileImporter presentation)
     var onPickInlineRaw: (() -> Void)? = nil
     var onPickInlineEdited: (() -> Void)? = nil
+    var onPickInlineBW: (() -> Void)? = nil
+    var onClearInlineBW: (() -> Void)? = nil
+    /// Add/change/remove the optional B&W on an already-generated before/after.
+    var onChangeBW: (() -> Void)? = nil
+    var onRemoveBW: (() -> Void)? = nil
     var inlineRawPhoto: URL? = nil
     var inlineEditedPhoto: URL? = nil
+    var inlineBWPhoto: URL? = nil
     var collageCropOffsets: Binding<[String: CropOffset]>? = nil
     var collageCellOverride: Binding<[CollageCell]?>? = nil
     var reelCropOffsets: Binding<[String: CropOffset]>? = nil
@@ -893,6 +1016,7 @@ private struct CaptionSection: View {
                                 InstagramMockup(
                                     photoURL: nil,
                                     videoURL: reelURL,
+                                    videoVersion: graphicVersion,
                                     dayLabel: day.displayName,
                                     caption: caption.caption,
                                     hashtags: caption.hashtags,
@@ -903,6 +1027,9 @@ private struct CaptionSection: View {
                                     onSwapAudio: onSwapReelAudio,
                                     onUploadAudio: onUploadReelAudio,
                                     onChangePhotos: onChangeReelPhotos,
+                                    onChangeBW: onChangeBW,
+                                    onRemoveBW: onRemoveBW,
+                                    hasBW: postingDay?.bwPhotoPath != nil,
                                     isRegenerating: isRegeneratingGraphic
                                 )
                                 .id("tuesday-reel-\(graphicVersion)")
@@ -1000,6 +1127,7 @@ private struct CaptionSection: View {
                                     photoURL: postingDay?.photoPaths.first,
                                     photoURLs: day == .wednesday ? (postingDay?.photoPaths ?? []) : [],
                                     videoURL: day == .thursday ? previewPaths?["reel"].flatMap({ URL(fileURLWithPath: $0) }) : nil,
+                                    videoVersion: graphicVersion,
                                     dayLabel: day.displayName,
                                     caption: caption.caption,
                                     hashtags: caption.hashtags,
@@ -1146,6 +1274,7 @@ private struct CaptionSection: View {
                                             onSwapAudio: onSwapReelAudio,
                                             onUploadAudio: onUploadReelAudio,
                                             onChangePhotos: onChangeReelPhotos,
+                                            onSwapPhotos: onSwapReelPhotos,
                                             maxHeight: storyExpandedMaxHeight - 60
                                         )
                                         .id("\(pngURL.path)-\(graphicVersion)")
@@ -1162,6 +1291,7 @@ private struct CaptionSection: View {
                                     } else {
                                     ReelPreviewPlayer(
                                         url: previewURL,
+                                        version: graphicVersion,
                                         onRegenerate: onRegenerateGraphic,
                                         isRegenerating: isRegeneratingGraphic
                                     )
@@ -1261,12 +1391,15 @@ private struct CaptionSection: View {
                             InlineReelPhotoAssignment(
                                 rawPhoto: inlineRawPhoto,
                                 editedPhoto: inlineEditedPhoto,
+                                bwPhoto: inlineBWPhoto,
                                 isRegenerating: isRegeneratingGraphic,
                                 onPickRaw: { onPickInlineRaw?() },
                                 onPickEdited: { onPickInlineEdited?() },
+                                onPickBW: { onPickInlineBW?() },
+                                onClearBW: { onClearInlineBW?() },
                                 onGenerate: {
                                     if let raw = inlineRawPhoto, let edited = inlineEditedPhoto {
-                                        onAssignReelPhotos?(raw, edited)
+                                        onAssignReelPhotos?(raw, edited, inlineBWPhoto)
                                     }
                                 }
                             )
@@ -1279,6 +1412,8 @@ private struct CaptionSection: View {
                                 graphicVersion: graphicVersion,
                                 onPreview: onPreview,
                                 onRegenerate: onRegenerateGraphic,
+                                onChangeBW: onChangeBW,
+                                onRemoveBW: onRemoveBW,
                                 collageCropOffsets: collageCropOffsets,
                                 collageCellOverride: collageCellOverride
                             )
@@ -1905,6 +2040,10 @@ private struct ReviewMediaStrip: View {
     var graphicVersion: Int = 0
     var onPreview: ((URL) -> Void)?
     var onRegenerate: (() -> Void)? = nil
+    /// When non-nil, the before/after pair shows an "Add / Change B&W" control
+    /// (Tuesday only). Picking re-runs the 3-photo treatment for Tuesday + Friday.
+    var onChangeBW: (() -> Void)? = nil
+    var onRemoveBW: (() -> Void)? = nil
     var collageCropOffsets: Binding<[String: CropOffset]>? = nil
     var collageCellOverride: Binding<[CollageCell]?>? = nil
     /// When true, skip the main story/reel/before-after graphic — used by the split
@@ -1955,7 +2094,7 @@ private struct ReviewMediaStrip: View {
                         .tracking(0.8)
                         .foregroundStyle(Color.warmMid)
                         .padding(.horizontal, Spacing.xl)
-                    ReelPreviewPlayer(url: url, onRegenerate: onRegenerate, isRegenerating: isRegenerating)
+                    ReelPreviewPlayer(url: url, version: graphicVersion, onRegenerate: onRegenerate, isRegenerating: isRegenerating)
                         .id("\(url.path)-\(graphicVersion)")
                         .aspectRatio(9/16, contentMode: .fit)
                         .frame(maxWidth: .infinity, maxHeight: max(440, (NSScreen.main?.visibleFrame.height ?? 800) * 0.82))
@@ -2057,16 +2196,55 @@ private struct ReviewMediaStrip: View {
                 }
             }
 
-            // Before / After pair — Tuesday and Friday
+            // Before / After pair — Tuesday and Friday. A third B&W after shows
+            // when the 3-photo treatment is in use.
             if day == .tuesday || day == .friday {
-                let hasBA = postingDay.rawPhotoPath != nil || postingDay.editedPhotoPath != nil
+                let hasBA = postingDay.rawPhotoPath != nil
+                    || postingDay.editedPhotoPath != nil
+                    || postingDay.bwPhotoPath != nil
                 if hasBA {
-                    HStack(spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
                         if let raw = postingDay.rawPhotoPath {
                             LabeledReviewThumb(url: raw, label: "Before") { onPreview?(raw) }
                         }
                         if let edited = postingDay.editedPhotoPath {
-                            LabeledReviewThumb(url: edited, label: "After") { onPreview?(edited) }
+                            LabeledReviewThumb(url: edited, label: postingDay.bwPhotoPath != nil ? "Color" : "After") { onPreview?(edited) }
+                        }
+                        if let bw = postingDay.bwPhotoPath {
+                            LabeledReviewThumb(url: bw, label: "B&W") { onPreview?(bw) }
+                        }
+
+                        // Add / Change B&W control (Tuesday only — Friday mirrors it).
+                        if let onChangeBW {
+                            if postingDay.bwPhotoPath == nil {
+                                Button { onChangeBW() } label: {
+                                    VStack(spacing: 4) {
+                                        Image(systemName: "plus.circle")
+                                            .font(.system(size: 18))
+                                        Text("Add B&W")
+                                            .font(.system(size: 9))
+                                    }
+                                    .foregroundStyle(Color.roseGold)
+                                    .frame(width: 60, height: 80)
+                                    .background(Color.warmFaint.opacity(0.3))
+                                    .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isRegenerating)
+                            } else {
+                                VStack(spacing: 6) {
+                                    Button("Change") { onChangeBW() }
+                                        .buttonStyle(.plain)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color.roseGold)
+                                    Button("Remove") { onRemoveBW?() }
+                                        .buttonStyle(.plain)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color.warmMid)
+                                }
+                                .disabled(isRegenerating)
+                                .padding(.top, 4)
+                            }
                         }
                     }
                     .padding(.horizontal, Spacing.xl)
@@ -2097,6 +2275,10 @@ private struct InstagramMockup: View {
     let photoURL: URL?
     var photoURLs: [URL] = []    // carousel mode: if non-empty, show left/right arrows
     var videoURL: URL? = nil     // reel — shown instead of still photo when set
+    /// Bumped on each successful regen — threaded into ReelPreviewPlayer so the
+    /// AVPlayer's URL-keyed asset cache is busted even if the file path itself
+    /// stays stable (Python overwrites the MP4 in place).
+    var videoVersion: Int = 0
     let dayLabel: String   // e.g. "Sunday" — shown as relative post time
     let caption: String
     let hashtags: [String]
@@ -2110,6 +2292,11 @@ private struct InstagramMockup: View {
     var onSwapAudio: (() -> Void)? = nil
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
+    /// Optional B&W after controls (Tuesday reel). `hasBW` toggles the label
+    /// between "Add" and "Change" and gates the Remove item.
+    var onChangeBW: (() -> Void)? = nil
+    var onRemoveBW: (() -> Void)? = nil
+    var hasBW: Bool = false
     var isRegenerating: Bool = false
 
     private var regenerateLabelText: String {
@@ -2124,6 +2311,7 @@ private struct InstagramMockup: View {
             || onSwapAudio != nil
             || onUploadAudio != nil
             || onChangePhotos != nil
+            || onChangeBW != nil
     }
 
     @State private var photo: NSImage? = nil
@@ -2209,6 +2397,22 @@ private struct InstagramMockup: View {
                             }
                             .disabled(isRegenerating)
                         }
+                        if let onChangeBW {
+                            Button {
+                                onChangeBW()
+                            } label: {
+                                Label(hasBW ? "Change B&W edit" : "Add B&W edit", systemImage: "circle.lefthalf.filled")
+                            }
+                            .disabled(isRegenerating)
+                        }
+                        if hasBW, let onRemoveBW {
+                            Button {
+                                onRemoveBW()
+                            } label: {
+                                Label("Remove B&W edit", systemImage: "minus.circle")
+                            }
+                            .disabled(isRegenerating)
+                        }
                         if let onSwapAudio {
                             Button {
                                 onSwapAudio()
@@ -2249,7 +2453,7 @@ private struct InstagramMockup: View {
                 if let url = videoURL {
                     // Reel: full 9:16 at card width — card width is already set
                     // to a screen-proportional value so height is controlled.
-                    ReelPreviewPlayer(url: url, onRegenerate: nil, isRegenerating: isRegenerating)
+                    ReelPreviewPlayer(url: url, version: videoVersion, onRegenerate: nil, isRegenerating: isRegenerating)
                         .frame(width: cardWidth, height: cardWidth * 16.0 / 9.0)
                         .overlay {
                             if isRegenerating {
@@ -2334,7 +2538,7 @@ private struct InstagramMockup: View {
             .padding(.bottom, 6)
 
             // ── Likes ────────────────────────────────────────────────────────
-            Text("1,847 likes")
+            Text("1,021 likes")
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(Color.black)
                 .padding(.horizontal, 11)
@@ -2935,6 +3139,7 @@ private struct ReelStripPreviewThumbnail: View {
     var onSwapAudio: (() -> Void)? = nil
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
+    var onSwapPhotos: ((URL, URL) -> Void)? = nil
     var maxHeight: CGFloat = 600
 
     @State private var image: NSImage?
@@ -2942,9 +3147,38 @@ private struct ReelStripPreviewThumbnail: View {
     @State private var stripW: CGFloat = 1080
     @State private var stripH: CGFloat = 1920
     @State private var selectedCellIndex: Int? = nil
+    // Swap mode — entered from the menu. swapSourceIdx tracks the first
+    // cell tapped; the next cell tap completes the swap and exits the mode.
+    @State private var swapMode: Bool = false
+    @State private var swapSourceIdx: Int? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if swapMode {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.roseGold)
+                    Text(swapSourceIdx == nil
+                         ? "Tap the photo you want to move"
+                         : "Tap the spot you want to swap it with")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.warmDark)
+                    Spacer()
+                    Button("Cancel") {
+                        swapMode = false
+                        swapSourceIdx = nil
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.roseGold)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.roseGold.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
             GeometryReader { geo in
                 let sx = geo.size.width / max(stripW, 1)
                 let displayH = stripH * sx
@@ -2964,7 +3198,14 @@ private struct ReelStripPreviewThumbnail: View {
                         .frame(width: geo.size.width, height: displayH)
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            if !isRegenerating { selectedCellIndex = nil }
+                            if !isRegenerating {
+                                if swapMode {
+                                    swapMode = false
+                                    swapSourceIdx = nil
+                                } else {
+                                    selectedCellIndex = nil
+                                }
+                            }
                         }
 
                         ForEach(Array(cells.enumerated()), id: \.0) { idx, cell in
@@ -2974,12 +3215,13 @@ private struct ReelStripPreviewThumbnail: View {
                                     get: { cropOffsets[photoKey] ?? CropOffset() },
                                     set: { cropOffsets[photoKey] = $0 }
                                 ),
-                                isSelected: selectedCellIndex == idx,
+                                isSelected: !swapMode && selectedCellIndex == idx,
+                                isDragTarget: swapMode && swapSourceIdx == idx,
                                 cellW: CGFloat(cell.w) * sx,
                                 cellH: CGFloat(cell.h) * sx,
                                 photoURL: URL(fileURLWithPath: cell.photoPath),
-                                onTap: { selectedCellIndex = (selectedCellIndex == idx) ? nil : idx },
-                                onDragEnd: { selectedCellIndex = idx }
+                                onTap: { handleCellTap(idx: idx) },
+                                onDragEnd: { if !swapMode { selectedCellIndex = idx } }
                             )
                             .position(
                                 x: CGFloat(cell.x) * sx + CGFloat(cell.w) * sx / 2,
@@ -3035,6 +3277,16 @@ private struct ReelStripPreviewThumbnail: View {
                                 Label("Change photos", systemImage: "photo.on.rectangle.angled")
                             }
                             .disabled(isRegenerating)
+                        }
+                        if onSwapPhotos != nil {
+                            Button {
+                                swapMode = true
+                                swapSourceIdx = nil
+                                selectedCellIndex = nil
+                            } label: {
+                                Label("Swap two photos", systemImage: "arrow.left.arrow.right")
+                            }
+                            .disabled(isRegenerating || cells.count < 2)
                         }
                         if let onSwapAudio {
                             Button {
@@ -3117,6 +3369,19 @@ private struct ReelStripPreviewThumbnail: View {
                         .font(.system(size: 11))
                         .foregroundStyle(Color.warmMid)
                     Spacer()
+                    if onSwapPhotos != nil && !swapMode {
+                        Button {
+                            swapMode = true
+                            swapSourceIdx = nil
+                            selectedCellIndex = nil
+                        } label: {
+                            Label("Swap photos", systemImage: "arrow.left.arrow.right")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Color.roseGold)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isRegenerating || cells.count < 2)
+                    }
                     Button(isRegenerating ? "Rebuilding…" : "Apply changes") {
                         onRegenerate()
                     }
@@ -3161,6 +3426,32 @@ private struct ReelStripPreviewThumbnail: View {
             }
         }
     }
+
+    private func handleCellTap(idx: Int) {
+        if swapMode {
+            if let src = swapSourceIdx {
+                if src == idx {
+                    swapSourceIdx = nil
+                } else if let onSwap = onSwapPhotos,
+                          src < cells.count, idx < cells.count {
+                    let a = URL(fileURLWithPath: cells[src].photoPath)
+                    let b = URL(fileURLWithPath: cells[idx].photoPath)
+                    // Swap the local cells so the overlay layer immediately
+                    // shows photos in their new positions on top of the stale
+                    // base PNG. Regen happens later via "Apply changes".
+                    cells[src].photoPath = b.path
+                    cells[idx].photoPath = a.path
+                    onSwap(a, b)
+                    swapMode = false
+                    swapSourceIdx = nil
+                }
+            } else {
+                swapSourceIdx = idx
+            }
+        } else {
+            selectedCellIndex = (selectedCellIndex == idx) ? nil : idx
+        }
+    }
 }
 
 /// Individual cell overlay inside the collage.
@@ -3195,7 +3486,7 @@ private struct CollageCellOverlay: View {
 
     private var isMoved: Bool { cropOffset.x != 0 || cropOffset.y != 0 || cropOffset.scale != 1.0 }
     private var isFillMode: Bool { cropOffset.scale >= 1.0 }
-    private var isDragging: Bool { dragTranslation != .zero && isFillMode }
+    private var isDragging: Bool { dragTranslation != .zero }
 
     // MARK: - Photo geometry (mirrors Python's fill_scale logic)
 
@@ -3297,12 +3588,14 @@ private struct CollageCellOverlay: View {
                             with: .color(.black.opacity(0.3 * blurOpacity))
                         )
                     }
-                    // Sharp photo centered in the cell (smaller than cell in blur mode)
-                    let centeredRect = CGRect(
-                        x: committedOffset.width,  y: committedOffset.height,
-                        width: rendered.width,      height: rendered.height
+                    // Sharp photo placed via liveOffset so drag is visible on any
+                    // axis that still overflows even when zoomed out (e.g. landscape
+                    // photo in portrait cell at scale 0.9).
+                    let drawRect = CGRect(
+                        x: liveOffset.width,  y: liveOffset.height,
+                        width: rendered.width, height: rendered.height
                     )
-                    context.draw(img, in: centeredRect)
+                    context.draw(img, in: drawRect)
                 }
             }
             .frame(width: cellW, height: cellH)
@@ -3334,7 +3627,7 @@ private struct CollageCellOverlay: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { val in
-                    guard isFillMode && (overflow.width > 0 || overflow.height > 0) else { return }
+                    guard overflow.width > 0 || overflow.height > 0 else { return }
                     // Clamp translation so the photo never exposes the cell boundary.
                     // liveOffset = committedOffset + dragTranslation must stay in [-overflow, 0].
                     let clampedX: CGFloat = overflow.width > 0
@@ -3353,10 +3646,10 @@ private struct CollageCellOverlay: View {
                     let dist = hypot(val.translation.width, val.translation.height)
                     if dist < 5 {
                         onTap()
-                    } else if isFillMode {
+                    } else if overflow.width > 0 || overflow.height > 0 {
                         // Commit pan only in axes where there's overflow to pan through.
-                        // new_ox = old_ox − 2×drag_x / overflow_x  (ensures committedOffset
-                        // equals the position the photo was at when the finger lifted)
+                        // Works in fill mode AND when slightly zoomed out, as long as
+                        // the photo still overflows the cell on at least one axis.
                         if overflow.width > 0 {
                             let ovX = Double(overflow.width)
                             cropOffset.x = min(1, max(-1, cropOffset.x - 2 * Double(val.translation.width) / ovX))
@@ -3367,7 +3660,6 @@ private struct CollageCellOverlay: View {
                         }
                         onDragEnd()
                     }
-                    // scale < 1: drag ignored — photo can't pan when smaller than cell
                 }
         )
         .task(id: photoURL) {
@@ -3615,6 +3907,7 @@ private struct ReviewMediaFileRow: View {
 
 private struct ReelPreviewPlayer: NSViewRepresentable {
     let url: URL
+    var version: Int = 0
     var onRegenerate: (() -> Void)?
     var isRegenerating: Bool
     var videoGravity: AVLayerVideoGravity = .resizeAspect
@@ -3622,11 +3915,13 @@ private struct ReelPreviewPlayer: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let container = NSView()
         let playerView = AVPlayerView()
-        playerView.player = AVPlayer(url: url)
+        playerView.player = AVPlayer(playerItem: AVPlayerItem(asset: AVURLAsset(url: url)))
         playerView.controlsStyle = .inline
         playerView.videoGravity = videoGravity
         playerView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(playerView)
+        context.coordinator.lastVersion = version
+        context.coordinator.lastURL = url
         NSLayoutConstraint.activate([
             playerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             playerView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -3636,13 +3931,30 @@ private struct ReelPreviewPlayer: NSViewRepresentable {
         return container
     }
 
+    // Replace the AVPlayer when the URL changes OR the version bumps. Same
+    // URL with new bytes (Python may overwrite the MP4 in place after a
+    // regen) needs a fresh AVPlayer because AVFoundation caches by URL.
     func updateNSView(_ nsView: NSView, context: Context) {
         guard let playerView = nsView.subviews.first as? AVPlayerView else { return }
-        let currentURL = (playerView.player?.currentItem?.asset as? AVURLAsset)?.url
-        if currentURL != url {
-            playerView.player = AVPlayer(url: url)
+        if context.coordinator.lastURL != url || context.coordinator.lastVersion != version {
+            // Tear down the old player explicitly so the underlying AVAsset
+            // is released before the new one memory-maps the (now overwritten)
+            // file. Without this, AVFoundation can keep serving stale frames
+            // even though we replaced the player object.
+            playerView.player?.pause()
+            playerView.player?.replaceCurrentItem(with: nil)
+            playerView.player = AVPlayer(playerItem: AVPlayerItem(asset: AVURLAsset(url: url)))
+            context.coordinator.lastURL = url
+            context.coordinator.lastVersion = version
         }
         playerView.videoGravity = videoGravity
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var lastURL: URL?
+        var lastVersion: Int = -1
     }
 }
 
@@ -3767,9 +4079,12 @@ private struct ReviewPhotoOverlay: View {
 private struct InlineReelPhotoAssignment: View {
     var rawPhoto: URL?
     var editedPhoto: URL?
+    var bwPhoto: URL? = nil
     var isRegenerating: Bool = false
     var onPickRaw: () -> Void
     var onPickEdited: () -> Void
+    var onPickBW: () -> Void
+    var onClearBW: () -> Void
     var onGenerate: () -> Void
 
     private var hasAll: Bool { rawPhoto != nil && editedPhoto != nil }
@@ -3786,9 +4101,25 @@ private struct InlineReelPhotoAssignment: View {
                 .font(.light(12))
                 .foregroundStyle(Color.warmMid)
 
-            HStack(spacing: Spacing.md) {
+            HStack(alignment: .top, spacing: Spacing.md) {
                 photoSlot(label: "RAW (unedited)", url: rawPhoto, action: onPickRaw)
                 photoSlot(label: "Edited", url: editedPhoto, action: onPickEdited)
+                VStack(spacing: Spacing.xs) {
+                    photoSlot(label: "B&W (optional)", url: bwPhoto, action: onPickBW)
+                    if bwPhoto != nil {
+                        Button("Remove") { onClearBW() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.roseGold)
+                    }
+                }
+            }
+
+            if bwPhoto != nil {
+                Text("3-photo post: reel reveals color over B&W, Friday shows all three.")
+                    .font(.light(10))
+                    .foregroundStyle(Color.roseGold.opacity(0.9))
+                    .multilineTextAlignment(.center)
             }
 
             if hasAll {

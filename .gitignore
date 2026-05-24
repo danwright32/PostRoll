@@ -6,6 +6,7 @@ __pycache__/
 
 # App data and client files — keep local only
 events.json
+events.json.bak.*
 programs/
 
 # Build artifacts

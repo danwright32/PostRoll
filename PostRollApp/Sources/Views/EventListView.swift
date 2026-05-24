@@ -21,11 +21,16 @@ struct EventListView: View {
 
     private var filteredEvents: [Event] {
         let base = showExported ? appState.events : appState.events.filter { $0.stage != .exported }
-        guard !searchText.isEmpty else { return base }
-        return base.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText) ||
-            $0.org.localizedCaseInsensitiveContains(searchText)
+        let searched: [Event]
+        if searchText.isEmpty {
+            searched = base
+        } else {
+            searched = base.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText) ||
+                $0.org.localizedCaseInsensitiveContains(searchText)
+            }
         }
+        return searched.sorted { $0.date > $1.date }
     }
 
     var body: some View {
@@ -373,7 +378,7 @@ struct StagePill: View {
         case .ocrDone:          return "Step 3: OCR complete. Review extracted text, then assign photos."
         case .photosAssigned:   return "Step 4: Photos assigned to posting days. Ready to generate assets."
         case .assetsGenerated:  return "Step 5: Assets generated. Review captions before exporting."
-        case .captionsReviewed: return "Step 6: Captions approved. Ready to export."
+        case .captionsReviewed: return "Step 6: Reviewing captions. Approve to export."
         case .exported:         return "Step 7: Exported. All assets are in the output folder."
         }
     }

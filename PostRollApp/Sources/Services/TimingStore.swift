@@ -13,6 +13,25 @@ final class TimingStore: @unchecked Sendable {
         var captions: [Double] = []     // seconds
         var blog: [Double] = []         // seconds
         var packaging: [Double] = []    // seconds
+        var mediaExport: [Double] = []  // seconds (export-time visual asset run)
+
+        init() {}
+
+        enum CodingKeys: String, CodingKey {
+            case ocr, generation, captions, blog, packaging, mediaExport
+        }
+
+        // decodeIfPresent on every field so adding a new track (mediaExport)
+        // doesn't fail to decode older stored JSON and wipe existing history.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            ocr         = try c.decodeIfPresent([Double].self, forKey: .ocr)         ?? []
+            generation  = try c.decodeIfPresent([Double].self, forKey: .generation)  ?? []
+            captions    = try c.decodeIfPresent([Double].self, forKey: .captions)    ?? []
+            blog        = try c.decodeIfPresent([Double].self, forKey: .blog)        ?? []
+            packaging   = try c.decodeIfPresent([Double].self, forKey: .packaging)   ?? []
+            mediaExport = try c.decodeIfPresent([Double].self, forKey: .mediaExport) ?? []
+        }
     }
 
     private var timings: Timings {
@@ -42,6 +61,16 @@ final class TimingStore: @unchecked Sendable {
         var t = timings
         t.generation.append(seconds)
         if t.generation.count > maxSamples { t.generation.removeFirst() }
+        timings = t
+    }
+
+    /// Record the wall-clock duration of an export-time visual asset run.
+    /// Only the copy-only common case is recorded by the caller, so the mean
+    /// stays meaningful (Python regen runs are estimated separately).
+    func recordMediaExport(seconds: Double) {
+        var t = timings
+        t.mediaExport.append(seconds)
+        if t.mediaExport.count > maxSamples { t.mediaExport.removeFirst() }
         timings = t
     }
 
@@ -79,6 +108,9 @@ final class TimingStore: @unchecked Sendable {
     var captionsMean: Double?  { mean(timings.captions) }
     var blogMean: Double?      { mean(timings.blog) }
     var packagingMean: Double? { mean(timings.packaging) }
+
+    /// Rolling mean of copy-only export-time media runs, or nil if no history.
+    var mediaExportEstimate: Double? { mean(timings.mediaExport) }
 
     private func mean(_ arr: [Double]) -> Double? {
         arr.isEmpty ? nil : arr.reduce(0, +) / Double(arr.count)

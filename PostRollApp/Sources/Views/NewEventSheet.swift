@@ -173,7 +173,9 @@ private struct ShootTypeOption: View {
                 Text(type.rawValue)
                     .font(.system(size: 13))
                     .foregroundStyle(isSelected ? Color.warmDark : Color.warmMid)
+                Spacer(minLength: 0)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .animation(.easeOut(duration: 0.1), value: isSelected)

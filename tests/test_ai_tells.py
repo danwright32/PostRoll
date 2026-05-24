@@ -209,7 +209,7 @@ def test_blog_runs_humanizer_review_when_available(sample_photo, tmp_path):
         calls.append(prompt)
         if len(calls) == 1:
             return {"title": "Pivotal moment", "body": "It delves into a tapestry.", "photo_count": 4}
-        return {"title": "A specific title", "body": "A specific clean body.", "photo_count": 4}
+        return {"title": "A specific title", "body": "It's a specific clean body.", "photo_count": 4}
 
     with patch(
         "postroll.ai.generate_blog.run_json_prompt", side_effect=fake_run_json
@@ -229,7 +229,7 @@ def test_blog_runs_humanizer_review_when_available(sample_photo, tmp_path):
     assert "Pivotal moment" in calls[1]  # voice pass receives the draft output
     # Title is deterministic: "{event} at {venue}".
     assert result["title"] == "E at V"
-    assert result["body"] == "A specific clean body."
+    assert result["body"] == "It's a specific clean body."
 
 
 def test_blog_skips_humanizer_when_skip_flag_set(sample_photo, tmp_path):
@@ -240,7 +240,7 @@ def test_blog_skips_humanizer_when_skip_flag_set(sample_photo, tmp_path):
 
     def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
         calls.append(prompt)
-        return {"title": "x", "body": "x", "photo_count": 4}
+        return {"title": "x", "body": "I'm here.", "photo_count": 4}
 
     with patch(
         "postroll.ai.generate_blog.run_json_prompt", side_effect=fake_run_json

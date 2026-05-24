@@ -17,12 +17,15 @@ final class AppState {
 
     init() {
         events = EventStore.load()
-        // One-time sweep: any event past OCR has program images we no longer
-        // need on disk. Going forward OCRProgressView cleans up automatically;
-        // this catches events that completed before that change shipped.
+        // Sweep: events past OCR review (photosAssigned and beyond) no longer
+        // need their program images on disk — OCRReviewView.confirmAndAdvance
+        // clears them when the user moves forward. We keep images alive
+        // through .ocrDone so the user can press "Back" from OCR review and
+        // re-run OCR on the same files (e.g. after re-launching the app).
         var dirty = false
         for i in events.indices where events[i].stage != .created
             && events[i].stage != .programUploaded
+            && events[i].stage != .ocrDone
             && !events[i].programImagePaths.isEmpty {
             ProgramImageCleanup.delete(urls: events[i].programImagePaths)
             events[i].programImagePaths = []
