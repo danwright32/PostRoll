@@ -60,7 +60,7 @@ struct ProgramUploadView: View {
                     isImporting: isImporting,
                     imagePaths: event.programImagePaths,
                     onPickFiles: { showingFilePicker = true },
-                    onRemove: removeImages
+                    onRemove: removeImage
                 )
                 .onDrop(of: [.pdf, .image, .fileURL], isTargeted: $isTargeted) { providers in
                     handleDrop(providers)
@@ -173,9 +173,12 @@ struct ProgramUploadView: View {
         return results
     }
 
-    private func removeImages(at offsets: IndexSet) {
-        var ev = event
-        ev.programImagePaths.remove(atOffsets: offsets)
+    private func removeImage(_ url: URL) {
+        // Read the live event from AppState: a captured `event` can be stale if
+        // the user removes pages in quick succession. Remove by identity (URL),
+        // never by index, so the right page goes regardless of render order.
+        guard var ev = appState.events.first(where: { $0.id == event.id }) else { return }
+        ev.programImagePaths.removeAll { $0 == url }
         appState.updateEvent(ev)
     }
 
@@ -355,7 +358,7 @@ private struct ProgramDropZone: View {
     let isImporting: Bool
     let imagePaths: [URL]
     let onPickFiles: () -> Void
-    let onRemove: (IndexSet) -> Void
+    let onRemove: (URL) -> Void
 
     var body: some View {
         if isImporting {
@@ -431,9 +434,11 @@ private struct ProgramDropZone: View {
             }
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110))], spacing: Spacing.sm) {
-                ForEach(imagePaths.indices, id: \.self) { i in
-                    ProgramThumbnail(url: imagePaths[i]) {
-                        onRemove(IndexSet(integer: i))
+                // Identify each thumbnail by its URL, not its index. Index identity
+                // makes SwiftUI think the last page was removed on any deletion.
+                ForEach(imagePaths, id: \.self) { url in
+                    ProgramThumbnail(url: url) {
+                        onRemove(url)
                     }
                 }
             }
