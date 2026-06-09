@@ -73,6 +73,39 @@ BLOG_WRITING_RULES = """\
   the images and must be rewritten as flowing prose where Dan moves
   through the night by thought, not by image queue. The prose decides
   which photos attach to it, never the reverse.
+- DECIDE THE THROUGH-LINE BEFORE DRAFTING. Before writing a word,
+  decide the ONE thing this post is about: the single idea the
+  photographer was working out during the shoot (e.g. what reads at
+  this distance when the stage is this full, how a solo voice holds
+  inside a packed ensemble, what a fixed position lets him catch and
+  what it costs). Every paragraph should advance or complicate that
+  idea. Performers, photos, and technical details are EVIDENCE for
+  the through-line, not the organizing principle themselves. The
+  photo-by-photo habit is a symptom of having nothing to say and
+  defaulting to a list; a real thesis is what makes the stacking
+  resolve itself. If you cannot name the through-line in one
+  sentence, you are not ready to draft.
+- DE-DUPLICATE THE THROUGH-LINE ITSELF. Once the post has a
+  through-line, each paragraph must ADVANCE it, not restate it. If
+  two paragraphs make the same point about the idea (e.g. two
+  soloists each illustrating "one voice against the ensemble," or two
+  wide frames each saying "the wide shot carries the scale"), combine
+  them or cut one. The same observation must not appear three times
+  wearing different clothes. Variety of subject does NOT justify
+  repetition of point. This is the next failure after the roster is
+  broken: the model stops repeating the words and starts repeating
+  the concept, attaching the through-line to each performer in turn.
+  Catch it by naming the point each paragraph makes; if two
+  paragraphs make the same point, they are one paragraph.
+- THE MERGE IS THE EXPECTED MOVE. When multiple performers illustrate
+  the same observation, the STRONG move is to combine them into one
+  paragraph that uses two photos, or to feature one and let the
+  others appear in the prose without their own beat. Defaulting to
+  one-performer-per-paragraph is the failure mode EVEN WHEN THE
+  WRITING IS GOOD. Giving each person a paragraph is not the safe
+  default once the post has a thesis; it is the roster habit
+  reasserting itself. Merge first, and only split when two performers
+  genuinely advance the through-line in different directions.
 - PARAGRAPH COUNT IS A HARD REQUIREMENT. 10 to 12 short paragraphs.
   Not 8. Not 9. Not 13. If a draft comes in under 10, it has almost
   certainly let one of two things crowd out a real beat: a methodology
@@ -911,7 +944,60 @@ BLOG_WRITING_RULES = """\
   hall filled in" or "the room had nearly filled by the start of the
   first piece" — Dan watching it happen, not joining it. The reader
   should always sense Dan was there before showtime doing his job,
-  not arriving with the crowd.\
+  not arriving with the crowd.
+- NEVER STRUCTURE THE BLOG AS A SEQUENCE OF SUBJECT-THEN-PHOTO
+  PARAGRAPHS (one performer introduced, their photo cued, repeat).
+  Photo placements fall where the prose naturally arrives at a
+  moment, not the other way around. Photos do not drive paragraph
+  order. Distribute working and technical details across the whole
+  post rather than bundling one detail into each photo's setup. A
+  draft can pass every voice rule above and still stack captions;
+  this is a stated requirement, not something to infer.
+  THIS CANNOT BE SATISFIED COSMETICALLY by making the sentences flow
+  while still walking one performer per paragraph. The post must be
+  organized around a single observation or through-line, NOT around
+  a roster of who was on stage. Do NOT give each performer their own
+  paragraph-plus-photo. Group, combine, or skip. If three soloists
+  illustrate the same point, they can share a paragraph, or two of
+  them can go uncaptioned in the prose. A reader should not be able
+  to reconstruct the lineup card from the paragraph order. ASK of
+  every paragraph: why is this one before that one? If the only
+  answer is "that's the order I'm listing people in," the post is a
+  roster and must be restructured. If paragraphs map one-to-one onto
+  photos, the post is built backward and must be rewritten so the
+  prose leads and the photos follow.
+- STATE EACH CENTRAL OBSERVATION ONCE. If an observation about the
+  shoot is central (your vantage point, the lighting, the scale, a
+  recurring constraint), state it once and state it well. Do not
+  restate the same observation across multiple paragraphs in varied
+  wording. The model anchors on a framing device and repeats it;
+  catch the second and third restatements and cut them. The reader
+  should encounter the back-of-the-hall position, the long lens, or
+  the room's scale as a single clear beat, not as a refrain.
+- THE CLOSING CTA CARRIES FORWARD A SPECIFIC IDEA OR DETAIL FROM
+  THE POST rather than listing generic event types or restating
+  services. It should feel like the natural end of THIS particular
+  post, not a template footer. "Offers conversation" is satisfied by
+  the blandest possible version unless the CTA reaches back to
+  something the post actually established and carries it the last
+  step. If the CTA could be pasted onto any other post unchanged, it
+  has not done this.
+- CUT SELF-NARRATING FILLER that explains your own process without
+  adding information, e.g. "that's all I had to work with,"
+  "something I've found holds true across events like this," "that's
+  what X earns." These read as voice but are padding. The model
+  treats this register as authentic Dan when it is actually empty.
+  Each of these sentences narrates that an observation is happening
+  instead of delivering one. Cut them and let the concrete sentence
+  beside them carry the moment.
+- FAVOR WHAT YOU SAW AND HEARD OVER LOGISTICS. The strongest
+  paragraphs are about the performance itself, what the music was
+  doing, what a moment looked like, not about camera mechanics. Lead
+  with the seeing. Let technical detail support it, not dominate it.
+  Mechanics-heavy paragraphs are where the draft drifts into
+  gear-blog territory. When a paragraph is mostly gear and position,
+  find the thing on stage it was built to catch and make that the
+  lead.\
 """
 
 

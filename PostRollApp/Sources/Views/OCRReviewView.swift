@@ -77,6 +77,9 @@ struct OCRReviewView: View {
                     if !flags.isEmpty {
                         FlagReviewSection(
                             flags: $flags,
+                            isStringLeaf: { flag in
+                                Self.pathIsStringLeaf(flag.fieldPath, in: ocr)
+                            },
                             onApply: { flag, newValue in applyFlag(flag, newValue: newValue) },
                             onDismiss: { flag in dismissFlag(flag) },
                             onReflow: { flag, message in
@@ -231,12 +234,12 @@ struct OCRReviewView: View {
             : ""
     }
 
-    private func applyFlag(_ flag: OCRFlag, newValue: String) {
+    private func applyFlag(_ flag: OCRFlag, newValue: String) -> Bool {
         if applyValue(newValue, atPath: flag.fieldPath, to: &ocr) {
             markResolved(flag)
+            return true
         }
-        // Apply failed silently (path drifted etc.) — leave unresolved so the user
-        // can dismiss it once they've made the matching edit in the section editor.
+        return false
     }
 
     private func dismissFlag(_ flag: OCRFlag) {
@@ -292,6 +295,31 @@ struct OCRReviewView: View {
             return false
         }
         ocr = decoded
+        return true
+    }
+
+    /// True when `path` lands on a leaf that can be overwritten with a plain string
+    /// (i.e. it's a String/Int/etc, not an Array or Object). Used to decide whether
+    /// the simple "Save correction" text-field path makes sense for a given flag.
+    static func pathIsStringLeaf(_ path: [FlagPathSegment], in ocr: OCRResult) -> Bool {
+        guard !path.isEmpty,
+              let data = try? JSONEncoder().encode(ocr),
+              let tree = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+            return false
+        }
+        var node: Any = tree
+        for seg in path {
+            switch seg {
+            case .key(let k):
+                guard let dict = node as? [String: Any], let next = dict[k] else { return false }
+                node = next
+            case .index(let i):
+                guard let arr = node as? [Any], i >= 0, i < arr.count else { return false }
+                node = arr[i]
+            }
+        }
+        // Arrays and dicts are not string-replaceable; null is treated as missing.
+        if node is [Any] || node is [String: Any] || node is NSNull { return false }
         return true
     }
 
@@ -1195,7 +1223,8 @@ private struct HandleRow: View {
 
 private struct FlagReviewSection: View {
     @Binding var flags: [OCRFlag]
-    let onApply: (OCRFlag, String) -> Void
+    let isStringLeaf: (OCRFlag) -> Bool
+    let onApply: (OCRFlag, String) -> Bool
     let onDismiss: (OCRFlag) -> Void
     let onReflow: (OCRFlag, String) async throws -> String
 
@@ -1222,6 +1251,7 @@ private struct FlagReviewSection: View {
                 ForEach($flags) { $flag in
                     FlagRow(
                         flag: $flag,
+                        isStringLeaf: isStringLeaf(flag),
                         onApply:   { newValue in onApply(flag, newValue) },
                         onDismiss: { onDismiss(flag) },
                         onReflow:  { message in try await onReflow(flag, message) }
@@ -1241,12 +1271,14 @@ private struct FlagReviewSection: View {
 
 private struct FlagRow: View {
     @Binding var flag: OCRFlag
-    let onApply: (String) -> Void
+    let isStringLeaf: Bool
+    let onApply: (String) -> Bool
     let onDismiss: () -> Void
     let onReflow: (String) async throws -> String
 
     @State private var draftValue: String = ""
     @State private var didInitDraft = false
+    @State private var applyError: String? = nil
 
     // Reflow ("describe the correction") state
     @State private var reflowOpen: Bool = false
@@ -1353,6 +1385,10 @@ private struct FlagRow: View {
                 Button {
                     reflowOpen = true
                     reflowError = nil
+                    if reflowText.trimmingCharacters(in: .whitespaces).isEmpty,
+                       hasRealSuggestion {
+                        reflowText = flag.suggestedValue
+                    }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "text.bubble")
@@ -1447,39 +1483,65 @@ private struct FlagRow: View {
                 }
                 .padding(.top, 2)
 
-                Text("Replace \(fieldName) with:")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Color.warmMid)
-                    .padding(.top, 4)
-
-                HStack(spacing: 6) {
-                    TextField("", text: $draftValue)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.warmDark)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: Radius.xs)
-                                .fill(Color.cream)
-                                .overlay(RoundedRectangle(cornerRadius: Radius.xs)
-                                    .strokeBorder(Color.creamEdge, lineWidth: 1))
-                        )
-                    Button("Save correction") {
-                        guard draftIsChange else { return }
-                        onApply(trimmedDraft)
-                    }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(draftIsChange ? Color.roseGold : Color.warmFaint)
-                    .disabled(!draftIsChange)
-                    .help("Replace the \(fieldName) value with what you typed.")
-
-                    Button("Keep OCR Text", action: onDismiss)
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11))
+                if isStringLeaf {
+                    Text("Replace \(fieldName) with:")
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color.warmMid)
-                        .help("The OCR text was correct. Mark this flag reviewed and leave the value alone.")
+                        .padding(.top, 4)
+
+                    HStack(spacing: 6) {
+                        TextField("", text: $draftValue)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.warmDark)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: Radius.xs)
+                                    .fill(Color.cream)
+                                    .overlay(RoundedRectangle(cornerRadius: Radius.xs)
+                                        .strokeBorder(Color.creamEdge, lineWidth: 1))
+                            )
+                        Button("Save correction") {
+                            guard draftIsChange else { return }
+                            applyError = nil
+                            if !onApply(trimmedDraft) {
+                                applyError = "Couldn't apply that change here. Use Describe the correction below so Claude can patch the right spot."
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(draftIsChange ? Color.roseGold : Color.warmFaint)
+                        .disabled(!draftIsChange)
+                        .help("Replace the \(fieldName) value with what you typed.")
+
+                        Button("Keep OCR Text", action: onDismiss)
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.warmMid)
+                            .help("The OCR text was correct. Mark this flag reviewed and leave the value alone.")
+                    }
+
+                    if let err = applyError {
+                        Text(err)
+                            .font(.light(10))
+                            .foregroundStyle(Color.roseGold)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    Text("This fix changes the \(fieldName) list, so it can't be made in a single field. Use Describe the correction (Claude's suggestion is pre-filled) or Keep OCR Text.")
+                        .font(.light(10))
+                        .foregroundStyle(Color.warmFaint)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
+
+                    HStack(spacing: 6) {
+                        Button("Keep OCR Text", action: onDismiss)
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.warmMid)
+                            .help("The OCR data was correct. Mark this flag reviewed and leave it alone.")
+                    }
                 }
 
                 reflowSection

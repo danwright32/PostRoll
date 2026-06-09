@@ -1088,7 +1088,7 @@ actor PythonBridge {
     // MARK: - Flag review (natural-language reflow)
 
     /// Result of asking Claude to reflow one flag given the user's plain-English correction.
-    struct FlagReviewResponse: Decodable {
+    struct FlagReviewResponse: Decodable, Sendable {
         let assistantReply: String
         let patch: [PatchOp]?
         let resolved: Bool
@@ -1103,7 +1103,7 @@ actor PythonBridge {
     /// dict so we can hand it straight back to Python to apply (the apply path is
     /// already implemented there). We don't introspect the patch on the Swift side
     /// beyond showing the assistant_reply summary.
-    struct PatchOp: Codable {
+    struct PatchOp: Codable, Sendable {
         let raw: [String: JSONValue]
 
         init(from decoder: Decoder) throws {

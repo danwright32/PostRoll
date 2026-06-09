@@ -3,7 +3,7 @@ import Foundation
 // Mirrors the JSON dict output of postroll/ai/ocr_program.py.
 // Python uses snake_case; CodingKeys bridge the difference.
 
-struct OCRResult: Codable, Hashable {
+struct OCRResult: Codable, Hashable, Sendable {
     var performers: [Performer] = []
     var pieces: [Piece] = []
     var scenes: [ProgramScene] = []
@@ -21,7 +21,7 @@ struct OCRResult: Codable, Hashable {
     }
 }
 
-struct Performer: Identifiable, Codable, Hashable {
+struct Performer: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var name: String
     var role: String
@@ -48,7 +48,7 @@ struct Performer: Identifiable, Codable, Hashable {
     }
 }
 
-struct Piece: Identifiable, Codable, Hashable {
+struct Piece: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var composer: String
     var title: String
@@ -78,7 +78,7 @@ struct Piece: Identifiable, Codable, Hashable {
 /// One element of a JSON-style path into OCRResult, e.g. `["pieces", 5, "composer"]`.
 /// Flag JSON returns paths as a mixed array of strings and ints — this enum preserves
 /// the type so we can walk the structure correctly when applying corrections.
-enum FlagPathSegment: Codable, Hashable {
+enum FlagPathSegment: Codable, Hashable, Sendable {
     case key(String)
     case index(Int)
 
@@ -112,7 +112,7 @@ enum FlagPathSegment: Codable, Hashable {
 
 /// A flagged item from `postroll.ai.flag_issues`. Transient — produced by Claude
 /// after OCR, surfaced in the OCR review UI, then either applied or dismissed.
-struct OCRFlag: Identifiable, Codable, Hashable {
+struct OCRFlag: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var fieldPath: [FlagPathSegment]
     var currentValue: String      // Stringified for display; complex values become JSON text
@@ -165,7 +165,7 @@ struct OCRFlag: Identifiable, Codable, Hashable {
 
 /// Minimal heterogeneous JSON value — used to coerce flag `current_value`
 /// into a display string when Claude returns a non-string (e.g. a piece object).
-enum JSONValue: Codable {
+enum JSONValue: Codable, Sendable {
     case string(String)
     case int(Int)
     case double(Double)
@@ -221,7 +221,7 @@ enum JSONValue: Codable {
     }
 }
 
-struct ProgramScene: Identifiable, Codable, Hashable {
+struct ProgramScene: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var name: String
     var location: String

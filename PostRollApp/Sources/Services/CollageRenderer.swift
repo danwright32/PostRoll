@@ -2,10 +2,15 @@ import SwiftUI
 import AppKit
 
 /// Renders a Wednesday collage by compositing the base PNG (which contains
-/// Python's masonry photos and the branded centre strip) with SwiftUI photo
-/// cells drawn at the supplied crop offsets. The cell overlays cover the
-/// base photo regions, so the result is the strip from Python plus photos
-/// rendered with the same math as the in-app live preview.
+/// Python's masonry photos and the branded centre strip) with the user's
+/// per photo crop/zoom, producing the same image the in app live preview shows.
+///
+/// Everything is drawn into a SINGLE `Canvas` sized to the 1080x1920 canvas, in
+/// absolute coordinates, with each photo clipped to its cell rect. We do NOT lay
+/// cells out with `.position()` / `.frame()` and feed that through `ImageRenderer`
+/// — that path mis-handles `.position()` and scatters the cells (each offset by
+/// roughly half its size). A single Canvas is pure deterministic drawing, so the
+/// export stays pixel faithful to the live preview.
 @MainActor
 enum CollageRenderer {
 
@@ -51,6 +56,10 @@ enum CollageRenderer {
     }
 }
 
+/// Single Canvas that draws the base PNG then every cropped photo in absolute
+/// canvas coordinates. The geometry (`rendered` / `overflow` / `committedOffset`
+/// / blur mode) is the SAME math as `CollageCellOverlay` in CaptionReviewView,
+/// just expressed at each cell's absolute origin instead of inside a per cell view.
 private struct StaticCollageView: View {
     let baseImage: NSImage
     let cells: [CollageCell]
@@ -58,107 +67,73 @@ private struct StaticCollageView: View {
     let cropOffsets: [String: CropOffset]
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            Image(nsImage: baseImage)
-                .resizable()
-                .frame(width: CollageRenderer.canvasSize.width,
-                       height: CollageRenderer.canvasSize.height)
+        Canvas { context, size in
+            // Base PNG fills the whole canvas (Python's strip + masonry photos).
+            context.draw(
+                Image(nsImage: baseImage),
+                in: CGRect(origin: .zero, size: size)
+            )
 
-            ForEach(cells.indices, id: \.self) { idx in
-                let cell = cells[idx]
-                let photoKey = URL(fileURLWithPath: cell.photoPath).absoluteString
-                let offset = cropOffsets[photoKey] ?? CropOffset()
-                if let photo = cellPhotos[cell.photoPath] {
-                    StaticCollageCellView(
-                        photo: photo,
-                        offset: offset,
-                        cellW: CGFloat(cell.w),
-                        cellH: CGFloat(cell.h)
-                    )
-                    .position(
-                        x: CGFloat(cell.x) + CGFloat(cell.w) / 2,
-                        y: CGFloat(cell.y) + CGFloat(cell.h) / 2
-                    )
+            for cell in cells {
+                guard let photo = cellPhotos[cell.photoPath] else { continue }
+                let key = URL(fileURLWithPath: cell.photoPath).absoluteString
+                let offset = cropOffsets[key] ?? CropOffset()
+
+                let cellW = CGFloat(cell.w)
+                let cellH = CGFloat(cell.h)
+                let cellOrigin = CGPoint(x: CGFloat(cell.x), y: CGFloat(cell.y))
+                let cellRect = CGRect(origin: cellOrigin, size: CGSize(width: cellW, height: cellH))
+
+                let photoRatio: CGFloat = photo.size.height > 0
+                    ? photo.size.width / photo.size.height
+                    : 1
+                let zoom = CGFloat(max(0.25, offset.scale))
+                let rendered: CGSize = photoRatio > cellW / cellH
+                    ? CGSize(width: cellH * photoRatio * zoom, height: cellH * zoom)
+                    : CGSize(width: cellW * zoom, height: cellW / photoRatio * zoom)
+                let overflow = CGSize(width: rendered.width - cellW, height: rendered.height - cellH)
+                let isFillMode = offset.scale >= 1.0
+                let committed = CGSize(
+                    width: overflow.width > 0
+                        ? -overflow.width * (0.5 + CGFloat(offset.x) * 0.5)
+                        : (cellW - rendered.width) / 2,
+                    height: overflow.height > 0
+                        ? -overflow.height * (0.5 + CGFloat(offset.y) * 0.5)
+                        : (cellH - rendered.height) / 2
+                )
+
+                let img = Image(nsImage: photo)
+
+                // Clip to the cell so any overflow is cropped, exactly like the
+                // live overlay's fixed size Canvas.
+                var cellCtx = context
+                cellCtx.clip(to: Path(cellRect))
+
+                let drawRect = CGRect(
+                    x: cellOrigin.x + committed.width,
+                    y: cellOrigin.y + committed.height,
+                    width: rendered.width,
+                    height: rendered.height
+                )
+
+                if isFillMode {
+                    cellCtx.draw(img, in: drawRect)
+                } else {
+                    // Blur mode (zoomed out): opaque base + optional blurred fill
+                    // + darkening scrim + the sharp photo centered.
+                    cellCtx.fill(Path(cellRect), with: .color(Color(white: 0.08)))
+                    let blurOpacity = max(0, min(1, (1.0 - Double(offset.scale)) * 4))
+                    if blurOpacity > 0 {
+                        var blurCtx = cellCtx
+                        blurCtx.addFilter(.blur(radius: 24))
+                        blurCtx.draw(img, in: cellRect)
+                        cellCtx.fill(Path(cellRect), with: .color(.black.opacity(0.3 * blurOpacity)))
+                    }
+                    cellCtx.draw(img, in: drawRect)
                 }
             }
         }
         .frame(width: CollageRenderer.canvasSize.width,
                height: CollageRenderer.canvasSize.height)
-    }
-}
-
-/// Mirror of `CollageCellOverlay`'s rendering — same math, no interactivity.
-/// Keep these formulas in sync with `CollageCellOverlay` in CaptionReviewView.
-private struct StaticCollageCellView: View {
-    let photo: NSImage
-    let offset: CropOffset
-    let cellW: CGFloat
-    let cellH: CGFloat
-
-    private var photoRatio: CGFloat {
-        guard photo.size.height > 0 else { return 1 }
-        return photo.size.width / photo.size.height
-    }
-
-    private var rendered: CGSize {
-        let zoom = CGFloat(max(0.25, offset.scale))
-        if photoRatio > cellW / cellH {
-            return CGSize(width: cellH * photoRatio * zoom, height: cellH * zoom)
-        } else {
-            return CGSize(width: cellW * zoom, height: cellW / photoRatio * zoom)
-        }
-    }
-
-    private var overflow: CGSize {
-        CGSize(width: rendered.width - cellW, height: rendered.height - cellH)
-    }
-
-    private var isFillMode: Bool { offset.scale >= 1.0 }
-
-    private var committedOffset: CGSize {
-        let cw = overflow.width > 0
-            ? -overflow.width * (0.5 + CGFloat(offset.x) * 0.5)
-            : (cellW - rendered.width) / 2
-        let ch = overflow.height > 0
-            ? -overflow.height * (0.5 + CGFloat(offset.y) * 0.5)
-            : (cellH - rendered.height) / 2
-        return CGSize(width: cw, height: ch)
-    }
-
-    private var blurOpacity: Double {
-        max(0, min(1, (1.0 - Double(offset.scale)) * 4))
-    }
-
-    var body: some View {
-        Canvas { context, size in
-            let img = Image(nsImage: photo)
-            if isFillMode {
-                let drawRect = CGRect(
-                    x: committedOffset.width, y: committedOffset.height,
-                    width: rendered.width, height: rendered.height
-                )
-                context.draw(img, in: drawRect)
-            } else {
-                context.fill(
-                    Path(CGRect(origin: .zero, size: size)),
-                    with: .color(Color(white: 0.08))
-                )
-                if blurOpacity > 0 {
-                    var blurCtx = context
-                    blurCtx.addFilter(.blur(radius: 24))
-                    blurCtx.draw(img, in: CGRect(origin: .zero, size: size))
-                    context.fill(
-                        Path(CGRect(origin: .zero, size: size)),
-                        with: .color(.black.opacity(0.3 * blurOpacity))
-                    )
-                }
-                let drawRect = CGRect(
-                    x: committedOffset.width, y: committedOffset.height,
-                    width: rendered.width, height: rendered.height
-                )
-                context.draw(img, in: drawRect)
-            }
-        }
-        .frame(width: cellW, height: cellH)
     }
 }

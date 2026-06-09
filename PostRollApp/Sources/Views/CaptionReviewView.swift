@@ -84,6 +84,11 @@ struct CaptionReviewView: View {
     @State private var thursdayEditorURL: URL? = nil
     @State private var isBuildingThursdayEditor: Bool = false
 
+    // Pre-renders the Thursday reel in the background as the user edits crops /
+    // swaps photos, so "Apply changes" usually adopts a finished encode instead
+    // of waiting on ffmpeg. Reset per event (the view is .id(event.id)-remounted).
+    @State private var speculativeReel = SpeculativeReelRenderer(day: .thursday)
+
     var body: some View {
         ZStack {
             ScrollView {
@@ -151,6 +156,7 @@ struct CaptionReviewView: View {
                             onSwapReelAudio: { swapReelAudio(day: day) },
                             onUploadReelAudio: { uploadReelAudioDay = day; showingReelAudioPicker = true },
                             onChangeReelPhotos: (day == .tuesday || day == .thursday) ? { changeReelPhotos(day: day) } : nil,
+                            onChangeCollagePhotos: day == .wednesday ? { changeCollagePhotos(day: .wednesday) } : nil,
                             onSwapReelPhotos: day == .thursday ? { a, b in swapReelPhotos(day: .thursday, a: a, b: b) } : nil,
                             onAssignReelPhotos: day == .tuesday ? { raw, edited, bw in
                                 assignReelPhotosAndGenerate(raw: raw, edited: edited, bw: bw)
@@ -325,7 +331,13 @@ struct CaptionReviewView: View {
     private func reelOffsetsBinding(_ day: DayName) -> Binding<[String: CropOffset]> {
         Binding(
             get: { dayReelCropOffsets[day.rawValue] ?? [:] },
-            set: { dayReelCropOffsets[day.rawValue] = $0; save() }
+            set: {
+                dayReelCropOffsets[day.rawValue] = $0
+                save()
+                // Assume the user will Apply: start encoding the new crop in the
+                // background now so the button press is near-instant.
+                if day == .thursday { speculativeReel.schedule(for: liveEvent) }
+            }
         )
     }
 
@@ -598,6 +610,42 @@ struct CaptionReviewView: View {
         }
     }
 
+    /// Replace the entire Wednesday collage photo set from the review screen.
+    /// Picks a fresh batch, discards layout/crop state tied to the old photos,
+    /// then regenerates the collage. Mirrors `changeReelPhotos` for Thursday.
+    private func changeCollagePhotos(day: DayName) {
+        let panel = NSOpenPanel()
+        panel.title = "Select photos for the Wednesday collage"
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+
+        // The collage lays out the first 10 photos; fewer breaks the grid.
+        guard panel.urls.count >= 10 else {
+            regenerateError = "The Wednesday collage needs at least 10 photos (you picked \(panel.urls.count))."
+            return
+        }
+
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        var wed = ev.days[DayName.wednesday.rawValue] ?? PostingDay(day: .wednesday)
+        wed.photoPaths = panel.urls.sorted {
+            $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending
+        }
+        // Crop offsets and the cell layout are keyed to the old photo paths, so
+        // discard them for a clean rebuild from the new set.
+        wed.collageCropOffsets = [:]
+        wed.collageCellOverride = nil
+        ev.days[DayName.wednesday.rawValue] = wed
+        appState.updateEvent(ev)
+
+        // Keep the in-memory editor state in sync so the live overlay doesn't
+        // reference photos that no longer exist.
+        dayCollageCropOffsets[DayName.wednesday.rawValue] = [:]
+        dayCollageCellOverrides.removeValue(forKey: DayName.wednesday.rawValue)
+
+        regenerateGraphic(day: .wednesday)
+    }
+
     /// Swap two photos in a day's photoPaths. Persists the new order but
     /// does NOT trigger regen — the user batches swaps with crop / resize
     /// edits and bakes them all in one shot via "Apply changes".
@@ -614,6 +662,8 @@ struct CaptionReviewView: View {
         pd.photoPaths.swapAt(i, j)
         ev.days[day.rawValue] = pd
         appState.updateEvent(ev)
+        // Pre-render the swapped order in the background ahead of "Apply changes".
+        if day == .thursday { speculativeReel.schedule(for: liveEvent) }
     }
 
     private func regenerateGraphic(day: DayName, newLayout: Bool = false) {
@@ -646,6 +696,21 @@ struct CaptionReviewView: View {
         regeneratingDays.insert(day)
         regenerateError = nil
         Task {
+            // For Thursday, try to adopt a speculative pre-render that was kicked
+            // off when the user edited. `newLayout` randomizes the seed, so there's
+            // nothing pre-rendered to match — skip straight to a fresh encode.
+            if day == .thursday, !newLayout,
+               let result = await speculativeReel.take(matching: eventSnapshot) {
+                await MainActor.run {
+                    regeneratingDays.remove(day)
+                    applyRegenResult(result, day: day)
+                }
+                return
+            }
+            // No usable pre-render: make sure no stale speculative encode is still
+            // writing the same output file before we start a fresh one.
+            if day == .thursday { speculativeReel.cancelAll() }
+
             // Capture the result so we can distinguish "Python crashed" from
             // "Python exited 0 but reported a per-day error". Both used to be
             // swallowed by `try?`, which fired the success notification while
@@ -666,24 +731,31 @@ struct CaptionReviewView: View {
                 case .failure(let error):
                     regenerateError = "\(day.displayName) regeneration failed: \(error.localizedDescription)"
                 case .success(let result):
-                    if let pyError = result.errors[day.rawValue] {
-                        regenerateError = "\(day.displayName) regeneration failed: \(pyError)"
-                    } else if let dayPaths = result.paths[day.rawValue], !dayPaths.isEmpty {
-                        // Read the CURRENT event — not self.event which may be stale
-                        // (e.g. after assignReelPhotosAndGenerate saved new photos).
-                        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-                        ev.previewMediaPaths[day.rawValue] = dayPaths
-                        appState.updateEvent(ev)
-                        graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
-                        NotificationService.shared.notifyRegenerationComplete(
-                            eventName: event.name,
-                            what: day.displayName
-                        )
-                    } else {
-                        regenerateError = "\(day.displayName) regeneration produced no output"
-                    }
+                    applyRegenResult(result, day: day)
                 }
             }
+        }
+    }
+
+    /// Land a finished (or adopted) reel render onto the live event: swap in the
+    /// new media paths, bump the version so AVPlayer reloads, and notify.
+    @MainActor
+    private func applyRegenResult(_ result: PythonBridge.PreviewGenerationResult, day: DayName) {
+        if let pyError = result.errors[day.rawValue] {
+            regenerateError = "\(day.displayName) regeneration failed: \(pyError)"
+        } else if let dayPaths = result.paths[day.rawValue], !dayPaths.isEmpty {
+            // Read the CURRENT event — not self.event which may be stale
+            // (e.g. after assignReelPhotosAndGenerate saved new photos).
+            var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+            ev.previewMediaPaths[day.rawValue] = dayPaths
+            appState.updateEvent(ev)
+            graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+            NotificationService.shared.notifyRegenerationComplete(
+                eventName: event.name,
+                what: day.displayName
+            )
+        } else {
+            regenerateError = "\(day.displayName) regeneration produced no output"
         }
     }
 
@@ -800,6 +872,7 @@ struct CaptionReviewView: View {
             }
         }
         ev.stage = .exported
+        ev.archivedAt = Date()
         appState.updateEvent(ev)
     }
 }
@@ -823,6 +896,8 @@ private struct CaptionSection: View {
     var onSwapReelAudio: (() -> Void)? = nil
     var onUploadReelAudio: (() -> Void)? = nil
     var onChangeReelPhotos: (() -> Void)? = nil
+    /// Replace the whole Wednesday collage photo set (review-screen action).
+    var onChangeCollagePhotos: (() -> Void)? = nil
     var onSwapReelPhotos: ((URL, URL) -> Void)? = nil
     /// Called when the user assigns RAW + Edited photos inline (review screen fallback).
     var onAssignReelPhotos: ((URL, URL, URL?) -> Void)? = nil
@@ -1138,7 +1213,7 @@ private struct CaptionSection: View {
                                     onNewLayout: (day == .wednesday || day == .thursday) ? onNewLayout : nil,
                                     onSwapAudio: day == .thursday ? onSwapReelAudio : nil,
                                     onUploadAudio: day == .thursday ? onUploadReelAudio : nil,
-                                    onChangePhotos: day == .thursday ? onChangeReelPhotos : nil,
+                                    onChangePhotos: day == .thursday ? onChangeReelPhotos : (day == .wednesday ? onChangeCollagePhotos : nil),
                                     isRegenerating: isRegeneratingGraphic
                                 )
                                 .id("\(day.rawValue)-mockup-\(graphicVersion)")
@@ -1242,7 +1317,8 @@ private struct CaptionSection: View {
                                         cellOverride: collageCellOverride ?? .constant(nil),
                                         onPreview: { onPreview?(previewURL) },
                                         isRegenerating: isRegeneratingGraphic,
-                                        onRegenerate: onRegenerateGraphic
+                                        onRegenerate: onRegenerateGraphic,
+                                        onChangePhotos: onChangeCollagePhotos
                                     )
                                     .padding(Spacing.md)
 
@@ -1414,6 +1490,7 @@ private struct CaptionSection: View {
                                 onRegenerate: onRegenerateGraphic,
                                 onChangeBW: onChangeBW,
                                 onRemoveBW: onRemoveBW,
+                                onChangeCollagePhotos: onChangeCollagePhotos,
                                 collageCropOffsets: collageCropOffsets,
                                 collageCellOverride: collageCellOverride
                             )
@@ -1953,10 +2030,19 @@ private struct AltTextsSection: View {
 
             if isExpanded {
                 ForEach(altTexts.indices, id: \.self) { i in
-                    AltTextRow(index: i, text: $altTexts[i])
+                    AltTextRow(index: i, text: binding(for: i))
                 }
             }
         }
+    }
+
+    // Bounds-checked binding so a stale row index can never trap in Array._checkSubscript
+    // if altTexts shrinks out from under the ForEach.
+    private func binding(for i: Int) -> Binding<String> {
+        Binding(
+            get: { i < altTexts.count ? altTexts[i] : "" },
+            set: { if i < altTexts.count { altTexts[i] = $0 } }
+        )
     }
 }
 
@@ -2044,6 +2130,8 @@ private struct ReviewMediaStrip: View {
     /// (Tuesday only). Picking re-runs the 3-photo treatment for Tuesday + Friday.
     var onChangeBW: (() -> Void)? = nil
     var onRemoveBW: (() -> Void)? = nil
+    /// Replace the whole Wednesday collage photo set (review-screen action).
+    var onChangeCollagePhotos: (() -> Void)? = nil
     var collageCropOffsets: Binding<[String: CropOffset]>? = nil
     var collageCellOverride: Binding<[CollageCell]?>? = nil
     /// When true, skip the main story/reel/before-after graphic — used by the split
@@ -2143,7 +2231,8 @@ private struct ReviewMediaStrip: View {
                             cellOverride: collageCellOverride ?? .constant(nil),
                             onPreview: { onPreview?(url) },
                             isRegenerating: isRegenerating,
-                            onRegenerate: onRegenerate
+                            onRegenerate: onRegenerate,
+                            onChangePhotos: onChangeCollagePhotos
                         )
                         // No .id() here — image reload is handled internally via
                         // .task(id: url) and .onChange(of: isRegenerating), so the
@@ -2741,6 +2830,8 @@ private struct CollagePreviewThumbnail: View {
     let onPreview: () -> Void
     var isRegenerating: Bool = false
     var onRegenerate: (() -> Void)? = nil
+    /// Replace the entire collage photo set with a freshly picked batch.
+    var onChangePhotos: (() -> Void)? = nil
 
     @State private var image: NSImage?
     @State private var cells: [CollageCell] = []
@@ -2777,6 +2868,26 @@ private struct CollagePreviewThumbnail: View {
     /// Base cells — user-dragged override if present, otherwise JSON-loaded positions.
     private var baseCells: [CollageCell] {
         cellOverride.wrappedValue ?? cells
+    }
+
+    /// Renders the collage the way the editor shows it (base PNG plus the live
+    /// SwiftUI crop overlays, same path the export uses via CollageRenderer) to a
+    /// temp file and opens that, so the standalone preview reflects the crop/zoom
+    /// the user set instead of Python's raw base PNG. Falls back to the base PNG
+    /// if compositing fails.
+    private func openComposited() {
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("collage-preview-\(UUID().uuidString).png")
+        if CollageRenderer.render(
+            baseURL: url,
+            cells: baseCells,
+            cropOffsets: cropOffsets,
+            outputURL: out
+        ) {
+            NSWorkspace.shared.open(out)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     var body: some View {
@@ -2880,10 +2991,13 @@ private struct CollagePreviewThumbnail: View {
                                     minDelta: minDelta,
                                     maxDelta: maxDelta
                                 ) { finalDeltaPx in
+                                    // Persist the frame change to the override only.
+                                    // The setter saves it, and CollageRenderer composites
+                                    // it at export — no Python regen, which would re-roll
+                                    // the whole layout. Use the ↺ button to regenerate.
                                     cellOverride.wrappedValue = applyCollageDividerDelta(
                                         to: baseCells, divider: div,
                                         delta: Int(finalDeltaPx / sy))
-                                    onRegenerate?()
                                 }
                                 .position(
                                     x: geo.size.width / 2,
@@ -2896,10 +3010,10 @@ private struct CollagePreviewThumbnail: View {
                                     minDelta: minDelta,
                                     maxDelta: maxDelta
                                 ) { finalDeltaPx in
+                                    // See the horizontal handle above: persist only, no regen.
                                     cellOverride.wrappedValue = applyCollageDividerDelta(
                                         to: baseCells, divider: div,
                                         delta: Int(finalDeltaPx / sx))
-                                    onRegenerate?()
                                 }
                                 .position(
                                     x: CGFloat(div.canvasPos) * sx,
@@ -2966,8 +3080,10 @@ private struct CollagePreviewThumbnail: View {
                                 newCells[otherIdx].photoPath = currentPath
                             }
                             newCells[idx].photoPath = droppedPath
+                            // Persist the swap to the override only. The setter saves
+                            // it and CollageRenderer composites it at export — no Python
+                            // regen, which would re-roll the layout and discard the swap.
                             cellOverride.wrappedValue = newCells
-                            onRegenerate?()
                         }
                     }
                     dropTargetIdx = nil
@@ -2982,7 +3098,7 @@ private struct CollagePreviewThumbnail: View {
                     .strokeBorder(Color.creamEdge, lineWidth: 0.5)
             )
             .overlay(alignment: .bottomTrailing) {
-                Button { NSWorkspace.shared.open(url) } label: {
+                Button { openComposited() } label: {
                     Image(systemName: "arrow.up.forward.square")
                         .font(.system(size: 13))
                         .foregroundStyle(Color.white.opacity(0.9))
@@ -3006,6 +3122,22 @@ private struct CollagePreviewThumbnail: View {
                     .buttonStyle(.plain)
                     .disabled(isRegenerating)
                     .help("Regenerate collage with current crop and frame adjustments")
+                    .padding(6)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if let onChangePhotos {
+                    Button(action: onChangePhotos) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.white.opacity(0.9))
+                            .padding(7)
+                            .background(Color.black.opacity(0.4))
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRegenerating)
+                    .help("Replace all collage photos with a new set")
                     .padding(6)
                 }
             }
@@ -3049,19 +3181,21 @@ private struct CollagePreviewThumbnail: View {
             .padding(.horizontal, 2)
             .animation(.easeOut(duration: 0.15), value: selectedCellIndex != nil)
 
-            // "Apply frame changes" — appears only when the user has dragged a divider
-            // and committed a cell override that hasn't been baked into the PNG yet.
+            // Frame edits (divider drags, photo swaps) are saved to the cell
+            // override the moment they happen and composited by CollageRenderer
+            // in both the preview and the export. There is nothing to "apply" via
+            // Python — a regen here would re-roll the grid and discard the edit
+            // (see the collage-edits-no-Python-regen rule). So this is a passive
+            // confirmation, not an action button.
             if cellOverride.wrappedValue != nil {
-                HStack {
-                    Text("Frame layout changed")
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.roseGold)
+                    Text("Frame changes saved — they'll appear in the exported collage")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.warmMid)
                     Spacer()
-                    if let onRegenerate {
-                        Button("Apply frame changes") { onRegenerate() }
-                            .buttonStyle(BrandButtonStyle())
-                            .disabled(isRegenerating)
-                    }
                 }
                 .padding(.horizontal, 2)
                 .transition(.opacity.combined(with: .move(edge: .top)))

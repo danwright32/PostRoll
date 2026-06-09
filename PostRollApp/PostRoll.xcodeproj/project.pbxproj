@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		060913C14E2EA2F69E2A8B4A /* SpellCheckingTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C98221E4EC10D5D7C582399F /* SpellCheckingTextEditor.swift */; };
 		06630E56AF30C91B88CBE538 /* AnalyticsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A362A1A4A339D47CDDA16372 /* AnalyticsStore.swift */; };
+		AC11AC11AC11AC11AC11AC11 /* ArchiveCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC22AC22AC22AC22AC22AC22 /* ArchiveCleanup.swift */; };
+		5BEC1A1A5BEC1A1A5BEC1A1A /* SpeculativeReelRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BEC2B2B5BEC2B2B5BEC2B2B /* SpeculativeReelRenderer.swift */; };
 		0F511905DB8007F0873761E3 /* HandleBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2178E7D3FF9E716B3FE384DA /* HandleBook.swift */; };
 		19DB11C64CD692CE9131577D /* InsightsOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7DDBE7D2AD5AD12EBDDDEFA /* InsightsOverviewView.swift */; };
 		1D74A150E4C6C172E66A7FFC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B123A7C2CBCBA4D6DF63E12 /* SettingsView.swift */; };
@@ -67,6 +69,8 @@
 		965B2DE8F6ED922A33E8922F /* OCRProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRProgressView.swift; sourceTree = "<group>"; };
 		A0446FB348B393437FB313CD /* ProgramUploadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramUploadView.swift; sourceTree = "<group>"; };
 		A362A1A4A339D47CDDA16372 /* AnalyticsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsStore.swift; sourceTree = "<group>"; };
+		AC22AC22AC22AC22AC22AC22 /* ArchiveCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveCleanup.swift; sourceTree = "<group>"; };
+		5BEC2B2B5BEC2B2B5BEC2B2B /* SpeculativeReelRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeculativeReelRenderer.swift; sourceTree = "<group>"; };
 		A8709408F930801E3507C477 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
 		B50B51B46F18FDB67EA62320 /* PostRoll.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PostRoll.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C01C45B805CCDAE330D2F89C /* OCRReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRReviewView.swift; sourceTree = "<group>"; };
@@ -145,6 +149,8 @@
 			isa = PBXGroup;
 			children = (
 				A362A1A4A339D47CDDA16372 /* AnalyticsStore.swift */,
+				AC22AC22AC22AC22AC22AC22 /* ArchiveCleanup.swift */,
+				5BEC2B2B5BEC2B2B5BEC2B2B /* SpeculativeReelRenderer.swift */,
 				CA6216D3AE9426D00E05CC60 /* CollageRenderer.swift */,
 				8089518478AA10F4DC5A9A83 /* EventStore.swift */,
 				2178E7D3FF9E716B3FE384DA /* HandleBook.swift */,
@@ -247,6 +253,8 @@
 				C441BEFB00B24864E99F3F76 /* Analytics.swift in Sources */,
 				06630E56AF30C91B88CBE538 /* AnalyticsStore.swift in Sources */,
 				82C249F3E5DCFA8E1D257EFD /* AppState.swift in Sources */,
+				AC11AC11AC11AC11AC11AC11 /* ArchiveCleanup.swift in Sources */,
+				5BEC1A1A5BEC1A1A5BEC1A1A /* SpeculativeReelRenderer.swift in Sources */,
 				EF8A4312114DD1E988B03A57 /* AssetGenerationView.swift in Sources */,
 				4E800BF325AA929687599262 /* CaptionReviewView.swift in Sources */,
 				987B16B87DC390DDDC5B01C8 /* CollageRenderer.swift in Sources */,

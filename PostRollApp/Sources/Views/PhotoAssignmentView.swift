@@ -543,7 +543,7 @@ private struct PhotoDaySection: View {
                         PhotoDropZone(isTargeted: isDropTargeted)
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))], spacing: Spacing.sm) {
-                            ForEach(Array(photos.enumerated()), id: \.offset) { i, url in
+                            ForEach(Array(photos.enumerated()), id: \.element) { i, url in
                                 thumbView(for: url, at: i)
                                     .draggable(i.description)
                                     .dropDestination(for: String.self) { items, _ in

@@ -31,6 +31,15 @@ final class AppState {
             events[i].programImagePaths = []
             dirty = true
         }
+
+        // Reclaim disk space from shoots archived more than ArchiveCleanup.archiveAgeDays ago.
+        let projectRoot = FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents/PostRoll")
+        if ArchiveCleanup.sweep(events: &events, projectRoot: projectRoot) {
+            dirty = true
+        }
+
         if dirty { EventStore.save(events) }
     }
 

@@ -47,6 +47,11 @@ struct Event: Identifiable, Codable, Hashable {
     // Export
     var exportPath: URL?
 
+    /// Set when stage transitions to .exported. Used by ArchiveCleanup to decide
+    /// which preview/program files to reclaim once a shoot has been archived
+    /// for long enough that the user is unlikely to re-render it.
+    var archivedAt: Date? = nil
+
     var displayDate: String {
         let f = DateFormatter()
         f.dateStyle = .medium
@@ -86,6 +91,7 @@ extension Event {
         weekResult        = try c.decodeIfPresent(WeekGenerationResult.self,       forKey: .weekResult)
         previewMediaPaths = try c.decodeIfPresent([String: [String: String]].self, forKey: .previewMediaPaths) ?? [:]
         exportPath        = try c.decodeIfPresent(URL.self,                        forKey: .exportPath)
+        archivedAt        = try c.decodeIfPresent(Date.self,                       forKey: .archivedAt)
     }
 }
 
