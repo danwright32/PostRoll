@@ -470,16 +470,24 @@ struct CaptionReviewView: View {
         appState.updateEvent(ev)
 
         regeneratingDays.insert(day)
+        regenerateError = nil
         Task {
-            _ = try? await PythonBridge.shared.runSwapReelAudio(event: liveEvent, day: day)
-            await MainActor.run {
-                // Bump the version so SwiftUI rebuilds AVPlayer with the updated file.
-                graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
-                regeneratingDays.remove(day)
-                NotificationService.shared.notifyRegenerationComplete(
-                    eventName: liveEvent.name,
-                    what: "\(day.displayName) audio"
-                )
+            do {
+                _ = try await PythonBridge.shared.runSwapReelAudio(event: liveEvent, day: day)
+                await MainActor.run {
+                    // Bump the version so SwiftUI rebuilds AVPlayer with the updated file.
+                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                    regeneratingDays.remove(day)
+                    NotificationService.shared.notifyRegenerationComplete(
+                        eventName: liveEvent.name,
+                        what: "\(day.displayName) audio"
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    regeneratingDays.remove(day)
+                    regenerateError = "\(day.displayName) audio swap failed: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -488,10 +496,20 @@ struct CaptionReviewView: View {
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
 
-        // Copy to a stable location so the sandbox bookmark survives.
-        let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("postroll_upload_\(UUID().uuidString)_\(url.lastPathComponent)")
-        try? FileManager.default.copyItem(at: url, to: dest)
+        // Copy to a stable location: this path is persisted on the event and
+        // reused by later regenerations, so it cannot live in the temp
+        // directory (macOS purges it). Fail loudly if the copy fails; the
+        // persisted path is only valid when the copy succeeded.
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents/PostRoll/audio")
+        let dest = dir.appendingPathComponent("upload_\(UUID().uuidString)_\(url.lastPathComponent)")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: url, to: dest)
+        } catch {
+            regenerateError = "Couldn't copy the audio file: \(error.localizedDescription)"
+            return
+        }
 
         // Persist the audio path on the event so regeneration reuses it
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
@@ -501,17 +519,25 @@ struct CaptionReviewView: View {
         appState.updateEvent(ev)
 
         regeneratingDays.insert(day)
+        regenerateError = nil
         Task {
-            _ = try? await PythonBridge.shared.runSwapReelAudioWithFile(
-                event: liveEvent, day: day, audioPath: dest.path
-            )
-            await MainActor.run {
-                graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
-                regeneratingDays.remove(day)
-                NotificationService.shared.notifyRegenerationComplete(
-                    eventName: liveEvent.name,
-                    what: "\(day.displayName) audio"
+            do {
+                _ = try await PythonBridge.shared.runSwapReelAudioWithFile(
+                    event: liveEvent, day: day, audioPath: dest.path
                 )
+                await MainActor.run {
+                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                    regeneratingDays.remove(day)
+                    NotificationService.shared.notifyRegenerationComplete(
+                        eventName: liveEvent.name,
+                        what: "\(day.displayName) audio"
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    regeneratingDays.remove(day)
+                    regenerateError = "\(day.displayName) audio upload failed: \(error.localizedDescription)"
+                }
             }
         }
     }
