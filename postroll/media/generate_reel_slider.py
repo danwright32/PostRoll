@@ -539,6 +539,9 @@ def generate_reel_slider(
                 "-framerate", str(FPS),
                 "-i", str(tmpdir / "frame_%05d.png"),
                 "-i", audio_path,
+                # Explicit stream selection so MP3 cover art can never be
+                # picked as the video stream.
+                "-map", "0:v:0", "-map", "1:a:0",
                 "-t", str(TOTAL_DURATION),
                 "-af", f"afade=t=out:st={TOTAL_DURATION - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
                 "-c:v", "libx264",

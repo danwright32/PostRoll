@@ -414,6 +414,10 @@ def generate_reel_scroll(
             "-framerate", str(FPS),
             "-i", str(tmpdir / "frame_%05d.png"),
             "-i", audio_path,
+            # Select streams explicitly: without -map, ffmpeg picks the
+            # highest resolution video stream across all inputs, and MP3
+            # cover art counts, which can replace the reel with album art.
+            "-map", "0:v:0", "-map", "1:a:0",
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-af", (
