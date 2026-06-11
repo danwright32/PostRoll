@@ -355,6 +355,10 @@ def generate_reel_screen(
                 "ffmpeg", "-y",
                 "-f", "concat", "-safe", "0", "-i", concat_list,
                 "-i", audio_path,
+                # Cap the container at the video length. Without -t, ffmpeg
+                # encodes until the longest stream (the full music track)
+                # ends, leaving minutes of dead air after the video.
+                "-t", str(actual_total),
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
                 "-af", f"afade=t=out:st={actual_total - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
