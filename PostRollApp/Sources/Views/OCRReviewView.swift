@@ -408,8 +408,12 @@ struct OCRReviewView: View {
     }
 
     private func goBack() {
+        // Return to the upload screen, as the button label promises. The
+        // .programUploaded stage mounts OCRProgressView, which starts a fresh
+        // paid OCR run on appear; the user can re-run OCR from the upload
+        // screen once they've adjusted the pages.
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        ev.stage = .programUploaded
+        ev.stage = .created
         appState.updateEvent(ev)
     }
 }
