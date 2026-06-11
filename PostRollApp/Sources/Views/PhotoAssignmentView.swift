@@ -551,13 +551,21 @@ private struct PhotoDaySection: View {
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))], spacing: Spacing.sm) {
                             ForEach(Array(photos.enumerated()), id: \.element) { i, url in
+                                // Drag payloads carry the photo URL, not a bare
+                                // index: index strings leak across days, so a
+                                // drag from Sunday onto Monday would silently
+                                // reorder Monday by the wrong index. Resolving
+                                // by content also rejects cross-day drops.
                                 thumbView(for: url, at: i)
-                                    .draggable(i.description)
+                                    .draggable(url.absoluteString)
                                     .dropDestination(for: String.self) { items, _ in
-                                        guard let src = items.first, let srcIdx = Int(src), srcIdx != i else { return false }
+                                        guard let payload = items.first,
+                                              let srcIdx = photos.firstIndex(where: { $0.absoluteString == payload }),
+                                              let dstIdx = photos.firstIndex(of: url),
+                                              srcIdx != dstIdx else { return false }
                                         withAnimation(.easeOut(duration: 0.2)) {
                                             photos.move(fromOffsets: IndexSet(integer: srcIdx),
-                                                        toOffset: srcIdx < i ? i + 1 : i)
+                                                        toOffset: srcIdx < dstIdx ? dstIdx + 1 : dstIdx)
                                         }
                                         return true
                                     } isTargeted: { targeted in
