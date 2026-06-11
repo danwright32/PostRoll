@@ -659,7 +659,7 @@ def generate_caption(
             if not photo.exists():
                 raise FileNotFoundError(f"Photo not found: {photo}")
             if photo.suffix.lower() in HEIC_SUFFIXES:
-                staged = _convert_heic_to_jpeg(photo, tmp_path)
+                staged = _convert_heic_to_jpeg(photo, tmp_path, prefix=f"{i:03d}_")
             else:
                 staged = tmp_path / f"{i:03d}_{photo.name}"
                 shutil.copy2(photo, staged)
@@ -1037,7 +1037,7 @@ def generate_week_captions(
                 if not photo.exists():
                     raise FileNotFoundError(f"Photo not found for post {i} ({post.get('day')}): {photo}")
                 if photo.suffix.lower() in HEIC_SUFFIXES:
-                    staged = _convert_heic_to_jpeg(photo, tmp_path)
+                    staged = _convert_heic_to_jpeg(photo, tmp_path, prefix=f"post{i:02d}_photo{j:03d}_")
                 else:
                     staged = tmp_path / f"post{i:02d}_photo{j:03d}_{photo.name}"
                     shutil.copy2(photo, staged)

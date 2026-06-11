@@ -336,12 +336,13 @@ def test_ocr_accepts_heic_path_and_converts(tmp_path):
 
     captured = {}
 
-    def fake_convert(src, dest_dir):
+    def fake_convert(src, dest_dir, prefix=""):
         # Simulate sips: write a fake JPEG into the temp dir
-        out = dest_dir / (src.stem + ".jpg")
+        out = dest_dir / f"{prefix}{src.stem}.jpg"
         out.write_bytes(b"fake jpeg bytes")
         captured["src"] = src
         captured["dest"] = out
+        captured["prefix"] = prefix
         return out
 
     def fake_run_json(prompt, timeout=600, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
@@ -356,6 +357,10 @@ def test_ocr_accepts_heic_path_and_converts(tmp_path):
 
     # Conversion was invoked on the HEIC file
     assert captured["src"] == heic
+    # Staged name carries the indexed prefix like plain copies do, so prefix
+    # stripping recovers the original filename downstream
+    assert captured["prefix"] == "000_"
+    assert captured["dest"].name == "000_program.jpg"
     # The prompt references the converted JPEG path, not the HEIC
     assert ".jpg" in captured["prompt"]
     assert "program.heic" not in captured["prompt"]

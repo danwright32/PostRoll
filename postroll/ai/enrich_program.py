@@ -237,7 +237,7 @@ def enrich_program(
             if not src.exists():
                 raise FileNotFoundError(f"Program image not found: {src}")
             if src.suffix.lower() in HEIC_SUFFIXES:
-                dest = _convert_heic_to_jpeg(src, tmp_path)
+                dest = _convert_heic_to_jpeg(src, tmp_path, prefix=f"{i:03d}_")
             else:
                 dest = tmp_path / f"{i:03d}_{src.name}"
                 shutil.copy2(src, dest)

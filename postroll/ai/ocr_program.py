@@ -271,8 +271,14 @@ Rules:
 """
 
 
-def _convert_heic_to_jpeg(src: Path, dest_dir: Path) -> Path:
+def _convert_heic_to_jpeg(src: Path, dest_dir: Path, prefix: str = "") -> Path:
     """Convert a HEIC file to JPEG using macOS `sips`. Returns the new path.
+
+    Callers must pass the same staging prefix they use for plain copies
+    (e.g. "000_"): prefix stripping downstream assumes every staged name
+    carries one, and an unprefixed name both mangles the recovered original
+    filename (IMG_1234 becomes 1234) and lets same-stem files from
+    different folders silently overwrite each other.
 
     Raises ClaudeError if `sips` is not available (non-Mac systems).
     """
@@ -282,7 +288,7 @@ def _convert_heic_to_jpeg(src: Path, dest_dir: Path) -> Path:
             "HEIC conversion is only supported on macOS."
         )
 
-    dest = dest_dir / (src.stem + ".jpg")
+    dest = dest_dir / f"{prefix}{src.stem}.jpg"
     result = subprocess.run(
         ["sips", "-s", "format", "jpeg", str(src), "--out", str(dest)],
         capture_output=True,
@@ -312,7 +318,7 @@ def _normalize_image_paths(
             raise FileNotFoundError(f"Program image not found: {path}")
 
         if path.suffix.lower() in HEIC_SUFFIXES:
-            staged = _convert_heic_to_jpeg(path, tmp_dir)
+            staged = _convert_heic_to_jpeg(path, tmp_dir, prefix=f"{i:03d}_")
         else:
             # Copy with a numeric prefix to avoid name collisions
             staged = tmp_dir / f"{i:03d}_{path.name}"

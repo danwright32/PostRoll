@@ -102,7 +102,7 @@ def select_reel_photos(
             if not photo.exists():
                 raise FileNotFoundError(f"Photo not found: {photo}")
             if photo.suffix.lower() in HEIC_SUFFIXES:
-                s = _convert_heic_to_jpeg(photo, tmp_path)
+                s = _convert_heic_to_jpeg(photo, tmp_path, prefix=f"{i:04d}_")
             else:
                 s = tmp_path / f"{i:04d}_{photo.name}"
                 shutil.copy2(photo, s)

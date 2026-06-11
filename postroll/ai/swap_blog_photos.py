@@ -81,7 +81,7 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path]) -> dict:
             if not path.exists():
                 raise FileNotFoundError(f"Photo not found: {path}")
             if path.suffix.lower() in HEIC_SUFFIXES:
-                staged = _convert_heic_to_jpeg(path, tmp_path)
+                staged = _convert_heic_to_jpeg(path, tmp_path, prefix=f"{i:03d}_")
             else:
                 staged = tmp_path / f"{i:03d}_{path.name}"
                 shutil.copy2(path, staged)
