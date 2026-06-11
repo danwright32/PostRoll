@@ -148,8 +148,7 @@ struct ProgramUploadView: View {
     /// Uses PDFKit so page orientation (including /Rotate metadata) is handled correctly.
     private nonisolated static func rasterisePDF(at url: URL) -> [URL] {
         guard let doc = PDFDocument(url: url), doc.pageCount > 0 else { return [] }
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/PostRoll/programs")
+        let dir = AppPaths.programsDir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let stem = url.deletingPathExtension().lastPathComponent
         var results: [URL] = []
@@ -197,8 +196,7 @@ struct ProgramUploadView: View {
     }
 
     private nonisolated static func permanentCopy(of url: URL) -> URL? {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/PostRoll/programs")
+        let dir = AppPaths.programsDir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let dest = dir.appendingPathComponent(url.lastPathComponent)
         if FileManager.default.fileExists(atPath: dest.path) { return dest }

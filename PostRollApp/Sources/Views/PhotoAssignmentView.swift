@@ -639,8 +639,7 @@ private struct PhotoDaySection: View {
     /// path survives the provider's temp file deletion. Names are uniquified
     /// rather than reused: two different photos can share a filename.
     private nonisolated static func permanentPhotoCopy(of url: URL) -> URL? {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/PostRoll/photos")
+        let dir = AppPaths.photosDir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var dest = dir.appendingPathComponent(url.lastPathComponent)
         if FileManager.default.fileExists(atPath: dest.path) {

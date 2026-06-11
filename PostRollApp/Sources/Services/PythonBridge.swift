@@ -74,9 +74,7 @@ actor PythonBridge {
     nonisolated let python3: String
 
     private init() {
-        let root = FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/PostRoll")
+        let root = AppPaths.root
         projectRoot = root
 
         // Prefer the project venv so all pip packages are available

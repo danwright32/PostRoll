@@ -22,11 +22,7 @@ enum StoreRecovery {
 }
 
 enum EventStore {
-    static var storeURL: URL {
-        FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/PostRoll/events.json")
-    }
+    static var storeURL: URL { AppPaths.eventsFile }
 
     struct LoadResult {
         var events: [Event]

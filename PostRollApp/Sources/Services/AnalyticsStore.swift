@@ -9,9 +9,7 @@ final class AnalyticsStore {
     var orgFollowerBands: [String: OrgFollowerBand] = [:]
     var lastImport: Date?
 
-    private static let filePath: URL = FileManager.default
-        .homeDirectoryForCurrentUser
-        .appendingPathComponent("Documents/PostRoll/analytics.json")
+    private static let filePath: URL = AppPaths.analyticsFile
 
     private static let encoder: JSONEncoder = {
         let e = JSONEncoder()

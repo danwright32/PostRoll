@@ -502,8 +502,7 @@ struct CaptionReviewView: View {
         // reused by later regenerations, so it cannot live in the temp
         // directory (macOS purges it). Fail loudly if the copy fails; the
         // persisted path is only valid when the copy succeeded.
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/PostRoll/audio")
+        let dir = AppPaths.audioDir
         let dest = dir.appendingPathComponent("upload_\(UUID().uuidString)_\(url.lastPathComponent)")
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

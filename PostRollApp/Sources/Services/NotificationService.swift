@@ -6,9 +6,7 @@ import UserNotifications
 /// so a user's source files (e.g. originals in ~/Downloads) are never deleted.
 enum ProgramImageCleanup {
     static func delete(urls: [URL]) {
-        let programsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/PostRoll/programs")
-            .standardizedFileURL.path
+        let programsDir = AppPaths.programsDir.standardizedFileURL.path
         for url in urls {
             let path = url.standardizedFileURL.path
             guard path.hasPrefix(programsDir + "/") else { continue }
