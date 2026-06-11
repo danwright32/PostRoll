@@ -29,6 +29,7 @@ enum PythonBridgeError: LocalizedError {
     case scriptFailed(exitCode: Int32, stderr: String)
     case outputMissing
     case invalidOutput(String)
+    case timedOut(seconds: TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -38,6 +39,8 @@ enum PythonBridgeError: LocalizedError {
             return "Generation finished but produced no output. Check that the program PDF has readable text and try again."
         case .invalidOutput:
             return "Generated output couldn't be read. Try regenerating. If it keeps failing, check ~/Documents/PostRoll/logs."
+        case .timedOut(let seconds):
+            return "The operation was still running after \(Int(seconds / 60)) minutes and was stopped. Check your internet connection and try again."
         }
     }
 
@@ -1443,7 +1446,7 @@ actor PythonBridge {
     ///
     /// Supports Swift task cancellation: when the calling task is cancelled,
     /// the subprocess is terminated immediately via SIGTERM.
-    private func runProcess(args: [String]) async throws {
+    private func runProcess(args: [String], timeout: TimeInterval = 1800) async throws {
         let python = python3
         let root = projectRoot
         let logURL = root
@@ -1489,8 +1492,35 @@ actor PythonBridge {
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
 
+        // Watchdog: no Python invocation may hang the UI forever. A wedged
+        // network call inside the pipeline previously left progress spinners
+        // running indefinitely with no way to recover except user cancel.
+        // The limit is deliberately generous (full week generation runs
+        // far under it); it exists only to catch genuinely stuck processes.
+        final class TimeoutFlag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var _fired = false
+            var fired: Bool {
+                get { lock.withLock { _fired } }
+                set { lock.withLock { _fired = newValue } }
+            }
+        }
+        let timedOut = TimeoutFlag()
+        // terminate()/isRunning are safe cross thread; the onCancel handler
+        // below already relies on that from a nonisolated context.
+        nonisolated(unsafe) let watchedProcess = process
+        let watchdog = Task.detached {
+            try? await Task.sleep(for: .seconds(timeout))
+            if !Task.isCancelled, watchedProcess.isRunning {
+                timedOut.fired = true
+                watchedProcess.terminate()
+            }
+        }
+        defer { watchdog.cancel() }
+
         // Use terminationHandler (non-blocking) + withTaskCancellationHandler so
         // cancelling the calling Swift task immediately sends SIGTERM to the process.
+        do {
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 // The handler must be installed before run(): a process that
@@ -1524,6 +1554,12 @@ actor PythonBridge {
             }
         } onCancel: {
             if process.isRunning { process.terminate() }
+        }
+        } catch {
+            if timedOut.fired {
+                throw PythonBridgeError.timedOut(seconds: timeout)
+            }
+            throw error
         }
     }
 }
