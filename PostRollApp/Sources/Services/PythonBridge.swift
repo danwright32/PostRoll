@@ -1489,25 +1489,41 @@ actor PythonBridge {
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
 
-        try process.run()
-
         // Use terminationHandler (non-blocking) + withTaskCancellationHandler so
         // cancelling the calling Swift task immediately sends SIGTERM to the process.
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                // The handler must be installed before run(): a process that
+                // exits instantly (bad module name, argparse exit 2) can
+                // otherwise terminate before the handler exists, and the
+                // continuation would hang forever.
                 process.terminationHandler = { p in
                     let status = p.terminationStatus
                     if status == 0 {
                         cont.resume()
                     } else {
+                        // Python's stderr is redirected into postroll.log by the
+                        // script above, so the pipe only ever carries pre-exec
+                        // shell output. When it's empty, read the log tail so
+                        // humanise() sees the real traceback instead of "".
                         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+                        var stderr = String(data: stderrData, encoding: .utf8) ?? ""
+                        if stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                           let logText = try? String(contentsOf: logURL, encoding: .utf8) {
+                            stderr = logText.split(separator: "\n").suffix(50).joined(separator: "\n")
+                        }
                         cont.resume(throwing: PythonBridgeError.scriptFailed(exitCode: status, stderr: stderr))
                     }
                 }
+                do {
+                    try process.run()
+                } catch {
+                    process.terminationHandler = nil
+                    cont.resume(throwing: error)
+                }
             }
         } onCancel: {
-            process.terminate()
+            if process.isRunning { process.terminate() }
         }
     }
 }
