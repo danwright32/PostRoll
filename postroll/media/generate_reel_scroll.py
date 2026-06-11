@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import subprocess
 import tempfile
@@ -400,9 +401,13 @@ def generate_reel_scroll(
 
             frame.save(str(tmpdir / f"frame_{i:05d}.png"), "PNG")
 
-        # Encode
+        # Encode to a temp name and rename into place atomically: a cancelled
+        # render orphans its ffmpeg child, which can keep writing for seconds
+        # while a replacement encode targets the same final path. The pid
+        # suffix keeps the two encodes from sharing a temp file either.
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
+        encode_tmp = output.with_suffix(f".{os.getpid()}.tmp.mp4")
 
         cmd = [
             "ffmpeg", "-y",
@@ -417,12 +422,14 @@ def generate_reel_scroll(
                 f"apad"
             ),
             "-t", str(total_duration),
-            str(output),
+            str(encode_tmp),
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
+            encode_tmp.unlink(missing_ok=True)
             raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
+        os.replace(encode_tmp, output)
 
     print(f"Scroll reel generated: {output} ({total_duration:.1f}s, {n} photos)")
     return str(output)

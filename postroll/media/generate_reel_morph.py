@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -387,8 +388,11 @@ def generate_reel_morph(
                 frame = draw_branded_chrome(frame, event_name, org, venue, logo)
             frame.save(str(tmpdir / f"frame_{i:05d}.png"), "PNG")
 
+        # Encode to a temp name and rename into place atomically so a
+        # cancelled render's orphaned ffmpeg can never corrupt the final file.
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
+        encode_tmp = output.with_suffix(f".{os.getpid()}.tmp.mp4")
 
         if audio_path:
             cmd = [
@@ -400,7 +404,7 @@ def generate_reel_morph(
                 "-af", f"afade=t=out:st={TOTAL_DURATION - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-shortest",
-                str(output),
+                str(encode_tmp),
             ]
         else:
             cmd = [
@@ -409,11 +413,13 @@ def generate_reel_morph(
                 "-i", str(tmpdir / "frame_%05d.png"),
                 "-t", str(TOTAL_DURATION),
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                str(output),
+                str(encode_tmp),
             ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
+            encode_tmp.unlink(missing_ok=True)
             raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
+        os.replace(encode_tmp, output)
 
     print(f"Split compare reel generated: {output} ({TOTAL_DURATION}s, {FPS}fps)")
     return str(output)

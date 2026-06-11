@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -279,8 +280,11 @@ def generate_reel_screen(
             raise RuntimeError(f"Compose failed: {result.stderr[-500:]}")
 
         # Step 6: Add closing frame with crossfade transition
+        # Encode to a temp name and rename into place atomically so a
+        # cancelled render's orphaned ffmpeg can never corrupt the final file.
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
+        encode_tmp = output.with_suffix(f".{os.getpid()}.tmp.mp4")
 
         if closing_path:
             # Create closing frame video
@@ -362,7 +366,7 @@ def generate_reel_screen(
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
                 "-af", f"afade=t=out:st={actual_total - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
-                str(output),
+                str(encode_tmp),
             ]
         else:
             # Just add audio
@@ -374,12 +378,14 @@ def generate_reel_screen(
                 "-af", f"afade=t=out:st={target_duration - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-shortest",
-                str(output),
+                str(encode_tmp),
             ]
 
         result = subprocess.run(final_cmd, capture_output=True, text=True)
         if result.returncode != 0:
+            encode_tmp.unlink(missing_ok=True)
             raise RuntimeError(f"Final encode failed: {result.stderr[-500:]}")
+        os.replace(encode_tmp, output)
 
     print(f"Screen recording reel generated: {output} "
           f"({total_duration:.1f}s, {speed_multiplier:.1f}x speed)")
