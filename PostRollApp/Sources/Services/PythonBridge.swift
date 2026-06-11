@@ -1,30 +1,5 @@
 import Foundation
 
-/// One candidate track returned by the music-picker fetcher.
-struct TrackCandidate: Codable, Hashable, Identifiable {
-    var id: String
-    var name: String
-    var artistName: String
-    var duration: Double
-    var tags: String
-    var localPath: String
-    /// "program" when the track was matched by piece search; nil otherwise.
-    var source: String?
-    /// "<title> — <composer>" of the program piece this track was matched
-    /// against. Only populated when source == "program".
-    var matchLabel: String?
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, duration, tags, source
-        case artistName = "artist_name"
-        case localPath  = "local_path"
-        case matchLabel = "match_label"
-    }
-
-    var localURL: URL { URL(fileURLWithPath: localPath) }
-    var isProgramMatch: Bool { source == "program" }
-}
-
 enum PythonBridgeError: LocalizedError {
     case scriptFailed(exitCode: Int32, stderr: String)
     case outputMissing
@@ -433,56 +408,6 @@ actor PythonBridge {
         let data = try Data(contentsOf: outputFile)
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return json["audio_source"] as? String
-    }
-
-    // MARK: - Music picker (candidate tracks)
-
-    /// Fetch a batch of candidate Jamendo tracks matching `tags`. Each candidate is
-    /// pre-downloaded to the shared audio cache so the UI can preview it immediately.
-    /// Pass `excludeIds` to skip tracks the user has already seen (used for
-    /// "get new tracks" pagination).
-    func runFetchTrackCandidates(
-        tags: String,
-        count: Int = 5,
-        excludeIds: [String] = [],
-        programPieces: [Piece]? = nil
-    ) async throws -> [TrackCandidate] {
-        let tmp = FileManager.default.temporaryDirectory
-        let outputFile = tmp.appendingPathComponent("postroll_tracks_\(UUID().uuidString).json")
-        let programFile = tmp.appendingPathComponent("postroll_tracks_program_\(UUID().uuidString).json")
-        defer {
-            try? FileManager.default.removeItem(at: outputFile)
-            try? FileManager.default.removeItem(at: programFile)
-        }
-
-        var args: [String] = [
-            "-m", "postroll.ai.fetch_tracks",
-            "--tags", tags,
-            "--count", String(count),
-            "--output", outputFile.path,
-        ]
-        if !excludeIds.isEmpty {
-            args.append("--exclude-ids")
-            args.append(excludeIds.joined(separator: ","))
-        }
-        if let pieces = programPieces, !pieces.isEmpty {
-            let dict: [String: Any] = [
-                "pieces": pieces.map { ["title": $0.title, "composer": $0.composer] }
-            ]
-            if let data = try? JSONSerialization.data(withJSONObject: dict) {
-                try data.write(to: programFile)
-                args.append("--program")
-                args.append(programFile.path)
-            }
-        }
-
-        try await runProcess(args: args)
-
-        guard FileManager.default.fileExists(atPath: outputFile.path) else { return [] }
-        let data = try Data(contentsOf: outputFile)
-        struct Wrapper: Codable { let tracks: [TrackCandidate] }
-        let wrapper = try JSONDecoder().decode(Wrapper.self, from: data)
-        return wrapper.tracks
     }
 
     /// Builds the media manifest dict shared by runMediaGeneration and runPreviewGeneration.
@@ -1000,50 +925,6 @@ actor PythonBridge {
         } catch {
             throw PythonBridgeError.invalidOutput(error.localizedDescription)
         }
-    }
-
-    // MARK: - Audio Tags
-    //
-    // Calls postroll.ai.audio_tags via CLI to fetch the canonical Jamendo
-    // tags for a posting day. Single source of truth so the Swift track
-    // picker matches what the Python reel generators auto-fetch.
-
-    func suggestAudioTags(day: DayName, shootType: ShootType, pieces: [Piece]) async -> String {
-        let tmp = FileManager.default.temporaryDirectory
-        let programFile = tmp.appendingPathComponent("postroll_audio_tags_in_\(UUID().uuidString).json")
-        let outputFile = tmp.appendingPathComponent("postroll_audio_tags_out_\(UUID().uuidString).txt")
-        defer {
-            try? FileManager.default.removeItem(at: programFile)
-            try? FileManager.default.removeItem(at: outputFile)
-        }
-
-        // Thursday is the only day that consumes pieces — writing them
-        // unconditionally keeps the call site simple.
-        let dict: [String: Any] = [
-            "pieces": pieces.map { ["title": $0.title, "composer": $0.composer] }
-        ]
-        if let data = try? JSONSerialization.data(withJSONObject: dict) {
-            try? data.write(to: programFile)
-        }
-
-        let args = [
-            "-m", "postroll.ai.audio_tags",
-            "--day", day.rawValue,
-            "--shoot-type", shootType.pythonValue,
-            "--program", programFile.path,
-            "--output", outputFile.path,
-        ]
-        do {
-            try await runProcess(args: args)
-            if let data = try? Data(contentsOf: outputFile),
-               let text = String(data: data, encoding: .utf8) {
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { return trimmed }
-            }
-        } catch {
-            // Fall through to the static default below
-        }
-        return day == .tuesday ? "electronic,upbeat" : "ambient,atmospheric"
     }
 
     // MARK: - Flag Issues
