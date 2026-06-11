@@ -194,8 +194,11 @@ def parse_csv(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
             raw_date = get(row, "published_at") or ""
             published_at = _parse_date(raw_date)
             if not published_at:
+                # Swift requires a real date on every post; a dateless post is
+                # useless for timing analysis anyway, so skip it loudly.
                 warnings.append(f"File {path.name} row {row_num} ({post_id}): "
-                                 f"could not parse date '{raw_date}'.")
+                                 f"could not parse date '{raw_date}', skipping post.")
+                continue
 
             raw_type = get(row, "raw_post_type") or ""
             media_type = _normalize_media_type(raw_type)
@@ -209,7 +212,7 @@ def parse_csv(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
             post: dict[str, Any] = {
                 "ig_post_id":    post_id,
                 "ig_permalink":  get(row, "ig_permalink") or "",
-                "published_at":  published_at or "",
+                "published_at":  published_at,
                 "media_type":    media_type,
                 "raw_post_type": raw_type,
                 "caption":       caption,

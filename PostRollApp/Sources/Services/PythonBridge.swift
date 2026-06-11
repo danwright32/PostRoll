@@ -1271,7 +1271,7 @@ actor PythonBridge {
 
         let data = try Data(contentsOf: outputFile)
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = AnalyticsDates.lenientDecoding
         do {
             return try decoder.decode(MetaImportResult.self, from: data)
         } catch {
@@ -1331,7 +1331,7 @@ actor PythonBridge {
 
         let data = try Data(contentsOf: outputFile)
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = AnalyticsDates.lenientDecoding
         do {
             return try decoder.decode(InsightReport.self, from: data)
         } catch {

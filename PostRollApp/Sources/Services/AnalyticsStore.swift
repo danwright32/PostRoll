@@ -22,7 +22,7 @@ final class AnalyticsStore {
 
     private static let decoder: JSONDecoder = {
         let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
+        d.dateDecodingStrategy = AnalyticsDates.lenientDecoding
         return d
     }()
 

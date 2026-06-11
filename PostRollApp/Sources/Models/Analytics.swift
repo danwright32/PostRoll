@@ -202,3 +202,55 @@ extension InsightFinding {
         confidence = try c.decodeIfPresent(Confidence.self, forKey: .confidence) ?? .medium
     }
 }
+
+// MARK: - Date decoding
+
+/// Python emits dates in three shapes: naive local timestamps from Meta CSV
+/// imports ("2026-01-05T19:00:00", Meta exports carry no timezone), date only
+/// strings ("2026-06-11" for insight date ranges), and Z suffixed UTC
+/// ("generated_at"). Swift's strict .iso8601 strategy rejects the first two,
+/// so every analytics decode must use this lenient strategy instead.
+enum AnalyticsDates {
+    // Formatters are immutable after configuration; both classes are
+    // documented thread safe, so sharing them across actors is sound.
+    nonisolated(unsafe) private static let isoWithTZ: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    nonisolated(unsafe) private static let isoWithFractionalSeconds: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private static let naiveLocal: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return f
+    }()
+
+    private static let dateOnly: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    static let lenientDecoding = JSONDecoder.DateDecodingStrategy.custom { decoder in
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        if let date = isoWithTZ.date(from: raw)
+            ?? isoWithFractionalSeconds.date(from: raw)
+            ?? naiveLocal.date(from: raw)
+            ?? dateOnly.date(from: raw) {
+            return date
+        }
+        throw DecodingError.dataCorruptedError(
+            in: container,
+            debugDescription: "Unrecognised date format: '\(raw)'"
+        )
+    }
+}
