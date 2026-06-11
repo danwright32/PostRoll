@@ -37,17 +37,30 @@ final class AnalyticsStore {
             orgFollowerBands: orgFollowerBands,
             lastImport: lastImport
         )
-        guard let data = try? Self.encoder.encode(stored) else { return }
-        try? data.write(to: Self.filePath, options: .atomic)
+        do {
+            let data = try Self.encoder.encode(stored)
+            try data.write(to: Self.filePath, options: .atomic)
+        } catch {
+            NSLog("AnalyticsStore: failed to save analytics.json: \(error)")
+        }
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: Self.filePath),
-              let stored = try? Self.decoder.decode(StoredData.self, from: data) else { return }
-        posts = stored.posts
-        reports = stored.reports
-        orgFollowerBands = stored.orgFollowerBands
-        lastImport = stored.lastImport
+        let url = Self.filePath
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let stored = try Self.decoder.decode(StoredData.self, from: data)
+            posts = stored.posts
+            reports = stored.reports
+            orgFollowerBands = stored.orgFollowerBands
+            lastImport = stored.lastImport
+        } catch {
+            // Do not leave an undecodable file in place: the next save would
+            // overwrite it and discard all imported history. Set it aside.
+            NSLog("AnalyticsStore: failed to decode analytics.json: \(error)")
+            StoreRecovery.setAside(url)
+        }
     }
 
     // MARK: - Posts

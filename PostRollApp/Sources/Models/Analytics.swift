@@ -89,6 +89,38 @@ extension IGPost: Identifiable {
     var id: String { igPostID }
 }
 
+extension IGPost {
+    // Persisted in analytics.json: every field must decodeIfPresent or a
+    // schema change wipes imported analytics history on the next launch.
+    // media_type decodes via raw string so an unrecognised value from a new
+    // Meta post type degrades to .unknown instead of failing the whole file.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        igPostID      = try c.decodeIfPresent(String.self,   forKey: .igPostID)      ?? UUID().uuidString
+        igPermalink   = try c.decodeIfPresent(String.self,   forKey: .igPermalink)   ?? ""
+        publishedAt   = try c.decodeIfPresent(Date.self,     forKey: .publishedAt)   ?? .distantPast
+        let rawMedia  = try c.decodeIfPresent(String.self,   forKey: .mediaType)     ?? ""
+        mediaType     = IGMediaType(rawValue: rawMedia)                              ?? .unknown
+        rawPostType   = try c.decodeIfPresent(String.self,   forKey: .rawPostType)   ?? ""
+        caption       = try c.decodeIfPresent(String.self,   forKey: .caption)       ?? ""
+        hashtags      = try c.decodeIfPresent([String].self, forKey: .hashtags)      ?? []
+        views         = try c.decodeIfPresent(Int.self,      forKey: .views)
+        reach         = try c.decodeIfPresent(Int.self,      forKey: .reach)
+        likes         = try c.decodeIfPresent(Int.self,      forKey: .likes)
+        shares        = try c.decodeIfPresent(Int.self,      forKey: .shares)
+        follows       = try c.decodeIfPresent(Int.self,      forKey: .follows)
+        comments      = try c.decodeIfPresent(Int.self,      forKey: .comments)
+        saves         = try c.decodeIfPresent(Int.self,      forKey: .saves)
+        replies       = try c.decodeIfPresent(Int.self,      forKey: .replies)
+        navigation    = try c.decodeIfPresent(Int.self,      forKey: .navigation)
+        profileVisits = try c.decodeIfPresent(Int.self,      forKey: .profileVisits)
+        stickerTaps   = try c.decodeIfPresent(Int.self,      forKey: .stickerTaps)
+        durationSec   = try c.decodeIfPresent(Double.self,   forKey: .durationSec)
+        org           = try c.decodeIfPresent(String.self,   forKey: .org)
+        isPersonal    = try c.decodeIfPresent(Bool.self,     forKey: .isPersonal)    ?? false
+    }
+}
+
 // MARK: - Import result (returned by import_meta_csv.py)
 
 struct MetaImportResult: Codable {

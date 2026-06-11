@@ -21,6 +21,21 @@ struct OCRResult: Codable, Hashable, Sendable {
     }
 }
 
+extension OCRResult {
+    // Persisted inside events.json: every field must decodeIfPresent or a
+    // future schema change wipes all saved events on the next launch.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        performers        = try c.decodeIfPresent([Performer].self,    forKey: .performers)        ?? []
+        pieces            = try c.decodeIfPresent([Piece].self,        forKey: .pieces)            ?? []
+        scenes            = try c.decodeIfPresent([ProgramScene].self, forKey: .scenes)            ?? []
+        organizationNotes = try c.decodeIfPresent(String.self,         forKey: .organizationNotes) ?? ""
+        programNotes      = try c.decodeIfPresent(String.self,         forKey: .programNotes)      ?? ""
+        venueNotes        = try c.decodeIfPresent(String.self,         forKey: .venueNotes)        ?? ""
+        productionDetails = try c.decodeIfPresent(String.self,         forKey: .productionDetails) ?? ""
+    }
+}
+
 struct Performer: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var name: String

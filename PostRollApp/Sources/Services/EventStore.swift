@@ -1,5 +1,26 @@
 import Foundation
 
+// MARK: - Store recovery
+
+/// Moves an undecodable store file aside so the next save cannot silently
+/// overwrite it. Returns the backup URL, or nil if the move failed.
+enum StoreRecovery {
+    @discardableResult
+    static func setAside(_ url: URL) -> URL? {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyyMMdd-HHmmss"
+        let backup = url.appendingPathExtension("corrupt-\(f.string(from: Date()))")
+        do {
+            try FileManager.default.moveItem(at: url, to: backup)
+            return backup
+        } catch {
+            NSLog("StoreRecovery: could not set aside \(url.lastPathComponent): \(error)")
+            return nil
+        }
+    }
+}
+
 enum EventStore {
     static var storeURL: URL {
         FileManager.default
@@ -7,19 +28,46 @@ enum EventStore {
             .appendingPathComponent("Documents/PostRoll/events.json")
     }
 
-    static func load() -> [Event] {
-        guard let data = try? Data(contentsOf: storeURL) else { return [] }
-        return (try? JSONDecoder().decode([Event].self, from: data)) ?? []
+    struct LoadResult {
+        var events: [Event]
+        /// Non nil when the file existed but could not be decoded. The
+        /// unreadable file has already been moved aside for recovery.
+        var recoveryMessage: String?
+    }
+
+    static func load() -> LoadResult {
+        let url = storeURL
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return LoadResult(events: [], recoveryMessage: nil)
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            let events = try JSONDecoder().decode([Event].self, from: data)
+            return LoadResult(events: events, recoveryMessage: nil)
+        } catch {
+            // A file that exists but fails to decode must never be treated as
+            // empty: the next save would overwrite it and destroy every event.
+            NSLog("EventStore: failed to decode events.json: \(error)")
+            let backup = StoreRecovery.setAside(url)
+            let name = backup?.lastPathComponent ?? "events.json"
+            return LoadResult(
+                events: [],
+                recoveryMessage: "Your saved events could not be read, so PostRoll is starting with an empty list. Nothing was deleted: the unreadable file was set aside as \(name) in Documents/PostRoll."
+            )
+        }
     }
 
     static func save(_ events: [Event]) {
         let url = storeURL
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        if let data = try? JSONEncoder().encode(events) {
-            try? data.write(to: url, options: .atomic)
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try JSONEncoder().encode(events)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            NSLog("EventStore: failed to save events.json: \(error)")
         }
     }
 }

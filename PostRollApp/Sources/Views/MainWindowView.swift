@@ -53,6 +53,17 @@ struct MainWindowView: View {
             NewEventSheet()
                 .environment(appState)
         }
+        .alert(
+            "Saved events could not be read",
+            isPresented: Binding(
+                get: { appState.dataLoadWarning != nil },
+                set: { if !$0 { appState.dataLoadWarning = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(appState.dataLoadWarning ?? "")
+        }
     }
 }
 

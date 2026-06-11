@@ -222,6 +222,19 @@ struct CollageCell: Codable, Hashable, Identifiable {
     }
 }
 
+extension CollageCell {
+    // Persisted inside events.json via PostingDay.collageCellOverride: every
+    // field must decodeIfPresent or a schema change wipes saved events.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        photoPath = try c.decodeIfPresent(String.self, forKey: .photoPath) ?? ""
+        x         = try c.decodeIfPresent(Int.self,    forKey: .x)         ?? 0
+        y         = try c.decodeIfPresent(Int.self,    forKey: .y)         ?? 0
+        w         = try c.decodeIfPresent(Int.self,    forKey: .w)         ?? 0
+        h         = try c.decodeIfPresent(Int.self,    forKey: .h)         ?? 0
+    }
+}
+
 // MARK: - CropOffset
 
 /// Per-photo crop adjustment, stored keyed by photo URL absoluteString.

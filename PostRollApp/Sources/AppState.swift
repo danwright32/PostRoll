@@ -11,12 +11,18 @@ final class AppState {
     var selectedEventID: Event.ID?
     var showingNewEvent = false
 
+    /// Set when events.json existed but could not be decoded at launch.
+    /// Shown once as an alert; the unreadable file was moved aside.
+    var dataLoadWarning: String?
+
     // Analytics navigation
     var sidebarMode: SidebarMode = .events
     var insightsSection: InsightsSection = .overview
 
     init() {
-        events = EventStore.load()
+        let loaded = EventStore.load()
+        events = loaded.events
+        dataLoadWarning = loaded.recoveryMessage
         // Sweep: events past OCR review (photosAssigned and beyond) no longer
         // need their program images on disk — OCRReviewView.confirmAndAdvance
         // clears them when the user moves forward. We keep images alive
