@@ -143,11 +143,23 @@ def _run_sdk(
     try:
         message = client.messages.create(
             model=_resolve_model(model),
-            max_tokens=8096,
+            # Generous cap (within every aliased model's output limit): a
+            # week batch or long blog through three review passes can run
+            # well past 8k tokens. Cost scales with tokens used, not the cap.
+            max_tokens=16384,
             messages=[{"role": "user", "content": content}],
         )
     except anthropic.APIError as e:
         raise ClaudeError(f"Anthropic API error: {e}") from e
+
+    if message.stop_reason == "max_tokens":
+        # A truncated response would otherwise surface as a confusing JSON
+        # parse failure (or silently clipped text for plain prompts).
+        raise ClaudeError(
+            "Response was truncated at the max_tokens cap. The prompt or "
+            "requested output is too large; try fewer photos or a shorter "
+            "input, then retry."
+        )
 
     text = message.content[0].text.strip() if message.content else ""
     if not text:

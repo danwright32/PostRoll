@@ -272,3 +272,55 @@ def test_image_block_leaves_small_photos_untouched(tmp_path):
 
     block = _image_block(src)
     assert base64.standard_b64decode(block["source"]["data"]) == src.read_bytes()
+
+
+# === Truncation detection (SDK path) ===
+
+
+def test_sdk_truncated_response_raises_clear_error(monkeypatch):
+    """A response cut off at max_tokens must raise a clear error instead of
+    surfacing as a confusing JSON parse failure downstream."""
+    from types import SimpleNamespace
+    from postroll.ai import claude_client as cc
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    fake_message = SimpleNamespace(
+        stop_reason="max_tokens",
+        content=[SimpleNamespace(text='{"caption": "cut off mid')],
+    )
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            return fake_message
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.messages = FakeMessages()
+
+    with patch.object(cc.anthropic, "Anthropic", FakeClient):
+        with pytest.raises(ClaudeError, match="truncated"):
+            run_prompt("write a very long thing")
+
+
+def test_sdk_normal_response_passes_through(monkeypatch):
+    from types import SimpleNamespace
+    from postroll.ai import claude_client as cc
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    fake_message = SimpleNamespace(
+        stop_reason="end_turn",
+        content=[SimpleNamespace(text='{"caption": "complete"}')],
+    )
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            return fake_message
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.messages = FakeMessages()
+
+    with patch.object(cc.anthropic, "Anthropic", FakeClient):
+        assert run_prompt("hi") == '{"caption": "complete"}'
