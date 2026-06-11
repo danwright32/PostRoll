@@ -52,14 +52,34 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         SWIFT_STRICT_CONCURRENCY: targeted
 
+  # UI smoke tests drive the real app against a sandboxed data directory
+  # (POSTROLL_DATA_DIR), so they can never touch live data.
+  PostRollUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: PostRoll
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwphotony.PostRollUITests
+        GENERATE_INFOPLIST_FILE: "YES"
+        CODE_SIGN_IDENTITY: "-"
+        TEST_TARGET_NAME: PostRoll
+
 schemes:
   PostRoll:
     build:
       targets:
         PostRoll: all
         PostRollTests: [test]
+        PostRollUITests: [test]
     run:
       config: Debug
     test:
       targets:
         - PostRollTests
+        - PostRollUITests
