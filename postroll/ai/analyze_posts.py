@@ -108,6 +108,17 @@ def _compact_post(post: dict[str, Any], org_bands: dict[str, str],
         "saves":          post.get("saves"),
         "views":          post.get("views"),
     }
+    # The prompt's confounder rule and the story navigation analysis only
+    # work if these fields actually reach Claude; omitting them makes those
+    # findings fabricated by construction.
+    if is_story:
+        summary["replies"]        = post.get("replies")
+        summary["shares"]         = post.get("shares")
+        summary["navigation"]     = post.get("navigation")
+        summary["profile_visits"] = post.get("profile_visits")
+        summary["sticker_taps"]   = post.get("sticker_taps")
+    if post.get("is_personal"):
+        summary["is_personal"] = True
     # Drop None values to reduce token count
     return {k: v for k, v in summary.items() if v is not None}
 

@@ -218,7 +218,7 @@ def parse_csv(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
                 "caption":       caption,
                 "hashtags":      hashtags,
                 "org":           org,
-                "is_personal":   False,  # Claude updates this during analysis
+                "is_personal":   False,  # manual flag; nothing sets it automatically yet
             }
 
             # Metrics (all optional)

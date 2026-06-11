@@ -83,6 +83,47 @@ class TestCompactPost:
         result = _compact_post(post, {}, set())
         assert None not in result.values()
 
+    def test_story_navigation_metrics_reach_the_prompt(self):
+        """The prompt asks for story navigation analysis; the summary must
+        actually carry the story metrics or those findings are fabricated."""
+        post = {
+            "ig_post_id":   "S001",
+            "media_type":   "story",
+            "published_at": "2026-04-09T11:00:00",
+            "caption":      "",
+            "hashtags":     [],
+            "reach":        150,
+            "replies":      2,
+            "shares":       1,
+            "navigation":   40,
+            "profile_visits": 3,
+            "sticker_taps": 5,
+        }
+        result = _compact_post(post, {}, set())
+        assert result["navigation"] == 40
+        assert result["profile_visits"] == 3
+        assert result["sticker_taps"] == 5
+        assert result["replies"] == 2
+        assert result["shares"] == 1
+
+    def test_feed_posts_do_not_carry_story_metrics(self):
+        post = self._sample_post()
+        post["navigation"] = 40
+        result = _compact_post(post, {}, set())
+        assert "navigation" not in result
+
+    def test_is_personal_flag_reaches_the_prompt(self):
+        """The prompt excludes personal posts from craft analysis; the flag
+        must be present in the summary when set."""
+        post = self._sample_post()
+        post["is_personal"] = True
+        result = _compact_post(post, {}, set())
+        assert result["is_personal"] is True
+        # And omitted entirely when false, to save tokens
+        post["is_personal"] = False
+        result = _compact_post(post, {}, set())
+        assert "is_personal" not in result
+
 
 class TestPrep:
     def _make_posts(self):
