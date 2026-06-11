@@ -22,7 +22,15 @@ enum ArchiveCleanup {
         var dirty = false
 
         for i in events.indices where events[i].stage == .exported {
-            let referenceDate = events[i].archivedAt ?? events[i].date
+            // Events exported before archivedAt existed carry no stamp;
+            // falling back to the shoot date would sweep them on the first
+            // launch after updating (the shoot is always months older than
+            // the export). Stamp them now so the full grace period applies.
+            guard let referenceDate = events[i].archivedAt else {
+                events[i].archivedAt = now
+                dirty = true
+                continue
+            }
             guard now.timeIntervalSince(referenceDate) > threshold else { continue }
 
             // duplicateEvent copies org, name, date, and programImagePaths

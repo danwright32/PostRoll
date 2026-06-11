@@ -78,6 +78,23 @@ final class ArchiveCleanupTests: XCTestCase {
                        "the duplicate's preview paths must be untouched")
     }
 
+    func testUnstampedExportedEventIsStampedNotSwept() throws {
+        // An event exported before archivedAt existed must get the full
+        // grace period from now, not be swept based on its old shoot date.
+        var events = [makeArchivedEvent()]
+        events[0].archivedAt = nil
+        events[0].previewMediaPaths = ["sunday": ["story": "/x"]]
+        let dir = try previewDir(for: events[0])
+
+        let dirty = ArchiveCleanup.sweep(events: &events, projectRoot: root)
+
+        XCTAssertTrue(dirty, "the stamp must be persisted")
+        XCTAssertNotNil(events[0].archivedAt)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path),
+                      "nothing is reclaimed on the stamping pass")
+        XCTAssertFalse(events[0].previewMediaPaths.isEmpty)
+    }
+
     func testSharedProgramScansSurviveSweep() throws {
         let programs = root.appendingPathComponent("programs")
         let shared = programs.appendingPathComponent("program_p1.png")
