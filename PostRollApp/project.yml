@@ -30,3 +30,34 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: PostRoll
     entitlements:
       path: PostRoll.entitlements
+
+  # Unit tests compile the model layer and EventStore directly into the
+  # test bundle (no app hosting), so tests can never touch live data and
+  # don't need to launch the GUI.
+  PostRollTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+      - path: Sources/Models
+      - path: Sources/Services/EventStore.swift
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwphotony.PostRollTests
+        GENERATE_INFOPLIST_FILE: "YES"
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_STRICT_CONCURRENCY: targeted
+
+schemes:
+  PostRoll:
+    build:
+      targets:
+        PostRoll: all
+        PostRollTests: [test]
+    run:
+      config: Debug
+    test:
+      targets:
+        - PostRollTests

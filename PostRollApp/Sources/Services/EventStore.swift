@@ -35,8 +35,11 @@ enum EventStore {
         var recoveryMessage: String?
     }
 
-    static func load() -> LoadResult {
-        let url = storeURL
+    // load/save take the URL as a parameter (defaulting to the real store)
+    // so tests can exercise the recovery and backup paths against a temp
+    // directory without ever touching live data.
+
+    static func load(from url: URL = storeURL) -> LoadResult {
         guard FileManager.default.fileExists(atPath: url.path) else {
             return LoadResult(events: [], recoveryMessage: nil)
         }
@@ -57,8 +60,7 @@ enum EventStore {
         }
     }
 
-    static func save(_ events: [Event]) {
-        let url = storeURL
+    static func save(_ events: [Event], to url: URL = storeURL) {
         do {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
