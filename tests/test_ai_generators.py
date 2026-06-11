@@ -559,6 +559,52 @@ def test_fix_wrong_names_corrects_first_name_against_program():
     assert "Kate Logan" in fixed
 
 
+def test_fix_wrong_names_leaves_venue_names_alone():
+    """A performer surnamed like a venue word must not rewrite the venue:
+    'Alice Tully Hall' is a capitalized run, not a hallucinated name."""
+    program = {
+        "performers": [{"name": "Grace Tully"}],
+        "production_details": "",
+    }
+    body = "The recital filled Alice Tully Hall with sound. Grace Tully bowed."
+    fixed = generate_blog._fix_wrong_names(body, program)
+    assert "Alice Tully Hall" in fixed
+    assert "Grace Tully bowed" in fixed
+
+
+def test_fix_wrong_names_leaves_place_names_after_prepositions():
+    program = {
+        "performers": [{"name": "Jordan York"}],
+        "production_details": "",
+    }
+    body = "The choir is based in New York. Jordan York conducted."
+    fixed = generate_blog._fix_wrong_names(body, program)
+    assert "in New York." in fixed
+    assert "Jordan York conducted" in fixed
+
+
+def test_fix_wrong_names_still_corrects_after_guards():
+    """The guards must not break the actual correction path."""
+    program = {
+        "performers": [{"name": "Jordan York"}],
+        "production_details": "",
+    }
+    body = "The program credits Steven York for the arrangement."
+    fixed = generate_blog._fix_wrong_names(body, program)
+    assert "Jordan York" in fixed
+    assert "Steven" not in fixed
+
+
+def test_fix_wrong_names_skips_three_part_names():
+    program = {
+        "performers": [{"name": "Other Jane"}],
+        "production_details": "",
+    }
+    body = "Soloist Mary Jane Smith stepped forward."
+    fixed = generate_blog._fix_wrong_names(body, program)
+    assert "Mary Jane Smith" in fixed
+
+
 # === per-paragraph contraction backstop ===
 
 def test_fix_missing_contractions_rewords_only_offending_paragraph():

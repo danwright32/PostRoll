@@ -1285,10 +1285,22 @@ def _canonical_first_names(program: dict[str, Any]) -> dict[str, str]:
     return {last: next(iter(fs)) for last, fs in seen.items() if len(fs) == 1}
 
 
+_CAP_WORD_BEFORE_RE = re.compile(r"[A-Z][a-z]+\s+$")
+_CAP_WORD_AFTER_RE = re.compile(r"^\s+[A-Z][a-z]+")
+_PLACE_PREPOSITION_RE = re.compile(r"\b(?:in|at|of|near|to|from)\s+$")
+
+
 def _fix_wrong_names(body: str, program: dict[str, Any]) -> str:
     """Correct hallucinated first names against the program data. A surname the
     program ties to one first name is forced to that name wherever the body
-    pairs it with a different first name."""
+    pairs it with a different first name.
+
+    Guards: a pair inside a longer capitalized run ("Alice Tully Hall",
+    "Mary Jane Smith") or following a location preposition ("in New York")
+    is a place name, title, or multi part name, not a hallucinated first
+    name, and is left alone. A skipped correction is harmless; a false
+    substitution corrupts prose, so the guards err toward not replacing.
+    Every substitution is printed to stderr so changes stay visible."""
     canon = _canonical_first_names(program)
     if not canon:
         return body
@@ -1296,9 +1308,19 @@ def _fix_wrong_names(body: str, program: dict[str, Any]) -> str:
     def _repl(m: "re.Match[str]") -> str:
         first, last = m.group(1), m.group(2)
         correct = canon.get(last)
-        if correct and correct != first:
-            return f"{correct} {last}"
-        return m.group(0)
+        if not correct or correct == first:
+            return m.group(0)
+        before = body[: m.start()]
+        after = body[m.end():]
+        if _CAP_WORD_BEFORE_RE.search(before) or _CAP_WORD_AFTER_RE.match(after):
+            return m.group(0)
+        if _PLACE_PREPOSITION_RE.search(before):
+            return m.group(0)
+        print(
+            f"name backstop: '{first} {last}' -> '{correct} {last}'",
+            file=sys.stderr, flush=True,
+        )
+        return f"{correct} {last}"
 
     return _NAME_PAIR_RE.sub(_repl, body)
 
