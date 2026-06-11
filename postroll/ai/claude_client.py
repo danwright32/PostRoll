@@ -20,6 +20,7 @@ import mimetypes
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +88,9 @@ def _run_sdk(
     client = anthropic.Anthropic(
         api_key=os.environ.get("ANTHROPIC_API_KEY"),
         timeout=float(timeout),
+        # SDK-level retry with backoff for 429/overloaded/5xx, so a single
+        # transient blip doesn't fail a multi-pass generation chain.
+        max_retries=4,
     )
     content: list[dict] = []
     paths = list(image_paths or [])
@@ -243,6 +247,43 @@ def run_json_prompt(
         model=model,
     )
     return _extract_json(raw)
+
+
+def run_review_pass(
+    prompt: str,
+    prior: dict,
+    *,
+    label: str,
+    timeout: int = 300,
+    runner=None,
+) -> dict:
+    """Run a quality review pass (voice, humanizer) over an existing draft.
+
+    Review passes improve a draft; they do not define correctness. A rate
+    limit or network blip here must not discard the already paid-for draft,
+    so any failure (or a non-dict response) keeps the prior draft and warns
+    on stderr instead of raising.
+
+    runner: callers pass their own module-level run_json_prompt binding so
+    tests that patch that name still intercept review pass calls.
+    """
+    run = runner or run_json_prompt
+    try:
+        data = run(prompt, timeout=timeout)
+    except ClaudeError as e:
+        print(
+            f"warning: {label} pass failed, keeping previous draft: {e}",
+            file=sys.stderr, flush=True,
+        )
+        return prior
+    if not isinstance(data, dict):
+        print(
+            f"warning: {label} pass returned {type(data).__name__}, "
+            "keeping previous draft",
+            file=sys.stderr, flush=True,
+        )
+        return prior
+    return data
 
 
 def _extract_json(text: str) -> Any:

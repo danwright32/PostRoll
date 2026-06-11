@@ -49,7 +49,7 @@ from .ai_tells import (
     is_humanizer_available,
     load_humanizer_rules,
 )
-from .claude_client import run_json_prompt, load_brand_voice, ClaudeError
+from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .generate_blog import (
     _fix_missing_contractions,
     _fix_wrong_names,
@@ -179,11 +179,7 @@ def revise_blog(
             output_shape_description=blog_shape,
             extra_checks=BLOG_VOICE_EXTRA_CHECKS,
         )
-        data = run_json_prompt(voice_prompt, timeout=600)
-        if not isinstance(data, dict):
-            raise ClaudeError(
-                f"Voice pass returned {type(data).__name__}, expected JSON object"
-            )
+        data = run_review_pass(voice_prompt, data, label="voice", timeout=600, runner=run_json_prompt)
 
     if not skip_humanizer and is_humanizer_available(humanizer_path):
         humanizer_rules = load_humanizer_rules(humanizer_path)
@@ -194,11 +190,7 @@ def revise_blog(
             output_shape_description=blog_shape,
             extra_hard_bans=BLOG_HUMANIZER_EXTRA_BANS,
         )
-        data = run_json_prompt(review_prompt, timeout=600)
-        if not isinstance(data, dict):
-            raise ClaudeError(
-                f"Humanizer pass returned {type(data).__name__}, expected JSON object"
-            )
+        data = run_review_pass(review_prompt, data, label="humanizer", timeout=600, runner=run_json_prompt)
 
     final_body = _fix_wrong_names(data.get("body", body).strip(), program)
     final_body = _fix_missing_contractions(final_body)

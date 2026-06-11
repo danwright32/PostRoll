@@ -48,7 +48,7 @@ from .ai_tells import (
     is_humanizer_available,
     load_humanizer_rules,
 )
-from .claude_client import run_json_prompt, run_prompt, load_brand_voice, ClaudeError
+from .claude_client import run_json_prompt, run_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
@@ -1500,11 +1500,7 @@ def generate_blog(
                 output_shape_description=blog_shape,
                 extra_checks=BLOG_VOICE_EXTRA_CHECKS,
             )
-            data = run_json_prompt(voice_prompt, timeout=600)
-            if not isinstance(data, dict):
-                raise ClaudeError(
-                    f"Voice pass returned {type(data).__name__}, expected JSON object"
-                )
+            data = run_review_pass(voice_prompt, data, label="voice", timeout=600, runner=run_json_prompt)
 
         # === Pass 3: humanizer — always last, non-negotiable ===
         # Runs after the voice pass so it catches any AI tells the voice pass
@@ -1518,11 +1514,7 @@ def generate_blog(
                 output_shape_description=blog_shape,
                 extra_hard_bans=BLOG_HUMANIZER_EXTRA_BANS,
             )
-            data = run_json_prompt(review_prompt, timeout=600)
-            if not isinstance(data, dict):
-                raise ClaudeError(
-                    f"Humanizer pass returned {type(data).__name__}, expected JSON object"
-                )
+            data = run_review_pass(review_prompt, data, label="humanizer", timeout=600, runner=run_json_prompt)
 
     # Title is deterministic — "{event} at {venue}" — so Claude doesn't need
     # to spend tokens (or risk drifting tone) on it. Falls back to whatever

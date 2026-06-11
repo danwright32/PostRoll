@@ -56,7 +56,7 @@ from .ai_tells import (
     is_humanizer_available,
     load_humanizer_rules,
 )
-from .claude_client import run_json_prompt, load_brand_voice, ClaudeError
+from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
@@ -743,14 +743,7 @@ def generate_caption(
                 brand_voice=brand_voice_text,
                 output_shape_description=single_shape,
             )
-            data = run_json_prompt(
-                voice_prompt,
-                timeout=300,
-            )
-            if not isinstance(data, dict):
-                raise ClaudeError(
-                    f"Voice pass returned {type(data).__name__}, expected JSON object"
-                )
+            data = run_review_pass(voice_prompt, data, label="voice", timeout=300, runner=run_json_prompt)
 
         # === Pass 3 (FINAL): humanizer — always runs last, non-negotiable ===
         # Humanizer is the final word on AI tells. It MUST be the last pass
@@ -764,14 +757,7 @@ def generate_caption(
                 brand_voice=brand_voice_text,
                 output_shape_description=single_shape,
             )
-            data = run_json_prompt(
-                review_prompt,
-                timeout=300,
-            )
-            if not isinstance(data, dict):
-                raise ClaudeError(
-                    f"Humanizer pass returned {type(data).__name__}, expected JSON object"
-                )
+            data = run_review_pass(review_prompt, data, label="humanizer", timeout=300, runner=run_json_prompt)
 
     # Normalize alt_texts and scene_labels. For single-alt post types,
     # collapse to the first entry defensively in case Claude wrote one

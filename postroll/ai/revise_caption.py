@@ -50,7 +50,7 @@ from .ai_tells import (
     is_humanizer_available,
     load_humanizer_rules,
 )
-from .claude_client import run_json_prompt, load_brand_voice, ClaudeError
+from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .generate_captions import _format_performers
 
 
@@ -152,11 +152,7 @@ def revise_caption(
             brand_voice=brand_voice_text,
             output_shape_description=output_shape,
         )
-        data = run_json_prompt(review_prompt, timeout=180)
-        if not isinstance(data, dict):
-            raise ClaudeError(
-                f"Humanizer pass returned {type(data).__name__}, expected JSON object"
-            )
+        data = run_review_pass(review_prompt, data, label="humanizer", timeout=180, runner=run_json_prompt)
 
     # Merge revised text with locked photo-derived fields
     return {

@@ -199,3 +199,41 @@ def test_run_prompt_omits_permission_flags_when_unspecified():
     assert "--allowedTools" not in cmd
     assert cmd == [cmd[0], "-p", "--model", "sonnet"]
     assert captured["input"] == "the prompt"
+
+
+# === Review pass fallback ===
+
+
+def test_run_review_pass_keeps_prior_draft_on_failure():
+    """A transient API failure in a review pass must not discard the
+    already generated draft."""
+    from postroll.ai.claude_client import run_review_pass
+
+    prior = {"caption": "the paid-for draft", "hashtags": ["#a"]}
+
+    def failing_runner(prompt, timeout=300):
+        raise ClaudeError("overloaded")
+
+    result = run_review_pass("review it", prior, label="voice", runner=failing_runner)
+    assert result == prior
+
+
+def test_run_review_pass_keeps_prior_draft_on_non_dict():
+    from postroll.ai.claude_client import run_review_pass
+
+    prior = {"caption": "draft"}
+    result = run_review_pass(
+        "review it", prior, label="humanizer", runner=lambda p, timeout=300: ["wrong shape"]
+    )
+    assert result == prior
+
+
+def test_run_review_pass_returns_revision_on_success():
+    from postroll.ai.claude_client import run_review_pass
+
+    prior = {"caption": "draft"}
+    revised = {"caption": "improved draft"}
+    result = run_review_pass(
+        "review it", prior, label="voice", runner=lambda p, timeout=300: revised
+    )
+    assert result == revised
