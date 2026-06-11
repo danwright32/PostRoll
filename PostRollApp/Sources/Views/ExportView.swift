@@ -111,7 +111,14 @@ struct ExportView: View {
                     }
                     HStack {
                         Spacer()
-                        Button("Choose different folder…") { showingFolderPicker = true }
+                        // Clear any single-day scope left behind by a cancelled
+                        // picker: the completion handler never fires on cancel,
+                        // and a stale value would silently turn this full
+                        // export into a single-day one.
+                        Button("Choose different folder…") {
+                            pendingSingleDay = nil
+                            showingFolderPicker = true
+                        }
                             .buttonStyle(.plain)
                             .font(.system(size: 12))
                             .foregroundStyle(Color.roseGold)
@@ -119,7 +126,10 @@ struct ExportView: View {
                 } else {
                     HStack {
                         Spacer()
-                        Button("Choose Destination…") { showingFolderPicker = true }
+                        Button("Choose Destination…") {
+                            pendingSingleDay = nil
+                            showingFolderPicker = true
+                        }
                             .buttonStyle(BrandButtonStyle())
                     }
                 }

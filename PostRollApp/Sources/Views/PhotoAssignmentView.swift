@@ -177,7 +177,7 @@ struct PhotoAssignmentView: View {
                             cropOffsets: enableCrop ? cropOffsetsBinding(day) : nil,
                             notes: noteBinding(day),
                             onPreview: { previewURL = $0 },
-                            onAddPhotos: { pickerTarget = .day(day) }
+                            onAddPhotos: { presentPicker(.day(day)) }
                         )
                     }
 
@@ -191,10 +191,10 @@ struct PhotoAssignmentView: View {
                             bwPhoto:         $tuesdayBWPhoto,
                             targetDuration:  $tuesdayTargetDuration,
                             dayPhotos:       dayPhotos[.tuesday] ?? [],
-                            onPickScreenRecording: { pickerTarget = .tuesdayScreenRecording },
-                            onPickRawPhoto:        { pickerTarget = .tuesdayRawPhoto },
-                            onPickEditedPhoto:     { pickerTarget = .tuesdayEditedPhoto },
-                            onPickBWPhoto:         { pickerTarget = .tuesdayBWPhoto }
+                            onPickScreenRecording: { presentPicker(.tuesdayScreenRecording) },
+                            onPickRawPhoto:        { presentPicker(.tuesdayRawPhoto) },
+                            onPickEditedPhoto:     { presentPicker(.tuesdayEditedPhoto) },
+                            onPickBWPhoto:         { presentPicker(.tuesdayBWPhoto) }
                         )
                         .onChange(of: tuesdayScreenRecording) { _, _ in save() }
                         .onChange(of: tuesdayRawPhoto)        { _, _ in save() }
@@ -214,7 +214,7 @@ struct PhotoAssignmentView: View {
                             audio:          $thursdayAudio,
                             scrollDuration: $thursdayScrollDuration,
                             reelSeed:       $thursdayReelSeed,
-                            onPickAudio:    { pickerTarget = .thursdayAudio }
+                            onPickAudio:    { presentPicker(.thursdayAudio) }
                         )
                         .onChange(of: thursdayAudio)         { _, _ in save() }
                         .onChange(of: thursdayScrollDuration){ _, _ in save() }
@@ -262,14 +262,6 @@ struct PhotoAssignmentView: View {
             }
         }
         .background(Color.cream)
-        .fileImporter(
-            isPresented: Binding(get: { pickerTarget != nil }, set: { _ in }),
-            allowedContentTypes: allowedTypes,
-            allowsMultipleSelection: isMultiSelection
-        ) { result in
-            if case .success(let urls) = result { handlePickedFiles(urls) }
-            pickerTarget = nil
-        }
 
         // Full-screen photo preview overlay
         if let url = previewURL {
@@ -280,7 +272,22 @@ struct PhotoAssignmentView: View {
         .animation(.easeOut(duration: 0.18), value: previewURL != nil)
     }
 
-    // MARK: - File picker config
+    // MARK: - File picker
+
+    /// NSOpenPanel instead of .fileImporter: the repo convention. The old
+    /// fileImporter binding had an empty setter, so cancelling the dialog
+    /// left pickerTarget stuck non-nil and Add Photos never opened again.
+    private func presentPicker(_ target: PickerTarget) {
+        pickerTarget = target
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = allowedTypes
+        panel.allowsMultipleSelection = isMultiSelection
+        panel.canChooseDirectories = false
+        panel.begin { response in
+            if response == .OK { handlePickedFiles(panel.urls) }
+            pickerTarget = nil
+        }
+    }
 
     private var allowedTypes: [UTType] {
         switch pickerTarget {
