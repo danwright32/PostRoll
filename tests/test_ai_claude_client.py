@@ -237,3 +237,38 @@ def test_run_review_pass_returns_revision_on_success():
         "review it", prior, label="voice", runner=lambda p, timeout=300: revised
     )
     assert result == revised
+
+
+# === Image block downscaling ===
+
+
+def test_image_block_downscales_oversized_photos(tmp_path):
+    """Full resolution photos must be downscaled to the API's server side
+    cap before base64 encoding; larger uploads only risk 413 errors."""
+    import base64
+    import io
+    from PIL import Image
+    from postroll.ai.claude_client import MAX_IMAGE_EDGE, _image_block
+
+    src = tmp_path / "big.jpg"
+    Image.new("RGB", (6000, 4000), (90, 70, 60)).save(src, quality=95)
+
+    block = _image_block(src)
+    decoded = base64.standard_b64decode(block["source"]["data"])
+    with Image.open(io.BytesIO(decoded)) as out:
+        assert max(out.size) == MAX_IMAGE_EDGE
+        # Aspect ratio preserved
+        assert abs(out.size[0] / out.size[1] - 1.5) < 0.01
+    assert block["source"]["media_type"] == "image/jpeg"
+
+
+def test_image_block_leaves_small_photos_untouched(tmp_path):
+    import base64
+    from PIL import Image
+    from postroll.ai.claude_client import _image_block
+
+    src = tmp_path / "small.jpg"
+    Image.new("RGB", (800, 600), (90, 70, 60)).save(src)
+
+    block = _image_block(src)
+    assert base64.standard_b64decode(block["source"]["data"]) == src.read_bytes()

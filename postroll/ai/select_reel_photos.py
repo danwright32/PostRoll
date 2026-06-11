@@ -108,7 +108,10 @@ def select_reel_photos(
                 shutil.copy2(photo, s)
             staged.append(s)
 
-        photo_list = "\n".join(f"- [{i}] {p}" for i, p in enumerate(staged))
+        # Inline labels anchor each attached image to its index: without
+        # them, index correlation rests on attachment order guessing.
+        labels = [f"[{i}] {p.name}" for i, p in enumerate(staged)]
+        photo_list = "\n".join(f"- {label}" for label in labels)
 
         prompt = SELECTION_PROMPT.format(
             total=len(staged),
@@ -120,6 +123,7 @@ def select_reel_photos(
             prompt,
             timeout=600,
             image_paths=staged,
+            image_labels=labels,
         )
 
     if not isinstance(data, dict) or "selected_indices" not in data:

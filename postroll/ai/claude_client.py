@@ -15,6 +15,7 @@ Env:
 from __future__ import annotations
 
 import base64
+import io
 import json
 import mimetypes
 import os
@@ -53,12 +54,46 @@ def load_brand_voice() -> str:
     return BRAND_VOICE_PATH.read_text(encoding="utf-8")
 
 
+# The API downscales images to this long edge server side before
+# tokenising, so sending anything larger only inflates the request
+# (413 request_too_large on big batches) and upload time.
+MAX_IMAGE_EDGE = 1568
+
+
 def _image_block(path: Path) -> dict:
-    """Build an Anthropic base64 image content block from a local file."""
+    """Build an Anthropic base64 image content block from a local file.
+
+    Full resolution concert JPEGs are commonly 5 to 15 MB; anything whose
+    long edge exceeds MAX_IMAGE_EDGE is downscaled in memory first. The
+    model sees identical pixels either way (see MAX_IMAGE_EDGE).
+    """
     mime, _ = mimetypes.guess_type(str(path))
     if mime not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
         mime = "image/jpeg"
-    data = base64.standard_b64encode(path.read_bytes()).decode()
+    raw = path.read_bytes()
+
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(raw)) as img:
+            if max(img.size) > MAX_IMAGE_EDGE:
+                img.thumbnail((MAX_IMAGE_EDGE, MAX_IMAGE_EDGE), Image.LANCZOS)
+                buf = io.BytesIO()
+                if mime == "image/png":
+                    # Program pages: keep PNG so small text stays crisp
+                    img.save(buf, format="PNG")
+                else:
+                    if img.mode not in ("RGB", "L"):
+                        img = img.convert("RGB")
+                    img.save(buf, format="JPEG", quality=88)
+                    mime = "image/jpeg"
+                raw = buf.getvalue()
+    except Exception as e:
+        # Not fatal: the API downscales server side; we just upload more.
+        print(f"warning: could not downscale {path.name}: {e}",
+              file=sys.stderr, flush=True)
+
+    data = base64.standard_b64encode(raw).decode()
     return {
         "type": "image",
         "source": {"type": "base64", "media_type": mime, "data": data},
