@@ -65,6 +65,15 @@ enum EventStore {
                 withIntermediateDirectories: true
             )
             let data = try JSONEncoder().encode(events)
+            // Keep the previous generation as .bak before overwriting:
+            // events.json is the single copy of every caption, blog, OCR
+            // result, and crop edit. On APFS this copy is a clone, so the
+            // cost is negligible even though save runs on every edit.
+            if FileManager.default.fileExists(atPath: url.path) {
+                let backup = url.appendingPathExtension("bak")
+                try? FileManager.default.removeItem(at: backup)
+                try? FileManager.default.copyItem(at: url, to: backup)
+            }
             try data.write(to: url, options: .atomic)
         } catch {
             NSLog("EventStore: failed to save events.json: \(error)")
