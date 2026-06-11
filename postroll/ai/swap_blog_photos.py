@@ -87,11 +87,16 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path]) -> dict:
                 shutil.copy2(path, staged)
             resolved.append(str(staged))
 
-        # Show clean filenames in the prompt (no staging prefix)
-        photo_list = "\n".join(
-            f"- {Path(p).name.split('_', 1)[1] if '_' in Path(p).name else Path(p).name}"
+        # Show clean filenames (without the 000_ staging prefix) in the
+        # prompt so markers use the original name. The same clean names go
+        # in as image_labels so each attached image is preceded by a
+        # `Photo N: filename.jpg` block, anchoring the file to image
+        # correspondence instead of leaving Claude to correlate by order.
+        photo_filenames = [
+            Path(p).name.split('_', 1)[1] if '_' in Path(p).name else Path(p).name
             for p in resolved
-        )
+        ]
+        photo_list = "\n".join(f"- {n}" for n in photo_filenames)
 
         prompt = PROMPT.format(
             photo_count=len(resolved),
@@ -99,7 +104,12 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path]) -> dict:
             body=body,
         )
 
-        data = run_json_prompt(prompt, timeout=300, image_paths=resolved)
+        data = run_json_prompt(
+            prompt,
+            timeout=300,
+            image_paths=resolved,
+            image_labels=photo_filenames,
+        )
         if not isinstance(data, dict):
             raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 
