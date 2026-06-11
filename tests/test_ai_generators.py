@@ -630,3 +630,40 @@ def test_fix_missing_contractions_no_call_when_all_have_contractions():
         out = generate_blog._fix_missing_contractions(body)
     m.assert_not_called()
     assert out == body
+
+
+# === per-paragraph second-person backstop ===
+
+def test_second_person_offenders_exclude_cta_and_quotes():
+    body = (
+        "You could hear the hall settle.\n\n"
+        '"You were wonderful," the director told the cast.\n\n'
+        "[PHOTO: a.jpg | alt]\n\n"
+        "If you're planning a season announcement, get in touch."
+    )
+    offenders = generate_blog._paragraphs_with_second_person(body)
+    # Only the first paragraph violates: the quote is speech and the final
+    # prose paragraph is the CTA, which may address the reader.
+    assert offenders == ["You could hear the hall settle."]
+
+
+def test_fix_second_person_rewords_only_offending_paragraph():
+    body = (
+        "You could hear the hall settle.\n\n"
+        "If you're planning a season announcement, get in touch."
+    )
+    with patch(
+        "postroll.ai.generate_blog.run_prompt",
+        return_value="I heard the hall settle.",
+    ):
+        out = generate_blog._fix_second_person(body)
+    assert "I heard the hall settle." in out
+    assert "If you're planning a season announcement" in out
+
+
+def test_fix_second_person_no_call_when_clean():
+    body = "The hall settled.\n\nIf you're planning a shoot, get in touch."
+    with patch("postroll.ai.generate_blog.run_prompt") as m:
+        out = generate_blog._fix_second_person(body)
+    m.assert_not_called()
+    assert out == body

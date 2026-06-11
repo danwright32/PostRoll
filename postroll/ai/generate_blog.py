@@ -47,6 +47,8 @@ from .ai_tells import (
     build_voice_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
+    markers_preserved_validator,
+    strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
@@ -1365,6 +1367,76 @@ def _paragraphs_without_contractions(body: str) -> list[str]:
     return offenders
 
 
+# --- Per-paragraph second-person backstop -----------------------------------
+# The BLOG_SECOND_PERSON_SCAN prompt rule keeps leaking generic "you" into
+# final drafts. Like contractions, this is checkable in code: detect the
+# offending paragraphs deterministically and reword only those, one focused
+# call each. The CTA (final prose paragraph) and quoted speech are allowed
+# to address the reader.
+_SECOND_PERSON_RE = re.compile(r"\b(?:you|your|you're|yours)\b", re.IGNORECASE)
+_QUOTED_SPAN_RE = re.compile(r'["“][^"”]*["”]')
+
+_SECOND_PERSON_PARAGRAPH_PROMPT = """\
+Reword this single paragraph from a blog post by Dan Wright, a photographer,
+so it contains no second person ("you", "your"): recast it in Dan's first
+person or neutral phrasing. Change as little as possible: keep the meaning,
+the facts, and any [PHOTO: ...] marker exactly. Return ONLY the reworded
+paragraph, nothing else.
+
+PARAGRAPH:
+{paragraph}"""
+
+
+def _paragraphs_with_second_person(body: str) -> list[str]:
+    """Prose paragraphs (not markers, not the closing CTA) that address the
+    reader outside of quoted speech."""
+    paras = [p.strip() for p in body.split("\n\n") if p.strip()]
+    prose = [p for p in paras if not p.startswith("[PHOTO:")]
+    if not prose:
+        return []
+    cta = prose[-1]
+    offenders: list[str] = []
+    for p in prose:
+        if p is cta:
+            continue
+        unquoted = _QUOTED_SPAN_RE.sub("", p)
+        if _SECOND_PERSON_RE.search(unquoted):
+            offenders.append(p)
+    return offenders
+
+
+def _fix_second_person(body: str) -> str:
+    """Reword each second-person prose paragraph (one focused call each),
+    then splice it back. Leaves a paragraph unchanged if the call fails or
+    the rewrite still contains second person."""
+    body = (body or "").strip()
+    offenders = _paragraphs_with_second_person(body)
+    if not offenders:
+        return body
+    for original in offenders:
+        try:
+            raw = run_prompt(
+                _SECOND_PERSON_PARAGRAPH_PROMPT.format(paragraph=original),
+                timeout=120,
+            )
+        except ClaudeError:
+            continue
+        blocks = [b.strip() for b in (raw or "").split("\n\n") if b.strip()]
+        candidates = [b for b in blocks if not _SECOND_PERSON_RE.search(b)]
+        if not candidates:
+            continue
+        reworded = max(candidates, key=len)
+        if "[PHOTO:" not in reworded and len(reworded) < len(original) * 2 + 80:
+            body = body.replace(original, reworded, 1)
+    leftover = _paragraphs_with_second_person(body)
+    if leftover:
+        print(
+            f"warning: {len(leftover)} paragraph(s) still contain second person",
+            file=sys.stderr,
+        )
+    return body
+
+
 def _fix_missing_contractions(body: str) -> str:
     """Reword each contraction-free prose paragraph (one focused call each) so
     it carries a contraction, then splice it back. Returns the corrected body;
@@ -1522,7 +1594,10 @@ def generate_blog(
                 output_shape_description=blog_shape,
                 extra_checks=BLOG_VOICE_EXTRA_CHECKS,
             )
-            data = run_review_pass(voice_prompt, data, label="voice", timeout=600, runner=run_json_prompt)
+            data = run_review_pass(
+                voice_prompt, data, label="voice", timeout=600,
+                runner=run_json_prompt, validate=markers_preserved_validator,
+            )
 
         # === Pass 3: humanizer — always last, non-negotiable ===
         # Runs after the voice pass so it catches any AI tells the voice pass
@@ -1536,15 +1611,21 @@ def generate_blog(
                 output_shape_description=blog_shape,
                 extra_hard_bans=BLOG_HUMANIZER_EXTRA_BANS,
             )
-            data = run_review_pass(review_prompt, data, label="humanizer", timeout=600, runner=run_json_prompt)
+            data = run_review_pass(
+                review_prompt, data, label="humanizer", timeout=600,
+                runner=run_json_prompt, validate=markers_preserved_validator,
+            )
 
     # Title is deterministic — "{event} at {venue}" — so Claude doesn't need
     # to spend tokens (or risk drifting tone) on it. Falls back to whatever
     # Claude returned only if either piece of metadata is missing.
-    # Backstops: deterministic name correction (pure regex), then a
-    # per-paragraph contraction fix (one focused call per contraction-free
-    # paragraph, which the model reliably edits, unlike a full-body rewrite).
-    final_body = _fix_wrong_names(data.get("body", "").strip(), program)
+    # Backstops: deterministic em dash strip, deterministic name correction
+    # (pure regex), then per-paragraph second-person and contraction fixes
+    # (one focused call per offending paragraph, which the model reliably
+    # edits, unlike a full-body rewrite).
+    final_body = strip_em_dashes(data.get("body", "").strip())
+    final_body = _fix_wrong_names(final_body, program)
+    final_body = _fix_second_person(final_body)
     final_body = _fix_missing_contractions(final_body)
 
     deterministic_title = _build_blog_title(event=event, venue=venue)

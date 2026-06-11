@@ -21,9 +21,46 @@ Usage:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .claude_client import ClaudeError
+
+
+# --- Deterministic backstops -------------------------------------------------
+# Hard checkable constraints are enforced here in code, not only by LLM self
+# scan: a review pass that reintroduces an em dash or drops a [PHOTO:] marker
+# would otherwise ship silently.
+
+_DASH_RANGE_RE = re.compile(r"(?<=\d)\s*[—–]\s*(?=\d)")
+_DASH_RE = re.compile(r"\s*[—–]\s*")
+
+
+def strip_em_dashes(text: str) -> str:
+    """Deterministically remove em and en dashes from output text: digit
+    ranges ("7–9pm") become a hyphen, everything else becomes a comma join."""
+    if not text or ("—" not in text and "–" not in text):
+        return text
+    text = _DASH_RANGE_RE.sub("-", text)
+    return _DASH_RE.sub(", ", text)
+
+
+_PHOTO_MARKER_RE = re.compile(r"\[PHOTO:\s*([^|\]]+?)\s*\|")
+
+
+def photo_marker_filenames(body: str) -> list[str]:
+    """Sorted [PHOTO: filename | alt] marker filenames in a blog body."""
+    return sorted(m.group(1).strip() for m in _PHOTO_MARKER_RE.finditer(body or ""))
+
+
+def markers_preserved_validator(prior: dict, revised: dict) -> str | None:
+    """run_review_pass validator: a review pass must not add, drop, or rename
+    [PHOTO:] markers. Returns a problem description, or None when intact."""
+    expected = photo_marker_filenames(prior.get("body", ""))
+    got = photo_marker_filenames(revised.get("body", ""))
+    if expected != got:
+        return f"changed [PHOTO:] markers ({expected} -> {got})"
+    return None
 
 
 # Default global install path for the humanizer skill (cloned via

@@ -54,6 +54,7 @@ from .ai_tells import (
     build_voice_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
+    strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
@@ -773,9 +774,9 @@ def generate_caption(
         scene_labels = scene_labels[:1]
 
     return {
-        "caption": data.get("caption", "").strip(),
+        "caption": strip_em_dashes(data.get("caption", "").strip()),
         "hashtags": data.get("hashtags", []),
-        "alt_texts": [str(a).strip() for a in alt_texts],
+        "alt_texts": [strip_em_dashes(str(a).strip()) for a in alt_texts],
         "scene_labels": scene_labels,
     }
 

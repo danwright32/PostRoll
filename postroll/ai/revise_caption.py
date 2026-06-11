@@ -49,6 +49,7 @@ from .ai_tells import (
     build_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
+    strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .generate_captions import _format_performers
@@ -156,7 +157,7 @@ def revise_caption(
 
     # Merge revised text with locked photo-derived fields
     return {
-        "caption":      data.get("caption", caption_text).strip(),
+        "caption":      strip_em_dashes(data.get("caption", caption_text).strip()),
         "hashtags":     data.get("hashtags", hashtags),
         "alt_texts":    existing.get("alt_texts", []),
         "scene_labels": existing.get("scene_labels", []),

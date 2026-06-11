@@ -324,3 +324,19 @@ def test_sdk_normal_response_passes_through(monkeypatch):
 
     with patch.object(cc.anthropic, "Anthropic", FakeClient):
         assert run_prompt("hi") == '{"caption": "complete"}'
+
+
+def test_run_review_pass_validator_keeps_prior_on_broken_invariant():
+    """A review pass that drops a hard invariant (e.g. a PHOTO marker)
+    must be discarded in favor of the prior draft."""
+    from postroll.ai.claude_client import run_review_pass
+
+    prior = {"body": "[PHOTO: a.jpg | x]\n\ntext"}
+    revised = {"body": "rewritten without the marker"}
+
+    result = run_review_pass(
+        "review", prior, label="humanizer",
+        runner=lambda p, timeout=300: revised,
+        validate=lambda pr, rv: "dropped markers" if "[PHOTO:" not in rv["body"] else None,
+    )
+    assert result == prior

@@ -303,6 +303,7 @@ def run_review_pass(
     label: str,
     timeout: int = 300,
     runner=None,
+    validate=None,
 ) -> dict:
     """Run a quality review pass (voice, humanizer) over an existing draft.
 
@@ -313,6 +314,10 @@ def run_review_pass(
 
     runner: callers pass their own module-level run_json_prompt binding so
     tests that patch that name still intercept review pass calls.
+
+    validate: optional callable (prior, revised) -> problem string or None.
+    When the revision breaks a hard invariant (e.g. dropped a [PHOTO:]
+    marker), the prior draft is kept instead.
     """
     run = runner or run_json_prompt
     try:
@@ -330,6 +335,14 @@ def run_review_pass(
             file=sys.stderr, flush=True,
         )
         return prior
+    if validate is not None:
+        problem = validate(prior, data)
+        if problem:
+            print(
+                f"warning: {label} pass {problem}, keeping previous draft",
+                file=sys.stderr, flush=True,
+            )
+            return prior
     return data
 
 

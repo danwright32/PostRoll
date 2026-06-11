@@ -258,3 +258,51 @@ def test_blog_skips_humanizer_when_skip_flag_set(sample_photo, tmp_path):
         )
 
     assert len(calls) == 1
+
+
+# === deterministic backstops ===
+
+
+class TestStripEmDashes:
+    def test_em_dash_becomes_comma_join(self):
+        from postroll.ai.ai_tells import strip_em_dashes
+        assert strip_em_dashes("The hall was full — every seat taken.") == \
+            "The hall was full, every seat taken."
+
+    def test_en_dash_becomes_comma_join(self):
+        from postroll.ai.ai_tells import strip_em_dashes
+        assert strip_em_dashes("quiet – then loud") == "quiet, then loud"
+
+    def test_numeric_range_becomes_hyphen(self):
+        from postroll.ai.ai_tells import strip_em_dashes
+        assert strip_em_dashes("Doors 7–9pm.") == "Doors 7-9pm."
+
+    def test_clean_text_unchanged(self):
+        from postroll.ai.ai_tells import strip_em_dashes
+        text = "Already clean, with commas and a hyphenated well-known word."
+        assert strip_em_dashes(text) is text
+
+
+class TestMarkerPreservation:
+    def test_extracts_sorted_filenames(self):
+        from postroll.ai.ai_tells import photo_marker_filenames
+        body = "p1\n\n[PHOTO: b.jpg | alt two]\n\np2\n\n[PHOTO: a.jpg | alt one]"
+        assert photo_marker_filenames(body) == ["a.jpg", "b.jpg"]
+
+    def test_validator_passes_when_markers_intact(self):
+        from postroll.ai.ai_tells import markers_preserved_validator
+        prior = {"body": "[PHOTO: a.jpg | x]\n\ntext"}
+        revised = {"body": "better text\n\n[PHOTO: a.jpg | x]"}
+        assert markers_preserved_validator(prior, revised) is None
+
+    def test_validator_flags_dropped_marker(self):
+        from postroll.ai.ai_tells import markers_preserved_validator
+        prior = {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: b.jpg | y]"}
+        revised = {"body": "[PHOTO: a.jpg | x]\n\nprose only now"}
+        assert markers_preserved_validator(prior, revised) is not None
+
+    def test_validator_flags_renamed_marker(self):
+        from postroll.ai.ai_tells import markers_preserved_validator
+        prior = {"body": "[PHOTO: a.jpg | x]"}
+        revised = {"body": "[PHOTO: hallucinated.jpg | x]"}
+        assert markers_preserved_validator(prior, revised) is not None

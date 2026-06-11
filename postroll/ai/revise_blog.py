@@ -48,10 +48,13 @@ from .ai_tells import (
     build_voice_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
+    markers_preserved_validator,
+    strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .generate_blog import (
     _fix_missing_contractions,
+    _fix_second_person,
     _fix_wrong_names,
     _format_performers,
     _format_pieces,
@@ -179,7 +182,10 @@ def revise_blog(
             output_shape_description=blog_shape,
             extra_checks=BLOG_VOICE_EXTRA_CHECKS,
         )
-        data = run_review_pass(voice_prompt, data, label="voice", timeout=600, runner=run_json_prompt)
+        data = run_review_pass(
+            voice_prompt, data, label="voice", timeout=600,
+            runner=run_json_prompt, validate=markers_preserved_validator,
+        )
 
     if not skip_humanizer and is_humanizer_available(humanizer_path):
         humanizer_rules = load_humanizer_rules(humanizer_path)
@@ -190,9 +196,14 @@ def revise_blog(
             output_shape_description=blog_shape,
             extra_hard_bans=BLOG_HUMANIZER_EXTRA_BANS,
         )
-        data = run_review_pass(review_prompt, data, label="humanizer", timeout=600, runner=run_json_prompt)
+        data = run_review_pass(
+            review_prompt, data, label="humanizer", timeout=600,
+            runner=run_json_prompt, validate=markers_preserved_validator,
+        )
 
-    final_body = _fix_wrong_names(data.get("body", body).strip(), program)
+    final_body = strip_em_dashes(data.get("body", body).strip())
+    final_body = _fix_wrong_names(final_body, program)
+    final_body = _fix_second_person(final_body)
     final_body = _fix_missing_contractions(final_body)
     return {
         "title":       data.get("title", title).strip(),
