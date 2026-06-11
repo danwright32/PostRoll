@@ -442,9 +442,18 @@ def fetch_audio_by_program(
 
 
 def _download(url: str, dest: Path) -> None:
-    with urllib.request.urlopen(url, timeout=60) as src, open(dest, "wb") as dst:
-        while chunk := src.read(65536):
-            dst.write(chunk)
+    # Stream to a temp name and rename into place atomically: a dropped
+    # connection must never leave a truncated file at the cache path, where
+    # every later run would treat it as a valid cached track and mux it into
+    # reels. The pid suffix keeps parallel generations from colliding.
+    tmp = dest.with_suffix(f".{os.getpid()}.part")
+    try:
+        with urllib.request.urlopen(url, timeout=60) as src, open(tmp, "wb") as dst:
+            while chunk := src.read(65536):
+                dst.write(chunk)
+        os.replace(tmp, dest)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

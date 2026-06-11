@@ -149,3 +149,39 @@ def test_search_tracks_returns_empty_on_no_results():
     with patch("urllib.request.urlopen", return_value=_mock_urlopen({"results": []})):
         tracks = _search_tracks("nothing", "key")
     assert tracks == []
+
+
+# ===================================================================
+# _download — atomic cache writes
+# ===================================================================
+
+
+def test_download_writes_file_atomically(tmp_path):
+    from postroll.audio import _download
+
+    dest = tmp_path / "12345.mp3"
+    with patch("urllib.request.urlopen", return_value=_mock_download_urlopen()):
+        _download("https://example.com/track.mp3", dest)
+
+    assert dest.read_bytes() == FAKE_MP3_BYTES
+    # No temp debris left behind
+    assert list(tmp_path.glob("*.part")) == []
+
+
+def test_failed_download_leaves_no_file_at_cache_path(tmp_path):
+    """A dropped connection must not leave a truncated file that later runs
+    would treat as a valid cached track."""
+    from postroll.audio import _download
+
+    mock = MagicMock()
+    mock.__enter__ = lambda s: s
+    mock.__exit__ = MagicMock(return_value=False)
+    mock.read.side_effect = [b"partial bytes", ConnectionResetError("dropped")]
+
+    dest = tmp_path / "12345.mp3"
+    with patch("urllib.request.urlopen", return_value=mock):
+        with pytest.raises(ConnectionResetError):
+            _download("https://example.com/track.mp3", dest)
+
+    assert not dest.exists()
+    assert list(tmp_path.glob("*.part")) == []
