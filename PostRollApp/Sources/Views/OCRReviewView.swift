@@ -125,6 +125,29 @@ struct OCRReviewView: View {
         }
         .background(Color.cream)
         .animation(.easeOut(duration: 0.2), value: undoMessage != nil)
+        // Draft persistence: all review edits live in @State, and the .id(event.id)
+        // remount in EventDetailView discards that state the moment another event
+        // is selected. Write every change through to the live event so corrections
+        // survive event switches and app quits before "Looks Good".
+        .onChange(of: ocr) { persistDraft() }
+        .onChange(of: flags) { persistDraft() }
+        .onChange(of: orgHandles) {
+            HandleBook.shared.record(org: event.org, handles: orgHandles)
+        }
+        .onChange(of: venueHandles) {
+            HandleBook.shared.record(venue: event.venue, handles: venueHandles)
+        }
+    }
+
+    /// Save in-progress review edits to the live event without advancing the
+    /// stage or marking review done. confirmAndAdvance() remains the only
+    /// place that finalizes the review.
+    private func persistDraft() {
+        guard var live = appState.events.first(where: { $0.id == event.id }),
+              live.stage == .ocrDone else { return }
+        live.ocrResult = ocr
+        live.pendingFlags = flags
+        appState.updateEvent(live)
     }
 
     // MARK: - Undo
@@ -373,7 +396,7 @@ struct OCRReviewView: View {
         // flag-review step can re-read images if needed.)
         ProgramImageCleanup.delete(urls: event.programImagePaths)
 
-        var ev = event
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.ocrResult = ocr
         ev.ocrReviewDone = true
         ev.eventHandles = deduped.joined(separator: ", ")
@@ -385,7 +408,7 @@ struct OCRReviewView: View {
     }
 
     private func goBack() {
-        var ev = event
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.stage = .programUploaded
         appState.updateEvent(ev)
     }
