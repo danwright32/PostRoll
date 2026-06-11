@@ -337,7 +337,6 @@ def generate_reel_scroll(
         print(f"  [{i}] {_Path(p).name}", flush=True)
 
     n = len(photo_paths)
-    total_duration = scroll_duration + HOLD_END + CLOSING_FRAME_DURATION
 
     # Build collage strip
     print(f"Building collage strip from {n} photos...")
@@ -345,8 +344,25 @@ def generate_reel_scroll(
     strip_h = strip.height
     print(f"Strip size: {CANVAS_W}x{strip_h}")
 
-    # Scroll exactly to bottom of strip — bottom_pad handles footer clearance
-    max_scroll = max(1, strip_h - CANVAS_H)
+    # A strip shorter than the canvas (possible with a handful of photos)
+    # has nothing to scroll: cropping past its bottom would render a black
+    # band, and a 40 second motionless "scroll" is dead air. Pad the strip
+    # to canvas height with the cream background and collapse the scroll
+    # phase to a short hold instead.
+    if strip_h <= CANVAS_H:
+        padded = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM_BG)
+        padded.paste(strip, (0, 0))
+        strip = padded
+        strip_h = CANVAS_H
+        scroll_duration = min(scroll_duration, 4.0)
+        print(f"Strip shorter than canvas: padded to {CANVAS_W}x{CANVAS_H}, "
+              f"scroll collapsed to {scroll_duration}s hold")
+
+    total_duration = scroll_duration + HOLD_END + CLOSING_FRAME_DURATION
+
+    # Scroll exactly to bottom of strip — bottom_pad handles footer clearance.
+    # When the strip exactly fills the canvas this is 0 (a static frame).
+    max_scroll = max(0, strip_h - CANVAS_H)
 
     # Load logo
     logo = None

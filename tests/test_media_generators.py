@@ -175,6 +175,50 @@ def test_morph_reel_ffmpeg_command(tmp_path, monkeypatch):
     assert out.exists()
 
 
+def test_scroll_reel_short_strip_pads_instead_of_black_band(tmp_path, monkeypatch):
+    """With a handful of photos the strip is shorter than the canvas. The
+    crop must not read past the strip bottom (black band), and a 40 second
+    motionless scroll must collapse to a short hold."""
+    photos = [_photo(tmp_path / f"p{i}.jpg", size=(1200, 400)) for i in range(2)]
+    audio = tmp_path / "a.mp3"
+    audio.write_bytes(b"fake mp3")
+    out = tmp_path / "reel.mp4"
+
+    monkeypatch.setattr(scroll_mod, "FPS", 2)
+    sampled = {}
+
+    class FrameInspectingCapture(FFmpegCapture):
+        def __call__(self, cmd, **kwargs):
+            if cmd[0] == "ffmpeg":
+                # Frames still exist while ffmpeg runs; sample the band
+                # between the content bottom and the footer chrome.
+                from PIL import Image as PILImage
+
+                pattern = next(a for a in cmd if "frame_%05d" in a)
+                frames = sorted(Path(pattern).parent.glob("frame_*.png"))
+                with PILImage.open(frames[-1]) as f:
+                    sampled["pixel"] = f.getpixel(
+                        (scroll_mod.CANVAS_W // 2,
+                         scroll_mod.CANVAS_H - scroll_mod.FOOTER_H - 10)
+                    )
+            return super().__call__(cmd, **kwargs)
+
+    cap = FrameInspectingCapture()
+    with patch("subprocess.run", new=cap):
+        scroll_mod.generate_reel_scroll(
+            [str(p) for p in photos], str(audio), str(out),
+            event_name="Ev", org="Org", venue="Venue",
+        )
+
+    # No black band: the padded area is the cream background
+    assert sampled["pixel"] != (0, 0, 0)
+    # The scroll phase collapsed (4s hold + 1s end hold + 5s closing slot),
+    # far below the default 40s scroll plus tail
+    cmd = [c for c in cap.commands if c[0] == "ffmpeg"][0]
+    t_value = float(cmd[cmd.index("-t") + 1])
+    assert t_value <= 10.0
+
+
 def test_screen_reel_closing_path_caps_duration(tmp_path):
     """The closing frame branch shipped without -t once: the container ran
     for the whole music track. Pin the cap and the mux contract."""
