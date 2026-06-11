@@ -262,22 +262,28 @@ def enrich_program(
     if not isinstance(data, dict):
         raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 
-    # Fill any missing keys with empty defaults so downstream code is safe
+    # Merge enriched fields over the OCR data. The prompt tells Claude to
+    # preserve existing content, but that guarantee must live in code: the
+    # full schema response routinely contains empty lists and strings, and
+    # an empty enrichment value must never erase real OCR content.
+    def merge(key: str, default: Any) -> Any:
+        enriched = data.get(key)
+        existing = ocr_data.get(key, default)
+        if enriched is None:
+            return existing
+        if not enriched and existing:
+            return existing
+        return enriched
+
     result = {
-        "performers": data.get("performers", ocr_data.get("performers", [])),
-        "pieces": data.get("pieces", ocr_data.get("pieces", [])),
-        "scenes": data.get("scenes", ocr_data.get("scenes", [])),
-        "organization_notes": data.get(
-            "organization_notes", ocr_data.get("organization_notes", "")
-        ),
-        "program_notes": data.get(
-            "program_notes", ocr_data.get("program_notes", "")
-        ),
-        "venue_notes": data.get("venue_notes", ocr_data.get("venue_notes", "")),
-        "production_details": data.get(
-            "production_details", ocr_data.get("production_details", "")
-        ),
-        "other": data.get("other", ocr_data.get("other", "")),
+        "performers": merge("performers", []),
+        "pieces": merge("pieces", []),
+        "scenes": merge("scenes", []),
+        "organization_notes": merge("organization_notes", ""),
+        "program_notes": merge("program_notes", ""),
+        "venue_notes": merge("venue_notes", ""),
+        "production_details": merge("production_details", ""),
+        "other": merge("other", ""),
         "_enrichment": data.get("_enrichment", {}),
     }
     return result

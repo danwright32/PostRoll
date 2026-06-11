@@ -167,6 +167,46 @@ def test_enrich_program_preserves_existing_ocr_fields(sample_photo):
     assert result["_enrichment"]["confidence"] == "high"
 
 
+def test_enrich_program_empty_values_do_not_erase_ocr_fields(sample_photo):
+    """Claude is told to output the full schema, so explicit empty lists and
+    strings are common. They must never replace real OCR content."""
+    existing_ocr = {
+        "performers": [{"name": "Real Name From OCR", "role": "actor"}],
+        "pieces": [{"composer": "Kate Gill", "title": "The Pushover"}],
+        "scenes": [],
+        "organization_notes": "Founded in 1990.",
+        "program_notes": "",
+        "venue_notes": "",
+        "production_details": "",
+        "other": "",
+    }
+    # Full schema response with empty values for fields OCR already filled
+    fake_response = {
+        "performers": [],
+        "pieces": [],
+        "scenes": [],
+        "organization_notes": "",
+        "program_notes": "Premiered off Broadway.",
+        "venue_notes": "",
+        "production_details": "",
+        "other": "",
+        "_enrichment": {"enriched_fields": ["program_notes"]},
+    }
+    with patch(
+        "postroll.ai.enrich_program.run_json_prompt", return_value=fake_response
+    ):
+        result = enrich_program(existing_ocr, [sample_photo])
+
+    # Explicit empties must not clobber existing content
+    assert result["performers"] == [{"name": "Real Name From OCR", "role": "actor"}]
+    assert result["pieces"][0]["title"] == "The Pushover"
+    assert result["organization_notes"] == "Founded in 1990."
+    # Genuinely new content still lands
+    assert result["program_notes"] == "Premiered off Broadway."
+    # Fields empty on both sides stay empty
+    assert result["venue_notes"] == ""
+
+
 def test_enrich_program_passes_url_hint_to_prompt(sample_photo):
     captured = {}
 
