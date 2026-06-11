@@ -25,9 +25,29 @@ enum ArchiveCleanup {
             let referenceDate = events[i].archivedAt ?? events[i].date
             guard now.timeIntervalSince(referenceDate) > threshold else { continue }
 
-            let removed = reclaim(event: events[i], projectRoot: projectRoot)
-            if removed {
+            // duplicateEvent copies org, name, date, and programImagePaths
+            // verbatim, so a live duplicate shares this event's preview
+            // folder slug and program scans. Never reclaim anything another
+            // event still references; a bounded disk leak beats deleting
+            // files out from under an active event.
+            let event = events[i]
+            let others = events.filter { $0.id != event.id }
+            let slugShared = others.contains { slug(event: $0) == slug(event: event) }
+            let sharedProgramPaths = Set(
+                others.flatMap { $0.programImagePaths.map { $0.standardizedFileURL.path } }
+            )
+
+            let result = reclaim(
+                event: event,
+                projectRoot: projectRoot,
+                skipPreviewFolder: slugShared,
+                sharedProgramPaths: sharedProgramPaths
+            )
+            if result.previewRemoved {
                 events[i].previewMediaPaths = [:]
+                dirty = true
+            }
+            if result.programsRemoved {
                 events[i].programImagePaths = []
                 dirty = true
             }
@@ -39,31 +59,40 @@ enum ArchiveCleanup {
     }
 
     /// Deletes the per-event preview folder and any program-scan files this
-    /// event still references. Returns true if anything was removed.
-    private static func reclaim(event: Event, projectRoot: URL) -> Bool {
+    /// event still references, except anything shared with another event.
+    private static func reclaim(
+        event: Event,
+        projectRoot: URL,
+        skipPreviewFolder: Bool,
+        sharedProgramPaths: Set<String>
+    ) -> (previewRemoved: Bool, programsRemoved: Bool) {
         let fm = FileManager.default
-        var removed = false
+        var previewRemoved = false
+        var programsRemoved = false
 
-        let previewDir = projectRoot
-            .appendingPathComponent("preview")
-            .appendingPathComponent(slug(event: event))
-        if fm.fileExists(atPath: previewDir.path),
-           isInside(previewDir, parent: projectRoot.appendingPathComponent("preview")) {
-            try? fm.removeItem(at: previewDir)
-            removed = true
+        if !skipPreviewFolder {
+            let previewDir = projectRoot
+                .appendingPathComponent("preview")
+                .appendingPathComponent(slug(event: event))
+            if fm.fileExists(atPath: previewDir.path),
+               isInside(previewDir, parent: projectRoot.appendingPathComponent("preview")) {
+                try? fm.removeItem(at: previewDir)
+                previewRemoved = true
+            }
         }
 
         let programsDir = projectRoot.appendingPathComponent("programs").standardizedFileURL
         for url in event.programImagePaths {
             let path = url.standardizedFileURL.path
             guard path.hasPrefix(programsDir.path + "/") else { continue }
+            guard !sharedProgramPaths.contains(path) else { continue }
             if fm.fileExists(atPath: path) {
                 try? fm.removeItem(atPath: path)
-                removed = true
+                programsRemoved = true
             }
         }
 
-        return removed
+        return (previewRemoved, programsRemoved)
     }
 
     /// Removes loose files at the root of `output/` whose mtime is older than

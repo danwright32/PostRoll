@@ -41,6 +41,7 @@ targets:
       - path: Tests
       - path: Sources/Models
       - path: Sources/Services/EventStore.swift
+      - path: Sources/Services/ArchiveCleanup.swift
     settings:
       base:
         SWIFT_VERSION: "6.0"
