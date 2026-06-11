@@ -138,6 +138,10 @@ def export_week(data: WeekExport, output_dir: Path) -> Path:
     output_dir = Path(output_dir)
     folder_name = f"{_slug(data.org)}_{_slug(data.event)}_{data.date}"
     export_dir = output_dir / folder_name
+    # Rebuild from scratch: a re-export after trimming photos must not leave
+    # stale numbered files from the previous export to be uploaded by mistake.
+    if export_dir.exists():
+        shutil.rmtree(export_dir)
     export_dir.mkdir(parents=True, exist_ok=True)
 
     _export_single_day(data.sunday, export_dir / "1. Sunday")

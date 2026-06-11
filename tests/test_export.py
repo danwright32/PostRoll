@@ -356,3 +356,30 @@ def test_slug_lowercases_and_replaces_spaces():
 
 def test_slug_collapses_consecutive_punctuation():
     assert _slug("DCINY — Sing & Play!") == "dciny_sing_play"
+
+
+# ===================================================================
+# Re-export hygiene
+# ===================================================================
+
+
+def test_reexport_removes_stale_files(week_data, tmp_path):
+    """A second export into the same destination must not keep files from
+    the first one (trimmed carousel photos, superseded assets)."""
+    out = tmp_path / "exports"
+    first = export_week(week_data, out)
+
+    # Simulate debris from the previous export that the new one won't write
+    stale_carousel = first / "4. Wednesday" / "carousel" / "11.jpg"
+    stale_carousel.write_bytes(b"stale")
+    stale_root = first / "old_story.png"
+    stale_root.write_bytes(b"stale")
+
+    second = export_week(week_data, out)
+
+    assert second == first
+    assert not stale_carousel.exists()
+    assert not stale_root.exists()
+    # The real contents are still there
+    assert (second / "CAPTIONS.txt").exists()
+    assert (second / "4. Wednesday" / "carousel" / "01.jpg").exists()

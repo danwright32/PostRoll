@@ -592,10 +592,23 @@ struct EventExporter {
     static func export(event: Event, to root: URL, days: Set<DayName>? = nil) throws -> URL {
         let folderName = "\(slug(event.org))_\(slug(event.name))_\(event.isoDate)"
         let folder = root.appendingPathComponent(folderName)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         let result = event.weekResult
         let isFullExport = (days == nil)
+
+        // A re-export must not inherit anything from the previous one:
+        // FileManager.copyItem never overwrites (so re-exported photos keep
+        // stale content), and trimmed sets leave orphans (carousel 11.jpg
+        // after cutting to 10) that would get uploaded. Full exports rebuild
+        // the folder from scratch; scoped exports clear just their days.
+        if isFullExport {
+            try? FileManager.default.removeItem(at: folder)
+        } else if let days {
+            for day in days {
+                try? FileManager.default.removeItem(at: folder.appendingPathComponent(day.folderName))
+            }
+        }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         // Per-day folders — only Wednesday's carousel photos are copied
         // directly by Swift (in the user's assigned order). All other day
