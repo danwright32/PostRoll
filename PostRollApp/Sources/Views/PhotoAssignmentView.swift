@@ -608,12 +608,38 @@ private struct PhotoDaySection: View {
             } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
                 provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, _ in
                     guard let url else { return }
-                    let captured = url
-                    Task { @MainActor in if !photos.contains(captured) { photos.append(captured) } }
+                    // Copy synchronously here: the temp URL is invalidated as
+                    // soon as this closure returns, so the copy can't be
+                    // deferred to the Task. (Drops from Photos, Mail, and
+                    // browsers arrive through this branch.)
+                    guard let stored = Self.permanentPhotoCopy(of: url) else { return }
+                    Task { @MainActor in if !photos.contains(stored) { photos.append(stored) } }
                 }
             }
         }
         return true
+    }
+
+    /// Copies a dropped photo into ~/Documents/PostRoll/photos/ so the stored
+    /// path survives the provider's temp file deletion. Names are uniquified
+    /// rather than reused: two different photos can share a filename.
+    private nonisolated static func permanentPhotoCopy(of url: URL) -> URL? {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents/PostRoll/photos")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var dest = dir.appendingPathComponent(url.lastPathComponent)
+        if FileManager.default.fileExists(atPath: dest.path) {
+            let stem = url.deletingPathExtension().lastPathComponent
+            let ext = url.pathExtension.isEmpty ? "jpg" : url.pathExtension
+            dest = dir.appendingPathComponent("\(stem)_\(UUID().uuidString.prefix(8)).\(ext)")
+        }
+        do {
+            try FileManager.default.copyItem(at: url, to: dest)
+            return dest
+        } catch {
+            NSLog("PhotoDaySection: failed to copy dropped photo: \(error)")
+            return nil
+        }
     }
 }
 
