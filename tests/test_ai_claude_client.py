@@ -127,6 +127,22 @@ def test_run_prompt_raises_on_timeout():
             run_prompt("any prompt", timeout=1)
 
 
+def test_run_prompt_with_images_and_no_api_key_raises(monkeypatch):
+    """The CLI fallback cannot attach images; a vision call without an API
+    key must fail loudly instead of generating fabricated output."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ClaudeError, match="ANTHROPIC_API_KEY"):
+        run_prompt("describe these", image_paths=["/tmp/x.jpg"])
+
+
+def test_run_prompt_with_images_and_cli_tools_raises(monkeypatch):
+    """Images plus CLI-only tools route to the CLI, which would drop the
+    images silently. Must raise rather than proceed."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    with pytest.raises(ClaudeError, match="WebSearch"):
+        run_prompt("x", image_paths=["/tmp/x.jpg"], allowed_tools=["WebSearch"])
+
+
 def test_run_json_prompt_parses_response():
     payload = json.dumps({"caption": "x", "hashtags": ["#a"]})
     with patch.object(

@@ -189,6 +189,23 @@ def run_prompt(
     allowed_dirs/allowed_tools: passed through to CLI when falling back.
     """
     if _needs_cli(allowed_tools):
+        # The CLI path cannot attach images. Falling back with images would
+        # silently drop them all and Claude would fabricate plausible looking
+        # OCR data, alt text, and captions from nothing. Fail loudly instead.
+        if image_paths:
+            if not os.environ.get("ANTHROPIC_API_KEY"):
+                raise ClaudeError(
+                    "ANTHROPIC_API_KEY is not set, and this call attaches "
+                    f"{len(image_paths)} image(s). The Claude CLI fallback "
+                    "cannot attach images, so continuing would generate "
+                    "output from nothing. Set the API key and retry."
+                )
+            cli_tools = sorted(set(allowed_tools or []) & _CLI_ONLY_TOOLS)
+            raise ClaudeError(
+                f"This call attaches {len(image_paths)} image(s) but requests "
+                f"CLI-only tools {cli_tools}; the CLI path cannot attach "
+                "images. Split the call or drop the web tools."
+            )
         return _run_cli(
             prompt,
             timeout=timeout,
