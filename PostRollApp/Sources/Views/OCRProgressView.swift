@@ -202,7 +202,9 @@ struct OCRProgressView: View {
             // Program images stay on disk through the review step — flag review
             // could conceivably need them later. They're cleaned up when the
             // user confirms OCR review, in OCRReviewView.confirmAndAdvance().
-            var updated = event
+            // Base the write-back on the live event: OCR takes minutes and a
+            // snapshot would revert edits (e.g. a rename) made during the run.
+            var updated = appState.events.first(where: { $0.id == event.id }) ?? event
             updated.ocrResult = result
             updated.pendingFlags = flags
             updated.pendingFlagsError = flagError

@@ -417,7 +417,9 @@ struct CaptionReviewView: View {
             if let result = try? await PythonBridge.shared.runPreviewGeneration(event: liveEvent),
                !result.paths.isEmpty {
                 await MainActor.run {
-                    var ev = event
+                    // Base the write-back on the live event: the run takes a
+                    // minute or more and a snapshot would revert interleaved edits.
+                    var ev = appState.events.first(where: { $0.id == event.id }) ?? event
                     ev.previewMediaPaths = result.paths
                     appState.updateEvent(ev)
                 }

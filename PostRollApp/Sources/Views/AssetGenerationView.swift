@@ -136,25 +136,35 @@ struct AssetGenerationView: View {
     }
 
     var body: some View {
-        switch generationState {
-        case .configuring:
-            configureView
-                .transition(.asymmetric(insertion: .opacity, removal: .opacity))
-        case .running:
-            runningView
-                .transition(.asymmetric(
-                    insertion: .move(edge: .bottom).combined(with: .opacity),
-                    removal: .opacity
-                ))
-        case .failed(let message):
-            errorView(message: message)
-                .transition(.asymmetric(insertion: .opacity, removal: .opacity))
-        case .done:
-            doneView
-                .transition(.asymmetric(
-                    insertion: .scale(scale: 0.97).combined(with: .opacity),
-                    removal: .opacity
-                ))
+        Group {
+            switch generationState {
+            case .configuring:
+                configureView
+                    .transition(.asymmetric(insertion: .opacity, removal: .opacity))
+            case .running:
+                runningView
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+            case .failed(let message):
+                errorView(message: message)
+                    .transition(.asymmetric(insertion: .opacity, removal: .opacity))
+            case .done:
+                doneView
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.97).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+            }
+        }
+        .onDisappear {
+            // Switching events remounts this view (.id in EventDetailView).
+            // An orphaned pipeline would keep running and later write its
+            // results over whatever the user is doing, so cancel it here.
+            generationTask?.cancel()
+            generationTask = nil
+            stopTimer()
         }
     }
 
@@ -638,7 +648,10 @@ struct AssetGenerationView: View {
                     if producedSomething {
                         TimingStore.shared.recordGeneration(seconds: Double(elapsedSeconds))
                     }
-                    var saved = ev
+                    // Base the write-back on the live event, not the snapshot
+                    // taken at button press: the run takes minutes, and any
+                    // edits made meanwhile must not be reverted.
+                    var saved = appState.events.first(where: { $0.id == ev.id }) ?? ev
 
                     if let only = onlyDays,
                        var existing = appState.events.first(where: { $0.id == ev.id })?.weekResult ?? ev.weekResult {
@@ -668,6 +681,11 @@ struct AssetGenerationView: View {
                         generationState = .done
                     }
                 }
+            } catch is CancellationError {
+                // User cancelled: cancelGeneration() already restored the
+                // configuring state and stopped the timer. Don't race it
+                // into a spurious .failed screen.
+                graphicsTask?.cancel()
             } catch {
                 graphicsTask?.cancel()
                 await MainActor.run {
