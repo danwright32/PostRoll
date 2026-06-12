@@ -49,4 +49,29 @@ final class PostingDayRemovePhotosTests: XCTestCase {
         XCTAssertEqual(result.photoPaths, [a])
         XCTAssertEqual(result.photoTags[a.absoluteString], ["Mike"])
     }
+
+    func testRebindCarriesCropsTagsAndCollageToNewURL() {
+        let old = url("old/a.jpg"), b = url("b.jpg")
+        let new = URL(fileURLWithPath: "/storage/a.jpg")
+        var day = PostingDay(day: .wednesday)
+        day.photoPaths = [old, b]
+        day.cropOffsets = [old.absoluteString: CropOffset(x: 0.4, y: 0, scale: 1)]
+        day.photoTags = [old.absoluteString: ["Mike"]]
+        day.collageCellOverride = [CollageCell(photoPath: old.path, x: 0, y: 0, w: 1, h: 1)]
+
+        let result = day.rebindingPhotos([old: new])
+
+        XCTAssertEqual(result.photoPaths, [new, b], "URL swapped in place, order kept")
+        XCTAssertEqual(result.cropOffsets[new.absoluteString]?.x, 0.4)
+        XCTAssertNil(result.cropOffsets[old.absoluteString])
+        XCTAssertEqual(result.photoTags[new.absoluteString], ["Mike"])
+        XCTAssertEqual(result.collageCellOverride?.first?.photoPath, new.path)
+    }
+
+    func testRebindEmptyIsNoOp() {
+        let a = url("a.jpg")
+        var day = PostingDay(day: .sunday)
+        day.photoPaths = [a]
+        XCTAssertEqual(day.rebindingPhotos([:]).photoPaths, [a])
+    }
 }

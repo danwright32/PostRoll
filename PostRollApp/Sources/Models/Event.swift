@@ -222,6 +222,36 @@ extension PostingDay {
         }
         return pd
     }
+
+    /// Returns a copy with photo URLs swapped per `remap` (old -> new), carrying
+    /// every per-photo entry (crop offsets, tags, collage cells) over to the new
+    /// URL. Used to re-link photos whose files moved to a new location.
+    func rebindingPhotos(_ remap: [URL: URL]) -> PostingDay {
+        guard !remap.isEmpty else { return self }
+        let keyRemap = Dictionary(uniqueKeysWithValues: remap.map { ($0.key.absoluteString, $0.value.absoluteString) })
+        let pathRemap = Dictionary(uniqueKeysWithValues: remap.map { ($0.key.path, $0.value.path) })
+        var pd = self
+        pd.photoPaths = photoPaths.map { remap[$0] ?? $0 }
+        pd.cropOffsets = Self.remapKeys(cropOffsets, keyRemap)
+        pd.collageCropOffsets = Self.remapKeys(collageCropOffsets, keyRemap)
+        pd.reelCropOffsets = Self.remapKeys(reelCropOffsets, keyRemap)
+        pd.photoTags = Self.remapKeys(photoTags, keyRemap)
+        if let cells = collageCellOverride {
+            pd.collageCellOverride = cells.map {
+                var cell = $0
+                if let newPath = pathRemap[$0.photoPath] { cell.photoPath = newPath }
+                return cell
+            }
+        }
+        return pd
+    }
+
+    private static func remapKeys<V>(_ dict: [String: V], _ keyRemap: [String: String]) -> [String: V] {
+        guard !keyRemap.isEmpty, !dict.isEmpty else { return dict }
+        var out: [String: V] = [:]
+        for (key, value) in dict { out[keyRemap[key] ?? key] = value }
+        return out
+    }
 }
 
 // MARK: - CollageCell

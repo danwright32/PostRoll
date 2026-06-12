@@ -184,9 +184,13 @@ struct PhotoAssignmentView: View {
                 }
 
                 if !missingPhotos.isEmpty {
-                    MissingPhotosBanner(count: missingPhotos.count, onRemove: removeMissingPhotos)
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.bottom, Spacing.sm)
+                    MissingPhotosBanner(
+                        count: missingPhotos.count,
+                        onLocate: locateMissingPhotos,
+                        onRemove: removeMissingPhotos
+                    )
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.bottom, Spacing.sm)
                 }
 
                 HStack {
@@ -522,6 +526,57 @@ struct PhotoAssignmentView: View {
         missingPhotos = missing
     }
 
+    /// Asks for a folder, then re-links any missing photo whose filename is
+    /// found inside it (recursively), copying the re-found file into app
+    /// storage and carrying its crop/tags over. Order is preserved.
+    private func locateMissingPhotos() {
+        guard !missingPhotos.isEmpty else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Locate"
+        panel.message = "Choose the folder these photos were moved to."
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+
+        let byName = filesByName(in: folder)
+        var remap: [URL: URL] = [:]
+        for missing in missingPhotos {
+            guard let found = byName[missing.lastPathComponent] else { continue }
+            remap[missing] = AppPaths.importedCopy(of: found, into: AppPaths.photosDir) ?? found
+        }
+        guard !remap.isEmpty else {
+            importResultMessage = "No matching photos were found in that folder."
+            return
+        }
+
+        for day in DayName.allCases {
+            var pd = PostingDay(day: day)
+            pd.photoPaths = dayPhotos[day] ?? []
+            pd.cropOffsets = dayCropOffsets[day] ?? [:]
+            pd.photoTags = dayPhotoTags[day] ?? [:]
+            let rebound = pd.rebindingPhotos(remap)
+            dayPhotos[day] = rebound.photoPaths
+            dayCropOffsets[day] = rebound.cropOffsets
+            dayPhotoTags[day] = rebound.photoTags
+        }
+        importResultMessage = "Re-linked \(remap.count) photo\(remap.count == 1 ? "" : "s")."
+        save()
+        Task { await scanMissingPhotos() }
+    }
+
+    /// Maps filename -> URL for every file under `folder` (first match wins).
+    private func filesByName(in folder: URL) -> [String: URL] {
+        var map: [String: URL] = [:]
+        guard let walker = FileManager.default.enumerator(
+            at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) else { return map }
+        for case let url as URL in walker where map[url.lastPathComponent] == nil {
+            map[url.lastPathComponent] = url
+        }
+        return map
+    }
+
     /// Drops every missing photo from each day (and its per-photo crop/tag
     /// entries), then persists. Leaves on-disk photos untouched.
     private func removeMissingPhotos() {
@@ -719,13 +774,22 @@ private struct PhotoDaySection: View {
                                 tagSuggestions: tagSuggestions,
                                 isReorderTarget: reorderTargetIndex == i,
                                 onPreview: onPreview,
-                                onRemove: { photos.remove(at: i) })
+                                onRemove: { removePhoto(url) })
         } else {
             PhotoThumb(url: url, isReorderTarget: reorderTargetIndex == i,
                        onPreview: onPreview) {
-                photos.remove(at: i)
+                removePhoto(url)
             }
         }
+    }
+
+    /// Removes a photo by identity (not index, which goes stale after a
+    /// reorder) and clears its per-photo crop and tag entries so no orphan
+    /// keys linger in events.json.
+    private func removePhoto(_ url: URL) {
+        photos.removeAll { $0 == url }
+        cropOffsets?.wrappedValue.removeValue(forKey: url.absoluteString)
+        photoTags?.wrappedValue.removeValue(forKey: url.absoluteString)
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -1807,6 +1871,7 @@ private struct PhotoThumb: View {
 /// to drop the dead references in one click.
 private struct MissingPhotosBanner: View {
     let count: Int
+    let onLocate: () -> Void
     let onRemove: () -> Void
 
     var body: some View {
@@ -1819,10 +1884,15 @@ private struct MissingPhotosBanner: View {
                 .foregroundStyle(Color.warmDark)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
-            Button("Remove missing", action: onRemove)
+            Button("Locate…", action: onLocate)
                 .buttonStyle(.plain)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Color.roseGold)
+            Text("·").foregroundStyle(Color.warmMid.opacity(0.5))
+            Button("Remove missing", action: onRemove)
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.warmMid)
         }
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, 9)
