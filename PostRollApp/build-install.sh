@@ -47,9 +47,18 @@ cp -R "${BUILT_APP}" "${DEST}"
 # Strip quarantine so Gatekeeper doesn't nag on first launch.
 xattr -dr com.apple.quarantine "${DEST}" 2>/dev/null || true
 
-# Ad-hoc re-sign so the bundle identity is stable across rebuilds
-# (helps TCC/Full Disk Access grants persist).
-codesign --force --deep --sign - "${DEST}" >/dev/null 2>&1 || true
+# Sign with a stable self-signed identity if one exists (run ./setup-signing.sh
+# once to create it). A stable identity keeps macOS folder-permission grants
+# (Downloads, etc.) from re-prompting on every rebuild. Falls back to ad-hoc.
+SIGN_IDENTITY="PostRoll Local Signing"
+if security find-identity -v -p codesigning 2>/dev/null | grep -qF "${SIGN_IDENTITY}"; then
+  codesign --force --deep --sign "${SIGN_IDENTITY}" "${DEST}" >/dev/null 2>&1 \
+    && echo "    Signed with '${SIGN_IDENTITY}' (stable identity)" \
+    || echo "    Warning: signing with '${SIGN_IDENTITY}' failed; bundle is unsigned" >&2
+else
+  codesign --force --deep --sign - "${DEST}" >/dev/null 2>&1 || true
+  echo "    Ad-hoc signed. Run ./setup-signing.sh once to stop repeated folder-access prompts."
+fi
 
 echo "==> Installed: ${DEST}"
 
