@@ -202,6 +202,26 @@ extension PostingDay {
         selectedPerformerIDs = try  c.decodeIfPresent([UUID].self,                    forKey: .selectedPerformerIDs) ?? []
         notes                = try  c.decodeIfPresent(String.self,                    forKey: .notes)               ?? ""
     }
+
+    /// Returns a copy with the given photos removed from photoPaths and from
+    /// every per-photo map (crop offsets and tags, keyed by URL absoluteString)
+    /// and collage cells (keyed by POSIX path). Used to drop references to
+    /// files that no longer exist on disk.
+    func removingPhotos(_ remove: Set<URL>) -> PostingDay {
+        guard !remove.isEmpty else { return self }
+        let removeKeys = Set(remove.map(\.absoluteString))
+        let removePaths = Set(remove.map(\.path))
+        var pd = self
+        pd.photoPaths = photoPaths.filter { !remove.contains($0) }
+        pd.cropOffsets = cropOffsets.filter { !removeKeys.contains($0.key) }
+        pd.collageCropOffsets = collageCropOffsets.filter { !removeKeys.contains($0.key) }
+        pd.reelCropOffsets = reelCropOffsets.filter { !removeKeys.contains($0.key) }
+        pd.photoTags = photoTags.filter { !removeKeys.contains($0.key) }
+        if let cells = collageCellOverride {
+            pd.collageCellOverride = cells.filter { !removePaths.contains($0.photoPath) }
+        }
+        return pd
+    }
 }
 
 // MARK: - CollageCell

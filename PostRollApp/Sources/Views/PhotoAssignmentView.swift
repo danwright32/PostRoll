@@ -12,6 +12,8 @@ struct PhotoAssignmentView: View {
     @State private var pickerTarget: PickerTarget? = nil
     @State private var importResultMessage: String? = nil
     @State private var previewURL: URL? = nil
+    // Photos whose files can't be found on disk (moved or deleted).
+    @State private var missingPhotos: Set<URL> = []
 
     // Tuesday: speed edit reel inputs
     @State private var tuesdayScreenRecording: URL?
@@ -181,6 +183,12 @@ struct PhotoAssignmentView: View {
                     .padding(.bottom, Spacing.sm)
                 }
 
+                if !missingPhotos.isEmpty {
+                    MissingPhotosBanner(count: missingPhotos.count, onRemove: removeMissingPhotos)
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.sm)
+                }
+
                 HStack {
                     Spacer()
                     Button("Import from folder…") {
@@ -313,6 +321,7 @@ struct PhotoAssignmentView: View {
         }
         } // ZStack
         .animation(.easeOut(duration: 0.18), value: previewURL != nil)
+        .task(id: dayPhotos.mapValues(\.count)) { await scanMissingPhotos() }
     }
 
     // MARK: - File picker
@@ -499,6 +508,37 @@ struct PhotoAssignmentView: View {
         importResultMessage = totalImported == 0
             ? "No photos found. Expected subfolders named sunday–friday or day 1–day 6."
             : "Imported \(totalImported) photo\(totalImported == 1 ? "" : "s")."
+    }
+
+    // MARK: - Missing media
+
+    /// Marks photos whose files are gone from disk so the UI can flag them.
+    /// Runs off the main thread because it stats every assigned photo.
+    private func scanMissingPhotos() async {
+        let all = dayPhotos.values.flatMap { $0 }
+        let missing = await Task.detached(priority: .utility) {
+            Set(all.filter { !FileManager.default.fileExists(atPath: $0.path) })
+        }.value
+        missingPhotos = missing
+    }
+
+    /// Drops every missing photo from each day (and its per-photo crop/tag
+    /// entries), then persists. Leaves on-disk photos untouched.
+    private func removeMissingPhotos() {
+        guard !missingPhotos.isEmpty else { return }
+        for day in DayName.allCases {
+            var pd = PostingDay(day: day)
+            pd.photoPaths = dayPhotos[day] ?? []
+            pd.cropOffsets = dayCropOffsets[day] ?? [:]
+            pd.photoTags = dayPhotoTags[day] ?? [:]
+            let stripped = pd.removingPhotos(missingPhotos)
+            guard stripped.photoPaths.count != pd.photoPaths.count else { continue }
+            dayPhotos[day] = stripped.photoPaths
+            dayCropOffsets[day] = stripped.cropOffsets
+            dayPhotoTags[day] = stripped.photoTags
+        }
+        missingPhotos = []
+        save()
     }
 
     // MARK: - Persistence
@@ -730,6 +770,7 @@ private struct CroppablePhotoThumb: View {
     let onRemove: () -> Void
 
     @State private var image: NSImage?
+    @State private var loadFailed = false
     @State private var showingCropPopover = false
     @State private var showingTagPopover = false
     @State private var isHovered = false
@@ -748,6 +789,8 @@ private struct CroppablePhotoThumb: View {
                         .offset(x: cropOffset.x * ox, y: cropOffset.y * oy)
                         .frame(width: 80, height: 80)
                         .clipped()
+                } else if loadFailed {
+                    MissingPhotoBadge()
                 } else {
                     Color.creamDeep
                         .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
@@ -758,8 +801,9 @@ private struct CroppablePhotoThumb: View {
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.md)
                     .strokeBorder(
-                        isReorderTarget ? Color.roseGold : (hasCrop ? Color.roseGold.opacity(0.5) : Color.creamEdge),
-                        lineWidth: isReorderTarget ? 2 : (hasCrop ? 1.5 : 0.5)
+                        loadFailed ? Color.roseGold.opacity(0.7)
+                            : (isReorderTarget ? Color.roseGold : (hasCrop ? Color.roseGold.opacity(0.5) : Color.creamEdge)),
+                        lineWidth: isReorderTarget ? 2 : (hasCrop || loadFailed ? 1.5 : 0.5)
                     )
             )
             .opacity(isReorderTarget ? 0.75 : 1.0)
@@ -828,7 +872,11 @@ private struct CroppablePhotoThumb: View {
         }
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
-        .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+        .task {
+            let loaded = await Task.detached { NSImage(contentsOf: url) }.value
+            image = loaded
+            loadFailed = (loaded == nil)
+        }
     }
 
     /// Returns the max pixel shift the image can move within the 80×80 frame.
@@ -1714,12 +1762,15 @@ private struct PhotoThumb: View {
     var onPreview: ((URL) -> Void)? = nil
     let onRemove: () -> Void
     @State private var image: NSImage?
+    @State private var loadFailed = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Group {
                 if let image {
                     Image(nsImage: image).resizable().scaledToFill()
+                } else if loadFailed {
+                    MissingPhotoBadge()
                 } else {
                     Color.creamDeep.overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
                 }
@@ -1728,8 +1779,8 @@ private struct PhotoThumb: View {
             .clipShape(RoundedRectangle(cornerRadius: Radius.md))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.md)
-                    .strokeBorder(isReorderTarget ? Color.roseGold : Color.creamEdge,
-                                  lineWidth: isReorderTarget ? 2 : 0.5)
+                    .strokeBorder(loadFailed ? Color.roseGold.opacity(0.7) : (isReorderTarget ? Color.roseGold : Color.creamEdge),
+                                  lineWidth: isReorderTarget ? 2 : (loadFailed ? 1.5 : 0.5))
             )
             .opacity(isReorderTarget ? 0.75 : 1.0)
             .animation(.easeOut(duration: 0.1), value: isReorderTarget)
@@ -1744,7 +1795,59 @@ private struct PhotoThumb: View {
             .buttonStyle(.plain)
             .padding(3)
         }
-        .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+        .task {
+            let loaded = await Task.detached { NSImage(contentsOf: url) }.value
+            image = loaded
+            loadFailed = (loaded == nil)
+        }
+    }
+}
+
+/// Banner shown when an event references photos whose files are gone, offering
+/// to drop the dead references in one click.
+private struct MissingPhotosBanner: View {
+    let count: Int
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.roseGold)
+            Text("\(count) photo\(count == 1 ? "" : "s") can't be found — the file\(count == 1 ? " was" : "s were") moved or deleted off disk.")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmDark)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button("Remove missing", action: onRemove)
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.roseGold)
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.sm)
+                .fill(Color.roseGold.opacity(0.08))
+                .overlay(RoundedRectangle(cornerRadius: Radius.sm).strokeBorder(Color.roseGold.opacity(0.25), lineWidth: 0.5))
+        )
+    }
+}
+
+/// Placeholder shown in a photo thumbnail when the underlying file can't be
+/// read (moved or deleted off disk).
+private struct MissingPhotoBadge: View {
+    var body: some View {
+        Color.creamDeep.overlay {
+            VStack(spacing: 2) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.roseGold.opacity(0.85))
+                Text("missing")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(Color.warmMid)
+            }
+        }
     }
 }
 
