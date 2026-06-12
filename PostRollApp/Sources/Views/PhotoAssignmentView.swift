@@ -59,10 +59,15 @@ struct PhotoAssignmentView: View {
             let handle = p.handle.trimmingCharacters(in: .whitespaces)
             let realHandle = PythonBridge.isRealHandle(handle)
             guard !name.isEmpty || realHandle else { return nil }
-            let token = realHandle ? (handle.hasPrefix("@") ? handle : "@\(handle)") : name
-            let display = (!name.isEmpty && realHandle)
-                ? "\(name) \(handle.hasPrefix("@") ? handle : "@\(handle)")"
-                : token
+            let normalizedHandle = handle.hasPrefix("@") ? handle : "@\(handle)"
+            let token = realHandle ? normalizedHandle : name
+            // Label echoes the performer checkbox: name, instrument/role, handle.
+            var parts: [String] = []
+            if !name.isEmpty { parts.append(name) }
+            let designation = p.designation
+            if !designation.isEmpty { parts.append(designation.lowercased()) }
+            if realHandle { parts.append(normalizedHandle) }
+            let display = parts.isEmpty ? token : parts.joined(separator: " ")
             return PhotoTagSuggestion(token: token, display: display)
         }
     }
@@ -402,16 +407,23 @@ struct PhotoAssignmentView: View {
 
     private func handlePickedFiles(_ urls: [URL]) {
         guard let url = urls.first else { return }
+        // Copy picked files into the app's own storage so later reads don't
+        // re-trigger the macOS Downloads/Desktop permission prompt.
+        func storedPhoto(_ u: URL) -> URL { AppPaths.importedCopy(of: u, into: AppPaths.photosDir) ?? u }
+        func storedAudio(_ u: URL) -> URL { AppPaths.importedCopy(of: u, into: AppPaths.audioDir) ?? u }
         switch pickerTarget {
         case .day(let day):
             var list = dayPhotos[day] ?? []
-            for u in urls where !list.contains(u) { list.append(u) }
+            for u in urls {
+                let stored = storedPhoto(u)
+                if !list.contains(stored) { list.append(stored) }
+            }
             dayPhotos[day] = list
-        case .tuesdayScreenRecording: tuesdayScreenRecording = url
-        case .tuesdayRawPhoto:        tuesdayRawPhoto = url
-        case .tuesdayEditedPhoto:     tuesdayEditedPhoto = url
-        case .tuesdayBWPhoto:         tuesdayBWPhoto = url
-        case .thursdayAudio:          thursdayAudio = url
+        case .tuesdayScreenRecording: tuesdayScreenRecording = storedPhoto(url)
+        case .tuesdayRawPhoto:        tuesdayRawPhoto = storedPhoto(url)
+        case .tuesdayEditedPhoto:     tuesdayEditedPhoto = storedPhoto(url)
+        case .tuesdayBWPhoto:         tuesdayBWPhoto = storedPhoto(url)
+        case .thursdayAudio:          thursdayAudio = storedAudio(url)
         case nil: break
         }
         save()
@@ -699,24 +711,10 @@ private struct PhotoDaySection: View {
     }
 
     /// Copies a dropped photo into ~/Documents/PostRoll/photos/ so the stored
-    /// path survives the provider's temp file deletion. Names are uniquified
-    /// rather than reused: two different photos can share a filename.
+    /// path survives the provider's temp file deletion. Shares one copy
+    /// implementation with the file-picker import path.
     private nonisolated static func permanentPhotoCopy(of url: URL) -> URL? {
-        let dir = AppPaths.photosDir
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        var dest = dir.appendingPathComponent(url.lastPathComponent)
-        if FileManager.default.fileExists(atPath: dest.path) {
-            let stem = url.deletingPathExtension().lastPathComponent
-            let ext = url.pathExtension.isEmpty ? "jpg" : url.pathExtension
-            dest = dir.appendingPathComponent("\(stem)_\(UUID().uuidString.prefix(8)).\(ext)")
-        }
-        do {
-            try FileManager.default.copyItem(at: url, to: dest)
-            return dest
-        } catch {
-            NSLog("PhotoDaySection: failed to copy dropped photo: \(error)")
-            return nil
-        }
+        AppPaths.importedCopy(of: url, into: AppPaths.photosDir)
     }
 }
 
@@ -816,7 +814,9 @@ private struct CroppablePhotoThumb: View {
                         .popover(isPresented: $showingTagPopover, arrowEdge: .bottom) {
                             PhotoTagPopover(tags: tagBinding, suggestions: tagSuggestions)
                         }
-                        .opacity(isHovered || hasTags ? 1 : 0)
+                        // Always visible so per-photo tagging is discoverable;
+                        // softer when the photo has no tags yet.
+                        .opacity(hasTags || isHovered ? 1 : 0.9)
                     }
 
                     Spacer()
@@ -868,7 +868,7 @@ struct PhotoTagSuggestion: Identifiable, Hashable {
 private struct PhotoTagPopover: View {
     @Binding var tags: [String]
     var suggestions: [PhotoTagSuggestion] = []
-    @State private var text: String = ""
+    @State private var newTag: String = ""
     @FocusState private var focused: Bool
 
     /// Suggestions not already present in the current tags.
@@ -884,59 +884,100 @@ private struct PhotoTagPopover: View {
                 .tracking(1.0)
                 .foregroundStyle(Color.warmMid)
 
-            Text("Names or @handles, comma-separated. Saved into CAPTIONS.txt for this photo so you know who to tag on the carousel slide.")
+            Text("Names or @handles. Saved into CAPTIONS.txt for this photo so you know who to tag on the carousel slide.")
                 .font(.system(size: 10))
                 .foregroundStyle(Color.warmMid.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)
 
-            TextField("Mike Bono, @mikebonomusic", text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.warmDark)
-                .focused($focused)
-                .lineLimit(1...4)
-                .focusEffectDisabled()
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.xs)
-                        .fill(Color.creamDeep)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Radius.xs)
-                                .strokeBorder(focused ? Color.roseGold : Color.creamEdge,
-                                              lineWidth: focused ? 1.5 : 1)
-                        )
-                )
-                .onChange(of: text) { _, newValue in
-                    tags = parseTokens(newValue)
-                }
-
-            if !available.isEmpty {
-                Text("FROM THIS EVENT")
-                    .font(.system(size: 8, weight: .medium))
-                    .tracking(0.8)
-                    .foregroundStyle(Color.warmMid.opacity(0.7))
-                TagSuggestionFlow(suggestions: available) { picked in
-                    var current = parseTokens(text)
-                    if !current.contains(where: { $0.lowercased() == picked.token.lowercased() }) {
-                        current.append(picked.token)
+            HStack(spacing: 6) {
+                TextField("Add a name or @handle", text: $newTag)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.warmDark)
+                    .focused($focused)
+                    .focusEffectDisabled()
+                    .onSubmit { commit(newTag); newTag = "" }
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.xs)
+                            .fill(Color.creamDeep)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Radius.xs)
+                                    .strokeBorder(focused ? Color.roseGold : Color.creamEdge,
+                                                  lineWidth: focused ? 1.5 : 1)
+                            )
+                    )
+                if !newTag.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button { commit(newTag); newTag = "" } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color.roseGold)
                     }
-                    text = current.joined(separator: ", ")
-                    tags = current
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.defaultAction)
                 }
             }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    if !tags.isEmpty {
+                        Text("TAGGED IN THIS PHOTO")
+                            .font(.system(size: 8, weight: .medium))
+                            .tracking(0.8)
+                            .foregroundStyle(Color.warmMid.opacity(0.7))
+                        FlowLayout(spacing: 4) {
+                            ForEach(tags, id: \.self) { tag in
+                                HStack(spacing: 3) {
+                                    Text(tag)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color.warmDark)
+                                        .lineLimit(1)
+                                    Button { tags.removeAll { $0 == tag } } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 7, weight: .bold))
+                                            .foregroundStyle(Color.warmMid)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(Color.roseGold.opacity(0.14)))
+                            }
+                        }
+                    }
+
+                    if !available.isEmpty {
+                        Text("FROM THIS EVENT")
+                            .font(.system(size: 8, weight: .medium))
+                            .tracking(0.8)
+                            .foregroundStyle(Color.warmMid.opacity(0.7))
+                        TagSuggestionFlow(suggestions: available) { picked in
+                            addToken(picked.token)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 220)
         }
         .padding(Spacing.md)
-        .frame(width: 260)
-        .onAppear {
-            text = tags.joined(separator: ", ")
-            focused = true
+        .frame(width: 280)
+        .onAppear { focused = true }
+    }
+
+    /// Splits free text on commas and adds each token.
+    private func commit(_ raw: String) {
+        for token in raw.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) {
+            addToken(token)
         }
     }
 
-    private func parseTokens(_ raw: String) -> [String] {
-        raw.split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+    private func addToken(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        if !tags.contains(where: { $0.lowercased() == trimmed.lowercased() }) {
+            tags.append(trimmed)
+        }
     }
 }
 
@@ -1005,6 +1046,7 @@ private struct TagSuggestionFlow: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .help(suggestion.display)
             }
         }
     }
