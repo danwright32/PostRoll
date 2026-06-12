@@ -447,6 +447,16 @@ struct ExportView: View {
                     }
                     stopMediaTimer()
                     exportState = .done(folder)
+                    // A full export is the real "Exported" milestone: stamp the
+                    // live event so the sidebar pill stops reading "Ready to
+                    // Export" and the archive clock starts from actual completion.
+                    // Single-day re-exports don't change the milestone.
+                    if onlyDay == nil,
+                       var ev = appState.events.first(where: { $0.id == event.id }) {
+                        ev.exportPath = folder
+                        ev.archivedAt = Date()
+                        appState.updateEvent(ev)
+                    }
                     NotificationService.shared.notifyExportComplete(eventName: event.name)
                 }
             } catch {

@@ -52,6 +52,23 @@ struct Event: Identifiable, Codable, Hashable {
     /// for long enough that the user is unlikely to re-render it.
     var archivedAt: Date? = nil
 
+    /// `stage` doubles as a navigation router and flips to `.assetsGenerated`
+    /// the moment the user opens the generation screen, before any assets are
+    /// actually produced. Assets only truly exist once `weekResult` is set, so
+    /// the sidebar pill uses this to avoid prematurely showing "Assets Generated".
+    var isAwaitingGeneration: Bool {
+        stage == .assetsGenerated && weekResult == nil
+    }
+
+    /// Same router-vs-milestone trap at the final step: approving captions flips
+    /// `stage` to `.exported` to open the Export screen, but no files exist until
+    /// the user picks a folder and runs the export (which stamps `exportPath` and
+    /// `archivedAt`). Legacy events exported before `exportPath` was recorded still
+    /// carry `archivedAt`, so they correctly read as exported rather than pending.
+    var isAwaitingExport: Bool {
+        stage == .exported && exportPath == nil && archivedAt == nil
+    }
+
     var displayDate: String {
         let f = DateFormatter()
         f.dateStyle = .medium

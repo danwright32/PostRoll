@@ -336,7 +336,10 @@ private struct EventRow: View {
                     .accessibilityHidden(true)
                 Text(event.shootType.rawValue)
                 Spacer()
-                StagePill(stage: event.stage, isSelected: isSelected)
+                StagePill(stage: event.stage,
+                          awaitingGeneration: event.isAwaitingGeneration,
+                          awaitingExport: event.isAwaitingExport,
+                          isSelected: isSelected)
             }
             .font(.system(size: 10))
             .foregroundStyle(isSelected ? Color.secondary : Color.warmMid)
@@ -357,9 +360,27 @@ private struct EventRow: View {
 
 struct StagePill: View {
     let stage: EventStage
+    /// True when `stage` has advanced to `.assetsGenerated` purely to open the
+    /// generation screen, but no assets exist yet (`weekResult == nil`). The
+    /// `stage` field doubles as a navigation router, so it flips the moment the
+    /// user hits "Continue to Generation"; without this guard the pill would
+    /// claim "Assets Generated" before anything is generated.
+    var awaitingGeneration: Bool = false
+    /// True when `stage` is `.exported` but the export hasn't actually run yet
+    /// (no `exportPath`/`archivedAt`). Like `awaitingGeneration`, this keeps the
+    /// pill from claiming "Exported" the instant the user opens the Export screen.
+    var awaitingExport: Bool = false
     var isSelected: Bool = false
 
+    private var displayLabel: String {
+        if awaitingGeneration { return "Ready to Generate" }
+        if awaitingExport { return "Ready to Export" }
+        return stage.displayLabel
+    }
+
     private var pillColor: Color {
+        if awaitingGeneration { return .stagePhotosAssigned }
+        if awaitingExport { return .stageCaptionsReviewed }
         switch stage {
         case .created:          return .stageCreated
         case .programUploaded:  return .stageProgramUploaded
@@ -372,6 +393,12 @@ struct StagePill: View {
     }
 
     private var tooltipText: String {
+        if awaitingGeneration {
+            return "Step 4: Photos assigned. Click Generate All to create assets."
+        }
+        if awaitingExport {
+            return "Step 6: Captions approved. Choose a folder and export."
+        }
         switch stage {
         case .created:          return "Step 1: Event created. Upload the program PDF to begin."
         case .programUploaded:  return "Step 2: Program uploaded. Ready to run OCR."
@@ -384,7 +411,7 @@ struct StagePill: View {
     }
 
     var body: some View {
-        Text(stage.displayLabel)
+        Text(displayLabel)
             .font(.system(size: 10, weight: .medium))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
@@ -394,7 +421,7 @@ struct StagePill: View {
             .help(tooltipText)
             // Announce as "Stage, Photos Assigned" — not the "3 ·" prefix
             .accessibilityLabel("Stage")
-            .accessibilityValue(stage.rawValue)
+            .accessibilityValue(displayLabel)
     }
 }
 

@@ -898,8 +898,10 @@ struct CaptionReviewView: View {
                 ev.days[dayKey] = pd
             }
         }
+        // Approving captions only opens the Export screen; the export itself
+        // (and the archivedAt / exportPath stamps that mark real completion)
+        // happens once the user picks a folder and runs it in ExportView.
         ev.stage = .exported
-        ev.archivedAt = Date()
         appState.updateEvent(ev)
     }
 }
