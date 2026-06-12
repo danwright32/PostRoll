@@ -45,7 +45,7 @@ import json
 import re
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +81,8 @@ class WednesdayData:
     carousel_photos: list[Path]   # typically 10 photos
     collage_story: Path
     caption: dict[str, Any]       # alt_texts is a list here
+    # Per-photo people tags, keyed by carousel photo path string.
+    photo_tags: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -229,15 +231,58 @@ def _format_caption(result: dict[str, Any]) -> str:
     return f"{caption}\n\n{tags}".rstrip()
 
 
+def _photo_label(idx: int, photos: list[Path]) -> str:
+    """Label for a carousel photo: the trailing number from the filename
+    (e.g. "show-277.jpg" -> "277"), falling back to 1-based position.
+    Mirrors the Swift exporter's photoLabel so both CAPTIONS.txt match.
+    """
+    if idx < len(photos):
+        stem = photos[idx].stem
+        if "-" in stem:
+            num = stem.rsplit("-", 1)[1]
+            if num:
+                return num
+    return str(idx + 1)
+
+
 def _master_captions(data: WeekExport) -> str:
+    # (label, caption dict, carousel photos, per-photo tags). Only Wednesday
+    # carries per-photo data; the rest get a single shared alt text.
     days = [
-        ("SUNDAY", data.sunday.caption),
-        ("MONDAY", data.monday.caption),
-        ("TUESDAY", data.tuesday.caption),
-        ("WEDNESDAY", data.wednesday.caption),
-        ("THURSDAY", data.thursday.caption),
+        ("SUNDAY", data.sunday.caption, None, None),
+        ("MONDAY", data.monday.caption, None, None),
+        ("TUESDAY", data.tuesday.caption, None, None),
+        ("WEDNESDAY", data.wednesday.caption,
+         data.wednesday.carousel_photos, data.wednesday.photo_tags),
+        ("THURSDAY", data.thursday.caption, None, None),
     ]
-    sections = [f"=== {label} ===\n{_format_caption(cap)}" for label, cap in days]
+    sections: list[str] = []
+    for label, cap, photos, photo_tags in days:
+        block = f"=== {label} ===\n{_format_caption(cap)}"
+
+        alt_texts = cap.get("alt_texts") or []
+        if alt_texts:
+            if label == "WEDNESDAY" and photos:
+                alt_body = "\n".join(
+                    f"{_photo_label(i, photos)}: {t}"
+                    for i, t in enumerate(alt_texts)
+                )
+            else:
+                alt_body = alt_texts[0]
+            block += f"\n\nALT TEXT:\n{alt_body}"
+
+        # Wednesday carousel: per-photo people tags, in photo order, only for
+        # photos that were actually tagged.
+        if label == "WEDNESDAY" and photos and photo_tags:
+            tag_lines = []
+            for i, photo in enumerate(photos):
+                tags = photo_tags.get(str(photo)) or []
+                if tags:
+                    tag_lines.append(f"{_photo_label(i, photos)}: {', '.join(tags)}")
+            if tag_lines:
+                block += "\n\nPHOTO TAGS:\n" + "\n".join(tag_lines)
+
+        sections.append(block)
     return "\n\n".join(sections) + "\n"
 
 
@@ -341,6 +386,7 @@ def _from_dict(raw: dict) -> WeekExport:
             carousel_photos=[Path(p) for p in raw["wednesday"]["carousel_photos"]],
             collage_story=Path(raw["wednesday"]["collage_story"]),
             caption=raw["wednesday"]["caption"],
+            photo_tags=raw["wednesday"].get("photo_tags", {}),
         ),
         thursday=ThursdayData(
             reel=Path(raw["thursday"]["reel"]),

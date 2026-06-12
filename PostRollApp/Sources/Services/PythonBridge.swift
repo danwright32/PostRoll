@@ -723,6 +723,17 @@ actor PythonBridge {
             if !allHandles.isEmpty { dayEntry["tag_handles"]   = allHandles }
             if !allNames.isEmpty   { dayEntry["name_mentions"] = allNames }
             if !pd.notes.isEmpty   { dayEntry["notes"]         = pd.notes }
+            // Per-photo people tags (Wednesday). Re-key from the URL
+            // absoluteString the UI stores to the POSIX path used in `photos`,
+            // so Python can line each tag up with its photo by path.
+            if !pd.photoTags.isEmpty {
+                var tagsByPath: [String: [String]] = [:]
+                for (key, tags) in pd.photoTags where !tags.isEmpty {
+                    let path = URL(string: key)?.path ?? key
+                    tagsByPath[path] = tags
+                }
+                if !tagsByPath.isEmpty { dayEntry["photo_tags"] = tagsByPath }
+            }
             daysDict[dayName.rawValue] = dayEntry
         }
 

@@ -198,6 +198,7 @@ extension PostingDay {
         collageCropOffsets  = try  c.decodeIfPresent([String: CropOffset].self,        forKey: .collageCropOffsets)  ?? [:]
         reelCropOffsets     = try  c.decodeIfPresent([String: CropOffset].self,        forKey: .reelCropOffsets)     ?? [:]
         collageCellOverride  = try  c.decodeIfPresent([CollageCell].self,               forKey: .collageCellOverride)
+        photoTags            = try  c.decodeIfPresent([String: [String]].self,         forKey: .photoTags)           ?? [:]
         selectedPerformerIDs = try  c.decodeIfPresent([UUID].self,                    forKey: .selectedPerformerIDs) ?? []
         notes                = try  c.decodeIfPresent(String.self,                    forKey: .notes)               ?? ""
     }
@@ -280,6 +281,7 @@ struct PostingDay: Codable, Hashable {
     var collageCropOffsets: [String: CropOffset] = [:] // collage-specific crop — separate from carousel
     var reelCropOffsets: [String: CropOffset] = [:]    // Thursday reel per-photo crop — independent from carousel/collage
     var collageCellOverride: [CollageCell]? = nil      // user-adjusted frame layout (nil = use Python layout)
+    var photoTags: [String: [String]] = [:]            // Wednesday only: per-photo people tags, keyed by photo URL absoluteString
     // Performers selected as appearing in this day's photos — drives auto handle/name merging
     var selectedPerformerIDs: [UUID] = []
     // Shooter's observations — passed to caption generator to produce voice-y, specific captions

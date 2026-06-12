@@ -18,6 +18,7 @@ from postroll.export import (
     _checklist,
     _format_caption,
     _master_captions,
+    _photo_label,
     _slug,
     export_week,
 )
@@ -267,6 +268,56 @@ def test_captions_master_has_all_days(week_data, tmp_path):
     text = (out / "CAPTIONS.txt").read_text()
     for day in ("SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY"):
         assert f"=== {day} ===" in text
+
+
+def test_captions_master_includes_alt_text(week_data):
+    # Parity with the Swift exporter: CAPTIONS.txt carries an ALT TEXT block,
+    # single-line for single-photo days and the soloist alt text for Sunday.
+    text = _master_captions(week_data)
+    assert "ALT TEXT:\nSoprano soloist at center stage, arms raised." in text
+
+
+def test_captions_master_wednesday_alt_text_is_per_photo(week_data):
+    # Wednesday's carousel lists one labelled alt text per photo. The fixture
+    # filenames (wed_01.jpg ...) have no trailing "-number", so labels fall
+    # back to 1-based position.
+    text = _master_captions(week_data)
+    assert "1: Photo 1 alt text." in text
+    assert "10: Photo 10 alt text." in text
+
+
+def test_captions_master_includes_photo_tags(week_data):
+    # Per-photo people tags surface under a PHOTO TAGS block for the tagged
+    # photos only, labelled the same way as the alt text.
+    first = week_data.wednesday.carousel_photos[0]
+    third = week_data.wednesday.carousel_photos[2]
+    week_data.wednesday.photo_tags = {
+        str(first): ["Mike Bono", "@mikebonomusic"],
+        str(third): ["Catherine Gregory"],
+    }
+    text = _master_captions(week_data)
+    assert "PHOTO TAGS:" in text
+    assert "1: Mike Bono, @mikebonomusic" in text
+    assert "3: Catherine Gregory" in text
+    # Untagged photos are omitted from the block.
+    assert "2: " not in text.split("PHOTO TAGS:")[1]
+
+
+def test_captions_master_omits_photo_tags_when_none(week_data):
+    text = _master_captions(week_data)
+    assert "PHOTO TAGS:" not in text
+
+
+def test_photo_label_uses_trailing_number():
+    photos = [Path("show-277.jpg"), Path("show-281.jpg")]
+    assert _photo_label(0, photos) == "277"
+    assert _photo_label(1, photos) == "281"
+
+
+def test_photo_label_falls_back_to_position():
+    photos = [Path("wed_01.jpg")]
+    assert _photo_label(0, photos) == "1"      # no dash -> position
+    assert _photo_label(5, photos) == "6"      # out of range -> position
 
 
 # ===================================================================

@@ -679,27 +679,13 @@ struct EventExporter {
         for day in DayName.allCases {
             guard let cap = result?[day] else { continue }
             var block = "=== \(day.displayName.uppercased()) ===\n\(cap.formatted)"
+            let photoPaths = event.days[day.rawValue]?.photoPaths ?? []
             if !cap.altTexts.isEmpty {
                 let altBody: String
                 if day == .wednesday {
-                    let photoPaths = event.days[day.rawValue]?.photoPaths ?? []
                     altBody = cap.altTexts.enumerated()
                         .map { idx, altText in
-                            // Use the trailing number from the filename (e.g. "-277.jpg" → "277")
-                            // and fall back to position if the pattern isn't found.
-                            let label: String
-                            if idx < photoPaths.count {
-                                let stem = photoPaths[idx].deletingPathExtension().lastPathComponent
-                                if let dash = stem.range(of: "-", options: .backwards) {
-                                    let num = String(stem[dash.upperBound...])
-                                    label = num.isEmpty ? "\(idx + 1)" : num
-                                } else {
-                                    label = "\(idx + 1)"
-                                }
-                            } else {
-                                label = "\(idx + 1)"
-                            }
-                            return "\(label): \(altText)"
+                            "\(photoLabel(idx: idx, photoPaths: photoPaths)): \(altText)"
                         }
                         .joined(separator: "\n")
                 } else {
@@ -707,9 +693,34 @@ struct EventExporter {
                 }
                 block += "\n\nALT TEXT:\n\(altBody)"
             }
+            // Wednesday carousel: per-photo people tags, in photo order, only for
+            // photos that were actually tagged.
+            if day == .wednesday {
+                let photoTags = event.days[day.rawValue]?.photoTags ?? [:]
+                let tagLines = photoPaths.enumerated().compactMap { idx, url -> String? in
+                    let tags = photoTags[url.absoluteString] ?? []
+                    guard !tags.isEmpty else { return nil }
+                    return "\(photoLabel(idx: idx, photoPaths: photoPaths)): \(tags.joined(separator: ", "))"
+                }
+                if !tagLines.isEmpty {
+                    block += "\n\nPHOTO TAGS:\n\(tagLines.joined(separator: "\n"))"
+                }
+            }
             sections.append(block)
         }
         return sections.joined(separator: "\n\n") + "\n"
+    }
+
+    /// Label for a carousel photo in CAPTIONS.txt: the trailing number from the
+    /// filename (e.g. "-277.jpg" → "277"), falling back to 1-based position.
+    private static func photoLabel(idx: Int, photoPaths: [URL]) -> String {
+        guard idx < photoPaths.count else { return "\(idx + 1)" }
+        let stem = photoPaths[idx].deletingPathExtension().lastPathComponent
+        if let dash = stem.range(of: "-", options: .backwards) {
+            let num = String(stem[dash.upperBound...])
+            return num.isEmpty ? "\(idx + 1)" : num
+        }
+        return "\(idx + 1)"
     }
 
     // MARK: - Slug

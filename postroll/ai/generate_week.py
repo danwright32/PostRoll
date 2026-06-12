@@ -112,6 +112,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
         tag_handles  = day_info.get("tag_handles") or None
         name_mentions = day_info.get("name_mentions") or None
         notes        = day_info.get("notes", "")
+        photo_tags   = day_info.get("photo_tags") or None
 
         # For Thursday's scroll reel: the reel itself can have 50-200+ photos
         # (the visual asset is generated locally by ffmpeg), but Claude only
@@ -174,6 +175,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
                 tag_handles=tag_handles,
                 name_mentions=name_mentions,
                 notes=notes,
+                photo_tags=photo_tags,
                 existing_captions=existing_captions if existing_captions else None,
                 event_url=event_url,
             )

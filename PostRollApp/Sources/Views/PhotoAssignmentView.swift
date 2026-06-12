@@ -30,6 +30,8 @@ struct PhotoAssignmentView: View {
 
     // Crop offsets for Wednesday + Thursday photos (keyed by photo URL absoluteString)
     @State private var dayCropOffsets: [DayName: [String: CropOffset]] = [:]
+    // Wednesday only: per-photo people tags (keyed by photo URL absoluteString)
+    @State private var dayPhotoTags: [DayName: [String: [String]]] = [:]
     // Shooter observations per day — passed to caption generator
     @State private var dayNotes: [DayName: String] = [:]
 
@@ -39,6 +41,31 @@ struct PhotoAssignmentView: View {
     @State private var dayPerformers: [DayName: Set<UUID>] = [:] // selected performer IDs
 
     var totalPhotos: Int { dayPhotos.values.reduce(0) { $0 + $1.count } }
+
+    /// Suggestions for the Wednesday per-photo tag popover, drawn from the
+    /// event's performers. Inserts the @handle when there is a real one,
+    /// otherwise the plain name. Performers marked as appearing in Wednesday's
+    /// photos are listed first so the common picks are closest to hand.
+    private var wednesdayTagSuggestions: [PhotoTagSuggestion] {
+        let performers = event.ocrResult?.performers ?? []
+        let selected = dayPerformers[.wednesday] ?? []
+        let ordered = performers.sorted { a, b in
+            let aSel = selected.contains(a.id), bSel = selected.contains(b.id)
+            if aSel != bSel { return aSel }
+            return false
+        }
+        return ordered.compactMap { p in
+            let name = p.name.trimmingCharacters(in: .whitespaces)
+            let handle = p.handle.trimmingCharacters(in: .whitespaces)
+            let realHandle = PythonBridge.isRealHandle(handle)
+            guard !name.isEmpty || realHandle else { return nil }
+            let token = realHandle ? (handle.hasPrefix("@") ? handle : "@\(handle)") : name
+            let display = (!name.isEmpty && realHandle)
+                ? "\(name) \(handle.hasPrefix("@") ? handle : "@\(handle)")"
+                : token
+            return PhotoTagSuggestion(token: token, display: display)
+        }
+    }
 
     enum PickerTarget: Equatable {
         case day(DayName)
@@ -78,6 +105,15 @@ struct PhotoAssignmentView: View {
             }
         }
         _dayCropOffsets = State(initialValue: offsets)
+
+        // Load Wednesday per-photo tags
+        var photoTags: [DayName: [String: [String]]] = [:]
+        for day in DayName.allCases {
+            if let existing = event.days[day.rawValue]?.photoTags, !existing.isEmpty {
+                photoTags[day] = existing
+            }
+        }
+        _dayPhotoTags = State(initialValue: photoTags)
 
         // Load per-day shooter notes
         var notes: [DayName: String] = [:]
@@ -125,7 +161,7 @@ struct PhotoAssignmentView: View {
 
                 BrandBanner(
                     icon: "rectangle.3.group",
-                    message: "Drop photos into each posting day, or import a whole folder organized by day subfolders (named sunday–friday or day 1–day 6). Wednesday and Thursday show a crop button on each photo."
+                    message: "Drop photos into each posting day, or import a whole folder organized by day subfolders (named sunday–friday or day 1–day 6). Wednesday and Thursday show a crop button on each photo, and Wednesday photos also have a tag button to note who's in each carousel slide."
                 )
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.sm)
@@ -175,6 +211,8 @@ struct PhotoAssignmentView: View {
                             collageNote: note,
                             photos: dayBinding(day),
                             cropOffsets: enableCrop ? cropOffsetsBinding(day) : nil,
+                            photoTags: day == .wednesday ? photoTagsBinding(day) : nil,
+                            tagSuggestions: day == .wednesday ? wednesdayTagSuggestions : [],
                             notes: noteBinding(day),
                             onPreview: { previewURL = $0 },
                             onAddPhotos: { presentPicker(.day(day)) }
@@ -325,6 +363,13 @@ struct PhotoAssignmentView: View {
         )
     }
 
+    private func photoTagsBinding(_ day: DayName) -> Binding<[String: [String]]> {
+        Binding(
+            get: { dayPhotoTags[day] ?? [:] },
+            set: { dayPhotoTags[day] = $0; save() }
+        )
+    }
+
     private func noteBinding(_ day: DayName) -> Binding<String> {
         Binding(
             get: { dayNotes[day] ?? "" },
@@ -452,6 +497,7 @@ struct PhotoAssignmentView: View {
             var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
             pd.photoPaths  = dayPhotos[day] ?? []
             pd.cropOffsets = dayCropOffsets[day] ?? [:]
+            pd.photoTags   = dayPhotoTags[day] ?? [:]
             pd.notes       = dayNotes[day] ?? ""
             pd.tagHandles          = parseHandles(dayHandles[day] ?? "")
             pd.nameMentions        = parseHandles(dayPlainNames[day] ?? "")
@@ -508,6 +554,8 @@ private struct PhotoDaySection: View {
     var collageNote: String? = nil
     @Binding var photos: [URL]
     var cropOffsets: Binding<[String: CropOffset]>? = nil
+    var photoTags: Binding<[String: [String]]>? = nil
+    var tagSuggestions: [PhotoTagSuggestion] = []
     var notes: Binding<String>? = nil
     var onPreview: ((URL) -> Void)? = nil
     let onAddPhotos: () -> Void
@@ -601,7 +649,22 @@ private struct PhotoDaySection: View {
                 get: { offsetsBinding.wrappedValue[url.absoluteString] ?? CropOffset() },
                 set: { offsetsBinding.wrappedValue[url.absoluteString] = $0 }
             )
+            // Per-photo tags are Wednesday only; nil binding hides the tag affordance.
+            let tagBinding: Binding<[String]>? = photoTags.map { tags in
+                Binding<[String]>(
+                    get: { tags.wrappedValue[url.absoluteString] ?? [] },
+                    set: { newValue in
+                        if newValue.isEmpty {
+                            tags.wrappedValue[url.absoluteString] = nil
+                        } else {
+                            tags.wrappedValue[url.absoluteString] = newValue
+                        }
+                    }
+                )
+            }
             CroppablePhotoThumb(url: url, cropOffset: cropBinding,
+                                photoTags: tagBinding,
+                                tagSuggestions: tagSuggestions,
                                 isReorderTarget: reorderTargetIndex == i,
                                 onPreview: onPreview,
                                 onRemove: { photos.remove(at: i) })
@@ -662,15 +725,19 @@ private struct PhotoDaySection: View {
 private struct CroppablePhotoThumb: View {
     let url: URL
     @Binding var cropOffset: CropOffset
+    var photoTags: Binding<[String]>? = nil
+    var tagSuggestions: [PhotoTagSuggestion] = []
     var isReorderTarget: Bool = false
     var onPreview: ((URL) -> Void)? = nil
     let onRemove: () -> Void
 
     @State private var image: NSImage?
     @State private var showingCropPopover = false
+    @State private var showingTagPopover = false
     @State private var isHovered = false
 
     var hasCrop: Bool { cropOffset.x != 0 || cropOffset.y != 0 }
+    var hasTags: Bool { !(photoTags?.wrappedValue.isEmpty ?? true) }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -732,6 +799,26 @@ private struct CroppablePhotoThumb: View {
                         CropOffsetPopover(image: image, cropOffset: $cropOffset)
                     }
                     .opacity(isHovered || hasCrop ? 1 : 0)
+
+                    if let tagBinding = photoTags {
+                        Button {
+                            showingTagPopover = true
+                        } label: {
+                            Image(systemName: hasTags ? "tag.fill" : "tag")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(hasTags ? Color.roseGold : .white.opacity(0.85))
+                                .padding(3)
+                                .background(Color.black.opacity(0.35))
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                        }
+                        .buttonStyle(.plain)
+                        .help(hasTags ? "Tagged: \(tagBinding.wrappedValue.joined(separator: ", "))" : "Tag people in this photo")
+                        .popover(isPresented: $showingTagPopover, arrowEdge: .bottom) {
+                            PhotoTagPopover(tags: tagBinding, suggestions: tagSuggestions)
+                        }
+                        .opacity(isHovered || hasTags ? 1 : 0)
+                    }
+
                     Spacer()
                 }
                 .padding(.leading, 4)
@@ -759,6 +846,166 @@ private struct CroppablePhotoThumb: View {
             // Taller image — overflows vertically
             let scaledH = frameW / imageRatio
             return (0, (scaledH - frameH) / 2)
+        }
+    }
+}
+
+// MARK: - Photo Tag Popover
+
+/// One performer suggestion offered in the per-photo tag popover. `token` is
+/// what gets inserted into the tag list (an @handle when there is one, else
+/// the plain name); `display` also shows the name alongside the handle.
+struct PhotoTagSuggestion: Identifiable, Hashable {
+    let token: String
+    let display: String
+    var id: String { token }
+}
+
+/// Edits the per-photo people tags for a single Wednesday carousel photo.
+/// Tags are free text (names or @handles), comma-separated, and are written
+/// into the master CAPTIONS.txt under the Wednesday section at export. The
+/// event's performers are offered as one-tap suggestions.
+private struct PhotoTagPopover: View {
+    @Binding var tags: [String]
+    var suggestions: [PhotoTagSuggestion] = []
+    @State private var text: String = ""
+    @FocusState private var focused: Bool
+
+    /// Suggestions not already present in the current tags.
+    private var available: [PhotoTagSuggestion] {
+        let current = Set(tags.map { $0.lowercased() })
+        return suggestions.filter { !current.contains($0.token.lowercased()) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("TAG PEOPLE IN THIS PHOTO")
+                .font(.system(size: 9, weight: .medium))
+                .tracking(1.0)
+                .foregroundStyle(Color.warmMid)
+
+            Text("Names or @handles, comma-separated. Saved into CAPTIONS.txt for this photo so you know who to tag on the carousel slide.")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.warmMid.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+
+            TextField("Mike Bono, @mikebonomusic", text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.warmDark)
+                .focused($focused)
+                .lineLimit(1...4)
+                .focusEffectDisabled()
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.xs)
+                        .fill(Color.creamDeep)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Radius.xs)
+                                .strokeBorder(focused ? Color.roseGold : Color.creamEdge,
+                                              lineWidth: focused ? 1.5 : 1)
+                        )
+                )
+                .onChange(of: text) { _, newValue in
+                    tags = parseTokens(newValue)
+                }
+
+            if !available.isEmpty {
+                Text("FROM THIS EVENT")
+                    .font(.system(size: 8, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.warmMid.opacity(0.7))
+                TagSuggestionFlow(suggestions: available) { picked in
+                    var current = parseTokens(text)
+                    if !current.contains(where: { $0.lowercased() == picked.token.lowercased() }) {
+                        current.append(picked.token)
+                    }
+                    text = current.joined(separator: ", ")
+                    tags = current
+                }
+            }
+        }
+        .padding(Spacing.md)
+        .frame(width: 260)
+        .onAppear {
+            text = tags.joined(separator: ", ")
+            focused = true
+        }
+    }
+
+    private func parseTokens(_ raw: String) -> [String] {
+        raw.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+}
+
+/// Minimal wrapping layout: places subviews left to right, wrapping to the
+/// next line when the current one runs out of width.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += lineHeight + spacing
+                lineHeight = 0
+            }
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+        return CGSize(width: maxWidth == .infinity ? x : maxWidth, height: y + lineHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let maxWidth = bounds.width
+        var x: CGFloat = bounds.minX
+        var y: CGFloat = bounds.minY
+        var lineHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.minX + maxWidth {
+                x = bounds.minX
+                y += lineHeight + spacing
+                lineHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
+}
+
+/// Wrapping row of tappable performer suggestion chips.
+private struct TagSuggestionFlow: View {
+    let suggestions: [PhotoTagSuggestion]
+    let onPick: (PhotoTagSuggestion) -> Void
+
+    var body: some View {
+        FlowLayout(spacing: 4) {
+            ForEach(suggestions) { suggestion in
+                Button {
+                    onPick(suggestion)
+                } label: {
+                    Text(suggestion.display)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.roseGold)
+                        .lineLimit(1)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(Color.roseGold.opacity(0.10))
+                                .overlay(Capsule().strokeBorder(Color.roseGold.opacity(0.3), lineWidth: 0.5))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }

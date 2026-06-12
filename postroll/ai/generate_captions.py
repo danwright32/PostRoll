@@ -605,6 +605,7 @@ def generate_caption(
     tag_handles: list[str] | None = None,
     name_mentions: list[str] | None = None,
     notes: str = "",
+    photo_tags: dict[str, list[str]] | None = None,
     existing_captions: list[str] | None = None,
     event_url: str = "",
     venue_context: str = "",
@@ -636,6 +637,12 @@ def generate_caption(
     the caption (e.g. ["Jordan Langworthy"]). These are for people who
     don't have an Instagram handle to tag. They appear in the caption
     body or credit line by name, and they do NOT become hashtags.
+
+    photo_tags is an optional mapping of photo path -> list of people in
+    that specific photo (e.g. {"/photos/show-277.jpg": ["Mike Bono"]}).
+    Used for multi-photo carousels (Wednesday) so each per-photo alt text
+    knows who is actually in that frame. Keys must match the entries in
+    photo_paths.
 
     existing_captions is an optional list of other captions from the
     same event (e.g. the other 4 captions in a week) that the new one
@@ -672,7 +679,21 @@ def generate_caption(
         # That eliminates the "alt text describes the wrong photo" failure
         # mode where the model guessed at file ↔ image correspondence.
         photo_filenames = [Path(p).name for p in staged_paths]
-        photo_list = "\n".join(f"- {n}" for n in photo_filenames)
+        # Annotate each photo with the people tagged in it (if any), aligned by
+        # index to the original photo_paths. Lets per-photo alt text reference
+        # who is actually in each carousel frame.
+        if photo_tags:
+            photo_lines = []
+            for i, name in enumerate(photo_filenames):
+                key = str(photo_paths[i]) if i < len(photo_paths) else None
+                tags = photo_tags.get(key) if key else None
+                if tags:
+                    photo_lines.append(f"- {name} (people in this photo: {', '.join(tags)})")
+                else:
+                    photo_lines.append(f"- {name}")
+            photo_list = "\n".join(photo_lines)
+        else:
+            photo_list = "\n".join(f"- {n}" for n in photo_filenames)
         post_type_framing = POST_TYPE_FRAMING.get(
             post_type, POST_TYPE_FRAMING["feed_photo"]
         )
