@@ -43,6 +43,7 @@ targets:
       - path: Sources/Services/EventStore.swift
       - path: Sources/Services/ArchiveCleanup.swift
       - path: Sources/Services/AppPaths.swift
+      - path: Sources/Services/OrphanedMediaCleanup.swift
     settings:
       base:
         SWIFT_VERSION: "6.0"

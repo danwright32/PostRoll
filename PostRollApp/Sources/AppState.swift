@@ -44,6 +44,13 @@ final class AppState {
         }
 
         if dirty { EventStore.save(events) }
+
+        // Reclaim photos/audio copies left behind by deleted events. Skipped
+        // when the events file couldn't be read: an empty/partial events array
+        // would orphan (and delete) every media file.
+        if dataLoadWarning == nil {
+            OrphanedMediaCleanup.sweep(events: events)
+        }
     }
 
     func addEvent(_ event: Event) {
@@ -62,6 +69,9 @@ final class AppState {
         events.removeAll { $0.id == id }
         if selectedEventID == id { selectedEventID = nil }
         EventStore.save(events)
+        // The deleted event's imported photos are now orphaned; reclaim any not
+        // shared with a surviving event.
+        OrphanedMediaCleanup.sweep(events: events)
     }
 
     /// Duplicate an event: copies metadata and OCR result, clears photos and
