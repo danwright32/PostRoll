@@ -1589,6 +1589,7 @@ private struct PhotoPreviewOverlay: View {
                             .font(.system(size: 22))
                     }
                     .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)   // Esc dismisses the preview
                     .padding(16)
                 }
                 Spacer()
