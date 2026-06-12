@@ -1712,7 +1712,7 @@ private struct PerformerCheckboxGrid: View {
             }
             .buttonStyle(.plain)
 
-            let columns = [GridItem(.adaptive(minimum: 180), spacing: 6)]
+            let columns = [GridItem(.adaptive(minimum: 230), spacing: 6)]
             LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
                 ForEach(performers) { performer in
                     PerformerCheckbox(
@@ -1736,6 +1736,8 @@ private struct PerformerCheckbox: View {
     let isSelected: Bool
     let onToggle: (Bool) -> Void
 
+    private var designation: String { performer.designation }
+
     var body: some View {
         Button { onToggle(!isSelected) } label: {
             HStack(spacing: 5) {
@@ -1746,6 +1748,13 @@ private struct PerformerCheckbox: View {
                     .font(.system(size: 11))
                     .foregroundStyle(isSelected ? Color.warmDark : Color.warmMid)
                     .lineLimit(1)
+                    .layoutPriority(1)
+                if !designation.isEmpty {
+                    Text(designation.lowercased())
+                        .font(.system(size: 10).italic())
+                        .foregroundStyle(Color.warmMid.opacity(0.75))
+                        .lineLimit(1)
+                }
                 if PythonBridge.isRealHandle(performer.handle) {
                     Text(performer.handle.hasPrefix("@") ? performer.handle : "@\(performer.handle)")
                         .font(.system(size: 10))
@@ -1753,8 +1762,18 @@ private struct PerformerCheckbox: View {
                         .lineLimit(1)
                 }
             }
+            .help(helpText)
         }
         .buttonStyle(.plain)
+    }
+
+    private var helpText: String {
+        var parts = [performer.name]
+        if !designation.isEmpty { parts.append(designation) }
+        if PythonBridge.isRealHandle(performer.handle) {
+            parts.append(performer.handle.hasPrefix("@") ? performer.handle : "@\(performer.handle)")
+        }
+        return parts.joined(separator: ", ")
     }
 }
 

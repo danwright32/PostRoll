@@ -61,6 +61,16 @@ struct Performer: Identifiable, Codable, Hashable, Sendable {
         case id, name, role, handle
         case voiceOrInstrument = "voice_or_instrument"
     }
+
+    /// A short label for what this performer plays or does, shown next to their
+    /// name when assigning performers. Prefers the instrument/voice; falls back
+    /// to the role (e.g. "conductor" or a character name) when no instrument
+    /// was captured. Empty when neither is known.
+    var designation: String {
+        let instrument = voiceOrInstrument.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !instrument.isEmpty { return instrument }
+        return role.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 struct Piece: Identifiable, Codable, Hashable, Sendable {
