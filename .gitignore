@@ -9,6 +9,7 @@ events.json
 events.json.bak
 events.json.bak.*
 programs/
+photos/
 
 # Build artifacts
 Test2
