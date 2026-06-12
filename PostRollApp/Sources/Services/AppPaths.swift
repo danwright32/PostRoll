@@ -62,4 +62,13 @@ enum AppPaths {
             return nil
         }
     }
+
+    /// The sanctioned way to turn a user-picked file into a path safe to
+    /// persist. Every import entry point (file picker, folder/auto import) must
+    /// route picked URLs through these so a raw ~/Downloads/~/Desktop URL never
+    /// reaches the Event model — otherwise later reads (collage edits, exports)
+    /// re-trigger the macOS permission prompt. Returns `url` unchanged only when
+    /// the copy fails or it is already inside app storage.
+    static func storedPhoto(_ url: URL) -> URL { importedCopy(of: url, into: photosDir) ?? url }
+    static func storedAudio(_ url: URL) -> URL { importedCopy(of: url, into: audioDir) ?? url }
 }

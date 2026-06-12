@@ -420,23 +420,19 @@ struct PhotoAssignmentView: View {
 
     private func handlePickedFiles(_ urls: [URL]) {
         guard let url = urls.first else { return }
-        // Copy picked files into the app's own storage so later reads don't
-        // re-trigger the macOS Downloads/Desktop permission prompt.
-        func storedPhoto(_ u: URL) -> URL { AppPaths.importedCopy(of: u, into: AppPaths.photosDir) ?? u }
-        func storedAudio(_ u: URL) -> URL { AppPaths.importedCopy(of: u, into: AppPaths.audioDir) ?? u }
         switch pickerTarget {
         case .day(let day):
             var list = dayPhotos[day] ?? []
             for u in urls {
-                let stored = storedPhoto(u)
+                let stored = AppPaths.storedPhoto(u)
                 if !list.contains(stored) { list.append(stored) }
             }
             dayPhotos[day] = list
-        case .tuesdayScreenRecording: tuesdayScreenRecording = storedPhoto(url)
-        case .tuesdayRawPhoto:        tuesdayRawPhoto = storedPhoto(url)
-        case .tuesdayEditedPhoto:     tuesdayEditedPhoto = storedPhoto(url)
-        case .tuesdayBWPhoto:         tuesdayBWPhoto = storedPhoto(url)
-        case .thursdayAudio:          thursdayAudio = storedAudio(url)
+        case .tuesdayScreenRecording: tuesdayScreenRecording = AppPaths.storedPhoto(url)
+        case .tuesdayRawPhoto:        tuesdayRawPhoto = AppPaths.storedPhoto(url)
+        case .tuesdayEditedPhoto:     tuesdayEditedPhoto = AppPaths.storedPhoto(url)
+        case .tuesdayBWPhoto:         tuesdayBWPhoto = AppPaths.storedPhoto(url)
+        case .thursdayAudio:          thursdayAudio = AppPaths.storedAudio(url)
         case nil: break
         }
         save()
@@ -450,6 +446,7 @@ struct PhotoAssignmentView: View {
         let imageExts = Set(["jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "webp"])
         let videoExts = Set(["mov", "mp4", "m4v"])
         let audioExts = Set(["m4a", "mp3", "aiff", "aif", "aac"])
+
 
         func imageFiles(in dir: URL) -> [URL] {
             ((try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
@@ -481,7 +478,10 @@ struct PhotoAssignmentView: View {
             let images = imageFiles(in: dayDir)
             if !images.isEmpty {
                 var list = dayPhotos[day] ?? []
-                for u in images where !list.contains(u) { list.append(u); totalImported += 1 }
+                for u in images {
+                    let stored = AppPaths.storedPhoto(u)
+                    if !list.contains(stored) { list.append(stored); totalImported += 1 }
+                }
                 dayPhotos[day] = list
             }
 
@@ -491,17 +491,17 @@ struct PhotoAssignmentView: View {
             case .tuesday:
                 if tuesdayScreenRecording == nil,
                    let rec = contents.first(where: { videoExts.contains($0.pathExtension.lowercased()) }) {
-                    tuesdayScreenRecording = rec
+                    tuesdayScreenRecording = AppPaths.storedPhoto(rec)
                 }
                 for file in contents where imageExts.contains(file.pathExtension.lowercased()) {
                     let name = file.deletingPathExtension().lastPathComponent.lowercased()
-                    if tuesdayRawPhoto == nil, isRaw(name) { tuesdayRawPhoto = file }
-                    else if tuesdayEditedPhoto == nil, isEdited(name) { tuesdayEditedPhoto = file }
+                    if tuesdayRawPhoto == nil, isRaw(name) { tuesdayRawPhoto = AppPaths.storedPhoto(file) }
+                    else if tuesdayEditedPhoto == nil, isEdited(name) { tuesdayEditedPhoto = AppPaths.storedPhoto(file) }
                 }
             case .thursday:
                 if thursdayAudio == nil,
                    let audio = contents.first(where: { audioExts.contains($0.pathExtension.lowercased()) }) {
-                    thursdayAudio = audio
+                    thursdayAudio = AppPaths.storedAudio(audio)
                 }
             default: break
             }

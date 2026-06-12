@@ -43,6 +43,14 @@ final class AppState {
             dirty = true
         }
 
+        // Copy any media still referenced from outside app storage (originals
+        // picked from ~/Downloads/~/Desktop before the import-copy fix) into the
+        // app's folder, so collage edits and exports stop re-triggering the
+        // macOS permission prompt on every interaction.
+        if MediaReclaim.reclaim(events: &events) {
+            dirty = true
+        }
+
         if dirty { EventStore.save(events) }
 
         // Reclaim photos/audio copies left behind by deleted events. Skipped

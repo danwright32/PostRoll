@@ -44,6 +44,7 @@ targets:
       - path: Sources/Services/ArchiveCleanup.swift
       - path: Sources/Services/AppPaths.swift
       - path: Sources/Services/OrphanedMediaCleanup.swift
+      - path: Sources/Services/MediaReclaim.swift
     settings:
       base:
         SWIFT_VERSION: "6.0"
@@ -84,3 +85,14 @@ schemes:
       targets:
         - PostRollTests
         - PostRollUITests
+
+  # Unit tests only: builds the test bundle without the GUI or UI tests, so
+  # `xcodebuild -scheme PostRollTests test` runs the fast model/service suite
+  # on its own.
+  PostRollTests:
+    build:
+      targets:
+        PostRollTests: [test]
+    test:
+      targets:
+        - PostRollTests
