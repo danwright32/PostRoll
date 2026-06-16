@@ -72,23 +72,39 @@ def swap_reel_audio(
     fade_dur = 5.0
     fade_start = max(0, video_dur - fade_dur)
 
-    # Copy video stream, re-encode audio with trim + fade-out so the music
-    # doesn't cut off abruptly regardless of the source track length.
+    # Fit the audio to the video length first: a track shorter than the reel is
+    # looped with crossfaded seams (no jarring restart) rather than ending early.
+    # Fall back to a plain trim/fade on the raw track if the fit fails.
+    fade = f"afade=t=out:st={fade_start}:d={fade_dur}"
+    fitted_audio = reel.with_suffix(".swap_audio.wav")
+    audio_in = audio_path
+    audio_opts = ["-af", f"atrim=0:{video_dur},{fade}"]
+    try:
+        from ..media.audio_fit import fit_audio_to_duration
+        fit_audio_to_duration(audio_path, str(fitted_audio), duration=video_dur)
+        audio_in = str(fitted_audio)
+        audio_opts = ["-af", fade]
+    except Exception as e:
+        print(f"[swap_reel_audio] audio fit failed, using raw track: {e}", file=sys.stderr)
+
+    # Copy video stream, re-encode audio with the fade-out so the music doesn't
+    # cut off abruptly regardless of the source track length.
     tmp = reel.with_suffix(".swap.mp4")
     cmd = [
         "ffmpeg", "-y", "-loglevel", "error",
         "-i", str(reel),
-        "-i", audio_path,
+        "-i", audio_in,
         "-map", "0:v:0",
         "-map", "1:a:0",
         "-c:v", "copy",
         "-c:a", "aac",
         "-b:a", "192k",
-        "-af", f"atrim=0:{video_dur},afade=t=out:st={fade_start}:d={fade_dur}",
+        *audio_opts,
         "-t", str(video_dur),
         str(tmp),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
+    fitted_audio.unlink(missing_ok=True)
     if result.returncode != 0:
         if tmp.exists():
             tmp.unlink()

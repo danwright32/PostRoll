@@ -20,6 +20,7 @@ from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
 from postroll.media.generate_collage import crop_to_fill
+from postroll.ai import swap_reel_audio as swap_mod
 
 
 # ===================================================================
@@ -98,6 +99,16 @@ def _photo(path: Path, size=(400, 300)) -> Path:
     return path
 
 
+def _assert_audio_fit_pass(commands: list[list[str]]):
+    """Every reel mux is now preceded by an audio-fit pass that renders the
+    track to the reel's exact length (looping short clips with crossfaded
+    seams). Returns the ffmpeg commands for further assertions."""
+    ffmpeg = [c for c in commands if c[0] == "ffmpeg"]
+    assert any(c[-1].endswith(".wav") for c in ffmpeg), \
+        "expected an audio-fit pass rendering a fitted .wav before the mux"
+    return ffmpeg
+
+
 def _assert_mux_contract(cmd: list[str], *, requires_t: bool):
     """The contract every reel mux must satisfy."""
     # Explicit stream selection so MP3 cover art can't become the video
@@ -129,8 +140,11 @@ def test_scroll_reel_ffmpeg_command(tmp_path, monkeypatch):
         )
 
     ffmpeg_cmds = [c for c in cap.commands if c[0] == "ffmpeg"]
-    assert len(ffmpeg_cmds) == 1
-    _assert_mux_contract(ffmpeg_cmds[0], requires_t=True)
+    # Two ffmpeg passes now: fit/loop the audio to the reel length, then encode.
+    assert len(ffmpeg_cmds) == 2
+    # The audio-fit pass renders a WAV; the final pass is the reel mux.
+    assert ffmpeg_cmds[0][-1].endswith("audio_fit.wav")
+    _assert_mux_contract(ffmpeg_cmds[-1], requires_t=True)
     assert out.exists()
     assert result == str(out)
 
@@ -150,8 +164,12 @@ def test_slider_reel_ffmpeg_command(tmp_path, monkeypatch):
             event_name="Ev", org="Org", venue="Venue",
         )
 
-    final = [c for c in cap.commands if c[0] == "ffmpeg"][-1]
-    _assert_mux_contract(final, requires_t=False)
+    ffmpeg = _assert_audio_fit_pass(cap.commands)
+    final = ffmpeg[-1]
+    _assert_mux_contract(final, requires_t=True)
+    # Fitted audio is the exact reel length, so the reel is bounded by -t and
+    # no longer relies on -shortest (which would cut the reel to a short track).
+    assert "-shortest" not in final
     assert out.exists()
 
 
@@ -170,8 +188,10 @@ def test_morph_reel_ffmpeg_command(tmp_path, monkeypatch):
             event_name="Ev", org="Org", venue="Venue",
         )
 
-    final = [c for c in cap.commands if c[0] == "ffmpeg"][-1]
-    _assert_mux_contract(final, requires_t=False)
+    ffmpeg = _assert_audio_fit_pass(cap.commands)
+    final = ffmpeg[-1]
+    _assert_mux_contract(final, requires_t=True)
+    assert "-shortest" not in final
     assert out.exists()
 
 
@@ -241,7 +261,58 @@ def test_screen_reel_closing_path_caps_duration(tmp_path):
             target_duration=5.0,
         )
 
-    final = [c for c in cap.commands if c[0] == "ffmpeg"][-1]
+    ffmpeg = _assert_audio_fit_pass(cap.commands)
+    final = ffmpeg[-1]
     assert "concat" in final  # the closing branch's final encode
     _assert_mux_contract(final, requires_t=True)
     assert out.exists()
+
+
+def test_screen_reel_simple_path_drops_shortest_with_fitted_audio(tmp_path):
+    """The non-closing branch used -shortest, which truncates the reel to a
+    short track. With the audio fitted to length it must be bounded by -t and
+    drop -shortest."""
+    rec = tmp_path / "rec.mp4"
+    rec.write_bytes(b"fake video")
+    raw = _photo(tmp_path / "raw.jpg")
+    edit = _photo(tmp_path / "edit.jpg")
+    audio = tmp_path / "a.mp3"
+    audio.write_bytes(b"fake mp3")
+    out = tmp_path / "reel.mp4"
+
+    cap = FFmpegCapture()
+    with patch("subprocess.run", new=cap):
+        screen_mod.generate_reel_screen(
+            str(rec), str(raw), str(edit), str(audio), str(out),
+            event_name="Ev", org="Org", venue="Venue",
+            target_duration=5.0,
+        )
+
+    ffmpeg = _assert_audio_fit_pass(cap.commands)
+    final = ffmpeg[-1]
+    _assert_mux_contract(final, requires_t=True)
+    assert "-shortest" not in final
+    assert out.exists()
+
+
+def test_swap_reel_audio_fits_user_audio_to_video(tmp_path):
+    """Swapping in a user-provided track fits it to the video length first
+    (looping short clips), then re-muxes with the video stream copied."""
+    reel = tmp_path / "reel.mp4"
+    reel.write_bytes(b"fake video")
+    audio = tmp_path / "user.mp3"
+    audio.write_bytes(b"fake mp3")
+
+    cap = FFmpegCapture()
+    with patch("subprocess.run", new=cap):
+        result = swap_mod.swap_reel_audio(
+            str(reel), shoot_type="performance", pieces=[], audio_file=str(audio),
+        )
+
+    ffmpeg = _assert_audio_fit_pass(cap.commands)
+    final = ffmpeg[-1]
+    # Video stream copied, fitted audio mapped in, bounded by -t.
+    assert "copy" in final
+    assert "1:a:0" in final
+    assert "-t" in final
+    assert result["reel"] == str(reel.resolve())

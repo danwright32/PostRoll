@@ -19,9 +19,12 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+from .audio_fit import fit_audio_to_duration
 
 
 # === Design Tokens ===
@@ -70,6 +73,23 @@ def get_video_duration(path: str) -> float:
 
 
 from postroll.ai.audio_tags import TUESDAY_DEFAULT_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
+
+
+def _fit_reel_audio(audio_path, tmpdir_path, duration, *, shortest_on_fallback):
+    """Fit `audio_path` to `duration`, looping short tracks with crossfaded
+    seams. Returns (audio_input_path, extra_ffmpeg_opts). On failure, falls back
+    to the raw track with the legacy fade (and -shortest where the caller used
+    it, so a short track still can't run past the video)."""
+    fade = f"afade=t=out:st={duration - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}"
+    try:
+        fitted = fit_audio_to_duration(
+            audio_path, str(tmpdir_path / "audio_fit.wav"), duration=duration)
+        return fitted, ["-af", fade]
+    except Exception as e:
+        print(f"[generate_reel_screen] audio fit failed, using raw track: {e}",
+              file=sys.stderr)
+        opts = ["-af", fade, "-shortest"] if shortest_on_fallback else ["-af", fade]
+        return audio_path, opts
 
 
 def generate_reel_screen(
@@ -355,10 +375,12 @@ def generate_reel_screen(
             with open(concat_list, "w") as f:
                 f.write(f"file '{faded_tl}'\nfile '{faded_cl}'\n")
 
+            audio_in, audio_opts = _fit_reel_audio(
+                audio_path, tmpdir_path, actual_total, shortest_on_fallback=False)
             final_cmd = [
                 "ffmpeg", "-y",
                 "-f", "concat", "-safe", "0", "-i", concat_list,
-                "-i", audio_path,
+                "-i", audio_in,
                 # Explicit stream selection so MP3 cover art can never be
                 # picked as the video stream.
                 "-map", "0:v:0", "-map", "1:a:0",
@@ -368,20 +390,22 @@ def generate_reel_screen(
                 "-t", str(actual_total),
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
-                "-af", f"afade=t=out:st={actual_total - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
+                *audio_opts,
                 str(encode_tmp),
             ]
         else:
             # Just add audio
+            audio_in, audio_opts = _fit_reel_audio(
+                audio_path, tmpdir_path, target_duration, shortest_on_fallback=True)
             final_cmd = [
                 "ffmpeg", "-y",
                 "-i", composed,
-                "-i", audio_path,
+                "-i", audio_in,
                 "-map", "0:v:0", "-map", "1:a:0",
                 "-t", str(target_duration),
-                "-af", f"afade=t=out:st={target_duration - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
+                *audio_opts,
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-shortest",
+                "-c:a", "aac",
                 str(encode_tmp),
             ]
 

@@ -20,6 +20,7 @@ import json
 import os
 import random
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -425,22 +426,34 @@ def generate_reel_scroll(
         output.parent.mkdir(parents=True, exist_ok=True)
         encode_tmp = output.with_suffix(f".{os.getpid()}.tmp.mp4")
 
+        # Fit the audio to the reel length first: short tracks are looped with
+        # crossfaded seams (no jarring restart) rather than padded with silence.
+        # On any failure, fall back to the raw track with a plain trim/pad.
+        from .audio_fit import fit_audio_to_duration
+        fade = f"afade=t=out:st={total_duration - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}"
+        try:
+            audio_in = fit_audio_to_duration(
+                audio_path, str(tmpdir / "audio_fit.wav"), duration=total_duration,
+            )
+            audio_af = fade
+        except Exception as e:
+            print(f"[generate_reel_scroll] audio fit failed, using raw track: {e}",
+                  file=sys.stderr)
+            audio_in = audio_path
+            audio_af = f"atrim=0:{total_duration},{fade},apad"
+
         cmd = [
             "ffmpeg", "-y",
             "-framerate", str(FPS),
             "-i", str(tmpdir / "frame_%05d.png"),
-            "-i", audio_path,
+            "-i", audio_in,
             # Select streams explicitly: without -map, ffmpeg picks the
             # highest resolution video stream across all inputs, and MP3
             # cover art counts, which can replace the reel with album art.
             "-map", "0:v:0", "-map", "1:a:0",
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac",
-            "-af", (
-                f"atrim=0:{total_duration},"
-                f"afade=t=out:st={total_duration - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION},"
-                f"apad"
-            ),
+            "-af", audio_af,
             "-t", str(total_duration),
             str(encode_tmp),
         ]

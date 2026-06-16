@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
@@ -395,18 +396,33 @@ def generate_reel_morph(
         encode_tmp = output.with_suffix(f".{os.getpid()}.tmp.mp4")
 
         if audio_path:
+            # Fit the audio to the reel length: short tracks loop with
+            # crossfaded seams (no jarring restart) instead of cutting the reel
+            # short via -shortest. Fall back to the raw track if the fit fails.
+            from .audio_fit import fit_audio_to_duration
+            fade = f"afade=t=out:st={TOTAL_DURATION - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}"
+            try:
+                audio_in = fit_audio_to_duration(
+                    audio_path, str(tmpdir / "audio_fit.wav"), duration=TOTAL_DURATION,
+                )
+                audio_opts = ["-af", fade]
+            except Exception as e:
+                print(f"[generate_reel_morph] audio fit failed, using raw track: {e}",
+                      file=sys.stderr)
+                audio_in = audio_path
+                audio_opts = ["-af", fade, "-shortest"]
             cmd = [
                 "ffmpeg", "-y",
                 "-framerate", str(FPS),
                 "-i", str(tmpdir / "frame_%05d.png"),
-                "-i", audio_path,
+                "-i", audio_in,
                 # Explicit stream selection so MP3 cover art can never be
                 # picked as the video stream.
                 "-map", "0:v:0", "-map", "1:a:0",
                 "-t", str(TOTAL_DURATION),
-                "-af", f"afade=t=out:st={TOTAL_DURATION - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}",
+                *audio_opts,
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-shortest",
+                "-c:a", "aac",
                 str(encode_tmp),
             ]
         else:
