@@ -144,32 +144,11 @@ struct ProgramUploadView: View {
         }
     }
 
-    /// Renders each PDF page to a 2× PNG in ~/Documents/PostRoll/programs/.
-    /// Uses PDFKit so page orientation (including /Rotate metadata) is handled correctly.
+    /// Rasterises each PDF page to a 2× PNG in ~/Documents/PostRoll/programs/
+    /// and retains the original PDF alongside them, so the downloadable program
+    /// keeps born-digital text. See `ProgramPDFBuilder.rasterise`.
     private nonisolated static func rasterisePDF(at url: URL) -> [URL] {
-        guard let doc = PDFDocument(url: url), doc.pageCount > 0 else { return [] }
-        let dir = AppPaths.programsDir
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let stem = url.deletingPathExtension().lastPathComponent
-        var results: [URL] = []
-        let scale = CGFloat(2)
-
-        for i in 0..<doc.pageCount {
-            guard let page = doc.page(at: i) else { continue }
-            let bounds = page.bounds(for: .mediaBox)
-            let size   = CGSize(width: bounds.width * scale, height: bounds.height * scale)
-            let image  = page.thumbnail(of: size, for: .mediaBox)
-
-            guard let tiff      = image.tiffRepresentation,
-                  let bitmapRep = NSBitmapImageRep(data: tiff),
-                  let pngData   = bitmapRep.representation(using: .png, properties: [:])
-            else { continue }
-
-            let dest = dir.appendingPathComponent("\(stem)_p\(i + 1).png")
-            try? pngData.write(to: dest)
-            results.append(dest)
-        }
-        return results
+        ProgramPDFBuilder.rasterise(pdfAt: url, into: AppPaths.programsDir)
     }
 
     private func removeImage(_ url: URL) {

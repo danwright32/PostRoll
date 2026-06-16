@@ -2,20 +2,28 @@ import Foundation
 import AppKit
 import CoreGraphics
 import CoreText
+import PDFKit
 import Vision
 
 // MARK: - ProgramPDFBuilder
 
 /// Bundles an event's program pages into a single, searchable PDF.
 ///
-/// Program pages are always stored on disk as individual image files (PNG/JPG)
-/// in `AppPaths.programsDir`, even when the original upload was one multi-page
-/// PDF (the upload flow rasterises each page to its own PNG). There is no
-/// retained "original PDF", so a download has to rebuild one from those pages.
+/// Program pages are stored on disk as individual image files (PNG/JPG) in
+/// `AppPaths.programsDir`. A PDF upload is rasterised to one PNG per page
+/// (`<stem>_p<N>.png`) AND the original PDF is retained alongside it as
+/// `<stem>.pdf`. So at build time each page is one of two kinds:
 ///
-/// Each page image is drawn into a PDF page with an invisible OCR text layer
-/// (Apple's Vision) laid over it at the recognised positions, so the resulting
-/// PDF is selectable and searchable — the same trick a document scanner uses.
+/// - A rasterised PDF page whose source PDF still exists and carries a real
+///   text layer: the original page is embedded verbatim (`drawPDFPage`), which
+///   preserves the crisp vector text exactly rather than re-OCRing a raster.
+/// - Anything else (a directly uploaded image, or a scanned PDF page with no
+///   text): the image is drawn and an invisible Vision OCR text layer is laid
+///   over it, the way a document scanner produces a searchable PDF.
+///
+/// The source PDF is discovered from the page's own filename, so page order and
+/// per-page removals are honoured by reading `programImagePaths` — no separate
+/// provenance map to keep in sync.
 struct ProgramPDFBuilder {
     enum BuildError: LocalizedError {
         case noPages
@@ -34,10 +42,38 @@ struct ProgramPDFBuilder {
         }
     }
 
+    // MARK: - Filename convention
+
+    /// Name of the PNG written for page `page` (1-based) of a rasterised PDF.
+    static func rasterizedPageName(stem: String, page: Int) -> String {
+        "\(stem)_p\(page).png"
+    }
+
+    /// Name the original PDF is retained under, next to its rasterised pages.
+    static func retainedSourceName(stem: String) -> String {
+        "\(stem).pdf"
+    }
+
+    /// Inverse of `rasterizedPageName`: given a page image, the source PDF and
+    /// 1-based page number it came from, when that retained PDF exists on disk.
+    static func sourcePDFPage(for pageImage: URL) -> (pdfURL: URL, page: Int)? {
+        let name = pageImage.deletingPathExtension().lastPathComponent
+        guard let marker = name.range(of: "_p", options: .backwards),
+              let page = Int(name[marker.upperBound...]), page >= 1 else { return nil }
+        let stem = String(name[..<marker.lowerBound])
+        let pdfURL = pageImage.deletingLastPathComponent()
+            .appendingPathComponent(retainedSourceName(stem: stem))
+        guard FileManager.default.fileExists(atPath: pdfURL.path) else { return nil }
+        return (pdfURL, page)
+    }
+
+    // MARK: - Build
+
     /// Build a single searchable PDF from the page images, preserving order.
-    /// Each image becomes one page with an invisible OCR text layer. Throws if
-    /// the list is empty or any image can't be read (rather than silently
-    /// dropping pages). Runs OCR on every page, so call it off the main thread.
+    /// Each image becomes one page — embedding the original PDF page when it
+    /// carries native text, otherwise drawing the image with an OCR text layer.
+    /// Throws if the list is empty or a non-PDF-backed page can't be read.
+    /// Runs OCR on raster pages, so call it off the main thread.
     static func makePDF(from imagePaths: [URL]) throws -> Data {
         guard !imagePaths.isEmpty else { throw BuildError.noPages }
 
@@ -47,12 +83,21 @@ struct ProgramPDFBuilder {
             throw BuildError.encodingFailed
         }
 
+        var sourceCache: [String: LoadedPDF?] = [:]
         for url in imagePaths {
+            if let source = sourcePDFPage(for: url),
+               let pdf = loadedPDF(at: source.pdfURL, cache: &sourceCache),
+               pdf.hasText(onPage: source.page),
+               let cgPage = pdf.document.page(at: source.page) {
+                embedPDFPage(cgPage, into: context)
+                continue
+            }
+
             guard let nsImage = NSImage(contentsOf: url),
                   let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
                 throw BuildError.unreadableImage(url)
             }
-            renderPage(cgImage, into: context)
+            renderImagePage(cgImage, into: context)
         }
 
         context.closePDF()
@@ -62,8 +107,8 @@ struct ProgramPDFBuilder {
 
     /// Build the searchable PDF and write it to `destination`, returning it.
     /// Used to pre-generate the downloadable program at upload time, while the
-    /// page scans still exist — ArchiveCleanup reclaims those scans 60 days
-    /// after a shoot is exported, so the PDF has to be baked before then.
+    /// page scans (and retained source PDFs) still exist — ArchiveCleanup
+    /// reclaims those 60 days after a shoot is exported.
     @discardableResult
     static func writePDF(from imagePaths: [URL], to destination: URL) throws -> URL {
         let data = try makePDF(from: imagePaths)
@@ -75,9 +120,97 @@ struct ProgramPDFBuilder {
         return destination
     }
 
+    // MARK: - Rasterising an upload
+
+    /// Rasterises each page of `url` to a 2× PNG in `dir` (named by
+    /// `rasterizedPageName`) and retains the original PDF alongside them as
+    /// `<stem>.pdf`, so `makePDF` can later embed the source pages verbatim.
+    /// Returns the page image URLs in order. Uses PDFKit so page orientation
+    /// (including /Rotate) is handled correctly.
+    static func rasterise(pdfAt url: URL, into dir: URL, scale: CGFloat = 2) -> [URL] {
+        guard let doc = PDFDocument(url: url), doc.pageCount > 0 else { return [] }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let stem = url.deletingPathExtension().lastPathComponent
+
+        let retainedSource = dir.appendingPathComponent(retainedSourceName(stem: stem))
+        if !FileManager.default.fileExists(atPath: retainedSource.path) {
+            try? FileManager.default.copyItem(at: url, to: retainedSource)
+        }
+
+        var results: [URL] = []
+        for i in 0..<doc.pageCount {
+            guard let page = doc.page(at: i) else { continue }
+            let bounds = page.bounds(for: .mediaBox)
+            let size   = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+            let image  = page.thumbnail(of: size, for: .mediaBox)
+
+            guard let tiff      = image.tiffRepresentation,
+                  let bitmapRep = NSBitmapImageRep(data: tiff),
+                  let pngData   = bitmapRep.representation(using: .png, properties: [:])
+            else { continue }
+
+            let dest = dir.appendingPathComponent(rasterizedPageName(stem: stem, page: i + 1))
+            try? pngData.write(to: dest)
+            results.append(dest)
+        }
+        return results
+    }
+
+    // MARK: - Source PDF loading
+
+    /// A retained source PDF, opened once per build for both text detection
+    /// (PDFKit) and content embedding (Core Graphics).
+    private final class LoadedPDF {
+        let document: CGPDFDocument
+        private let kit: PDFDocument
+
+        init?(url: URL) {
+            guard let document = CGPDFDocument(url as CFURL),
+                  let kit = PDFDocument(url: url) else { return nil }
+            self.document = document
+            self.kit = kit
+        }
+
+        /// Whether `page` (1-based) has an extractable text layer worth keeping.
+        /// A scanned PDF page returns no text, so we OCR its raster instead.
+        func hasText(onPage page: Int) -> Bool {
+            guard let text = kit.page(at: page - 1)?.string else { return false }
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private static func loadedPDF(at url: URL, cache: inout [String: LoadedPDF?]) -> LoadedPDF? {
+        let key = url.path
+        if let cached = cache[key] { return cached }
+        let loaded = LoadedPDF(url: url)
+        cache[key] = loaded
+        return loaded
+    }
+
     // MARK: - Page rendering
 
-    private static func renderPage(_ cgImage: CGImage, into context: CGContext) {
+    /// Embeds a source PDF page verbatim, preserving its vector text and layout.
+    private static func embedPDFPage(_ page: CGPDFPage, into context: CGContext) {
+        let mediaBox = page.getBoxRect(.mediaBox)
+        // Pages with a /Rotate of 90 or 270 present swapped dimensions.
+        let rotation = ((Int(page.rotationAngle) % 360) + 360) % 360
+        var pageRect = (rotation == 90 || rotation == 270)
+            ? CGRect(x: 0, y: 0, width: mediaBox.height, height: mediaBox.width)
+            : CGRect(x: 0, y: 0, width: mediaBox.width, height: mediaBox.height)
+
+        context.beginPage(mediaBox: &pageRect)
+        context.saveGState()
+        // getDrawingTransform folds in the page's own /Rotate, so we draw upright.
+        let transform = page.getDrawingTransform(.mediaBox, rect: pageRect, rotate: 0, preserveAspectRatio: true)
+        context.concatenate(transform)
+        context.clip(to: mediaBox)
+        context.drawPDFPage(page)
+        context.restoreGState()
+        context.endPage()
+    }
+
+    /// Draws an image page and overlays an invisible OCR text layer.
+    private static func renderImagePage(_ cgImage: CGImage, into context: CGContext) {
         let width = CGFloat(cgImage.width)
         let height = CGFloat(cgImage.height)
         var box = CGRect(x: 0, y: 0, width: width, height: height)
