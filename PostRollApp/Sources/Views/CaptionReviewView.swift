@@ -1261,6 +1261,8 @@ private struct CaptionSection: View {
                                     onSwapAudio: day == .thursday ? onSwapReelAudio : nil,
                                     onUploadAudio: day == .thursday ? onUploadReelAudio : nil,
                                     onChangePhotos: day == .thursday ? onChangeReelPhotos : (day == .wednesday ? onChangeCollagePhotos : nil),
+                                    currentReelLength: day == .thursday ? reelLength : nil,
+                                    onChangeReelLength: day == .thursday ? onChangeReelLength : nil,
                                     isRegenerating: isRegeneratingGraphic
                                 )
                                 .id("\(day.rawValue)-mockup-\(graphicVersion)")
@@ -2431,12 +2433,19 @@ private struct InstagramMockup: View {
     var onSwapAudio: (() -> Void)? = nil
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
+    /// Current reel length (scroll seconds) and change handler — drives the
+    /// "Reel length" submenu (Thursday scroll reel only). nil hides it.
+    var currentReelLength: Double? = nil
+    var onChangeReelLength: ((Double) -> Void)? = nil
     /// Optional B&W after controls (Tuesday reel). `hasBW` toggles the label
     /// between "Add" and "Change" and gates the Remove item.
     var onChangeBW: (() -> Void)? = nil
     var onRemoveBW: (() -> Void)? = nil
     var hasBW: Bool = false
     var isRegenerating: Bool = false
+
+    /// Preset reel lengths offered in the menu (scroll seconds, 15–60 range).
+    private static let reelLengthPresets: [Int] = [15, 20, 30, 40, 50, 60]
 
     private var regenerateLabelText: String {
         if isRegenerating { return "Regenerating…" }
@@ -2450,6 +2459,7 @@ private struct InstagramMockup: View {
             || onSwapAudio != nil
             || onUploadAudio != nil
             || onChangePhotos != nil
+            || onChangeReelLength != nil
             || onChangeBW != nil
     }
 
@@ -2525,6 +2535,24 @@ private struct InstagramMockup: View {
                                 onNewLayout()
                             } label: {
                                 Label("New layout (re-roll)", systemImage: "shuffle")
+                            }
+                            .disabled(isRegenerating)
+                        }
+                        if let onChangeReelLength {
+                            Menu {
+                                ForEach(Self.reelLengthPresets, id: \.self) { secs in
+                                    Button {
+                                        onChangeReelLength(Double(secs))
+                                    } label: {
+                                        if let current = currentReelLength, Int(current.rounded()) == secs {
+                                            Label("\(secs)s", systemImage: "checkmark")
+                                        } else {
+                                            Text("\(secs)s")
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Label("Reel length", systemImage: "timer")
                             }
                             .disabled(isRegenerating)
                         }
