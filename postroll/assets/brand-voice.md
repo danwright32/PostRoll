@@ -275,7 +275,12 @@ line. Required tags every time:
 - Venue tag (e.g. `#carnegiehall`, `#chaintheatre`, `#mercurylounge`)
 - Organization / company / band tag (e.g. `#dcinyconcerts`,
   `#publictheater`, `#bandname`)
-- Performer / cast / conductor / choreographer tags if known
+- Performer / cast / conductor / choreographer tags ONLY when the person is
+  genuinely famous (a household name or a major figure in their field) so the
+  tag actually aids discovery. Do not turn ordinary performer names into
+  hashtags: a tag like `#janesmith` for a local cast member is noise, not
+  reach. Credit those people inline in the caption body instead (as an
+  @mention if they have a handle, otherwise by plain name).
 - 2–3 additional relevant tags that match the genre:
   - Classical: instrument, repertoire, composer, city
   - Theater: play title, playwright, acting, nyc theater
