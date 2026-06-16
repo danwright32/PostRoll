@@ -20,9 +20,10 @@ import math
 import subprocess
 from pathlib import Path
 
-# Seconds blended at each loop seam. Long enough to hide the seam, short enough
-# not to noticeably duck the music on a short clip.
-DEFAULT_CROSSFADE = 1.0
+# Seconds blended at each loop seam. Kept short so you don't hear the end of
+# the track playing over its own beginning (a long crossfade of music against
+# itself sounds like two takes at once); just long enough to avoid a click.
+DEFAULT_CROSSFADE = 0.5
 
 
 def audio_duration(path: str | Path) -> float | None:
@@ -64,7 +65,9 @@ def _loop_filtergraph(copies: int, crossfade: float, duration: float) -> str:
     prev = "s0"
     for i in range(1, copies):
         nxt = f"x{i}"
-        parts.append(f"[{prev}][s{i}]acrossfade=d={crossfade:.3f}:c1=tri:c2=tri[{nxt}]")
+        # Equal-power curve (qsin) on both sides so the seam holds a constant
+        # perceived loudness instead of dipping ~6 dB through a linear blend.
+        parts.append(f"[{prev}][s{i}]acrossfade=d={crossfade:.3f}:c1=qsin:c2=qsin[{nxt}]")
         prev = nxt
     parts.append(f"[{prev}]atrim=0:{duration:.3f}[aout]")
     return ";".join(parts)

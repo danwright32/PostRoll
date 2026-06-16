@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from postroll.media.audio_fit import (
+    DEFAULT_CROSSFADE,
     _loop_copies,
     _loop_filtergraph,
     audio_duration,
@@ -43,13 +44,21 @@ def test_loop_copies_minimum_two():
     assert _loop_copies(audio_len=9.0, duration=10.0, crossfade=1.0) >= 2
 
 
+def test_default_crossfade_is_short_and_equal_power():
+    # A long linear blend of a track against its own start sounded like two
+    # takes at once; the seam is now a short, equal-power crossfade.
+    assert DEFAULT_CROSSFADE == 0.5
+    graph = _loop_filtergraph(copies=2, crossfade=DEFAULT_CROSSFADE, duration=20.0)
+    assert "acrossfade=d=0.500:c1=qsin:c2=qsin" in graph
+
+
 def test_loop_filtergraph_structure():
     graph = _loop_filtergraph(copies=3, crossfade=1.0, duration=46.0)
     # One split into 3 streams.
     assert "asplit=3[s0][s1][s2]" in graph
-    # Two crossfade joins for three copies, with a smooth (triangular) curve.
+    # Two crossfade joins for three copies, with an equal-power curve.
     assert graph.count("acrossfade=") == 2
-    assert "c1=tri:c2=tri" in graph
+    assert "c1=qsin:c2=qsin" in graph
     # Trimmed to the exact target, exposed as [aout].
     assert "atrim=0:46.000[aout]" in graph
 
