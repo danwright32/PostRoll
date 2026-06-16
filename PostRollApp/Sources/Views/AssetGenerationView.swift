@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct AssetGenerationView: View {
     let event: Event
@@ -17,6 +18,11 @@ struct AssetGenerationView: View {
     // Animation state
     @State private var showCheckmark = false
     @State private var phasesVisible = false
+
+    // Program PDF download error, surfaced as an alert when non-nil.
+    @State private var programPDFError: String?
+    // True while a program PDF is being rebuilt on demand (OCR runs off-main).
+    @State private var isPreparingProgramPDF = false
 
 
     /// The view's display is derived (not stored): an active/failed run in the
@@ -569,6 +575,16 @@ struct AssetGenerationView: View {
                     .fixedSize()
                 }
 
+                if !event.programImagePaths.isEmpty || event.programPDFPath != nil {
+                    Button(isPreparingProgramPDF ? "Preparing program PDF…" : "Download program PDF") {
+                        downloadProgramPDF()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.roseGold)
+                    .disabled(isPreparingProgramPDF)
+                }
+
                 if !event.blogPhotoPaths.isEmpty {
                     Button("Regenerate blog post") {
                         startGeneration(retryDays: Set(["blog"]))
@@ -604,6 +620,59 @@ struct AssetGenerationView: View {
             }
         }
         .onDisappear { showCheckmark = false }
+        .alert("Couldn't export program PDF",
+               isPresented: Binding(get: { programPDFError != nil },
+                                    set: { if !$0 { programPDFError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(programPDFError ?? "")
+        }
+    }
+
+    /// Save the whole program as one searchable PDF, then open it in Preview.
+    /// Prefers the PDF baked at upload time (which carries the OCR text layer and
+    /// outlives the page scans). For legacy events that predate that, or whose
+    /// cached PDF is gone, it rebuilds on demand from the page scans.
+    private func downloadProgramPDF() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue =
+            "\(EventExporter.slug(event.org))_\(EventExporter.slug(event.name))_program.pdf"
+        panel.title = "Save Program PDF"
+
+        guard panel.runModal() == .OK, let dest = panel.url else { return }
+
+        if let prebuilt = event.programPDFPath,
+           FileManager.default.fileExists(atPath: prebuilt.path) {
+            do {
+                try? FileManager.default.removeItem(at: dest)
+                try FileManager.default.copyItem(at: prebuilt, to: dest)
+                NSWorkspace.shared.open(dest)
+            } catch {
+                programPDFError = error.localizedDescription
+            }
+            return
+        }
+
+        // No cached PDF — rebuild from the page scans. OCR runs off-main, so show
+        // a preparing state until the file is written.
+        let pages = event.programImagePaths
+        isPreparingProgramPDF = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                let data = try ProgramPDFBuilder.makePDF(from: pages)
+                try data.write(to: dest)
+                await MainActor.run {
+                    isPreparingProgramPDF = false
+                    NSWorkspace.shared.open(dest)
+                }
+            } catch {
+                await MainActor.run {
+                    isPreparingProgramPDF = false
+                    programPDFError = error.localizedDescription
+                }
+            }
+        }
     }
 
     // MARK: - Helpers

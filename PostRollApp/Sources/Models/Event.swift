@@ -15,6 +15,10 @@ struct Event: Identifiable, Codable, Hashable {
 
     // Program OCR inputs
     var programImagePaths: [URL] = []
+    /// A single searchable PDF of the whole program, built from the page scans
+    /// at upload time (with an OCR text layer) so it survives ArchiveCleanup
+    /// reclaiming the individual `programImagePaths` files post-export.
+    var programPDFPath: URL? = nil
     var ocrResult: OCRResult?
     var ocrReviewDone: Bool = false
     var eventURL: String = ""  // Optional event page URL — used to enrich OCR data
@@ -97,6 +101,7 @@ extension Event {
         shootType    = try c.decode(ShootType.self, forKey: .shootType)
         stage             = try c.decodeIfPresent(EventStage.self,                 forKey: .stage)             ?? .created
         programImagePaths = try c.decodeIfPresent([URL].self,                      forKey: .programImagePaths) ?? []
+        programPDFPath    = try c.decodeIfPresent(URL.self,                        forKey: .programPDFPath)
         ocrResult         = try c.decodeIfPresent(OCRResult.self,                  forKey: .ocrResult)
         ocrReviewDone     = try c.decodeIfPresent(Bool.self,                       forKey: .ocrReviewDone)     ?? false
         pendingFlags      = try c.decodeIfPresent([OCRFlag].self,                  forKey: .pendingFlags)      ?? []

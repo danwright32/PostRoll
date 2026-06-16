@@ -185,6 +185,28 @@ struct ProgramUploadView: View {
         var ev = event
         ev.stage = .programUploaded
         appState.updateEvent(ev)
+        buildProgramPDF(for: ev)
+    }
+
+    /// Bakes the whole program into one searchable PDF (OCR text layer) and
+    /// stores it on the event. Done here, while the page scans are freshly
+    /// imported, because ArchiveCleanup reclaims those scans 60 days after
+    /// export — after which the PDF is the only copy of the program left.
+    private func buildProgramPDF(for ev: Event) {
+        let pages = ev.programImagePaths
+        guard !pages.isEmpty else { return }
+        let eventID = ev.id
+        let dest = AppPaths.programsDir.appendingPathComponent("\(eventID.uuidString)_program.pdf")
+        Task.detached(priority: .utility) {
+            guard let url = try? ProgramPDFBuilder.writePDF(from: pages, to: dest) else { return }
+            await MainActor.run {
+                // Read the live event back: the user may have renamed it or moved
+                // on while OCR was running. Never write a stale captured copy.
+                guard var live = appState.events.first(where: { $0.id == eventID }) else { return }
+                live.programPDFPath = url
+                appState.updateEvent(live)
+            }
+        }
     }
 
     private func skipProgram() {
