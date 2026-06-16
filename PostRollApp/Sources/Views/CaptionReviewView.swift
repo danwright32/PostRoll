@@ -1347,7 +1347,8 @@ private struct CaptionSection: View {
                                         onPreview: { onPreview?(previewURL) },
                                         isRegenerating: isRegeneratingGraphic,
                                         onRegenerate: onRegenerateGraphic,
-                                        onChangePhotos: onChangeCollagePhotos
+                                        onChangePhotos: onChangeCollagePhotos,
+                                        photoURLs: postingDay?.photoPaths ?? []
                                     )
                                     .padding(Spacing.md)
 
@@ -2861,6 +2862,14 @@ private struct CollagePreviewThumbnail: View {
     var onRegenerate: (() -> Void)? = nil
     /// Replace the entire collage photo set with a freshly picked batch.
     var onChangePhotos: (() -> Void)? = nil
+    /// The day's current photo set (the same URLs the draggable thumbnail strip
+    /// uses). The layout JSON records whatever path Python used at generation
+    /// time, but MediaReclaim may since have copied that file into app storage
+    /// and rewritten the day's photoPaths. Rebasing JSON-loaded cells onto these
+    /// by filename keeps each cell's photoPath equal to the drag-source path, so
+    /// a swap matches the existing cell (instead of duplicating the photo) and
+    /// per-cell crop keys still resolve.
+    var photoURLs: [URL] = []
 
     @State private var image: NSImage?
     @State private var cells: [CollageCell] = []
@@ -2897,6 +2906,13 @@ private struct CollagePreviewThumbnail: View {
     /// Base cells — user-dragged override if present, otherwise JSON-loaded positions.
     private var baseCells: [CollageCell] {
         cellOverride.wrappedValue ?? cells
+    }
+
+    /// Re-links layout-JSON cell paths to the day's current photo set by
+    /// filename. The override is already kept current by MediaReclaim
+    /// (PostingDay.rebindingPhotos), so only the JSON-loaded cells need this.
+    private func rebasedToCurrentPhotos(_ loaded: [CollageCell]) -> [CollageCell] {
+        CollageCell.rebasing(loaded, toCurrentPhotos: photoURLs)
     }
 
     /// Renders the collage the way the editor shows it (base PNG plus the live
@@ -3101,14 +3117,9 @@ private struct CollagePreviewThumbnail: View {
                     _ = provider.loadObject(ofClass: NSString.self) { item, _ in
                         guard let droppedPath = (item as? NSString).map(String.init) else { return }
                         DispatchQueue.main.async {
-                            var newCells = baseCells
-                            let currentPath = newCells[idx].photoPath
-                            guard droppedPath != currentPath else { return }
-                            if let otherIdx = newCells.firstIndex(where: { $0.photoPath == droppedPath }),
-                               otherIdx != idx {
-                                newCells[otherIdx].photoPath = currentPath
-                            }
-                            newCells[idx].photoPath = droppedPath
+                            guard let newCells = CollageCell.applyingDrop(
+                                of: droppedPath, ontoCellAt: idx, in: baseCells
+                            ) else { return }
                             // Persist the swap to the override only. The setter saves
                             // it and CollageRenderer composites it at export — no Python
                             // regen, which would re-roll the layout and discard the swap.
@@ -3244,7 +3255,7 @@ private struct CollagePreviewThumbnail: View {
             let sampledGap = Self.sampleGapColor(from: loadedImage)
             await MainActor.run {
                 image = loadedImage
-                cells = loadedCells
+                cells = rebasedToCurrentPhotos(loadedCells)
                 gapColor = sampledGap
             }
         }
@@ -3262,7 +3273,7 @@ private struct CollagePreviewThumbnail: View {
                     // Commit image, cells, and override-clear in one render cycle.
                     await MainActor.run {
                         image = loadedImage
-                        cells = loadedCells
+                        cells = rebasedToCurrentPhotos(loadedCells)
                         gapColor = sampledGap
                         cellOverride.wrappedValue = nil
                     }

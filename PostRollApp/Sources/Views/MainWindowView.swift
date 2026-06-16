@@ -7,25 +7,31 @@ struct MainWindowView: View {
         @Bindable var appState = appState
 
         NavigationSplitView {
-            Group {
-                if appState.sidebarMode == .events {
-                    EventListView()
-                } else {
-                    InsightsSidebarView()
+            // The mode toggle is a real sibling stacked above the sidebar content,
+            // not a safeAreaInset overlay. As an overlay it competed with the
+            // .searchable(.sidebar) field for the top of the column and ended up
+            // painted on top of the first event row, leaking its text around the
+            // pill. Stacking guarantees the list flows below it and never underlaps.
+            VStack(spacing: 0) {
+                Picker("Sidebar", selection: $appState.sidebarMode) {
+                    Text("Events").tag(SidebarMode.events)
+                    Text("Insights").tag(SidebarMode.insights)
                 }
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                VStack(spacing: 0) {
-                    Picker("Sidebar", selection: $appState.sidebarMode) {
-                        Text("Events").tag(SidebarMode.events)
-                        Text("Insights").tag(SidebarMode.insights)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity)
+                .background(Color.creamDeep)
+
+                Color.creamEdge.frame(height: 0.5)
+
+                Group {
+                    if appState.sidebarMode == .events {
+                        EventListView()
+                    } else {
+                        InsightsSidebarView()
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Color.creamDeep)
-                    Color.creamEdge.frame(height: 0.5)
                 }
             }
             .navigationSplitViewColumnWidth(min: 230, ideal: 265)

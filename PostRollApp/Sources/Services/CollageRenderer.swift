@@ -14,7 +14,7 @@ import AppKit
 @MainActor
 enum CollageRenderer {
 
-    static let canvasSize = CGSize(width: 1080, height: 1920)
+    nonisolated static let canvasSize = CGSize(width: 1080, height: 1920)
 
     /// Returns true on success. The output PNG is written at canvas resolution.
     static func render(
@@ -36,7 +36,8 @@ enum CollageRenderer {
             baseImage: baseImage,
             cells: cells,
             cellPhotos: cellPhotos,
-            cropOffsets: cropOffsets
+            cropOffsets: cropOffsets,
+            gapColor: sampleGapColor(from: baseImage)
         )
 
         let renderer = ImageRenderer(content: view)
@@ -54,6 +55,82 @@ enum CollageRenderer {
             return false
         }
     }
+
+    /// Cream divider strips between cells, matching the live editor's gap fill.
+    ///
+    /// Python bakes 8px gaps into the base PNG at its ORIGINAL masonry positions.
+    /// The moment the user drags a divider the override cells move, so those baked
+    /// gaps no longer line up and stale photo content shows through the new gaps.
+    /// The live editor (CaptionReviewView) repaints `gap_color` strips at the
+    /// CURRENT cell boundaries; the composited preview and the export render
+    /// through this type, so they must do the same or the dividers vanish.
+    ///
+    /// Returns absolute-canvas rectangles to fill, skipping the wide (~90px)
+    /// branded-strip band so the centre logo/text is never painted over.
+    nonisolated static func gapRects(for cells: [CollageCell]) -> [CGRect] {
+        guard cells.count > 1 else { return [] }
+        // Match the editor's `actualGapPx <= 16` test: normal gaps are ~8px, the
+        // strip band is ~90px and must be left untouched.
+        let gapLimit = 16
+        let canvasW = canvasSize.width
+
+        // Group cells into rows by vertical overlap (same logic as the editor's
+        // computeCollageDividers).
+        let byY = cells.sorted { $0.y < $1.y }
+        var rows: [[CollageCell]] = []
+        var current: [CollageCell] = [byY[0]]
+        for cell in byY.dropFirst() {
+            let curBottom = current.map { $0.y + $0.h }.max() ?? 0
+            if cell.y < curBottom {
+                current.append(cell)
+            } else {
+                rows.append(current)
+                current = [cell]
+            }
+        }
+        rows.append(current)
+
+        var rects: [CGRect] = []
+
+        // Horizontal dividers — full-width strips between consecutive rows.
+        for i in 0..<(rows.count - 1) {
+            let boundary = rows[i].map { $0.y + $0.h }.max()!
+            let belowTop = rows[i + 1].map { $0.y }.min()!
+            let gap = belowTop - boundary
+            if gap > 0 && gap <= gapLimit {
+                rects.append(CGRect(x: 0, y: boundary, width: Int(canvasW), height: gap))
+            }
+        }
+
+        // Vertical dividers — row-height strips between adjacent cells in a row.
+        for row in rows {
+            let sorted = row.sorted { $0.x < $1.x }
+            let rowTop = row.map { $0.y }.min()!
+            let rowH = row.map { $0.y + $0.h }.max()! - rowTop
+            for i in 0..<(sorted.count - 1) {
+                let leftEdge = sorted[i].x + sorted[i].w
+                let gap = sorted[i + 1].x - leftEdge
+                if gap > 0 && gap <= gapLimit {
+                    rects.append(CGRect(x: leftEdge, y: rowTop, width: gap, height: rowH))
+                }
+            }
+        }
+
+        return rects
+    }
+
+    private static func sampleGapColor(from image: NSImage) -> Color {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return Color.creamDeep }
+        let bitmap = NSBitmapImageRep(cgImage: cg)
+        guard let c = bitmap.colorAt(x: 4, y: 4)?.usingColorSpace(.sRGB)
+        else { return Color.creamDeep }
+        return Color(
+            red:   Double(c.redComponent),
+            green: Double(c.greenComponent),
+            blue:  Double(c.blueComponent)
+        )
+    }
 }
 
 /// Single Canvas that draws the base PNG then every cropped photo in absolute
@@ -65,6 +142,7 @@ private struct StaticCollageView: View {
     let cells: [CollageCell]
     let cellPhotos: [String: NSImage]
     let cropOffsets: [String: CropOffset]
+    let gapColor: Color
 
     var body: some View {
         Canvas { context, size in
@@ -73,6 +151,13 @@ private struct StaticCollageView: View {
                 Image(nsImage: baseImage),
                 in: CGRect(origin: .zero, size: size)
             )
+
+            // Repaint clean gap_color dividers at the current cell boundaries.
+            // Without this, an override that moved a divider leaves the photos
+            // butting against stale PNG content with no visible gaps.
+            for rect in CollageRenderer.gapRects(for: cells) {
+                context.fill(Path(rect), with: .color(gapColor))
+            }
 
             for cell in cells {
                 guard let photo = cellPhotos[cell.photoPath] else { continue }

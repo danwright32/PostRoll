@@ -291,6 +291,49 @@ struct CollageCell: Codable, Hashable, Identifiable {
 }
 
 extension CollageCell {
+    /// Re-links layout-JSON cell paths to a day's current photo set by filename.
+    /// The layout JSON records whatever path Python used at generation time, but
+    /// MediaReclaim may since have copied that file into app storage and
+    /// rewritten the day's photoPaths. Without rebasing, a dragged thumbnail's
+    /// (current) path no longer equals any cell's (old) path, so a swap can't
+    /// find the source cell and the photo is duplicated in the collage.
+    static func rebasing(_ cells: [CollageCell], toCurrentPhotos photoURLs: [URL]) -> [CollageCell] {
+        guard !photoURLs.isEmpty else { return cells }
+        let currentByName = Dictionary(
+            photoURLs.map { ($0.lastPathComponent, $0.path) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return cells.map { cell in
+            var cell = cell
+            let name = (cell.photoPath as NSString).lastPathComponent
+            if let current = currentByName[name], current != cell.photoPath {
+                cell.photoPath = current
+            }
+            return cell
+        }
+    }
+
+    /// Drops `droppedPath` onto the cell at `idx`, swapping it with whichever
+    /// cell currently holds that photo so the photo never lands in the collage
+    /// twice. Matches the source cell by exact path first, then by filename
+    /// (covers a path the layout JSON recorded before MediaReclaim rewrote it).
+    /// Returns the updated cells, or nil when the drop is a no-op (the dropped
+    /// photo is already in the target cell).
+    static func applyingDrop(of droppedPath: String, ontoCellAt idx: Int, in cells: [CollageCell]) -> [CollageCell]? {
+        guard cells.indices.contains(idx) else { return nil }
+        var newCells = cells
+        let currentPath = newCells[idx].photoPath
+        guard droppedPath != currentPath else { return nil }
+        let droppedName = (droppedPath as NSString).lastPathComponent
+        let otherIdx = newCells.firstIndex(where: { $0.photoPath == droppedPath })
+            ?? newCells.firstIndex(where: { ($0.photoPath as NSString).lastPathComponent == droppedName })
+        if let otherIdx, otherIdx != idx {
+            newCells[otherIdx].photoPath = currentPath
+        }
+        newCells[idx].photoPath = droppedPath
+        return newCells
+    }
+
     // Persisted inside events.json via PostingDay.collageCellOverride: every
     // field must decodeIfPresent or a schema change wipes saved events.
     init(from decoder: Decoder) throws {

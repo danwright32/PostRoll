@@ -74,7 +74,9 @@ actor PythonBridge {
     nonisolated let python3: String
 
     private init() {
-        let root = AppPaths.root
+        // The Python code (venv, source, preview output) lives in the project
+        // checkout, separate from the user data root (AppPaths.root).
+        let root = AppPaths.projectRoot
         projectRoot = root
 
         // Prefer the project venv so all pip packages are available
@@ -228,7 +230,10 @@ actor PythonBridge {
         let tmp = FileManager.default.temporaryDirectory
         let manifestFile = tmp.appendingPathComponent("postroll_preview_manifest_\(UUID().uuidString).json")
         let outputFile   = tmp.appendingPathComponent("postroll_preview_\(UUID().uuidString).json")
-        let previewRoot  = projectRoot.appendingPathComponent("preview")
+        // Previews live under the data root (Application Support once migrated),
+        // not the Documents project checkout, so the caption review screen can
+        // reload them without a TCC prompt. Python honors --output-dir.
+        let previewRoot  = AppPaths.previewDir
 
         defer {
             try? FileManager.default.removeItem(at: manifestFile)

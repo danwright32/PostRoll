@@ -44,17 +44,27 @@ if [[ -d "${DEST}" ]]; then
 fi
 cp -R "${BUILT_APP}" "${DEST}"
 
-# Strip quarantine so Gatekeeper doesn't nag on first launch.
-xattr -dr com.apple.quarantine "${DEST}" 2>/dev/null || true
+# Clear ALL extended attributes (quarantine plus any resource-fork / Finder-info
+# "detritus") so Gatekeeper doesn't nag AND codesign doesn't refuse with
+# "resource fork, Finder information, or similar detritus not allowed" — which
+# was silently dropping the app back to unsigned and breaking TCC persistence.
+xattr -cr "${DEST}" 2>/dev/null || true
 
 # Sign with a stable self-signed identity if one exists (run ./setup-signing.sh
 # once to create it). A stable identity keeps macOS folder-permission grants
 # (Downloads, etc.) from re-prompting on every rebuild. Falls back to ad-hoc.
 SIGN_IDENTITY="PostRoll Local Signing"
 if security find-identity -v -p codesigning 2>/dev/null | grep -qF "${SIGN_IDENTITY}"; then
-  codesign --force --deep --sign "${SIGN_IDENTITY}" "${DEST}" >/dev/null 2>&1 \
-    && echo "    Signed with '${SIGN_IDENTITY}' (stable identity)" \
-    || echo "    Warning: signing with '${SIGN_IDENTITY}' failed; bundle is unsigned" >&2
+  # Show codesign's stderr on failure: an unsigned bundle silently breaks TCC
+  # grant persistence (macOS re-prompts for Documents access on every file
+  # read), so this must never fail quietly.
+  if codesign --force --deep --sign "${SIGN_IDENTITY}" "${DEST}"; then
+    echo "    Signed with '${SIGN_IDENTITY}' (stable identity)"
+  else
+    echo "    ERROR: signing with '${SIGN_IDENTITY}' failed; bundle is unsigned." >&2
+    echo "    Fix the cause above (often: xattr -cr '${DEST}'), then re-run." >&2
+    exit 1
+  fi
 else
   codesign --force --deep --sign - "${DEST}" >/dev/null 2>&1 || true
   echo "    Ad-hoc signed. Run ./setup-signing.sh once to stop repeated folder-access prompts."

@@ -20,6 +20,10 @@ final class AppState {
     var insightsSection: InsightsSection = .overview
 
     init() {
+        // Data lives under AppPaths.root, which is ~/Library/Application Support
+        // /PostRoll once the `.migrated` marker is present (the move was done
+        // out-of-band, deliberately NOT on launch), otherwise the legacy
+        // ~/Documents/PostRoll. No migration runs here.
         let loaded = EventStore.load()
         events = loaded.events
         dataLoadWarning = loaded.recoveryMessage
@@ -39,7 +43,7 @@ final class AppState {
         }
 
         // Reclaim disk space from shoots archived more than ArchiveCleanup.archiveAgeDays ago.
-        if ArchiveCleanup.sweep(events: &events, projectRoot: AppPaths.root) {
+        if ArchiveCleanup.sweep(events: &events, dataRoot: AppPaths.root) {
             dirty = true
         }
 

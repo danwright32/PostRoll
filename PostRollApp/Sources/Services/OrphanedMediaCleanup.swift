@@ -59,14 +59,33 @@ enum OrphanedMediaCleanup {
         ) else { return 0 }
 
         let dirPrefix = dir.standardizedFileURL.path + "/"
-        var removed = 0
+        var files = 0
+        var orphans: [URL] = []
         for entry in entries {
             let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             if isDir { continue }
+            files += 1
             let path = entry.standardizedFileURL.path
             // Constrain deletion to inside the target folder, belt and suspenders.
             guard path.hasPrefix(dirPrefix) else { continue }
-            guard !referenced.contains(path) else { continue }
+            if !referenced.contains(path) { orphans.append(entry) }
+        }
+
+        // Sanity backstop: genuine orphans are a handful left behind by a deleted
+        // event. If MOST of the folder looks unreferenced, the reference set is
+        // almost certainly wrong (a path-encoding mismatch, a half-loaded events
+        // array) rather than the library actually being orphaned — refuse to
+        // delete and log, so a comparison bug can never wipe the user's photos.
+        // (This is exactly what saved nothing the first time: a double-encoded
+        // events.json made every photo look unreferenced.)
+        if files >= 4, orphans.count * 2 > files {
+            NSLog("OrphanedMediaCleanup: refusing to delete \(orphans.count)/\(files) files in "
+                + "\(dir.lastPathComponent) — reference set looks wrong, skipping for safety.")
+            return 0
+        }
+
+        var removed = 0
+        for entry in orphans {
             try? fm.removeItem(at: entry)
             removed += 1
         }

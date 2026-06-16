@@ -48,7 +48,7 @@ final class ArchiveCleanupTests: XCTestCase {
         events[0].previewMediaPaths = ["sunday": ["story": "/x"]]
         let dir = try previewDir(for: events[0])
 
-        let dirty = ArchiveCleanup.sweep(events: &events, projectRoot: root)
+        let dirty = ArchiveCleanup.sweep(events: &events, dataRoot: root)
 
         XCTAssertTrue(dirty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
@@ -68,7 +68,7 @@ final class ArchiveCleanupTests: XCTestCase {
         var events = [original, duplicate]
         let dir = try previewDir(for: original)
 
-        _ = ArchiveCleanup.sweep(events: &events, projectRoot: root)
+        _ = ArchiveCleanup.sweep(events: &events, dataRoot: root)
 
         XCTAssertTrue(
             FileManager.default.fileExists(atPath: dir.path),
@@ -86,7 +86,7 @@ final class ArchiveCleanupTests: XCTestCase {
         events[0].previewMediaPaths = ["sunday": ["story": "/x"]]
         let dir = try previewDir(for: events[0])
 
-        let dirty = ArchiveCleanup.sweep(events: &events, projectRoot: root)
+        let dirty = ArchiveCleanup.sweep(events: &events, dataRoot: root)
 
         XCTAssertTrue(dirty, "the stamp must be persisted")
         XCTAssertNotNil(events[0].archivedAt)
@@ -112,7 +112,7 @@ final class ArchiveCleanupTests: XCTestCase {
         duplicate.programImagePaths = [shared]
 
         var events = [original, duplicate]
-        _ = ArchiveCleanup.sweep(events: &events, projectRoot: root)
+        _ = ArchiveCleanup.sweep(events: &events, dataRoot: root)
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: shared.path),
                       "scan referenced by the live duplicate must survive")

@@ -5,18 +5,18 @@ import Foundation
 /// events.json stay intact; only regeneratable media files and program scans
 /// for those events are deleted.
 ///
-/// Also wipes stale debris from `output/` (loose test renders from earlier
-/// dev work; nothing in the active app writes there).
-///
-/// Safety: every delete path is constrained to subfolders inside the project
+/// Safety: every delete path is constrained to subfolders inside the data
 /// root so a misconfigured event URL can't escape and remove user data.
 enum ArchiveCleanup {
     static let archiveAgeDays: Int = 60
 
     /// Runs the cleanup sweep against the provided events array.
     /// Returns `true` if any event was mutated (caller should persist).
+    /// `dataRoot` holds both program scans (`programs/`) and the regeneratable
+    /// preview graphics (`preview/`); both sit under the data root so this never
+    /// reads the TCC-protected Documents folder at launch.
     @discardableResult
-    static func sweep(events: inout [Event], projectRoot: URL) -> Bool {
+    static func sweep(events: inout [Event], dataRoot: URL) -> Bool {
         let now = Date()
         let threshold = TimeInterval(archiveAgeDays) * 86_400
         var dirty = false
@@ -47,7 +47,7 @@ enum ArchiveCleanup {
 
             let result = reclaim(
                 event: event,
-                projectRoot: projectRoot,
+                dataRoot: dataRoot,
                 skipPreviewFolder: slugShared,
                 sharedProgramPaths: sharedProgramPaths
             )
@@ -61,8 +61,6 @@ enum ArchiveCleanup {
             }
         }
 
-        cleanOutputDebris(projectRoot: projectRoot, olderThan: threshold, now: now)
-
         return dirty
     }
 
@@ -70,7 +68,7 @@ enum ArchiveCleanup {
     /// event still references, except anything shared with another event.
     private static func reclaim(
         event: Event,
-        projectRoot: URL,
+        dataRoot: URL,
         skipPreviewFolder: Bool,
         sharedProgramPaths: Set<String>
     ) -> (previewRemoved: Bool, programsRemoved: Bool) {
@@ -79,17 +77,16 @@ enum ArchiveCleanup {
         var programsRemoved = false
 
         if !skipPreviewFolder {
-            let previewDir = projectRoot
-                .appendingPathComponent("preview")
-                .appendingPathComponent(slug(event: event))
+            let previewParent = dataRoot.appendingPathComponent("preview")
+            let previewDir = previewParent.appendingPathComponent(slug(event: event))
             if fm.fileExists(atPath: previewDir.path),
-               isInside(previewDir, parent: projectRoot.appendingPathComponent("preview")) {
+               isInside(previewDir, parent: previewParent) {
                 try? fm.removeItem(at: previewDir)
                 previewRemoved = true
             }
         }
 
-        let programsDir = projectRoot.appendingPathComponent("programs").standardizedFileURL
+        let programsDir = dataRoot.appendingPathComponent("programs").standardizedFileURL
         for url in event.programImagePaths {
             let path = url.standardizedFileURL.path
             guard path.hasPrefix(programsDir.path + "/") else { continue }
@@ -101,29 +98,6 @@ enum ArchiveCleanup {
         }
 
         return (previewRemoved, programsRemoved)
-    }
-
-    /// Removes loose files at the root of `output/` whose mtime is older than
-    /// the cleanup threshold. Skips directories so a freshly created export
-    /// subfolder is never touched.
-    private static func cleanOutputDebris(projectRoot: URL, olderThan: TimeInterval, now: Date) {
-        let fm = FileManager.default
-        let outputDir = projectRoot.appendingPathComponent("output")
-        guard let entries = try? fm.contentsOfDirectory(
-            at: outputDir,
-            includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
-
-        for entry in entries {
-            guard let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey]),
-                  let mtime = values.contentModificationDate
-            else { continue }
-            let isDir = values.isDirectory ?? false
-            guard !isDir else { continue }
-            guard now.timeIntervalSince(mtime) > olderThan else { continue }
-            try? fm.removeItem(at: entry)
-        }
     }
 
     /// Matches the Python slug in postroll/ai/generate_media.py so we hit the

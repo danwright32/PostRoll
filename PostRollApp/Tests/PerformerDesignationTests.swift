@@ -1,5 +1,4 @@
 import XCTest
-@testable import PostRoll
 
 /// Covers Performer.designation, the label shown next to a performer's name in
 /// the Assign Performers section (e.g. "Mike Bono, guitar"). The Assign

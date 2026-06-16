@@ -3,30 +3,43 @@ import SwiftUI
 struct AssetGenerationView: View {
     let event: Event
     @Environment(AppState.self) private var appState
+    @Environment(GenerationManager.self) private var genManager
 
-    @State private var generationState: GenState
+    /// When no run is active, this picks between the configuring and done
+    /// screens. `nil` defers to `event.weekResult` (done if results exist).
+    /// "Regenerate all" sets it to force the configuring screen.
+    @State private var forceConfigure = false
 
     init(event: Event) {
         self.event = event
-        // Skip straight to done if results already exist (e.g. after app reload)
-        _generationState = State(initialValue: event.weekResult != nil ? .done : .configuring)
     }
-
-    // Generation tracking
-    @State private var generationTask: Task<Void, Never>? = nil
-    @State private var elapsedSeconds: Int = 0
-    @State private var elapsedTimer: Timer? = nil
-    @State private var retryDays: Set<String>? = nil   // nil = regenerate all
 
     // Animation state
     @State private var showCheckmark = false
     @State private var phasesVisible = false
 
-    enum GenState {
-        case configuring
-        case running
-        case failed(String)
-        case done
+
+    /// The view's display is derived (not stored): an active/failed run in the
+    /// GenerationManager wins; otherwise fall back to configuring vs done.
+    /// Keeping this out of `@State` is what lets the run survive the view being
+    /// torn down and remounted when the user switches events. See
+    /// AssetGenerationDisplay for the pure, unit-tested precedence rule.
+    private var generationState: AssetGenerationDisplay {
+        AssetGenerationDisplay.resolve(
+            runStatus: genManager.run(for: event.id)?.status,
+            forceConfigure: forceConfigure,
+            hasWeekResult: event.weekResult != nil
+        )
+    }
+
+    /// Retry scope of the active run (nil = full run), used to shape the
+    /// running screen's phase timeline and subtitle.
+    private var activeRetryDays: Set<String>? {
+        genManager.run(for: event.id)?.retryDays
+    }
+
+    private var elapsedSeconds: Int {
+        genManager.run(for: event.id)?.elapsedSeconds ?? 0
     }
 
     // Phase timeline — full run uses the rolling-window history from TimingStore;
@@ -49,7 +62,7 @@ struct AssetGenerationView: View {
     /// blog means come from TimingStore if available; otherwise fall back to a
     /// proportion of the full-run estimate.
     private var retryPhases: (phases: [(name: String, startsAt: Int)], estimate: Double)? {
-        guard let retry = retryDays else { return nil }
+        guard let retry = activeRetryDays else { return nil }
 
         let fullEstimate = TimingStore.shared.generationEstimate ?? 360
         let captionsMean = TimingStore.shared.captionsMean ?? (fullEstimate * 0.50)
@@ -97,7 +110,7 @@ struct AssetGenerationView: View {
     /// One-line subtitle shown above the phase timeline so the user knows whether
     /// this is a full run or a partial retry.
     private var runningSubtitle: String {
-        guard let retry = retryDays else {
+        guard let retry = activeRetryDays else {
             let count = daysWithPhotos.count
             return "Generating all \(count) \(count == 1 ? "day" : "days")"
         }
@@ -158,14 +171,10 @@ struct AssetGenerationView: View {
                     ))
             }
         }
-        .onDisappear {
-            // Switching events remounts this view (.id in EventDetailView).
-            // An orphaned pipeline would keep running and later write its
-            // results over whatever the user is doing, so cancel it here.
-            generationTask?.cancel()
-            generationTask = nil
-            stopTimer()
-        }
+        // The generation task deliberately lives in GenerationManager, not this
+        // view, so switching events (which remounts this view via .id in
+        // EventDetailView) no longer cancels an in-flight run. The write-back
+        // re-reads the live event, so a background run can't clobber edits.
     }
 
     // MARK: - Configure
@@ -274,10 +283,7 @@ struct AssetGenerationView: View {
         }
         .background(Color.cream)
         .onAppear { phasesVisible = true }
-        .onDisappear {
-            stopTimer()
-            phasesVisible = false
-        }
+        .onDisappear { phasesVisible = false }
     }
 
     private var elapsedFormatted: String {
@@ -302,20 +308,24 @@ struct AssetGenerationView: View {
                     if event.weekResult != nil {
                         Button("Use previous results") {
                             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                                generationState = .done
+                                genManager.clearOutcome(eventID: event.id)
                             }
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmMid)
                     }
-                    Button("Fix inputs") { goFixInputs() }
+                    Button("Fix inputs") {
+                        genManager.clearOutcome(eventID: event.id)
+                        goFixInputs()
+                    }
                         .buttonStyle(.plain)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.roseGold)
                     Button("Try Again") {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                            generationState = .configuring
+                            forceConfigure = true
+                            genManager.clearOutcome(eventID: event.id)
                         }
                     }
                     .buttonStyle(BrandButtonStyle())
@@ -531,8 +541,7 @@ struct AssetGenerationView: View {
                             .foregroundStyle(Color.roseGold)
                     }
                     Button("Retry \(failedDaysSummary)") {
-                        retryDays = Set(failedDayKeys)
-                        startGeneration()
+                        startGeneration(retryDays: Set(failedDayKeys))
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
@@ -547,8 +556,7 @@ struct AssetGenerationView: View {
                     Menu {
                         ForEach(regenerableDayKeys, id: \.self) { dayKey in
                             Button(regenerableDayLabel(dayKey)) {
-                                retryDays = Set([dayKey])
-                                startGeneration()
+                                startGeneration(retryDays: Set([dayKey]))
                             }
                         }
                     } label: {
@@ -563,8 +571,7 @@ struct AssetGenerationView: View {
 
                 if !event.blogPhotoPaths.isEmpty {
                     Button("Regenerate blog post") {
-                        retryDays = Set(["blog"])
-                        startGeneration()
+                        startGeneration(retryDays: Set(["blog"]))
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
@@ -572,9 +579,8 @@ struct AssetGenerationView: View {
                 }
 
                 Button("Regenerate all") {
-                    retryDays = nil
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                        generationState = .configuring
+                        forceConfigure = true
                     }
                 }
                 .buttonStyle(.plain)
@@ -608,108 +614,16 @@ struct AssetGenerationView: View {
         } + event.blogPhotoPaths.count
     }
 
-    private func startGeneration() {
-        let ev = event
-
-        elapsedSeconds = 0
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-            generationState = .running
-        }
-
-        // Elapsed timer fires every second on the main run loop
-        elapsedTimer?.invalidate()
-        elapsedTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            MainActor.assumeIsolated { elapsedSeconds += 1 }
-        }
-
-        let onlyDays = retryDays
-
-        generationTask = Task {
-            // Reels use Python's default background audio. Graphics generation runs
-            // in parallel with captions on a full run; retries skip it.
-            let graphicsTask: Task<[String: [String: String]]?, Never>? = onlyDays == nil
-                ? Task {
-                    (try? await PythonBridge.shared.runPreviewGeneration(event: ev))?.paths
-                }
-                : nil
-
-            do {
-                let result = try await PythonBridge.shared.runWeekGeneration(event: ev, onlyDays: onlyDays)
-
-                // Captions done — now collect graphics (likely already finished in parallel)
-                let mediaPaths = await graphicsTask?.value
-
-                await MainActor.run {
-                    stopTimer()
-                    // Only record the run's duration when something actually
-                    // generated (caption OR media). Otherwise an immediate
-                    // failure pulls the rolling-mean estimate toward zero.
-                    let producedSomething = result.hasAnyContent || !(mediaPaths?.isEmpty ?? true)
-                    if producedSomething {
-                        TimingStore.shared.recordGeneration(seconds: Double(elapsedSeconds))
-                    }
-                    // Base the write-back on the live event, not the snapshot
-                    // taken at button press: the run takes minutes, and any
-                    // edits made meanwhile must not be reverted.
-                    var saved = appState.events.first(where: { $0.id == ev.id }) ?? ev
-
-                    if let only = onlyDays,
-                       var existing = appState.events.first(where: { $0.id == ev.id })?.weekResult ?? ev.weekResult {
-                        // Partial retry: merge new results into the existing weekResult
-                        for key in only {
-                            if key == "blog" {
-                                existing.blog = result.blog
-                            } else if let day = DayName(rawValue: key) {
-                                existing[day] = result[day]
-                            }
-                        }
-                        // Clear retried errors; carry over any new ones
-                        for key in only { existing.errors.removeValue(forKey: key) }
-                        existing.errors.merge(result.errors) { _, new in new }
-                        saved.weekResult = existing
-                    } else {
-                        saved.weekResult = result
-                    }
-
-                    if let paths = mediaPaths, !paths.isEmpty {
-                        saved.previewMediaPaths = paths
-                    }
-
-                    appState.updateEvent(saved)
-                    NotificationService.shared.notifyGenerationComplete(eventName: ev.name)
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                        generationState = .done
-                    }
-                }
-            } catch is CancellationError {
-                // User cancelled: cancelGeneration() already restored the
-                // configuring state and stopped the timer. Don't race it
-                // into a spurious .failed screen.
-                graphicsTask?.cancel()
-            } catch {
-                graphicsTask?.cancel()
-                await MainActor.run {
-                    stopTimer()
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                        generationState = .failed(error.localizedDescription)
-                    }
-                }
-            }
-        }
+    /// Hand the run off to GenerationManager, which owns it at app scope so it
+    /// outlives this view. The success/failure write-back and timing all happen
+    /// there; this view just reflects the manager's state.
+    private func startGeneration(retryDays: Set<String>? = nil) {
+        forceConfigure = false
+        genManager.start(eventID: event.id, retryDays: retryDays, appState: appState)
     }
 
     private func cancelGeneration() {
-        generationTask?.cancel()
-        generationTask = nil
-        stopTimer()
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-            generationState = .configuring
-        }
-    }
-
-    private func stopTimer() {
-        elapsedTimer?.invalidate()
-        elapsedTimer = nil
+        genManager.cancel(eventID: event.id)
     }
 
     private func advance() {

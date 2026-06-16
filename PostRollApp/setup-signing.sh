@@ -43,7 +43,14 @@ openssl req -new -x509 -days 3650 -nodes \
   -keyout "$TMP/key.pem" -out "$TMP/cert.pem" \
   -config "$TMP/openssl.cnf" >/dev/null 2>&1
 
-openssl pkcs12 -export \
+# `-legacy` (OpenSSL 3) forces 3DES/RC2 + SHA1-MAC encoding. Without it,
+# OpenSSL 3 writes a SHA-256 MAC that Apple's `security import` can't verify and
+# wrongly reports as "MAC verification failed (wrong password?)". Fall back to
+# the plain form on LibreSSL/older OpenSSL, which don't accept `-legacy`.
+openssl pkcs12 -export -legacy \
+  -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
+  -out "$TMP/identity.p12" -passout pass:postroll -name "$IDENTITY" >/dev/null 2>&1 \
+|| openssl pkcs12 -export \
   -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
   -out "$TMP/identity.p12" -passout pass:postroll -name "$IDENTITY" >/dev/null 2>&1
 

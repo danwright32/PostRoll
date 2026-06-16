@@ -5,8 +5,20 @@ import XCTest
 /// whole tree so tests and UI automation can never touch live data.
 final class AppPathsTests: XCTestCase {
 
-    func testDefaultRootIsDocumentsPostRoll() {
-        let root = AppPaths.resolveRoot(environment: [:])
+    /// FileManager that reports the migration marker present or absent, so the
+    /// root-resolution tests don't depend on the real machine's migration state.
+    private final class MarkerFM: FileManager {
+        let migrated: Bool
+        init(migrated: Bool) { self.migrated = migrated; super.init() }
+        required init?(coder: NSCoder) { fatalError() }
+        override func fileExists(atPath path: String) -> Bool {
+            if path.hasSuffix("/" + AppPaths.migrationMarker) { return migrated }
+            return super.fileExists(atPath: path)
+        }
+    }
+
+    func testRootIsLegacyDocumentsUntilMigrated() {
+        let root = AppPaths.resolveRoot(environment: [:], fileManager: MarkerFM(migrated: false))
         XCTAssertEqual(
             root,
             FileManager.default.homeDirectoryForCurrentUser
@@ -14,18 +26,40 @@ final class AppPathsTests: XCTestCase {
         )
     }
 
+    func testRootIsAppSupportOnceMigrated() {
+        let root = AppPaths.resolveRoot(environment: [:], fileManager: MarkerFM(migrated: true))
+        XCTAssertEqual(root, AppPaths.appSupportRoot)
+    }
+
     func testOverrideRedirectsRoot() {
-        let root = AppPaths.resolveRoot(environment: ["POSTROLL_DATA_DIR": "/tmp/postroll-sandbox"])
+        let root = AppPaths.resolveRoot(environment: ["POSTROLL_DATA_DIR": "/tmp/postroll-sandbox"],
+                                        fileManager: MarkerFM(migrated: true))
         XCTAssertEqual(root.path, "/tmp/postroll-sandbox")
     }
 
     func testBlankOverrideFallsBackToDefault() {
-        let root = AppPaths.resolveRoot(environment: ["POSTROLL_DATA_DIR": "   "])
+        let root = AppPaths.resolveRoot(environment: ["POSTROLL_DATA_DIR": "   "],
+                                        fileManager: MarkerFM(migrated: false))
         XCTAssertEqual(
             root,
             FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Documents/PostRoll")
         )
+    }
+
+    func testDefaultProjectRootIsDocumentsPostRoll() {
+        // The Python checkout (venv, source, logs) stays in the repo.
+        let projectRoot = AppPaths.resolveProjectRoot(environment: [:])
+        XCTAssertEqual(
+            projectRoot,
+            FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Documents/PostRoll")
+        )
+    }
+
+    func testProjectRootOverride() {
+        let projectRoot = AppPaths.resolveProjectRoot(environment: ["POSTROLL_PROJECT_DIR": "/tmp/postroll-code"])
+        XCTAssertEqual(projectRoot.path, "/tmp/postroll-code")
     }
 
     func testDerivedPathsHangOffRoot() {

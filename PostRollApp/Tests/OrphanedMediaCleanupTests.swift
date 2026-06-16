@@ -49,6 +49,40 @@ final class OrphanedMediaCleanupTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
     }
 
+    func testRefusesToMassDeleteWhenMostFilesLookUnreferenced() throws {
+        // Regression: a double-encoded events.json made every photo look
+        // unreferenced, so the sweep deleted the whole library. When more than
+        // half a folder looks orphaned, that's a reference-set bug, not real
+        // orphans — the sweep must refuse and delete nothing.
+        var files: [URL] = []
+        for i in 0..<10 { files.append(try makeFile("p\(i).jpg", in: photosDir)) }
+        // Only 2 of 10 referenced → 8 "orphans" → must trip the safety backstop.
+        let ev = event(name: "A", photos: [files[0], files[1]])
+
+        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir)
+
+        XCTAssertEqual(removed, 0, "a suspicious mass deletion must be refused")
+        for f in files {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: f.path), "nothing should be deleted")
+        }
+    }
+
+    func testStillDeletesAFewGenuineOrphans() throws {
+        // The backstop must not block a normal sweep: most files referenced,
+        // a couple genuinely orphaned → those couple are removed.
+        var files: [URL] = []
+        for i in 0..<10 { files.append(try makeFile("p\(i).jpg", in: photosDir)) }
+        let referenced = Array(files[0..<8])  // 8 referenced, 2 orphans
+        let ev = event(name: "A", photos: referenced)
+
+        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir)
+
+        XCTAssertEqual(removed, 2)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: files[8].path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: files[9].path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: files[0].path))
+    }
+
     func testSharedPhotoSurvivesWhenOneEventDeleted() throws {
         // The same file referenced by two events must not be deleted while
         // either still references it.

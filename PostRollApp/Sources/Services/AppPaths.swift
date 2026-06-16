@@ -1,20 +1,76 @@
 import Foundation
 
-/// Single source of truth for where PostRoll keeps its data on disk.
+/// Single source of truth for where PostRoll keeps its files on disk.
 ///
-/// The root defaults to ~/Documents/PostRoll, which is also the Python
-/// project checkout. Tests and UI automation can redirect everything by
-/// setting POSTROLL_DATA_DIR in the environment before launch, so no test
-/// run can ever touch live data.
+/// Two distinct roots:
+/// - `root` — user DATA (events.json, photos, programs, audio) plus the
+///   regeneratable `preview/` graphics. Resolves to ~/Library/Application
+///   Support/PostRoll once `DataMigration` has moved data there (marker present),
+///   which is NOT a TCC-protected location, so neither the app nor its Python
+///   subprocess prompts at launch or while editing. Until the verified move
+///   completes it stays at the legacy ~/Documents/PostRoll so the app keeps
+///   working. POSTROLL_DATA_DIR redirects this for tests.
+/// - `projectRoot` — the Python project checkout (venv, source, logs,
+///   brand-voice files). Stays in ~/Documents/PostRoll; only read during
+///   generation, not at launch. POSTROLL_PROJECT_DIR overrides it.
 enum AppPaths {
     static let root: URL = resolveRoot()
+    static let projectRoot: URL = resolveProjectRoot()
+
+    /// Marker file (inside `appSupportRoot`) written by `DataMigration` only once
+    /// a verified copy of every irreplaceable data folder has completed. Its
+    /// presence is the single source of truth for "data now lives in Application
+    /// Support"; until then `resolveRoot` keeps returning the legacy Documents
+    /// location so a denied or partial migration never points the app at an
+    /// empty folder.
+    static let migrationMarker = ".migrated"
+
+    /// The pre-migration data location. Always ~/Documents/PostRoll regardless
+    /// of any project-root override, so `DataMigration` can find legacy data.
+    static var legacyDataRoot: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents/PostRoll")
+    }
+
+    /// The post-migration data location: ~/Library/Application Support/PostRoll,
+    /// which is NOT a TCC-protected folder, so neither the app nor its Python
+    /// subprocess prompts when reading data, previews, photos, etc.
+    static var appSupportRoot: URL {
+        let base = (try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false
+        )) ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support")
+        return base.appendingPathComponent("PostRoll")
+    }
 
     /// Split out so tests can exercise the override logic with an injected
     /// environment; the static `root` resolves once per process.
+    ///
+    /// Returns Application Support once `DataMigration` has dropped its marker
+    /// there, otherwise the legacy Documents folder. Because the marker is only
+    /// written after a verified copy, the app reads live data from Documents
+    /// (working, but prompting) until the move is genuinely complete, then
+    /// switches to the unprotected location and never prompts at launch again.
     static func resolveRoot(
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager fm: FileManager = .default
     ) -> URL {
         if let override = environment["POSTROLL_DATA_DIR"],
+           !override.trimmingCharacters(in: .whitespaces).isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
+        }
+        let appSupport = appSupportRoot
+        if fm.fileExists(atPath: appSupport.appendingPathComponent(migrationMarker).path) {
+            return appSupport
+        }
+        return legacyDataRoot
+    }
+
+    /// Where the Python code lives — separate from data so the data root can sit
+    /// outside the TCC-protected Documents folder.
+    static func resolveProjectRoot(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> URL {
+        if let override = environment["POSTROLL_PROJECT_DIR"],
            !override.trimmingCharacters(in: .whitespaces).isEmpty {
             return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
         }
@@ -28,6 +84,10 @@ enum AppPaths {
     static var programsDir: URL { root.appendingPathComponent("programs") }
     static var photosDir: URL { root.appendingPathComponent("photos") }
     static var audioDir: URL { root.appendingPathComponent("audio") }
+    /// Where Python writes collage/reel preview graphics. Lives under the data
+    /// root (not the Documents project checkout) so the caption review screen,
+    /// which reloads these on every visit, never triggers a TCC prompt.
+    static var previewDir: URL { root.appendingPathComponent("preview") }
 
     /// True when `url` already lives under `storageRoot`.
     static func isInside(_ url: URL, root storageRoot: URL) -> Bool {

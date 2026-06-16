@@ -5,6 +5,9 @@ struct PostRollApp: App {
     @State private var appState = AppState()
     @State private var hashtagStore = HashtagStore()
     @State private var analyticsStore = AnalyticsStore()
+    @State private var generationManager = GenerationManager()
+    @State private var ocrManager = OCRManager()
+    @State private var exportManager = ExportManager()
 
     init() {
         NotificationService.shared.requestPermission()
@@ -16,6 +19,9 @@ struct PostRollApp: App {
                 .environment(appState)
                 .environment(hashtagStore)
                 .environment(analyticsStore)
+                .environment(generationManager)
+                .environment(ocrManager)
+                .environment(exportManager)
                 .preferredColorScheme(.light)
                 .tint(Color.roseGold)
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

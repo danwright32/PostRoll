@@ -1,0 +1,137 @@
+import XCTest
+
+/// Integration coverage for the export file-writing core (`EventExporter`),
+/// which was relocated out of ExportView and into ExportManager during the
+/// background-task refactor. Exercises the deterministic, no-Python parts: the
+/// folder layout, CAPTIONS.txt, blog draft, Wednesday carousel copy, full-export
+/// rebuild (orphan removal), and single-day scoping. Media/reels still come from
+/// Python and aren't covered here.
+final class EventExporterTests: XCTestCase {
+
+    private var root: URL!
+    private var assets: URL!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("exporter-test-\(UUID().uuidString)")
+        assets = root.appendingPathComponent("_assets")
+        try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    // MARK: - Helpers
+
+    private func makeFile(_ name: String) -> URL {
+        let url = assets.appendingPathComponent(name)
+        FileManager.default.createFile(atPath: url.path, contents: Data("img".utf8))
+        return url
+    }
+
+    private func caption(_ text: String, hashtags: [String] = [], alt: [String] = []) -> DayCaption {
+        var c = DayCaption()
+        c.caption = text
+        c.hashtags = hashtags
+        c.altTexts = alt
+        return c
+    }
+
+    private func makeEvent(wednesdayPhotos: [URL]) -> Event {
+        var event = Event(name: "Music From Inside", org: "Decoda",
+                          venue: "Hall", date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        var wed = PostingDay(day: .wednesday)
+        wed.photoPaths = wednesdayPhotos
+        if wednesdayPhotos.count >= 2 {
+            wed.photoTags = [wednesdayPhotos[1].absoluteString: ["Jane Cellist"]]
+        }
+        event.days = [DayName.wednesday.rawValue: wed]
+        event.blogPhotoPaths = [makeFile("blog1.jpg")]
+
+        var result = WeekGenerationResult()
+        result.sunday = caption("Sunday opener", hashtags: ["#concert"], alt: ["wide shot of the stage"])
+        result.wednesday = caption("Carousel day", alt: ["first frame", "second frame"])
+        result.blog = BlogOutput(title: "Inside the Music", body: "A long blog body.")
+        event.weekResult = result
+        return event
+    }
+
+    // MARK: - Tests
+
+    func testFullExportWritesExpectedLayout() throws {
+        let p1 = makeFile("shot-100.jpg")
+        let p2 = makeFile("shot-277.jpg")
+        let event = makeEvent(wednesdayPhotos: [p1, p2])
+
+        let folder = try EventExporter.export(event: event, to: root)
+        let fm = FileManager.default
+
+        XCTAssertEqual(folder.lastPathComponent,
+                       "decoda_music_from_inside_\(event.isoDate)",
+                       "folder name is slug(org)_slug(name)_isoDate")
+
+        // Blog draft
+        let blog = folder.appendingPathComponent("0. Blog/draft.md")
+        XCTAssertTrue(fm.fileExists(atPath: blog.path))
+        let blogText = try String(contentsOf: blog, encoding: .utf8)
+        XCTAssertTrue(blogText.contains("# Inside the Music"))
+        XCTAssertTrue(blogText.contains("A long blog body."))
+        XCTAssertTrue(fm.fileExists(atPath: folder.appendingPathComponent("0. Blog/photo_01.jpg").path))
+
+        // Wednesday carousel copied in order, zero-padded
+        XCTAssertTrue(fm.fileExists(atPath: folder.appendingPathComponent("4. Wednesday/carousel/01.jpg").path))
+        XCTAssertTrue(fm.fileExists(atPath: folder.appendingPathComponent("4. Wednesday/carousel/02.jpg").path))
+
+        // Sunday has a caption → its folder exists, but no carousel (not Wednesday)
+        XCTAssertTrue(fm.fileExists(atPath: folder.appendingPathComponent("1. Sunday").path))
+
+        // Master CAPTIONS.txt content
+        let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+        XCTAssertTrue(captions.contains("=== SUNDAY ==="))
+        XCTAssertTrue(captions.contains("Sunday opener"))
+        XCTAssertTrue(captions.contains("#concert"))
+        XCTAssertTrue(captions.contains("=== WEDNESDAY ==="))
+        // Per-photo alt text labelled by trailing filename number
+        XCTAssertTrue(captions.contains("100: first frame"))
+        XCTAssertTrue(captions.contains("277: second frame"))
+        // Per-photo people tag on the second photo
+        XCTAssertTrue(captions.contains("277: Jane Cellist"))
+    }
+
+    func testFullReexportRebuildsAndRemovesOrphans() throws {
+        let p1 = makeFile("shot-100.jpg")
+        let p2 = makeFile("shot-277.jpg")
+        let first = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1, p2]), to: root)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: first.appendingPathComponent("4. Wednesday/carousel/02.jpg").path))
+
+        // Re-export with Wednesday trimmed to one photo: the stale 02.jpg must
+        // not survive (full export rebuilds the folder from scratch).
+        let second = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1]), to: root)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: second.appendingPathComponent("4. Wednesday/carousel/01.jpg").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: second.appendingPathComponent("4. Wednesday/carousel/02.jpg").path),
+                       "orphaned carousel photo from the previous export must be gone")
+    }
+
+    func testSingleDayExportLeavesMasterFilesUntouched() throws {
+        let event = makeEvent(wednesdayPhotos: [makeFile("shot-100.jpg")])
+        let folder = try EventExporter.export(event: event, to: root)
+
+        let captionsURL = folder.appendingPathComponent("CAPTIONS.txt")
+        let before = try String(contentsOf: captionsURL, encoding: .utf8)
+
+        // Scoped re-export of just Sunday must not rewrite CAPTIONS.txt or the blog.
+        _ = try EventExporter.export(event: event, to: root, days: [.sunday])
+        let after = try String(contentsOf: captionsURL, encoding: .utf8)
+        XCTAssertEqual(before, after, "single-day export must leave the master CAPTIONS.txt as-is")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("0. Blog/draft.md").path))
+    }
+
+    func testSlug() {
+        XCTAssertEqual(EventExporter.slug("Decoda"), "decoda")
+        XCTAssertEqual(EventExporter.slug("Music From Inside"), "music_from_inside")
+        XCTAssertEqual(EventExporter.slug("Reverence & Resistance"), "reverence_resistance")
+        XCTAssertEqual(EventExporter.slug("  Trailing!!  "), "trailing")
+    }
+}

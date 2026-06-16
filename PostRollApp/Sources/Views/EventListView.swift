@@ -292,6 +292,9 @@ private struct EventRow: View {
     var onRenameCommit: (() -> Void)? = nil
     var onRenameCancel: (() -> Void)? = nil
 
+    @Environment(GenerationManager.self) private var genManager
+    @Environment(OCRManager.self) private var ocrManager
+    @Environment(ExportManager.self) private var exportManager
     @FocusState private var renameFocused: Bool
 
     var body: some View {
@@ -339,6 +342,11 @@ private struct EventRow: View {
                 StagePill(stage: event.stage,
                           awaitingGeneration: event.isAwaitingGeneration,
                           awaitingExport: event.isAwaitingExport,
+                          isGenerating: genManager.isRunning(event.id),
+                          generationFailed: genManager.hasFailed(event.id),
+                          isReading: ocrManager.isRunning(event.id),
+                          readingFailed: ocrManager.hasFailed(event.id),
+                          isExporting: exportManager.isExporting(event.id),
                           isSelected: isSelected)
             }
             .font(.system(size: 10))
@@ -370,58 +378,106 @@ struct StagePill: View {
     /// (no `exportPath`/`archivedAt`). Like `awaitingGeneration`, this keeps the
     /// pill from claiming "Exported" the instant the user opens the Export screen.
     var awaitingExport: Bool = false
+    /// Background work in flight for this event — possibly while the user is off
+    /// working on a different event. These override the static stage labels.
+    var isGenerating: Bool = false
+    var generationFailed: Bool = false
+    var isReading: Bool = false
+    var readingFailed: Bool = false
+    var isExporting: Bool = false
     var isSelected: Bool = false
 
-    private var displayLabel: String {
-        if awaitingGeneration { return "Ready to Generate" }
-        if awaitingExport { return "Ready to Export" }
-        return stage.displayLabel
+    /// Subtle alive-signal pulse while any background work runs.
+    @State private var pulse = false
+
+    private var state: StagePillState {
+        StagePillState.resolve(
+            stage: stage,
+            isGenerating: isGenerating,
+            generationFailed: generationFailed,
+            isReading: isReading,
+            readingFailed: readingFailed,
+            isExporting: isExporting,
+            awaitingGeneration: awaitingGeneration,
+            awaitingExport: awaitingExport
+        )
     }
 
     private var pillColor: Color {
-        if awaitingGeneration { return .stagePhotosAssigned }
-        if awaitingExport { return .stageCaptionsReviewed }
-        switch stage {
-        case .created:          return .stageCreated
-        case .programUploaded:  return .stageProgramUploaded
-        case .ocrDone:          return .stageOCRDone
-        case .photosAssigned:   return .stagePhotosAssigned
-        case .assetsGenerated:  return .stageAssetsGenerated
-        case .captionsReviewed: return .stageCaptionsReviewed
-        case .exported:         return .stageExported
+        switch state {
+        case .reading:            return .roseGold
+        case .readingFailed:      return .roseDeep
+        case .generating:         return .roseGold
+        case .generationFailed:   return .roseDeep
+        case .exporting:          return .roseGold
+        case .awaitingGeneration: return .stagePhotosAssigned
+        case .awaitingExport:     return .stageCaptionsReviewed
+        case .stage(let s):
+            switch s {
+            case .created:          return .stageCreated
+            case .programUploaded:  return .stageProgramUploaded
+            case .ocrDone:          return .stageOCRDone
+            case .photosAssigned:   return .stagePhotosAssigned
+            case .assetsGenerated:  return .stageAssetsGenerated
+            case .captionsReviewed: return .stageCaptionsReviewed
+            case .exported:         return .stageExported
+            }
         }
     }
 
     private var tooltipText: String {
-        if awaitingGeneration {
-            return "Step 4: Photos assigned. Click Generate All to create assets."
-        }
-        if awaitingExport {
-            return "Step 6: Captions approved. Choose a folder and export."
-        }
-        switch stage {
-        case .created:          return "Step 1: Event created. Upload the program PDF to begin."
-        case .programUploaded:  return "Step 2: Program uploaded. Ready to run OCR."
-        case .ocrDone:          return "Step 3: OCR complete. Review extracted text, then assign photos."
-        case .photosAssigned:   return "Step 4: Photos assigned to posting days. Ready to generate assets."
-        case .assetsGenerated:  return "Step 5: Assets generated. Review captions before exporting."
-        case .captionsReviewed: return "Step 6: Reviewing captions. Approve to export."
-        case .exported:         return "Step 7: Exported. All assets are in the output folder."
+        switch state {
+        case .reading:            return "Reading the program in the background. You can keep working on other events."
+        case .readingFailed:      return "Program OCR hit an error. Open this event to retry."
+        case .generating:         return "Generating content in the background. You can keep working on other events."
+        case .generationFailed:   return "Generation hit an error. Open this event to see what happened and retry."
+        case .exporting:          return "Exporting in the background. You can keep working on other events."
+        case .awaitingGeneration: return "Step 4: Photos assigned. Click Generate All to create assets."
+        case .awaitingExport:     return "Step 6: Captions approved. Choose a folder and export."
+        case .stage(let s):
+            switch s {
+            case .created:          return "Step 1: Event created. Upload the program PDF to begin."
+            case .programUploaded:  return "Step 2: Program uploaded. Ready to run OCR."
+            case .ocrDone:          return "Step 3: OCR complete. Review extracted text, then assign photos."
+            case .photosAssigned:   return "Step 4: Photos assigned to posting days. Ready to generate assets."
+            case .assetsGenerated:  return "Step 5: Assets generated. Review captions before exporting."
+            case .captionsReviewed: return "Step 6: Reviewing captions. Approve to export."
+            case .exported:         return "Step 7: Exported. All assets are in the output folder."
+            }
         }
     }
 
     var body: some View {
-        Text(displayLabel)
-            .font(.system(size: 10, weight: .medium))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(isSelected ? Color.primary.opacity(0.15) : pillColor.opacity(0.14))
-            .foregroundStyle(isSelected ? Color.primary : pillColor)
-            .clipShape(Capsule())
-            .help(tooltipText)
-            // Announce as "Stage, Photos Assigned" — not the "3 ·" prefix
-            .accessibilityLabel("Stage")
-            .accessibilityValue(displayLabel)
+        HStack(spacing: 4) {
+            if state.isBusy {
+                Circle()
+                    .fill(pillColor)
+                    .frame(width: 5, height: 5)
+                    .opacity(pulse ? 0.35 : 1)
+            }
+            Text(state.label)
+        }
+        .font(.system(size: 10, weight: .medium))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(isSelected ? Color.primary.opacity(0.15) : pillColor.opacity(0.14))
+        .foregroundStyle(isSelected ? Color.primary : pillColor)
+        .clipShape(Capsule())
+        .help(tooltipText)
+        // Announce as "Stage, Photos Assigned" — not the "3 ·" prefix
+        .accessibilityLabel("Stage")
+        .accessibilityValue(state.label)
+        .onChange(of: state.isBusy) { _, busy in
+            pulse = false
+            if busy { startPulse() }
+        }
+        .onAppear { if state.isBusy { startPulse() } }
+    }
+
+    private func startPulse() {
+        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+            pulse = true
+        }
     }
 }
 
