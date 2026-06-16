@@ -155,6 +155,8 @@ struct CaptionReviewView: View {
                                 : nil,
                             onSwapReelAudio: { swapReelAudio(day: day) },
                             onUploadReelAudio: { uploadReelAudioDay = day; showingReelAudioPicker = true },
+                            reelLength: day == .thursday ? (live.days[day.rawValue]?.scrollDuration ?? 40.0) : nil,
+                            onChangeReelLength: day == .thursday ? { newLength in changeReelLength(day: .thursday, to: newLength) } : nil,
                             onChangeReelPhotos: (day == .tuesday || day == .thursday) ? { changeReelPhotos(day: day) } : nil,
                             onChangeCollagePhotos: day == .wednesday ? { changeCollagePhotos(day: .wednesday) } : nil,
                             onSwapReelPhotos: day == .thursday ? { a, b in swapReelPhotos(day: .thursday, a: a, b: b) } : nil,
@@ -492,6 +494,19 @@ struct CaptionReviewView: View {
                 }
             }
         }
+    }
+
+    /// Set the Thursday scroll reel length and re-render it. The number of
+    /// frames depends on `scrollDuration`, so a full regenerate is required
+    /// (regenerateGraphic reads the updated value from the live event).
+    private func changeReelLength(day: DayName, to seconds: Double) {
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
+        guard pd.scrollDuration != seconds else { return }
+        pd.scrollDuration = seconds
+        ev.days[day.rawValue] = pd
+        appState.updateEvent(ev)
+        regenerateGraphic(day: day)
     }
 
     private func uploadReelAudio(day: DayName, url: URL) {
@@ -924,6 +939,9 @@ private struct CaptionSection: View {
     var onNewLayout: (() -> Void)? = nil
     var onSwapReelAudio: (() -> Void)? = nil
     var onUploadReelAudio: (() -> Void)? = nil
+    /// Current Thursday reel length (scroll seconds) and the change handler.
+    var reelLength: Double? = nil
+    var onChangeReelLength: ((Double) -> Void)? = nil
     var onChangeReelPhotos: (() -> Void)? = nil
     /// Replace the whole Wednesday collage photo set (review-screen action).
     var onChangeCollagePhotos: (() -> Void)? = nil
@@ -1381,6 +1399,8 @@ private struct CaptionSection: View {
                                             onUploadAudio: onUploadReelAudio,
                                             onChangePhotos: onChangeReelPhotos,
                                             onSwapPhotos: onSwapReelPhotos,
+                                            currentReelLength: reelLength,
+                                            onChangeReelLength: onChangeReelLength,
                                             maxHeight: storyExpandedMaxHeight - 60
                                         )
                                         .id("\(pngURL.path)-\(graphicVersion)")
@@ -3314,7 +3334,15 @@ private struct ReelStripPreviewThumbnail: View {
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
     var onSwapPhotos: ((URL, URL) -> Void)? = nil
+    /// Current reel length (scroll seconds) — drives the checkmark in the
+    /// "Reel length" submenu. nil hides the submenu.
+    var currentReelLength: Double? = nil
+    var onChangeReelLength: ((Double) -> Void)? = nil
     var maxHeight: CGFloat = 600
+
+    /// Preset reel lengths offered in the menu (scroll seconds, 15–60 range).
+    /// The PhotoAssignmentView slider still covers in-between values.
+    private static let reelLengthPresets: [Int] = [15, 20, 30, 40, 50, 60]
 
     @State private var image: NSImage?
     @State private var cells: [CollageCell] = []
@@ -3426,7 +3454,7 @@ private struct ReelStripPreviewThumbnail: View {
                     .strokeBorder(Color.creamEdge, lineWidth: 0.5)
             )
             .overlay(alignment: .topTrailing) {
-                if onRegenerate != nil || onSwapAudio != nil || onUploadAudio != nil || onChangePhotos != nil {
+                if onRegenerate != nil || onSwapAudio != nil || onUploadAudio != nil || onChangePhotos != nil || onChangeReelLength != nil {
                     Menu {
                         if let onRegenerate {
                             Button {
@@ -3441,6 +3469,24 @@ private struct ReelStripPreviewThumbnail: View {
                                 onNewLayout()
                             } label: {
                                 Label("New layout (re-roll)", systemImage: "shuffle")
+                            }
+                            .disabled(isRegenerating)
+                        }
+                        if let onChangeReelLength {
+                            Menu {
+                                ForEach(Self.reelLengthPresets, id: \.self) { secs in
+                                    Button {
+                                        onChangeReelLength(Double(secs))
+                                    } label: {
+                                        if let current = currentReelLength, Int(current.rounded()) == secs {
+                                            Label("\(secs)s", systemImage: "checkmark")
+                                        } else {
+                                            Text("\(secs)s")
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Label("Reel length", systemImage: "timer")
                             }
                             .disabled(isRegenerating)
                         }
