@@ -17,11 +17,19 @@ import Foundation
 ///   just retries on the next launch.
 /// - previews and analytics are best-effort (regeneratable / non-critical) and
 ///   never block completion.
+///
+/// STATUS: NOT invoked at launch. `AppState.init` deliberately runs no migration
+/// (the production Documents→Application Support move was done out-of-band), so
+/// this is currently dormant. It is kept — rather than deleted — as a vetted,
+/// copy-based recovery tool: a fresh machine whose data still lives in
+/// ~/Documents/PostRoll can be migrated by wiring `migrateIfNeeded` to a
+/// deliberate action. Do not call it from launch without re-reviewing the
+/// data-safety model above.
 enum DataMigration {
 
-    /// Run before EventStore.load(). No-op when already migrated, when running
-    /// against a redirected data dir (tests/automation), or when there's nothing
-    /// in the legacy location.
+    /// Entry point (see STATUS above — not currently called). No-op when already
+    /// migrated, when running against a redirected data dir (tests/automation),
+    /// or when there's nothing in the legacy location.
     static func migrateIfNeeded(
         appSupportRoot: URL = AppPaths.appSupportRoot,
         legacyRoot: URL = AppPaths.legacyDataRoot,
