@@ -182,6 +182,23 @@ final class ProgramPDFBuilderTests: XCTestCase {
                       "Expected OCR'd text layer to contain \"PROGRAM\", got: \"\(extracted)\"")
     }
 
+    func testFingerprintChangesWhenPagesChange() {
+        let a = URL(fileURLWithPath: "/x/Prog_p1.png")
+        let b = URL(fileURLWithPath: "/x/Prog_p2.png")
+        let base = ProgramPDFBuilder.fingerprint(of: [a, b])
+
+        // Same pages, same order → same fingerprint (relocation doesn't matter:
+        // it's filename-based).
+        XCTAssertEqual(base, ProgramPDFBuilder.fingerprint(of: [
+            URL(fileURLWithPath: "/other/dir/Prog_p1.png"),
+            URL(fileURLWithPath: "/other/dir/Prog_p2.png"),
+        ]))
+        // Reorder, add, and remove each change it.
+        XCTAssertNotEqual(base, ProgramPDFBuilder.fingerprint(of: [b, a]))
+        XCTAssertNotEqual(base, ProgramPDFBuilder.fingerprint(of: [a, b, URL(fileURLWithPath: "/x/Prog_p3.png")]))
+        XCTAssertNotEqual(base, ProgramPDFBuilder.fingerprint(of: [a]))
+    }
+
     func testEmptyInputThrowsNoPages() {
         XCTAssertThrowsError(try ProgramPDFBuilder.makePDF(from: [])) { error in
             guard case ProgramPDFBuilder.BuildError.noPages = error else {

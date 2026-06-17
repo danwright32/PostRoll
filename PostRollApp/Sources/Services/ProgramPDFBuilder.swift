@@ -54,6 +54,14 @@ struct ProgramPDFBuilder {
         "\(stem).pdf"
     }
 
+    /// Identity of a page set: the ordered page filenames. A baked program PDF
+    /// is stamped with this; when the current pages no longer match (a page was
+    /// added, removed, or reordered after the bake), the cache is stale and must
+    /// be rebuilt. Filename-based so relocating the data root doesn't invalidate.
+    static func fingerprint(of pages: [URL]) -> String {
+        pages.map(\.lastPathComponent).joined(separator: "|")
+    }
+
     /// Inverse of `rasterizedPageName`: given a page image, the source PDF and
     /// 1-based page number it came from, when that retained PDF exists on disk.
     static func sourcePDFPage(for pageImage: URL) -> (pdfURL: URL, page: Int)? {

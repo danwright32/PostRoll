@@ -176,6 +176,7 @@ struct ProgramUploadView: View {
         guard !pages.isEmpty else { return }
         let eventID = ev.id
         let dest = AppPaths.programPDFFile(eventID: eventID)
+        let fingerprint = ProgramPDFBuilder.fingerprint(of: pages)
         Task.detached(priority: .utility) {
             guard let url = try? ProgramPDFBuilder.writePDF(from: pages, to: dest) else { return }
             await MainActor.run {
@@ -183,6 +184,7 @@ struct ProgramUploadView: View {
                 // on while OCR was running. Never write a stale captured copy.
                 guard var live = appState.events.first(where: { $0.id == eventID }) else { return }
                 live.programPDFPath = url
+                live.programPDFFingerprint = fingerprint
                 appState.updateEvent(live)
             }
         }

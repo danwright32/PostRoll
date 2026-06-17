@@ -19,6 +19,10 @@ struct Event: Identifiable, Codable, Hashable {
     /// at upload time (with an OCR text layer) so it survives ArchiveCleanup
     /// reclaiming the individual `programImagePaths` files post-export.
     var programPDFPath: URL? = nil
+    /// Fingerprint of the page set `programPDFPath` was built from. When it no
+    /// longer matches the current pages (a page was added/removed/reordered after
+    /// the bake), the cached PDF is stale and gets rebuilt on next download.
+    var programPDFFingerprint: String? = nil
     var ocrResult: OCRResult?
     var ocrReviewDone: Bool = false
     var eventURL: String = ""  // Optional event page URL — used to enrich OCR data
@@ -102,6 +106,7 @@ extension Event {
         stage             = try c.decodeIfPresent(EventStage.self,                 forKey: .stage)             ?? .created
         programImagePaths = try c.decodeIfPresent([URL].self,                      forKey: .programImagePaths) ?? []
         programPDFPath    = try c.decodeIfPresent(URL.self,                        forKey: .programPDFPath)
+        programPDFFingerprint = try c.decodeIfPresent(String.self,                 forKey: .programPDFFingerprint)
         ocrResult         = try c.decodeIfPresent(OCRResult.self,                  forKey: .ocrResult)
         ocrReviewDone     = try c.decodeIfPresent(Bool.self,                       forKey: .ocrReviewDone)     ?? false
         pendingFlags      = try c.decodeIfPresent([OCRFlag].self,                  forKey: .pendingFlags)      ?? []

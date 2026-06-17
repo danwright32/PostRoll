@@ -642,7 +642,11 @@ struct AssetGenerationView: View {
 
         guard panel.runModal() == .OK, let dest = panel.url else { return }
 
-        if let prebuilt = event.programPDFPath,
+        // Use the cached PDF only when it still matches the current pages — a
+        // page added/removed/reordered after the bake makes it stale, so fall
+        // through to rebuild.
+        let fresh = event.programPDFFingerprint == ProgramPDFBuilder.fingerprint(of: event.programImagePaths)
+        if fresh, let prebuilt = event.programPDFPath,
            FileManager.default.fileExists(atPath: prebuilt.path) {
             do {
                 try? FileManager.default.removeItem(at: dest)
@@ -670,10 +674,12 @@ struct AssetGenerationView: View {
                 try? FileManager.default.createDirectory(
                     at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 do { try data.write(to: cacheURL); cached = true } catch { cached = false }
+                let fingerprint = ProgramPDFBuilder.fingerprint(of: pages)
                 await MainActor.run {
                     isPreparingProgramPDF = false
                     if cached, var live = appState.events.first(where: { $0.id == eventID }) {
                         live.programPDFPath = cacheURL
+                        live.programPDFFingerprint = fingerprint
                         appState.updateEvent(live)
                     }
                     NSWorkspace.shared.open(dest)
