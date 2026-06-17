@@ -68,6 +68,9 @@ final class AppPathsTests: XCTestCase {
         XCTAssertEqual(AppPaths.programsDir, AppPaths.root.appendingPathComponent("programs"))
         XCTAssertEqual(AppPaths.photosDir, AppPaths.root.appendingPathComponent("photos"))
         XCTAssertEqual(AppPaths.audioDir, AppPaths.root.appendingPathComponent("audio"))
+        // Logs live under the data root, not the Documents checkout (#56).
+        XCTAssertEqual(AppPaths.logsDir, AppPaths.root.appendingPathComponent("logs"))
+        XCTAssertEqual(AppPaths.logFile, AppPaths.logsDir.appendingPathComponent("postroll.log"))
     }
 
     func testProgramPDFFileIsOnePerEventUnderProgramsDir() {

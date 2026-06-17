@@ -1344,9 +1344,11 @@ actor PythonBridge {
     private func runProcess(args: [String], timeout: TimeInterval = 1800) async throws {
         let python = python3
         let root = projectRoot
-        let logURL = root
-            .appendingPathComponent("logs")
-            .appendingPathComponent("postroll.log")
+        // Logs go under the data root (Application Support), NOT the Documents
+        // checkout: an absolute log path lets the subprocess write there while
+        // its cwd stays at the checkout, so generation no longer writes to the
+        // TCC-protected Documents folder. cwd below stays at `root`.
+        let logURL = AppPaths.logFile
 
         // Ensure logs directory exists
         let logsDir = logURL.deletingLastPathComponent()

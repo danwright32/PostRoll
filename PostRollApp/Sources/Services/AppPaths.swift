@@ -80,6 +80,10 @@ enum AppPaths {
     }
 
     static var eventsFile: URL { root.appendingPathComponent("events.json") }
+    /// Generation logs. Under the data root (not the Documents checkout) so the
+    /// Python subprocess never writes to the TCC-protected folder during a run.
+    static var logsDir: URL { root.appendingPathComponent("logs") }
+    static var logFile: URL { logsDir.appendingPathComponent("postroll.log") }
     /// Writable brand voice doc. Lives under the data root (not the TCC-protected
     /// Documents checkout) so generation-time reads/appends never prompt. Seeded
     /// once from the checkout's read-only default via `ensureBrandVoiceSeeded`.
