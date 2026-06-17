@@ -119,4 +119,55 @@ final class AppPathsTests: XCTestCase {
         XCTAssertTrue(AppPaths.isInsideAppStorage(AppPaths.photosDir.appendingPathComponent("a.jpg")))
         XCTAssertFalse(AppPaths.isInsideAppStorage(URL(fileURLWithPath: "/tmp/elsewhere/a.jpg")))
     }
+
+    // seedBrandVoice copies the checkout's read-only brand-voice.md into the data
+    // root once, so generation reads/writes hit the unprotected location (#46).
+
+    func testSeedBrandVoiceCopiesWhenAbsent() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("pr-bv-\(UUID().uuidString)")
+        let seedDir = fm.temporaryDirectory.appendingPathComponent("pr-seed-\(UUID().uuidString)")
+        try fm.createDirectory(at: seedDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root); try? fm.removeItem(at: seedDir) }
+
+        let seed = seedDir.appendingPathComponent("brand-voice.md")
+        try Data("BASE VOICE".utf8).write(to: seed)
+
+        AppPaths.seedBrandVoice(into: root, from: seed)
+
+        let dest = root.appendingPathComponent("brand-voice.md")
+        XCTAssertEqual(try Data(contentsOf: dest), Data("BASE VOICE".utf8))
+        XCTAssertTrue(fm.fileExists(atPath: seed.path), "seed is copied, not moved")
+    }
+
+    func testSeedBrandVoiceNeverOverwritesExistingCopy() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("pr-bv-\(UUID().uuidString)")
+        let seedDir = fm.temporaryDirectory.appendingPathComponent("pr-seed-\(UUID().uuidString)")
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try fm.createDirectory(at: seedDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root); try? fm.removeItem(at: seedDir) }
+
+        // The writable copy already carries the user's accumulated notes.
+        let dest = root.appendingPathComponent("brand-voice.md")
+        try Data("ACCUMULATED NOTES".utf8).write(to: dest)
+        let seed = seedDir.appendingPathComponent("brand-voice.md")
+        try Data("BASE VOICE".utf8).write(to: seed)
+
+        AppPaths.seedBrandVoice(into: root, from: seed)
+
+        XCTAssertEqual(try Data(contentsOf: dest), Data("ACCUMULATED NOTES".utf8),
+                       "an existing writable copy must never be overwritten by the seed")
+    }
+
+    func testSeedBrandVoiceMissingSeedIsNoOp() {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("pr-bv-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let missingSeed = fm.temporaryDirectory.appendingPathComponent("nope-\(UUID().uuidString).md")
+
+        AppPaths.seedBrandVoice(into: root, from: missingSeed)
+
+        XCTAssertFalse(fm.fileExists(atPath: root.appendingPathComponent("brand-voice.md").path))
+    }
 }

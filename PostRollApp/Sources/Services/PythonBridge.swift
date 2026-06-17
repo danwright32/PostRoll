@@ -1263,10 +1263,10 @@ actor PythonBridge {
         }
         guard !edits.isEmpty else { return nil }
 
-        // Read brand voice from disk
-        let brandVoiceFile = projectRoot
-            .appendingPathComponent("postroll/assets/brand-voice.md")
-        let brandVoice = (try? String(contentsOf: brandVoiceFile, encoding: .utf8)) ?? ""
+        // Read brand voice from the writable data-root copy (seeded from the
+        // checkout default on first use), not the TCC-protected Documents file.
+        AppPaths.ensureBrandVoiceSeeded()
+        let brandVoice = (try? String(contentsOf: AppPaths.brandVoiceFile, encoding: .utf8)) ?? ""
 
         let manifest: [String: Any] = [
             "brand_voice": brandVoice,
@@ -1295,8 +1295,8 @@ actor PythonBridge {
 
     /// Appends a user feedback note to brand-voice.md under a "## Caption revision notes" section.
     nonisolated func appendBrandVoiceNote(_ note: String) throws {
-        let file = projectRoot
-            .appendingPathComponent("postroll/assets/brand-voice.md")
+        AppPaths.ensureBrandVoiceSeeded()
+        let file = AppPaths.brandVoiceFile
         var content = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
 
         let sectionHeader = "\n\n## Caption revision notes\n"
@@ -1315,8 +1315,8 @@ actor PythonBridge {
 
     /// Appends an insight-derived suggestion to brand-voice.md under "## Insights-derived patterns".
     nonisolated func appendInsightNote(_ note: String) throws {
-        let file = projectRoot
-            .appendingPathComponent("postroll/assets/brand-voice.md")
+        AppPaths.ensureBrandVoiceSeeded()
+        let file = AppPaths.brandVoiceFile
         var content = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
 
         let sectionHeader = "\n\n## Insights-derived patterns\n"
@@ -1352,6 +1352,14 @@ actor PythonBridge {
         let logsDir = logURL.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
 
+        // Point Python at the writable brand voice copy in the data root (seeded
+        // here so it exists before the subprocess reads it), keeping generation
+        // off the TCC-protected Documents file.
+        AppPaths.ensureBrandVoiceSeeded()
+        let brandVoicePath = AppPaths.brandVoiceFile.path
+            .replacingOccurrences(of: "'", with: "'\"'\"'")
+        let brandVoiceExport = "export POSTROLL_BRAND_VOICE='\(brandVoicePath)'"
+
         let quotedArgs = ([python] + args)
             .map { "'" + $0.replacingOccurrences(of: "'", with: "'\"'\"'") + "'" }
             .joined(separator: " ")
@@ -1372,6 +1380,7 @@ actor PythonBridge {
             export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
             [ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc"
             \(apiKeyExport)
+            \(brandVoiceExport)
             cd '\(root.path)'
             if [ -f '\(logPath)' ]; then
                 tail -n 500 '\(logPath)' > '\(logPath).tmp' && mv '\(logPath).tmp' '\(logPath)'

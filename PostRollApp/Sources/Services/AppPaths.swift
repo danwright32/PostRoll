@@ -80,6 +80,33 @@ enum AppPaths {
     }
 
     static var eventsFile: URL { root.appendingPathComponent("events.json") }
+    /// Writable brand voice doc. Lives under the data root (not the TCC-protected
+    /// Documents checkout) so generation-time reads/appends never prompt. Seeded
+    /// once from the checkout's read-only default via `ensureBrandVoiceSeeded`.
+    static var brandVoiceFile: URL { root.appendingPathComponent("brand-voice.md") }
+    /// The read-only default shipped in the Python checkout — the seed source.
+    static var brandVoiceSeed: URL {
+        projectRoot.appendingPathComponent("postroll/assets/brand-voice.md")
+    }
+
+    /// Copies the checkout's brand-voice.md into the data root once, if the
+    /// writable copy is absent. Called lazily at generation/append time (never at
+    /// launch), so the single Documents read is a one-time migration that also
+    /// carries over any notes the user already accumulated in the old location.
+    static func ensureBrandVoiceSeeded() {
+        seedBrandVoice(into: root, from: brandVoiceSeed)
+    }
+
+    /// Injectable core of `ensureBrandVoiceSeeded` (so it can be unit-tested
+    /// against temp dirs). Copies `seed` to `<root>/brand-voice.md` only when the
+    /// destination is absent; a present writable copy is never overwritten, and a
+    /// missing seed is a no-op rather than an error.
+    static func seedBrandVoice(into root: URL, from seed: URL, fileManager fm: FileManager = .default) {
+        let dest = root.appendingPathComponent("brand-voice.md")
+        guard !fm.fileExists(atPath: dest.path) else { return }
+        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try? fm.copyItem(at: seed, to: dest)
+    }
     static var analyticsFile: URL { root.appendingPathComponent("analytics.json") }
     static var programsDir: URL { root.appendingPathComponent("programs") }
     static var photosDir: URL { root.appendingPathComponent("photos") }

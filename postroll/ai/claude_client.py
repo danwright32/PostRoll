@@ -50,8 +50,26 @@ def _resolve_model(model: str) -> str:
 
 
 def load_brand_voice() -> str:
-    """Read the brand voice system prompt from disk."""
-    return BRAND_VOICE_PATH.read_text(encoding="utf-8")
+    """Read the brand voice system prompt from disk.
+
+    The writable copy lives at $POSTROLL_BRAND_VOICE (the app's data root, outside
+    the TCC-protected Documents checkout) when the app sets it. On first use that
+    copy won't exist yet, so we seed it from the bundled default. Without the env
+    var (CLI / dev), fall back to the in-repo default.
+    """
+    override = os.environ.get("POSTROLL_BRAND_VOICE")
+    if not override:
+        return BRAND_VOICE_PATH.read_text(encoding="utf-8")
+
+    target = Path(override)
+    if not target.exists():
+        default = BRAND_VOICE_PATH.read_text(encoding="utf-8")
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(default, encoding="utf-8")
+        except OSError:
+            return default
+    return target.read_text(encoding="utf-8")
 
 
 # The API downscales images to this long edge server side before
