@@ -39,4 +39,36 @@ final class TestTargetHygieneTests: XCTestCase {
             + "without an import."
         )
     }
+
+    /// xcodegen resolves the `Tests/` source glob at project-generation time, not
+    /// build time, so a newly added test file compiles and runs only after
+    /// `xcodegen generate`. Until then the suite passes while silently skipping
+    /// it — the same "looks wired but isn't" trap as the import above. This fails
+    /// if any test source on disk is missing from the generated project.
+    func testEveryTestSourceFileIsInTheGeneratedProject() throws {
+        let testsDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let appDir = testsDir.deletingLastPathComponent()   // .../PostRollApp
+        let pbxproj = appDir.appendingPathComponent("PostRoll.xcodeproj/project.pbxproj")
+
+        guard let project = try? String(contentsOf: pbxproj, encoding: .utf8) else {
+            throw XCTSkip("project.pbxproj not found at \(pbxproj.path); skipping orphan check")
+        }
+
+        let entries = try FileManager.default.contentsOfDirectory(
+            at: testsDir, includingPropertiesForKeys: nil
+        )
+        var orphans: [String] = []
+        for url in entries where url.pathExtension == "swift" {
+            if !project.contains(url.lastPathComponent) {
+                orphans.append(url.lastPathComponent)
+            }
+        }
+
+        XCTAssertTrue(
+            orphans.isEmpty,
+            "These test files exist on disk but aren't in the generated Xcode project, so "
+            + "they compile and run only after regeneration (the suite silently skips them): "
+            + "\(orphans.joined(separator: ", ")). Run `xcodegen generate` after adding a test file."
+        )
+    }
 }
