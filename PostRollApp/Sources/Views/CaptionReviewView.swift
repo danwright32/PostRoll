@@ -3733,7 +3733,7 @@ private struct CollageCellOverlay: View {
     @State private var photo: NSImage? = nil
 
     private var isMoved: Bool { cropOffset.x != 0 || cropOffset.y != 0 || cropOffset.scale != 1.0 }
-    private var isFillMode: Bool { cropOffset.scale >= 1.0 }
+    private var isFillMode: Bool { CollageGeometry.isFillMode(scale: cropOffset.scale) }
     private var isDragging: Bool { dragTranslation != .zero }
 
     // MARK: - Photo geometry (mirrors Python's fill_scale logic)
@@ -3744,35 +3744,22 @@ private struct CollageCellOverlay: View {
         return s.width / s.height
     }
 
-    /// Rendered photo size at the current zoom — same math as Python's effective_scale.
-    private var rendered: CGSize {
-        let zoom = CGFloat(max(0.25, cropOffset.scale))
-        if photoRatio > cellW / cellH {          // landscape photo in portrait cell
-            return CGSize(width: cellH * photoRatio * zoom, height: cellH * zoom)
-        } else {                                  // portrait / square photo in any cell
-            return CGSize(width: cellW * zoom,   height: cellW / photoRatio * zoom)
-        }
+    /// Rendered size + committed pan offset — shared with the export renderer
+    /// via CollageGeometry so the live crop can't drift from the exported one.
+    private var placement: (rendered: CGSize, committed: CGSize) {
+        CollageGeometry.placement(photoRatio: photoRatio, cellW: cellW, cellH: cellH, offset: cropOffset)
     }
+
+    /// Rendered photo size at the current zoom — same math as Python's effective_scale.
+    private var rendered: CGSize { placement.rendered }
 
     /// Overflow in each axis (≥ 0 when photo overflows; < 0 when photo is smaller).
     private var overflow: CGSize {
         CGSize(width: rendered.width - cellW, height: rendered.height - cellH)
     }
 
-    // MARK: - Committed pan offset (Python formula)
-
-    /// Offset that makes the SwiftUI view show the same crop as Python.
-    /// Fill mode (overflow > 0): left = overflow × (0.5 + ox × 0.5) → offset = −left
-    /// Blur mode (overflow ≤ 0): center the smaller photo over the blur background.
-    private var committedOffset: CGSize {
-        let cw = overflow.width > 0
-            ? -overflow.width  * (0.5 + CGFloat(cropOffset.x) * 0.5)
-            : (cellW - rendered.width)  / 2
-        let ch = overflow.height > 0
-            ? -overflow.height * (0.5 + CGFloat(cropOffset.y) * 0.5)
-            : (cellH - rendered.height) / 2
-        return CGSize(width: cw, height: ch)
-    }
+    /// Offset that makes the SwiftUI view show the same crop as the export.
+    private var committedOffset: CGSize { placement.committed }
 
     /// Live offset: committed base + drag translation, but only in axes where the
     /// photo overflows the cell. If overflow is zero in an axis, there's nothing to
@@ -3786,7 +3773,7 @@ private struct CollageCellOverlay: View {
 
     /// How much the blur background shows: fades from 0 at scale 1 to 1 at scale 0.75.
     private var blurOpacity: Double {
-        max(0, min(1, (1.0 - Double(cropOffset.scale)) * 4))
+        CollageGeometry.blurOpacity(scale: cropOffset.scale)
     }
 
     // MARK: - Body
@@ -3824,16 +3811,16 @@ private struct CollageCellOverlay: View {
                     // through the Gaussian filter's semi-transparent edge fringe.
                     context.fill(
                         Path(CGRect(origin: .zero, size: size)),
-                        with: .color(Color(white: 0.08))
+                        with: .color(CollageGeometry.blurBackgroundColor)
                     )
                     if blurOpacity > 0 {
                         var blurCtx = context
-                        blurCtx.addFilter(.blur(radius: 24))
+                        blurCtx.addFilter(.blur(radius: CollageGeometry.blurRadius))
                         blurCtx.draw(img, in: CGRect(origin: .zero, size: size))
                         // Darkening scrim proportional to blur opacity
                         context.fill(
                             Path(CGRect(origin: .zero, size: size)),
-                            with: .color(.black.opacity(0.3 * blurOpacity))
+                            with: .color(.black.opacity(CollageGeometry.scrimDarkness * blurOpacity))
                         )
                     }
                     // Sharp photo placed via liveOffset so drag is visible on any
@@ -3940,19 +3927,9 @@ private func computeCollageDividers(_ cells: [CollageCell]) -> [CollageDivider] 
     let gap = 8
     let minCellPx = 80  // minimum cell dimension in canvas pixels
 
-    // Group cells into horizontal rows by y-overlap
-    let byY = cells.sorted { $0.y < $1.y }
-    var rows: [[CollageCell]] = []
-    var current: [CollageCell] = [byY[0]]
-    for cell in byY.dropFirst() {
-        if cell.y < (current.map { $0.y + $0.h }.max() ?? 0) {
-            current.append(cell)
-        } else {
-            rows.append(current)
-            current = [cell]
-        }
-    }
-    rows.append(current)
+    // Group cells into horizontal rows by y-overlap (shared with the export
+    // renderer's gap-fill rects so the two agree on row boundaries).
+    let rows = CollageGeometry.groupCellsByRow(cells)
 
     var result: [CollageDivider] = []
 

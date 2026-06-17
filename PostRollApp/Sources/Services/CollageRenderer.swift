@@ -14,7 +14,7 @@ import AppKit
 @MainActor
 enum CollageRenderer {
 
-    nonisolated static let canvasSize = CGSize(width: 1080, height: 1920)
+    nonisolated static let canvasSize = CollageGeometry.canvasSize
 
     /// Returns true on success. The output PNG is written at canvas resolution.
     static func render(
@@ -69,26 +69,12 @@ enum CollageRenderer {
     /// branded-strip band so the centre logo/text is never painted over.
     nonisolated static func gapRects(for cells: [CollageCell]) -> [CGRect] {
         guard cells.count > 1 else { return [] }
-        // Match the editor's `actualGapPx <= 16` test: normal gaps are ~8px, the
-        // strip band is ~90px and must be left untouched.
-        let gapLimit = 16
+        let gapLimit = CollageGeometry.normalGapLimit
         let canvasW = canvasSize.width
 
-        // Group cells into rows by vertical overlap (same logic as the editor's
-        // computeCollageDividers).
-        let byY = cells.sorted { $0.y < $1.y }
-        var rows: [[CollageCell]] = []
-        var current: [CollageCell] = [byY[0]]
-        for cell in byY.dropFirst() {
-            let curBottom = current.map { $0.y + $0.h }.max() ?? 0
-            if cell.y < curBottom {
-                current.append(cell)
-            } else {
-                rows.append(current)
-                current = [cell]
-            }
-        }
-        rows.append(current)
+        // Group cells into rows by vertical overlap (shared with the editor's
+        // divider computation so the two can't disagree on row boundaries).
+        let rows = CollageGeometry.groupCellsByRow(cells)
 
         var rects: [CGRect] = []
 
@@ -172,20 +158,9 @@ private struct StaticCollageView: View {
                 let photoRatio: CGFloat = photo.size.height > 0
                     ? photo.size.width / photo.size.height
                     : 1
-                let zoom = CGFloat(max(0.25, offset.scale))
-                let rendered: CGSize = photoRatio > cellW / cellH
-                    ? CGSize(width: cellH * photoRatio * zoom, height: cellH * zoom)
-                    : CGSize(width: cellW * zoom, height: cellW / photoRatio * zoom)
-                let overflow = CGSize(width: rendered.width - cellW, height: rendered.height - cellH)
-                let isFillMode = offset.scale >= 1.0
-                let committed = CGSize(
-                    width: overflow.width > 0
-                        ? -overflow.width * (0.5 + CGFloat(offset.x) * 0.5)
-                        : (cellW - rendered.width) / 2,
-                    height: overflow.height > 0
-                        ? -overflow.height * (0.5 + CGFloat(offset.y) * 0.5)
-                        : (cellH - rendered.height) / 2
-                )
+                let (rendered, committed) = CollageGeometry.placement(
+                    photoRatio: photoRatio, cellW: cellW, cellH: cellH, offset: offset)
+                let isFillMode = CollageGeometry.isFillMode(scale: offset.scale)
 
                 let img = Image(nsImage: photo)
 
@@ -206,13 +181,13 @@ private struct StaticCollageView: View {
                 } else {
                     // Blur mode (zoomed out): opaque base + optional blurred fill
                     // + darkening scrim + the sharp photo centered.
-                    cellCtx.fill(Path(cellRect), with: .color(Color(white: 0.08)))
-                    let blurOpacity = max(0, min(1, (1.0 - Double(offset.scale)) * 4))
+                    cellCtx.fill(Path(cellRect), with: .color(CollageGeometry.blurBackgroundColor))
+                    let blurOpacity = CollageGeometry.blurOpacity(scale: offset.scale)
                     if blurOpacity > 0 {
                         var blurCtx = cellCtx
-                        blurCtx.addFilter(.blur(radius: 24))
+                        blurCtx.addFilter(.blur(radius: CollageGeometry.blurRadius))
                         blurCtx.draw(img, in: cellRect)
-                        cellCtx.fill(Path(cellRect), with: .color(.black.opacity(0.3 * blurOpacity)))
+                        cellCtx.fill(Path(cellRect), with: .color(.black.opacity(CollageGeometry.scrimDarkness * blurOpacity)))
                     }
                     cellCtx.draw(img, in: drawRect)
                 }

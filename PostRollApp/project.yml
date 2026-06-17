@@ -50,6 +50,7 @@ targets:
       - path: Sources/Services/ProgramPDFBuilder.swift
       - path: Sources/Services/DataMigration.swift
       - path: Sources/Services/CollageRenderer.swift
+      - path: Sources/Services/CollageGeometry.swift
       - path: Sources/DesignTokens.swift
     settings:
       base:
