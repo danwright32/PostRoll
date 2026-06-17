@@ -8,14 +8,17 @@ final class OrphanedMediaCleanupTests: XCTestCase {
 
     private var photosDir: URL!
     private var audioDir: URL!
+    private var programsDir: URL!
 
     override func setUpWithError() throws {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("orphan-\(UUID().uuidString)")
         photosDir = base.appendingPathComponent("photos")
         audioDir = base.appendingPathComponent("audio")
+        programsDir = base.appendingPathComponent("programs")
         try FileManager.default.createDirectory(at: photosDir, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: programsDir, withIntermediateDirectories: true)
     }
 
     override func tearDownWithError() throws {
@@ -42,7 +45,7 @@ final class OrphanedMediaCleanupTests: XCTestCase {
         let orphan = try makeFile("orphan.jpg", in: photosDir)
         let ev = event(name: "A", photos: [kept])
 
-        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir)
+        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir, programsDir: programsDir)
 
         XCTAssertEqual(removed, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: kept.path))
@@ -59,7 +62,7 @@ final class OrphanedMediaCleanupTests: XCTestCase {
         // Only 2 of 10 referenced → 8 "orphans" → must trip the safety backstop.
         let ev = event(name: "A", photos: [files[0], files[1]])
 
-        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir)
+        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir, programsDir: programsDir)
 
         XCTAssertEqual(removed, 0, "a suspicious mass deletion must be refused")
         for f in files {
@@ -75,7 +78,7 @@ final class OrphanedMediaCleanupTests: XCTestCase {
         let referenced = Array(files[0..<8])  // 8 referenced, 2 orphans
         let ev = event(name: "A", photos: referenced)
 
-        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir)
+        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir, programsDir: programsDir)
 
         XCTAssertEqual(removed, 2)
         XCTAssertFalse(FileManager.default.fileExists(atPath: files[8].path))
@@ -91,7 +94,7 @@ final class OrphanedMediaCleanupTests: XCTestCase {
         let evB = event(name: "B", photos: [shared])
 
         // Delete A: B still references the file -> survives.
-        let removed = OrphanedMediaCleanup.sweep(events: [evB], photosDir: photosDir, audioDir: audioDir)
+        let removed = OrphanedMediaCleanup.sweep(events: [evB], photosDir: photosDir, audioDir: audioDir, programsDir: programsDir)
         _ = evA
         XCTAssertEqual(removed, 0)
         XCTAssertTrue(FileManager.default.fileExists(atPath: shared.path))
@@ -102,7 +105,7 @@ final class OrphanedMediaCleanupTests: XCTestCase {
         let orphanAudio = try makeFile("old.m4a", in: audioDir)
         let ev = event(name: "A", photos: [], audio: keptAudio)
 
-        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir)
+        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir, programsDir: programsDir)
 
         XCTAssertEqual(removed, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: keptAudio.path))
@@ -114,7 +117,7 @@ final class OrphanedMediaCleanupTests: XCTestCase {
         // running this on a failed load; here we assert the mechanics.)
         _ = try makeFile("a.jpg", in: photosDir)
         _ = try makeFile("b.jpg", in: photosDir)
-        let removed = OrphanedMediaCleanup.sweep(events: [], photosDir: photosDir, audioDir: audioDir)
+        let removed = OrphanedMediaCleanup.sweep(events: [], photosDir: photosDir, audioDir: audioDir, programsDir: programsDir)
         XCTAssertEqual(removed, 2)
     }
 
@@ -134,5 +137,40 @@ final class OrphanedMediaCleanupTests: XCTestCase {
         XCTAssertTrue(refs.contains(p.standardizedFileURL.path))
         XCTAssertTrue(refs.contains(raw.standardizedFileURL.path))
         XCTAssertTrue(refs.contains(bw.standardizedFileURL.path))
+    }
+
+    // programs/ sweep (#54): deletes program files from deleted events, but
+    // protects every live event's pages, baked PDF, and retained source PDF.
+
+    func testCleansProgramsDirAndKeepsReferencedPages() throws {
+        let page = try makeFile("Prog_p1.png", in: programsDir)
+        let orphan = try makeFile("OldProg_p1.png", in: programsDir)
+        var ev = Event(name: "A", org: "Org", venue: "Hall", date: Date(), shootType: .fullShow)
+        ev.programImagePaths = [page]
+
+        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir, programsDir: programsDir)
+
+        XCTAssertEqual(removed, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: page.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+    }
+
+    func testKeepsBakedPdfAndRetainedSourceForLiveEvent() throws {
+        let page = try makeFile("Recital_p1.png", in: programsDir)   // rasterised page
+        let source = try makeFile("Recital.pdf", in: programsDir)    // retained source (sibling)
+        let baked = try makeFile("event_program.pdf", in: programsDir)  // programPDFPath
+        let orphan = try makeFile("ghost_p1.png", in: programsDir)   // from a deleted event
+        var ev = Event(name: "A", org: "Org", venue: "Hall", date: Date(), shootType: .fullShow)
+        ev.programImagePaths = [page]
+        ev.programPDFPath = baked
+
+        let removed = OrphanedMediaCleanup.sweep(events: [ev], photosDir: photosDir, audioDir: audioDir, programsDir: programsDir)
+
+        XCTAssertEqual(removed, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: page.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path),
+                      "the retained source PDF for a referenced page must survive")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: baked.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
     }
 }

@@ -1,14 +1,18 @@
 import Foundation
 
 /// Reclaims disk space by deleting files in the app's media folders (photos/,
-/// audio/) that no event references any more. Photos are copied into photos/ on
-/// import; when the event that used them is deleted, those copies become
-/// orphans with nothing left to clean them up. This sweep is what removes them.
+/// audio/, programs/) that no event references any more. Photos are copied into
+/// photos/ on import; programs are rasterised into programs/ (with a retained
+/// source PDF and a baked program PDF); when the event that used them is deleted,
+/// those copies become orphans with nothing left to clean them up. This sweep is
+/// what removes them.
 ///
 /// Safety:
-/// - Only ever deletes files *inside* photos/ and audio/.
+/// - Only ever deletes files *inside* photos/, audio/, and programs/.
 /// - Never deletes a file still referenced by any event (collected across every
-///   media field, so a photo shared between events survives).
+///   media field, so a photo shared between events survives). For programs/ this
+///   includes the baked programPDFPath and each rasterised page's retained source
+///   PDF, which is found by filename convention rather than a stored field.
 /// - The caller MUST NOT run this when events.json failed to load (an empty or
 ///   partial events array would orphan — and delete — everything). AppState
 ///   guards on `dataLoadWarning == nil`.
@@ -19,10 +23,12 @@ enum OrphanedMediaCleanup {
     static func sweep(
         events: [Event],
         photosDir: URL = AppPaths.photosDir,
-        audioDir: URL = AppPaths.audioDir
+        audioDir: URL = AppPaths.audioDir,
+        programsDir: URL = AppPaths.programsDir
     ) -> Int {
         let referenced = referencedPaths(in: events)
-        return [photosDir, audioDir].reduce(0) { $0 + removeOrphans(in: $1, referenced: referenced) }
+        return [photosDir, audioDir, programsDir]
+            .reduce(0) { $0 + removeOrphans(in: $1, referenced: referenced) }
     }
 
     /// Every on-disk media path any event points at, standardized for comparison.
@@ -35,6 +41,13 @@ enum OrphanedMediaCleanup {
         for event in events {
             event.blogPhotoPaths.forEach(add)
             event.programImagePaths.forEach(add)
+            add(event.programPDFPath)
+            // Retained source PDFs (<stem>.pdf) aren't stored in any field —
+            // they're located from each rasterised page's filename — so protect
+            // them explicitly or the sweep would delete a live event's source.
+            for page in event.programImagePaths {
+                if let source = ProgramPDFBuilder.sourcePDFPage(for: page) { add(source.pdfURL) }
+            }
             for pd in event.days.values {
                 pd.photoPaths.forEach(add)
                 add(pd.screenRecordingPath)
