@@ -657,13 +657,25 @@ struct AssetGenerationView: View {
         // No cached PDF — rebuild from the page scans. OCR runs off-main, so show
         // a preparing state until the file is written.
         let pages = event.programImagePaths
+        let eventID = event.id
+        let cacheURL = AppPaths.programPDFFile(eventID: eventID)
         isPreparingProgramPDF = true
         Task.detached(priority: .userInitiated) {
             do {
                 let data = try ProgramPDFBuilder.makePDF(from: pages)
                 try data.write(to: dest)
+                // Cache it at the canonical path so the next download (and any
+                // re-export) is instant and skips re-OCRing the page scans.
+                var cached = false
+                try? FileManager.default.createDirectory(
+                    at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                do { try data.write(to: cacheURL); cached = true } catch { cached = false }
                 await MainActor.run {
                     isPreparingProgramPDF = false
+                    if cached, var live = appState.events.first(where: { $0.id == eventID }) {
+                        live.programPDFPath = cacheURL
+                        appState.updateEvent(live)
+                    }
                     NSWorkspace.shared.open(dest)
                 }
             } catch {

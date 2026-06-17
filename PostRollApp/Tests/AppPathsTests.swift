@@ -70,6 +70,14 @@ final class AppPathsTests: XCTestCase {
         XCTAssertEqual(AppPaths.audioDir, AppPaths.root.appendingPathComponent("audio"))
     }
 
+    func testProgramPDFFileIsOnePerEventUnderProgramsDir() {
+        let id = UUID()
+        let url = AppPaths.programPDFFile(eventID: id)
+        XCTAssertEqual(url, AppPaths.programsDir.appendingPathComponent("\(id.uuidString)_program.pdf"))
+        // Distinct events get distinct files (so the bake and rebuild agree).
+        XCTAssertNotEqual(AppPaths.programPDFFile(eventID: UUID()), url)
+    }
+
     // importedCopy keeps picked files out of the macOS-gated Downloads/Desktop
     // by copying them into the app's own storage, so thumbnail/export reads
     // don't re-trigger the permission prompt.

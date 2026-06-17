@@ -175,7 +175,7 @@ struct ProgramUploadView: View {
         let pages = ev.programImagePaths
         guard !pages.isEmpty else { return }
         let eventID = ev.id
-        let dest = AppPaths.programsDir.appendingPathComponent("\(eventID.uuidString)_program.pdf")
+        let dest = AppPaths.programPDFFile(eventID: eventID)
         Task.detached(priority: .utility) {
             guard let url = try? ProgramPDFBuilder.writePDF(from: pages, to: dest) else { return }
             await MainActor.run {

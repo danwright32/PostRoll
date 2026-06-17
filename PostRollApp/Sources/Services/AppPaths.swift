@@ -109,6 +109,11 @@ enum AppPaths {
     }
     static var analyticsFile: URL { root.appendingPathComponent("analytics.json") }
     static var programsDir: URL { root.appendingPathComponent("programs") }
+    /// Canonical location of an event's baked, searchable program PDF (one per
+    /// event), so the upload-time bake and the on-demand rebuild agree on it.
+    static func programPDFFile(eventID: UUID) -> URL {
+        programsDir.appendingPathComponent("\(eventID.uuidString)_program.pdf")
+    }
     static var photosDir: URL { root.appendingPathComponent("photos") }
     static var audioDir: URL { root.appendingPathComponent("audio") }
     /// Where Python writes collage/reel preview graphics. Lives under the data
