@@ -24,6 +24,7 @@ struct PhotoAssignmentView: View {
 
     // Thursday: scroll reel
     @State private var thursdayAudio: URL?
+    @State private var thursdayAudioMissing = false   // file set but gone from disk
     @State private var thursdayScrollDuration: Double = 30.0
     @State private var thursdayReelSeed: Int? = nil
 
@@ -267,10 +268,13 @@ struct PhotoAssignmentView: View {
                     case .thursday:
                         ThursdayReelSection(
                             audio:          $thursdayAudio,
+                            audioMissing:   thursdayAudioMissing,
                             scrollDuration: $thursdayScrollDuration,
                             reelSeed:       $thursdayReelSeed,
-                            onPickAudio:    { presentPicker(.thursdayAudio) }
+                            onPickAudio:    { presentPicker(.thursdayAudio) },
+                            onLocateAudio:  locateMissingAudio
                         )
+                        .task(id: thursdayAudio) { await scanMissingAudio() }
                         .onChange(of: thursdayAudio)         { _, _ in save() }
                         .onChange(of: thursdayScrollDuration){ _, _ in save() }
                         .onChange(of: thursdayReelSeed)      { _, _ in save() }
@@ -563,6 +567,34 @@ struct PhotoAssignmentView: View {
         importResultMessage = "Re-linked \(remap.count) photo\(remap.count == 1 ? "" : "s")."
         save()
         Task { await scanMissingPhotos() }
+    }
+
+    /// Flags the Thursday audio when its file has moved or been deleted off disk,
+    /// mirroring the missing-photo scan. Stats off the main thread.
+    private func scanMissingAudio() async {
+        let audio = thursdayAudio
+        let missing = await Task.detached(priority: .utility) {
+            MediaPresence.isMissing(audio)
+        }.value
+        thursdayAudioMissing = missing
+    }
+
+    /// Lets the user pick a replacement audio file when the original is gone,
+    /// copying it into app storage so it can't go missing the same way again.
+    private func locateMissingAudio() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.audio, .mp3, .aiff,
+                                     UTType(filenameExtension: "m4a") ?? .audio,
+                                     UTType(filenameExtension: "aac") ?? .audio]
+        panel.prompt = "Locate"
+        panel.message = "Choose the audio file to use for the Thursday reel."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        thursdayAudio = AppPaths.storedAudio(url)
+        save()
+        Task { await scanMissingAudio() }
     }
 
     /// Maps filename -> URL for every file under `folder` (first match wins).
@@ -1481,9 +1513,11 @@ private struct WednesdayCollageSection: View {
 
 private struct ThursdayReelSection: View {
     @Binding var audio: URL?
+    var audioMissing: Bool = false
     @Binding var scrollDuration: Double
     @Binding var reelSeed: Int?
     let onPickAudio: () -> Void
+    var onLocateAudio: () -> Void = {}
 
     @State private var isExpanded = true
 
@@ -1516,7 +1550,8 @@ private struct ThursdayReelSection: View {
                         Text("Optional audio, auto-fetched from Jamendo if omitted.")
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
-                        AudioFilePicker(audio: $audio, onPick: onPickAudio)
+                        AudioFilePicker(audio: $audio, isMissing: audioMissing,
+                                        onPick: onPickAudio, onLocate: onLocateAudio)
                     }
 
                     // Scroll duration slider
@@ -1925,7 +1960,9 @@ private struct MissingPhotoBadge: View {
 
 private struct AudioFilePicker: View {
     @Binding var audio: URL?
+    var isMissing: Bool = false
     let onPick: () -> Void
+    var onLocate: () -> Void = {}
 
     @State private var player: AVAudioPlayer? = nil
     @State private var isPlaying = false
@@ -1938,7 +1975,30 @@ private struct AudioFilePicker: View {
                 .foregroundStyle(Color.warmMid)
                 .frame(width: 110, alignment: .leading)
 
-            if let url = audio {
+            if let url = audio, isMissing {
+                // File set but gone from disk — mirror the missing-photo flag.
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.roseGold)
+                Text("\(url.lastPathComponent) can't be found")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.warmDark)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Button("Locate…", action: onLocate)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.roseGold)
+                Button(action: { audio = nil; stopPlayback() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.warmMid.opacity(0.6), Color.creamEdge)
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+                .help("Remove")
+            } else if let url = audio {
                 Text(url.lastPathComponent)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.warmDark)
