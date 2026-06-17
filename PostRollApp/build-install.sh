@@ -70,6 +70,18 @@ else
   echo "    Ad-hoc signed. Run ./setup-signing.sh once to stop repeated folder-access prompts."
 fi
 
+# Final gate: confirm the installed bundle is actually validly signed. An
+# unsigned or broken signature has no stable identity for TCC to remember grants
+# against, which silently reintroduces the repeated Documents-access prompts.
+# This catches a silently-failed (ad-hoc or stable) signing — passing equally
+# for a stable or an ad-hoc signature, failing only on a genuinely broken one.
+if ! codesign --verify --deep --strict "${DEST}"; then
+  echo "    ERROR: installed bundle failed signature verification (unsigned or broken)." >&2
+  echo "    Run ./setup-signing.sh, ensure 'xattr -cr ${DEST}' clears detritus, then re-run." >&2
+  exit 1
+fi
+echo "    Signature verified"
+
 echo "==> Installed: ${DEST}"
 
 if [[ "${1:-}" == "--launch" ]]; then
