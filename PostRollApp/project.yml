@@ -51,6 +51,7 @@ targets:
       - path: Sources/Services/DataMigration.swift
       - path: Sources/Services/CollageRenderer.swift
       - path: Sources/Services/CollageGeometry.swift
+      - path: Sources/Services/LegacyDataReclaim.swift
       - path: Sources/DesignTokens.swift
     settings:
       base:
