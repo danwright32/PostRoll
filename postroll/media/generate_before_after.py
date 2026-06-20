@@ -53,6 +53,7 @@ TITLE_TOP_PADDING = 170  # clears iPhone notch/Dynamic Island (~120px) with brea
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 FONT_DETAIL_THIN = 12
+FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
 
 # Background
 BG_BLUR_RADIUS = 60  # heavy blur — smooth color wash, not muddy detail
@@ -225,7 +226,7 @@ def generate_before_after(
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
     bw_photo = Image.open(bw_path) if bw_path else None
-    label_font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_THIN)
+    label_font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_BOLD)
     detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_THIN)
 
     # Create blurred background
