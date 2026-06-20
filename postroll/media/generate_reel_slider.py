@@ -68,6 +68,7 @@ RAW_DESATURATION = 0.0  # 0 = full color, 1 = grayscale
 # Labels
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 FONT_DETAIL_THIN = 12
+FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
 LABEL_FONT_SIZE = 38
 LABEL_MARGIN = 30
 LOGO_WIDTH = 200
@@ -416,7 +417,7 @@ def generate_reel_slider(
 
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
-    font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_THIN)
+    font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_BOLD)
 
     # 3-photo mode: the revealed "after" is the color edit stacked over the B&W.
     three_photo = bool(bw_path) and Path(bw_path).exists()

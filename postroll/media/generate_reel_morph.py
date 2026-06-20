@@ -56,6 +56,7 @@ DIVIDER_COLOR = (255, 255, 255)
 # Labels
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 FONT_DETAIL_THIN = 12
+FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
 LABEL_FONT_SIZE = 38
 LABEL_MARGIN = 30
 
@@ -307,7 +308,7 @@ def generate_reel_morph(
 
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
-    font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_THIN)
+    font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_BOLD)
 
     raw_canvas = prepare_photo(raw_photo, edit_photo)
     edit_canvas = prepare_photo(edit_photo, edit_photo)
