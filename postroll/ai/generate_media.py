@@ -6,11 +6,13 @@ format as generate_week.py and writes a JSON output listing generated file paths
 
 Day-specific asset types
 ────────────────────────
-Sunday / Monday   → story image (story template)
+Sunday / Monday / Wednesday → governed by the posting preset (see
+                    postroll.posting_preset). In the "balanced" default each is
+                    a 4 photo carousel whose collage doubles as the story. In
+                    "classic" Sunday/Monday are single feed photos + story and
+                    Wednesday is a 10 photo carousel + collage.
 Tuesday           → speed edit reel (screen recording + RAW + edited → MP4)
                     Falls back to story template if reel inputs are missing.
-Wednesday         → masonry collage (10+ photos required)
-                    The collage IS the story — no story template is generated.
 Thursday          → photo scroll reel (MP4)
                     Audio auto-fetched from Jamendo if not provided.
 Friday            → before/after story (RAW + edited → PNG)
@@ -67,6 +69,12 @@ from typing import Any
 from ..media.generate_story import generate_story
 from ..media.generate_collage import generate_collage
 from ..media.generate_before_after import generate_before_after
+from ..posting_preset import (
+    DEFAULT_PRESET,
+    COLLAGE_CAROUSEL,
+    SINGLE,
+    day_format,
+)
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 LOGO_WHITE = str(ASSETS_DIR / "logo-white.png")
@@ -84,10 +92,6 @@ DAY_FOLDER_NAMES = {
     "thursday":  "5. Thursday",
     "friday":    "6. Friday",
 }
-
-COLLAGE_MIN_PHOTOS = 10
-COLLAGE_PHOTO_COUNT = 10
-
 
 def _slug(text: str) -> str:
     result = text.lower()
@@ -139,6 +143,7 @@ def generate_media(
     shoot_type = manifest.get("shoot_type", "performance")
     pieces     = manifest.get("pieces", [])
     days_data  = manifest.get("days", {})
+    preset     = manifest.get("preset", DEFAULT_PRESET)
 
     folder_name = f"{_slug(org)}_{_slug(event)}_{manifest.get('date', 'undated')}"
     base_dir = output_dir / folder_name
@@ -168,25 +173,61 @@ def generate_media(
         day_result: dict[str, str] = {}
 
         # ──────────────────────────────────────────────────────────────
-        # Sunday / Monday — story template
+        # Preset-governed days (Sunday / Monday / Wednesday). The preset
+        # decides whether each is a single feed photo + story or a carousel
+        # whose collage doubles as the story.
         # ──────────────────────────────────────────────────────────────
-        if day_name in ("sunday", "monday"):
-            try:
-                story_path = str(day_dir / "story.png")
-                generate_story(
-                    photo_path=photos[0],
-                    event_name=event,
-                    org=org,
-                    venue=venue,
-                    output_path=story_path,
-                    logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
-                )
-                day_result["story"] = story_path
-                print(f"[generate_media] {day_name}: story → {story_path}", flush=True)
-            except Exception as e:
-                msg = f"story failed: {e}"
-                print(f"[generate_media] {day_name}: ERROR — {msg}", flush=True, file=sys.stderr)
-                errors[day_name] = msg
+        day_fmt = day_format(preset, day_name)
+        if day_fmt is not None:
+            kind, count = day_fmt
+            if kind == SINGLE:
+                try:
+                    story_path = str(day_dir / "story.png")
+                    generate_story(
+                        photo_path=photos[0],
+                        event_name=event,
+                        org=org,
+                        venue=venue,
+                        output_path=story_path,
+                        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                    )
+                    day_result["story"] = story_path
+                    print(f"[generate_media] {day_name}: story → {story_path}", flush=True)
+                except Exception as e:
+                    msg = f"story failed: {e}"
+                    print(f"[generate_media] {day_name}: ERROR — {msg}", flush=True, file=sys.stderr)
+                    errors[day_name] = msg
+            elif kind == COLLAGE_CAROUSEL:
+                try:
+                    collage_path = str(day_dir / "collage.png")
+                    selected = photos[:count]
+                    # crop_offsets: list of [x, y, zoom] triples from manifest
+                    raw_offsets = day_info.get("crop_offsets")
+                    crop_offsets = (
+                        [tuple(o) for o in raw_offsets[:count]]
+                        if raw_offsets else None
+                    )
+                    seed = day_info.get("collage_seed")
+                    # cell_layout: user-dragged frame positions — skips masonry if present
+                    cell_layout = day_info.get("cell_layout")
+                    generate_collage(
+                        photo_paths=selected,
+                        output_path=collage_path,
+                        event_name=event,
+                        org=org,
+                        venue=venue,
+                        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                        seed=seed,
+                        crop_offsets=crop_offsets,
+                        cell_layout=cell_layout,
+                        write_layout_sidecar=not final_export,
+                    )
+                    day_result["collage"] = collage_path
+                    print(f"[generate_media] {day_name}: collage ({len(selected)} photos) → {collage_path}", flush=True)
+                except Exception as e:
+                    msg = f"collage failed: {e}"
+                    print(f"[generate_media] {day_name}: ERROR — {msg}", flush=True, file=sys.stderr)
+                    errors[day_name] = msg
 
         # ──────────────────────────────────────────────────────────────
         # Tuesday — speed edit reel (screen recording + RAW + edited)
@@ -333,46 +374,6 @@ def generate_media(
                     Path(tuesday_ba_tempfile.name).unlink(missing_ok=True)
                 except Exception:
                     pass
-
-        # ──────────────────────────────────────────────────────────────
-        # Wednesday — masonry collage (the collage IS the story)
-        # ──────────────────────────────────────────────────────────────
-        elif day_name == "wednesday":
-            if len(photos) >= COLLAGE_MIN_PHOTOS:
-                try:
-                    collage_path = str(day_dir / "collage.png")
-                    selected = photos[:COLLAGE_PHOTO_COUNT]
-                    # crop_offsets: list of [x, y, zoom] triples from manifest
-                    raw_offsets = day_info.get("crop_offsets")
-                    crop_offsets = (
-                        [tuple(o) for o in raw_offsets[:COLLAGE_PHOTO_COUNT]]
-                        if raw_offsets else None
-                    )
-                    seed = day_info.get("collage_seed")
-                    # cell_layout: user-dragged frame positions — skips masonry if present
-                    cell_layout = day_info.get("cell_layout")
-                    generate_collage(
-                        photo_paths=selected,
-                        output_path=collage_path,
-                        event_name=event,
-                        org=org,
-                        venue=venue,
-                        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
-                        seed=seed,
-                        crop_offsets=crop_offsets,
-                        cell_layout=cell_layout,
-                        write_layout_sidecar=not final_export,
-                    )
-                    day_result["collage"] = collage_path
-                    print(f"[generate_media] wednesday: collage → {collage_path}", flush=True)
-                except Exception as e:
-                    msg = f"collage failed: {e}"
-                    print(f"[generate_media] wednesday: ERROR — {msg}", flush=True, file=sys.stderr)
-                    errors["wednesday"] = msg
-            else:
-                msg = f"collage skipped — needs {COLLAGE_MIN_PHOTOS}+ photos, got {len(photos)}"
-                print(f"[generate_media] wednesday: {msg}", flush=True)
-                errors["wednesday"] = msg
 
         # ──────────────────────────────────────────────────────────────
         # Thursday — photo scroll reel (audio auto-fetched if not provided)

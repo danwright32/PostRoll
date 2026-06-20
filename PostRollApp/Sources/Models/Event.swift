@@ -401,7 +401,7 @@ struct PostingDay: Codable, Hashable {
     var collageCropOffsets: [String: CropOffset] = [:] // collage-specific crop — separate from carousel
     var reelCropOffsets: [String: CropOffset] = [:]    // Thursday reel per-photo crop — independent from carousel/collage
     var collageCellOverride: [CollageCell]? = nil      // user-adjusted frame layout (nil = use Python layout)
-    var photoTags: [String: [String]] = [:]            // Wednesday only: per-photo people tags, keyed by photo URL absoluteString
+    var photoTags: [String: [String]] = [:]            // collage-carousel days: per-photo people tags, keyed by photo URL absoluteString
     // Performers selected as appearing in this day's photos — drives auto handle/name merging
     var selectedPerformerIDs: [UUID] = []
     // Shooter's observations — passed to caption generator to produce voice-y, specific captions

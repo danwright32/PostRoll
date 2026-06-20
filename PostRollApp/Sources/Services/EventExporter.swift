@@ -7,7 +7,8 @@ struct EventExporter {
     /// pass a specific set to export only those days — in which case the master
     /// CAPTIONS.txt / CHECKLIST.md and Blog are left untouched so they keep
     /// reflecting the last full export.
-    static func export(event: Event, to root: URL, days: Set<DayName>? = nil) throws -> URL {
+    static func export(event: Event, to root: URL, days: Set<DayName>? = nil,
+                       preset: PostingPreset = .balanced) throws -> URL {
         let folderName = "\(slug(event.org))_\(slug(event.name))_\(event.isoDate)"
         let folder = root.appendingPathComponent(folderName)
 
@@ -28,20 +29,22 @@ struct EventExporter {
         }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
-        // Per-day folders — only Wednesday's carousel photos are copied
-        // directly by Swift (in the user's assigned order). All other day
-        // artifacts — story.png, reels, collage, before/after — come from
-        // the Python media generator. Per-day caption.txt / alt_text.txt
-        // files are no longer written; the master CAPTIONS.txt at the root
-        // is the single source of truth for caption + alt text.
+        // Per-day folders — for collage-carousel days the assigned photos are
+        // copied directly by Swift (in the user's order) into a carousel/
+        // subfolder. Wednesday is always collage-carousel; Sunday/Monday are
+        // too under the balanced preset. All other day artifacts — story.png,
+        // reels, collage, before/after — come from the Python media generator.
+        // Per-day caption.txt / alt_text.txt files are no longer written; the
+        // master CAPTIONS.txt at the root is the single source of truth.
         for day in DayName.allCases {
             if let days, !days.contains(day) { continue }
             guard result?[day] != nil else { continue }
             let dayDir = folder.appendingPathComponent(day.folderName)
             try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
 
-            if day == .wednesday {
-                let photos = event.days[day.rawValue]?.photoPaths ?? []
+            if preset.isCollageCarousel(day) {
+                let count = preset.format(for: day)?.count ?? 0
+                let photos = Array((event.days[day.rawValue]?.photoPaths ?? []).prefix(count))
                 if !photos.isEmpty {
                     let carouselDir = dayDir.appendingPathComponent("carousel")
                     try? FileManager.default.createDirectory(at: carouselDir, withIntermediateDirectories: true)
@@ -72,7 +75,7 @@ struct EventExporter {
                 }
             }
 
-            let masterCaptions = masterCaptionText(event: event, result: result)
+            let masterCaptions = masterCaptionText(event: event, result: result, preset: preset)
             try masterCaptions.write(to: folder.appendingPathComponent("CAPTIONS.txt"),
                                       atomically: true, encoding: .utf8)
         }
@@ -82,7 +85,8 @@ struct EventExporter {
 
     // MARK: - Text generators
 
-    private static func masterCaptionText(event: Event, result: WeekGenerationResult?) -> String {
+    private static func masterCaptionText(event: Event, result: WeekGenerationResult?,
+                                          preset: PostingPreset) -> String {
         var sections: [String] = []
         for day in DayName.allCases {
             guard let cap = result?[day] else { continue }
@@ -90,7 +94,7 @@ struct EventExporter {
             let photoPaths = event.days[day.rawValue]?.photoPaths ?? []
             if !cap.altTexts.isEmpty {
                 let altBody: String
-                if day == .wednesday {
+                if preset.isCollageCarousel(day) {
                     altBody = cap.altTexts.enumerated()
                         .map { idx, altText in
                             "\(photoLabel(idx: idx, photoPaths: photoPaths)): \(altText)"
@@ -101,9 +105,10 @@ struct EventExporter {
                 }
                 block += "\n\nALT TEXT:\n\(altBody)"
             }
-            // Wednesday carousel: per-photo people tags, in photo order, only for
-            // photos that were actually tagged.
-            if day == .wednesday {
+            // Collage-carousel days: per-photo people tags, in photo order, only
+            // for photos that were actually tagged (Wednesday always; Sun/Mon
+            // under the balanced preset).
+            if preset.isCollageCarousel(day) {
                 let photoTags = event.days[day.rawValue]?.photoTags ?? [:]
                 let tagLines = photoPaths.enumerated().compactMap { idx, url -> String? in
                     let tags = photoTags[url.absoluteString] ?? []

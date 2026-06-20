@@ -47,6 +47,10 @@ targets:
       - path: Sources/Services/MediaReclaim.swift
       - path: Sources/Services/EventJobTracker.swift
       - path: Sources/Services/EventExporter.swift
+      - path: Sources/Services/PostingPresetStore.swift
+      - path: Sources/Services/CollageCandidate.swift
+      - path: Sources/Services/CollageCandidateCache.swift
+      - path: Sources/Services/PreviewMergePolicy.swift
       - path: Sources/Services/ProgramPDFBuilder.swift
       - path: Sources/Services/DataMigration.swift
       - path: Sources/Services/CollageRenderer.swift

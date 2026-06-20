@@ -36,7 +36,12 @@ final class GenerationManager {
     /// Begin (or restart) a generation for `eventID`. `retryDays` nil = full
     /// run; a set of day keys (and/or "blog") = partial retry merged into the
     /// existing weekResult.
-    func start(eventID: Event.ID, retryDays: Set<String>?, appState: AppState) {
+    /// Begin a generation. `regenerateGraphics` overrides the default of
+    /// graphics-only-on-full-run: pass `true` to also re-render previews for a
+    /// partial retry (used when switching the posting preset, which changes the
+    /// media for the affected days, not just their captions).
+    func start(eventID: Event.ID, retryDays: Set<String>?, appState: AppState,
+               regenerateGraphics: Bool? = nil) {
         // Snapshot the event for its input paths. The write-back later re-reads
         // the live event so edits made during the run aren't clobbered.
         guard let ev = appState.events.first(where: { $0.id == eventID }) else { return }
@@ -45,10 +50,13 @@ final class GenerationManager {
         tracker.begin(Run(status: .running, elapsedSeconds: 0, retryDays: retryDays, task: nil), for: eventID)
 
         let onlyDays = retryDays
+        // Graphics run in parallel with captions on a full run; retries skip
+        // them unless explicitly requested (preset switch).
+        let doGraphics = PreviewMergePolicy.shouldRenderGraphics(
+            regenerateGraphics: regenerateGraphics, isFullRun: onlyDays == nil)
         let task = Task { [weak self] in
-            // Graphics run in parallel with captions on a full run; retries skip it.
-            let graphicsTask: Task<[String: [String: String]]?, Never>? = onlyDays == nil
-                ? Task { (try? await PythonBridge.shared.runPreviewGeneration(event: ev))?.paths }
+            let graphicsTask: Task<[String: [String: String]]?, Never>? = doGraphics
+                ? Task { (try? await PythonBridge.shared.runPreviewGeneration(event: ev, days: onlyDays.map { Array($0) }))?.paths }
                 : nil
 
             do {
@@ -117,9 +125,10 @@ final class GenerationManager {
             saved.weekResult = result
         }
 
-        if let paths = mediaPaths, !paths.isEmpty {
-            saved.previewMediaPaths = paths
-        }
+        // A full run replaces all previews; a partial retry merges only the
+        // regenerated days so other days' approved previews survive.
+        saved.previewMediaPaths = PreviewMergePolicy.merge(
+            existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: onlyDays == nil)
 
         appState.updateEvent(saved)
         NotificationService.shared.notifyGenerationComplete(eventName: ev.name)

@@ -19,7 +19,7 @@ from postroll.media import generate_reel_morph as morph_mod
 from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
-from postroll.media.generate_collage import crop_to_fill
+from postroll.media.generate_collage import crop_to_fill, generate_collage_candidates
 from postroll.ai import swap_reel_audio as swap_mod
 
 
@@ -67,6 +67,60 @@ def test_crop_x_axis_uses_same_bias():
             px[x, y] = (x, 0, 0)
     out = crop_to_fill(img, 100, 100, crop_offset_x=1.0)
     assert out.getpixel((0, 0))[0] == 100
+
+
+# ===================================================================
+# Collage layout candidates (the in-app layout gallery, #57)
+# ===================================================================
+
+
+def test_collage_candidates_render_distinct_files(tmp_path):
+    photos = []
+    for i in range(4):
+        p = tmp_path / f"p{i}.jpg"
+        Image.new("RGB", (800, 600), (100, 140, 160)).save(str(p), "JPEG")
+        photos.append(str(p))
+    out_dir = tmp_path / "cand"
+
+    results = generate_collage_candidates(
+        photo_paths=photos, output_dir=str(out_dir), count=5, event_name="Test"
+    )
+    assert len(results) == 5
+    # Distinct seeds and one PNG per candidate, all on disk.
+    assert len({r["seed"] for r in results}) == 5
+    for r in results:
+        assert Path(r["path"]).exists()
+
+
+def test_collage_candidates_accept_crop_offsets(tmp_path):
+    # #62: candidates render with the day's crop offsets so the gallery matches
+    # the final collage. Just assert it renders cleanly with offsets supplied.
+    photos = []
+    for i in range(4):
+        p = tmp_path / f"p{i}.jpg"
+        Image.new("RGB", (800, 600), (130, 110, 90)).save(str(p), "JPEG")
+        photos.append(str(p))
+    offsets = [(0.2, -0.1, 1.2), (0.0, 0.0, 1.0), (-0.3, 0.1, 1.1), (0.0, 0.0, 1.0)]
+    results = generate_collage_candidates(
+        photo_paths=photos, output_dir=str(tmp_path / "c"), count=3,
+        event_name="Test", seeds=[1, 2, 3], crop_offsets=offsets,
+    )
+    assert len(results) == 3
+    for r in results:
+        assert Path(r["path"]).exists()
+
+
+def test_collage_candidates_honor_explicit_seeds(tmp_path):
+    photos = []
+    for i in range(4):
+        p = tmp_path / f"p{i}.jpg"
+        Image.new("RGB", (800, 600), (120, 120, 120)).save(str(p), "JPEG")
+        photos.append(str(p))
+    results = generate_collage_candidates(
+        photo_paths=photos, output_dir=str(tmp_path / "c"), count=2,
+        event_name="Test", seeds=[111, 222],
+    )
+    assert [r["seed"] for r in results] == [111, 222]
 
 
 # ===================================================================

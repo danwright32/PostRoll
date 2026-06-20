@@ -9,14 +9,15 @@ from PIL import Image
 
 from postroll.export import (
     BlogData,
+    CollageCarouselData,
     FridayData,
     SingleDayData,
     ThursdayData,
     TuesdayData,
-    WednesdayData,
     WeekExport,
     _checklist,
     _format_caption,
+    _from_dict,
     _master_captions,
     _photo_label,
     _slug,
@@ -95,7 +96,8 @@ def week_data(tmp_path) -> WeekExport:
             story_cover=_make_png(src / "tue_cover.png"),
             caption=SAMPLE_CAPTION,
         ),
-        wednesday=WednesdayData(
+        wednesday=CollageCarouselData(
+            day="wednesday",
             carousel_photos=[_make_photo(src / f"wed_{i:02d}.jpg") for i in range(1, 11)],
             collage_story=_make_png(src / "wed_collage.png"),
             caption=MULTI_CAPTION,
@@ -412,6 +414,126 @@ def test_slug_collapses_consecutive_punctuation():
 # ===================================================================
 # Re-export hygiene
 # ===================================================================
+
+
+# ===================================================================
+# Posting preset (balanced 4/4/4 vs classic 1/1/10)
+# ===================================================================
+
+
+def _balanced_sunday(src: Path) -> CollageCarouselData:
+    """Sunday as a 4 photo carousel + collage story (balanced preset)."""
+    return CollageCarouselData(
+        day="sunday",
+        carousel_photos=[_make_photo(src / f"sun_{i:02d}.jpg") for i in range(1, 5)],
+        collage_story=_make_png(src / "sun_collage.png"),
+        caption=MULTI_CAPTION,
+    )
+
+
+def test_balanced_sunday_exports_carousel_and_collage(week_data, tmp_path):
+    src = tmp_path / "src"
+    week_data.preset = "balanced"
+    week_data.sunday = _balanced_sunday(src)
+
+    out = export_week(week_data, tmp_path)
+    # Carousel of four photos plus the collage story image.
+    assert (out / "1. Sunday" / "carousel").is_dir()
+    for i in range(1, 5):
+        assert (out / "1. Sunday" / "carousel" / f"{i:02d}.jpg").exists()
+    assert (out / "1. Sunday" / "collage_story.png").exists()
+    # Per-photo numbered alt texts (like Wednesday), not a single alt_text.txt.
+    text = (out / "1. Sunday" / "alt_texts.txt").read_text()
+    assert "1: Photo 1 alt text." in text
+
+
+def test_balanced_checklist_says_carousel_for_sunday(week_data, tmp_path):
+    src = tmp_path / "src"
+    week_data.preset = "balanced"
+    week_data.sunday = _balanced_sunday(src)
+    out = export_week(week_data, tmp_path)
+    text = (out / "CHECKLIST.md").read_text()
+    sunday_block = text.split("### Sunday")[1].split("###")[0]
+    assert "Post carousel" in sunday_block
+    assert "collage story" in sunday_block
+
+
+def test_balanced_sunday_emits_per_photo_tags_and_alt(week_data, tmp_path):
+    src = tmp_path / "src"
+    sunday = _balanced_sunday(src)
+    sunday.photo_tags = {
+        str(sunday.carousel_photos[1]): ["Mike Bono", "@mikebonomusic"],
+        str(sunday.carousel_photos[3]): ["Catherine Gregory"],
+    }
+    week_data.preset = "balanced"
+    week_data.sunday = sunday
+
+    text = _master_captions(week_data)
+    sunday_block = text.split("=== SUNDAY ===")[1].split("=== ")[0]
+    # Per-photo numbered alt texts (carousel), not a single shared alt.
+    assert "1: Photo 1 alt text." in sunday_block
+    # Per-photo people tags for the tagged photos only.
+    assert "PHOTO TAGS:" in sunday_block
+    assert "Mike Bono, @mikebonomusic" in sunday_block
+    assert "Catherine Gregory" in sunday_block
+
+
+def test_classic_sunday_stays_single_photo(week_data, tmp_path):
+    # Default fixture Sunday is a SingleDayData; classic keeps it that way.
+    week_data.preset = "classic"
+    out = export_week(week_data, tmp_path)
+    assert (out / "1. Sunday" / "photo.jpg").exists()
+    assert (out / "1. Sunday" / "story.png").exists()
+    assert not (out / "1. Sunday" / "carousel").exists()
+
+
+def test_from_dict_balanced_makes_sunday_collage_carousel(tmp_path):
+    src = tmp_path / "src"
+    raw = {
+        "event": "E", "org": "O", "venue": "V", "date": "2026-04-04",
+        "preset": "balanced",
+        "sunday": {
+            "carousel_photos": [str(_make_photo(src / "s1.jpg"))],
+            "collage_story": str(_make_png(src / "s_collage.png")),
+            "caption": SAMPLE_CAPTION,
+        },
+        "monday": {
+            "carousel_photos": [str(_make_photo(src / "m1.jpg"))],
+            "collage_story": str(_make_png(src / "m_collage.png")),
+            "caption": SAMPLE_CAPTION,
+        },
+        "tuesday": {"reel": str(_make_mp4(src / "t.mp4")),
+                    "story_cover": str(_make_png(src / "tc.png")), "caption": SAMPLE_CAPTION},
+        "wednesday": {"carousel_photos": [str(_make_photo(src / "w1.jpg"))],
+                      "collage_story": str(_make_png(src / "w_collage.png")), "caption": MULTI_CAPTION},
+        "thursday": {"reel": str(_make_mp4(src / "th.mp4")), "caption": SAMPLE_CAPTION},
+        "friday": {"before_after": str(_make_png(src / "f.png"))},
+    }
+    week = _from_dict(raw)
+    assert isinstance(week.sunday, CollageCarouselData)
+    assert isinstance(week.monday, CollageCarouselData)
+    assert week.preset == "balanced"
+
+
+def test_from_dict_classic_makes_sunday_single(tmp_path):
+    src = tmp_path / "src"
+    raw = {
+        "event": "E", "org": "O", "venue": "V", "date": "2026-04-04",
+        "preset": "classic",
+        "sunday": {"photo": str(_make_photo(src / "s.jpg")),
+                   "story": str(_make_png(src / "s_story.png")), "caption": SAMPLE_CAPTION},
+        "monday": {"photo": str(_make_photo(src / "m.jpg")),
+                   "story": str(_make_png(src / "m_story.png")), "caption": SAMPLE_CAPTION},
+        "tuesday": {"reel": str(_make_mp4(src / "t.mp4")),
+                    "story_cover": str(_make_png(src / "tc.png")), "caption": SAMPLE_CAPTION},
+        "wednesday": {"carousel_photos": [str(_make_photo(src / "w1.jpg"))],
+                      "collage_story": str(_make_png(src / "w_collage.png")), "caption": MULTI_CAPTION},
+        "thursday": {"reel": str(_make_mp4(src / "th.mp4")), "caption": SAMPLE_CAPTION},
+        "friday": {"before_after": str(_make_png(src / "f.png"))},
+    }
+    week = _from_dict(raw)
+    assert isinstance(week.sunday, SingleDayData)
+    assert week.preset == "classic"
 
 
 def test_reexport_removes_stale_files(week_data, tmp_path):

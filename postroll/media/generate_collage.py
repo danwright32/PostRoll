@@ -508,6 +508,51 @@ def generate_collage(
     return str(output)
 
 
+def generate_collage_candidates(
+    photo_paths: list[str],
+    output_dir: str,
+    count: int,
+    *,
+    event_name: str = "",
+    org: str = "",
+    venue: str = "",
+    logo_path: str | None = None,
+    seeds: list[int] | None = None,
+    crop_offsets: list[tuple[float, float, float]] | None = None,
+) -> list[dict]:
+    """Render `count` distinct collage layouts (one per seed) for a layout picker.
+
+    Returns a list of {"seed": int, "path": str} dicts. The caller stores the
+    chosen seed as the day's collage_seed so the final render reproduces it. No
+    layout sidecar is written — these are throwaway previews.
+
+    crop_offsets: optional per-photo (x, y, zoom) triples, parallel to
+    photo_paths, so the gallery thumbnails match the user's saved crop edits.
+    """
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if seeds is None:
+        upper = 999_999_999
+        # Distinct seeds so the gallery never shows the same layout twice.
+        seeds = random.sample(range(1, upper), min(count, upper - 1))
+    results: list[dict] = []
+    for seed in seeds:
+        out = out_dir / f"candidate_{seed}.png"
+        generate_collage(
+            photo_paths=photo_paths,
+            output_path=str(out),
+            event_name=event_name,
+            org=org,
+            venue=venue,
+            logo_path=logo_path,
+            seed=seed,
+            crop_offsets=crop_offsets,
+            write_layout_sidecar=False,
+        )
+        results.append({"seed": seed, "path": str(out)})
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate a masonry collage")
     parser.add_argument("--photos", nargs="+", required=True)
@@ -517,7 +562,41 @@ def main():
     parser.add_argument("--logo", default=None, help="Path to DW logo")
     parser.add_argument("--output", default="output/collage.png")
     parser.add_argument("--seed", type=int, default=None)
+    # Layout-gallery mode: render N candidate layouts and print JSON to stdout.
+    parser.add_argument("--candidates", type=int, default=0,
+                        help="Render this many candidate layouts instead of one")
+    parser.add_argument("--candidates-out", default=None,
+                        help="Directory to write candidate PNGs into")
+    parser.add_argument("--candidates-json", default=None,
+                        help="Write the [{seed, path}] list as JSON to this file")
+    parser.add_argument("--crop-offsets-json", default=None,
+                        help="JSON file with a list of [x, y, zoom] triples parallel to --photos")
     args = parser.parse_args()
+
+    crop_offsets = None
+    if args.crop_offsets_json:
+        raw = json.loads(Path(args.crop_offsets_json).read_text(encoding="utf-8"))
+        crop_offsets = [tuple(o) for o in raw]
+
+    if args.candidates > 0:
+        results = generate_collage_candidates(
+            photo_paths=args.photos,
+            output_dir=args.candidates_out or "output/candidates",
+            count=args.candidates,
+            event_name=args.event,
+            org=args.org,
+            venue=args.venue,
+            logo_path=args.logo,
+            crop_offsets=crop_offsets,
+        )
+        payload = json.dumps(results)
+        if args.candidates_json:
+            Path(args.candidates_json).write_text(payload, encoding="utf-8")
+        else:
+            # Sentinel-prefixed so the caller can find this line among the
+            # per-candidate "Collage generated" progress prints on stdout.
+            print("CANDIDATES_JSON " + payload)
+        return
 
     generate_collage(
         photo_paths=args.photos,
