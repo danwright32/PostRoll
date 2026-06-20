@@ -8,7 +8,6 @@ struct PostRollApp: App {
     @State private var generationManager = GenerationManager()
     @State private var ocrManager = OCRManager()
     @State private var exportManager = ExportManager()
-    @State private var postingPresetStore = PostingPresetStore()
 
     init() {
         NotificationService.shared.requestPermission()
@@ -23,7 +22,6 @@ struct PostRollApp: App {
                 .environment(generationManager)
                 .environment(ocrManager)
                 .environment(exportManager)
-                .environment(postingPresetStore)
                 .preferredColorScheme(.light)
                 .tint(Color.roseGold)
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

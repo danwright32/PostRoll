@@ -46,9 +46,10 @@ struct PhotoAssignmentView: View {
     var totalPhotos: Int { dayPhotos.values.reduce(0) { $0 + $1.count } }
 
     /// A day with a per-photo carousel that supports people tagging: Wednesday
-    /// always, plus Sunday/Monday under the balanced preset.
+    /// always, plus Sunday/Monday under a balanced layout. Uses this event's
+    /// effective preset so a per-event override is respected.
     private func isCollageDay(_ day: DayName) -> Bool {
-        PostingPreset.current.isCollageCarousel(day)
+        event.effectivePostingPreset.isCollageCarousel(day)
     }
 
     /// Suggestions for a day's per-photo tag popover, drawn from the event's

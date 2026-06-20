@@ -39,6 +39,17 @@ struct Event: Identifiable, Codable, Hashable {
     // Event-wide handles applied to every day's caption (org, venue, recurring tags)
     var eventHandles: String = ""
 
+    /// Per-event posting layout. `nil` means follow the app wide default
+    /// (`PostingPreset.current`); set on the Export page to give one event a
+    /// different layout without changing the default for other events (#66).
+    var postingPresetOverride: PostingPreset? = nil
+
+    /// The layout this event actually uses: its own override, or the app wide
+    /// default when it has none.
+    var effectivePostingPreset: PostingPreset {
+        postingPresetOverride ?? PostingPreset.current
+    }
+
     // Per-day photo assignments (keyed by DayName.rawValue)
     var days: [String: PostingDay] = [:]
 
@@ -113,6 +124,7 @@ extension Event {
         pendingFlagsError = try c.decodeIfPresent(String.self,                     forKey: .pendingFlagsError)
         eventURL          = try c.decodeIfPresent(String.self,                     forKey: .eventURL)          ?? ""
         eventHandles      = try c.decodeIfPresent(String.self,                     forKey: .eventHandles)      ?? ""
+        postingPresetOverride = try c.decodeIfPresent(PostingPreset.self,          forKey: .postingPresetOverride)
         days              = try c.decodeIfPresent([String: PostingDay].self,       forKey: .days)              ?? [:]
         blogPhotoPaths    = try c.decodeIfPresent([URL].self,                      forKey: .blogPhotoPaths)    ?? []
         weekResult        = try c.decodeIfPresent(WeekGenerationResult.self,       forKey: .weekResult)

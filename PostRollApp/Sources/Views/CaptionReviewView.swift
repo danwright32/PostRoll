@@ -345,9 +345,10 @@ struct CaptionReviewView: View {
     // MARK: - Bindings
 
     /// A day whose feed is a carousel + editable collage story: Wednesday always,
-    /// plus Sunday/Monday under the balanced preset.
+    /// plus Sunday/Monday under a balanced layout. Uses this event's effective
+    /// preset so a per-event override is respected.
     private func isCollageDay(_ day: DayName) -> Bool {
-        PostingPreset.current.isCollageCarousel(day)
+        liveEvent.effectivePostingPreset.isCollageCarousel(day)
     }
 
     private func collageOffsetsBinding(_ day: DayName) -> Binding<[String: CropOffset]> {
@@ -686,7 +687,7 @@ struct CaptionReviewView: View {
         // The collage targets the preset's photo count, but the generator adapts
         // to fewer (down to a 2-photo grid), so only block below that floor and
         // surface the target as guidance rather than a hard requirement (#63).
-        let target = CollagePhotoSelection.target(preset: PostingPreset.current, day: day)
+        let target = CollagePhotoSelection.target(preset: liveEvent.effectivePostingPreset, day: day)
         let panel = NSOpenPanel()
         panel.title = "Select photos for the \(day.displayName) collage (about \(target))"
         panel.allowedContentTypes = [.image]
@@ -4553,7 +4554,7 @@ private struct CollageLayoutGallery: View {
     /// crop offsets. When this is unchanged the cached candidates still apply.
     private func fingerprint() -> String {
         guard let pd = event.days[day.rawValue] else { return day.rawValue }
-        let count = PostingPreset.current.format(for: day)?.count ?? pd.photoPaths.count
+        let count = event.effectivePostingPreset.format(for: day)?.count ?? pd.photoPaths.count
         let parts = pd.photoPaths.prefix(count).map { url -> String in
             let o = pd.collageCropOffsets[url.absoluteString] ?? CropOffset()
             return "\(url.path)|\(o.x),\(o.y),\(o.scale)"
