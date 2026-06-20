@@ -210,6 +210,68 @@ actor PythonBridge {
         return imagePaths
     }
 
+    /// Render `count` candidate collage layouts for `day` (each a distinct seed)
+    /// into a temp directory, for the in-app layout gallery. The caller stores
+    /// the chosen candidate's `seed` as the day's collageSeed so the final
+    /// render reproduces it. Returns the candidates (empty on failure).
+    func renderCollageCandidates(event: Event, day: DayName, count: Int = 6) async throws -> [CollageCandidate] {
+        guard let pd = event.days[day.rawValue], !pd.photoPaths.isEmpty else { return [] }
+        let photoCount = PostingPreset.current.format(for: day)?.count ?? pd.photoPaths.count
+        let photos = Array(pd.photoPaths.prefix(photoCount)).map { $0.path }
+        guard !photos.isEmpty else { return [] }
+
+        let tmp = FileManager.default.temporaryDirectory
+        // Deterministic per-day output dir (issue #64): a cancelled or rapidly
+        // re-opened render reuses the same directory instead of orphaning a fresh
+        // UUID dir each time, so the temp footprint stays bounded to one dir per
+        // collage day. Clear it first so a prior partial render can't leave stale
+        // candidate PNGs that outlive their seeds.
+        let outDir = tmp.appendingPathComponent("postroll_collage_candidates_\(day.rawValue)")
+        try? FileManager.default.removeItem(at: outDir)
+        let jsonFile = tmp.appendingPathComponent("postroll_collage_candidates_\(UUID().uuidString).json")
+        let cropFile = tmp.appendingPathComponent("postroll_collage_crops_\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: jsonFile)
+            try? FileManager.default.removeItem(at: cropFile)
+            // Leave outDir PNGs in place — the caller reads them for the gallery
+            // and CollageCandidateCache removes the dir when superseded.
+        }
+
+        let logo = projectRoot.appendingPathComponent("postroll/assets/logo-black.png").path
+        var args = [
+            "-m", "postroll.media.generate_collage",
+            "--photos",
+        ] + photos
+        args += [
+            "--event", event.name,
+            "--org", event.org,
+            "--venue", event.venue,
+            "--candidates", String(count),
+            "--candidates-out", outDir.path,
+            "--candidates-json", jsonFile.path,
+        ]
+        if FileManager.default.fileExists(atPath: logo) {
+            args += ["--logo", logo]
+        }
+        // Pass the day's saved per-photo crop offsets so the gallery thumbnails
+        // match the final collage (#62). Only when at least one is non-default.
+        let offsets = Array(pd.photoPaths.prefix(photoCount)).map { url -> [Double] in
+            let o = pd.collageCropOffsets[url.absoluteString] ?? CropOffset()
+            return [o.x, o.y, o.scale]
+        }
+        if offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }),
+           let cropData = try? JSONSerialization.data(withJSONObject: offsets) {
+            try? cropData.write(to: cropFile)
+            args += ["--crop-offsets-json", cropFile.path]
+        }
+        try await runProcess(args: args)
+
+        guard let data = try? Data(contentsOf: jsonFile),
+              let candidates = try? JSONDecoder().decode([CollageCandidate].self, from: data)
+        else { return [] }
+        return candidates
+    }
+
     /// Result of a preview-generation run. `paths` mirrors Python's per-day
     /// output dict; `errors` carries the per-day failure messages Python writes
     /// when a day couldn't be generated (e.g. missing photo, ffmpeg crash). A
@@ -450,8 +512,18 @@ actor PythonBridge {
                 if offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }) {
                     entry["crop_offsets"] = offsets
                 }
-            case .wednesday:
-                if let seed = pd.collageSeed         { entry["collage_seed"]      = seed }
+            case .friday:
+                if let raw  = pd.rawPhotoPath        { entry["raw_photo"]         = raw.path }
+                if let edit = pd.editedPhotoPath     { entry["edited_photo"]      = edit.path }
+                if let bw   = pd.bwPhotoPath         { entry["bw_photo"]          = bw.path }
+            default:
+                break
+            }
+            // Collage-carousel days (Wednesday always; Sunday/Monday under the
+            // balanced preset) carry the collage seed, per-cell crop offsets, and
+            // any user-dragged frame layout so Python reproduces the live editor.
+            if PostingPreset.current.isCollageCarousel(dayName) {
+                if let seed = pd.collageSeed { entry["collage_seed"] = seed }
                 let offsets = pd.photoPaths.map { url -> [Double] in
                     let o = pd.collageCropOffsets[url.absoluteString] ?? CropOffset()
                     return [o.x, o.y, o.scale]
@@ -459,7 +531,6 @@ actor PythonBridge {
                 if offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }) {
                     entry["crop_offsets"] = offsets
                 }
-                // Pass user-dragged frame layout to Python so it renders at the exact positions
                 if let cellOverride = pd.collageCellOverride, !cellOverride.isEmpty {
                     entry["cell_layout"] = cellOverride.map { [
                         "photo_path": $0.photoPath,
@@ -467,12 +538,6 @@ actor PythonBridge {
                         "w": $0.w, "h": $0.h,
                     ] as [String: Any] }
                 }
-            case .friday:
-                if let raw  = pd.rawPhotoPath        { entry["raw_photo"]         = raw.path }
-                if let edit = pd.editedPhotoPath     { entry["edited_photo"]      = edit.path }
-                if let bw   = pd.bwPhotoPath         { entry["bw_photo"]          = bw.path }
-            default:
-                break
             }
             daysDict[dayName.rawValue] = entry
         }
@@ -488,6 +553,7 @@ actor PythonBridge {
             "shoot_type": event.shootType.pythonValue,
             "pieces":     pieces,
             "days":       daysDict,
+            "preset":     PostingPreset.current.rawValue,
         ]
     }
 
@@ -751,6 +817,7 @@ actor PythonBridge {
             "shoot_type":    event.shootType.pythonValue,
             "program":       programDict,
             "days":          daysDict,
+            "preset":        PostingPreset.current.rawValue,
         ]
 
         // Wednesday's collage photos (always 10 or fewer) are reused as

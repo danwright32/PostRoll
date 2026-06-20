@@ -4,6 +4,8 @@ struct ExportView: View {
     let event: Event
     @Environment(AppState.self) private var appState
     @Environment(ExportManager.self) private var exportManager
+    @Environment(PostingPresetStore.self) private var presetStore
+    @Environment(GenerationManager.self) private var genManager
 
     @State private var showingFolderPicker = false
     @State private var lastExportFolder: URL? = nil
@@ -83,6 +85,9 @@ struct ExportView: View {
             )
             .padding(.horizontal, Spacing.xl)
 
+            presetPicker
+                .padding(.horizontal, Spacing.xl)
+
             ExportSummaryCard(event: event, result: result) { day in
                 if let dest = lastExportFolder {
                     exportManager.start(eventID: event.id, to: dest, onlyDay: day, appState: appState)
@@ -128,7 +133,69 @@ struct ExportView: View {
                 }
             }
             .padding(Spacing.xl)
+            .disabled(isRegenerating)
         }
+    }
+
+    private var isRegenerating: Bool { genManager.isRunning(event.id) }
+
+    /// App wide posting layout. Switching it rebuilds Sunday/Monday/Wednesday
+    /// (their captions and media change) so the affected days are regenerated.
+    private var presetPicker: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(spacing: Spacing.md) {
+                Text("Posting layout")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.warmDark)
+                Picker("Posting layout", selection: Binding(
+                    get: { presetStore.selected },
+                    set: { applyPreset($0) }
+                )) {
+                    ForEach(PostingPreset.allCases) { preset in
+                        Text(preset.displayName).tag(preset)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 360)
+                .disabled(isRegenerating)
+            }
+            if isRegenerating {
+                HStack(spacing: Spacing.xs) {
+                    ProgressView().controlSize(.small).tint(Color.roseGold)
+                    Text("Rebuilding Sunday, Monday, and Wednesday for the new layout…")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.warmDark.opacity(0.8))
+                }
+            } else {
+                Text(presetStore.selected == .balanced
+                     ? "Sunday, Monday, and Wednesday each post a 4 photo carousel with a collage story."
+                     : "Sunday and Monday post a single photo; Wednesday posts a 10 photo carousel with a collage story.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.warmDark.opacity(0.7))
+            }
+        }
+    }
+
+    /// Persist the new preset and regenerate the days it governs. Their previews
+    /// are cleared first so a failed regen can't leave the export copying stale
+    /// assets from the previous layout.
+    private func applyPreset(_ newValue: PostingPreset) {
+        guard newValue != presetStore.selected else { return }
+        presetStore.selected = newValue
+        presetStore.save()
+
+        guard var ev = appState.events.first(where: { $0.id == event.id }) else { return }
+        let governed = DayName.allCases.filter { newValue.format(for: $0) != nil }
+        let affected = Set(governed
+            .filter { !(ev.days[$0.rawValue]?.photoPaths.isEmpty ?? true) }
+            .map { $0.rawValue })
+        guard !affected.isEmpty else { return }
+
+        for day in affected { ev.previewMediaPaths.removeValue(forKey: day) }
+        appState.updateEvent(ev)
+        genManager.start(eventID: event.id, retryDays: affected, appState: appState,
+                         regenerateGraphics: true)
     }
 
     private func progressContent(label: String) -> some View {

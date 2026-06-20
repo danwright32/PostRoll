@@ -51,6 +51,15 @@ struct CaptionReviewView: View {
 
     @State private var previewURL: URL? = nil
 
+    // Collage layout gallery (#57). Non-nil → the picker sheet is shown for that day.
+    @State private var layoutGalleryTarget: GalleryTarget? = nil
+
+    /// Identifiable wrapper so the layout gallery can drive `.sheet(item:)`.
+    struct GalleryTarget: Identifiable {
+        let day: DayName
+        var id: String { day.rawValue }
+    }
+
     // Upload-your-own reel audio
     @State private var showingReelAudioPicker = false
     @State private var uploadReelAudioDay: DayName = .tuesday
@@ -150,7 +159,7 @@ struct CaptionReviewView: View {
                                     regenerateGraphic(day: .friday)
                                 }
                             },
-                            onNewLayout: (day == .wednesday || day == .thursday)
+                            onNewLayout: (isCollageDay(day) || day == .thursday)
                                 ? { regenerateGraphic(day: day, newLayout: true) }
                                 : nil,
                             onSwapReelAudio: { swapReelAudio(day: day) },
@@ -158,7 +167,8 @@ struct CaptionReviewView: View {
                             reelLength: day == .thursday ? (live.days[day.rawValue]?.scrollDuration ?? 40.0) : nil,
                             onChangeReelLength: day == .thursday ? { newLength in changeReelLength(day: .thursday, to: newLength) } : nil,
                             onChangeReelPhotos: (day == .tuesday || day == .thursday) ? { changeReelPhotos(day: day) } : nil,
-                            onChangeCollagePhotos: day == .wednesday ? { changeCollagePhotos(day: .wednesday) } : nil,
+                            onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
+                            onChooseLayout: isCollageDay(day) ? { layoutGalleryTarget = GalleryTarget(day: day) } : nil,
                             onSwapReelPhotos: day == .thursday ? { a, b in swapReelPhotos(day: .thursday, a: a, b: b) } : nil,
                             onAssignReelPhotos: day == .tuesday ? { raw, edited, bw in
                                 assignReelPhotosAndGenerate(raw: raw, edited: edited, bw: bw)
@@ -196,8 +206,8 @@ struct CaptionReviewView: View {
                             inlineRawPhoto: inlineRawPhoto,
                             inlineEditedPhoto: inlineEditedPhoto,
                             inlineBWPhoto: inlineBWPhoto,
-                            collageCropOffsets: day == .wednesday ? collageOffsetsBinding(day) : nil,
-                            collageCellOverride: day == .wednesday ? collageCellOverrideBinding(day) : nil,
+                            collageCropOffsets: isCollageDay(day) ? collageOffsetsBinding(day) : nil,
+                            collageCellOverride: isCollageDay(day) ? collageCellOverrideBinding(day) : nil,
                             reelCropOffsets: day == .thursday ? reelOffsetsBinding(day) : nil,
                             thursdayEditorURL: day == .thursday ? thursdayEditorURL : nil,
                             isBuildingThursdayEditor: day == .thursday ? isBuildingThursdayEditor : false
@@ -294,6 +304,17 @@ struct CaptionReviewView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: previewURL != nil)
+        .sheet(item: $layoutGalleryTarget) { target in
+            CollageLayoutGallery(
+                event: liveEvent,
+                day: target.day,
+                onPick: { seed in
+                    layoutGalleryTarget = nil
+                    applyCollageLayout(day: target.day, seed: seed)
+                },
+                onCancel: { layoutGalleryTarget = nil }
+            )
+        }
         .sheet(isPresented: $showLearnSheet) {
             if let suggestion = learningSuggestion {
                 LearningSuggestionSheet(
@@ -322,6 +343,12 @@ struct CaptionReviewView: View {
     }
 
     // MARK: - Bindings
+
+    /// A day whose feed is a carousel + editable collage story: Wednesday always,
+    /// plus Sunday/Monday under the balanced preset.
+    private func isCollageDay(_ day: DayName) -> Bool {
+        PostingPreset.current.isCollageCarousel(day)
+    }
 
     private func collageOffsetsBinding(_ day: DayName) -> Binding<[String: CropOffset]> {
         Binding(
@@ -656,36 +683,56 @@ struct CaptionReviewView: View {
     /// Picks a fresh batch, discards layout/crop state tied to the old photos,
     /// then regenerates the collage. Mirrors `changeReelPhotos` for Thursday.
     private func changeCollagePhotos(day: DayName) {
+        // The collage targets the preset's photo count, but the generator adapts
+        // to fewer (down to a 2-photo grid), so only block below that floor and
+        // surface the target as guidance rather than a hard requirement (#63).
+        let target = CollagePhotoSelection.target(preset: PostingPreset.current, day: day)
         let panel = NSOpenPanel()
-        panel.title = "Select photos for the Wednesday collage"
+        panel.title = "Select photos for the \(day.displayName) collage (about \(target))"
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = true
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
 
-        // The collage lays out the first 10 photos; fewer breaks the grid.
-        guard panel.urls.count >= 10 else {
-            regenerateError = "The Wednesday collage needs at least 10 photos (you picked \(panel.urls.count))."
+        if let message = CollagePhotoSelection.validationError(
+            selectedCount: panel.urls.count, dayDisplayName: day.displayName
+        ) {
+            regenerateError = message
             return
         }
 
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        var wed = ev.days[DayName.wednesday.rawValue] ?? PostingDay(day: .wednesday)
-        wed.photoPaths = panel.urls.sorted {
+        var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
+        pd.photoPaths = panel.urls.sorted {
             $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending
         }
         // Crop offsets and the cell layout are keyed to the old photo paths, so
         // discard them for a clean rebuild from the new set.
-        wed.collageCropOffsets = [:]
-        wed.collageCellOverride = nil
-        ev.days[DayName.wednesday.rawValue] = wed
+        pd.collageCropOffsets = [:]
+        pd.collageCellOverride = nil
+        ev.days[day.rawValue] = pd
         appState.updateEvent(ev)
 
         // Keep the in-memory editor state in sync so the live overlay doesn't
         // reference photos that no longer exist.
-        dayCollageCropOffsets[DayName.wednesday.rawValue] = [:]
-        dayCollageCellOverrides.removeValue(forKey: DayName.wednesday.rawValue)
+        dayCollageCropOffsets[day.rawValue] = [:]
+        dayCollageCellOverrides.removeValue(forKey: day.rawValue)
 
-        regenerateGraphic(day: .wednesday)
+        regenerateGraphic(day: day)
+    }
+
+    /// Apply a layout chosen from the gallery: store its seed as the day's
+    /// collage seed, drop any per-cell override (tied to the old layout), and
+    /// regenerate. `regenerateGraphic` keeps a non-nil seed when newLayout is
+    /// false, so the rendered collage reproduces the picked layout.
+    private func applyCollageLayout(day: DayName, seed: Int) {
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
+        pd.collageSeed = seed
+        pd.collageCellOverride = nil
+        ev.days[day.rawValue] = pd
+        appState.updateEvent(ev)
+        dayCollageCellOverrides.removeValue(forKey: day.rawValue)
+        regenerateGraphic(day: day)
     }
 
     /// Swap two photos in a day's photoPaths. Persists the new order but
@@ -716,16 +763,16 @@ struct CaptionReviewView: View {
         guard let live = appState.events.first(where: { $0.id == event.id }) else { return }
         var eventSnapshot = live
 
-        // For Wednesday, lock the collage seed before the first regen so Python
-        // always produces the same grid layout when only crop offsets change.
-        // When `newLayout` is true, force a fresh seed regardless.
-        if day == .wednesday,
-           newLayout || eventSnapshot.days[DayName.wednesday.rawValue]?.collageSeed == nil {
-            var pd = eventSnapshot.days[DayName.wednesday.rawValue] ?? PostingDay(day: .wednesday)
+        // For a collage day, lock the collage seed before the first regen so
+        // Python always produces the same grid layout when only crop offsets
+        // change. When `newLayout` is true, force a fresh seed regardless.
+        if isCollageDay(day),
+           newLayout || eventSnapshot.days[day.rawValue]?.collageSeed == nil {
+            var pd = eventSnapshot.days[day.rawValue] ?? PostingDay(day: day)
             pd.collageSeed = Int.random(in: 1...999_999_999)
             // Drop any per-cell overrides — they're keyed to the previous layout.
             pd.collageCellOverride = nil
-            eventSnapshot.days[DayName.wednesday.rawValue] = pd
+            eventSnapshot.days[day.rawValue] = pd
             appState.updateEvent(eventSnapshot)
         }
         if day == .thursday, newLayout {
@@ -945,6 +992,8 @@ private struct CaptionSection: View {
     var onChangeReelPhotos: (() -> Void)? = nil
     /// Replace the whole Wednesday collage photo set (review-screen action).
     var onChangeCollagePhotos: (() -> Void)? = nil
+    /// Open the collage layout gallery to pick a layout (collage days only).
+    var onChooseLayout: (() -> Void)? = nil
     var onSwapReelPhotos: ((URL, URL) -> Void)? = nil
     /// Called when the user assigns RAW + Edited photos inline (review screen fallback).
     var onAssignReelPhotos: ((URL, URL, URL?) -> Void)? = nil
@@ -1015,10 +1064,12 @@ private struct CaptionSection: View {
             }
             return nil
         }
-        // Tuesday only needs its reel — the before/after story is covered on Friday
+        // Tuesday only needs its reel — the before/after story is covered on Friday.
+        // Sunday/Monday carry a "collage" key under the balanced preset (their
+        // collage doubles as the story); a "story" key under classic.
         let keys: [String] = day == .tuesday
             ? ["reel"]
-            : ["reel", "before_after", "story_cover", "story"]
+            : ["collage", "reel", "before_after", "story_cover", "story"]
         for key in keys {
             if let p = paths[key], FileManager.default.fileExists(atPath: p) {
                 return URL(fileURLWithPath: p)
@@ -1026,6 +1077,11 @@ private struct CaptionSection: View {
         }
         return nil
     }
+
+    /// A day whose feed is a carousel + collage story (Wednesday always; Sunday
+    /// and Monday under the balanced preset). Detected by the "collage" asset
+    /// key so the view stays preset-agnostic.
+    private var isCollageCarouselDay: Bool { previewPaths?["collage"] != nil }
 
     private var splitPreviewIsReel: Bool {
         guard let paths = previewPaths, let reelP = paths["reel"] else { return false }
@@ -1047,7 +1103,7 @@ private struct CaptionSection: View {
             .appendingPathComponent("reel_preview_layout.json")
     }
 
-    private var splitPreviewIsCollage: Bool { day == .wednesday }
+    private var splitPreviewIsCollage: Bool { isCollageCarouselDay }
 
     private var splitPreviewLabel: String {
         if day == .wednesday { return "COLLAGE" }
@@ -1055,6 +1111,7 @@ private struct CaptionSection: View {
         if paths["reel"] != nil && splitPreviewIsReel { return "REEL" }
         if paths["before_after"] != nil { return "BEFORE / AFTER" }
         if paths["story_cover"] != nil { return "STORY COVER" }
+        if paths["collage"] != nil { return "COLLAGE" }
         return "STORY"
     }
 
@@ -1247,7 +1304,7 @@ private struct CaptionSection: View {
                                 Spacer(minLength: 0)
                                 InstagramMockup(
                                     photoURL: postingDay?.photoPaths.first,
-                                    photoURLs: day == .wednesday ? (postingDay?.photoPaths ?? []) : [],
+                                    photoURLs: (day == .wednesday || isCollageCarouselDay) ? (postingDay?.photoPaths ?? []) : [],
                                     videoURL: day == .thursday ? previewPaths?["reel"].flatMap({ URL(fileURLWithPath: $0) }) : nil,
                                     videoVersion: graphicVersion,
                                     dayLabel: day.displayName,
@@ -1257,10 +1314,10 @@ private struct CaptionSection: View {
                                     isReelDay: day == .thursday,
                                     onRegenerate: onRegenerateGraphic,
                                     onReviseCaption: { showingRevision = true },
-                                    onNewLayout: (day == .wednesday || day == .thursday) ? onNewLayout : nil,
+                                    onNewLayout: (isCollageCarouselDay || day == .thursday) ? onNewLayout : nil,
                                     onSwapAudio: day == .thursday ? onSwapReelAudio : nil,
                                     onUploadAudio: day == .thursday ? onUploadReelAudio : nil,
-                                    onChangePhotos: day == .thursday ? onChangeReelPhotos : (day == .wednesday ? onChangeCollagePhotos : nil),
+                                    onChangePhotos: day == .thursday ? onChangeReelPhotos : (isCollageCarouselDay ? onChangeCollagePhotos : nil),
                                     currentReelLength: day == .thursday ? reelLength : nil,
                                     onChangeReelLength: day == .thursday ? onChangeReelLength : nil,
                                     isRegenerating: isRegeneratingGraphic
@@ -1371,6 +1428,17 @@ private struct CaptionSection: View {
                                         photoURLs: postingDay?.photoPaths ?? []
                                     )
                                     .padding(Spacing.md)
+
+                                    if let onChooseLayout {
+                                        Button(action: onChooseLayout) {
+                                            Label("Choose layout…", systemImage: "square.grid.2x2")
+                                                .font(.system(size: 12, weight: .medium))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(Color.roseGold)
+                                        .disabled(isRegeneratingGraphic)
+                                        .padding(.bottom, Spacing.xs)
+                                    }
 
                                     // Draggable photo thumbnails for swapping cells
                                     if let pd = postingDay, !pd.photoPaths.isEmpty {
@@ -2197,10 +2265,10 @@ private struct ReviewMediaStrip: View {
         return URL(fileURLWithPath: p)
     }
 
-    /// Collage PNG + layout sidecar — Wednesday only.
+    /// Collage PNG + layout sidecar — any collage day (the "collage" key is only
+    /// present for collage-carousel days: Wednesday always, Sun/Mon under balanced).
     private var collageInfo: (url: URL, layoutURL: URL)? {
-        guard day == .wednesday,
-              let p = previewPaths?["collage"],
+        guard let p = previewPaths?["collage"],
               FileManager.default.fileExists(atPath: p) else { return nil }
         let url = URL(fileURLWithPath: p)
         let layoutURL = url.deletingLastPathComponent()
@@ -4393,5 +4461,127 @@ private struct InlineReelPhotoAssignment: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(Color.warmMid)
         }
+    }
+}
+
+// MARK: - Collage layout gallery (#57)
+
+/// Renders several candidate collage layouts for a day and lets the user pick
+/// one. The picked layout's seed is stored as the day's collage seed so the
+/// final render reproduces it.
+private struct CollageLayoutGallery: View {
+    let event: Event
+    let day: DayName
+    var onPick: (Int) -> Void
+    var onCancel: () -> Void
+
+    @State private var candidates: [CollageCandidate] = []
+    @State private var isLoading = true
+    @State private var error: String?
+
+    private let columns = [GridItem(.adaptive(minimum: 150), spacing: Spacing.md)]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Choose a layout — \(day.displayName)")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.warmDark)
+                Spacer()
+                Button("Cancel") { onCancel() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.roseGold)
+            }
+            .padding(Spacing.lg)
+
+            Divider()
+
+            if isLoading {
+                VStack(spacing: Spacing.md) {
+                    ProgressView().controlSize(.large).tint(Color.roseGold)
+                    Text("Rendering layout options…")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.warmMid)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error {
+                Text(error)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.roseDeep)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding()
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: Spacing.md) {
+                        ForEach(candidates, id: \.seed) { candidate in
+                            Button { onPick(candidate.seed) } label: {
+                                candidateThumb(candidate)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Use this layout")
+                        }
+                    }
+                    .padding(Spacing.lg)
+                }
+            }
+        }
+        .frame(width: 580, height: 660)
+        .background(Color.cream)
+        .task { await load() }
+    }
+
+    @ViewBuilder
+    private func candidateThumb(_ candidate: CollageCandidate) -> some View {
+        if let img = NSImage(contentsOfFile: candidate.path) {
+            Image(nsImage: img)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                        .stroke(Color.warmMid.opacity(0.2), lineWidth: 1)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                .fill(Color.warmMid.opacity(0.1))
+                .frame(height: 220)
+        }
+    }
+
+    /// Identity of the layout inputs: the day, its photos (in order), and their
+    /// crop offsets. When this is unchanged the cached candidates still apply.
+    private func fingerprint() -> String {
+        guard let pd = event.days[day.rawValue] else { return day.rawValue }
+        let count = PostingPreset.current.format(for: day)?.count ?? pd.photoPaths.count
+        let parts = pd.photoPaths.prefix(count).map { url -> String in
+            let o = pd.collageCropOffsets[url.absoluteString] ?? CropOffset()
+            return "\(url.path)|\(o.x),\(o.y),\(o.scale)"
+        }
+        return ([day.rawValue] + parts).joined(separator: "~")
+    }
+
+    private func load() async {
+        let fp = fingerprint()
+        // Reuse the same options on reopen (issue #61) when nothing changed.
+        if let cached = CollageCandidateCache.shared.cached(day: day, fingerprint: fp) {
+            candidates = cached
+            isLoading = false
+            return
+        }
+        isLoading = true
+        error = nil
+        do {
+            let result = try await PythonBridge.shared.renderCollageCandidates(event: event, day: day)
+            candidates = result
+            if result.isEmpty {
+                error = "Couldn't render layout options. Make sure this day has photos assigned."
+            } else {
+                CollageCandidateCache.shared.store(day: day, fingerprint: fp, candidates: result)
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+        isLoading = false
     }
 }

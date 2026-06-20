@@ -45,13 +45,19 @@ struct PhotoAssignmentView: View {
 
     var totalPhotos: Int { dayPhotos.values.reduce(0) { $0 + $1.count } }
 
-    /// Suggestions for the Wednesday per-photo tag popover, drawn from the
-    /// event's performers. Inserts the @handle when there is a real one,
-    /// otherwise the plain name. Performers marked as appearing in Wednesday's
-    /// photos are listed first so the common picks are closest to hand.
-    private var wednesdayTagSuggestions: [PhotoTagSuggestion] {
+    /// A day with a per-photo carousel that supports people tagging: Wednesday
+    /// always, plus Sunday/Monday under the balanced preset.
+    private func isCollageDay(_ day: DayName) -> Bool {
+        PostingPreset.current.isCollageCarousel(day)
+    }
+
+    /// Suggestions for a day's per-photo tag popover, drawn from the event's
+    /// performers. Inserts the @handle when there is a real one, otherwise the
+    /// plain name. Performers marked as appearing in that day's photos are listed
+    /// first so the common picks are closest to hand.
+    private func tagSuggestions(for day: DayName) -> [PhotoTagSuggestion] {
         let performers = event.ocrResult?.performers ?? []
-        let selected = dayPerformers[.wednesday] ?? []
+        let selected = dayPerformers[day] ?? []
         let ordered = performers.sorted { a, b in
             let aSel = selected.contains(a.id), bSel = selected.contains(b.id)
             if aSel != bSel { return aSel }
@@ -229,8 +235,8 @@ struct PhotoAssignmentView: View {
                             collageNote: note,
                             photos: dayBinding(day),
                             cropOffsets: enableCrop ? cropOffsetsBinding(day) : nil,
-                            photoTags: day == .wednesday ? photoTagsBinding(day) : nil,
-                            tagSuggestions: day == .wednesday ? wednesdayTagSuggestions : [],
+                            photoTags: isCollageDay(day) ? photoTagsBinding(day) : nil,
+                            tagSuggestions: isCollageDay(day) ? tagSuggestions(for: day) : [],
                             notes: noteBinding(day),
                             onPreview: { previewURL = $0 },
                             onAddPhotos: { presentPicker(.day(day)) }

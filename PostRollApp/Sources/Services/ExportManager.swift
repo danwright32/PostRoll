@@ -94,7 +94,8 @@ final class ExportManager {
             // scope is released once the synchronous export returns.
             let folder = try await Task.detached {
                 defer { destinationRoot.stopAccessingSecurityScopedResource() }
-                return try EventExporter.export(event: capturedEvent, to: destinationRoot, days: scopedDays)
+                return try EventExporter.export(event: capturedEvent, to: destinationRoot, days: scopedDays,
+                                                preset: PostingPreset.current)
             }.value
 
             tracker.update(eventID) {
@@ -116,10 +117,12 @@ final class ExportManager {
                 guard hasContent else { continue }
                 contentDayCount += 1
 
-                // Wednesday: render directly from the live SwiftUI overlay so crop
-                // offsets / cell-frame edits match what the user saw on screen.
-                if day == .wednesday,
-                   (await renderWednesdayCollage(event: capturedEvent, exportFolder: folder)) != nil {
+                // Collage-carousel days (Wednesday always; Sunday/Monday under
+                // the balanced preset): render directly from the live SwiftUI
+                // overlay so crop offsets / cell-frame edits match what the user
+                // saw on screen.
+                if PostingPreset.current.isCollageCarousel(day),
+                   (await renderCollage(day: day, event: capturedEvent, exportFolder: folder)) != nil {
                     continue
                 }
 
@@ -226,16 +229,18 @@ final class ExportManager {
             eventName: appState.events.first(where: { $0.id == eventID })?.name ?? "")
     }
 
-    /// Render Wednesday's collage from the live SwiftUI overlay. Returns the
-    /// output URL on success, nil if any precondition is missing.
+    /// Render a day's collage from the live SwiftUI overlay so crop offsets and
+    /// cell-frame edits match what the user saw. Works for any collage-carousel
+    /// day (Wednesday always; Sunday/Monday under the balanced preset). Returns
+    /// the output URL on success, nil if any precondition is missing.
     @MainActor
-    private func renderWednesdayCollage(event: Event, exportFolder: URL) async -> URL? {
-        guard let basePath = event.previewMediaPaths[DayName.wednesday.rawValue]?["collage"]
+    private func renderCollage(day: DayName, event: Event, exportFolder: URL) async -> URL? {
+        guard let basePath = event.previewMediaPaths[day.rawValue]?["collage"]
         else { return nil }
         let baseURL = URL(fileURLWithPath: basePath)
         guard FileManager.default.fileExists(atPath: baseURL.path) else { return nil }
 
-        let pd = event.days[DayName.wednesday.rawValue]
+        let pd = event.days[day.rawValue]
         let cells: [CollageCell]? = {
             if let override = pd?.collageCellOverride, !override.isEmpty { return override }
             let layoutURL = baseURL.deletingLastPathComponent()
@@ -248,7 +253,7 @@ final class ExportManager {
         }()
         guard let cells else { return nil }
 
-        let dayDir = exportFolder.appendingPathComponent(DayName.wednesday.folderName)
+        let dayDir = exportFolder.appendingPathComponent(day.folderName)
         try? FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
         let outputURL = dayDir.appendingPathComponent("collage.png")
 

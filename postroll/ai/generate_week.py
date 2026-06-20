@@ -54,6 +54,7 @@ from typing import Any
 from .generate_captions import generate_caption
 from .generate_blog import generate_blog
 from .select_reel_photos import select_reel_photos, DEFAULT_MAX_REEL_PHOTOS
+from ..posting_preset import DEFAULT_PRESET, is_collage_carousel
 
 
 DAY_ORDER = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]
@@ -62,9 +63,14 @@ DAY_ORDER = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]
 REEL_SELECTION_THRESHOLD = 50
 
 
-def _auto_post_type(day: str, photo_count: int) -> str:
-    """Pick a sensible post_type when the manifest doesn't specify one."""
-    if day == "wednesday" and photo_count > 1:
+def _auto_post_type(day: str, photo_count: int, preset: str = DEFAULT_PRESET) -> str:
+    """Pick a sensible post_type when the manifest doesn't specify one.
+
+    Sunday/Monday/Wednesday are governed by the posting preset: a
+    collage_carousel day is a "carousel" (so the caption pipeline emits one alt
+    text per photo), a single day is a "feed_photo".
+    """
+    if is_collage_carousel(preset, day) and photo_count > 1:
         return "carousel"
     if day in ("thursday",) and photo_count > 1:
         return "scroll_reel"
@@ -83,6 +89,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
     days_data     = manifest.get("days", {})
     blog_photos   = manifest.get("blog_photos", [])
     event_url     = manifest.get("event_url", "")
+    preset        = manifest.get("preset", DEFAULT_PRESET)
 
     results: dict[str, Any] = {}
     errors:  dict[str, str] = {}
@@ -108,7 +115,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
             print(f"[generate_week] {day_name}: no photos, skipping", flush=True)
             continue
 
-        post_type    = day_info.get("post_type") or _auto_post_type(day_name, len(photos))
+        post_type    = day_info.get("post_type") or _auto_post_type(day_name, len(photos), preset)
         tag_handles  = day_info.get("tag_handles") or None
         name_mentions = day_info.get("name_mentions") or None
         notes        = day_info.get("notes", "")
@@ -117,9 +124,10 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
         # For Thursday's scroll reel: the reel itself can have 50-200+ photos
         # (the visual asset is generated locally by ffmpeg), but Claude only
         # needs a representative sample to write the caption. Wednesday's
-        # collage photos are already the curated 10-photo sample of the event,
-        # so reuse them as Claude's context — same event, same shoot, no extra
-        # selection step, never blows past Claude's request size limit.
+        # collage photos are already a curated sample of the event (4 or 10
+        # depending on the posting preset), so reuse them as Claude's context —
+        # same event, same shoot, no extra selection step, never blows past
+        # Claude's request size limit.
         if day_name == "thursday" and post_type == "scroll_reel":
             # Look up Wednesday's photos from either the days dict (when
             # Wednesday is included in this run) OR from the dedicated

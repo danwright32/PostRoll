@@ -128,6 +128,90 @@ final class EventExporterTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("0. Blog/draft.md").path))
     }
 
+    // MARK: - Posting preset
+
+    /// Build an event whose Sunday carries four assigned photos plus a caption
+    /// with one alt text per photo (what a carousel day produces).
+    private func makeSundayCarouselEvent() -> (Event, [URL]) {
+        let photos = [makeFile("sun-11.jpg"), makeFile("sun-22.jpg"),
+                      makeFile("sun-33.jpg"), makeFile("sun-44.jpg")]
+        var event = Event(name: "Music From Inside", org: "Decoda",
+                          venue: "Hall", date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        var sun = PostingDay(day: .sunday)
+        sun.photoPaths = photos
+        event.days = [DayName.sunday.rawValue: sun]
+
+        var result = WeekGenerationResult()
+        result.sunday = caption("Sunday carousel", hashtags: ["#concert"],
+                                alt: ["frame a", "frame b", "frame c", "frame d"])
+        event.weekResult = result
+        return (event, photos)
+    }
+
+    func testBalancedPresetExportsSundayAsCarouselWithNumberedAltText() throws {
+        let (event, _) = makeSundayCarouselEvent()
+        let folder = try EventExporter.export(event: event, to: root, preset: .balanced)
+        let fm = FileManager.default
+
+        // Sunday gets a carousel/ of its four assigned photos, zero-padded.
+        for i in 1...4 {
+            XCTAssertTrue(
+                fm.fileExists(atPath: folder.appendingPathComponent("1. Sunday/carousel/0\(i).jpg").path),
+                "balanced Sunday should copy carousel photo 0\(i)")
+        }
+
+        // Alt texts are numbered per photo (by trailing filename number).
+        let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+        XCTAssertTrue(captions.contains("11: frame a"))
+        XCTAssertTrue(captions.contains("44: frame d"))
+    }
+
+    func testBalancedSundayCarouselEmitsPerPhotoTags() throws {
+        let photos = [makeFile("sun-11.jpg"), makeFile("sun-22.jpg"),
+                      makeFile("sun-33.jpg"), makeFile("sun-44.jpg")]
+        var event = Event(name: "Music From Inside", org: "Decoda",
+                          venue: "Hall", date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        var sun = PostingDay(day: .sunday)
+        sun.photoPaths = photos
+        // Tag people on the second and fourth photos only.
+        sun.photoTags = [
+            photos[1].absoluteString: ["Mike Bono", "@mikebonomusic"],
+            photos[3].absoluteString: ["Catherine Gregory"],
+        ]
+        event.days = [DayName.sunday.rawValue: sun]
+        var result = WeekGenerationResult()
+        result.sunday = caption("Sunday carousel", alt: ["a", "b", "c", "d"])
+        event.weekResult = result
+
+        let folder = try EventExporter.export(event: event, to: root, preset: .balanced)
+        let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+        XCTAssertTrue(captions.contains("PHOTO TAGS:"))
+        XCTAssertTrue(captions.contains("22: Mike Bono, @mikebonomusic"))
+        XCTAssertTrue(captions.contains("44: Catherine Gregory"))
+        // Untagged photos don't appear in the tags block.
+        let tagsBlock = captions.components(separatedBy: "PHOTO TAGS:")[1]
+        XCTAssertFalse(tagsBlock.contains("11:"))
+    }
+
+    func testClassicPresetKeepsSundaySinglePhoto() throws {
+        let (event, _) = makeSundayCarouselEvent()
+        let folder = try EventExporter.export(event: event, to: root, preset: .classic)
+        let fm = FileManager.default
+
+        // No carousel subfolder under classic — Sunday is a single feed photo.
+        XCTAssertFalse(
+            fm.fileExists(atPath: folder.appendingPathComponent("1. Sunday/carousel").path),
+            "classic Sunday must not produce a carousel folder")
+
+        // Only the first alt text is written, un-numbered.
+        let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+        XCTAssertTrue(captions.contains("frame a"))
+        XCTAssertFalse(captions.contains("11: frame a"),
+                       "classic single-photo day must not number alt texts")
+    }
+
     func testSlug() {
         XCTAssertEqual(EventExporter.slug("Decoda"), "decoda")
         XCTAssertEqual(EventExporter.slug("Music From Inside"), "music_from_inside")
