@@ -4,6 +4,10 @@ struct SettingsView: View {
     @State private var apiKey: String = KeychainStore.readAPIKey() ?? ""
     @State private var saved = false
 
+    // Default posting layout for new events (#66). Per-event overrides live on
+    // the Export page; this is the fallback an event uses until it's overridden.
+    @State private var presetStore = PostingPresetStore()
+
     // Legacy-data reclaim (#47): nil until probed; 0 means nothing to reclaim.
     @State private var reclaimableBytes: Int64? = nil
     @State private var isReclaiming = false
@@ -42,6 +46,24 @@ struct SettingsView: View {
                 Text("Anthropic API Key")
             } footer: {
                 Text("Used to call Claude directly, bypassing the CLI for faster generation. Get a key at console.anthropic.com.")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+            }
+
+            Section {
+                Picker("Default layout", selection: Binding(
+                    get: { presetStore.selected },
+                    set: { presetStore.selected = $0; presetStore.save() }
+                )) {
+                    ForEach(PostingPreset.allCases) { preset in
+                        Text(preset.displayName).tag(preset)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Default Posting Layout")
+            } footer: {
+                Text("The layout new events start with. Balanced posts a 4 photo carousel with a collage story on Sunday, Monday, and Wednesday; Classic posts a single photo Sunday and Monday plus a 10 photo Wednesday. You can override this for any single event on its Export page.")
                     .foregroundStyle(.secondary)
                     .font(.system(size: 11))
             }

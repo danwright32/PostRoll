@@ -95,7 +95,7 @@ final class ExportManager {
             let folder = try await Task.detached {
                 defer { destinationRoot.stopAccessingSecurityScopedResource() }
                 return try EventExporter.export(event: capturedEvent, to: destinationRoot, days: scopedDays,
-                                                preset: PostingPreset.current)
+                                                preset: capturedEvent.effectivePostingPreset)
             }.value
 
             tracker.update(eventID) {
@@ -121,7 +121,7 @@ final class ExportManager {
                 // the balanced preset): render directly from the live SwiftUI
                 // overlay so crop offsets / cell-frame edits match what the user
                 // saw on screen.
-                if PostingPreset.current.isCollageCarousel(day),
+                if capturedEvent.effectivePostingPreset.isCollageCarousel(day),
                    (await renderCollage(day: day, event: capturedEvent, exportFolder: folder)) != nil {
                     continue
                 }

@@ -4,7 +4,6 @@ struct ExportView: View {
     let event: Event
     @Environment(AppState.self) private var appState
     @Environment(ExportManager.self) private var exportManager
-    @Environment(PostingPresetStore.self) private var presetStore
     @Environment(GenerationManager.self) private var genManager
 
     @State private var showingFolderPicker = false
@@ -139,8 +138,15 @@ struct ExportView: View {
 
     private var isRegenerating: Bool { genManager.isRunning(event.id) }
 
-    /// App wide posting layout. Switching it rebuilds Sunday/Monday/Wednesday
-    /// (their captions and media change) so the affected days are regenerated.
+    /// This event's effective posting layout (its override, or the app wide
+    /// default). Read live from AppState so it reflects the latest write.
+    private var effectivePreset: PostingPreset {
+        (appState.events.first(where: { $0.id == event.id }) ?? event).effectivePostingPreset
+    }
+
+    /// Posting layout for THIS event. Switching it sets a per-event override and
+    /// rebuilds Sunday/Monday/Wednesday (their captions and media change) so the
+    /// affected days are regenerated. The default for new events lives in Settings.
     private var presetPicker: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(spacing: Spacing.md) {
@@ -148,7 +154,7 @@ struct ExportView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.warmDark)
                 Picker("Posting layout", selection: Binding(
-                    get: { presetStore.selected },
+                    get: { effectivePreset },
                     set: { applyPreset($0) }
                 )) {
                     ForEach(PostingPreset.allCases) { preset in
@@ -168,34 +174,34 @@ struct ExportView: View {
                         .foregroundStyle(Color.warmDark.opacity(0.8))
                 }
             } else {
-                Text(presetStore.selected == .balanced
-                     ? "Sunday, Monday, and Wednesday each post a 4 photo carousel with a collage story."
-                     : "Sunday and Monday post a single photo; Wednesday posts a 10 photo carousel with a collage story.")
+                Text(effectivePreset == .balanced
+                     ? "This event: Sunday, Monday, and Wednesday each post a 4 photo carousel with a collage story."
+                     : "This event: Sunday and Monday post a single photo; Wednesday posts a 10 photo carousel with a collage story.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.warmDark.opacity(0.7))
             }
         }
     }
 
-    /// Persist the new preset and regenerate the days it governs. Their previews
-    /// are cleared first so a failed regen can't leave the export copying stale
-    /// assets from the previous layout.
+    /// Set this event's layout override and regenerate the days it governs. Their
+    /// previews are cleared first so a failed regen can't leave the export copying
+    /// stale assets from the previous layout.
     private func applyPreset(_ newValue: PostingPreset) {
-        guard newValue != presetStore.selected else { return }
-        presetStore.selected = newValue
-        presetStore.save()
+        guard var ev = appState.events.first(where: { $0.id == event.id }),
+              newValue != ev.effectivePostingPreset else { return }
+        ev.postingPresetOverride = newValue
 
-        guard var ev = appState.events.first(where: { $0.id == event.id }) else { return }
         let governed = DayName.allCases.filter { newValue.format(for: $0) != nil }
         let affected = Set(governed
             .filter { !(ev.days[$0.rawValue]?.photoPaths.isEmpty ?? true) }
             .map { $0.rawValue })
-        guard !affected.isEmpty else { return }
-
         for day in affected { ev.previewMediaPaths.removeValue(forKey: day) }
         appState.updateEvent(ev)
-        genManager.start(eventID: event.id, retryDays: affected, appState: appState,
-                         regenerateGraphics: true)
+
+        if !affected.isEmpty {
+            genManager.start(eventID: event.id, retryDays: affected, appState: appState,
+                             regenerateGraphics: true)
+        }
     }
 
     private func progressContent(label: String) -> some View {

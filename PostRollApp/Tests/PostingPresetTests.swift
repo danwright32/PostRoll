@@ -58,6 +58,61 @@ final class PostingPresetTests: XCTestCase {
         XCTAssertTrue(message?.contains("Sunday") ?? false)
     }
 
+    // MARK: - Per-event override (#66)
+
+    private func makeEvent() -> Event {
+        Event(name: "Show", org: "Org", venue: "Hall",
+              date: Date(timeIntervalSince1970: 1_700_000_000), shootType: .fullShow)
+    }
+
+    private func withGlobalPreset(_ preset: PostingPreset, _ body: () -> Void) {
+        let key = PostingPreset.storageKey
+        let original = UserDefaults.standard.string(forKey: key)
+        defer {
+            if let original { UserDefaults.standard.set(original, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        UserDefaults.standard.set(preset.rawValue, forKey: key)
+        body()
+    }
+
+    func testEffectivePresetUsesOverrideWhenSet() {
+        var event = makeEvent()
+        event.postingPresetOverride = .classic
+        // The override wins regardless of the global default.
+        withGlobalPreset(.balanced) {
+            XCTAssertEqual(event.effectivePostingPreset, .classic)
+        }
+    }
+
+    func testEffectivePresetFallsBackToGlobalWhenNoOverride() {
+        var event = makeEvent()
+        event.postingPresetOverride = nil
+        withGlobalPreset(.classic) {
+            XCTAssertEqual(event.effectivePostingPreset, .classic)
+        }
+        withGlobalPreset(.balanced) {
+            XCTAssertEqual(event.effectivePostingPreset, .balanced)
+        }
+    }
+
+    func testOverrideSurvivesCodableRoundTrip() throws {
+        var event = makeEvent()
+        event.postingPresetOverride = .classic
+        let data = try JSONEncoder().encode(event)
+        let decoded = try JSONDecoder().decode(Event.self, from: data)
+        XCTAssertEqual(decoded.postingPresetOverride, .classic)
+    }
+
+    func testMissingOverrideDecodesAsNil() throws {
+        // An event saved before this field existed must decode with no override.
+        var event = makeEvent()
+        event.postingPresetOverride = nil
+        let data = try JSONEncoder().encode(event)
+        let decoded = try JSONDecoder().decode(Event.self, from: data)
+        XCTAssertNil(decoded.postingPresetOverride)
+    }
+
     @MainActor
     func testStoreDefaultsToBalancedAndPersists() {
         let key = PostingPreset.storageKey

@@ -216,7 +216,7 @@ actor PythonBridge {
     /// render reproduces it. Returns the candidates (empty on failure).
     func renderCollageCandidates(event: Event, day: DayName, count: Int = 6) async throws -> [CollageCandidate] {
         guard let pd = event.days[day.rawValue], !pd.photoPaths.isEmpty else { return [] }
-        let photoCount = PostingPreset.current.format(for: day)?.count ?? pd.photoPaths.count
+        let photoCount = event.effectivePostingPreset.format(for: day)?.count ?? pd.photoPaths.count
         let photos = Array(pd.photoPaths.prefix(photoCount)).map { $0.path }
         guard !photos.isEmpty else { return [] }
 
@@ -522,7 +522,7 @@ actor PythonBridge {
             // Collage-carousel days (Wednesday always; Sunday/Monday under the
             // balanced preset) carry the collage seed, per-cell crop offsets, and
             // any user-dragged frame layout so Python reproduces the live editor.
-            if PostingPreset.current.isCollageCarousel(dayName) {
+            if event.effectivePostingPreset.isCollageCarousel(dayName) {
                 if let seed = pd.collageSeed { entry["collage_seed"] = seed }
                 let offsets = pd.photoPaths.map { url -> [Double] in
                     let o = pd.collageCropOffsets[url.absoluteString] ?? CropOffset()
@@ -553,7 +553,7 @@ actor PythonBridge {
             "shoot_type": event.shootType.pythonValue,
             "pieces":     pieces,
             "days":       daysDict,
-            "preset":     PostingPreset.current.rawValue,
+            "preset":     event.effectivePostingPreset.rawValue,
         ]
     }
 
@@ -817,7 +817,7 @@ actor PythonBridge {
             "shoot_type":    event.shootType.pythonValue,
             "program":       programDict,
             "days":          daysDict,
-            "preset":        PostingPreset.current.rawValue,
+            "preset":        event.effectivePostingPreset.rawValue,
         ]
 
         // Wednesday's collage photos (always 10 or fewer) are reused as
