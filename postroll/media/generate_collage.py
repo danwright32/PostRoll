@@ -63,6 +63,33 @@ BOTTOM_PATTERNS = [
     [2, 3],          # pair → trio
 ]
 
+# Dedicated 4-photo arrangements (top_pattern, bottom_pattern). The even 2/2
+# split only ever yields a flat 2x2 grid, so offer asymmetric hero layouts too.
+FOUR_PHOTO_LAYOUTS = [
+    ([1], [3]),       # hero over trio
+    ([3], [1]),       # trio over hero
+    ([2], [2]),       # balanced 2x2 grid
+    ([1], [2, 1]),    # hero over (pair then hero)
+    ([2, 1], [1]),    # (pair then hero) over hero
+]
+
+
+def choose_collage_split(n: int, rng: random.Random) -> tuple[list[int], list[int]]:
+    """Pick (top_pattern, bottom_pattern) for an n-photo masonry collage.
+
+    Each pattern is a list of per-row photo counts. For 4 photos we draw from a
+    curated set of dynamic arrangements; for other counts we keep the original
+    near-even top/bottom split and choose matching row patterns.
+    """
+    if n == 4:
+        top, bottom = rng.choice(FOUR_PHOTO_LAYOUTS)
+        return list(top), list(bottom)
+    top_count = n // 2
+    bottom_count = n - top_count
+    valid_top = [p for p in TOP_PATTERNS if sum(p) == top_count] or [[top_count]]
+    valid_bottom = [p for p in BOTTOM_PATTERNS if sum(p) == bottom_count] or [[bottom_count]]
+    return rng.choice(valid_top), rng.choice(valid_bottom)
+
 
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
     try:
@@ -457,15 +484,11 @@ def generate_collage(
         # ── Masonry mode: compute layout from photo ratios + pattern ───────
         rng = random.Random(seed)
         n = len(all_photos)
-        top_count = n // 2
+        top_pattern, bottom_pattern = choose_collage_split(n, rng)
+        top_count = sum(top_pattern)
         bottom_count = n - top_count
         top_photos = all_photos[:top_count]
         bottom_photos = all_photos[top_count:]
-
-        valid_top = [p for p in TOP_PATTERNS if sum(p) == top_count] or [[top_count]]
-        valid_bottom = [p for p in BOTTOM_PATTERNS if sum(p) == bottom_count] or [[bottom_count]]
-        top_pattern = rng.choice(valid_top)
-        bottom_pattern = rng.choice(valid_bottom)
 
         photo_area_h = CANVAS_H - STRIP_H - GAP
         top_h = int(photo_area_h * 0.50)

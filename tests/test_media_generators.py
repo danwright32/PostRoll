@@ -9,6 +9,7 @@ explicit stream selection, and atomic temp encodes.
 
 from __future__ import annotations
 
+import random
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -19,7 +20,11 @@ from postroll.media import generate_reel_morph as morph_mod
 from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
-from postroll.media.generate_collage import crop_to_fill, generate_collage_candidates
+from postroll.media.generate_collage import (
+    crop_to_fill,
+    generate_collage_candidates,
+    choose_collage_split,
+)
 from postroll.ai import swap_reel_audio as swap_mod
 
 
@@ -67,6 +72,33 @@ def test_crop_x_axis_uses_same_bias():
             px[x, y] = (x, 0, 0)
     out = crop_to_fill(img, 100, 100, crop_offset_x=1.0)
     assert out.getpixel((0, 0))[0] == 100
+
+
+# ===================================================================
+# Collage split selection (#67 — dynamic 4-photo layouts)
+# ===================================================================
+
+
+def test_four_photo_split_offers_dynamic_layouts():
+    # A 4-photo collage must offer more than the flat 2x2 grid: across seeds it
+    # should produce varied arrangements including a single hero row.
+    seen = set()
+    for s in range(60):
+        top, bottom = choose_collage_split(4, random.Random(s))
+        seen.add((tuple(top), tuple(bottom)))
+        # Every layout must cover all four photos.
+        assert sum(top) + sum(bottom) == 4
+    assert len(seen) > 1, "4-photo layout should vary, not always 2x2"
+    top_sums = {sum(t) for t, _ in seen}
+    assert 1 in top_sums, "a hero-over-trio style layout (1 photo on top) should appear"
+
+
+def test_non_four_split_uses_even_halves():
+    # Other counts keep the original near-even split.
+    top, bottom = choose_collage_split(10, random.Random(0))
+    assert sum(top) == 5 and sum(bottom) == 5
+    top, bottom = choose_collage_split(6, random.Random(1))
+    assert sum(top) == 3 and sum(bottom) == 3
 
 
 # ===================================================================
