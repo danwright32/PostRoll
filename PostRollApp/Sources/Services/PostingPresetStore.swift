@@ -41,6 +41,15 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
         format(for: day)?.format == .collageCarousel
     }
 
+    /// The days a switch to this layout would rebuild for `event`: the
+    /// preset-governed days (Sunday/Monday/Wednesday) that actually have photos.
+    /// Used to warn before a switch regenerates posts (#71).
+    func affectedDays(in event: Event) -> [DayName] {
+        DayName.allCases.filter {
+            format(for: $0) != nil && !(event.days[$0.rawValue]?.photoPaths.isEmpty ?? true)
+        }
+    }
+
     /// UserDefaults key shared with `PostingPresetStore`.
     static let storageKey = "postroll.posting.preset.v1"
 
