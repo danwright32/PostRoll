@@ -9,6 +9,8 @@ struct ExportView: View {
     @State private var showingFolderPicker = false
     @State private var lastExportFolder: URL? = nil
     @State private var pendingSingleDay: DayName? = nil
+    /// A layout the user picked that needs confirmation before it rebuilds posts (#71).
+    @State private var pendingPreset: PostingPreset? = nil
 
     /// Export progress is owned app-scoped by ExportManager so it survives this
     /// view being torn down on an event switch (`.id(event.id)` remount) and
@@ -63,6 +65,24 @@ struct ExportView: View {
             } else {
                 pendingSingleDay = nil
             }
+        }
+        .confirmationDialog(
+            pendingPreset.map { "Switch this event to the \($0.displayName) layout?" } ?? "",
+            isPresented: Binding(
+                get: { pendingPreset != nil },
+                set: { if !$0 { pendingPreset = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let pendingPreset {
+                Button("Switch and rebuild") {
+                    applyPreset(pendingPreset)
+                    self.pendingPreset = nil
+                }
+                Button("Cancel", role: .cancel) { self.pendingPreset = nil }
+            }
+        } message: {
+            Text(pendingPresetRebuildMessage)
         }
     }
 
@@ -155,7 +175,7 @@ struct ExportView: View {
                     .foregroundStyle(Color.warmDark)
                 Picker("Posting layout", selection: Binding(
                     get: { effectivePreset },
-                    set: { applyPreset($0) }
+                    set: { requestPresetChange($0) }
                 )) {
                     ForEach(PostingPreset.allCases) { preset in
                         Text(preset.displayName).tag(preset)
@@ -183,6 +203,28 @@ struct ExportView: View {
         }
     }
 
+    /// Plain-language list of what a pending layout switch will rebuild.
+    private var pendingPresetRebuildMessage: String {
+        guard let pendingPreset,
+              let ev = appState.events.first(where: { $0.id == event.id }) else { return "" }
+        let days = pendingPreset.affectedDays(in: ev).map { $0.displayName }
+        let list = ListFormatter.localizedString(byJoining: days)
+        return "This rebuilds \(list) (captions and images) for this event."
+    }
+
+    /// Handle a picker selection. Switching the layout rebuilds the governed
+    /// days, so confirm first when there are posts to rebuild (#71); when nothing
+    /// would rebuild (no photos yet), just set the override silently.
+    private func requestPresetChange(_ newValue: PostingPreset) {
+        guard let ev = appState.events.first(where: { $0.id == event.id }),
+              newValue != ev.effectivePostingPreset else { return }
+        if newValue.affectedDays(in: ev).isEmpty {
+            applyPreset(newValue)
+        } else {
+            pendingPreset = newValue
+        }
+    }
+
     /// Set this event's layout override and regenerate the days it governs. Their
     /// previews are cleared first so a failed regen can't leave the export copying
     /// stale assets from the previous layout.
@@ -191,15 +233,12 @@ struct ExportView: View {
               newValue != ev.effectivePostingPreset else { return }
         ev.postingPresetOverride = newValue
 
-        let governed = DayName.allCases.filter { newValue.format(for: $0) != nil }
-        let affected = Set(governed
-            .filter { !(ev.days[$0.rawValue]?.photoPaths.isEmpty ?? true) }
-            .map { $0.rawValue })
+        let affected = newValue.affectedDays(in: ev).map { $0.rawValue }
         for day in affected { ev.previewMediaPaths.removeValue(forKey: day) }
         appState.updateEvent(ev)
 
         if !affected.isEmpty {
-            genManager.start(eventID: event.id, retryDays: affected, appState: appState,
+            genManager.start(eventID: event.id, retryDays: Set(affected), appState: appState,
                              regenerateGraphics: true)
         }
     }
