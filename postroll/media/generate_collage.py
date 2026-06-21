@@ -91,6 +91,32 @@ def choose_collage_split(n: int, rng: random.Random) -> tuple[list[int], list[in
     return rng.choice(valid_top), rng.choice(valid_bottom)
 
 
+def distinct_collage_splits(n: int) -> list[tuple[list[int], list[int]]]:
+    """Every distinct (top_pattern, bottom_pattern) arrangement for n photos.
+
+    The set `choose_collage_split` draws from, enumerated so the layout gallery
+    can show one of each structural arrangement instead of random repeats (#70).
+    """
+    if n == 4:
+        return [(list(t), list(b)) for t, b in FOUR_PHOTO_LAYOUTS]
+    top_count = n // 2
+    bottom_count = n - top_count
+    valid_top = [p for p in TOP_PATTERNS if sum(p) == top_count] or [[top_count]]
+    valid_bottom = [p for p in BOTTOM_PATTERNS if sum(p) == bottom_count] or [[bottom_count]]
+    return [(list(t), list(b)) for t in valid_top for b in valid_bottom]
+
+
+def _seed_for_split(n: int, target: tuple[list[int], list[int]], limit: int = 100_000) -> int:
+    """Find a seed whose `choose_collage_split` yields `target`, so a gallery
+    candidate's stored seed reproduces its exact arrangement on final render."""
+    want = (tuple(target[0]), tuple(target[1]))
+    for seed in range(limit):
+        top, bottom = choose_collage_split(n, random.Random(seed))
+        if (tuple(top), tuple(bottom)) == want:
+            return seed
+    return 0
+
+
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
     try:
         return ImageFont.truetype(path, size, index=index)
@@ -555,9 +581,11 @@ def generate_collage_candidates(
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if seeds is None:
-        upper = 999_999_999
-        # Distinct seeds so the gallery never shows the same layout twice.
-        seeds = random.sample(range(1, upper), min(count, upper - 1))
+        # Pick one seed per distinct structural arrangement so the gallery shows
+        # genuinely different layouts, not random repeats (#70). Each seed
+        # reproduces its arrangement on the final render.
+        splits = distinct_collage_splits(len(photo_paths))[:count]
+        seeds = [_seed_for_split(len(photo_paths), split) for split in splits]
     results: list[dict] = []
     for seed in seeds:
         out = out_dir / f"candidate_{seed}.png"
