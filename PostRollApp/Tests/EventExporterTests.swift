@@ -195,6 +195,29 @@ final class EventExporterTests: XCTestCase {
         XCTAssertFalse(tagsBlock.contains("11:"))
     }
 
+    func testPerEventOverrideDrivesExportLayout() throws {
+        // An event whose override is classic must export Sunday as a single photo
+        // even when the app wide default is balanced (#66). Passing the event's
+        // effectivePostingPreset is exactly what ExportManager does.
+        let key = PostingPreset.storageKey
+        let original = UserDefaults.standard.string(forKey: key)
+        defer {
+            if let original { UserDefaults.standard.set(original, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        UserDefaults.standard.set(PostingPreset.balanced.rawValue, forKey: key)
+
+        var (event, _) = makeSundayCarouselEvent()
+        event.postingPresetOverride = .classic
+        XCTAssertEqual(event.effectivePostingPreset, .classic)
+
+        let folder = try EventExporter.export(event: event, to: root,
+                                              preset: event.effectivePostingPreset)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: folder.appendingPathComponent("1. Sunday/carousel").path),
+            "a classic override exports Sunday as a single photo, not a carousel, despite a balanced default")
+    }
+
     func testClassicPresetKeepsSundaySinglePhoto() throws {
         let (event, _) = makeSundayCarouselEvent()
         let folder = try EventExporter.export(event: event, to: root, preset: .classic)
