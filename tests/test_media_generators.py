@@ -24,6 +24,7 @@ from postroll.media.generate_collage import (
     crop_to_fill,
     generate_collage_candidates,
     choose_collage_split,
+    distinct_collage_splits,
 )
 from postroll.ai import swap_reel_audio as swap_mod
 
@@ -72,6 +73,48 @@ def test_crop_x_axis_uses_same_bias():
             px[x, y] = (x, 0, 0)
     out = crop_to_fill(img, 100, 100, crop_offset_x=1.0)
     assert out.getpixel((0, 0))[0] == 100
+
+
+# ===================================================================
+# Distinct gallery layouts (#70)
+# ===================================================================
+
+
+def test_distinct_splits_for_four_photos_are_unique_and_cover_all():
+    splits = distinct_collage_splits(4)
+    assert len(splits) >= 3
+    keys = {(tuple(t), tuple(b)) for t, b in splits}
+    assert len(keys) == len(splits), "no duplicate arrangements"
+    for t, b in splits:
+        assert sum(t) + sum(b) == 4
+
+
+def test_distinct_splits_for_ten_photos_keep_even_halves():
+    splits = distinct_collage_splits(10)
+    assert len(splits) > 1
+    keys = {(tuple(t), tuple(b)) for t, b in splits}
+    assert len(keys) == len(splits)
+    for t, b in splits:
+        assert sum(t) == 5 and sum(b) == 5
+
+
+def test_gallery_candidates_have_distinct_layouts(tmp_path):
+    # With auto seeds, the gallery must show structurally different arrangements,
+    # and each candidate's seed must reproduce its arrangement.
+    photos = []
+    for i in range(4):
+        p = tmp_path / f"p{i}.jpg"
+        Image.new("RGB", (800, 600), (120, 140, 150)).save(str(p), "JPEG")
+        photos.append(str(p))
+    results = generate_collage_candidates(
+        photo_paths=photos, output_dir=str(tmp_path / "cand"), count=5, event_name="Test"
+    )
+    # Map each candidate's stored seed back to the arrangement it renders.
+    arrangements = {
+        tuple(tuple(p) for p in choose_collage_split(4, random.Random(r["seed"])))
+        for r in results
+    }
+    assert len(arrangements) == len(results), "every gallery candidate is a distinct layout"
 
 
 # ===================================================================
