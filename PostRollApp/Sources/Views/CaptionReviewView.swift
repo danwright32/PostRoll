@@ -1355,7 +1355,7 @@ private struct CaptionSection: View {
                                     onRecutWithAI: onRecutFridayWithAI
                                 )
                                 if fridayRegenStartedAt != nil {
-                                    FridayPipelineStatusView(startedAt: fridayRegenStartedAt)
+                                    PipelineStatusView(startedAt: fridayRegenStartedAt)
                                 }
 
                                 if showingRevision {
@@ -1435,7 +1435,7 @@ private struct CaptionSection: View {
                         .padding(.bottom, Spacing.xs)
                     }
                     if fridayRegenStartedAt != nil {
-                        FridayPipelineStatusView(startedAt: fridayRegenStartedAt)
+                        PipelineStatusView(startedAt: fridayRegenStartedAt)
                             .padding(.horizontal, Spacing.xl)
                             .padding(.bottom, Spacing.md)
                     }
@@ -2752,12 +2752,12 @@ private struct ReviewMediaStrip: View {
 /// / still-alive-with-elapsed-time / taking-longer-than-usual so the user
 /// never sees a spinner that looks identical whether it's progressing,
 /// hung, or dead.
-private struct FridayPipelineStatusView: View {
+private struct PipelineStatusView: View {
     let startedAt: Date?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            let state = FridayPipelineProgressState.state(startedAt: startedAt, now: context.date, failedMessage: nil)
+            let state = PipelineProgressState.state(startedAt: startedAt, now: context.date, failedMessage: nil)
             switch state {
             case .idle, .failed:
                 EmptyView()

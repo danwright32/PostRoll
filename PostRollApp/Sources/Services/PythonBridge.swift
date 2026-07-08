@@ -822,6 +822,109 @@ actor PythonBridge {
         }
     }
 
+    // MARK: - Cover image regeneration
+
+    struct CoverRegenerationResult {
+        let coverPath: String
+        /// Present only for a fresh AI pick (regenerate mode); absent for a
+        /// manual override, since there's no AI rationale for the user's
+        /// own choice.
+        let coverPick: CoverPick?
+    }
+
+    /// Builds the single-day manifest postroll.ai.generate_cover expects.
+    /// Pure function of `event` (no actor-isolated state), so nonisolated
+    /// and directly testable without a subprocess. nil when there's no day
+    /// to generate for, or no existing rendered cover to regenerate (this
+    /// call only ever refreshes an already-rendered cover, never produces
+    /// the first one for a day).
+    nonisolated static func buildCoverManifest(event: Event, day: DayName, overrideSource: URL?) -> [String: Any]? {
+        guard let pd = event.days[day.rawValue] else { return nil }
+        guard let coverPath = event.previewMediaPaths[day.rawValue]?["cover"] else { return nil }
+
+        var dayInfo: [String: Any] = ["photos": pd.photoPaths.map { $0.path }]
+        if day == .friday, let plan = pd.fridayClipPlan, !plan.selections.isEmpty {
+            dayInfo["clips_plan"] = [
+                "selections": plan.selections.map { sel -> [String: Any] in
+                    [
+                        "clip_path": sel.clipPath,
+                        "trim_in": sel.trimIn,
+                        "trim_out": sel.trimOut,
+                        "transition": sel.transition.rawValue,
+                    ]
+                },
+                "rationale": plan.rationale,
+            ]
+        }
+
+        var manifest: [String: Any] = [
+            "day":       day.rawValue,
+            "event":     event.name,
+            "org":       event.org,
+            "venue":     event.venue,
+            "day_info":  dayInfo,
+            "output_path": coverPath,
+        ]
+        if let overrideSource { manifest["override_source"] = overrideSource.path }
+        return manifest
+    }
+
+    /// Parses postroll.ai.generate_cover's output JSON. nil when the
+    /// required "cover" path is missing (a malformed or empty response).
+    nonisolated static func parseCoverRegenerationOutput(_ json: [String: Any]) -> CoverRegenerationResult? {
+        guard let coverPath = json["cover"] as? String else { return nil }
+        var pick: CoverPick? = nil
+        if let pickObject = json["cover_pick"],
+           let pickData = try? JSONSerialization.data(withJSONObject: pickObject) {
+            pick = try? JSONDecoder().decode(CoverPick.self, from: pickData)
+        }
+        return CoverRegenerationResult(coverPath: coverPath, coverPick: pick)
+    }
+
+    /// Regenerates just cover.png for one day (#141), far cheaper than a
+    /// full runPreviewGeneration for that day: no reel re-render, and for
+    /// Friday specifically no clip re-cut (Stage 1/2 + ffmpeg). Routes to
+    /// postroll.ai.generate_cover, which re-picks via Claude from the day's
+    /// own photos (Thursday) or frames re-extracted from the already-
+    /// persisted fridayClipPlan (Friday, never a fresh recut). When
+    /// `overrideSource` is given instead, renders directly from it with no
+    /// Claude call at all (the manual "choose a different photo/frame"
+    /// escape hatch).
+    func runCoverRegeneration(event: Event, day: DayName, overrideSource: URL? = nil) async throws -> CoverRegenerationResult {
+        guard let manifest = Self.buildCoverManifest(event: event, day: day, overrideSource: overrideSource) else {
+            throw PythonBridgeError.invalidOutput("No existing cover to regenerate for \(day.displayName).")
+        }
+
+        let tmp = FileManager.default.temporaryDirectory
+        let manifestFile = tmp.appendingPathComponent("postroll_cover_manifest_\(UUID().uuidString).json")
+        let outputFile   = tmp.appendingPathComponent("postroll_cover_\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: manifestFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        let manifestData = try JSONSerialization.data(
+            withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
+        )
+        try manifestData.write(to: manifestFile)
+
+        try await runProcess(args: [
+            "-m", "postroll.ai.generate_cover",
+            "--manifest", manifestFile.path,
+            "--output",   outputFile.path,
+        ])
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+        let data = try Data(contentsOf: outputFile)
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let result = Self.parseCoverRegenerationOutput(json) else {
+            throw PythonBridgeError.invalidOutput("Cover regeneration did not produce a cover path.")
+        }
+        return result
+    }
+
     // MARK: - Manifest builder
 
     /// A pure function of `event` (no actor-isolated state), so nonisolated:

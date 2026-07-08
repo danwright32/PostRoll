@@ -1,9 +1,11 @@
 import Foundation
 
-/// State the Friday clip-reel pipeline (import copy, Stage 1 scoring, Stage
-/// 2 Claude selection, ffmpeg render) can be in, extracted so it's
-/// unit-testable without SwiftUI's Timer/TimelineView.
-enum FridayPipelineProgress: Equatable {
+/// State a long-running background pipeline (Friday's clip-reel cut, cover
+/// image regeneration, ...) can be in, extracted so it's unit-testable
+/// without SwiftUI's Timer/TimelineView. Originally Friday-only
+/// (FridayPipelineProgress); generalized when the cover image feature (#141)
+/// needed the same elapsed-timer pattern rather than forking a second copy.
+enum PipelineProgress: Equatable {
     case idle
     case running(elapsedSeconds: Int)
     /// Still running, but past the point this pipeline should ever
@@ -14,7 +16,7 @@ enum FridayPipelineProgress: Equatable {
     case failed(String)
 }
 
-enum FridayPipelineProgressState {
+enum PipelineProgressState {
     /// Default stall threshold: generous enough to cover Stage 1 scoring +
     /// a Claude call + an ffmpeg render on a normal week's clip set without
     /// false-flagging, while still catching a genuinely hung run instead of
@@ -27,7 +29,7 @@ enum FridayPipelineProgressState {
     static func state(
         startedAt: Date?, now: Date, failedMessage: String?,
         stallThreshold: TimeInterval = defaultStallThreshold
-    ) -> FridayPipelineProgress {
+    ) -> PipelineProgress {
         if let failedMessage { return .failed(failedMessage) }
         guard let startedAt else { return .idle }
         let elapsed = max(0, Int(now.timeIntervalSince(startedAt)))
