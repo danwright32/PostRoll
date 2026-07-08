@@ -43,6 +43,36 @@ final class FridayManifestClipsTests: XCTestCase {
         XCTAssertNil(days?["friday"], "an empty Friday day (no photos, no clips) stays excluded")
     }
 
+    // Phase 5 (#136): a Friday day with raw/edited stills but no clips must
+    // still be included (via the pre-existing photo-shaped guard) while the
+    // "clips" key itself stays absent - a day that legitimately has no
+    // clips must not send an empty/misleading clips entry to Python.
+    func testBuildMediaManifestOmitsClipsKeyWhenFridayHasPhotosButNoClips() async {
+        var day = PostingDay(day: .friday)
+        day.rawPhotoPath = URL(fileURLWithPath: "/raw.jpg")
+        day.editedPhotoPath = URL(fileURLWithPath: "/edited.jpg")
+        let event = makeEvent(friday: day)
+        let manifest = await PythonBridge.shared.buildMediaManifest(event: event)
+
+        let days = manifest["days"] as? [String: Any]
+        let friday = days?["friday"] as? [String: Any]
+        XCTAssertNotNil(friday, "raw/edited stills alone must still include the day")
+        XCTAssertNil(friday?["clips"], "no clips imported: the clips key must be absent, not an empty array")
+    }
+
+    func testBuildManifestOmitsClipsKeyWhenFridayHasPhotosButNoClips() async throws {
+        var day = PostingDay(day: .friday)
+        day.rawPhotoPath = URL(fileURLWithPath: "/raw.jpg")
+        day.editedPhotoPath = URL(fileURLWithPath: "/edited.jpg")
+        let event = makeEvent(friday: day)
+        let manifest = try await PythonBridge.shared.buildManifest(event: event)
+
+        let days = manifest["days"] as? [String: Any]
+        let friday = days?["friday"] as? [String: Any]
+        XCTAssertNotNil(friday)
+        XCTAssertNil(friday?["clips"], "no clips imported: the clips key must be absent, not an empty array")
+    }
+
     func testBuildMediaManifestIncludesDuckSettingsForFriday() async {
         var day = clipsOnlyFriday()
         day.fridayAudioDuckDB = -18.0
