@@ -84,6 +84,11 @@ struct CaptionReviewView: View {
     // Preview graphics generation
     @State private var isGeneratingGraphics = false
     @State private var regeneratingDays: Set<DayName> = []
+    /// When each day's current regen started, so the UI can show elapsed
+    /// time instead of a bare spinner (#135's Friday pipeline in particular:
+    /// import copy + Stage 1 scoring + Stage 2 Claude + ffmpeg render can
+    /// genuinely take a while).
+    @State private var regenerationStartTimes: [DayName: Date] = [:]
     @State private var graphicVersions: [DayName: Int] = [:]
 
     // Collage crop offsets (separate from carousel) — keyed by day rawValue then photo URL absoluteString
@@ -178,6 +183,7 @@ struct CaptionReviewView: View {
                             onApplyFridayOverride: day == .friday ? { applyFridayOverride($0) } : nil,
                             onSwapFridayClip: day == .friday ? { swapFridayClip($0) } : nil,
                             onRecutFridayWithAI: day == .friday ? { recutFridayWithAI() } : nil,
+                            fridayRegenStartedAt: day == .friday ? regenerationStartTimes[.friday] : nil,
                             onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
                             onChooseLayout: isCollageDay(day) ? { layoutGalleryTarget = GalleryTarget(day: day) } : nil,
                             onSwapReelPhotos: day == .thursday ? { a, b in swapReelPhotos(day: .thursday, a: a, b: b) } : nil,
@@ -722,6 +728,7 @@ struct CaptionReviewView: View {
         appState.updateEvent(ev)
 
         regeneratingDays.insert(.friday)
+        regenerationStartTimes[.friday] = Date()
         regenerateError = nil
         Task {
             do {
@@ -729,6 +736,7 @@ struct CaptionReviewView: View {
                 let reelPath = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
                 await MainActor.run {
                     regeneratingDays.remove(.friday)
+                    regenerationStartTimes[.friday] = nil
                     guard let reelPath else {
                         regenerateError = "Friday reel edit couldn't be applied: no reel to update"
                         return
@@ -743,6 +751,7 @@ struct CaptionReviewView: View {
             } catch {
                 await MainActor.run {
                     regeneratingDays.remove(.friday)
+                    regenerationStartTimes[.friday] = nil
                     regenerateError = "Friday reel edit failed: \(error.localizedDescription)"
                 }
             }
@@ -879,6 +888,7 @@ struct CaptionReviewView: View {
         }
 
         regeneratingDays.insert(day)
+        regenerationStartTimes[day] = Date()
         regenerateError = nil
         Task {
             // For Thursday, try to adopt a speculative pre-render that was kicked
@@ -888,6 +898,7 @@ struct CaptionReviewView: View {
                let result = await speculativeReel.take(matching: eventSnapshot) {
                 await MainActor.run {
                     regeneratingDays.remove(day)
+                    regenerationStartTimes[day] = nil
                     applyRegenResult(result, day: day)
                 }
                 return
@@ -912,6 +923,7 @@ struct CaptionReviewView: View {
 
             await MainActor.run {
                 regeneratingDays.remove(day)
+                regenerationStartTimes[day] = nil
                 switch outcome {
                 case .failure(let error):
                     regenerateError = "\(day.displayName) regeneration failed: \(error.localizedDescription)"
@@ -1075,6 +1087,10 @@ private struct CaptionSection: View {
     var onSwapFridayClip: ((String) -> Void)? = nil
     /// Clear fridayClipOverride and re-run the full AI pipeline (Stage 1 + 2).
     var onRecutFridayWithAI: (() -> Void)? = nil
+    /// When Friday's current pipeline run (import/regen/override-apply)
+    /// started, so the elapsed-timer status view can show real progress
+    /// instead of a bare spinner. nil when nothing is running.
+    var fridayRegenStartedAt: Date? = nil
     /// Replace the whole Wednesday collage photo set (review-screen action).
     var onChangeCollagePhotos: (() -> Void)? = nil
     /// Open the collage layout gallery to pick a layout (collage days only).
@@ -1314,6 +1330,9 @@ private struct CaptionSection: View {
                                     onSwap: onSwapFridayClip,
                                     onRecutWithAI: onRecutFridayWithAI
                                 )
+                                if fridayRegenStartedAt != nil {
+                                    FridayPipelineStatusView(startedAt: fridayRegenStartedAt)
+                                }
 
                                 if showingRevision {
                                     RevisionPanel(
@@ -1389,7 +1408,12 @@ private struct CaptionSection: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.roseGold)
                         .padding(.horizontal, Spacing.xl)
-                        .padding(.bottom, Spacing.md)
+                        .padding(.bottom, Spacing.xs)
+                    }
+                    if fridayRegenStartedAt != nil {
+                        FridayPipelineStatusView(startedAt: fridayRegenStartedAt)
+                            .padding(.horizontal, Spacing.xl)
+                            .padding(.bottom, Spacing.md)
                     }
 
                 } else if day == .tuesday, let reelURL = splitPreviewURL {
@@ -2681,6 +2705,42 @@ private struct ReviewMediaStrip: View {
             }
         }
         .padding(.bottom, Spacing.xs)
+    }
+}
+
+// MARK: - Friday pipeline status (elapsed time / stall, not a bare spinner)
+
+/// Live elapsed-time status for Friday's clip pipeline (import copy, Stage 1
+/// scoring, Stage 2 Claude selection, ffmpeg render). Distinguishes started
+/// / still-alive-with-elapsed-time / taking-longer-than-usual so the user
+/// never sees a spinner that looks identical whether it's progressing,
+/// hung, or dead.
+private struct FridayPipelineStatusView: View {
+    let startedAt: Date?
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let state = FridayPipelineProgressState.state(startedAt: startedAt, now: context.date, failedMessage: nil)
+            switch state {
+            case .idle, .failed:
+                EmptyView()
+            case .running(let seconds):
+                HStack(spacing: Spacing.xs) {
+                    ProgressView().controlSize(.small).tint(Color.roseGold)
+                    Text("Working… \(seconds)s")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warmMid)
+                }
+            case .stalled(let seconds):
+                HStack(spacing: Spacing.xs) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(Color.roseDeep)
+                    Text("Still working (\(seconds)s): this is taking longer than usual")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.roseDeep)
+                }
+            }
+        }
     }
 }
 
