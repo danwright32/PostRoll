@@ -5,10 +5,12 @@ Friday's candidate list (frames extracted from the clip reel's already-cut
 plan), and the sticky gate that skips Claude entirely once a cover_source is
 already persisted for the day.
 
-select_cover_photo and select_reel_photos are monkeypatched at the
-generate_media module boundary, the same boundary
-test_generate_media_friday_clips.py already mocks Stage 2 at, so these
-don't depend on network access or a Claude API key.
+select_cover_photo is monkeypatched at the generate_media module boundary,
+the same boundary test_generate_media_friday_clips.py already mocks Stage 2
+at. select_reel_photos is monkeypatched at select_cover_photo (where the
+candidate-building helpers actually live, shared with generate_cover.py's
+lightweight regen path) so these don't depend on network access or a
+Claude API key.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import pytest
 from PIL import Image
 
 import postroll.ai.generate_media as gm_mod
+import postroll.ai.select_cover_photo as scp_mod
 from postroll.ai.select_reel_photos import DEFAULT_MAX_REEL_PHOTOS
 
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
@@ -90,7 +93,7 @@ def test_thursday_cover_candidates_capped_via_representative_sampling_when_over_
         captured["count"] = count
         return paths[:count]
 
-    monkeypatch.setattr(gm_mod, "select_reel_photos", fake_select_reel_photos)
+    monkeypatch.setattr(scp_mod, "select_reel_photos", fake_select_reel_photos)
 
     candidates = gm_mod._cover_candidates_from_photos(photos)
 
@@ -146,7 +149,7 @@ def test_thursday_cover_sticky_gate_skips_selection_when_cover_source_present(mo
         raise AssertionError("select_reel_photos must not be called when cover_source is persisted")
 
     monkeypatch.setattr(gm_mod, "select_cover_photo", _spy_select_cover_photo)
-    monkeypatch.setattr(gm_mod, "select_reel_photos", _spy_select_reel_photos)
+    monkeypatch.setattr(scp_mod, "select_reel_photos", _spy_select_reel_photos)
 
     manifest = {
         "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",

@@ -31,6 +31,14 @@ from pathlib import Path
 
 from .claude_client import ClaudeError, run_json_prompt
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
+from .select_reel_clips import _extract_representative_frames
+from .select_reel_photos import select_reel_photos, DEFAULT_MAX_REEL_PHOTOS
+
+# 1-2 frames per selected clip so Claude can pick a still-worthy moment
+# without re-sending every frame Stage 2 already saw; only the clips that
+# made the final cut are candidates, so this stays small regardless of how
+# many clips were imported.
+COVER_FRAMES_PER_CLIP = 2
 
 SELECTION_PROMPT = """\
 You are picking a single cover image for a photography studio's Instagram
@@ -77,6 +85,33 @@ def apply_cover_pick(data: object, candidates: list[dict]) -> dict:
         rationale = ""
 
     return {"index": idx, "path": candidates[idx]["path"], "rationale": rationale}
+
+
+def _cover_candidates_from_photos(photos: list[str]) -> list[dict]:
+    """Thursday's cover candidates: the day's own photos, or (above
+    DEFAULT_MAX_REEL_PHOTOS) the same representative subset already used to
+    cap Claude's image budget elsewhere in this codebase, reused rather
+    than a second cap invented for this feature."""
+    if len(photos) > DEFAULT_MAX_REEL_PHOTOS:
+        sample = select_reel_photos(photos, count=DEFAULT_MAX_REEL_PHOTOS)
+        return [{"path": str(p)} for p in sample]
+    return [{"path": p} for p in photos]
+
+
+def _cover_candidates_from_friday_plan(selections: list[dict], tmp_dir: Path) -> list[dict]:
+    """Friday's cover candidates: frames extracted from a clip-reel plan
+    (a freshly cut one, or one re-extracted from an already-persisted
+    clips_plan, the caller decides which; this only needs each
+    selection's clip_path/trim_in/trim_out), mirroring select_reel_clips.py's
+    own frame-extraction pattern."""
+    candidates: list[dict] = []
+    for i, sel in enumerate(selections):
+        frames = _extract_representative_frames(
+            sel["clip_path"], (sel["trim_in"], sel["trim_out"]),
+            COVER_FRAMES_PER_CLIP, tmp_dir, prefix=f"cover{i:02d}_",
+        )
+        candidates.extend({"path": str(f)} for f in frames)
+    return candidates
 
 
 def _fallback_pick(candidates: list[dict], reason: str) -> dict:

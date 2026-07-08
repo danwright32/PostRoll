@@ -73,9 +73,13 @@ from ..media.generate_before_after import generate_before_after
 from ..media.clip_scorer import score_clips, InsufficientClipsError
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
 from .audio_tags import resolve_reel_audio
-from .select_reel_clips import select_reel_clips, _extract_representative_frames
-from .select_reel_photos import select_reel_photos, DEFAULT_MAX_REEL_PHOTOS
-from .select_cover_photo import select_cover_photo
+from .select_reel_clips import select_reel_clips
+from .select_cover_photo import (
+    select_cover_photo,
+    COVER_FRAMES_PER_CLIP,
+    _cover_candidates_from_photos,
+    _cover_candidates_from_friday_plan,
+)
 from ..posting_preset import (
     DEFAULT_PRESET,
     COLLAGE_CAROUSEL,
@@ -115,38 +119,6 @@ def _has_ffmpeg() -> bool:
 # Thursday's audio tag derivation lives in postroll.ai.audio_tags so the
 # Swift-side track picker can call the same logic via a CLI shim.
 from .audio_tags import thursday_tags as _derive_audio_tags  # noqa: E402
-
-# 1-2 frames per selected clip so Claude can pick a still-worthy moment
-# without re-sending every frame Stage 2 already saw; only the clips that
-# made the final cut are candidates, so this stays small regardless of how
-# many clips were imported.
-COVER_FRAMES_PER_CLIP = 2
-
-
-def _cover_candidates_from_photos(photos: list[str]) -> list[dict]:
-    """Thursday's cover candidates: the day's own photos, or (above
-    DEFAULT_MAX_REEL_PHOTOS) the same representative subset already used to
-    cap Claude's image budget elsewhere in this codebase, reused rather
-    than a second cap invented for this feature."""
-    if len(photos) > DEFAULT_MAX_REEL_PHOTOS:
-        sample = select_reel_photos(photos, count=DEFAULT_MAX_REEL_PHOTOS)
-        return [{"path": str(p)} for p in sample]
-    return [{"path": p} for p in photos]
-
-
-def _cover_candidates_from_friday_plan(selections: list[dict], tmp_dir: Path) -> list[dict]:
-    """Friday's cover candidates: frames extracted from Stage 2's already-cut
-    plan (only the clips in the final reel), mirroring select_reel_clips.py's
-    own frame-extraction pattern."""
-    candidates: list[dict] = []
-    for i, sel in enumerate(selections):
-        frames = _extract_representative_frames(
-            sel["clip_path"], (sel["trim_in"], sel["trim_out"]),
-            COVER_FRAMES_PER_CLIP, tmp_dir, prefix=f"cover{i:02d}_",
-        )
-        candidates.extend({"path": str(f)} for f in frames)
-    return candidates
-
 
 def _render_cover(
     *,
