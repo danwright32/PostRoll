@@ -1,58 +1,7 @@
 import Foundation
 
-enum PythonBridgeError: LocalizedError {
-    case scriptFailed(exitCode: Int32, stderr: String)
-    case outputMissing
-    case invalidOutput(String)
-    case timedOut(seconds: TimeInterval)
-
-    var errorDescription: String? {
-        switch self {
-        case .scriptFailed(_, let stderr):
-            return Self.humanise(stderr: stderr)
-        case .outputMissing:
-            return "Generation finished but produced no output. Check that the program PDF has readable text and try again."
-        case .invalidOutput:
-            return "Generated output couldn't be read. Try regenerating. If it keeps failing, check ~/Documents/PostRoll/logs."
-        case .timedOut(let seconds):
-            return "The operation was still running after \(Int(seconds / 60)) minutes and was stopped. Check your internet connection and try again."
-        }
-    }
-
-    private static func humanise(stderr: String) -> String {
-        let s = stderr.lowercased()
-        if s.contains("no performers") || s.contains("performers is empty") || s.contains("no performer") {
-            return "Generation failed: no performers found in your OCR data. Go back to OCR review and add at least one performer, then try again."
-        }
-        if s.contains("no pieces") || s.contains("pieces is empty") || s.contains("no works") {
-            return "Generation failed: no program works found in your OCR data. Go back to OCR review and add at least one work, then try again."
-        }
-        if s.contains("ffmpeg") {
-            return "Media generation failed: ffmpeg is not installed. Run `brew install ffmpeg` in Terminal, then try again."
-        }
-        // Order matters: check 413 / request_too_large BEFORE the generic "anthropic" check.
-        if s.contains("413") || s.contains("request_too_large") || s.contains("request exceeds the maximum size") || s.contains("payload too large") {
-            return "The program photos are too large for the AI service to process in one call. Try uploading fewer pages at a time, or downscale the images (Preview › Tools › Adjust Size), then try again."
-        }
-        if s.contains("rate_limit") || s.contains("rate limit") || s.contains("429") || s.contains("overloaded") {
-            return "The AI service is rate-limiting or overloaded right now. Wait a minute and try again."
-        }
-        if s.contains("anthropic") || s.contains("openai") || s.contains("api key") || s.contains("apikey") {
-            return "Generation failed: could not connect to the AI service. Check that your API key is set correctly and that you have internet access."
-        }
-        if s.contains("json") || s.contains("decode") || s.contains("parse") {
-            return "Generation failed: the output could not be read. This is usually a temporary issue. Try again."
-        }
-        if s.contains("no such file") || s.contains("filenotfounderror") {
-            return "Generation failed: a required file was not found. Check that your photos are still in their original locations."
-        }
-        // Fall back to a trimmed version of stderr (first 120 chars), not a raw traceback
-        let trimmed = stderr.split(separator: "\n").last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
-            .map(String.init) ?? stderr
-        let preview = trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
-        return "Generation failed: \(preview). Check ~/Documents/PostRoll/logs if this persists."
-    }
-}
+// PythonBridgeError and PythonBridgeLog live in PythonBridgeError.swift
+// (kept dependency-light so PostRollTests can compile them directly).
 
 actor PythonBridge {
     static let shared = PythonBridge()
@@ -1434,6 +1383,11 @@ actor PythonBridge {
             .joined(separator: " ")
 
         let logPath = logURL.path.replacingOccurrences(of: "'", with: "'\"'\"'")
+        // The log file is shared across every Python invocation for the app's
+        // lifetime. When the fallback below has to read it (see readDataToEndOfFile),
+        // this marker lets it isolate just this run's own output instead of
+        // conflating it with unrelated older entries.
+        let runMarker = UUID().uuidString
         // `exec` replaces the shell with the Python process so that terminating
         // this Process object directly kills the Python subprocess, not just the
         // shell wrapper.
@@ -1454,7 +1408,7 @@ actor PythonBridge {
             if [ -f '\(logPath)' ]; then
                 tail -n 500 '\(logPath)' > '\(logPath).tmp' && mv '\(logPath).tmp' '\(logPath)'
             fi
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running:" \(quotedArgs) >> '\(logPath)'
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running [\(runMarker)]:" \(quotedArgs) >> '\(logPath)'
             exec \(quotedArgs) 2>> '\(logPath)'
             """
 
@@ -1509,11 +1463,17 @@ actor PythonBridge {
                         // script above, so the pipe only ever carries pre-exec
                         // shell output. When it's empty, read the log tail so
                         // humanise() sees the real traceback instead of "".
+                        // Scoped to runMarker: the log file is shared across
+                        // every invocation, and an unscoped tail can leak a
+                        // stray digit sequence from an unrelated older entry
+                        // into humanise()'s substring matching (e.g. a UUID
+                        // containing "413" misreporting an unrelated 401 as
+                        // "photos too large").
                         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
                         var stderr = String(data: stderrData, encoding: .utf8) ?? ""
                         if stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                            let logText = try? String(contentsOf: logURL, encoding: .utf8) {
-                            stderr = logText.split(separator: "\n").suffix(50).joined(separator: "\n")
+                            stderr = PythonBridgeLog.scopedTail(logText, marker: runMarker)
                         }
                         cont.resume(throwing: PythonBridgeError.scriptFailed(exitCode: status, stderr: stderr))
                     }
