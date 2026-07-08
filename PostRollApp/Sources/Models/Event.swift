@@ -240,6 +240,9 @@ extension PostingDay {
         photoTags            = try  c.decodeIfPresent([String: [String]].self,         forKey: .photoTags)           ?? [:]
         selectedPerformerIDs = try  c.decodeIfPresent([UUID].self,                    forKey: .selectedPerformerIDs) ?? []
         notes                = try  c.decodeIfPresent(String.self,                    forKey: .notes)               ?? ""
+        clipPaths            = try  c.decodeIfPresent([URL].self,                     forKey: .clipPaths)           ?? []
+        fridayClipPlan       = try  c.decodeIfPresent(FridayClipPlan.self,            forKey: .fridayClipPlan)
+        fridayClipOverride   = try  c.decodeIfPresent([ReelClipOverride].self,        forKey: .fridayClipOverride)
     }
 
     /// Returns a copy with the given photos removed from photoPaths and from
@@ -290,6 +293,33 @@ extension PostingDay {
         var out: [String: V] = [:]
         for (key, value) in dict { out[keyRemap[key] ?? key] = value }
         return out
+    }
+
+    /// Returns a copy with clip URLs swapped per `remap` (old -> new), carrying
+    /// fridayClipPlan's selections and fridayClipOverride entries over to the
+    /// new URL. Mirrors rebindingPhotos so clip references survive MediaReclaim
+    /// copying files into app storage (feedback_layout_json_paths_go_stale).
+    func rebindingClips(_ remap: [URL: URL]) -> PostingDay {
+        guard !remap.isEmpty else { return self }
+        let pathRemap = Dictionary(uniqueKeysWithValues: remap.map { ($0.key.path, $0.value.path) })
+        var pd = self
+        pd.clipPaths = clipPaths.map { remap[$0] ?? $0 }
+        if var plan = fridayClipPlan {
+            plan.selections = plan.selections.map {
+                var sel = $0
+                if let newPath = pathRemap[$0.clipPath] { sel.clipPath = newPath }
+                return sel
+            }
+            pd.fridayClipPlan = plan
+        }
+        if let overrides = fridayClipOverride {
+            pd.fridayClipOverride = overrides.map {
+                var o = $0
+                if let newPath = pathRemap[$0.clipPath] { o.clipPath = newPath }
+                return o
+            }
+        }
+        return pd
     }
 }
 
@@ -368,6 +398,120 @@ extension CollageCell {
     }
 }
 
+// MARK: - Friday clip reel
+
+/// How a clip transitions to the next one in the cut. Claude picks this per
+/// cut (Stage 2); the render step consumes it.
+enum ClipTransition: String, Codable, Hashable {
+    case cut
+    case crossfade
+}
+
+extension ClipTransition {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        self = (try? c.decode(RawValue.self)).flatMap(ClipTransition.init(rawValue:)) ?? .cut
+    }
+}
+
+/// One clip's placement in Claude's Stage 2 selection: the trim window
+/// (already clamped server-side to Stage 1's validated range) and how it
+/// transitions to the next clip in the cut.
+struct FridayClipSelection: Codable, Hashable, Identifiable {
+    var id: String { clipPath }
+    var clipPath: String
+    var trimIn: Double
+    var trimOut: Double
+    var transition: ClipTransition
+
+    enum CodingKeys: String, CodingKey {
+        case clipPath = "clip_path"
+        case trimIn = "trim_in"
+        case trimOut = "trim_out"
+        case transition
+    }
+
+    init(clipPath: String, trimIn: Double, trimOut: Double, transition: ClipTransition) {
+        self.clipPath = clipPath
+        self.trimIn = trimIn
+        self.trimOut = trimOut
+        self.transition = transition
+    }
+
+    // Persisted inside events.json via PostingDay.fridayClipPlan: every field
+    // must decodeIfPresent or a schema change wipes saved events.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        clipPath   = try c.decodeIfPresent(String.self, forKey: .clipPath)   ?? ""
+        trimIn     = try c.decodeIfPresent(Double.self, forKey: .trimIn)     ?? 0
+        trimOut    = try c.decodeIfPresent(Double.self, forKey: .trimOut)    ?? 0
+        transition = try c.decodeIfPresent(ClipTransition.self, forKey: .transition) ?? .cut
+    }
+}
+
+/// Claude's Stage 2 output for the Friday clip reel: the ordered, trimmed
+/// selection plus a one-line rationale surfaced under the reel player.
+struct FridayClipPlan: Codable, Hashable {
+    var selections: [FridayClipSelection] = []
+    var rationale: String = ""
+
+    enum CodingKeys: String, CodingKey {
+        case selections
+        case rationale
+    }
+
+    init(selections: [FridayClipSelection] = [], rationale: String = "") {
+        self.selections = selections
+        self.rationale = rationale
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        selections = try c.decodeIfPresent([FridayClipSelection].self, forKey: .selections) ?? []
+        rationale  = try c.decodeIfPresent(String.self, forKey: .rationale) ?? ""
+    }
+}
+
+/// A user's manual edit to the Friday clip reel: reorder, include/exclude,
+/// or adjust the trim window for one clip. Stored separately from
+/// fridayClipPlan (Claude's pass) so manual edits never trigger a re-cut.
+/// Same override-layer principle as CollageCell (feedback_collage_edits_no_python_regen).
+struct ReelClipOverride: Codable, Hashable, Identifiable {
+    var id: String { clipPath }
+    var clipPath: String
+    var order: Int
+    var included: Bool
+    var trimIn: Double
+    var trimOut: Double
+
+    enum CodingKeys: String, CodingKey {
+        case clipPath = "clip_path"
+        case order
+        case included
+        case trimIn = "trim_in"
+        case trimOut = "trim_out"
+    }
+
+    init(clipPath: String, order: Int, included: Bool, trimIn: Double, trimOut: Double) {
+        self.clipPath = clipPath
+        self.order = order
+        self.included = included
+        self.trimIn = trimIn
+        self.trimOut = trimOut
+    }
+
+    // Persisted inside events.json via PostingDay.fridayClipOverride: every
+    // field must decodeIfPresent or a schema change wipes saved events.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        clipPath = try c.decodeIfPresent(String.self, forKey: .clipPath) ?? ""
+        order    = try c.decodeIfPresent(Int.self,    forKey: .order)    ?? 0
+        included = try c.decodeIfPresent(Bool.self,   forKey: .included) ?? true
+        trimIn   = try c.decodeIfPresent(Double.self, forKey: .trimIn)   ?? 0
+        trimOut  = try c.decodeIfPresent(Double.self, forKey: .trimOut)  ?? 0
+    }
+}
+
 // MARK: - CropOffset
 
 /// Per-photo crop adjustment, stored keyed by photo URL absoluteString.
@@ -418,4 +562,11 @@ struct PostingDay: Codable, Hashable {
     var selectedPerformerIDs: [UUID] = []
     // Shooter's observations — passed to caption generator to produce voice-y, specific captions
     var notes: String = ""
+    // Friday auto-cut clip reel: imported video clips for the week's event
+    var clipPaths: [URL] = []
+    // Claude's Stage 2 output (selected/ordered/trimmed clips + rationale). nil = not yet cut or no clips.
+    var fridayClipPlan: FridayClipPlan? = nil
+    // User's manual reorder/include-exclude/trim edits. nil = defer to fridayClipPlan,
+    // non-nil = user's edit wins forever (same nil-means-AI / non-nil-means-user semantics as collageCellOverride).
+    var fridayClipOverride: [ReelClipOverride]? = nil
 }

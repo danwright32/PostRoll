@@ -1,14 +1,15 @@
 import Foundation
 
 /// Reclaims disk space by deleting files in the app's media folders (photos/,
-/// audio/, programs/) that no event references any more. Photos are copied into
-/// photos/ on import; programs are rasterised into programs/ (with a retained
-/// source PDF and a baked program PDF); when the event that used them is deleted,
-/// those copies become orphans with nothing left to clean them up. This sweep is
-/// what removes them.
+/// audio/, programs/, clips/) that no event references any more. Photos are
+/// copied into photos/ on import; programs are rasterised into programs/ (with
+/// a retained source PDF and a baked program PDF); video clips are copied into
+/// clips/ on import; when the event that used them is deleted, those copies
+/// become orphans with nothing left to clean them up. This sweep is what
+/// removes them.
 ///
 /// Safety:
-/// - Only ever deletes files *inside* photos/, audio/, and programs/.
+/// - Only ever deletes files *inside* photos/, audio/, programs/, and clips/.
 /// - Never deletes a file still referenced by any event (collected across every
 ///   media field, so a photo shared between events survives). For programs/ this
 ///   includes the baked programPDFPath and each rasterised page's retained source
@@ -24,10 +25,11 @@ enum OrphanedMediaCleanup {
         events: [Event],
         photosDir: URL = AppPaths.photosDir,
         audioDir: URL = AppPaths.audioDir,
-        programsDir: URL = AppPaths.programsDir
+        programsDir: URL = AppPaths.programsDir,
+        clipsDir: URL = AppPaths.clipsDir
     ) -> Int {
         let referenced = referencedPaths(in: events)
-        return [photosDir, audioDir, programsDir]
+        return [photosDir, audioDir, programsDir, clipsDir]
             .reduce(0) { $0 + removeOrphans(in: $1, referenced: referenced) }
     }
 
@@ -57,6 +59,13 @@ enum OrphanedMediaCleanup {
                 add(pd.audioPath)
                 for cell in pd.collageCellOverride ?? [] {
                     add(URL(fileURLWithPath: cell.photoPath))
+                }
+                pd.clipPaths.forEach(add)
+                for selection in pd.fridayClipPlan?.selections ?? [] {
+                    add(URL(fileURLWithPath: selection.clipPath))
+                }
+                for override in pd.fridayClipOverride ?? [] {
+                    add(URL(fileURLWithPath: override.clipPath))
                 }
             }
         }

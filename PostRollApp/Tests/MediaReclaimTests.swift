@@ -10,6 +10,7 @@ final class MediaReclaimTests: XCTestCase {
     private var storageRoot: URL!
     private var photosDir: URL!
     private var audioDir: URL!
+    private var clipsDir: URL!
     private var external: URL!
 
     override func setUpWithError() throws {
@@ -18,8 +19,9 @@ final class MediaReclaimTests: XCTestCase {
         storageRoot = base.appendingPathComponent("storage")
         photosDir = storageRoot.appendingPathComponent("photos")
         audioDir = storageRoot.appendingPathComponent("audio")
+        clipsDir = storageRoot.appendingPathComponent("clips")
         external = base.appendingPathComponent("Downloads") // stand-in for a gated folder
-        for dir in [photosDir!, audioDir!, external!] {
+        for dir in [photosDir!, audioDir!, clipsDir!, external!] {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }
@@ -35,7 +37,7 @@ final class MediaReclaimTests: XCTestCase {
     }
 
     private func reclaim(_ events: inout [Event]) -> Bool {
-        MediaReclaim.reclaim(events: &events, photosDir: photosDir, audioDir: audioDir, storageRoot: storageRoot)
+        MediaReclaim.reclaim(events: &events, photosDir: photosDir, audioDir: audioDir, clipsDir: clipsDir, storageRoot: storageRoot)
     }
 
     func testExternalPhotoIsCopiedInAndPathRewritten() throws {
@@ -95,6 +97,36 @@ final class MediaReclaimTests: XCTestCase {
         XCTAssertTrue(AppPaths.isInside(pd.audioPath!, root: storageRoot),
                       "Audio must land in the audio dir inside storage.")
         XCTAssertTrue(AppPaths.isInside(pd.audioPath!, root: audioDir))
+    }
+
+    // Friday auto-cut clip reel (#131): imported clips must land in the clips
+    // dir (not photosDir) and carry the AI plan + user override entries to the
+    // new path, same as photoPaths carries crops/tags/collage cells.
+    func testClipPathsAreReclaimedAndPlanOverrideFollowTheNewPath() throws {
+        let ext = try makeFile("show.mov", in: external)
+        var day = PostingDay(day: .friday)
+        day.clipPaths = [ext]
+        day.fridayClipPlan = FridayClipPlan(
+            selections: [FridayClipSelection(clipPath: ext.path, trimIn: 1, trimOut: 6, transition: .cut)],
+            rationale: "opens strong"
+        )
+        day.fridayClipOverride = [
+            ReelClipOverride(clipPath: ext.path, order: 0, included: true, trimIn: 1, trimOut: 6)
+        ]
+        var ev = Event(name: "A", org: "Org", venue: "Hall", date: Date(), shootType: .fullShow)
+        ev.days["friday"] = day
+        var events = [ev]
+
+        XCTAssertTrue(reclaim(&events))
+
+        let pd = events[0].days["friday"]!
+        let newURL = pd.clipPaths[0]
+        XCTAssertTrue(AppPaths.isInside(newURL, root: clipsDir), "Clip must land in the clips dir, not photosDir.")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
+        XCTAssertEqual(pd.fridayClipPlan?.selections.first?.clipPath, newURL.path,
+                       "The AI plan must point at the new path so playback/edit reads are ungated.")
+        XCTAssertEqual(pd.fridayClipOverride?.first?.clipPath, newURL.path,
+                       "The user's manual override must follow the clip to its new path.")
     }
 
     func testAlreadyInStorageIsUntouchedAndIdempotent() throws {

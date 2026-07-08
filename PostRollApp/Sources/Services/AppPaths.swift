@@ -120,6 +120,10 @@ enum AppPaths {
     }
     static var photosDir: URL { root.appendingPathComponent("photos") }
     static var audioDir: URL { root.appendingPathComponent("audio") }
+    /// Video clips (Friday auto-cut clip reel). A dedicated directory rather
+    /// than reusing photosDir. Clips are large 4K video files with a
+    /// different size/lifecycle profile than photos.
+    static var clipsDir: URL { root.appendingPathComponent("clips") }
     /// Where Python writes collage/reel preview graphics. Lives under the data
     /// root (not the Documents project checkout) so the caption review screen,
     /// which reloads these on every visit, never triggers a TCC prompt.

@@ -45,4 +45,42 @@ final class ModelDecodeToleranceTests: XCTestCase {
         XCTAssertEqual(decoded[0].id, event.id)
         XCTAssertEqual(decoded[0].ocrResult?.performers.first?.name, "Jo")
     }
+
+    // Friday auto-cut clip reel (#131): a PostingDay saved by a build before
+    // this feature existed has none of clipPaths/fridayClipPlan/
+    // fridayClipOverride in its JSON at all. Decoding must default them
+    // safely, not throw and trip the events.json wipe-protection path.
+    func testPostingDayToleratesMissingClipFields() throws {
+        let json = Data(#"{"day": "friday", "photoPaths": []}"#.utf8)
+        let day = try JSONDecoder().decode(PostingDay.self, from: json)
+        XCTAssertTrue(day.clipPaths.isEmpty)
+        XCTAssertNil(day.fridayClipPlan)
+        XCTAssertNil(day.fridayClipOverride)
+    }
+
+    func testReelClipOverrideToleratesMissingKeys() throws {
+        let json = Data(#"{"clip_path": "/x.mov"}"#.utf8)
+        let override = try JSONDecoder().decode(ReelClipOverride.self, from: json)
+        XCTAssertEqual(override.clipPath, "/x.mov")
+        XCTAssertEqual(override.order, 0)
+        XCTAssertTrue(override.included)
+        XCTAssertEqual(override.trimIn, 0)
+        XCTAssertEqual(override.trimOut, 0)
+    }
+
+    func testFridayClipPlanToleratesMissingKeys() throws {
+        let json = Data(#"{}"#.utf8)
+        let plan = try JSONDecoder().decode(FridayClipPlan.self, from: json)
+        XCTAssertTrue(plan.selections.isEmpty)
+        XCTAssertEqual(plan.rationale, "")
+    }
+
+    func testFridayClipSelectionToleratesMissingKeys() throws {
+        let json = Data(#"{"clip_path": "/x.mov"}"#.utf8)
+        let selection = try JSONDecoder().decode(FridayClipSelection.self, from: json)
+        XCTAssertEqual(selection.clipPath, "/x.mov")
+        XCTAssertEqual(selection.trimIn, 0)
+        XCTAssertEqual(selection.trimOut, 0)
+        XCTAssertEqual(selection.transition, .cut)
+    }
 }

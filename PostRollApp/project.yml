@@ -45,6 +45,7 @@ targets:
       - path: Sources/Services/AppPaths.swift
       - path: Sources/Services/OrphanedMediaCleanup.swift
       - path: Sources/Services/MediaReclaim.swift
+      - path: Sources/Services/DayStateMerger.swift
       - path: Sources/Services/EventJobTracker.swift
       - path: Sources/Services/EventExporter.swift
       - path: Sources/Services/PostingPresetStore.swift

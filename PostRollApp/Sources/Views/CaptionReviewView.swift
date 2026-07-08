@@ -36,6 +36,11 @@ struct CaptionReviewView: View {
             if let override = pd.collageCellOverride { cellOverrides[key] = override }
         }
         _dayCollageCellOverrides = State(initialValue: cellOverrides)
+        var clipOverrides: [String: [ReelClipOverride]] = [:]
+        for (key, pd) in event.days {
+            if let override = pd.fridayClipOverride { clipOverrides[key] = override }
+        }
+        _dayFridayClipOverride = State(initialValue: clipOverrides)
     }
 
     var daysWithContent: [DayName] {
@@ -87,6 +92,8 @@ struct CaptionReviewView: View {
     @State private var dayReelCropOffsets: [String: [String: CropOffset]] = [:]
     // Collage cell layout overrides — keyed by day rawValue; nil entry = use Python layout
     @State private var dayCollageCellOverrides: [String: [CollageCell]] = [:]
+    // Friday clip reel manual edits (reorder/include-exclude/trim), keyed by day rawValue
+    @State private var dayFridayClipOverride: [String: [ReelClipOverride]] = [:]
 
     // Thursday reel editor — built eagerly in the background on view appear so the
     // PNG + layout JSON are ready by the time the user expands the Thursday card.
@@ -897,24 +904,13 @@ struct CaptionReviewView: View {
     private func save() {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.weekResult = result
-        for (dayKey, offsets) in dayCollageCropOffsets {
-            if var pd = ev.days[dayKey] {
-                pd.collageCropOffsets = offsets
-                ev.days[dayKey] = pd
-            }
-        }
-        for (dayKey, offsets) in dayReelCropOffsets {
-            if var pd = ev.days[dayKey] {
-                pd.reelCropOffsets = offsets
-                ev.days[dayKey] = pd
-            }
-        }
-        for (dayKey, cells) in dayCollageCellOverrides {
-            if var pd = ev.days[dayKey] {
-                pd.collageCellOverride = cells
-                ev.days[dayKey] = pd
-            }
-        }
+        DayStateMerger.mergeLocalStateIntoDays(
+            &ev,
+            collageCropOffsets: dayCollageCropOffsets,
+            reelCropOffsets: dayReelCropOffsets,
+            collageCellOverrides: dayCollageCellOverrides,
+            fridayClipOverride: dayFridayClipOverride
+        )
         appState.updateEvent(ev)
     }
 
@@ -943,24 +939,13 @@ struct CaptionReviewView: View {
     private func finalizeAdvance() {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.weekResult = result
-        for (dayKey, offsets) in dayCollageCropOffsets {
-            if var pd = ev.days[dayKey] {
-                pd.collageCropOffsets = offsets
-                ev.days[dayKey] = pd
-            }
-        }
-        for (dayKey, offsets) in dayReelCropOffsets {
-            if var pd = ev.days[dayKey] {
-                pd.reelCropOffsets = offsets
-                ev.days[dayKey] = pd
-            }
-        }
-        for (dayKey, cells) in dayCollageCellOverrides {
-            if var pd = ev.days[dayKey] {
-                pd.collageCellOverride = cells
-                ev.days[dayKey] = pd
-            }
-        }
+        DayStateMerger.mergeLocalStateIntoDays(
+            &ev,
+            collageCropOffsets: dayCollageCropOffsets,
+            reelCropOffsets: dayReelCropOffsets,
+            collageCellOverrides: dayCollageCellOverrides,
+            fridayClipOverride: dayFridayClipOverride
+        )
         // Approving captions only opens the Export screen; the export itself
         // (and the archivedAt / exportPath stamps that mark real completion)
         // happens once the user picks a folder and runs it in ExportView.

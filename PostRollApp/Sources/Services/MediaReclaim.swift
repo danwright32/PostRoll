@@ -21,11 +21,12 @@ enum MediaReclaim {
         events: inout [Event],
         photosDir: URL = AppPaths.photosDir,
         audioDir: URL = AppPaths.audioDir,
+        clipsDir: URL = AppPaths.clipsDir,
         storageRoot: URL = AppPaths.root
     ) -> Bool {
         var changed = false
         for i in events.indices {
-            if reclaim(event: &events[i], photosDir: photosDir, audioDir: audioDir, storageRoot: storageRoot) {
+            if reclaim(event: &events[i], photosDir: photosDir, audioDir: audioDir, clipsDir: clipsDir, storageRoot: storageRoot) {
                 changed = true
             }
         }
@@ -33,7 +34,7 @@ enum MediaReclaim {
     }
 
     private static func reclaim(
-        event: inout Event, photosDir: URL, audioDir: URL, storageRoot: URL
+        event: inout Event, photosDir: URL, audioDir: URL, clipsDir: URL, storageRoot: URL
     ) -> Bool {
         var changed = false
 
@@ -42,7 +43,7 @@ enum MediaReclaim {
 
         for key in event.days.keys {
             guard var pd = event.days[key] else { continue }
-            if reclaim(day: &pd, photosDir: photosDir, audioDir: audioDir, storageRoot: storageRoot) {
+            if reclaim(day: &pd, photosDir: photosDir, audioDir: audioDir, clipsDir: clipsDir, storageRoot: storageRoot) {
                 event.days[key] = pd
                 changed = true
             }
@@ -51,7 +52,7 @@ enum MediaReclaim {
     }
 
     private static func reclaim(
-        day pd: inout PostingDay, photosDir: URL, audioDir: URL, storageRoot: URL
+        day pd: inout PostingDay, photosDir: URL, audioDir: URL, clipsDir: URL, storageRoot: URL
     ) -> Bool {
         var changed = false
 
@@ -64,6 +65,18 @@ enum MediaReclaim {
         }
         if !remap.isEmpty {
             pd = pd.rebindingPhotos(remap)
+            changed = true
+        }
+
+        // clipPaths carry the AI plan and user override entries, mirroring
+        // photoPaths above. rebindingClips moves both to the new URL.
+        var clipRemap: [URL: URL] = [:]
+        for url in pd.clipPaths {
+            let dest = stored(url, into: clipsDir, storageRoot: storageRoot)
+            if dest != url { clipRemap[url] = dest }
+        }
+        if !clipRemap.isEmpty {
+            pd = pd.rebindingClips(clipRemap)
             changed = true
         }
 

@@ -68,6 +68,10 @@ final class AppPathsTests: XCTestCase {
         XCTAssertEqual(AppPaths.programsDir, AppPaths.root.appendingPathComponent("programs"))
         XCTAssertEqual(AppPaths.photosDir, AppPaths.root.appendingPathComponent("photos"))
         XCTAssertEqual(AppPaths.audioDir, AppPaths.root.appendingPathComponent("audio"))
+        // Clips are large video files with a different size/lifecycle profile
+        // than photos, so they get their own directory rather than reusing
+        // photosDir (Friday auto-cut clip reel, #131).
+        XCTAssertEqual(AppPaths.clipsDir, AppPaths.root.appendingPathComponent("clips"))
         // Logs live under the data root, not the Documents checkout (#56).
         XCTAssertEqual(AppPaths.logsDir, AppPaths.root.appendingPathComponent("logs"))
         XCTAssertEqual(AppPaths.logFile, AppPaths.logsDir.appendingPathComponent("postroll.log"))
