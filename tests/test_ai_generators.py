@@ -460,6 +460,44 @@ def test_caption_passes_brand_voice_to_prompt(sample_photo):
     assert "#dwphotony" in prompt  # hashtag rule restated
 
 
+def test_caption_clip_reel_post_type_gets_event_level_framing(sample_photo):
+    # Phase 3 (#134): clip_reel is a new post_type for the Friday auto-cut
+    # reel. Exercises the real generate_caption prompt-building path (not a
+    # mocked generate_caption) so a KeyError or missing-framing regression
+    # in POST_TYPE_FRAMING/EVENT_LEVEL_POST_TYPES/ALT_TEXT_INSTRUCTION would
+    # fail this test, not just silently fall back to default framing.
+    captured = {}
+
+    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None, image_labels=None):
+        captured["prompt"] = prompt
+        return {"caption": "x", "hashtags": [], "alt_texts": ["x"]}
+
+    with patch(
+        "postroll.ai.generate_captions.run_json_prompt", side_effect=fake_run_json
+    ):
+        generate_captions.generate_caption(
+            event="Sing Play",
+            org="DCINY",
+            venue="Carnegie Hall",
+            date="2026-04-05",
+            day="friday",
+            photo_paths=[sample_photo],
+            program={"performers": [], "pieces": []},
+            post_type="clip_reel",
+            skip_humanizer=True,
+            skip_voice_pass=True,
+        )
+
+    prompt = captured["prompt"]
+    # The clip_reel-specific framing text made it into the real prompt.
+    assert "auto-cut highlight reel" in prompt
+    # Event-level scope rule applies (not the single-subject one): a
+    # highlight reel spans multiple clips, not one frame.
+    assert "SINGLE-SUBJECT" not in prompt
+    # scroll_reel's unified-narrative alt text instruction is reused.
+    assert "UNIFIED NARRATIVE" in prompt
+
+
 # === generate_blog ===
 
 

@@ -1,0 +1,150 @@
+"""Tests for the Friday auto-cut clip reel gate in generate_media.py (Phase 3, #134).
+
+Stage 1 (score_clips) runs for real against ffmpeg-generated synthetic
+clips, matching test_clip_scorer.py's fixtures. Stage 2 (select_reel_clips)
+and the Jamendo fetch are monkeypatched at the generate_media module
+boundary, the same boundary test_select_reel_clips.py already mocks at,
+so these tests don't depend on network access or a Claude API key.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+
+import pytest
+
+import postroll.ai.generate_media as gm_mod
+
+HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+needs_ffmpeg = pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
+
+
+def _make_gradient(path, seconds=3.0):
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+         "-i", f"testsrc=s=320x240:d={seconds}:r=10", str(path)],
+        check=True,
+    )
+
+
+def _make_usable_clips(tmp_path, count=3):
+    paths = []
+    for i in range(count):
+        p = tmp_path / f"clip{i}.mp4"
+        _make_gradient(p)
+        paths.append(str(p))
+    return paths
+
+
+def _fake_select_reel_clips(scored_clips, **kwargs):
+    candidates = [c for c in scored_clips if c.get("usable")]
+    return {
+        "selections": [
+            {
+                "clip_path": c["path"],
+                "trim_in": c["valid_trim"][0],
+                "trim_out": c["valid_trim"][1],
+                "transition_after": "cut",
+            }
+            for c in candidates
+        ],
+        "rationale": "test rationale",
+    }
+
+
+def _base_manifest(clips, tmp_path, **friday_extra):
+    friday = {"clips": clips}
+    friday.update(friday_extra)
+    return {
+        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "days": {"friday": friday},
+    }
+
+
+@needs_ffmpeg
+def test_friday_with_usable_clips_produces_reel_and_clip_plan(tmp_path, monkeypatch):
+    clips = _make_usable_clips(tmp_path)
+    monkeypatch.setattr(gm_mod, "select_reel_clips", _fake_select_reel_clips)
+    monkeypatch.setattr(gm_mod, "fetch_audio", lambda tags: None)
+
+    manifest = _base_manifest(clips, tmp_path)
+    out_dir = tmp_path / "out"
+    result = gm_mod.generate_media(manifest, out_dir)
+
+    assert "friday" not in result.get("errors", {})
+    friday_result = result["friday"]
+    assert friday_result is not None
+    assert "reel" in friday_result
+    assert friday_result["reel"].endswith(".mp4")
+    plan = friday_result["friday_clip_plan"]
+    assert len(plan["selections"]) == 3
+    assert plan["selections"][0]["transition"] == "cut"
+    # Reel replaces before/after/story for this day, not alongside it.
+    assert "before_after" not in friday_result
+    assert "story" not in friday_result
+
+
+@needs_ffmpeg
+def test_friday_with_insufficient_clips_falls_back_to_story(tmp_path, monkeypatch):
+    # Only 1 clip: below MIN_USABLE_CLIPS (3), Stage 1 must raise and the
+    # gate must fall through to the existing story fallback, unmodified.
+    clips = _make_usable_clips(tmp_path, count=1)
+    monkeypatch.setattr(gm_mod, "select_reel_clips", _fake_select_reel_clips)
+    monkeypatch.setattr(gm_mod, "fetch_audio", lambda tags: None)
+
+    from PIL import Image
+    photo = tmp_path / "photo.jpg"
+    Image.new("RGB", (400, 600), "green").save(photo)
+
+    manifest = _base_manifest(clips, tmp_path, photos=[str(photo)])
+    out_dir = tmp_path / "out"
+    result = gm_mod.generate_media(manifest, out_dir)
+
+    friday_result = result["friday"]
+    assert "reel" not in friday_result
+    assert "story" in friday_result
+    assert "friday" in result["errors"], "a clip attempt that fell back must still flag the failure, not go silent"
+
+
+@needs_ffmpeg
+def test_friday_with_no_clips_behaves_exactly_as_before(tmp_path):
+    # No clips key at all: today's before/after path must be completely
+    # unaffected by this feature.
+    raw = tmp_path / "raw.mp4"
+    _make_gradient(raw)  # placeholder file; generate_before_after is a still-image generator so use PNGs instead
+    from PIL import Image
+    raw_png = tmp_path / "raw.png"
+    edit_png = tmp_path / "edit.png"
+    Image.new("RGB", (400, 600), "red").save(raw_png)
+    Image.new("RGB", (400, 600), "blue").save(edit_png)
+
+    manifest = {
+        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "days": {"friday": {"raw_photo": str(raw_png), "edited_photo": str(edit_png)}},
+    }
+    out_dir = tmp_path / "out"
+    result = gm_mod.generate_media(manifest, out_dir)
+
+    friday_result = result["friday"]
+    assert "before_after" in friday_result
+    assert "reel" not in friday_result
+    assert "friday" not in result.get("errors", {})
+
+
+def test_static_only_skips_clip_reel_even_with_clips(tmp_path, monkeypatch):
+    # static_only must still short-circuit the reel path exactly like it
+    # does for Tuesday/Thursday, without needing real ffmpeg-usable clips.
+    called = False
+
+    def _spy_select(*args, **kwargs):
+        nonlocal called
+        called = True
+        return {"selections": [], "rationale": ""}
+
+    monkeypatch.setattr(gm_mod, "select_reel_clips", _spy_select)
+    manifest = _base_manifest(["/fake/clip.mov"], tmp_path)
+    out_dir = tmp_path / "out"
+    gm_mod.generate_media(manifest, out_dir, static_only=True)
+
+    assert not called, "static_only must skip the clip reel attempt entirely"

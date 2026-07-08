@@ -69,6 +69,10 @@ from typing import Any
 from ..media.generate_story import generate_story
 from ..media.generate_collage import generate_collage
 from ..media.generate_before_after import generate_before_after
+from ..media.clip_scorer import score_clips
+from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
+from ..audio import fetch_audio
+from .select_reel_clips import select_reel_clips
 from ..posting_preset import (
     DEFAULT_PRESET,
     COLLAGE_CAROUSEL,
@@ -161,10 +165,20 @@ def generate_media(
 
         if not photos:
             # Tuesday and Friday can operate without the generic photos list —
-            # they use raw_photo / edited_photo instead.
-            if day_name not in ("tuesday", "friday") or (
-                not day_info.get("raw_photo") and not day_info.get("edited_photo")
-            ):
+            # Tuesday uses raw_photo/edited_photo, Friday uses those OR clips
+            # (the auto-cut reel path, which needs no stills at all).
+            if day_name == "tuesday":
+                if not day_info.get("raw_photo") and not day_info.get("edited_photo"):
+                    results[day_name] = None
+                    continue
+            elif day_name == "friday":
+                if (
+                    not day_info.get("raw_photo") and not day_info.get("edited_photo")
+                    and not day_info.get("clips")
+                ):
+                    results[day_name] = None
+                    continue
+            else:
                 results[day_name] = None
                 continue
 
@@ -454,11 +468,60 @@ def generate_media(
         # Falls back to story template if inputs are missing.
         # ──────────────────────────────────────────────────────────────
         elif day_name == "friday":
-            raw  = day_info.get("raw_photo")
-            edit = day_info.get("edited_photo")
-            bw   = day_info.get("bw_photo")   # optional B&W after → 3-photo graphic
+            raw   = day_info.get("raw_photo")
+            edit  = day_info.get("edited_photo")
+            bw    = day_info.get("bw_photo")   # optional B&W after → 3-photo graphic
+            clips = day_info.get("clips") or []
 
-            if raw and edit:
+            # Auto-cut clip reel: only attempted when clips were imported.
+            # Any failure (too few usable clips, Claude error, ffmpeg crash)
+            # falls through to exactly today's before/after/story behavior
+            # below: Friday must never silently produce nothing just
+            # because the reel attempt didn't pan out.
+            reel_rendered = False
+            if ffmpeg_available and not static_only and clips:
+                try:
+                    scored = score_clips(clips)
+                    plan = select_reel_clips(scored)
+                    audio_file = day_info.get("audio")
+                    music_path = audio_file or fetch_audio(_derive_audio_tags(shoot_type, pieces))
+                    duck_gain_db = float(day_info.get("clip_duck_db", DEFAULT_DUCK_GAIN_DB))
+                    mute_clip_audio = bool(day_info.get("clip_audio_muted", False))
+
+                    reel_path = str(day_dir / "reel_clip.mp4")
+                    render_clip_reel(
+                        plan["selections"], reel_path,
+                        audio_path=music_path,
+                        duck_gain_db=duck_gain_db,
+                        mute_clip_audio=mute_clip_audio,
+                    )
+                    day_result["reel"] = reel_path
+                    # Translated to Swift's FridayClipPlan field names
+                    # (transition_after -> transition) so PythonBridge.swift
+                    # can decode this straight into event.days["friday"].fridayClipPlan.
+                    day_result["friday_clip_plan"] = {
+                        "selections": [
+                            {
+                                "clip_path": sel["clip_path"],
+                                "trim_in": sel["trim_in"],
+                                "trim_out": sel["trim_out"],
+                                "transition": sel["transition_after"],
+                            }
+                            for sel in plan["selections"]
+                        ],
+                        "rationale": plan.get("rationale", ""),
+                    }
+                    print(
+                        f"[generate_media] friday: clip reel "
+                        f"({len(plan['selections'])} clips) → {reel_path}", flush=True,
+                    )
+                    reel_rendered = True
+                except Exception as e:
+                    msg = f"clip reel skipped: {e}"
+                    print(f"[generate_media] friday: {msg}", flush=True, file=sys.stderr)
+                    errors["friday"] = msg
+
+            if not reel_rendered and raw and edit:
                 try:
                     ba_path = str(day_dir / "before_after.png")
                     generate_before_after(
@@ -476,8 +539,8 @@ def generate_media(
                 except Exception as e:
                     msg = f"before/after failed: {e}"
                     print(f"[generate_media] friday: ERROR — {msg}", flush=True, file=sys.stderr)
-                    errors["friday"] = msg
-            else:
+                    errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + msg
+            elif not reel_rendered:
                 # Fallback: story template
                 reason = "missing raw_photo/edited_photo"
                 print(f"[generate_media] friday: before/after skipped ({reason}), generating story", flush=True)
@@ -494,7 +557,8 @@ def generate_media(
                         )
                         day_result["story"] = story_path
                     except Exception as e:
-                        errors["friday"] = f"story fallback failed: {e}"
+                        msg = f"story fallback failed: {e}"
+                        errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + msg
 
         results[day_name] = day_result or None
 

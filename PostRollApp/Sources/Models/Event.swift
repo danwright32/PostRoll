@@ -132,6 +132,19 @@ extension Event {
         exportPath        = try c.decodeIfPresent(URL.self,                        forKey: .exportPath)
         archivedAt        = try c.decodeIfPresent(Date.self,                       forKey: .archivedAt)
     }
+
+    /// Writes a freshly-decoded Friday clip plan onto this event's Friday day.
+    /// `plan` is nil when no reel was attempted this run (no clips, or the
+    /// clip-reel gate fell back): a nil plan must never clobber an
+    /// already-persisted one, and there's nothing to write if Friday has no
+    /// PostingDay yet. Shared by every call site that applies a
+    /// PreviewGenerationResult (GenerationManager.finishSuccess,
+    /// CaptionReviewView.generateGraphics, CaptionReviewView.applyRegenResult)
+    /// so the write-back logic exists in exactly one place.
+    mutating func applyFridayClipPlan(_ plan: FridayClipPlan?) {
+        guard let plan else { return }
+        days["friday"]?.fridayClipPlan = plan
+    }
 }
 
 // MARK: - ShootType
@@ -243,6 +256,8 @@ extension PostingDay {
         clipPaths            = try  c.decodeIfPresent([URL].self,                     forKey: .clipPaths)           ?? []
         fridayClipPlan       = try  c.decodeIfPresent(FridayClipPlan.self,            forKey: .fridayClipPlan)
         fridayClipOverride   = try  c.decodeIfPresent([ReelClipOverride].self,        forKey: .fridayClipOverride)
+        fridayAudioDuckDB    = try  c.decodeIfPresent(Double.self,                    forKey: .fridayAudioDuckDB)   ?? -15.0
+        fridayAudioMuted     = try  c.decodeIfPresent(Bool.self,                      forKey: .fridayAudioMuted)    ?? false
     }
 
     /// Returns a copy with the given photos removed from photoPaths and from
@@ -569,4 +584,9 @@ struct PostingDay: Codable, Hashable {
     // User's manual reorder/include-exclude/trim edits. nil = defer to fridayClipPlan,
     // non-nil = user's edit wins forever (same nil-means-AI / non-nil-means-user semantics as collageCellOverride).
     var fridayClipOverride: [ReelClipOverride]? = nil
+    // How far under the music bed each clip's own audio is ducked when the
+    // Friday reel is rendered. Dan's default call (-15dB); adjustable per
+    // event since some weeks he wants clip audio fully muted instead.
+    var fridayAudioDuckDB: Double = -15.0
+    var fridayAudioMuted: Bool = false
 }

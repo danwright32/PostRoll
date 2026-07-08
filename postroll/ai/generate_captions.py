@@ -414,6 +414,7 @@ SINGLE_SUBJECT_POST_TYPES = {
 EVENT_LEVEL_POST_TYPES = {
     "carousel",
     "scroll_reel",
+    "clip_reel",
 }
 
 
@@ -526,6 +527,13 @@ POST_TYPE_FRAMING = {
         "not photo-specific. Reference the scope (a night, a week, a whole show) "
         "rather than any individual frame."
     ),
+    "clip_reel": (
+        "An auto-cut highlight reel: a short video built from several video clips "
+        "shot live at the event, edited together with cuts and transitions to a music "
+        "bed. The caption should be general-event-level like a scroll reel, not tied "
+        "to any single clip's moment. Reference the overall energy or arc of the "
+        "performance rather than describing individual cuts."
+    ),
     "before_after_story": (
         "A static before/after story image (not a reel). A single 1080x1920 image "
         "showing the RAW and edited photos stacked. No caption needed for Instagram "
@@ -568,6 +576,7 @@ ALT_TEXT_INSTRUCTION = {
 }
 ALT_TEXT_INSTRUCTION["morph_reel"]  = ALT_TEXT_INSTRUCTION["slider_reel"]
 ALT_TEXT_INSTRUCTION["screen_reel"] = ALT_TEXT_INSTRUCTION["slider_reel"]
+ALT_TEXT_INSTRUCTION["clip_reel"]   = ALT_TEXT_INSTRUCTION["scroll_reel"]
 
 DEFAULT_ALT_TEXT_INSTRUCTION = (
     "Write ONE alt text for the photo and put it as a SINGLE entry in "
@@ -584,6 +593,7 @@ SINGLE_ALT_POST_TYPES = {
     "before_after_story",
     "performance",
     "scroll_reel",
+    "clip_reel",
 }
 
 

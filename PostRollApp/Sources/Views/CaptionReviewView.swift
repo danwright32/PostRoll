@@ -458,6 +458,7 @@ struct CaptionReviewView: View {
                     // minute or more and a snapshot would revert interleaved edits.
                     var ev = appState.events.first(where: { $0.id == event.id }) ?? event
                     ev.previewMediaPaths = result.paths
+                    ev.applyFridayClipPlan(result.fridayClipPlan)
                     appState.updateEvent(ev)
                 }
             }
@@ -845,6 +846,7 @@ struct CaptionReviewView: View {
             // (e.g. after assignReelPhotosAndGenerate saved new photos).
             var ev = appState.events.first(where: { $0.id == event.id }) ?? event
             ev.previewMediaPaths[day.rawValue] = dayPaths
+            if day == .friday { ev.applyFridayClipPlan(result.fridayClipPlan) }
             appState.updateEvent(ev)
             graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
             NotificationService.shared.notifyRegenerationComplete(

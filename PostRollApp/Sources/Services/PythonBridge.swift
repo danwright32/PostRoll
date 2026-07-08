@@ -229,6 +229,36 @@ actor PythonBridge {
     struct PreviewGenerationResult {
         let paths: [String: [String: String]]
         let errors: [String: String]
+        /// Friday's Stage 2 selection plan, decoded straight from
+        /// generate_media.py's friday_clip_plan when a clip reel was
+        /// rendered. nil when no reel was attempted this run.
+        var fridayClipPlan: FridayClipPlan? = nil
+    }
+
+    /// Parses one day's entry from generate_media.py's output JSON. Values
+    /// are a mix of plain string paths (e.g. "reel", "story") and, for
+    /// Friday, a nested friday_clip_plan object, so the whole dict can't be
+    /// cast to [String: String]. That cast fails outright the moment a
+    /// nested value shows up, silently dropping every path for that day,
+    /// not just the plan. `fileExists` is injectable so this is testable
+    /// without touching the real filesystem.
+    nonisolated static func parsePreviewDayEntry(
+        _ dayDict: [String: Any],
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> (paths: [String: String], fridayClipPlan: FridayClipPlan?) {
+        var paths: [String: String] = [:]
+        for (key, value) in dayDict {
+            guard key != "friday_clip_plan", let path = value as? String, fileExists(path) else { continue }
+            paths[key] = path
+        }
+
+        var plan: FridayClipPlan? = nil
+        if let planObject = dayDict["friday_clip_plan"],
+           let data = try? JSONSerialization.data(withJSONObject: planObject) {
+            plan = try? JSONDecoder().decode(FridayClipPlan.self, from: data)
+        }
+
+        return (paths, plan)
     }
 
     /// Generates preview graphics (Tuesday + Thursday reels included) to a
@@ -279,14 +309,15 @@ actor PythonBridge {
         }
 
         var paths: [String: [String: String]] = [:]
+        var fridayClipPlan: FridayClipPlan? = nil
         for dayKey in ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"] {
-            guard let dayDict = json[dayKey] as? [String: String] else { continue }
-            // Include both images and video files (.mp4)
-            let existing = dayDict.filter { FileManager.default.fileExists(atPath: $0.value) }
-            if !existing.isEmpty { paths[dayKey] = existing }
+            guard let dayDict = json[dayKey] as? [String: Any] else { continue }
+            let parsed = Self.parsePreviewDayEntry(dayDict)
+            if !parsed.paths.isEmpty { paths[dayKey] = parsed.paths }
+            if dayKey == "friday" { fridayClipPlan = parsed.fridayClipPlan }
         }
         let errors = (json["errors"] as? [String: String]) ?? [:]
-        return PreviewGenerationResult(paths: paths, errors: errors)
+        return PreviewGenerationResult(paths: paths, errors: errors, fridayClipPlan: fridayClipPlan)
     }
 
     /// Builds the Thursday reel's still preview PNG + layout sidecar (no ffmpeg encode).
@@ -425,11 +456,15 @@ actor PythonBridge {
     }
 
     /// Builds the media manifest dict shared by runMediaGeneration and runPreviewGeneration.
-    private func buildMediaManifest(event: Event) -> [String: Any] {
+    /// A pure function of `event` (no actor-isolated state), so nonisolated:
+    /// callable directly, and internal (not private) so PostRollTests can
+    /// pin the per-day inclusion guard and field wiring directly.
+    nonisolated func buildMediaManifest(event: Event) -> [String: Any] {
         var daysDict: [String: Any] = [:]
         for dayName in DayName.allCases {
             guard let pd = event.days[dayName.rawValue],
                   !pd.photoPaths.isEmpty || pd.rawPhotoPath != nil || pd.editedPhotoPath != nil
+                      || !pd.clipPaths.isEmpty
             else { continue }
             // photoPaths is the source of truth for reel/collage order. It's
             // sorted once at import (changeReelPhotos) and any user-driven
@@ -465,6 +500,9 @@ actor PythonBridge {
                 if let raw  = pd.rawPhotoPath        { entry["raw_photo"]         = raw.path }
                 if let edit = pd.editedPhotoPath     { entry["edited_photo"]      = edit.path }
                 if let bw   = pd.bwPhotoPath         { entry["bw_photo"]          = bw.path }
+                if !pd.clipPaths.isEmpty { entry["clips"] = pd.clipPaths.map { $0.path } }
+                entry["clip_duck_db"] = pd.fridayAudioDuckDB
+                entry["clip_audio_muted"] = pd.fridayAudioMuted
             default:
                 break
             }
@@ -696,7 +734,10 @@ actor PythonBridge {
 
     // MARK: - Manifest builder
 
-    private func buildManifest(event: Event, onlyDays: Set<String>? = nil) throws -> [String: Any] {
+    /// A pure function of `event` (no actor-isolated state), so nonisolated:
+    /// callable directly, and internal (not private) so PostRollTests can
+    /// pin the per-day inclusion guard and field wiring directly.
+    nonisolated func buildManifest(event: Event, onlyDays: Set<String>? = nil) throws -> [String: Any] {
         // Serialize OCRResult via JSONEncoder so CodingKeys produce snake_case
         guard let ocr = event.ocrResult else {
             throw PythonBridgeError.invalidOutput("No OCR result. Complete the OCR step first.")
@@ -719,10 +760,32 @@ actor PythonBridge {
             if let only = onlyDays, !only.contains(dayName.rawValue) { continue }
             guard let pd = event.days[dayName.rawValue],
                   !pd.photoPaths.isEmpty || pd.rawPhotoPath != nil || pd.editedPhotoPath != nil
+                      || !pd.clipPaths.isEmpty
             else { continue }
             var dayEntry: [String: Any] = [
                 "photos": pd.photoPaths.map { $0.path },
             ]
+            // Friday clip reel: the persisted Stage 2 plan (already selected/
+            // ordered/trimmed by generate_media.py, decoded back into
+            // fridayClipPlan) is sent along so generate_week.py can re-extract
+            // representative frames for the caption call without redoing
+            // Stage 1/2 selection.
+            if dayName == .friday {
+                if !pd.clipPaths.isEmpty { dayEntry["clips"] = pd.clipPaths.map { $0.path } }
+                if let plan = pd.fridayClipPlan, !plan.selections.isEmpty {
+                    dayEntry["clips_plan"] = [
+                        "selections": plan.selections.map { sel -> [String: Any] in
+                            [
+                                "clip_path": sel.clipPath,
+                                "trim_in": sel.trimIn,
+                                "trim_out": sel.trimOut,
+                                "transition": sel.transition.rawValue,
+                            ]
+                        },
+                        "rationale": plan.rationale,
+                    ]
+                }
+            }
 
             // Merge selected performers into handles / name mentions
             let selectedIDs = Set(pd.selectedPerformerIDs)

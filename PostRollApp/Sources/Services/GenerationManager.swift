@@ -55,15 +55,16 @@ final class GenerationManager {
         let doGraphics = PreviewMergePolicy.shouldRenderGraphics(
             regenerateGraphics: regenerateGraphics, isFullRun: onlyDays == nil)
         let task = Task { [weak self] in
-            let graphicsTask: Task<[String: [String: String]]?, Never>? = doGraphics
-                ? Task { (try? await PythonBridge.shared.runPreviewGeneration(event: ev, days: onlyDays.map { Array($0) }))?.paths }
+            let graphicsTask: Task<PythonBridge.PreviewGenerationResult?, Never>? = doGraphics
+                ? Task { try? await PythonBridge.shared.runPreviewGeneration(event: ev, days: onlyDays.map { Array($0) }) }
                 : nil
 
             do {
                 let result = try await PythonBridge.shared.runWeekGeneration(event: ev, onlyDays: onlyDays)
-                let mediaPaths = await graphicsTask?.value
+                let mediaResult = await graphicsTask?.value
                 self?.finishSuccess(eventID: eventID, snapshot: ev, onlyDays: onlyDays,
-                                    result: result, mediaPaths: mediaPaths, appState: appState)
+                                    result: result, mediaPaths: mediaResult?.paths,
+                                    fridayClipPlan: mediaResult?.fridayClipPlan, appState: appState)
             } catch is CancellationError {
                 graphicsTask?.cancel()
             } catch {
@@ -90,7 +91,7 @@ final class GenerationManager {
 
     private func finishSuccess(eventID: Event.ID, snapshot ev: Event, onlyDays: Set<String>?,
                                result: WeekGenerationResult, mediaPaths: [String: [String: String]]?,
-                               appState: AppState) {
+                               fridayClipPlan: FridayClipPlan? = nil, appState: AppState) {
         let elapsed = tracker.job(for: eventID)?.elapsedSeconds ?? 0
         tracker.remove(eventID)
 
@@ -129,6 +130,8 @@ final class GenerationManager {
         // regenerated days so other days' approved previews survive.
         saved.previewMediaPaths = PreviewMergePolicy.merge(
             existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: onlyDays == nil)
+
+        saved.applyFridayClipPlan(fridayClipPlan)
 
         appState.updateEvent(saved)
         NotificationService.shared.notifyGenerationComplete(eventName: ev.name)

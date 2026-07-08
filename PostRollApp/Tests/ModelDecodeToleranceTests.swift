@@ -58,6 +58,16 @@ final class ModelDecodeToleranceTests: XCTestCase {
         XCTAssertNil(day.fridayClipOverride)
     }
 
+    // Phase 3 (#134): duck gain / mute are new fields on an already-shipped
+    // struct: an event saved before this feature existed has neither key
+    // in its JSON at all. Must default to -15dB unducked, not muted.
+    func testPostingDayToleratesMissingAudioDuckFields() throws {
+        let json = Data(#"{"day": "friday", "photoPaths": []}"#.utf8)
+        let day = try JSONDecoder().decode(PostingDay.self, from: json)
+        XCTAssertEqual(day.fridayAudioDuckDB, -15.0)
+        XCTAssertFalse(day.fridayAudioMuted)
+    }
+
     func testReelClipOverrideToleratesMissingKeys() throws {
         let json = Data(#"{"clip_path": "/x.mov"}"#.utf8)
         let override = try JSONDecoder().decode(ReelClipOverride.self, from: json)

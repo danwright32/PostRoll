@@ -46,7 +46,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -61,6 +63,48 @@ DAY_ORDER = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]
 
 # When a scroll_reel day has this many photos, ask Claude to pick the best subset
 REEL_SELECTION_THRESHOLD = 50
+
+
+def _extract_clip_plan_frames(
+    selections: list[dict[str, Any]], tmp_dir: str | Path | None = None
+) -> list[str]:
+    """Re-extract one mid-point frame per selection in a persisted Friday
+    clip plan, for the caption call's `photo_paths`.
+
+    Deliberately does NOT reuse Stage 2's own representative frames: those
+    live in a TemporaryDirectory that's already deleted by the time this
+    runs, and media generation (which produces the plan) runs concurrently
+    with, not strictly before, this caption pass. Self-contained: reads
+    only the clip paths and trim windows already persisted in the manifest.
+
+    A selection whose clip file no longer exists is skipped rather than
+    failing the whole caption; raises only if NO frame could be extracted
+    at all (nothing usable to caption).
+    """
+    tmp = Path(tmp_dir) if tmp_dir else Path(tempfile.mkdtemp(prefix="postroll-fridaycaptionframes-"))
+    tmp.mkdir(parents=True, exist_ok=True)
+
+    frames: list[str] = []
+    for i, sel in enumerate(selections):
+        clip_path = sel.get("clip_path")
+        if not clip_path or not Path(clip_path).exists():
+            continue
+        trim_in = float(sel.get("trim_in", 0.0))
+        trim_out = float(sel.get("trim_out", trim_in))
+        midpoint = (trim_in + trim_out) / 2
+
+        out = tmp / f"frame_{i:02d}.png"
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(midpoint), "-i", str(clip_path),
+             "-frames:v", "1", str(out)],
+            capture_output=True,
+        )
+        if proc.returncode == 0 and out.exists():
+            frames.append(str(out))
+
+    if not frames:
+        raise RuntimeError("no frames could be extracted from the Friday clip plan")
+    return frames
 
 
 def _auto_post_type(day: str, photo_count: int, preset: str = DEFAULT_PRESET) -> str:
@@ -103,23 +147,41 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
 
     for day_name in DAY_ORDER:
         if day_name == "friday":
-            results[day_name] = None
-            print(f"[generate_week] {day_name}: story-only day, skipping caption", flush=True)
-            continue
+            day_info = days_data.get("friday", {})
+            selections = ((day_info.get("clips_plan") or {}).get("selections")) or []
+            if not selections:
+                results[day_name] = None
+                print(f"[generate_week] friday: no clip plan, skipping caption", flush=True)
+                continue
+            try:
+                photos = _extract_clip_plan_frames(selections)
+            except Exception as e:
+                print(f"[generate_week] friday: frame extraction failed ({e}), skipping caption",
+                      flush=True, file=sys.stderr)
+                errors[day_name] = f"frame extraction failed: {e}"
+                results[day_name] = None
+                continue
 
-        day_info = days_data.get(day_name, {})
-        photos   = day_info.get("photos", [])
+            post_type     = "clip_reel"
+            tag_handles   = day_info.get("tag_handles") or None
+            name_mentions = day_info.get("name_mentions") or None
+            notes         = day_info.get("notes", "")
+            photo_tags    = None  # per-photo tagging isn't meaningful for a reconstructed reel frame set
 
-        if not photos:
-            results[day_name] = None
-            print(f"[generate_week] {day_name}: no photos, skipping", flush=True)
-            continue
+        else:
+            day_info = days_data.get(day_name, {})
+            photos   = day_info.get("photos", [])
 
-        post_type    = day_info.get("post_type") or _auto_post_type(day_name, len(photos), preset)
-        tag_handles  = day_info.get("tag_handles") or None
-        name_mentions = day_info.get("name_mentions") or None
-        notes        = day_info.get("notes", "")
-        photo_tags   = day_info.get("photo_tags") or None
+            if not photos:
+                results[day_name] = None
+                print(f"[generate_week] {day_name}: no photos, skipping", flush=True)
+                continue
+
+            post_type    = day_info.get("post_type") or _auto_post_type(day_name, len(photos), preset)
+            tag_handles  = day_info.get("tag_handles") or None
+            name_mentions = day_info.get("name_mentions") or None
+            notes        = day_info.get("notes", "")
+            photo_tags   = day_info.get("photo_tags") or None
 
         # For Thursday's scroll reel: the reel itself can have 50-200+ photos
         # (the visual asset is generated locally by ffmpeg), but Claude only
