@@ -61,6 +61,7 @@ import argparse
 import json
 import random
 import re
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -72,7 +73,9 @@ from ..media.generate_before_after import generate_before_after
 from ..media.clip_scorer import score_clips, InsufficientClipsError
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
 from .audio_tags import resolve_reel_audio
-from .select_reel_clips import select_reel_clips
+from .select_reel_clips import select_reel_clips, _extract_representative_frames
+from .select_reel_photos import select_reel_photos, DEFAULT_MAX_REEL_PHOTOS
+from .select_cover_photo import select_cover_photo
 from ..posting_preset import (
     DEFAULT_PRESET,
     COLLAGE_CAROUSEL,
@@ -112,6 +115,93 @@ def _has_ffmpeg() -> bool:
 # Thursday's audio tag derivation lives in postroll.ai.audio_tags so the
 # Swift-side track picker can call the same logic via a CLI shim.
 from .audio_tags import thursday_tags as _derive_audio_tags  # noqa: E402
+
+# 1-2 frames per selected clip so Claude can pick a still-worthy moment
+# without re-sending every frame Stage 2 already saw; only the clips that
+# made the final cut are candidates, so this stays small regardless of how
+# many clips were imported.
+COVER_FRAMES_PER_CLIP = 2
+
+
+def _cover_candidates_from_photos(photos: list[str]) -> list[dict]:
+    """Thursday's cover candidates: the day's own photos, or (above
+    DEFAULT_MAX_REEL_PHOTOS) the same representative subset already used to
+    cap Claude's image budget elsewhere in this codebase, reused rather
+    than a second cap invented for this feature."""
+    if len(photos) > DEFAULT_MAX_REEL_PHOTOS:
+        sample = select_reel_photos(photos, count=DEFAULT_MAX_REEL_PHOTOS)
+        return [{"path": str(p)} for p in sample]
+    return [{"path": p} for p in photos]
+
+
+def _cover_candidates_from_friday_plan(selections: list[dict], tmp_dir: Path) -> list[dict]:
+    """Friday's cover candidates: frames extracted from Stage 2's already-cut
+    plan (only the clips in the final reel), mirroring select_reel_clips.py's
+    own frame-extraction pattern."""
+    candidates: list[dict] = []
+    for i, sel in enumerate(selections):
+        frames = _extract_representative_frames(
+            sel["clip_path"], (sel["trim_in"], sel["trim_out"]),
+            COVER_FRAMES_PER_CLIP, tmp_dir, prefix=f"cover{i:02d}_",
+        )
+        candidates.extend({"path": str(f)} for f in frames)
+    return candidates
+
+
+def _render_cover(
+    *,
+    day_name: str,
+    day_dir: Path,
+    day_info: dict,
+    build_candidates,
+    event: str,
+    org: str,
+    venue: str,
+    day_result: dict,
+    errors: dict,
+    persist_pick_to: Path | None = None,
+) -> None:
+    """Sticky-gate cover render, generic across days: reuses a persisted
+    cover_source without touching Claude (or the representative-sampling
+    call that itself hits Claude) when one exists; otherwise builds
+    candidates lazily via `build_candidates` (only invoked when actually
+    needed) and picks fresh. Renders through generate_story.py's exact
+    template, reusing the same design rather than forking a second one.
+    """
+    cover_source = day_info.get("cover_source")
+    try:
+        if cover_source:
+            source_path = cover_source
+        else:
+            candidates = build_candidates()
+            if not candidates:
+                return
+            pick = select_cover_photo(candidates)
+            source_path = pick["path"]
+            if persist_pick_to is not None:
+                # The winning candidate may live in a temp dir (Friday's
+                # extracted frames) that's cleaned up right after this call
+                # returns; persist it so a later sticky-gate regen can still
+                # find it via the source_path saved below.
+                shutil.copy2(source_path, persist_pick_to)
+                source_path = str(persist_pick_to)
+            day_result["cover_pick"] = {"source_path": source_path, "rationale": pick["rationale"]}
+
+        cover_path = str(day_dir / "cover.png")
+        generate_story(
+            photo_path=source_path,
+            event_name=event,
+            org=org,
+            venue=venue,
+            output_path=cover_path,
+            logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+        )
+        day_result["cover"] = cover_path
+        print(f"[generate_media] {day_name}: cover → {cover_path}", flush=True)
+    except Exception as e:
+        msg = f"cover failed: {e}"
+        print(f"[generate_media] {day_name}: ERROR: {msg}", flush=True, file=sys.stderr)
+        errors[day_name] = (errors.get(day_name) + "; " if day_name in errors else "") + msg
 
 
 def generate_media(
@@ -463,6 +553,15 @@ def generate_media(
                     print("[generate_media] thursday: reel skipped — ffmpeg not available", flush=True)
                     errors["thursday"] = "ffmpeg not available — install ffmpeg to generate Thursday reel"
 
+            _render_cover(
+                day_name="thursday",
+                day_dir=day_dir,
+                day_info=day_info,
+                build_candidates=lambda: _cover_candidates_from_photos(photos),
+                event=event, org=org, venue=venue,
+                day_result=day_result, errors=errors,
+            )
+
         # ──────────────────────────────────────────────────────────────
         # Friday — before/after story (RAW + edited)
         # Falls back to story template if inputs are missing.
@@ -529,6 +628,20 @@ def generate_media(
                     msg = f"clip reel skipped: {e}"
                     print(f"[generate_media] friday: {msg}", flush=True, file=sys.stderr)
                     errors["friday"] = msg
+
+            if reel_rendered:
+                with tempfile.TemporaryDirectory(prefix="postroll-coverframes-") as cover_tmp:
+                    _render_cover(
+                        day_name="friday",
+                        day_dir=day_dir,
+                        day_info=day_info,
+                        build_candidates=lambda: _cover_candidates_from_friday_plan(
+                            plan["selections"], Path(cover_tmp)
+                        ),
+                        event=event, org=org, venue=venue,
+                        day_result=day_result, errors=errors,
+                        persist_pick_to=day_dir / "cover_frame.jpg",
+                    )
 
             if not reel_rendered and raw and edit:
                 try:
