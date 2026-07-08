@@ -24,7 +24,7 @@ struct SettingsView: View {
 
                 HStack {
                     Button("Save") {
-                        let trimmed = apiKey.trimmingCharacters(in: .whitespaces)
+                        let trimmed = KeychainStore.sanitize(apiKey)
                         if trimmed.isEmpty {
                             KeychainStore.deleteAPIKey()
                         } else {
@@ -33,7 +33,7 @@ struct SettingsView: View {
                         saved = true
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(apiKey.trimmingCharacters(in: .whitespaces) ==
+                    .disabled(KeychainStore.sanitize(apiKey) ==
                               (KeychainStore.readAPIKey() ?? ""))
 
                     if saved {

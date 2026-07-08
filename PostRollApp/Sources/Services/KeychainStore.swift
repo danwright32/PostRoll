@@ -22,8 +22,18 @@ enum KeychainStore {
         return key.isEmpty ? nil : key
     }
 
+    /// Strips leading/trailing whitespace AND newlines. Copying a key from a
+    /// browser or terminal commonly carries a trailing line break that
+    /// `.whitespaces` alone (space/tab only) doesn't catch, which silently
+    /// corrupts the stored key: every API call then fails with "invalid
+    /// x-api-key" even though the visible text looks correct.
+    static func sanitize(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func saveAPIKey(_ key: String) {
-        let data = key.data(using: .utf8)!
+        let cleaned = sanitize(key)
+        let data = cleaned.data(using: .utf8)!
         // Try update first, then add
         let query: [CFString: Any] = [
             kSecClass:       kSecClassGenericPassword,

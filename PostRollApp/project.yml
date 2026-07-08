@@ -58,6 +58,7 @@ targets:
       - path: Sources/Services/LegacyDataReclaim.swift
       - path: Sources/Services/MediaPresence.swift
       - path: Sources/Services/PythonBridgeError.swift
+      - path: Sources/Services/KeychainStore.swift
       - path: Sources/DesignTokens.swift
     settings:
       base:

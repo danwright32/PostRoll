@@ -94,6 +94,7 @@
 		D885853A207B7BB7CD2007FF /* PostingDayRemovePhotosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF9F3E1F3D03A06B57231103 /* PostingDayRemovePhotosTests.swift */; };
 		D892486FD3D595457099ED1F /* StagePillStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F33CF4948C312ECC3CA2464F /* StagePillStateTests.swift */; };
 		D8CB6AEE3BB716C86B809498 /* EventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8089518478AA10F4DC5A9A83 /* EventStore.swift */; };
+		D93F84B45D2781255E1D6BD3 /* KeychainStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC7B1FAFB20429210CABD2BE /* KeychainStoreTests.swift */; };
 		DC0F2C1B8DBF14075C489E47 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131DFC672BC525BCA210EE58 /* Analytics.swift */; };
 		DC690D26F40BC6F3EDB7C5DA /* CollageCellSwapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B719FEAA2506A47B8A848B1D /* CollageCellSwapTests.swift */; };
 		E16572303B16295D9390DA70 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6750316591A729CE9F71D7EA /* DesignTokens.swift */; };
@@ -114,6 +115,7 @@
 		F7287FF02FF430AADD4D5853 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3090D877CEFCB9583146E70C /* NotificationService.swift */; };
 		F7C3308291DB915741B393B8 /* Event.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD025AADE68A58F67848071 /* Event.swift */; };
 		F84283C1A2E6E8B575960AB5 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62ACB2F17962B8CB7B7C6BC0 /* KeychainStore.swift */; };
+		F919B310442E2174AFBFA260 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62ACB2F17962B8CB7B7C6BC0 /* KeychainStore.swift */; };
 		F9F309C0B64DDE96B666C55F /* StagePillState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 437103CEA7E838775D2A5C44 /* StagePillState.swift */; };
 		FCD75C4AEA074AB59BAEBBCD /* CollageCandidate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E0E0D7A8E5639D8A201397 /* CollageCandidate.swift */; };
 		FDE828606ED1E5FFD596249B /* OrphanedMediaCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A633BF0DA8C2886AB1351758 /* OrphanedMediaCleanup.swift */; };
@@ -209,6 +211,7 @@
 		D5F8E13FD8CD89C280ED6930 /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
 		D92CD520B46A8592B9C5493C /* OCRResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRResult.swift; sourceTree = "<group>"; };
 		DB9E4B9B7EC3C8B0195232E0 /* ArchiveCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveCleanup.swift; sourceTree = "<group>"; };
+		DC7B1FAFB20429210CABD2BE /* KeychainStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStoreTests.swift; sourceTree = "<group>"; };
 		DEEDE6F9DD9D9B527BB6E897 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E4BEB62FA9022665E1A22746 /* AssetGenerationDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetGenerationDisplayTests.swift; sourceTree = "<group>"; };
 		F33CF4948C312ECC3CA2464F /* StagePillStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagePillStateTests.swift; sourceTree = "<group>"; };
@@ -349,6 +352,7 @@
 				CC3E912717BD14F25AD7B4F3 /* EventExporterTests.swift */,
 				ABCF75AA5A7C1685C2EF0045 /* EventJobTrackerTests.swift */,
 				30734A52AAEC8C7D2F66AA83 /* EventStoreTests.swift */,
+				DC7B1FAFB20429210CABD2BE /* KeychainStoreTests.swift */,
 				8D26540356A73F27B16AB755 /* LegacyDataReclaimTests.swift */,
 				08425C03BB53CA6388F5DB0A /* MediaPresenceTests.swift */,
 				2744E745D0D8E9DADE2015C0 /* MediaReclaimTests.swift */,
@@ -587,6 +591,8 @@
 				55E8526D240F703175B03FDB /* EventStore.swift in Sources */,
 				6B1AE726F19C587CEE5F3996 /* EventStoreTests.swift in Sources */,
 				6D378574F5F62A6185510EDB /* GeneratedOutput.swift in Sources */,
+				F919B310442E2174AFBFA260 /* KeychainStore.swift in Sources */,
+				D93F84B45D2781255E1D6BD3 /* KeychainStoreTests.swift in Sources */,
 				59C5D0F9DF6800481172E706 /* LegacyDataReclaim.swift in Sources */,
 				A533DB7802C511D9476FD663 /* LegacyDataReclaimTests.swift in Sources */,
 				AD0C9A21084CA5CFE7FD5DE1 /* MediaPresence.swift in Sources */,
