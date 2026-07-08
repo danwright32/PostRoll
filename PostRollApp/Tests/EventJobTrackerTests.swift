@@ -83,6 +83,24 @@ final class EventJobTrackerTests: XCTestCase {
         XCTAssertFalse(t.hasFailed(id))
     }
 
+    func testRemoveClearsFailedState() {
+        // Pins the escape hatch behind OCRProgressView's error screen "Go Back"
+        // button: cancelling out of a failed run (not just an active one) must
+        // fully clear the job, or the user is stuck with no way off the screen
+        // except deleting the project.
+        let t = makeTracker()
+        let id = UUID()
+        t.begin(Job(label: "f"), for: id)
+        t.markFailed(id)
+        XCTAssertTrue(t.hasFailed(id))
+
+        t.remove(id)
+
+        XCTAssertNil(t.job(for: id))
+        XCTAssertFalse(t.isActive(id))
+        XCTAssertFalse(t.hasFailed(id))
+    }
+
     func testClearFailedRemovesOnlyWhenIdle() {
         let t = makeTracker()
         let id = UUID()

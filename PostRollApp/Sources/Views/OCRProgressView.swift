@@ -147,6 +147,11 @@ struct OCRProgressView: View {
                 ocrManager.start(eventID: event.id, appState: appState)
             }
             .buttonStyle(BrandButtonStyle())
+
+            Button("Go Back") { cancelOCR() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmMid)
         }
     }
 
