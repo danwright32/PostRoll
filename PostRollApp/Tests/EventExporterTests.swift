@@ -235,6 +235,37 @@ final class EventExporterTests: XCTestCase {
                        "classic single-photo day must not number alt texts")
     }
 
+    // Phase 4 (#135): Friday's clip_reel caption reaches CAPTIONS.txt via the
+    // same generic per-day loop every other day already uses - no Friday
+    // exclusion exists in EventExporter, so this is a regression pin, not
+    // new production logic. (The rendered reel MP4 itself is copied by
+    // ExportManager's day-copy loop, confirmed equally generic over
+    // previewMediaPaths with no Friday exclusion; that async, AppState-backed
+    // path isn't practical to exercise from this synchronous unit test.)
+    func testFridayClipReelCaptionReachesExportedCaptionsFile() throws {
+        var event = Event(name: "Music From Inside", org: "Decoda",
+                          venue: "Hall", date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        var fri = PostingDay(day: .friday)
+        fri.clipPaths = [makeFile("clip1.mov")]
+        fri.fridayClipPlan = FridayClipPlan(
+            selections: [FridayClipSelection(clipPath: "/clips/clip1.mov", trimIn: 0, trimOut: 4, transition: .cut)],
+            rationale: "opens strong"
+        )
+        event.days = [DayName.friday.rawValue: fri]
+
+        var result = WeekGenerationResult()
+        result.friday = caption("A night of highlights, cut together.", hashtags: ["#dwphotony"])
+        event.weekResult = result
+
+        let folder = try EventExporter.export(event: event, to: root)
+        let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+
+        XCTAssertTrue(captions.contains("=== FRIDAY ==="))
+        XCTAssertTrue(captions.contains("A night of highlights, cut together."))
+        XCTAssertTrue(captions.contains("#dwphotony"))
+    }
+
     func testSlug() {
         XCTAssertEqual(EventExporter.slug("Decoda"), "decoda")
         XCTAssertEqual(EventExporter.slug("Music From Inside"), "music_from_inside")

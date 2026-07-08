@@ -4,9 +4,11 @@ import Foundation
 
 struct EventExporter {
     /// Export one event. Pass `days = nil` (the default) to export the whole week;
-    /// pass a specific set to export only those days — in which case the master
-    /// CAPTIONS.txt / CHECKLIST.md and Blog are left untouched so they keep
-    /// reflecting the last full export.
+    /// pass a specific set to export only those days, in which case the master
+    /// CAPTIONS.txt and Blog are left untouched so they keep reflecting the
+    /// last full export. (No CHECKLIST.md is written by this exporter or by
+    /// anything else in the app: an earlier version of this doc comment
+    /// claimed one was, which was never true.)
     static func export(event: Event, to root: URL, days: Set<DayName>? = nil,
                        preset: PostingPreset = .balanced) throws -> URL {
         let folderName = "\(slug(event.org))_\(slug(event.name))_\(event.isoDate)"
