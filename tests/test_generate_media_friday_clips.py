@@ -66,7 +66,7 @@ def _base_manifest(clips, tmp_path, **friday_extra):
 def test_friday_with_usable_clips_produces_reel_and_clip_plan(tmp_path, monkeypatch):
     clips = _make_usable_clips(tmp_path)
     monkeypatch.setattr(gm_mod, "select_reel_clips", _fake_select_reel_clips)
-    monkeypatch.setattr(gm_mod, "fetch_audio", lambda tags: None)
+    monkeypatch.setattr(gm_mod, "resolve_reel_audio", lambda audio_file, **kwargs: None)
 
     manifest = _base_manifest(clips, tmp_path)
     out_dir = tmp_path / "out"
@@ -91,7 +91,7 @@ def test_friday_with_insufficient_clips_falls_back_to_story(tmp_path, monkeypatc
     # gate must fall through to the existing story fallback, unmodified.
     clips = _make_usable_clips(tmp_path, count=1)
     monkeypatch.setattr(gm_mod, "select_reel_clips", _fake_select_reel_clips)
-    monkeypatch.setattr(gm_mod, "fetch_audio", lambda tags: None)
+    monkeypatch.setattr(gm_mod, "resolve_reel_audio", lambda audio_file, **kwargs: None)
 
     from PIL import Image
     photo = tmp_path / "photo.jpg"

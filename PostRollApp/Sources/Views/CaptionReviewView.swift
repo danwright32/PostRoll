@@ -175,6 +175,9 @@ struct CaptionReviewView: View {
                             onChangeReelLength: day == .thursday ? { newLength in changeReelLength(day: .thursday, to: newLength) } : nil,
                             onChangeReelPhotos: (day == .tuesday || day == .thursday) ? { changeReelPhotos(day: day) } : nil,
                             onImportFridayClips: day == .friday ? { importFridayClips() } : nil,
+                            onApplyFridayOverride: day == .friday ? { applyFridayOverride($0) } : nil,
+                            onSwapFridayClip: day == .friday ? { swapFridayClip($0) } : nil,
+                            onRecutFridayWithAI: day == .friday ? { recutFridayWithAI() } : nil,
                             onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
                             onChooseLayout: isCollageDay(day) ? { layoutGalleryTarget = GalleryTarget(day: day) } : nil,
                             onSwapReelPhotos: day == .thursday ? { a, b in swapReelPhotos(day: .thursday, a: a, b: b) } : nil,
@@ -709,6 +712,69 @@ struct CaptionReviewView: View {
         regenerateGraphic(day: .friday)
     }
 
+    /// Reorder/include-exclude edit to the Friday clip selection (#135).
+    /// Writes only to fridayClipOverride and re-renders locally via
+    /// render_friday_override.py - never re-invokes Claude
+    /// (feedback_collage_edits_no_python_regen).
+    private func applyFridayOverride(_ override: [ReelClipOverride]) {
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        ev.days[DayName.friday.rawValue]?.fridayClipOverride = override
+        appState.updateEvent(ev)
+
+        regeneratingDays.insert(.friday)
+        regenerateError = nil
+        Task {
+            do {
+                let liveEvent = appState.events.first(where: { $0.id == event.id }) ?? ev
+                let reelPath = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
+                await MainActor.run {
+                    regeneratingDays.remove(.friday)
+                    guard let reelPath else {
+                        regenerateError = "Friday reel edit couldn't be applied: no reel to update"
+                        return
+                    }
+                    var current = appState.events.first(where: { $0.id == event.id }) ?? liveEvent
+                    var paths = current.previewMediaPaths[DayName.friday.rawValue] ?? [:]
+                    paths["reel"] = reelPath
+                    current.previewMediaPaths[DayName.friday.rawValue] = paths
+                    appState.updateEvent(current)
+                    graphicVersions[.friday] = (graphicVersions[.friday] ?? 0) + 1
+                }
+            } catch {
+                await MainActor.run {
+                    regeneratingDays.remove(.friday)
+                    regenerateError = "Friday reel edit failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    /// Replace one clip in the Friday override with a freshly picked file.
+    private func swapFridayClip(_ oldClipPath: String) {
+        let panel = NSOpenPanel()
+        panel.title = "Select a replacement video clip"
+        panel.allowedContentTypes = [.movie]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let picked = panel.url else { return }
+        let newPath = AppPaths.storedClip(picked).path
+
+        let live = appState.events.first(where: { $0.id == event.id }) ?? event
+        guard let fri = live.days[DayName.friday.rawValue] else { return }
+        var override = fri.effectiveFridayOverride
+        guard let index = override.firstIndex(where: { $0.clipPath == oldClipPath }) else { return }
+        override[index].clipPath = newPath
+        applyFridayOverride(override)
+    }
+
+    /// Clear the manual override and re-run the full AI pipeline
+    /// (Stage 1 scoring + Stage 2 Claude selection + render).
+    private func recutFridayWithAI() {
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        ev.days[DayName.friday.rawValue]?.fridayClipOverride = nil
+        appState.updateEvent(ev)
+        regenerateGraphic(day: .friday)
+    }
+
     /// Replace the entire Wednesday collage photo set from the review screen.
     /// Picks a fresh batch, discards layout/crop state tied to the old photos,
     /// then regenerates the collage. Mirrors `changeReelPhotos` for Thursday.
@@ -1001,6 +1067,14 @@ private struct CaptionSection: View {
     var onChangeReelPhotos: (() -> Void)? = nil
     /// Open the multi-select clip picker for Friday's auto-cut reel (#135).
     var onImportFridayClips: (() -> Void)? = nil
+    /// Called with the full edited list whenever reorder/include-exclude
+    /// changes in the Friday manual override editor (#135). Never re-invokes
+    /// Claude: writes fridayClipOverride and re-renders locally.
+    var onApplyFridayOverride: (([ReelClipOverride]) -> Void)? = nil
+    /// Swap one clip in the Friday override for a freshly picked file.
+    var onSwapFridayClip: ((String) -> Void)? = nil
+    /// Clear fridayClipOverride and re-run the full AI pipeline (Stage 1 + 2).
+    var onRecutFridayWithAI: (() -> Void)? = nil
     /// Replace the whole Wednesday collage photo set (review-screen action).
     var onChangeCollagePhotos: (() -> Void)? = nil
     /// Open the collage layout gallery to pick a layout (collage days only).
@@ -1232,6 +1306,15 @@ private struct CaptionSection: View {
                                 ReviewTextArea(label: "Caption", text: $caption.caption, minHeight: 60)
                                     .frame(maxHeight: 120)
                                 HashtagsEditor(hashtags: $caption.hashtags)
+
+                                FridayClipEditor(
+                                    entries: postingDay?.effectiveFridayOverride ?? [],
+                                    hasOverride: postingDay?.fridayClipOverride != nil,
+                                    onApply: onApplyFridayOverride,
+                                    onSwap: onSwapFridayClip,
+                                    onRecutWithAI: onRecutFridayWithAI
+                                )
+
                                 if showingRevision {
                                     RevisionPanel(
                                         feedbackText: $feedbackText,
@@ -2598,6 +2681,95 @@ private struct ReviewMediaStrip: View {
             }
         }
         .padding(.bottom, Spacing.xs)
+    }
+}
+
+// MARK: - Friday clip manual override editor
+
+/// Reorder / include-exclude / swap the Friday auto-cut reel's clip
+/// selection (#135). Every edit here writes only to fridayClipOverride and
+/// re-renders locally via render_friday_override.py - never re-invokes
+/// Claude (feedback_collage_edits_no_python_regen). "Re-cut with AI" is the
+/// only action that clears the override and re-runs Stage 1 + 2.
+private struct FridayClipEditor: View {
+    let entries: [ReelClipOverride]
+    let hasOverride: Bool
+    var onApply: (([ReelClipOverride]) -> Void)? = nil
+    var onSwap: ((String) -> Void)? = nil
+    var onRecutWithAI: (() -> Void)? = nil
+
+    var body: some View {
+        guard !entries.isEmpty else { return AnyView(EmptyView()) }
+        return AnyView(
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("CLIPS")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.warmMid.opacity(0.55))
+
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    HStack(spacing: Spacing.sm) {
+                        VStack(spacing: 2) {
+                            Button(action: { move(index, by: -1) }) {
+                                Image(systemName: "chevron.up")
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(index == 0)
+                            Button(action: { move(index, by: 1) }) {
+                                Image(systemName: "chevron.down")
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(index == entries.count - 1)
+                        }
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.warmMid)
+
+                        Text(URL(fileURLWithPath: entry.clipPath).lastPathComponent)
+                            .font(.system(size: 11))
+                            .foregroundStyle(entry.included ? Color.white : Color.warmMid)
+                            .lineLimit(1)
+                            .strikethrough(!entry.included)
+
+                        Spacer(minLength: 0)
+
+                        Button(entry.included ? "Exclude" : "Include") { toggleIncluded(index) }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.roseGold)
+
+                        if let onSwap {
+                            Button("Swap") { onSwap(entry.clipPath) }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.roseGold)
+                        }
+                    }
+                }
+
+                if hasOverride, let onRecutWithAI {
+                    Button("Re-cut with AI", action: onRecutWithAI)
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warmMid)
+                        .padding(.top, Spacing.xs)
+                }
+            }
+        )
+    }
+
+    private func move(_ index: Int, by offset: Int) {
+        let target = index + offset
+        guard entries.indices.contains(target) else { return }
+        var reordered = entries
+        reordered.swapAt(index, target)
+        for i in reordered.indices { reordered[i].order = i }
+        onApply?(reordered)
+    }
+
+    private func toggleIncluded(_ index: Int) {
+        var updated = entries
+        updated[index].included.toggle()
+        onApply?(updated)
     }
 }
 

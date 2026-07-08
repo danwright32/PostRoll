@@ -71,7 +71,7 @@ from ..media.generate_collage import generate_collage
 from ..media.generate_before_after import generate_before_after
 from ..media.clip_scorer import score_clips
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
-from ..audio import fetch_audio
+from .audio_tags import resolve_reel_audio
 from .select_reel_clips import select_reel_clips
 from ..posting_preset import (
     DEFAULT_PRESET,
@@ -483,8 +483,9 @@ def generate_media(
                 try:
                     scored = score_clips(clips)
                     plan = select_reel_clips(scored)
-                    audio_file = day_info.get("audio")
-                    music_path = audio_file or fetch_audio(_derive_audio_tags(shoot_type, pieces))
+                    music_path = resolve_reel_audio(
+                        day_info.get("audio"), shoot_type=shoot_type, pieces=pieces
+                    )
                     duck_gain_db = float(day_info.get("clip_duck_db", DEFAULT_DUCK_GAIN_DB))
                     mute_clip_audio = bool(day_info.get("clip_audio_muted", False))
 

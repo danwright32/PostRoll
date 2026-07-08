@@ -73,4 +73,46 @@ final class PostingDayClipTests: XCTestCase {
 
         XCTAssertEqual(day.addingClips([]).clipPaths, [a])
     }
+
+    // effectiveFridayOverride backs the manual editor (#135): before the
+    // user has ever touched reorder/include-exclude/swap, the editor shows
+    // the AI's own plan as its starting point rather than an empty list.
+    func testEffectiveFridayOverrideDerivesFromPlanWhenNoOverrideYet() {
+        var day = PostingDay(day: .friday)
+        day.fridayClipPlan = FridayClipPlan(
+            selections: [
+                FridayClipSelection(clipPath: "/a.mov", trimIn: 0, trimOut: 3, transition: .cut),
+                FridayClipSelection(clipPath: "/b.mov", trimIn: 1, trimOut: 4, transition: .crossfade),
+            ],
+            rationale: "x"
+        )
+
+        let effective = day.effectiveFridayOverride
+
+        XCTAssertEqual(effective.count, 2)
+        XCTAssertEqual(effective[0].clipPath, "/a.mov")
+        XCTAssertEqual(effective[0].order, 0)
+        XCTAssertTrue(effective[0].included)
+        XCTAssertEqual(effective[1].clipPath, "/b.mov")
+        XCTAssertEqual(effective[1].order, 1)
+    }
+
+    func testEffectiveFridayOverrideUsesExistingOverrideOnceUserHasEdited() {
+        var day = PostingDay(day: .friday)
+        day.fridayClipPlan = FridayClipPlan(
+            selections: [FridayClipSelection(clipPath: "/a.mov", trimIn: 0, trimOut: 3, transition: .cut)],
+            rationale: "x"
+        )
+        day.fridayClipOverride = [
+            ReelClipOverride(clipPath: "/a.mov", order: 0, included: false, trimIn: 0, trimOut: 3),
+        ]
+
+        XCTAssertEqual(day.effectiveFridayOverride, day.fridayClipOverride,
+                       "an existing user edit must win over re-deriving from the AI plan")
+    }
+
+    func testEffectiveFridayOverrideEmptyWhenNoPlanAndNoOverride() {
+        let day = PostingDay(day: .friday)
+        XCTAssertTrue(day.effectiveFridayOverride.isEmpty)
+    }
 }

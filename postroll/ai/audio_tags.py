@@ -29,6 +29,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ..audio import fetch_audio
+
 
 # Tuesday speed-edit reel — energetic, doesn't depend on program content.
 TUESDAY_DEFAULT_TAGS = "electronic,upbeat"
@@ -93,6 +95,18 @@ def derive_audio_tags(
     if day == "thursday":
         return thursday_tags(shoot_type, pieces or [])
     return THURSDAY_FALLBACK_TAGS
+
+
+def resolve_reel_audio(audio_file: str | None, *, shoot_type: str, pieces: list[dict[str, Any]]) -> str:
+    """Music bed for any day's reel: `audio_file` if the user provided one,
+    otherwise a fresh Jamendo fetch using the same tag derivation
+    swap_reel_audio.py already reuses across days. Shared so Friday's
+    original AI-cut render (generate_media.py) and a manual-override
+    re-render (render_friday_override.py) resolve audio identically.
+    """
+    if audio_file:
+        return audio_file
+    return fetch_audio(thursday_tags(shoot_type, pieces))
 
 
 def main() -> int:

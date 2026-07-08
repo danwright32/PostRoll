@@ -346,6 +346,20 @@ extension PostingDay {
         pd.clipPaths.append(contentsOf: urls)
         return pd
     }
+
+    /// What the manual override editor (#135) displays: the user's own edit
+    /// once one exists, otherwise the AI's plan re-derived as a starting
+    /// point (order 0-based, everything included) so the editor never opens
+    /// on an empty list. Same nil-means-AI / non-nil-means-user semantics as
+    /// collageCellOverride.
+    var effectiveFridayOverride: [ReelClipOverride] {
+        if let override = fridayClipOverride { return override }
+        guard let plan = fridayClipPlan else { return [] }
+        return plan.selections.enumerated().map { index, sel in
+            ReelClipOverride(clipPath: sel.clipPath, order: index, included: true,
+                             trimIn: sel.trimIn, trimOut: sel.trimOut)
+        }
+    }
 }
 
 // MARK: - CollageCell

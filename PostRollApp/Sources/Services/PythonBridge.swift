@@ -455,6 +455,74 @@ actor PythonBridge {
         return json["audio_source"] as? String
     }
 
+    /// Re-renders the Friday reel from the user's manual override
+    /// (reorder/include-exclude/swap), skipping Stage 1/2 entirely. Manual
+    /// edits never re-invoke Claude (feedback_collage_edits_no_python_regen).
+    /// Overwrites the existing reel path in place, mirroring
+    /// runSwapReelAudio, so the reel player picks up the change with no new
+    /// path wiring. Returns the render output path on success, nil when
+    /// there's no override or no existing reel to overwrite.
+    @discardableResult
+    func runRenderFridayOverride(event: Event) async throws -> String? {
+        guard let fri = event.days[DayName.friday.rawValue],
+              let override = fri.fridayClipOverride, !override.isEmpty,
+              let reelPath = event.previewMediaPaths[DayName.friday.rawValue]?["reel"] else {
+            return nil
+        }
+
+        let tmp = FileManager.default.temporaryDirectory
+        let manifestFile = tmp.appendingPathComponent("postroll_friday_override_manifest_\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: manifestFile) }
+
+        var manifest = Self.buildFridayOverrideManifest(override: override, originalPlan: fri.fridayClipPlan)
+        manifest["duck_gain_db"] = fri.fridayAudioDuckDB
+        manifest["mute_clip_audio"] = fri.fridayAudioMuted
+        manifest["shoot_type"] = event.shootType.pythonValue
+        manifest["pieces"] = (event.ocrResult?.pieces ?? []).map {
+            ["title": $0.title, "composer": $0.composer]
+        }
+        let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
+        try manifestData.write(to: manifestFile)
+
+        try await runProcess(args: [
+            "-m", "postroll.ai.render_friday_override",
+            "--manifest", manifestFile.path,
+            "--output", reelPath,
+        ])
+
+        guard FileManager.default.fileExists(atPath: reelPath) else { return nil }
+        return reelPath
+    }
+
+    /// Builds the render_friday_override.py manifest: fridayClipOverride
+    /// entries reordered by `order` and filtered to `included`, each
+    /// carrying over its transition from the original AI plan (matched by
+    /// clip path) since ReelClipOverride has no transition field of its
+    /// own. A swap-in clip the AI never selected defaults to "cut".
+    /// A pure function (no actor-isolated state), so nonisolated: callable
+    /// directly, and internal (not private) so PostRollTests can pin the
+    /// exact wire format render_friday_override.py expects.
+    nonisolated static func buildFridayOverrideManifest(
+        override: [ReelClipOverride], originalPlan: FridayClipPlan?
+    ) -> [String: Any] {
+        let transitionByPath = Dictionary(
+            (originalPlan?.selections ?? []).map { ($0.clipPath, $0.transition.rawValue) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let selections: [[String: Any]] = override
+            .filter { $0.included }
+            .sorted { $0.order < $1.order }
+            .map { entry in
+                [
+                    "clip_path": entry.clipPath,
+                    "trim_in": entry.trimIn,
+                    "trim_out": entry.trimOut,
+                    "transition": transitionByPath[entry.clipPath] ?? "cut",
+                ]
+            }
+        return ["selections": selections]
+    }
+
     /// Builds the media manifest dict shared by runMediaGeneration and runPreviewGeneration.
     /// A pure function of `event` (no actor-isolated state), so nonisolated:
     /// callable directly, and internal (not private) so PostRollTests can
