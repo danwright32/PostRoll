@@ -336,6 +336,16 @@ extension PostingDay {
         }
         return pd
     }
+
+    /// Returns a copy with `urls` appended to clipPaths (Friday clip import,
+    /// #135). Appends rather than replaces so importing in multiple batches
+    /// doesn't drop earlier picks.
+    func addingClips(_ urls: [URL]) -> PostingDay {
+        guard !urls.isEmpty else { return self }
+        var pd = self
+        pd.clipPaths.append(contentsOf: urls)
+        return pd
+    }
 }
 
 // MARK: - CollageCell

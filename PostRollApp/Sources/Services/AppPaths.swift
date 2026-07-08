@@ -171,4 +171,5 @@ enum AppPaths {
     /// the copy fails or it is already inside app storage.
     static func storedPhoto(_ url: URL) -> URL { importedCopy(of: url, into: photosDir) ?? url }
     static func storedAudio(_ url: URL) -> URL { importedCopy(of: url, into: audioDir) ?? url }
+    static func storedClip(_ url: URL) -> URL { importedCopy(of: url, into: clipsDir) ?? url }
 }

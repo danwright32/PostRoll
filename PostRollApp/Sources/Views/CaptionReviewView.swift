@@ -174,6 +174,7 @@ struct CaptionReviewView: View {
                             reelLength: day == .thursday ? (live.days[day.rawValue]?.scrollDuration ?? 40.0) : nil,
                             onChangeReelLength: day == .thursday ? { newLength in changeReelLength(day: .thursday, to: newLength) } : nil,
                             onChangeReelPhotos: (day == .tuesday || day == .thursday) ? { changeReelPhotos(day: day) } : nil,
+                            onImportFridayClips: day == .friday ? { importFridayClips() } : nil,
                             onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
                             onChooseLayout: isCollageDay(day) ? { layoutGalleryTarget = GalleryTarget(day: day) } : nil,
                             onSwapReelPhotos: day == .thursday ? { a, b in swapReelPhotos(day: .thursday, a: a, b: b) } : nil,
@@ -688,6 +689,26 @@ struct CaptionReviewView: View {
         }
     }
 
+    /// Multi-select clip picker for Friday's auto-cut reel (#135). Every picked
+    /// URL is routed through AppPaths.storedClip so a raw ~/Downloads/~/Desktop
+    /// path never reaches PostingDay.clipPaths, per the standing TCC rule.
+    private func importFridayClips() {
+        let panel = NSOpenPanel()
+        panel.title = "Select video clips for the Friday reel"
+        panel.allowedContentTypes = [.movie]
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+
+        let copied = panel.urls.map { AppPaths.storedClip($0) }
+
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        let fri = ev.days[DayName.friday.rawValue] ?? PostingDay(day: .friday)
+        ev.days[DayName.friday.rawValue] = fri.addingClips(copied)
+        appState.updateEvent(ev)
+
+        regenerateGraphic(day: .friday)
+    }
+
     /// Replace the entire Wednesday collage photo set from the review screen.
     /// Picks a fresh batch, discards layout/crop state tied to the old photos,
     /// then regenerates the collage. Mirrors `changeReelPhotos` for Thursday.
@@ -978,6 +999,8 @@ private struct CaptionSection: View {
     var reelLength: Double? = nil
     var onChangeReelLength: ((Double) -> Void)? = nil
     var onChangeReelPhotos: (() -> Void)? = nil
+    /// Open the multi-select clip picker for Friday's auto-cut reel (#135).
+    var onImportFridayClips: (() -> Void)? = nil
     /// Replace the whole Wednesday collage photo set (review-screen action).
     var onChangeCollagePhotos: (() -> Void)? = nil
     /// Open the collage layout gallery to pick a layout (collage days only).
@@ -1135,7 +1158,110 @@ private struct CaptionSection: View {
             .buttonStyle(.plain)
 
             if isExpanded {
-                if day == .friday {
+                if day == .friday,
+                   FridayReviewDisplay.showsDualSlot(
+                       fridayClipPlan: postingDay?.fridayClipPlan,
+                       reelPath: previewPaths?["reel"],
+                       fileExists: FileManager.default.fileExists(atPath:)
+                   ),
+                   let plan = postingDay?.fridayClipPlan,
+                   let reelPath = previewPaths?["reel"] {
+                    // ── Friday: dual-slot review (auto-cut reel + before/after story) (#135) ──
+                    let reelURL = URL(fileURLWithPath: reelPath)
+                    HStack(alignment: .top, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack {
+                                Spacer(minLength: 0)
+                                InstagramMockup(
+                                    photoURL: nil,
+                                    videoURL: reelURL,
+                                    videoVersion: graphicVersion,
+                                    dayLabel: day.displayName,
+                                    caption: caption.caption,
+                                    hashtags: caption.hashtags,
+                                    cardWidth: tuesdayReelCardWidth,
+                                    isReelDay: true,
+                                    onRegenerate: onRegenerateGraphic,
+                                    onReviseCaption: { showingRevision = true },
+                                    onChangePhotos: onImportFridayClips,
+                                    isRegenerating: isRegeneratingGraphic
+                                )
+                                .id("friday-reel-\(graphicVersion)")
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.top, 16)
+
+                            if !plan.rationale.isEmpty {
+                                Text(plan.rationale)
+                                    .font(.light(11))
+                                    .italic()
+                                    .foregroundStyle(Color.warmMid)
+                                    .frame(maxWidth: tuesdayReelCardWidth, alignment: .leading)
+                                    .padding(.top, Spacing.sm)
+                            }
+
+                            // Story slot: same before/after asset Friday already
+                            // produces today, relabeled as the Story post here
+                            // alongside the Feed Post reel.
+                            if let storyPath = previewPaths?["before_after"],
+                               FileManager.default.fileExists(atPath: storyPath) {
+                                let storyURL = URL(fileURLWithPath: storyPath)
+                                Text("STORY")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .tracking(0.8)
+                                    .foregroundStyle(Color.warmMid.opacity(0.55))
+                                    .frame(maxWidth: tuesdayReelCardWidth, alignment: .leading)
+                                    .padding(.top, Spacing.md)
+                                PreviewGraphicThumbnail(
+                                    url: storyURL,
+                                    onPreview: { onPreview?(storyURL) },
+                                    isRegenerating: false,
+                                    maxHeight: 160
+                                )
+                                .frame(maxWidth: tuesdayReelCardWidth)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 0) {
+                            Spacer(minLength: 0)
+                            VStack(alignment: .leading, spacing: Spacing.md) {
+                                ReviewTextArea(label: "Caption", text: $caption.caption, minHeight: 60)
+                                    .frame(maxHeight: 120)
+                                HashtagsEditor(hashtags: $caption.hashtags)
+                                if showingRevision {
+                                    RevisionPanel(
+                                        feedbackText: $feedbackText,
+                                        saveToBrandVoice: $saveToBrandVoice,
+                                        isRevising: isRevising,
+                                        error: revisionError,
+                                        onApply: { applyRevision() },
+                                        onCancel: {
+                                            showingRevision = false
+                                            feedbackText = ""
+                                            saveToBrandVoice = false
+                                            revisionError = nil
+                                        }
+                                    )
+                                } else {
+                                    Button("Revise with feedback…") { showingRevision = true }
+                                        .buttonStyle(.plain)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Color.roseGold)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.vertical, Spacing.md)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .padding(.bottom, Spacing.md)
+
+                } else if day == .friday {
                     // ── Friday: story image only — no caption/hashtags/revise ──
                     if let previewURL = splitPreviewURL {
                         VStack(spacing: 0) {
@@ -1170,6 +1296,17 @@ private struct CaptionSection: View {
                             .foregroundStyle(Color.warmMid)
                             .padding(.horizontal, Spacing.xl)
                             .padding(.vertical, Spacing.md)
+                    }
+
+                    if let onImportFridayClips {
+                        Button(action: onImportFridayClips) {
+                            Label("Import Clips…", systemImage: "film")
+                                .font(.system(size: 12))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.roseGold)
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.md)
                     }
 
                 } else if day == .tuesday, let reelURL = splitPreviewURL {

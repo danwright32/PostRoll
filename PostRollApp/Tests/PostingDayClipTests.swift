@@ -51,4 +51,26 @@ final class PostingDayClipTests: XCTestCase {
         XCTAssertEqual(result.fridayClipOverride?[0].clipPath, new.path)
         XCTAssertEqual(result.fridayClipOverride?[1].clipPath, untouched.path, "not in remap, path unchanged")
     }
+
+    // addingClips backs the Friday clip import flow (#135): storedClip-copied
+    // URLs get appended to clipPaths so importing in multiple batches doesn't
+    // drop earlier picks.
+    func testAddingClipsAppendsToExistingClipPaths() {
+        let a = url("a.mov")
+        var day = PostingDay(day: .friday)
+        day.clipPaths = [a]
+
+        let b = url("b.mov"), c = url("c.mov")
+        let result = day.addingClips([b, c])
+
+        XCTAssertEqual(result.clipPaths, [a, b, c])
+    }
+
+    func testAddingClipsEmptyIsNoOp() {
+        let a = url("a.mov")
+        var day = PostingDay(day: .friday)
+        day.clipPaths = [a]
+
+        XCTAssertEqual(day.addingClips([]).clipPaths, [a])
+    }
 }

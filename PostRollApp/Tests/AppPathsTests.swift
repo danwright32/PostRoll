@@ -135,6 +135,15 @@ final class AppPathsTests: XCTestCase {
         XCTAssertFalse(AppPaths.isInsideAppStorage(URL(fileURLWithPath: "/tmp/elsewhere/a.jpg")))
     }
 
+    // storedClip is the sanctioned way to persist a Friday clip import pick
+    // (#135), mirroring storedPhoto/storedAudio: routes through clipsDir so a
+    // raw ~/Downloads/~/Desktop URL never reaches PostingDay.clipPaths.
+    func testStoredClipRoutesIntoClipsDir() {
+        let already = AppPaths.clipsDir.appendingPathComponent("already.mov")
+        XCTAssertEqual(AppPaths.storedClip(already), already,
+                        "already inside clipsDir: returned unchanged, no duplicate copy")
+    }
+
     // seedBrandVoice copies the checkout's read-only brand-voice.md into the data
     // root once, so generation reads/writes hit the unprotected location (#46).
 
