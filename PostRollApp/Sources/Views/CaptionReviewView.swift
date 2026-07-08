@@ -91,6 +91,12 @@ struct CaptionReviewView: View {
     @State private var regenerationStartTimes: [DayName: Date] = [:]
     @State private var graphicVersions: [DayName: Int] = [:]
 
+    // Cover image regen (Thursday + Friday only, #141). Separate from
+    // regeneratingDays/regenerationStartTimes: regenerating the cover must
+    // never look like (or actually trigger) a full reel/story regen.
+    @State private var coverRegeneratingDays: Set<DayName> = []
+    @State private var coverRegenerationStartTimes: [DayName: Date] = [:]
+
     // Collage crop offsets (separate from carousel) — keyed by day rawValue then photo URL absoluteString
     @State private var dayCollageCropOffsets: [String: [String: CropOffset]] = [:]
     // Thursday reel crop offsets — same shape, independent storage so reels and collages don't fight
@@ -229,7 +235,19 @@ struct CaptionReviewView: View {
                             collageCellOverride: isCollageDay(day) ? collageCellOverrideBinding(day) : nil,
                             reelCropOffsets: day == .thursday ? reelOffsetsBinding(day) : nil,
                             thursdayEditorURL: day == .thursday ? thursdayEditorURL : nil,
-                            isBuildingThursdayEditor: day == .thursday ? isBuildingThursdayEditor : false
+                            isBuildingThursdayEditor: day == .thursday ? isBuildingThursdayEditor : false,
+                            isCoverRegenerating: coverRegeneratingDays.contains(day),
+                            coverRegenStartedAt: coverRegenerationStartTimes[day],
+                            onRegenerateCover: (day == .thursday || day == .friday) ? { regenerateCover(day: day) } : nil,
+                            onChooseCoverOverride: (day == .thursday || day == .friday) ? {
+                                let panel = NSOpenPanel()
+                                panel.title = "Choose a cover photo"
+                                panel.allowedContentTypes = [.image]
+                                panel.allowsMultipleSelection = false
+                                if panel.runModal() == .OK, let url = panel.url {
+                                    regenerateCover(day: day, overrideSource: url)
+                                }
+                            } : nil
                         )
                         .disabled(isRegenerating)
                     }
@@ -974,6 +992,47 @@ struct CaptionReviewView: View {
         }
     }
 
+    /// Regenerate (or manually override) just the day's cover image (#141).
+    /// Deliberately does NOT call regenerateGraphic: that would force a full
+    /// reel/story regen (for Friday specifically, a real Stage 1/2 recut +
+    /// ffmpeg render) just to refresh one thumbnail. Routes to
+    /// PythonBridge.runCoverRegeneration instead, the cheap cover-only path.
+    private func regenerateCover(day: DayName, overrideSource: URL? = nil) {
+        guard let live = appState.events.first(where: { $0.id == event.id }) else { return }
+        coverRegeneratingDays.insert(day)
+        coverRegenerationStartTimes[day] = Date()
+        Task {
+            let outcome: Result<PythonBridge.CoverRegenerationResult, Error>
+            do {
+                let result = try await PythonBridge.shared.runCoverRegeneration(
+                    event: live, day: day, overrideSource: overrideSource
+                )
+                outcome = .success(result)
+            } catch {
+                outcome = .failure(error)
+            }
+
+            await MainActor.run {
+                coverRegeneratingDays.remove(day)
+                coverRegenerationStartTimes[day] = nil
+                switch outcome {
+                case .failure(let error):
+                    regenerateError = "\(day.displayName) cover regeneration failed: \(error.localizedDescription)"
+                case .success(let result):
+                    var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+                    ev.previewMediaPaths[day.rawValue, default: [:]]["cover"] = result.coverPath
+                    if let pick = result.coverPick {
+                        ev.applyCoverPick(pick, forDay: day.rawValue)
+                    } else if let overrideSource {
+                        ev.days[day.rawValue]?.coverOverride = overrideSource.path
+                    }
+                    appState.updateEvent(ev)
+                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                }
+            }
+        }
+    }
+
     // MARK: - Caption revision
 
     private func reviseCaption(day: DayName, feedback: String) async throws {
@@ -1138,6 +1197,14 @@ private struct CaptionSection: View {
     var reelCropOffsets: Binding<[String: CropOffset]>? = nil
     var thursdayEditorURL: URL? = nil
     var isBuildingThursdayEditor: Bool = false
+    /// Cover image (Thursday scroll reel + Friday auto-cut clip reel, #141).
+    var isCoverRegenerating: Bool = false
+    var coverRegenStartedAt: Date? = nil
+    var onRegenerateCover: (() -> Void)? = nil
+    /// Manual "choose a different photo/frame" escape hatch: writes
+    /// coverOverride directly, never re-invokes Claude (same discipline as
+    /// every other manual override in this app).
+    var onChooseCoverOverride: (() -> Void)? = nil
 
     @State private var showingRevision = false
     @State private var feedbackText = ""
@@ -1207,6 +1274,23 @@ private struct CaptionSection: View {
     /// and Monday under the balanced preset). Detected by the "collage" asset
     /// key so the view stays preset-agnostic.
     private var isCollageCarouselDay: Bool { previewPaths?["collage"] != nil }
+
+    /// The rendered cover.png, only when it's still on disk (a stale path
+    /// surviving after the file was reclaimed/deleted must not show a
+    /// broken image, same guard FridayReviewDisplay.showsDualSlot uses).
+    private var coverURL: URL? {
+        let path = previewPaths?["cover"]
+        guard CoverReviewDisplay.showsCover(coverPath: path, fileExists: FileManager.default.fileExists(atPath:)) else {
+            return nil
+        }
+        return path.map { URL(fileURLWithPath: $0) }
+    }
+
+    /// nil once a manual override is in effect (no AI rationale for the
+    /// user's own pick), otherwise the AI's one-line rationale when it has one.
+    private var coverRationale: String? {
+        CoverReviewDisplay.rationale(coverOverride: postingDay?.coverOverride, coverPick: postingDay?.coverPick)
+    }
 
     private var splitPreviewIsReel: Bool {
         guard let paths = previewPaths, let reelP = paths["reel"] else { return false }
@@ -1333,6 +1417,20 @@ private struct CaptionSection: View {
                                     maxHeight: 160
                                 )
                                 .frame(maxWidth: tuesdayReelCardWidth)
+                            }
+
+                            if let coverURL {
+                                CoverSlotView(
+                                    coverURL: coverURL,
+                                    rationale: coverRationale,
+                                    isRegenerating: isCoverRegenerating,
+                                    regenStartedAt: coverRegenStartedAt,
+                                    onPreview: { onPreview?(coverURL) },
+                                    onRegenerate: onRegenerateCover,
+                                    onChooseOverride: onChooseCoverOverride,
+                                    maxHeight: 160
+                                )
+                                .frame(maxWidth: tuesdayReelCardWidth, alignment: .leading)
                             }
                             Spacer(minLength: 0)
                         }
@@ -1832,6 +1930,20 @@ private struct CaptionSection: View {
                                     )
                                     .id("\(previewURL.path)-\(graphicVersion)")
                                     .padding(Spacing.md)
+                                }
+
+                                if day == .thursday, let coverURL {
+                                    CoverSlotView(
+                                        coverURL: coverURL,
+                                        rationale: coverRationale,
+                                        isRegenerating: isCoverRegenerating,
+                                        regenStartedAt: coverRegenStartedAt,
+                                        onPreview: { onPreview?(coverURL) },
+                                        onRegenerate: onRegenerateCover,
+                                        onChooseOverride: onChooseCoverOverride,
+                                        maxHeight: 160
+                                    )
+                                    .padding(.horizontal, Spacing.md)
                                 }
 
                                 Spacer(minLength: 0)
@@ -3245,6 +3357,69 @@ private struct CarouselArrow: View {
                 .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Cover image (#141)
+
+/// The Instagram grid cover card: thumbnail, AI rationale (or none once a
+/// manual override is in effect), a Regenerate button (reuses
+/// PreviewGraphicThumbnail's own, no new UI needed), a manual override
+/// escape hatch, and an elapsed-timer progress state. Shared by Friday's
+/// dual-slot layout and the generic split layout (Thursday) so the two
+/// never diverge.
+private struct CoverSlotView: View {
+    let coverURL: URL
+    let rationale: String?
+    var isRegenerating: Bool = false
+    var regenStartedAt: Date? = nil
+    var onPreview: (() -> Void)? = nil
+    var onRegenerate: (() -> Void)? = nil
+    var onChooseOverride: (() -> Void)? = nil
+    var maxHeight: CGFloat = 160
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("COVER")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.warmMid.opacity(0.55))
+                Spacer()
+                if let onChooseOverride {
+                    Button(action: onChooseOverride) {
+                        Text("Choose a different photo…")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.roseGold)
+                    .disabled(isRegenerating)
+                }
+            }
+            .padding(.top, Spacing.md)
+
+            PreviewGraphicThumbnail(
+                url: coverURL,
+                onPreview: { onPreview?() },
+                isRegenerating: isRegenerating,
+                onRegenerate: onRegenerate,
+                maxHeight: maxHeight
+            )
+            .padding(.top, Spacing.xs)
+
+            if let rationale, !rationale.isEmpty {
+                Text(rationale)
+                    .font(.light(11))
+                    .italic()
+                    .foregroundStyle(Color.warmMid)
+                    .padding(.top, Spacing.xs)
+            }
+
+            if regenStartedAt != nil {
+                PipelineStatusView(startedAt: regenStartedAt)
+                    .padding(.top, Spacing.xs)
+            }
+        }
     }
 }
 
