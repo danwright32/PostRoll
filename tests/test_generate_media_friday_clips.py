@@ -105,6 +105,31 @@ def test_friday_with_insufficient_clips_falls_back_to_story(tmp_path, monkeypatc
     assert "reel" not in friday_result
     assert "story" in friday_result
     assert "friday" in result["errors"], "a clip attempt that fell back must still flag the failure, not go silent"
+    # Distinguishable prefix (not just generic error text the Swift side
+    # would have to string-match against a message meant for humans): the
+    # UI needs to reliably tell "too few usable clips" apart from any other
+    # clip-reel failure to show the two specific escape-hatch buttons.
+    assert result["errors"]["friday"].startswith("insufficient_clips:")
+
+
+@needs_ffmpeg
+def test_friday_with_other_clip_reel_failure_uses_generic_prefix(tmp_path, monkeypatch):
+    # A non-InsufficientClipsError failure (e.g. Stage 2/Claude) must NOT be
+    # mistaken for the insufficient-clips case.
+    clips = _make_usable_clips(tmp_path)
+
+    def _raising_select(*args, **kwargs):
+        raise RuntimeError("Claude API timeout")
+
+    monkeypatch.setattr(gm_mod, "select_reel_clips", _raising_select)
+    monkeypatch.setattr(gm_mod, "resolve_reel_audio", lambda audio_file, **kwargs: None)
+
+    manifest = _base_manifest(clips, tmp_path)
+    out_dir = tmp_path / "out"
+    result = gm_mod.generate_media(manifest, out_dir)
+
+    assert result["errors"]["friday"].startswith("clip reel skipped:")
+    assert not result["errors"]["friday"].startswith("insufficient_clips:")
 
 
 @needs_ffmpeg

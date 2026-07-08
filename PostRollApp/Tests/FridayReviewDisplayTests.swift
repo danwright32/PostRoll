@@ -42,4 +42,19 @@ final class FridayReviewDisplayTests: XCTestCase {
             fridayClipPlan: plan(), reelPath: "/reel.mp4", fileExists: { _ in false }
         ))
     }
+
+    // generate_media.py signals the "< 3 usable clips" case with a
+    // distinguishable insufficient_clips: prefix (not a message meant for
+    // humans) so the UI can reliably show the two escape-hatch buttons
+    // instead of string-matching generic error text.
+    func testDetectsInsufficientClipsPrefix() {
+        XCTAssertTrue(FridayReviewDisplay.isInsufficientClipsError(
+            "insufficient_clips: only 1 of 1 clips usable, need at least 3"
+        ))
+    }
+
+    func testDoesNotMatchOtherErrorMessages() {
+        XCTAssertFalse(FridayReviewDisplay.isInsufficientClipsError("clip reel skipped: ffmpeg crashed"))
+        XCTAssertFalse(FridayReviewDisplay.isInsufficientClipsError("before/after failed: missing raw"))
+    }
 }

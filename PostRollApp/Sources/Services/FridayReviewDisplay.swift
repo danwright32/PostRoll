@@ -17,4 +17,12 @@ enum FridayReviewDisplay {
         guard let reelPath, fileExists(reelPath) else { return false }
         return true
     }
+
+    /// generate_media.py signals "< 3 usable clips" with a distinguishable
+    /// insufficient_clips: prefix, deliberately, so this check is an
+    /// intentional wire contract rather than string-matching a message
+    /// meant for humans.
+    static func isInsufficientClipsError(_ message: String) -> Bool {
+        message.hasPrefix("insufficient_clips:")
+    }
 }

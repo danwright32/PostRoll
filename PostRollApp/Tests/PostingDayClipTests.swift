@@ -115,4 +115,23 @@ final class PostingDayClipTests: XCTestCase {
         let day = PostingDay(day: .friday)
         XCTAssertTrue(day.effectiveFridayOverride.isEmpty)
     }
+
+    // clearingFridayClips backs the "< 3 usable clips" error banner's
+    // "Skip clips, keep story-only" action (#135): drops the imported
+    // clips so future regens fall straight through to the existing
+    // before/after path instead of retrying a doomed clip pipeline.
+    func testClearingFridayClipsEmptiesClipPaths() {
+        var day = PostingDay(day: .friday)
+        day.clipPaths = [url("a.mov"), url("b.mov")]
+
+        XCTAssertTrue(day.clearingFridayClips().clipPaths.isEmpty)
+    }
+
+    func testClearingFridayClipsLeavesOtherFieldsUntouched() {
+        var day = PostingDay(day: .friday)
+        day.clipPaths = [url("a.mov")]
+        day.rawPhotoPath = url("raw.jpg")
+
+        XCTAssertEqual(day.clearingFridayClips().rawPhotoPath, url("raw.jpg"))
+    }
 }

@@ -360,6 +360,16 @@ extension PostingDay {
                              trimIn: sel.trimIn, trimOut: sel.trimOut)
         }
     }
+
+    /// "Skip clips, keep story-only" (#135's fail-loud "< 3 usable clips"
+    /// banner): drops the imported clips so future regens fall straight
+    /// through to the existing before/after path instead of retrying a
+    /// doomed clip pipeline. Leaves every other field untouched.
+    func clearingFridayClips() -> PostingDay {
+        var pd = self
+        pd.clipPaths = []
+        return pd
+    }
 }
 
 // MARK: - CollageCell

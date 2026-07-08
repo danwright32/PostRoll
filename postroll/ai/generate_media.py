@@ -69,7 +69,7 @@ from typing import Any
 from ..media.generate_story import generate_story
 from ..media.generate_collage import generate_collage
 from ..media.generate_before_after import generate_before_after
-from ..media.clip_scorer import score_clips
+from ..media.clip_scorer import score_clips, InsufficientClipsError
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
 from .audio_tags import resolve_reel_audio
 from .select_reel_clips import select_reel_clips
@@ -517,6 +517,14 @@ def generate_media(
                         f"({len(plan['selections'])} clips) → {reel_path}", flush=True,
                     )
                     reel_rendered = True
+                except InsufficientClipsError as e:
+                    # Distinguishable prefix (not a human-facing message the
+                    # UI would have to string-match against): the "< 3
+                    # usable clips" case gets two specific escape-hatch
+                    # buttons the UI can't infer from generic error text.
+                    msg = f"insufficient_clips: {e}"
+                    print(f"[generate_media] friday: {msg}", flush=True, file=sys.stderr)
+                    errors["friday"] = msg
                 except Exception as e:
                     msg = f"clip reel skipped: {e}"
                     print(f"[generate_media] friday: {msg}", flush=True, file=sys.stderr)

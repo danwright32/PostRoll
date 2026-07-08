@@ -184,6 +184,8 @@ struct CaptionReviewView: View {
                             onSwapFridayClip: day == .friday ? { swapFridayClip($0) } : nil,
                             onRecutFridayWithAI: day == .friday ? { recutFridayWithAI() } : nil,
                             fridayRegenStartedAt: day == .friday ? regenerationStartTimes[.friday] : nil,
+                            fridayRegenerateError: day == .friday ? regenerateError : nil,
+                            onSkipFridayClips: day == .friday ? { skipFridayClipsKeepStoryOnly() } : nil,
                             onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
                             onChooseLayout: isCollageDay(day) ? { layoutGalleryTarget = GalleryTarget(day: day) } : nil,
                             onSwapReelPhotos: day == .thursday ? { a, b in swapReelPhotos(day: .thursday, a: a, b: b) } : nil,
@@ -784,6 +786,19 @@ struct CaptionReviewView: View {
         regenerateGraphic(day: .friday)
     }
 
+    /// Escape hatch for the "< 3 usable clips" error banner: drop the
+    /// imported clips so future regens don't retry the clip pipeline, and
+    /// dismiss the error. Friday falls back to its existing before/after
+    /// story path exactly as it did before clips were ever imported.
+    private func skipFridayClipsKeepStoryOnly() {
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        if let fri = ev.days[DayName.friday.rawValue] {
+            ev.days[DayName.friday.rawValue] = fri.clearingFridayClips()
+        }
+        appState.updateEvent(ev)
+        regenerateError = nil
+    }
+
     /// Replace the entire Wednesday collage photo set from the review screen.
     /// Picks a fresh batch, discards layout/crop state tied to the old photos,
     /// then regenerates the collage. Mirrors `changeReelPhotos` for Thursday.
@@ -1091,6 +1106,13 @@ private struct CaptionSection: View {
     /// started, so the elapsed-timer status view can show real progress
     /// instead of a bare spinner. nil when nothing is running.
     var fridayRegenStartedAt: Date? = nil
+    /// The parent's regenerateError, passed down so Friday's card can show
+    /// the fail-loud "< 3 usable clips" banner with its two escape hatches
+    /// instead of relying on the generic top-of-screen error text (#135).
+    var fridayRegenerateError: String? = nil
+    /// "Skip clips, keep story-only": clears clipPaths so future regens
+    /// don't retry the clip pipeline, and dismisses the error.
+    var onSkipFridayClips: (() -> Void)? = nil
     /// Replace the whole Wednesday collage photo set (review-screen action).
     var onChangeCollagePhotos: (() -> Void)? = nil
     /// Open the collage layout gallery to pick a layout (collage days only).
@@ -1414,6 +1436,19 @@ private struct CaptionSection: View {
                         FridayPipelineStatusView(startedAt: fridayRegenStartedAt)
                             .padding(.horizontal, Spacing.xl)
                             .padding(.bottom, Spacing.md)
+                    }
+                    if let err = fridayRegenerateError, FridayReviewDisplay.isInsufficientClipsError(err) {
+                        BrandBanner(
+                            icon: "exclamationmark.triangle",
+                            message: "Not enough usable clips for an auto-cut reel. Import more, or skip clips and keep the story-only post.",
+                            style: .error,
+                            actions: [
+                                BrandBannerAction(label: "Import more clips", action: { onImportFridayClips?() }),
+                                BrandBannerAction(label: "Skip clips, keep story-only", action: { onSkipFridayClips?() }),
+                            ]
+                        )
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.md)
                     }
 
                 } else if day == .tuesday, let reelURL = splitPreviewURL {

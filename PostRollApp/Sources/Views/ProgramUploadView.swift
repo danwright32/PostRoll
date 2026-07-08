@@ -274,10 +274,22 @@ enum BrandBannerStyle {
     case error    // something wrong — roseDeep border
 }
 
+/// One escape-hatch action rendered as a button below a BrandBanner's
+/// message (e.g. the Friday "< 3 usable clips" banner's "Import more
+/// clips" / "Skip clips, keep story-only" pair, #135).
+struct BrandBannerAction: Identifiable {
+    let id = UUID()
+    let label: String
+    let action: () -> Void
+}
+
 struct BrandBanner: View {
     let icon: String
     let message: String
     var style: BrandBannerStyle = .info
+    /// Optional action buttons shown below the message. Empty by default so
+    /// every existing call site is unaffected.
+    var actions: [BrandBannerAction] = []
 
     private var borderColor: Color {
         switch style {
@@ -314,10 +326,22 @@ struct BrandBanner: View {
                 .font(.system(size: 18))
                 .foregroundStyle(iconColor)
                 .frame(width: 24)
-            Text(message)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.warmMid)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.warmMid)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !actions.isEmpty {
+                    HStack(spacing: Spacing.md) {
+                        ForEach(actions) { action in
+                            Button(action.label, action: action.action)
+                                .buttonStyle(.plain)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Color.roseGold)
+                        }
+                    }
+                }
+            }
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
