@@ -233,22 +233,29 @@ actor PythonBridge {
         /// generate_media.py's friday_clip_plan when a clip reel was
         /// rendered. nil when no reel was attempted this run.
         var fridayClipPlan: FridayClipPlan? = nil
+        /// Thursday/Friday's cover-image pick, decoded straight from
+        /// generate_media.py's cover_pick, keyed by day name. Only present
+        /// for a day when a fresh pick was made this run (the sticky gate
+        /// reusing a persisted pick emits no cover_pick at all).
+        var coverPicks: [String: CoverPick] = [:]
     }
 
     /// Parses one day's entry from generate_media.py's output JSON. Values
     /// are a mix of plain string paths (e.g. "reel", "story") and, for
-    /// Friday, a nested friday_clip_plan object, so the whole dict can't be
-    /// cast to [String: String]. That cast fails outright the moment a
-    /// nested value shows up, silently dropping every path for that day,
-    /// not just the plan. `fileExists` is injectable so this is testable
+    /// Friday, a nested friday_clip_plan object (and for Thursday/Friday, a
+    /// nested cover_pick object), so the whole dict can't be cast to
+    /// [String: String]. That cast fails outright the moment a nested value
+    /// shows up, silently dropping every path for that day, not just the
+    /// nested object. `fileExists` is injectable so this is testable
     /// without touching the real filesystem.
     nonisolated static func parsePreviewDayEntry(
         _ dayDict: [String: Any],
         fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
-    ) -> (paths: [String: String], fridayClipPlan: FridayClipPlan?) {
+    ) -> (paths: [String: String], fridayClipPlan: FridayClipPlan?, coverPick: CoverPick?) {
         var paths: [String: String] = [:]
         for (key, value) in dayDict {
-            guard key != "friday_clip_plan", let path = value as? String, fileExists(path) else { continue }
+            guard key != "friday_clip_plan", key != "cover_pick",
+                  let path = value as? String, fileExists(path) else { continue }
             paths[key] = path
         }
 
@@ -258,7 +265,13 @@ actor PythonBridge {
             plan = try? JSONDecoder().decode(FridayClipPlan.self, from: data)
         }
 
-        return (paths, plan)
+        var coverPick: CoverPick? = nil
+        if let pickObject = dayDict["cover_pick"],
+           let data = try? JSONSerialization.data(withJSONObject: pickObject) {
+            coverPick = try? JSONDecoder().decode(CoverPick.self, from: data)
+        }
+
+        return (paths, plan, coverPick)
     }
 
     /// Generates preview graphics (Tuesday + Thursday reels included) to a
@@ -310,14 +323,16 @@ actor PythonBridge {
 
         var paths: [String: [String: String]] = [:]
         var fridayClipPlan: FridayClipPlan? = nil
+        var coverPicks: [String: CoverPick] = [:]
         for dayKey in ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"] {
             guard let dayDict = json[dayKey] as? [String: Any] else { continue }
             let parsed = Self.parsePreviewDayEntry(dayDict)
             if !parsed.paths.isEmpty { paths[dayKey] = parsed.paths }
             if dayKey == "friday" { fridayClipPlan = parsed.fridayClipPlan }
+            if let pick = parsed.coverPick { coverPicks[dayKey] = pick }
         }
         let errors = (json["errors"] as? [String: String]) ?? [:]
-        return PreviewGenerationResult(paths: paths, errors: errors, fridayClipPlan: fridayClipPlan)
+        return PreviewGenerationResult(paths: paths, errors: errors, fridayClipPlan: fridayClipPlan, coverPicks: coverPicks)
     }
 
     /// Builds the Thursday reel's still preview PNG + layout sidecar (no ffmpeg encode).
@@ -573,6 +588,13 @@ actor PythonBridge {
                 entry["clip_audio_muted"] = pd.fridayAudioMuted
             default:
                 break
+            }
+            // Instagram grid cover image (Thursday + Friday only): a manual
+            // override always wins over the AI pick, same nil-means-AI /
+            // non-nil-means-user semantics as collageCellOverride. Lets
+            // Phase 1's sticky gate skip its Claude call on regen.
+            if let source = pd.coverOverride ?? pd.coverPick?.sourcePath {
+                entry["cover_source"] = source
             }
             // Collage-carousel days (Wednesday always; Sunday/Monday under the
             // balanced preset) carry the collage seed, per-cell crop offsets, and
@@ -874,6 +896,9 @@ actor PythonBridge {
             if !allHandles.isEmpty { dayEntry["tag_handles"]   = allHandles }
             if !allNames.isEmpty   { dayEntry["name_mentions"] = allNames }
             if !pd.notes.isEmpty   { dayEntry["notes"]         = pd.notes }
+            if let source = pd.coverOverride ?? pd.coverPick?.sourcePath {
+                dayEntry["cover_source"] = source
+            }
             // Per-photo people tags (Wednesday). Re-key from the URL
             // absoluteString the UI stores to the POSIX path used in `photos`,
             // so Python can line each tag up with its photo by path.

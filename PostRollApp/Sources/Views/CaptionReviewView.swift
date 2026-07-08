@@ -471,6 +471,7 @@ struct CaptionReviewView: View {
                     var ev = appState.events.first(where: { $0.id == event.id }) ?? event
                     ev.previewMediaPaths = result.paths
                     ev.applyFridayClipPlan(result.fridayClipPlan)
+                    for (day, pick) in result.coverPicks { ev.applyCoverPick(pick, forDay: day) }
                     appState.updateEvent(ev)
                 }
             }
@@ -961,6 +962,7 @@ struct CaptionReviewView: View {
             var ev = appState.events.first(where: { $0.id == event.id }) ?? event
             ev.previewMediaPaths[day.rawValue] = dayPaths
             if day == .friday { ev.applyFridayClipPlan(result.fridayClipPlan) }
+            ev.applyCoverPick(result.coverPicks[day.rawValue], forDay: day.rawValue)
             appState.updateEvent(ev)
             graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
             NotificationService.shared.notifyRegenerationComplete(

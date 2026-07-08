@@ -64,7 +64,8 @@ final class GenerationManager {
                 let mediaResult = await graphicsTask?.value
                 self?.finishSuccess(eventID: eventID, snapshot: ev, onlyDays: onlyDays,
                                     result: result, mediaPaths: mediaResult?.paths,
-                                    fridayClipPlan: mediaResult?.fridayClipPlan, appState: appState)
+                                    fridayClipPlan: mediaResult?.fridayClipPlan,
+                                    coverPicks: mediaResult?.coverPicks ?? [:], appState: appState)
             } catch is CancellationError {
                 graphicsTask?.cancel()
             } catch {
@@ -91,7 +92,8 @@ final class GenerationManager {
 
     private func finishSuccess(eventID: Event.ID, snapshot ev: Event, onlyDays: Set<String>?,
                                result: WeekGenerationResult, mediaPaths: [String: [String: String]]?,
-                               fridayClipPlan: FridayClipPlan? = nil, appState: AppState) {
+                               fridayClipPlan: FridayClipPlan? = nil,
+                               coverPicks: [String: CoverPick] = [:], appState: AppState) {
         let elapsed = tracker.job(for: eventID)?.elapsedSeconds ?? 0
         tracker.remove(eventID)
 
@@ -132,6 +134,7 @@ final class GenerationManager {
             existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: onlyDays == nil)
 
         saved.applyFridayClipPlan(fridayClipPlan)
+        for (day, pick) in coverPicks { saved.applyCoverPick(pick, forDay: day) }
 
         appState.updateEvent(saved)
         NotificationService.shared.notifyGenerationComplete(eventName: ev.name)

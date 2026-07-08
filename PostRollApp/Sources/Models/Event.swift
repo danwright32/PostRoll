@@ -145,6 +145,18 @@ extension Event {
         guard let plan else { return }
         days["friday"]?.fridayClipPlan = plan
     }
+
+    /// Writes a freshly-decoded cover pick onto the named day (Thursday or
+    /// Friday). `pick` is nil when no cover was generated this run (the
+    /// sticky gate reused an already-persisted pick, or the day doesn't
+    /// apply): a nil pick must never clobber an already-persisted one, and
+    /// there's nothing to write if the day has no PostingDay yet. Shared by
+    /// every call site that applies a PreviewGenerationResult, same pattern
+    /// as applyFridayClipPlan.
+    mutating func applyCoverPick(_ pick: CoverPick?, forDay day: String) {
+        guard let pick else { return }
+        days[day]?.coverPick = pick
+    }
 }
 
 // MARK: - ShootType
@@ -258,6 +270,8 @@ extension PostingDay {
         fridayClipOverride   = try  c.decodeIfPresent([ReelClipOverride].self,        forKey: .fridayClipOverride)
         fridayAudioDuckDB    = try  c.decodeIfPresent(Double.self,                    forKey: .fridayAudioDuckDB)   ?? -15.0
         fridayAudioMuted     = try  c.decodeIfPresent(Bool.self,                      forKey: .fridayAudioMuted)    ?? false
+        coverPick            = try  c.decodeIfPresent(CoverPick.self,                 forKey: .coverPick)
+        coverOverride        = try  c.decodeIfPresent(String.self,                    forKey: .coverOverride)
     }
 
     /// Returns a copy with the given photos removed from photoPaths and from
@@ -521,6 +535,32 @@ struct FridayClipPlan: Codable, Hashable {
     }
 }
 
+/// Claude's cover-image pick for Thursday's scroll reel or Friday's auto-cut
+/// clip reel: the source photo/frame plus a one-line rationale shown under
+/// the cover thumbnail (mirrors FridayClipPlan's rationale display).
+struct CoverPick: Codable, Hashable {
+    var sourcePath: String = ""
+    var rationale: String = ""
+
+    enum CodingKeys: String, CodingKey {
+        case sourcePath = "source_path"
+        case rationale
+    }
+
+    init(sourcePath: String = "", rationale: String = "") {
+        self.sourcePath = sourcePath
+        self.rationale = rationale
+    }
+
+    // Persisted inside events.json via PostingDay.coverPick: every field
+    // must decodeIfPresent or a schema change wipes saved events.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sourcePath = try c.decodeIfPresent(String.self, forKey: .sourcePath) ?? ""
+        rationale  = try c.decodeIfPresent(String.self, forKey: .rationale)  ?? ""
+    }
+}
+
 /// A user's manual edit to the Friday clip reel: reorder, include/exclude,
 /// or adjust the trim window for one clip. Stored separately from
 /// fridayClipPlan (Claude's pass) so manual edits never trigger a re-cut.
@@ -623,4 +663,9 @@ struct PostingDay: Codable, Hashable {
     // event since some weeks he wants clip audio fully muted instead.
     var fridayAudioDuckDB: Double = -15.0
     var fridayAudioMuted: Bool = false
+    // Instagram grid cover image (Thursday scroll reel + Friday auto-cut clip
+    // reel only). Claude's pick; nil = not yet generated. Same nil-means-AI /
+    // non-nil-means-user override semantics as fridayClipPlan/fridayClipOverride.
+    var coverPick: CoverPick? = nil
+    var coverOverride: String? = nil
 }

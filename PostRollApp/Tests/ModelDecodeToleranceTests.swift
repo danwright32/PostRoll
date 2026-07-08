@@ -93,4 +93,22 @@ final class ModelDecodeToleranceTests: XCTestCase {
         XCTAssertEqual(selection.trimOut, 0)
         XCTAssertEqual(selection.transition, .cut)
     }
+
+    // Instagram grid cover images (#139/#140): a PostingDay saved by a build
+    // before this feature existed has neither coverPick nor coverOverride in
+    // its JSON at all. Decoding must default them safely, not throw and trip
+    // the events.json wipe-protection path.
+    func testPostingDayToleratesMissingCoverFields() throws {
+        let json = Data(#"{"day": "thursday", "photoPaths": []}"#.utf8)
+        let day = try JSONDecoder().decode(PostingDay.self, from: json)
+        XCTAssertNil(day.coverPick)
+        XCTAssertNil(day.coverOverride)
+    }
+
+    func testCoverPickToleratesMissingKeys() throws {
+        let json = Data(#"{}"#.utf8)
+        let pick = try JSONDecoder().decode(CoverPick.self, from: json)
+        XCTAssertEqual(pick.sourcePath, "")
+        XCTAssertEqual(pick.rationale, "")
+    }
 }
