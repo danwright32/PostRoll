@@ -2948,7 +2948,7 @@ private struct FridayClipEditor: View {
 
                         Spacer(minLength: 0)
 
-                        Button(entry.cropX == 0 && entry.cropY == 0 ? "Crop" : "Crop*") {
+                        Button(ClipCropFrameStrip.isCustomCrop(x: entry.cropX, y: entry.cropY) ? "Crop*" : "Crop") {
                             cropPopoverIndex = index
                         }
                         .buttonStyle(.plain)
@@ -3070,7 +3070,7 @@ private struct FridayClipCropPopover: View {
                 }
             }
 
-            if cropOffset.x != 0 || cropOffset.y != 0 {
+            if ClipCropFrameStrip.isCustomCrop(x: cropOffset.x, y: cropOffset.y) {
                 Button("Reset to default") { cropOffset = (0, 0) }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))

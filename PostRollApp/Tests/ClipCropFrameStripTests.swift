@@ -22,4 +22,19 @@ final class ClipCropFrameStripTests: XCTestCase {
         let times = ClipCropFrameStrip.sampleTimes(trimIn: 5.0, trimOut: 1.0)
         XCTAssertEqual(times, [5.0])
     }
+
+    // Drives the crop editor's "Crop"/"Crop*" button label and the reset
+    // button's visibility: both must agree on what counts as "no crop
+    // applied yet" so they can never disagree on screen.
+    func testIsCustomCropFalseWhenBothCentered() {
+        XCTAssertFalse(ClipCropFrameStrip.isCustomCrop(x: 0, y: 0))
+    }
+
+    func testIsCustomCropTrueWhenXOffset() {
+        XCTAssertTrue(ClipCropFrameStrip.isCustomCrop(x: 0.4, y: 0))
+    }
+
+    func testIsCustomCropTrueWhenYOffset() {
+        XCTAssertTrue(ClipCropFrameStrip.isCustomCrop(x: 0, y: -0.2))
+    }
 }
