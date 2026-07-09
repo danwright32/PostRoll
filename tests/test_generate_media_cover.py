@@ -162,6 +162,23 @@ def test_thursday_cover_sticky_gate_skips_selection_when_cover_source_present(mo
     assert "cover_pick" not in thursday_result
 
 
+def test_cover_render_failure_is_reported_not_silent(tmp_path):
+    # Phase 5 (#143) failure-path sweep: a cover_source pointing at a photo
+    # that no longer exists on disk must surface as a reported error, not
+    # succeed silently or crash the whole day's generation.
+    photos = _make_photos(tmp_path, 1)
+
+    manifest = {
+        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "days": {"thursday": {"photos": photos, "cover_source": str(tmp_path / "does_not_exist.jpg")}},
+    }
+    result = gm_mod.generate_media(manifest, tmp_path / "out", static_only=True)
+
+    thursday_result = result["thursday"]
+    assert "cover" not in thursday_result
+    assert result["errors"]["thursday"].startswith("cover failed:")
+
+
 @needs_ffmpeg
 def test_friday_cover_generated_from_clip_reel_frames(monkeypatch, tmp_path):
     clips = _make_usable_clips(tmp_path)
