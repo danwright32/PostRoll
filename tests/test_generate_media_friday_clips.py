@@ -46,6 +46,12 @@ def _fake_select_reel_clips(scored_clips, **kwargs):
                 "trim_in": c["valid_trim"][0],
                 "trim_out": c["valid_trim"][1],
                 "transition_after": "cut",
+                # apply_selection always returns these (plan #148 Phase 0/2);
+                # a fake return that omitted them would mask the
+                # generate_media.py translation silently dropping them.
+                "crop_x": 0.3,
+                "crop_y": -0.15,
+                "crop_confidence": "high",
             }
             for c in candidates
         ],
@@ -80,6 +86,11 @@ def test_friday_with_usable_clips_produces_reel_and_clip_plan(tmp_path, monkeypa
     plan = friday_result["friday_clip_plan"]
     assert len(plan["selections"]) == 3
     assert plan["selections"][0]["transition"] == "cut"
+    # Crop fields (plan #148, Phase 2) must survive this translation, not
+    # silently drop before ever reaching Swift's FridayClipSelection.
+    assert plan["selections"][0]["crop_x"] == 0.3
+    assert plan["selections"][0]["crop_y"] == -0.15
+    assert plan["selections"][0]["crop_confidence"] == "high"
     # Reel replaces before/after/story for this day, not alongside it.
     assert "before_after" not in friday_result
     assert "story" not in friday_result
