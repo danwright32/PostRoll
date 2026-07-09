@@ -118,6 +118,38 @@ def test_render_concatenates_selections_to_expected_duration(tmp_path):
 
 
 @needs_ffmpeg
+def test_landscape_source_fills_the_portrait_canvas_not_padded(tmp_path):
+    # Dan's feedback (2026-07-08): a landscape clip must fill the 1080x1920
+    # portrait canvas (cropping the sides), not letterbox with black bars.
+    # A solid-red 320x180 (16:9) source scaled to FIT inside the canvas would
+    # leave black padding on the sides; scaled to FILL (cropping the excess
+    # top/bottom) leaves no black anywhere in the frame. Sampling a corner
+    # pixel distinguishes the two: black corner means padding survived.
+    clip = tmp_path / "landscape.mp4"
+    _make_clip(clip, seconds=2.0, color="red")
+    selections = [
+        {"clip_path": str(clip), "trim_in": 0.0, "trim_out": 1.5, "transition_after": "cut"},
+    ]
+    out = tmp_path / "reel.mp4"
+
+    render_clip_reel(selections, out)
+
+    frame = tmp_path / "frame.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-ss", "0.5", "-i", str(out),
+         "-frames:v", "1", str(frame)],
+        check=True,
+    )
+    from PIL import Image
+    img = Image.open(frame).convert("RGB")
+    corner = img.getpixel((0, 0))
+    assert corner != (0, 0, 0), (
+        f"top-left corner is black {corner}: the source was padded/letterboxed "
+        "instead of scaled to fill and crop"
+    )
+
+
+@needs_ffmpeg
 def test_muted_clip_audio_leaves_only_music_bed(tmp_path):
     clip = tmp_path / "loud.mp4"
     _make_clip(clip, seconds=5.0, color="green", freq=500)

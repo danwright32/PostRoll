@@ -73,9 +73,13 @@ def _xfade_offsets(durations: list[float], transition_durations: list[float]) ->
 
 
 def _scale_pad_filter() -> str:
+    # Fill the portrait canvas and crop the excess (centered) rather than
+    # fitting inside it with black bars: a landscape source should read as
+    # cropped-to-fill, matching every other template in this app (Dan's
+    # explicit feedback, 2026-07-08).
     return (
-        f"scale={CANVAS_W}:{CANVAS_H}:force_original_aspect_ratio=decrease,"
-        f"pad={CANVAS_W}:{CANVAS_H}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+        f"scale={CANVAS_W}:{CANVAS_H}:force_original_aspect_ratio=increase,"
+        f"crop={CANVAS_W}:{CANVAS_H},setsar=1"
     )
 
 
