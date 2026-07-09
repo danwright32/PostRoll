@@ -578,6 +578,14 @@ def generate_media(
                                 "trim_in": sel["trim_in"],
                                 "trim_out": sel["trim_out"],
                                 "transition": sel["transition_after"],
+                                # Plan #148 Phase 2: apply_selection always
+                                # returns these (0/0/"low" when the crop gate
+                                # denied or Claude proposed none), and they
+                                # must survive to Swift's FridayClipSelection
+                                # or the per-shot crop feature never surfaces.
+                                "crop_x": sel["crop_x"],
+                                "crop_y": sel["crop_y"],
+                                "crop_confidence": sel["crop_confidence"],
                             }
                             for sel in plan["selections"]
                         ],

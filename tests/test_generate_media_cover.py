@@ -56,6 +56,12 @@ def _fake_select_reel_clips(scored_clips, **kwargs):
                 "trim_in": c["valid_trim"][0],
                 "trim_out": c["valid_trim"][1],
                 "transition_after": "cut",
+                # apply_selection always returns these (plan #148 Phase 0/2);
+                # a fake return that omitted them doesn't match the real
+                # contract generate_media.py's translation depends on.
+                "crop_x": 0.0,
+                "crop_y": 0.0,
+                "crop_confidence": "low",
             }
             for c in candidates
         ],
