@@ -131,12 +131,17 @@ def test_all_selections_invalid_raises_rather_than_returning_empty():
 
 
 def test_missing_rationale_defaults_to_empty_string():
-    # A long enough valid_trim avoids the duration-shortfall note, isolating
-    # the missing-rationale default this test actually checks.
+    # Enough cuts of enough length to avoid both the duration-shortfall and
+    # cut-count notes, isolating the missing-rationale default this test
+    # actually checks.
     long_candidates = [
-        {"path": "/clips/a.mov", "duration": 30.0, "usable": True, "score": 40.0, "valid_trim": (0.0, 25.0)},
+        {"path": f"/clips/r{i}.mov", "duration": 4.0, "usable": True, "score": 40.0, "valid_trim": (0.0, 2.5)}
+        for i in range(10)
     ]
-    data = {"selections": [{"clip_index": 0, "trim_in": 0.0, "trim_out": 25.0, "transition_after": "cut"}]}
+    data = {"selections": [
+        {"clip_index": i, "trim_in": 0.0, "trim_out": 2.5, "transition_after": "cut"}
+        for i in range(10)
+    ]}
 
     result = apply_selection(data, long_candidates)
 
@@ -162,17 +167,23 @@ def test_short_total_duration_gets_a_visible_note_in_rationale():
 
 
 def test_meeting_target_duration_leaves_rationale_unannotated():
+    # 10 cuts at 2.5s (25s total) meet both the duration target and the
+    # cut-count target, so no note of either kind may be appended.
     long_candidates = [
-        {"path": "/clips/a.mov", "duration": 30.0, "usable": True, "score": 40.0, "valid_trim": (0.0, 25.0)},
+        {"path": f"/clips/r{i}.mov", "duration": 4.0, "usable": True, "score": 40.0, "valid_trim": (0.0, 2.5)}
+        for i in range(10)
     ]
     data = {
-        "selections": [{"clip_index": 0, "trim_in": 0.0, "trim_out": 25.0, "transition_after": "cut"}],
-        "rationale": "one long strong take",
+        "selections": [
+            {"clip_index": i, "trim_in": 0.0, "trim_out": 2.5, "transition_after": "cut"}
+            for i in range(10)
+        ],
+        "rationale": "steady build to the finale",
     }
 
     result = apply_selection(data, long_candidates)
 
-    assert result["rationale"] == "one long strong take"
+    assert result["rationale"] == "steady build to the finale"
 
 
 # ===================================================================
@@ -253,6 +264,135 @@ def test_non_string_crop_confidence_defaults_to_low():
 
 
 # ===================================================================
+# Phase 1 pacing (issue #150): the prompt asks for the measured CapCut
+# cadence, and a cut count that comes back too low gets a visible
+# rationale note (mirroring the duration-shortfall note), never a
+# silent reshape of the selection.
+# ===================================================================
+
+def _pacing_candidates(count: int, span: float) -> list[dict]:
+    return [
+        {"path": f"/clips/p{i}.mov", "duration": span + 2.0, "usable": True,
+         "score": float(count - i), "valid_trim": (0.0, span)}
+        for i in range(count)
+    ]
+
+
+def test_few_cuts_get_a_visible_note_in_rationale():
+    # 5 cuts at 5s each: total duration (25s) is inside target, so any
+    # note must be about the cut count, not duration.
+    candidates = _pacing_candidates(5, 5.0)
+    data = {
+        "selections": [
+            {"clip_index": i, "trim_in": 0.0, "trim_out": 5.0, "transition_after": "cut"}
+            for i in range(5)
+        ],
+        "rationale": "energetic cut",
+    }
+
+    result = apply_selection(data, candidates)
+
+    assert "energetic cut" in result["rationale"]
+    assert "5 cuts" in result["rationale"]
+
+
+def test_enough_cuts_leave_rationale_unannotated():
+    # 10 cuts at 2.5s each (25s total): both duration and cut count meet
+    # target, rationale must come back exactly as given.
+    candidates = _pacing_candidates(10, 2.5)
+    data = {
+        "selections": [
+            {"clip_index": i, "trim_in": 0.0, "trim_out": 2.5, "transition_after": "cut"}
+            for i in range(10)
+        ],
+        "rationale": "punchy montage",
+    }
+
+    result = apply_selection(data, candidates)
+
+    assert result["rationale"] == "punchy montage"
+
+
+def test_duration_and_cut_count_notes_can_coexist():
+    # 3 cuts at 2s each (6s total): both shortfalls apply and both notes
+    # must survive in the rationale, neither clobbering the other.
+    candidates = _pacing_candidates(3, 2.0)
+    data = {
+        "selections": [
+            {"clip_index": i, "trim_in": 0.0, "trim_out": 2.0, "transition_after": "cut"}
+            for i in range(3)
+        ],
+        "rationale": "short",
+    }
+
+    result = apply_selection(data, candidates)
+
+    assert "short" in result["rationale"]
+    assert "6.0s" in result["rationale"] or "6s" in result["rationale"]
+    assert "3 cuts" in result["rationale"]
+
+
+def test_selection_prompt_states_cadence_targets(monkeypatch, tmp_path):
+    from postroll.ai.select_reel_clips import (
+        TARGET_CLIP_SECONDS_MAX,
+        TARGET_CLIP_SECONDS_MIN,
+        TARGET_CUT_COUNT,
+    )
+
+    captured = {}
+
+    def fake_extract(path, times, count, out_dir, prefix):
+        return [out_dir / f"{prefix}0.png"]
+
+    def fake_run_json_prompt(prompt, *, timeout, image_paths, image_labels, **kwargs):
+        captured["prompt"] = prompt
+        return {"selections": [{"clip_index": 0, "trim_in": 1.0, "trim_out": 6.0, "transition_after": "cut"}], "rationale": ""}
+
+    import postroll.ai.select_reel_clips as mod
+    monkeypatch.setattr(mod, "_extract_representative_frames", fake_extract)
+    monkeypatch.setattr(mod, "run_json_prompt", fake_run_json_prompt)
+
+    select_reel_clips(CANDIDATES, tmp_dir=tmp_path)
+
+    # The cadence numbers must reach the prompt from the named constants,
+    # so a recalibration never leaves stale prose behind.
+    assert str(TARGET_CUT_COUNT) in captured["prompt"]
+    assert f"{TARGET_CLIP_SECONDS_MIN:.1f}" in captured["prompt"]
+    assert f"{TARGET_CLIP_SECONDS_MAX:.1f}" in captured["prompt"]
+
+
+def test_select_candidates_supplies_enough_clips_for_target_cut_count():
+    # 30 clips at 10s valid_trim each: the 45s duration budget alone would
+    # stop at 5 candidates, but 12-13 cuts can't come out of 5 clips (each
+    # clip is used at most once), so the pacing floor must keep supplying
+    # candidates.
+    from postroll.ai.select_reel_clips import MIN_CANDIDATES_FOR_PACING
+
+    usable = [
+        {"path": f"/clips/c{i}.mov", "score": float(30 - i), "valid_trim": (0.0, 10.0)}
+        for i in range(30)
+    ]
+
+    candidates = _select_candidates(usable)
+
+    assert len(candidates) == MIN_CANDIDATES_FOR_PACING
+    # Still the highest-scored clips, in rank order.
+    assert [c["path"] for c in candidates] == [f"/clips/c{i}.mov" for i in range(MIN_CANDIDATES_FOR_PACING)]
+
+
+def test_select_candidates_floor_is_capped_by_available_clips():
+    # Only 4 usable clips: the floor must not invent candidates.
+    usable = [
+        {"path": f"/clips/c{i}.mov", "score": float(4 - i), "valid_trim": (0.0, 10.0)}
+        for i in range(4)
+    ]
+
+    candidates = _select_candidates(usable)
+
+    assert len(candidates) == 4
+
+
+# ===================================================================
 # Hard motion gate (issue #149): the code-level check that a tight crop
 # is only ever attempted on a calm shot Claude is confident about.
 # Nothing calls this yet (Phase 2 wires it up); Phase 0 fixes the rule.
@@ -323,17 +463,19 @@ def test_select_reel_clips_calls_claude_and_clamps_result(monkeypatch, tmp_path)
 # ===================================================================
 
 def test_select_candidates_stops_once_duration_budget_is_covered():
-    # 10 clips at 10s valid_trim each: the budget (45s) is covered by the
-    # 5th, so the 6th onward (lower-scored) must not be included.
+    # 30 clips at 2.5s valid_trim each: the pacing floor (15) is met at
+    # 37.5s of span, but the duration budget (45s) isn't covered until the
+    # 18th clip, so the budget keeps supplying candidates past the floor
+    # and the 19th onward (lower-scored) must not be included.
     usable = [
-        {"path": f"/clips/c{i}.mov", "score": float(10 - i), "valid_trim": (0.0, 10.0)}
-        for i in range(10)
+        {"path": f"/clips/c{i}.mov", "score": float(30 - i), "valid_trim": (0.0, 2.5)}
+        for i in range(30)
     ]
 
     candidates = _select_candidates(usable)
 
-    assert len(candidates) == 5
-    assert [c["path"] for c in candidates] == [f"/clips/c{i}.mov" for i in range(5)]
+    assert len(candidates) == 18
+    assert [c["path"] for c in candidates] == [f"/clips/c{i}.mov" for i in range(18)]
 
 
 def test_select_candidates_respects_hard_ceiling_with_many_small_clips():
@@ -384,8 +526,10 @@ def test_select_candidates_adapts_to_available_footage_not_a_fixed_count(monkeyp
 
     result = select_reel_clips(many_candidates, tmp_dir=tmp_path)
 
-    # 5s clips: budget (45s) covered by 9 clips (45/5), one frame each here.
-    assert captured["count"] == 9
+    # 5s clips: the budget (45s) is covered by 9 clips, but the pacing
+    # floor (issue #150: 12-13 cuts need at least that many distinct clips
+    # to cut between) keeps supplying candidates up to 15, one frame each here.
+    assert captured["count"] == 15
     # Highest-scored candidate (score=29) must still be the survivor.
     assert result["selections"][0]["clip_path"] == "/clips/c29.mov"
 

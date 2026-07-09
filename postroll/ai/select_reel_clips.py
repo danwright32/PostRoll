@@ -39,6 +39,25 @@ FRAMES_PER_CLIP = 3
 TARGET_DURATION_MIN = 20.0
 TARGET_DURATION_MAX = 30.0
 
+# Pacing targets (issue #150), measured directly off Dan's manual CapCut
+# edit of the same source footage: ~12-13 cuts across 31.2s, most shots
+# 2-2.5s. The automated reel's ~8 clips at ~3s read noticeably less
+# energetic side by side.
+TARGET_CUT_COUNT = 12
+TARGET_CLIP_SECONDS_MIN = 2.0
+TARGET_CLIP_SECONDS_MAX = 2.5
+
+# Below this many cuts the pacing gap Dan flagged is back, so the
+# rationale gets a visible note (mirroring the duration-shortfall note),
+# never a silent reshape of Claude's cut.
+CUT_COUNT_WARNING_THRESHOLD = 10
+
+# A cut can't have more cuts than distinct clips (each clip is selected at
+# most once), so the candidate pool must always offer at least the pacing
+# target plus slack, even when CANDIDATE_DURATION_BUDGET is already
+# covered by fewer, longer clips.
+MIN_CANDIDATES_FOR_PACING = 15
+
 # Candidates are chosen by score until their combined valid_trim duration
 # covers this budget, not a fixed clip count: a week with plenty of good,
 # longer footage should offer Claude enough clips to comfortably hit the
@@ -68,6 +87,12 @@ lands inside {min_duration:.0f}-{max_duration:.0f} seconds. A reel built
 from only one or two clips will almost always fall short of this; prefer
 using most or all of the {count} candidates over leaning on a couple of
 long ones.
+
+Pacing: aim for roughly {cut_count} or more cuts, keeping most trim
+windows around {clip_seconds_min:.1f} to {clip_seconds_max:.1f} seconds.
+Short, punchy cuts read as far more energetic than a few long clips.
+When the duration target forces a choice, add another short clip rather
+than lengthening one you already picked.
 
 Selection guidance:
 1. Order for a dramatic arc, not necessarily the order the clips were shot in.
@@ -202,6 +227,22 @@ def _annotate_duration_shortfall(selections: list[dict], rationale: str) -> str:
     return rationale
 
 
+def _annotate_cut_count_shortfall(selections: list[dict], rationale: str) -> str:
+    """Same policy as the duration note above: a cut count far under the
+    pacing target must be visible in the review UI, not silently reshaped
+    into a different cut than the one Claude reasoned about."""
+    count = len(selections)
+    if count < CUT_COUNT_WARNING_THRESHOLD:
+        cuts = "cut" if count == 1 else "cuts"
+        note = (
+            f"Note: this reel has only {count} {cuts}, under the pacing "
+            f"target of roughly {TARGET_CUT_COUNT}. Consider adding or "
+            "splitting clips with the override editor."
+        )
+        return f"{rationale} {note}".strip() if rationale else note
+    return rationale
+
+
 def apply_selection(data: object, candidates: list[dict]) -> dict:
     """Pure: validate Claude's raw JSON response against `candidates` (Stage
     1's scored clips, in the same order the prompt listed them) and clamp
@@ -268,22 +309,28 @@ def apply_selection(data: object, candidates: list[dict]) -> dict:
     if not isinstance(rationale, str):
         rationale = ""
     rationale = _annotate_duration_shortfall(selections, rationale)
+    rationale = _annotate_cut_count_shortfall(selections, rationale)
 
     return {"selections": selections, "rationale": rationale}
 
 
 def _select_candidates(usable: list[dict]) -> list[dict]:
     """Highest-scored usable clips (Stage 1's score, not a re-judgment),
-    kept until their combined valid_trim duration covers
-    CANDIDATE_DURATION_BUDGET or MAX_CANDIDATES_CEILING is hit, whichever
-    comes first. Always includes at least one clip, even if its own span
-    alone exceeds the budget."""
+    kept until BOTH the duration budget (CANDIDATE_DURATION_BUDGET) and
+    the pacing floor (MIN_CANDIDATES_FOR_PACING: a 12-cut reel needs at
+    least that many distinct clips to cut between) are satisfied, capped
+    at MAX_CANDIDATES_CEILING. Always includes at least one clip, even if
+    its own span alone exceeds the budget."""
     ranked = sorted(usable, key=lambda c: c["score"], reverse=True)
     candidates: list[dict] = []
     total_span = 0.0
     for clip in ranked:
-        if candidates and (
-            total_span >= CANDIDATE_DURATION_BUDGET or len(candidates) >= MAX_CANDIDATES_CEILING
+        if len(candidates) >= MAX_CANDIDATES_CEILING:
+            break
+        if (
+            candidates
+            and len(candidates) >= MIN_CANDIDATES_FOR_PACING
+            and total_span >= CANDIDATE_DURATION_BUDGET
         ):
             break
         candidates.append(clip)
@@ -328,6 +375,9 @@ def select_reel_clips(
             clip_list=_format_clip_list(candidates),
             min_duration=TARGET_DURATION_MIN,
             max_duration=TARGET_DURATION_MAX,
+            cut_count=TARGET_CUT_COUNT,
+            clip_seconds_min=TARGET_CLIP_SECONDS_MIN,
+            clip_seconds_max=TARGET_CLIP_SECONDS_MAX,
         )
 
         data = run_json_prompt(prompt, timeout=timeout, image_paths=staged, image_labels=labels)
