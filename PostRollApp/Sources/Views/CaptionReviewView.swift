@@ -190,6 +190,7 @@ struct CaptionReviewView: View {
                             onApplyFridayOverride: day == .friday ? { applyFridayOverride($0) } : nil,
                             onSwapFridayClip: day == .friday ? { swapFridayClip($0) } : nil,
                             onRecutFridayWithAI: day == .friday ? { recutFridayWithAI() } : nil,
+                            onToggleFridayTitleCard: day == .friday ? { toggleFridayTitleCard() } : nil,
                             fridayRegenStartedAt: day == .friday ? regenerationStartTimes[.friday] : nil,
                             fridayRegenerateError: day == .friday ? regenerateError : nil,
                             onSkipFridayClips: day == .friday ? { skipFridayClipsKeepStoryOnly() } : nil,
@@ -784,6 +785,20 @@ struct CaptionReviewView: View {
         }
     }
 
+    /// Title card overlay (plan #148, Phase 3): toggled off without
+    /// re-invoking Claude. Freezes the AI's current selection into
+    /// fridayClipOverride (if not already overridden) so the existing
+    /// override render path picks up the new mute state, same policy as
+    /// any other Friday manual edit (feedback_collage_edits_no_python_regen).
+    private func toggleFridayTitleCard() {
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        guard let fri = ev.days[DayName.friday.rawValue] else { return }
+        ev.days[DayName.friday.rawValue]?.titleCardMuted.toggle()
+        appState.updateEvent(ev)
+
+        applyFridayOverride(fri.effectiveFridayOverride)
+    }
+
     /// Replace one clip in the Friday override with a freshly picked file.
     private func swapFridayClip(_ oldClipPath: String) {
         let panel = NSOpenPanel()
@@ -1168,6 +1183,9 @@ private struct CaptionSection: View {
     var onSwapFridayClip: ((String) -> Void)? = nil
     /// Clear fridayClipOverride and re-run the full AI pipeline (Stage 1 + 2).
     var onRecutFridayWithAI: (() -> Void)? = nil
+    /// Title card overlay (plan #148, Phase 3): toggled off without
+    /// re-invoking Claude, same as reorder/include-exclude edits.
+    var onToggleFridayTitleCard: (() -> Void)? = nil
     /// When Friday's current pipeline run (import/regen/override-apply)
     /// started, so the elapsed-timer status view can show real progress
     /// instead of a bare spinner. nil when nothing is running.
@@ -1455,7 +1473,9 @@ private struct CaptionSection: View {
                                     hasOverride: postingDay?.fridayClipOverride != nil,
                                     onApply: onApplyFridayOverride,
                                     onSwap: onSwapFridayClip,
-                                    onRecutWithAI: onRecutFridayWithAI
+                                    onRecutWithAI: onRecutFridayWithAI,
+                                    titleCardMuted: postingDay?.titleCardMuted ?? false,
+                                    onToggleTitleCard: onToggleFridayTitleCard
                                 )
                                 if fridayRegenStartedAt != nil {
                                     PipelineStatusView(startedAt: fridayRegenStartedAt)
@@ -2911,6 +2931,10 @@ private struct FridayClipEditor: View {
     var onApply: (([ReelClipOverride]) -> Void)? = nil
     var onSwap: ((String) -> Void)? = nil
     var onRecutWithAI: (() -> Void)? = nil
+    /// Title card overlay (plan #148, Phase 3): on by default per event,
+    /// toggled off here without re-invoking Claude.
+    var titleCardMuted: Bool = false
+    var onToggleTitleCard: (() -> Void)? = nil
 
     @State private var cropPopoverIndex: Int? = nil
 
@@ -2980,13 +3004,22 @@ private struct FridayClipEditor: View {
                     }
                 }
 
-                if hasOverride, let onRecutWithAI {
-                    Button("Re-cut with AI", action: onRecutWithAI)
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
-                        .padding(.top, Spacing.xs)
+                HStack(spacing: Spacing.md) {
+                    if let onToggleTitleCard {
+                        Button(TitleCardToggleLabel.text(muted: titleCardMuted), action: onToggleTitleCard)
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.warmMid)
+                    }
+
+                    if hasOverride, let onRecutWithAI {
+                        Button("Re-cut with AI", action: onRecutWithAI)
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.warmMid)
+                    }
                 }
+                .padding(.top, Spacing.xs)
             }
         )
     }

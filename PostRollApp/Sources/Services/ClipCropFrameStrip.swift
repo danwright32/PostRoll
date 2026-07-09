@@ -17,3 +17,11 @@ enum ClipCropFrameStrip {
         x != 0 || y != 0
     }
 }
+
+/// Title card overlay (plan #148, Phase 3): drives the review screen's
+/// on/off toggle button label.
+enum TitleCardToggleLabel {
+    static func text(muted: Bool) -> String {
+        muted ? "Title card: Off" : "Title card: On"
+    }
+}

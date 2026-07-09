@@ -85,6 +85,27 @@ final class FridayManifestClipsTests: XCTestCase {
         XCTAssertEqual(friday?["clip_audio_muted"] as? Bool, true)
     }
 
+    // Title card overlay (plan #148, Phase 3): titleCardMuted must reach
+    // Python the same way clip_audio_muted already does, or the per-event
+    // off toggle silently no-ops.
+    func testBuildMediaManifestIncludesTitleCardMutedForFriday() async {
+        var day = clipsOnlyFriday()
+        day.titleCardMuted = true
+        let event = makeEvent(friday: day)
+        let manifest = await PythonBridge.shared.buildMediaManifest(event: event)
+
+        let friday = (manifest["days"] as? [String: Any])?["friday"] as? [String: Any]
+        XCTAssertEqual(friday?["title_card_muted"] as? Bool, true)
+    }
+
+    func testBuildMediaManifestDefaultsTitleCardMutedToFalse() async {
+        let event = makeEvent(friday: clipsOnlyFriday())
+        let manifest = await PythonBridge.shared.buildMediaManifest(event: event)
+
+        let friday = (manifest["days"] as? [String: Any])?["friday"] as? [String: Any]
+        XCTAssertEqual(friday?["title_card_muted"] as? Bool, false)
+    }
+
     // MARK: - buildManifest (generate_week.py / caption pipeline)
 
     func testBuildManifestIncludesFridayWithClipsOnly() async throws {

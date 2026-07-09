@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
+from ..media.generate_title_card import apply_title_card, TitleCardError
 from .audio_tags import resolve_reel_audio
 
 
@@ -71,13 +72,30 @@ def render_friday_override(manifest: dict[str, Any], output_path: str | Path) ->
         pieces=manifest.get("pieces", []),
     )
 
-    return render_clip_reel(
+    reel_path = render_clip_reel(
         render_selections,
         output_path,
         audio_path=music_path,
         duck_gain_db=float(manifest.get("duck_gain_db", DEFAULT_DUCK_GAIN_DB)),
         mute_clip_audio=bool(manifest.get("mute_clip_audio", False)),
     )
+
+    # Title card overlay (plan #148, Phase 3): same on-by-default policy as
+    # generate_media.py's initial render, so a manual reorder/trim edit
+    # doesn't silently drop or restore it. A finishing touch, not the
+    # product itself, so a failure here must never cost the reel already
+    # rendered above.
+    if not bool(manifest.get("title_card_muted", False)):
+        titled_path = f"{reel_path}.titled.tmp"
+        try:
+            apply_title_card(reel_path, manifest.get("event_name", ""), titled_path)
+            Path(titled_path).replace(reel_path)
+        except TitleCardError as e:
+            print(f"[render_friday_override] title card skipped: {e}", flush=True)
+        finally:
+            Path(titled_path).unlink(missing_ok=True)
+
+    return reel_path
 
 
 def _main() -> int:

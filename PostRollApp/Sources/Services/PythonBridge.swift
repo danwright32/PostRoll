@@ -492,6 +492,8 @@ actor PythonBridge {
         var manifest = Self.buildFridayOverrideManifest(override: override, originalPlan: fri.fridayClipPlan)
         manifest["duck_gain_db"] = fri.fridayAudioDuckDB
         manifest["mute_clip_audio"] = fri.fridayAudioMuted
+        manifest["title_card_muted"] = fri.titleCardMuted
+        manifest["event_name"] = event.name
         manifest["shoot_type"] = event.shootType.pythonValue
         manifest["pieces"] = (event.ocrResult?.pieces ?? []).map {
             ["title": $0.title, "composer": $0.composer]
@@ -588,6 +590,7 @@ actor PythonBridge {
                 if !pd.clipPaths.isEmpty { entry["clips"] = pd.clipPaths.map { $0.path } }
                 entry["clip_duck_db"] = pd.fridayAudioDuckDB
                 entry["clip_audio_muted"] = pd.fridayAudioMuted
+                entry["title_card_muted"] = pd.titleCardMuted
             default:
                 break
             }

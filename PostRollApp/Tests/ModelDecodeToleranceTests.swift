@@ -68,6 +68,15 @@ final class ModelDecodeToleranceTests: XCTestCase {
         XCTAssertFalse(day.fridayAudioMuted)
     }
 
+    // Title card overlay (plan #148, Phase 3): on by default (Dan's call,
+    // 2026-07-09), so an event saved before this feature existed, with no
+    // key at all, must decode as NOT muted (title card shows).
+    func testPostingDayToleratesMissingTitleCardMutedField() throws {
+        let json = Data(#"{"day": "friday", "photoPaths": []}"#.utf8)
+        let day = try JSONDecoder().decode(PostingDay.self, from: json)
+        XCTAssertFalse(day.titleCardMuted)
+    }
+
     func testReelClipOverrideToleratesMissingKeys() throws {
         let json = Data(#"{"clip_path": "/x.mov"}"#.utf8)
         let override = try JSONDecoder().decode(ReelClipOverride.self, from: json)

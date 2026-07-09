@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -94,6 +95,76 @@ def test_friday_with_usable_clips_produces_reel_and_clip_plan(tmp_path, monkeypa
     # Reel replaces before/after/story for this day, not alongside it.
     assert "before_after" not in friday_result
     assert "story" not in friday_result
+
+
+# ===================================================================
+# Title card overlay (plan #148, Phase 3): applied by default after the
+# reel renders, skippable per event via title_card_muted.
+# ===================================================================
+
+@needs_ffmpeg
+def test_title_card_applied_by_default(tmp_path, monkeypatch):
+    clips = _make_usable_clips(tmp_path)
+    monkeypatch.setattr(gm_mod, "select_reel_clips", _fake_select_reel_clips)
+    monkeypatch.setattr(gm_mod, "resolve_reel_audio", lambda audio_file, **kwargs: None)
+
+    captured = {}
+
+    def fake_apply_title_card(video_path, event_name, output_path, **kwargs):
+        captured["event_name"] = event_name
+        Path(output_path).write_bytes(Path(video_path).read_bytes())
+        return str(output_path)
+
+    monkeypatch.setattr(gm_mod, "apply_title_card", fake_apply_title_card)
+
+    manifest = _base_manifest(clips, tmp_path)
+    result = gm_mod.generate_media(manifest, tmp_path / "out")
+
+    assert "friday" not in result.get("errors", {})
+    assert captured.get("event_name") == "Test Show"
+
+
+@needs_ffmpeg
+def test_title_card_skipped_when_muted(tmp_path, monkeypatch):
+    clips = _make_usable_clips(tmp_path)
+    monkeypatch.setattr(gm_mod, "select_reel_clips", _fake_select_reel_clips)
+    monkeypatch.setattr(gm_mod, "resolve_reel_audio", lambda audio_file, **kwargs: None)
+
+    called = {"count": 0}
+
+    def fake_apply_title_card(video_path, event_name, output_path, **kwargs):
+        called["count"] += 1
+        return str(output_path)
+
+    monkeypatch.setattr(gm_mod, "apply_title_card", fake_apply_title_card)
+
+    manifest = _base_manifest(clips, tmp_path, title_card_muted=True)
+    result = gm_mod.generate_media(manifest, tmp_path / "out")
+
+    assert "friday" not in result.get("errors", {})
+    assert called["count"] == 0
+
+
+@needs_ffmpeg
+def test_title_card_failure_does_not_fail_the_whole_reel(tmp_path, monkeypatch):
+    # The title card is a finishing touch, not the product: if it fails for
+    # any reason, the reel Stage 1/2/3 already built must still ship.
+    clips = _make_usable_clips(tmp_path)
+    monkeypatch.setattr(gm_mod, "select_reel_clips", _fake_select_reel_clips)
+    monkeypatch.setattr(gm_mod, "resolve_reel_audio", lambda audio_file, **kwargs: None)
+
+    def failing_apply_title_card(video_path, event_name, output_path, **kwargs):
+        raise gm_mod.TitleCardError("boom")
+
+    monkeypatch.setattr(gm_mod, "apply_title_card", failing_apply_title_card)
+
+    manifest = _base_manifest(clips, tmp_path)
+    result = gm_mod.generate_media(manifest, tmp_path / "out")
+
+    assert "friday" not in result.get("errors", {})
+    friday_result = result["friday"]
+    assert friday_result["reel"].endswith(".mp4")
+    assert Path(friday_result["reel"]).exists()
 
 
 @needs_ffmpeg
