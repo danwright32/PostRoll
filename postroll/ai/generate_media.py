@@ -72,6 +72,7 @@ from ..media.generate_collage import generate_collage
 from ..media.generate_before_after import generate_before_after
 from ..media.clip_scorer import score_clips, InsufficientClipsError
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
+from ..media.generate_title_card import apply_title_card, TitleCardError
 from .audio_tags import resolve_reel_audio
 from .select_reel_clips import select_reel_clips
 from .select_cover_photo import (
@@ -567,6 +568,21 @@ def generate_media(
                         duck_gain_db=duck_gain_db,
                         mute_clip_audio=mute_clip_audio,
                     )
+
+                    # Title card overlay (plan #148, Phase 3): on by default,
+                    # skippable per event via title_card_muted. A finishing
+                    # touch, not the product itself, so a failure here must
+                    # never cost the reel Stage 1/2/3 already built.
+                    if not bool(day_info.get("title_card_muted", False)):
+                        titled_path = str(day_dir / "reel_clip_titled.mp4.tmp")
+                        try:
+                            apply_title_card(reel_path, event, titled_path)
+                            Path(titled_path).replace(reel_path)
+                        except TitleCardError as e:
+                            print(f"[generate_media] friday: title card skipped: {e}", flush=True)
+                        finally:
+                            Path(titled_path).unlink(missing_ok=True)
+
                     day_result["reel"] = reel_path
                     # Translated to Swift's FridayClipPlan field names
                     # (transition_after -> transition) so PythonBridge.swift

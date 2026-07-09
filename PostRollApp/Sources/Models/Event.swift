@@ -270,6 +270,7 @@ extension PostingDay {
         fridayClipOverride   = try  c.decodeIfPresent([ReelClipOverride].self,        forKey: .fridayClipOverride)
         fridayAudioDuckDB    = try  c.decodeIfPresent(Double.self,                    forKey: .fridayAudioDuckDB)   ?? -15.0
         fridayAudioMuted     = try  c.decodeIfPresent(Bool.self,                      forKey: .fridayAudioMuted)    ?? false
+        titleCardMuted       = try  c.decodeIfPresent(Bool.self,                      forKey: .titleCardMuted)      ?? false
         coverPick            = try  c.decodeIfPresent(CoverPick.self,                 forKey: .coverPick)
         coverOverride        = try  c.decodeIfPresent(String.self,                    forKey: .coverOverride)
     }
@@ -694,6 +695,10 @@ struct PostingDay: Codable, Hashable {
     // event since some weeks he wants clip audio fully muted instead.
     var fridayAudioDuckDB: Double = -15.0
     var fridayAudioMuted: Bool = false
+    // Title card overlay (plan #148, Phase 3): the event name as an
+    // animated reveal on the reel's opening seconds. On by default (Dan's
+    // call, 2026-07-09); this only ever turns it off for one event.
+    var titleCardMuted: Bool = false
     // Instagram grid cover image (Thursday scroll reel + Friday auto-cut clip
     // reel only). Claude's pick; nil = not yet generated. Same nil-means-AI /
     // non-nil-means-user override semantics as fridayClipPlan/fridayClipOverride.
