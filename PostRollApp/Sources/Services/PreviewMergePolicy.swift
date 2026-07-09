@@ -28,4 +28,31 @@ enum PreviewMergePolicy {
         for (day, paths) in fresh { merged[day] = paths }
         return merged
     }
+
+    /// Attempts to satisfy one day's exported assets purely from already-
+    /// rendered previews (no Python regen): every listed asset file must
+    /// still exist on disk. Generic over asset key by construction: a
+    /// "cover" entry (#141's Instagram grid cover images) copies exactly
+    /// like "reel", "story", or any other key, no exclusions needed.
+    /// Extracted from ExportManager so it's testable with real files
+    /// instead of Task/AppState/security-scoped URLs.
+    @discardableResult
+    static func copyPreviewAssetsIfComplete(
+        assets: [String: String]?,
+        to dayDir: URL,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard let assets, !assets.isEmpty,
+              assets.values.allSatisfy({ fileManager.fileExists(atPath: $0) })
+        else { return false }
+
+        try? fileManager.createDirectory(at: dayDir, withIntermediateDirectories: true)
+        for (_, srcPath) in assets {
+            let src = URL(fileURLWithPath: srcPath)
+            let dest = dayDir.appendingPathComponent(src.lastPathComponent)
+            try? fileManager.removeItem(at: dest)
+            _ = try? fileManager.copyItem(at: src, to: dest)
+        }
+        return true
+    }
 }

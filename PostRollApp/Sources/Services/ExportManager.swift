@@ -135,18 +135,11 @@ final class ExportManager {
                 }()
 
                 if !hasUnflattenedEdits,
-                   let assets = previewPaths[day.rawValue],
-                   !assets.isEmpty,
-                   assets.values.allSatisfy({ FileManager.default.fileExists(atPath: $0) }) {
-                    // All preview files exist — copy directly, no Python needed.
-                    let dayDir = folder.appendingPathComponent(day.folderName)
-                    try? FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
-                    for (_, srcPath) in assets {
-                        let src = URL(fileURLWithPath: srcPath)
-                        let dest = dayDir.appendingPathComponent(src.lastPathComponent)
-                        try? FileManager.default.removeItem(at: dest)
-                        _ = try? FileManager.default.copyItem(at: src, to: dest)
-                    }
+                   PreviewMergePolicy.copyPreviewAssetsIfComplete(
+                       assets: previewPaths[day.rawValue],
+                       to: folder.appendingPathComponent(day.folderName)
+                   ) {
+                    // All preview files existed and were copied directly, no Python needed.
                 } else {
                     daysNeedingPython.append(day.rawValue)
                 }
