@@ -64,4 +64,20 @@ final class FridayOverrideManifestTests: XCTestCase {
         XCTAssertEqual(selections?.first?["trim_in"] as? Double, 1.5)
         XCTAssertEqual(selections?.first?["trim_out"] as? Double, 4.25)
     }
+
+    // Per-shot crop (plan #148, Phase 2): a manual reorder/trim edit must
+    // not silently drop the AI's crop choice, since ReelClipOverride now
+    // carries cropX/cropY over from the original plan.
+    func testCropValuesPassThrough() {
+        let override = [
+            ReelClipOverride(clipPath: "/a.mov", order: 0, included: true, trimIn: 1, trimOut: 4,
+                             cropX: 0.4, cropY: -0.2),
+        ]
+
+        let manifest = PythonBridge.buildFridayOverrideManifest(override: override, originalPlan: nil)
+        let selections = manifest["selections"] as? [[String: Any]]
+
+        XCTAssertEqual(selections?.first?["crop_x"] as? Double, 0.4)
+        XCTAssertEqual(selections?.first?["crop_y"] as? Double, -0.2)
+    }
 }

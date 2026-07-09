@@ -155,18 +155,32 @@ def _longest_valid_run(sharpness: list[float], motion: list[float]) -> tuple[int
     return best
 
 
+def _unusable(path: str, duration: float) -> dict:
+    return {
+        "path": path, "duration": duration, "usable": False, "score": 0.0,
+        "valid_trim": None, "motion_score": None,
+    }
+
+
 def score_clip(path: str | Path) -> dict:
     """Score one clip. Returns
-    {path, duration, usable, score, valid_trim: (in, out) | None}."""
+    {path, duration, usable, score, valid_trim: (in, out) | None,
+    motion_score: float | None}.
+
+    motion_score is the mean frame-to-frame pixel delta across the usable
+    (valid_trim) window: how much on-screen movement Stage 2's per-shot
+    crop gate (crop_allowed in select_reel_clips.py) treats as too risky
+    for a static crop to track. None whenever the clip has no valid_trim,
+    since there's no window to measure motion within."""
     path = Path(path)
     duration = clip_duration(path)
     if duration is None:
-        return {"path": str(path), "duration": 0.0, "usable": False, "score": 0.0, "valid_trim": None}
+        return _unusable(str(path), 0.0)
 
     times = _sample_times(duration, SAMPLE_COUNT)
     frames = _sample_frames(path, duration, SAMPLE_COUNT)
     if len(frames) < 2:
-        return {"path": str(path), "duration": duration, "usable": False, "score": 0.0, "valid_trim": None}
+        return _unusable(str(path), duration)
     times = times[:len(frames)]
 
     sharpness = [_sharpness(f) for f in frames]
@@ -174,16 +188,19 @@ def score_clip(path: str | Path) -> dict:
 
     run = _longest_valid_run(sharpness, motion)
     if run is None:
-        return {"path": str(path), "duration": duration, "usable": False, "score": 0.0, "valid_trim": None}
+        return _unusable(str(path), duration)
 
     start_idx, end_idx = run
     trim_in = times[start_idx]
     trim_out = times[end_idx]
     if trim_out - trim_in < MIN_VALID_TRIM_SECONDS:
-        return {"path": str(path), "duration": duration, "usable": False, "score": 0.0, "valid_trim": None}
+        return _unusable(str(path), duration)
 
     window_sharpness = sharpness[start_idx:end_idx + 1]
     score = sum(window_sharpness) / len(window_sharpness)
+
+    window_motion = motion[start_idx:end_idx]
+    motion_score = sum(window_motion) / len(window_motion) if window_motion else 0.0
 
     return {
         "path": str(path),
@@ -191,6 +208,7 @@ def score_clip(path: str | Path) -> dict:
         "usable": True,
         "score": score,
         "valid_trim": (trim_in, trim_out),
+        "motion_score": motion_score,
     }
 
 

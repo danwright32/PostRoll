@@ -371,7 +371,8 @@ extension PostingDay {
         guard let plan = fridayClipPlan else { return [] }
         return plan.selections.enumerated().map { index, sel in
             ReelClipOverride(clipPath: sel.clipPath, order: index, included: true,
-                             trimIn: sel.trimIn, trimOut: sel.trimOut)
+                             trimIn: sel.trimIn, trimOut: sel.trimOut,
+                             cropX: sel.cropX, cropY: sel.cropY)
         }
     }
 
@@ -486,29 +487,46 @@ struct FridayClipSelection: Codable, Hashable, Identifiable {
     var trimIn: Double
     var trimOut: Double
     var transition: ClipTransition
+    /// Per-shot crop (plan #148, Phase 2): same [-1, 1] convention as
+    /// CropOffset, 0 = centered. Already server-side clamped and gated in
+    /// select_reel_clips.apply_selection, so cropConfidence here reflects
+    /// the gate's final decision, not necessarily Claude's raw claim.
+    var cropX: Double
+    var cropY: Double
+    var cropConfidence: String
 
     enum CodingKeys: String, CodingKey {
         case clipPath = "clip_path"
         case trimIn = "trim_in"
         case trimOut = "trim_out"
         case transition
+        case cropX = "crop_x"
+        case cropY = "crop_y"
+        case cropConfidence = "crop_confidence"
     }
 
-    init(clipPath: String, trimIn: Double, trimOut: Double, transition: ClipTransition) {
+    init(clipPath: String, trimIn: Double, trimOut: Double, transition: ClipTransition,
+         cropX: Double = 0, cropY: Double = 0, cropConfidence: String = "low") {
         self.clipPath = clipPath
         self.trimIn = trimIn
         self.trimOut = trimOut
         self.transition = transition
+        self.cropX = cropX
+        self.cropY = cropY
+        self.cropConfidence = cropConfidence
     }
 
     // Persisted inside events.json via PostingDay.fridayClipPlan: every field
     // must decodeIfPresent or a schema change wipes saved events.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        clipPath   = try c.decodeIfPresent(String.self, forKey: .clipPath)   ?? ""
-        trimIn     = try c.decodeIfPresent(Double.self, forKey: .trimIn)     ?? 0
-        trimOut    = try c.decodeIfPresent(Double.self, forKey: .trimOut)    ?? 0
-        transition = try c.decodeIfPresent(ClipTransition.self, forKey: .transition) ?? .cut
+        clipPath       = try c.decodeIfPresent(String.self, forKey: .clipPath)   ?? ""
+        trimIn         = try c.decodeIfPresent(Double.self, forKey: .trimIn)     ?? 0
+        trimOut        = try c.decodeIfPresent(Double.self, forKey: .trimOut)    ?? 0
+        transition     = try c.decodeIfPresent(ClipTransition.self, forKey: .transition) ?? .cut
+        cropX          = try c.decodeIfPresent(Double.self, forKey: .cropX) ?? 0
+        cropY          = try c.decodeIfPresent(Double.self, forKey: .cropY) ?? 0
+        cropConfidence = try c.decodeIfPresent(String.self, forKey: .cropConfidence) ?? "low"
     }
 }
 
@@ -572,6 +590,12 @@ struct ReelClipOverride: Codable, Hashable, Identifiable {
     var included: Bool
     var trimIn: Double
     var trimOut: Double
+    /// Per-shot crop (plan #148, Phase 2): carried over from the AI's
+    /// FridayClipSelection (via PostingDay.effectiveFridayOverride) so a
+    /// manual reorder/trim edit doesn't silently drop the AI's crop
+    /// choice, and user-adjustable from the crop editor thereafter.
+    var cropX: Double
+    var cropY: Double
 
     enum CodingKeys: String, CodingKey {
         case clipPath = "clip_path"
@@ -579,14 +603,19 @@ struct ReelClipOverride: Codable, Hashable, Identifiable {
         case included
         case trimIn = "trim_in"
         case trimOut = "trim_out"
+        case cropX = "crop_x"
+        case cropY = "crop_y"
     }
 
-    init(clipPath: String, order: Int, included: Bool, trimIn: Double, trimOut: Double) {
+    init(clipPath: String, order: Int, included: Bool, trimIn: Double, trimOut: Double,
+         cropX: Double = 0, cropY: Double = 0) {
         self.clipPath = clipPath
         self.order = order
         self.included = included
         self.trimIn = trimIn
         self.trimOut = trimOut
+        self.cropX = cropX
+        self.cropY = cropY
     }
 
     // Persisted inside events.json via PostingDay.fridayClipOverride: every
@@ -598,6 +627,8 @@ struct ReelClipOverride: Codable, Hashable, Identifiable {
         included = try c.decodeIfPresent(Bool.self,   forKey: .included) ?? true
         trimIn   = try c.decodeIfPresent(Double.self, forKey: .trimIn)   ?? 0
         trimOut  = try c.decodeIfPresent(Double.self, forKey: .trimOut)  ?? 0
+        cropX    = try c.decodeIfPresent(Double.self, forKey: .cropX)    ?? 0
+        cropY    = try c.decodeIfPresent(Double.self, forKey: .cropY)    ?? 0
     }
 }
 

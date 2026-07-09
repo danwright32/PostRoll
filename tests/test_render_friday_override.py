@@ -54,6 +54,45 @@ def test_renders_reel_from_override_selections_without_claude(tmp_path):
     mock_resolve.assert_called_once()
 
 
+# ===================================================================
+# Crop fields threading (issue #151): a manual override must not silently
+# drop the AI's crop choice just because it only carries clip path, trim,
+# and transition through the rest of this manifest.
+# ===================================================================
+
+def test_crop_fields_from_manifest_pass_through_to_render(tmp_path):
+    manifest = {
+        "selections": [
+            {"clip_path": "/clips/a.mov", "trim_in": 0.0, "trim_out": 3.0,
+             "transition": "cut", "crop_x": 0.4, "crop_y": -0.2},
+        ],
+    }
+
+    with patch("postroll.ai.render_friday_override.resolve_reel_audio", return_value=None), \
+         patch("postroll.ai.render_friday_override.render_clip_reel") as mock_render:
+        render_friday_override(manifest, tmp_path / "out.mp4")
+
+    rendered_selections = mock_render.call_args[0][0]
+    assert rendered_selections[0]["crop_x"] == 0.4
+    assert rendered_selections[0]["crop_y"] == -0.2
+
+
+def test_missing_crop_fields_default_to_centered(tmp_path):
+    manifest = {
+        "selections": [
+            {"clip_path": "/clips/a.mov", "trim_in": 0.0, "trim_out": 3.0, "transition": "cut"},
+        ],
+    }
+
+    with patch("postroll.ai.render_friday_override.resolve_reel_audio", return_value=None), \
+         patch("postroll.ai.render_friday_override.render_clip_reel") as mock_render:
+        render_friday_override(manifest, tmp_path / "out.mp4")
+
+    rendered_selections = mock_render.call_args[0][0]
+    assert rendered_selections[0]["crop_x"] == 0.0
+    assert rendered_selections[0]["crop_y"] == 0.0
+
+
 @needs_ffmpeg
 def test_user_provided_audio_file_passed_through(tmp_path):
     clip_a = tmp_path / "a.mp4"

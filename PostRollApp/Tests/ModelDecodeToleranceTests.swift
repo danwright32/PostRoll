@@ -76,6 +76,8 @@ final class ModelDecodeToleranceTests: XCTestCase {
         XCTAssertTrue(override.included)
         XCTAssertEqual(override.trimIn, 0)
         XCTAssertEqual(override.trimOut, 0)
+        XCTAssertEqual(override.cropX, 0)
+        XCTAssertEqual(override.cropY, 0)
     }
 
     func testFridayClipPlanToleratesMissingKeys() throws {
@@ -92,6 +94,19 @@ final class ModelDecodeToleranceTests: XCTestCase {
         XCTAssertEqual(selection.trimIn, 0)
         XCTAssertEqual(selection.trimOut, 0)
         XCTAssertEqual(selection.transition, .cut)
+        XCTAssertEqual(selection.cropX, 0)
+        XCTAssertEqual(selection.cropY, 0)
+        XCTAssertEqual(selection.cropConfidence, "low")
+    }
+
+    // Per-shot crop (plan #148, Phase 2): Python's snake_case crop fields
+    // must decode onto the Swift camelCase properties.
+    func testFridayClipSelectionDecodesCropFieldsFromPython() throws {
+        let json = Data(#"{"clip_path": "/x.mov", "crop_x": 0.4, "crop_y": -0.25, "crop_confidence": "high"}"#.utf8)
+        let selection = try JSONDecoder().decode(FridayClipSelection.self, from: json)
+        XCTAssertEqual(selection.cropX, 0.4)
+        XCTAssertEqual(selection.cropY, -0.25)
+        XCTAssertEqual(selection.cropConfidence, "high")
     }
 
     // Instagram grid cover images (#139/#140): a PostingDay saved by a build

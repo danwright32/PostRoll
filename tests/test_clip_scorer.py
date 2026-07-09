@@ -163,6 +163,34 @@ def test_score_clip_result_shape(tmp_path):
 
 
 @needs_ffmpeg
+def test_usable_clip_exposes_a_motion_score(tmp_path):
+    # Plan #148 Phase 2 (issue #151): Stage 2's crop gate needs the clip's
+    # motion reading, so it must ride along on score_clip's normal output
+    # rather than requiring a second, separate scoring pass.
+    clip = tmp_path / "gradient.mp4"
+    _make_gradient(clip)
+
+    result = score_clip(clip)
+
+    assert isinstance(result["motion_score"], float)
+    assert result["motion_score"] >= 0.0
+
+
+@needs_ffmpeg
+def test_unusable_clip_has_no_motion_score(tmp_path):
+    # No valid_trim window means no motion was ever measured within one;
+    # motion_score must come back None, not a stale or zero placeholder
+    # that could be mistaken for "measured and calm" by the crop gate.
+    clip = tmp_path / "solid.mp4"
+    _make_solid(clip)
+
+    result = score_clip(clip)
+
+    assert result["usable"] is False
+    assert result["motion_score"] is None
+
+
+@needs_ffmpeg
 def test_score_clips_raises_when_fewer_than_minimum_usable(tmp_path):
     good = tmp_path / "good.mp4"
     _make_gradient(good)
