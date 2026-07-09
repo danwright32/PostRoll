@@ -176,6 +176,106 @@ def test_meeting_target_duration_leaves_rationale_unannotated():
 
 
 # ===================================================================
+# Phase 0 crop plumbing (issue #149): crop_x / crop_y / crop_confidence
+# on every selection, defaulting to today's centered crop. No behavior
+# change yet; later phases build the prompt, gate wiring, and rendering
+# on these fields.
+# ===================================================================
+
+def test_crop_fields_default_to_centered_when_missing():
+    # Today's responses carry no crop fields at all: every selection must
+    # still come back with the centered-crop defaults, never a KeyError
+    # downstream.
+    data = {"selections": [{"clip_index": 0, "trim_in": 1.0, "trim_out": 6.0, "transition_after": "cut"}]}
+
+    result = apply_selection(data, CANDIDATES)
+
+    sel = result["selections"][0]
+    assert sel["crop_x"] == 0.0
+    assert sel["crop_y"] == 0.0
+    assert sel["crop_confidence"] == "low"
+
+
+def test_valid_crop_fields_pass_through():
+    data = {"selections": [{
+        "clip_index": 0, "trim_in": 1.0, "trim_out": 6.0, "transition_after": "cut",
+        "crop_x": 0.4, "crop_y": -0.25, "crop_confidence": "high",
+    }]}
+
+    result = apply_selection(data, CANDIDATES)
+
+    sel = result["selections"][0]
+    assert sel["crop_x"] == 0.4
+    assert sel["crop_y"] == -0.25
+    assert sel["crop_confidence"] == "high"
+
+
+def test_out_of_range_crop_values_are_clamped():
+    # CropOffset convention (Event.swift): x/y live in [-1, 1]. A value
+    # outside that range is clamped, same policy as trim windows.
+    data = {"selections": [{
+        "clip_index": 0, "trim_in": 1.0, "trim_out": 6.0, "transition_after": "cut",
+        "crop_x": 3.0, "crop_y": -9.0, "crop_confidence": "high",
+    }]}
+
+    result = apply_selection(data, CANDIDATES)
+
+    sel = result["selections"][0]
+    assert sel["crop_x"] == 1.0
+    assert sel["crop_y"] == -1.0
+
+
+def test_malformed_crop_values_default_safely_without_failing_selection():
+    # Garbage crop data must never fail the whole selection: the crop is
+    # an enhancement, the cut itself is the product.
+    data = {"selections": [{
+        "clip_index": 0, "trim_in": 1.0, "trim_out": 6.0, "transition_after": "cut",
+        "crop_x": "left", "crop_y": None, "crop_confidence": "medium",
+    }]}
+
+    result = apply_selection(data, CANDIDATES)
+
+    sel = result["selections"][0]
+    assert sel["crop_x"] == 0.0
+    assert sel["crop_y"] == 0.0
+    assert sel["crop_confidence"] == "low"
+
+
+def test_non_string_crop_confidence_defaults_to_low():
+    data = {"selections": [{
+        "clip_index": 0, "trim_in": 1.0, "trim_out": 6.0, "transition_after": "cut",
+        "crop_confidence": 42,
+    }]}
+
+    result = apply_selection(data, CANDIDATES)
+
+    assert result["selections"][0]["crop_confidence"] == "low"
+
+
+# ===================================================================
+# Hard motion gate (issue #149): the code-level check that a tight crop
+# is only ever attempted on a calm shot Claude is confident about.
+# Nothing calls this yet (Phase 2 wires it up); Phase 0 fixes the rule.
+# ===================================================================
+
+def test_crop_allowed_requires_high_confidence_and_low_motion():
+    from postroll.ai.select_reel_clips import MAX_CROP_MOTION, crop_allowed
+
+    assert crop_allowed("high", 10.0) is True
+    assert crop_allowed("low", 10.0) is False
+    assert crop_allowed("high", MAX_CROP_MOTION) is False
+    assert crop_allowed("high", MAX_CROP_MOTION + 5.0) is False
+
+
+def test_crop_allowed_denies_when_motion_score_is_unknown():
+    # A clip with no motion score (older Stage 1 output, or a scoring
+    # failure) must fail closed: no data, no tight crop.
+    from postroll.ai.select_reel_clips import crop_allowed
+
+    assert crop_allowed("high", None) is False
+
+
+# ===================================================================
 # select_reel_clips: orchestration wrapper (run_json_prompt mocked)
 # ===================================================================
 
