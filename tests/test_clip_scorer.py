@@ -109,6 +109,28 @@ def test_gradient_clip_is_usable_with_a_valid_trim_spanning_the_clip(tmp_path):
 
 
 @needs_ffmpeg
+def test_high_resolution_sharp_clip_is_still_usable(tmp_path):
+    # Real bug found 2026-07-08 against 17 real 4K clips from an actual
+    # event: every one scored below MIN_SHARPNESS despite being genuinely
+    # in-focus. Root cause confirmed with this exact fixture: ffmpeg's own
+    # "good footage" test pattern, rendered at 4K instead of the original
+    # 320x240 SAMPLE_COUNT fixtures, ALSO fails. Edge-detection stddev
+    # scales with frame dimensions (a hard edge spans more pixels at higher
+    # resolution, so the per-pixel gradient reads lower), not perceptual
+    # sharpness, so scoring must normalize to a consistent size first.
+    clip = tmp_path / "gradient_4k.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+         "-i", "testsrc=s=3840x2160:d=3:r=10", str(clip)],
+        check=True,
+    )
+
+    result = score_clip(clip)
+
+    assert result["usable"] is True
+
+
+@needs_ffmpeg
 def test_score_clip_result_shape(tmp_path):
     clip = tmp_path / "gradient.mp4"
     _make_gradient(clip)

@@ -34,10 +34,20 @@ from PIL import Image, ImageChops, ImageFilter, ImageStat
 # How many frames to sample across a clip. Evenly spaced.
 SAMPLE_COUNT = 8
 
+# Frames are downscaled to this long edge before scoring. Edge-detection
+# stddev scales with frame dimensions, not perceptual sharpness (a hard edge
+# spans more pixels at higher resolution, so the per-pixel gradient reads
+# lower). Real bug found 2026-07-08 against 17 real 4K clips from an actual
+# event, every one scored below MIN_SHARPNESS despite being genuinely in
+# focus. MIN_SHARPNESS/MAX_COHERENT_MOTION below were calibrated against
+# fixtures at roughly this size; every clip must be normalized to it first
+# so a source's native resolution never changes its score.
+SCORING_LONG_EDGE = 320
+
 # A frame's edge-detection stddev below this reads as out-of-focus or blank.
-# Calibrated against synthetic fixtures: a solid-color frame lands ~15
-# (H.264 compression noise, not real detail), real detail (even a simple
-# moving-gradient test pattern) lands ~45+.
+# Calibrated against synthetic fixtures (after normalizing to SCORING_LONG_EDGE):
+# a solid-color frame lands ~15 (H.264 compression noise, not real detail),
+# real detail (even a simple moving-gradient test pattern) lands ~45+.
 MIN_SHARPNESS = 25.0
 
 # Mean pixel delta between consecutive frames above this reads as incoherent
@@ -88,6 +98,15 @@ def _extract_frame(path: Path, t: float, out: Path) -> bool:
     return proc.returncode == 0 and out.exists()
 
 
+def _normalize_for_scoring(frame: Image.Image) -> Image.Image:
+    """Downscale to SCORING_LONG_EDGE (never upscale) so a clip's native
+    resolution can't shift its sharpness/motion scores away from the basis
+    MIN_SHARPNESS/MAX_COHERENT_MOTION were calibrated against."""
+    frame = frame.copy()
+    frame.thumbnail((SCORING_LONG_EDGE, SCORING_LONG_EDGE), Image.LANCZOS)
+    return frame
+
+
 def _sample_frames(path: Path, duration: float, count: int) -> list[Image.Image]:
     frames: list[Image.Image] = []
     with tempfile.TemporaryDirectory(prefix="postroll-clipscore-") as tmp:
@@ -95,7 +114,8 @@ def _sample_frames(path: Path, duration: float, count: int) -> list[Image.Image]
         for i, t in enumerate(_sample_times(duration, count)):
             out = tmp_path / f"frame_{i:03d}.png"
             if _extract_frame(path, t, out):
-                frames.append(Image.open(out).convert("RGB").copy())
+                frame = Image.open(out).convert("RGB")
+                frames.append(_normalize_for_scoring(frame))
     return frames
 
 
