@@ -245,7 +245,11 @@ struct CaptionReviewView: View {
                                 panel.allowedContentTypes = [.image]
                                 panel.allowsMultipleSelection = false
                                 if panel.runModal() == .OK, let url = panel.url {
-                                    regenerateCover(day: day, overrideSource: url)
+                                    // Copy into app storage before persisting: a raw
+                                    // ~/Downloads or ~/Desktop URL loses read access on
+                                    // next launch (feedback_folder_import_skips_copy),
+                                    // the same discipline every other import path here follows.
+                                    regenerateCover(day: day, overrideSource: AppPaths.storedPhoto(url))
                                 }
                             } : nil
                         )
