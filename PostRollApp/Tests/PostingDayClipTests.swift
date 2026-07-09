@@ -97,6 +97,25 @@ final class PostingDayClipTests: XCTestCase {
         XCTAssertEqual(effective[1].order, 1)
     }
 
+    // Per-shot crop (plan #148, Phase 2): re-deriving the editor's starting
+    // point from the AI plan must carry the AI's crop choice over, or the
+    // very first render through the override path silently drops it.
+    func testEffectiveFridayOverrideCarriesCropFromPlan() {
+        var day = PostingDay(day: .friday)
+        day.fridayClipPlan = FridayClipPlan(
+            selections: [
+                FridayClipSelection(clipPath: "/a.mov", trimIn: 0, trimOut: 3, transition: .cut,
+                                     cropX: 0.4, cropY: -0.2, cropConfidence: "high"),
+            ],
+            rationale: "x"
+        )
+
+        let effective = day.effectiveFridayOverride
+
+        XCTAssertEqual(effective[0].cropX, 0.4)
+        XCTAssertEqual(effective[0].cropY, -0.2)
+    }
+
     func testEffectiveFridayOverrideUsesExistingOverrideOnceUserHasEdited() {
         var day = PostingDay(day: .friday)
         day.fridayClipPlan = FridayClipPlan(

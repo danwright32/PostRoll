@@ -533,6 +533,8 @@ actor PythonBridge {
                     "trim_in": entry.trimIn,
                     "trim_out": entry.trimOut,
                     "transition": transitionByPath[entry.clipPath] ?? "cut",
+                    "crop_x": entry.cropX,
+                    "crop_y": entry.cropY,
                 ]
             }
         return ["selections": selections]

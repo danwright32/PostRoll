@@ -56,6 +56,11 @@ def render_friday_override(manifest: dict[str, Any], output_path: str | Path) ->
             "trim_in": sel["trim_in"],
             "trim_out": sel["trim_out"],
             "transition_after": sel.get("transition", "cut"),
+            # Carried through so a manual reorder/trim edit doesn't silently
+            # drop the AI's crop choice (plan #148, Phase 2): this path
+            # used to only know clip path, trim, and transition.
+            "crop_x": sel.get("crop_x", 0.0),
+            "crop_y": sel.get("crop_y", 0.0),
         }
         for sel in selections
     ]

@@ -23,6 +23,11 @@ Usage:
         duck_gain_db=-15.0,
         mute_clip_audio=False,
     )
+
+Each selection may also carry crop_x/crop_y (plan #148, Phase 2): a
+per-clip crop offset in [-1, 1], already server-side clamped and gated in
+select_reel_clips.apply_selection. Missing or (0, 0) reproduces today's
+centered crop exactly.
 """
 
 from __future__ import annotations
@@ -72,15 +77,29 @@ def _xfade_offsets(durations: list[float], transition_durations: list[float]) ->
     return offsets
 
 
-def _scale_pad_filter() -> str:
-    # Fill the portrait canvas and crop the excess (centered) rather than
-    # fitting inside it with black bars: a landscape source should read as
-    # cropped-to-fill, matching every other template in this app (Dan's
-    # explicit feedback, 2026-07-08).
-    return (
-        f"scale={CANVAS_W}:{CANVAS_H}:force_original_aspect_ratio=increase,"
-        f"crop={CANVAS_W}:{CANVAS_H},setsar=1"
-    )
+def _scale_pad_filter(crop_x: float = 0.0, crop_y: float = 0.0) -> str:
+    """Fill the portrait canvas and crop the excess rather than fitting
+    inside it with black bars: a landscape source should read as
+    cropped-to-fill, matching every other template in this app (Dan's
+    explicit feedback, 2026-07-08).
+
+    crop_x/crop_y (plan #148, Phase 2) shift where that crop is taken from,
+    same [-1, 1] convention as the app's CropOffset (0 = centered, already
+    server-side clamped and gated in select_reel_clips.apply_selection
+    before ever reaching here). At (0, 0) this must produce the exact
+    "crop=W:H" string every reel rendered before this feature existed.
+    """
+    if crop_x == 0.0 and crop_y == 0.0:
+        crop = f"crop={CANVAS_W}:{CANVAS_H}"
+    else:
+        # ffmpeg crop's own default position is centered: (in_w-out_w)/2,
+        # (in_h-out_h)/2. An offset scales that same centered position by
+        # (1 + offset), so -1/+1 lands exactly on the left/right (or
+        # top/bottom) edge of the available slack and 0 reproduces center.
+        x_expr = f"(in_w-out_w)/2*(1+({crop_x:.4f}))"
+        y_expr = f"(in_h-out_h)/2*(1+({crop_y:.4f}))"
+        crop = f"crop={CANVAS_W}:{CANVAS_H}:{x_expr}:{y_expr}"
+    return f"scale={CANVAS_W}:{CANVAS_H}:force_original_aspect_ratio=increase,{crop},setsar=1"
 
 
 def _validate_selections(selections: list[dict]) -> None:
@@ -105,10 +124,12 @@ def _prepare_segment(sel: dict, out_path: Path, *, has_audio: bool) -> float:
     trim_out = float(sel["trim_out"])
     duration = trim_out - trim_in
 
+    crop_x = float(sel.get("crop_x") or 0.0)
+    crop_y = float(sel.get("crop_y") or 0.0)
     cmd = [
         "ffmpeg", "-y", "-loglevel", "error",
         "-ss", str(trim_in), "-to", str(trim_out), "-i", str(sel["clip_path"]),
-        "-vf", _scale_pad_filter(),
+        "-vf", _scale_pad_filter(crop_x, crop_y),
         "-r", "30",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
         "-pix_fmt", "yuv420p",

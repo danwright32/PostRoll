@@ -14,9 +14,12 @@ from pathlib import Path
 import pytest
 
 from postroll.media.render_clip_reel import (
+    CANVAS_H,
+    CANVAS_W,
     DEFAULT_DUCK_GAIN_DB,
     TRANSITION_DURATION,
     RenderClipReelError,
+    _scale_pad_filter,
     _xfade_offsets,
     render_clip_reel,
 )
@@ -54,6 +57,33 @@ def test_xfade_offsets_chains_multiple_joins():
     # First join offset: 4.0 - 0.4 = 3.6
     # Second join offset (cumulative): 3.6 + 3.0 - 0.4 = 6.2
     assert offsets == pytest.approx([3.6, 6.2])
+
+
+# ===================================================================
+# Per-clip crop offset (issue #151): the filter must reproduce today's
+# exact centered crop when no offset is given, and shift the crop window
+# when one is.
+# ===================================================================
+
+def test_scale_pad_filter_with_no_offset_matches_todays_centered_crop():
+    # Byte-identical to the pre-Phase-2 filter string: existing reels must
+    # render exactly as before when crop_x/crop_y are 0 (the default).
+    assert _scale_pad_filter(0.0, 0.0) == (
+        f"scale={CANVAS_W}:{CANVAS_H}:force_original_aspect_ratio=increase,"
+        f"crop={CANVAS_W}:{CANVAS_H},setsar=1"
+    )
+
+
+def test_scale_pad_filter_defaults_to_centered_when_called_with_no_args():
+    assert _scale_pad_filter() == _scale_pad_filter(0.0, 0.0)
+
+
+def test_scale_pad_filter_with_offset_shifts_the_crop_position():
+    filter_str = _scale_pad_filter(0.5, -0.5)
+    # A non-zero offset must produce an explicit x/y crop position, not
+    # the bare "crop=W:H" (which always centers).
+    assert f"crop={CANVAS_W}:{CANVAS_H}:" in filter_str
+    assert filter_str != _scale_pad_filter(0.0, 0.0)
 
 
 # ===================================================================
@@ -207,6 +237,53 @@ def test_default_duck_gain_is_minus_15_db():
 def test_transition_duration_is_short():
     # Short enough to read as a deliberate blend, not a lingering dissolve.
     assert 0 < TRANSITION_DURATION <= 0.5
+
+
+@needs_ffmpeg
+def test_crop_offset_shifts_which_side_of_a_landscape_source_is_kept(tmp_path):
+    # A landscape source twice canvas width, left half red / right half
+    # blue: a centered crop keeps a mix, crop_x=-1 must keep (mostly) the
+    # left/red side, crop_x=+1 must keep (mostly) the right/blue side.
+    # This is the real-render proof that a non-zero crop offset actually
+    # changes what's on screen, not just the filter string.
+    clip = tmp_path / "split.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+         "-i", f"color=c=red:s={320}x{240}", "-f", "lavfi", "-i", f"color=c=blue:s={320}x{240}",
+         "-filter_complex", "[0:v][1:v]hstack=inputs=2,loop=loop=-1:size=1:start=0",
+         "-t", "1.5", "-pix_fmt", "yuv420p", str(clip)],
+        check=True,
+    )
+
+    def _corner_colors(crop_x: float) -> tuple:
+        selections = [{"clip_path": str(clip), "trim_in": 0.0, "trim_out": 1.0,
+                        "transition_after": "cut", "crop_x": crop_x, "crop_y": 0.0}]
+        out = tmp_path / f"reel_{crop_x}.mp4"
+        render_clip_reel(selections, out)
+        frame = tmp_path / f"frame_{crop_x}.png"
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-ss", "0.5", "-i", str(out),
+             "-frames:v", "1", str(frame)], check=True,
+        )
+        from PIL import Image
+        img = Image.open(frame).convert("RGB")
+        return img.getpixel((5, img.size[1] // 2)), img.getpixel((img.size[0] - 5, img.size[1] // 2))
+
+    left_edge_at_neg1, right_edge_at_neg1 = _corner_colors(-1.0)
+    left_edge_at_pos1, right_edge_at_pos1 = _corner_colors(1.0)
+
+    def _is_red(px):
+        return px[0] > 150 and px[2] < 100
+
+    def _is_blue(px):
+        return px[2] > 150 and px[0] < 100
+
+    assert _is_red(left_edge_at_neg1) and _is_red(right_edge_at_neg1), (
+        "crop_x=-1 should keep the source's left (red) side across the frame"
+    )
+    assert _is_blue(left_edge_at_pos1) and _is_blue(right_edge_at_pos1), (
+        "crop_x=+1 should keep the source's right (blue) side across the frame"
+    )
 
 
 @needs_ffmpeg

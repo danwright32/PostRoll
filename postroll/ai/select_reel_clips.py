@@ -108,6 +108,17 @@ Selection guidance:
    than roughly a third of the total reel duration. A highlight reel reads
    as one long clip with two short add-ons is a miss, not a good cut.
 
+Framing: for each selection, also judge whether a tighter, zoomed-in crop
+(favoring a face or performer rather than the full wide scene) would read
+better than today's centered wide framing. Give crop_x and crop_y, both
+from -1 to 1 (0 = centered, -1 = full shift left/up, +1 = full shift
+right/down), and crop_confidence: "high" only when the subject stays in
+roughly the same place for the whole trim window (a locked-off or barely
+moving shot), "low" whenever the camera pans, the subject moves across
+the frame, or you're not sure. When in doubt, use "low" and crop_x=0,
+crop_y=0: a wrong wide guess just looks like today's reel, but a wrong
+tight guess can crop the subject half out of frame for the whole shot.
+
 Candidate clips ({count} total):
 {clip_list}
 
@@ -115,7 +126,8 @@ Return JSON ONLY, no markdown fences, no commentary:
 
 {{
   "selections": [
-    {{"clip_index": 2, "trim_in": 1.2, "trim_out": 4.8, "transition_after": "cut"}},
+    {{"clip_index": 2, "trim_in": 1.2, "trim_out": 4.8, "transition_after": "cut",
+      "crop_x": 0.0, "crop_y": -0.2, "crop_confidence": "high"}},
     ...
   ],
   "rationale": "one short sentence summarising the cut"
@@ -190,12 +202,15 @@ DURATION_SHORTFALL_TOLERANCE = 2.0
 # A tight crop is a static window over a possibly-moving shot: Claude's
 # self-reported confidence alone can't detect a pan (it judges from 3
 # stills), so a code-level gate also requires the clip's Stage 1 motion
-# score to sit below this. Real footage measured 13-66 mean pixel delta
-# across 17 clips from an actual event (2026-07-08, the same calibration
-# as clip_scorer.py's MAX_COHERENT_MOTION); 30.0 admits only the calm
-# bottom of that range. Phase 4's real-reel comparison against Dan's
-# CapCut baseline is the recalibration point.
-MAX_CROP_MOTION = 30.0
+# score (clip_scorer.py's score_clip, the mean frame-to-frame pixel delta
+# across the clip's valid_trim window) to sit below this. Directly
+# measured across the same 17 real clips used for MAX_COHERENT_MOTION
+# (2026-07-09): per-clip window averages ranged 22.7 to 57.6 (mean 39.6),
+# nowhere near the earlier 30.0 guess, which would have admitted only 2
+# of 17 real shots. Dan's call (2026-07-09) given that spread: 45.0, the
+# more permissive end, letting most real footage (12 of 17 in this
+# sample) qualify for a tight crop rather than rarely firing.
+MAX_CROP_MOTION = 45.0
 
 
 def crop_allowed(confidence: str, motion_score: object) -> bool:
@@ -291,6 +306,14 @@ def apply_selection(data: object, candidates: list[dict]) -> dict:
         crop_confidence = item.get("crop_confidence")
         if crop_confidence not in ("high", "low"):
             crop_confidence = "low"
+
+        # Hard gate (plan #148, Phase 0/2): a clamped, well-formed crop is
+        # still not trusted unless crop_allowed() agrees, using this
+        # clip's own Stage 1 motion score. Denied crops report the same
+        # centered/low state as never having been proposed at all, so a
+        # bad AI guess can only ever under-crop.
+        if not crop_allowed(crop_confidence, clip.get("motion_score")):
+            crop_x, crop_y, crop_confidence = 0.0, 0.0, "low"
 
         selections.append({
             "clip_path": clip["path"],

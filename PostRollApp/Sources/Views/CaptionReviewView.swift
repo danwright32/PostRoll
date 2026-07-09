@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import AVFoundation
 import UniformTypeIdentifiers
 
 struct CaptionReviewView: View {
@@ -2911,6 +2912,8 @@ private struct FridayClipEditor: View {
     var onSwap: ((String) -> Void)? = nil
     var onRecutWithAI: (() -> Void)? = nil
 
+    @State private var cropPopoverIndex: Int? = nil
+
     var body: some View {
         guard !entries.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(
@@ -2944,6 +2947,24 @@ private struct FridayClipEditor: View {
                             .strikethrough(!entry.included)
 
                         Spacer(minLength: 0)
+
+                        Button(entry.cropX == 0 && entry.cropY == 0 ? "Crop" : "Crop*") {
+                            cropPopoverIndex = index
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.roseGold)
+                        .popover(isPresented: Binding(
+                            get: { cropPopoverIndex == index },
+                            set: { if !$0 { cropPopoverIndex = nil } }
+                        )) {
+                            FridayClipCropPopover(
+                                clipPath: entry.clipPath,
+                                trimIn: entry.trimIn,
+                                trimOut: entry.trimOut,
+                                cropOffset: cropBinding(index)
+                            )
+                        }
 
                         Button(entry.included ? "Exclude" : "Include") { toggleIncluded(index) }
                             .buttonStyle(.plain)
@@ -2983,6 +3004,138 @@ private struct FridayClipEditor: View {
         var updated = entries
         updated[index].included.toggle()
         onApply?(updated)
+    }
+
+    /// (x, y) pair binding for one entry's crop offset: the popover edits
+    /// both fields together, so a single Binding<(Double, Double)> avoids
+    /// two separate onApply writes racing each other.
+    private func cropBinding(_ index: Int) -> Binding<(x: Double, y: Double)> {
+        Binding(
+            get: { (entries[index].cropX, entries[index].cropY) },
+            set: { newValue in
+                var updated = entries
+                updated[index].cropX = newValue.x
+                updated[index].cropY = newValue.y
+                onApply?(updated)
+            }
+        )
+    }
+}
+
+/// Per-clip crop editor (plan #148, Phase 2): a 3-frame strip (start,
+/// middle, end of the clip's trim window) so a crop that drifts off-subject
+/// partway through a shot is visible before it ships, plus x/y sliders
+/// mirroring PhotoAssignmentView's CropOffsetPopover for photos.
+private struct FridayClipCropPopover: View {
+    let clipPath: String
+    let trimIn: Double
+    let trimOut: Double
+    @Binding var cropOffset: (x: Double, y: Double)
+
+    @State private var frames: [NSImage?] = [nil, nil, nil]
+
+    private let previewW: Double = 72
+    private let previewH: Double = 128
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("ADJUST CROP")
+                .font(.system(size: 9, weight: .medium))
+                .tracking(1.0)
+                .foregroundStyle(Color.warmMid)
+
+            HStack(spacing: 6) {
+                ForEach(0..<3, id: \.self) { i in
+                    framePreview(frames[i])
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("HORIZONTAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(Color.warmMid)
+                HStack(spacing: 4) {
+                    Text("◄").font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                    Slider(value: $cropOffset.x, in: -1...1)
+                        .tint(Color.roseGold)
+                    Text("►").font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("VERTICAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(Color.warmMid)
+                HStack(spacing: 4) {
+                    Text("▲").font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                    Slider(value: $cropOffset.y, in: -1...1)
+                        .tint(Color.roseGold)
+                    Text("▼").font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                }
+            }
+
+            if cropOffset.x != 0 || cropOffset.y != 0 {
+                Button("Reset to default") { cropOffset = (0, 0) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.roseGold)
+            }
+        }
+        .padding(Spacing.md)
+        .frame(width: 260)
+        .background(Color.cream)
+        .task(id: "\(clipPath)-\(trimIn)-\(trimOut)") {
+            await loadFrames()
+        }
+    }
+
+    @ViewBuilder
+    private func framePreview(_ image: NSImage?) -> some View {
+        Group {
+            if let image {
+                let (ox, oy) = shift(image: image, frameW: previewW, frameH: previewH)
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .offset(x: cropOffset.x * ox, y: cropOffset.y * oy)
+                    .frame(width: previewW, height: previewH)
+                    .clipped()
+            } else {
+                Color.creamDeep
+                    .frame(width: previewW, height: previewH)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+    }
+
+    private func shift(image: NSImage, frameW: Double, frameH: Double) -> (Double, Double) {
+        let iw = image.size.width
+        let ih = image.size.height
+        guard iw > 0, ih > 0 else { return (0, 0) }
+        let imageRatio = iw / ih
+        let frameRatio = frameW / frameH
+        if imageRatio > frameRatio {
+            let scaledW = frameH * imageRatio
+            return ((scaledW - frameW) / 2, 0)
+        } else {
+            let scaledH = frameW / imageRatio
+            return (0, (scaledH - frameH) / 2)
+        }
+    }
+
+    private func loadFrames() async {
+        let times = ClipCropFrameStrip.sampleTimes(trimIn: trimIn, trimOut: trimOut)
+        let asset = AVURLAsset(url: URL(fileURLWithPath: clipPath))
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+
+        var results: [NSImage?] = []
+        for t in times {
+            let cmTime = CMTime(seconds: t, preferredTimescale: 600)
+            if let cgImage = try? await generator.image(at: cmTime).image {
+                results.append(NSImage(cgImage: cgImage, size: .zero))
+            } else {
+                results.append(nil)
+            }
+        }
+        while results.count < 3 { results.append(nil) }
+        frames = results
     }
 }
 

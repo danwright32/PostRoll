@@ -31,9 +31,15 @@ HAVE_FFMPEG = shutil.which("ffmpeg") is not None
 needs_ffmpeg = pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg not installed")
 
 CANDIDATES = [
-    {"path": "/clips/a.mov", "duration": 8.0, "usable": True, "score": 40.0, "valid_trim": (1.0, 6.0)},
-    {"path": "/clips/b.mov", "duration": 6.0, "usable": True, "score": 35.0, "valid_trim": (0.5, 5.0)},
-    {"path": "/clips/c.mov", "duration": 7.0, "usable": True, "score": 30.0, "valid_trim": (2.0, 6.5)},
+    # motion_score below MAX_CROP_MOTION: calm enough for the crop gate to
+    # admit a high-confidence tight crop.
+    {"path": "/clips/a.mov", "duration": 8.0, "usable": True, "score": 40.0, "valid_trim": (1.0, 6.0), "motion_score": 20.0},
+    # motion_score above MAX_CROP_MOTION: too much movement, gate must deny
+    # a tight crop regardless of what Claude reports.
+    {"path": "/clips/b.mov", "duration": 6.0, "usable": True, "score": 35.0, "valid_trim": (0.5, 5.0), "motion_score": 60.0},
+    # No motion_score at all (older Stage 1 data or a scoring gap): gate
+    # must fail closed, same as an above-threshold reading.
+    {"path": "/clips/c.mov", "duration": 7.0, "usable": True, "score": 30.0, "valid_trim": (2.0, 6.5), "motion_score": None},
 ]
 
 
@@ -261,6 +267,83 @@ def test_non_string_crop_confidence_defaults_to_low():
     result = apply_selection(data, CANDIDATES)
 
     assert result["selections"][0]["crop_confidence"] == "low"
+
+
+# ===================================================================
+# Phase 2 crop gate wiring (issue #151): apply_selection must actually
+# call crop_allowed() using each candidate's own motion_score, not just
+# clamp values into range. A high-confidence claim on a too-jittery clip
+# must come back centered, never a mis-crop.
+# ===================================================================
+
+def test_crop_passes_through_on_a_calm_high_confidence_clip():
+    # clip_index 0: motion_score=20.0, well under MAX_CROP_MOTION.
+    data = {"selections": [{
+        "clip_index": 0, "trim_in": 1.0, "trim_out": 6.0, "transition_after": "cut",
+        "crop_x": 0.4, "crop_y": -0.25, "crop_confidence": "high",
+    }]}
+
+    result = apply_selection(data, CANDIDATES)
+
+    sel = result["selections"][0]
+    assert sel["crop_x"] == 0.4
+    assert sel["crop_y"] == -0.25
+    assert sel["crop_confidence"] == "high"
+
+
+def test_crop_denied_when_motion_score_exceeds_gate_despite_high_confidence():
+    # clip_index 1: motion_score=60.0, above MAX_CROP_MOTION. Claude's own
+    # high-confidence claim must not override the code-level gate.
+    data = {"selections": [{
+        "clip_index": 1, "trim_in": 1.0, "trim_out": 4.0, "transition_after": "cut",
+        "crop_x": 0.5, "crop_y": 0.5, "crop_confidence": "high",
+    }]}
+
+    result = apply_selection(data, CANDIDATES)
+
+    sel = result["selections"][0]
+    assert sel["crop_x"] == 0.0
+    assert sel["crop_y"] == 0.0
+    assert sel["crop_confidence"] == "low"
+
+
+def test_crop_denied_when_candidate_has_no_motion_score():
+    # clip_index 2: motion_score is None (no Stage 1 data). Fails closed,
+    # same as an above-threshold reading.
+    data = {"selections": [{
+        "clip_index": 2, "trim_in": 2.5, "trim_out": 6.0, "transition_after": "cut",
+        "crop_x": 0.5, "crop_y": 0.5, "crop_confidence": "high",
+    }]}
+
+    result = apply_selection(data, CANDIDATES)
+
+    sel = result["selections"][0]
+    assert sel["crop_x"] == 0.0
+    assert sel["crop_y"] == 0.0
+    assert sel["crop_confidence"] == "low"
+
+
+def test_selection_prompt_asks_for_crop_fields(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_extract(path, times, count, out_dir, prefix):
+        return [out_dir / f"{prefix}0.png"]
+
+    def fake_run_json_prompt(prompt, *, timeout, image_paths, image_labels, **kwargs):
+        captured["prompt"] = prompt
+        return {"selections": [{"clip_index": 0, "trim_in": 1.0, "trim_out": 6.0, "transition_after": "cut"}], "rationale": ""}
+
+    import postroll.ai.select_reel_clips as mod
+    monkeypatch.setattr(mod, "_extract_representative_frames", fake_extract)
+    monkeypatch.setattr(mod, "run_json_prompt", fake_run_json_prompt)
+
+    select_reel_clips(CANDIDATES, tmp_dir=tmp_path)
+
+    # The prompt must actually ask for crop fields, not just have Python
+    # silently accept them if they happen to show up (plan #148 Phase 2).
+    assert "crop_x" in captured["prompt"]
+    assert "crop_y" in captured["prompt"]
+    assert "crop_confidence" in captured["prompt"]
 
 
 # ===================================================================
