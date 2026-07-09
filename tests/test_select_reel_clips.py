@@ -11,14 +11,24 @@ run_json_prompt, the same boundary test_ai_claude_client.py mocks at.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from postroll.ai.claude_client import ClaudeError
 from postroll.ai.select_reel_clips import (
-    MAX_CLIPS_TO_STAGE2,
+    CANDIDATE_DURATION_BUDGET,
+    MAX_CANDIDATES_CEILING,
     apply_selection,
     select_reel_clips,
+    _extract_representative_frames,
+    _select_candidates,
 )
+
+HAVE_FFMPEG = shutil.which("ffmpeg") is not None
+needs_ffmpeg = pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg not installed")
 
 CANDIDATES = [
     {"path": "/clips/a.mov", "duration": 8.0, "usable": True, "score": 40.0, "valid_trim": (1.0, 6.0)},
@@ -44,7 +54,7 @@ def test_valid_selection_passes_through_with_clamped_trim():
 
     assert [s["clip_path"] for s in result["selections"]] == ["/clips/b.mov", "/clips/a.mov"]
     assert result["selections"][0]["transition_after"] == "crossfade"
-    assert result["rationale"] == "opens with the wide shot, closes on the soloist"
+    assert result["rationale"].startswith("opens with the wide shot, closes on the soloist")
 
 
 def test_trim_window_outside_valid_range_is_clamped_not_trusted():
@@ -121,11 +131,48 @@ def test_all_selections_invalid_raises_rather_than_returning_empty():
 
 
 def test_missing_rationale_defaults_to_empty_string():
-    data = {"selections": [{"clip_index": 0, "trim_in": 1.0, "trim_out": 6.0, "transition_after": "cut"}]}
+    # A long enough valid_trim avoids the duration-shortfall note, isolating
+    # the missing-rationale default this test actually checks.
+    long_candidates = [
+        {"path": "/clips/a.mov", "duration": 30.0, "usable": True, "score": 40.0, "valid_trim": (0.0, 25.0)},
+    ]
+    data = {"selections": [{"clip_index": 0, "trim_in": 0.0, "trim_out": 25.0, "transition_after": "cut"}]}
 
-    result = apply_selection(data, CANDIDATES)
+    result = apply_selection(data, long_candidates)
 
     assert result["rationale"] == ""
+
+
+def test_short_total_duration_gets_a_visible_note_in_rationale():
+    # Dan's feedback (2026-07-08): Stage 2 can undershoot its own stated
+    # 20-30s target substantially while its rationale claims otherwise.
+    # A miss this large must be visible in the review UI, not silent.
+    long_candidates = [
+        {"path": "/clips/a.mov", "duration": 10.0, "usable": True, "score": 40.0, "valid_trim": (0.0, 3.0)},
+    ]
+    data = {
+        "selections": [{"clip_index": 0, "trim_in": 0.0, "trim_out": 3.0, "transition_after": "cut"}],
+        "rationale": "quick highlight",
+    }
+
+    result = apply_selection(data, long_candidates)
+
+    assert "quick highlight" in result["rationale"]
+    assert "3s" in result["rationale"] or "3.0s" in result["rationale"]
+
+
+def test_meeting_target_duration_leaves_rationale_unannotated():
+    long_candidates = [
+        {"path": "/clips/a.mov", "duration": 30.0, "usable": True, "score": 40.0, "valid_trim": (0.0, 25.0)},
+    ]
+    data = {
+        "selections": [{"clip_index": 0, "trim_in": 0.0, "trim_out": 25.0, "transition_after": "cut"}],
+        "rationale": "one long strong take",
+    }
+
+    result = apply_selection(data, long_candidates)
+
+    assert result["rationale"] == "one long strong take"
 
 
 # ===================================================================
@@ -160,7 +207,7 @@ def test_select_reel_clips_calls_claude_and_clamps_result(monkeypatch, tmp_path)
 
     result = select_reel_clips(CANDIDATES, tmp_dir=tmp_path)
 
-    assert result["rationale"] == "test rationale"
+    assert result["rationale"].startswith("test rationale")
     # The out-of-range trim must still be clamped even through the full call.
     assert result["selections"][0]["trim_in"] == 1.0
     assert result["selections"][0]["trim_out"] == 6.0
@@ -171,16 +218,64 @@ def test_select_reel_clips_calls_claude_and_clamps_result(monkeypatch, tmp_path)
     assert captured["image_labels"][0] == "[clip 0, frame 0]"
 
 
-def test_select_reel_clips_caps_candidates_at_max_clips_to_stage2(monkeypatch, tmp_path):
+# ===================================================================
+# _select_candidates: duration-budget-based candidate cap (pure, no network)
+# ===================================================================
+
+def test_select_candidates_stops_once_duration_budget_is_covered():
+    # 10 clips at 10s valid_trim each: the budget (45s) is covered by the
+    # 5th, so the 6th onward (lower-scored) must not be included.
+    usable = [
+        {"path": f"/clips/c{i}.mov", "score": float(10 - i), "valid_trim": (0.0, 10.0)}
+        for i in range(10)
+    ]
+
+    candidates = _select_candidates(usable)
+
+    assert len(candidates) == 5
+    assert [c["path"] for c in candidates] == [f"/clips/c{i}.mov" for i in range(5)]
+
+
+def test_select_candidates_respects_hard_ceiling_with_many_small_clips():
+    # 50 tiny clips (1s each): the duration budget alone would allow far
+    # more than MAX_CANDIDATES_CEILING, but the ceiling must still apply.
+    usable = [
+        {"path": f"/clips/c{i}.mov", "score": float(50 - i), "valid_trim": (0.0, 1.0)}
+        for i in range(50)
+    ]
+
+    candidates = _select_candidates(usable)
+
+    assert len(candidates) == MAX_CANDIDATES_CEILING
+
+
+def test_select_candidates_always_includes_at_least_one_clip():
+    # A single clip whose own span already exceeds the budget must still
+    # be included, not dropped to an empty candidate list.
+    usable = [{"path": "/clips/long.mov", "score": 10.0, "valid_trim": (0.0, CANDIDATE_DURATION_BUDGET + 20.0)}]
+
+    candidates = _select_candidates(usable)
+
+    assert len(candidates) == 1
+    assert candidates[0]["path"] == "/clips/long.mov"
+
+
+def test_select_candidates_adapts_to_available_footage_not_a_fixed_count(monkeypatch, tmp_path):
+    # Real behavior check (2026-07-08, Dan's call): a week with plenty of
+    # good, longer clips should offer Claude however many are needed to
+    # cover the target duration with room to choose, not always exactly 8.
     many_candidates = [
         {"path": f"/clips/c{i}.mov", "duration": 5.0, "usable": True, "score": float(i), "valid_trim": (0.0, 5.0)}
-        for i in range(MAX_CLIPS_TO_STAGE2 + 5)
+        for i in range(30)
     ]
 
     def fake_extract(path, times, count, out_dir, prefix):
         return [out_dir / f"{prefix}0.png" for _ in range(1)]
 
+    captured = {}
+
     def fake_run_json_prompt(prompt, *, timeout, image_paths, image_labels, **kwargs):
+        captured["count"] = len(image_paths)
         return {"selections": [{"clip_index": 0, "trim_in": 0.0, "trim_out": 5.0, "transition_after": "cut"}], "rationale": ""}
 
     import postroll.ai.select_reel_clips as mod
@@ -189,10 +284,10 @@ def test_select_reel_clips_caps_candidates_at_max_clips_to_stage2(monkeypatch, t
 
     result = select_reel_clips(many_candidates, tmp_dir=tmp_path)
 
-    # Highest-scored candidate (score = MAX+4, the last one) must be the
-    # survivor at index 0 once capped, proving the cap keeps the best-scored
-    # clips rather than an arbitrary prefix.
-    assert result["selections"][0]["clip_path"] == f"/clips/c{MAX_CLIPS_TO_STAGE2 + 4}.mov"
+    # 5s clips: budget (45s) covered by 9 clips (45/5), one frame each here.
+    assert captured["count"] == 9
+    # Highest-scored candidate (score=29) must still be the survivor.
+    assert result["selections"][0]["clip_path"] == "/clips/c29.mov"
 
 
 def test_select_reel_clips_filters_out_unusable_candidates(monkeypatch, tmp_path):
@@ -235,3 +330,32 @@ def test_select_reel_clips_raises_with_no_usable_candidates(tmp_path):
     all_unusable = [{"path": "/x.mov", "duration": 3.0, "usable": False, "score": 0.0, "valid_trim": None}]
     with pytest.raises(ClaudeError):
         select_reel_clips(all_unusable, tmp_dir=tmp_path)
+
+
+@needs_ffmpeg
+def test_extracted_frames_are_jpeg_not_png(tmp_path):
+    # Real bug found 2026-07-08: with only a few usable clips, Stage 2's
+    # image payload stayed small enough to slip by, but once the clip
+    # scorer fixes above raised real usable-clip counts to what production
+    # actually needs, sending a full candidate batch of PNG frames
+    # (claude_client.py keeps PNGs undownsized in size, only JPEGs get
+    # recompressed smaller) hit a real 413 request_too_large from the
+    # Anthropic API. PNG frames from real 4K clips run ~1.7MB each even
+    # after Claude's own downscale step; JPEG at the same size is ~0.2MB.
+    # Frames must be extracted as JPEG so claude_client.py's mimetype-based
+    # downscale path actually shrinks them.
+    clip = tmp_path / "clip.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+         "-i", "testsrc=s=640x480:d=2:r=10", str(clip)],
+        check=True,
+    )
+
+    frames = _extract_representative_frames(clip, (0.2, 1.8), 2, tmp_path, prefix="test_")
+
+    assert frames, "no frames were extracted"
+    for frame in frames:
+        assert Path(frame).suffix.lower() in (".jpg", ".jpeg"), (
+            f"{frame} is not a JPEG: PNG frames don't get recompressed "
+            "smaller by claude_client.py's downscale step"
+        )

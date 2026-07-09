@@ -32,15 +32,23 @@ from pathlib import Path
 from .claude_client import ClaudeError, run_json_prompt
 
 # 2-3 frames per clip (start/mid/end) so Claude can judge motion, not just a
-# single still. Capped at 8 candidate clips: 8 * 3 = 24 images per call,
-# comfortably under the ~20 images already proven safe in production by
-# select_reel_photos.py's DEFAULT_MAX_REEL_PHOTOS, with headroom. A concrete
-# number decided up front, not discovered mid-build against the 413 ceiling.
+# single still.
 FRAMES_PER_CLIP = 3
-MAX_CLIPS_TO_STAGE2 = 8
 
 TARGET_DURATION_MIN = 20.0
 TARGET_DURATION_MAX = 30.0
+
+# Candidates are chosen by score until their combined valid_trim duration
+# covers this budget, not a fixed clip count: a week with plenty of good,
+# longer footage should offer Claude enough clips to comfortably hit the
+# target with room to choose a subset/order, rather than an arbitrary count
+# that ignores how much usable footage actually exists (2026-07-08, Dan's
+# call, once the JPEG frame fix removed the payload-size reason a fixed
+# cap of 8 originally existed for). 1.5x the max target gives real slack.
+CANDIDATE_DURATION_BUDGET = TARGET_DURATION_MAX * 1.5
+# Hard backstop so a week with dozens of usable clips can't balloon the
+# image payload/API cost unbounded.
+MAX_CANDIDATES_CEILING = 20
 
 SELECTION_PROMPT = """\
 You are cutting a highlight reel for a photography studio's Instagram from
@@ -52,6 +60,13 @@ Pick which clips make the final cut, their order, a trim window for each
 (within its valid range), and how each clip transitions to the next one.
 
 Target total reel duration: {min_duration:.0f} to {max_duration:.0f} seconds.
+This is a real requirement, not a suggestion: sum up trim_out - trim_in
+across every selection before finalizing your answer, and keep adding
+clips (or widening trim windows within their valid range) until the total
+lands inside {min_duration:.0f}-{max_duration:.0f} seconds. A reel built
+from only one or two clips will almost always fall short of this; prefer
+using most or all of the {count} candidates over leaning on a couple of
+long ones.
 
 Selection guidance:
 1. Order for a dramatic arc, not necessarily the order the clips were shot in.
@@ -63,6 +78,9 @@ Selection guidance:
 4. A trim window must stay within the clip's own valid range below. Frames
    for each clip are labeled "[clip i, frame j]" so you can see roughly what
    happens across the clip before choosing where to trim.
+5. Keep the cut varied: no single clip's trim window should make up more
+   than roughly a third of the total reel duration. A highlight reel reads
+   as one long clip with two short add-ons is a miss, not a good cut.
 
 Candidate clips ({count} total):
 {clip_list}
@@ -110,7 +128,14 @@ def _extract_representative_frames(
 
     frames: list[Path] = []
     for i, t in enumerate(times):
-        out = out_dir / f"{prefix}{i}.png"
+        # JPEG, not PNG: claude_client.py's _image_block only recompresses
+        # smaller on downscale for JPEG-mimetype images, keeping PNG at full
+        # quality (meant for OCR program pages with text to preserve, not
+        # video frames). A 4K PNG frame stays ~1.7MB even after downscaling;
+        # the same frame as JPEG is ~0.2MB. Sending a full candidate batch
+        # of PNG frames hit a real 413 request_too_large once enough real
+        # clips passed Stage 1 to fill the candidate budget (2026-07-08).
+        out = out_dir / f"{prefix}{i}.jpg"
         proc = subprocess.run(
             ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(t), "-i", str(path),
              "-frames:v", "1", str(out)],
@@ -130,6 +155,27 @@ def _as_float(value: object, default: float) -> float:
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(value, high))
+
+
+# Slack before flagging a duration miss: a cut a second or two under the
+# target isn't worth a warning, only a real shortfall is.
+DURATION_SHORTFALL_TOLERANCE = 2.0
+
+
+def _annotate_duration_shortfall(selections: list[dict], rationale: str) -> str:
+    """Claude can undershoot its own stated target duration substantially
+    while its rationale claims otherwise (real behavior seen 2026-07-08).
+    A miss this large must be visible in the review UI, not silent, so
+    it's appended to the rationale rather than swallowed."""
+    total = sum(s["trim_out"] - s["trim_in"] for s in selections)
+    if total < TARGET_DURATION_MIN - DURATION_SHORTFALL_TOLERANCE:
+        note = (
+            f"Note: this cut runs about {total:.1f}s, under the "
+            f"{TARGET_DURATION_MIN:.0f} to {TARGET_DURATION_MAX:.0f}s target. "
+            "Consider adding or lengthening clips with the override editor."
+        )
+        return f"{rationale} {note}".strip() if rationale else note
+    return rationale
 
 
 def apply_selection(data: object, candidates: list[dict]) -> dict:
@@ -184,8 +230,29 @@ def apply_selection(data: object, candidates: list[dict]) -> dict:
     rationale = data.get("rationale")
     if not isinstance(rationale, str):
         rationale = ""
+    rationale = _annotate_duration_shortfall(selections, rationale)
 
     return {"selections": selections, "rationale": rationale}
+
+
+def _select_candidates(usable: list[dict]) -> list[dict]:
+    """Highest-scored usable clips (Stage 1's score, not a re-judgment),
+    kept until their combined valid_trim duration covers
+    CANDIDATE_DURATION_BUDGET or MAX_CANDIDATES_CEILING is hit, whichever
+    comes first. Always includes at least one clip, even if its own span
+    alone exceeds the budget."""
+    ranked = sorted(usable, key=lambda c: c["score"], reverse=True)
+    candidates: list[dict] = []
+    total_span = 0.0
+    for clip in ranked:
+        if candidates and (
+            total_span >= CANDIDATE_DURATION_BUDGET or len(candidates) >= MAX_CANDIDATES_CEILING
+        ):
+            break
+        candidates.append(clip)
+        valid_in, valid_out = clip["valid_trim"]
+        total_span += valid_out - valid_in
+    return candidates
 
 
 def select_reel_clips(
@@ -197,13 +264,13 @@ def select_reel_clips(
     """Top-level entry: Stage 1's scored clips -> Claude's selection, order,
     trim, and transition plan, clamped to each clip's own valid_trim.
 
-    Only clips with usable=True are considered. When more than
-    MAX_CLIPS_TO_STAGE2 are usable, the highest-scored ones are kept (Stage
-    1's score, not a re-judgment) so the image budget per call stays fixed
-    regardless of how many clips a given week has.
+    Only clips with usable=True are considered; which ones become Stage 2's
+    candidates is decided by _select_candidates (a duration budget, not a
+    fixed count, so a week with plenty of good footage offers Claude more
+    to choose from).
     """
     usable = [c for c in scored_clips if c.get("usable")]
-    candidates = sorted(usable, key=lambda c: c["score"], reverse=True)[:MAX_CLIPS_TO_STAGE2]
+    candidates = _select_candidates(usable)
     if not candidates:
         raise ClaudeError("no usable clips to select from")
 
