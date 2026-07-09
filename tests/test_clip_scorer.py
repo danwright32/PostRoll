@@ -22,6 +22,7 @@ import pytest
 from postroll.media.clip_scorer import (
     MIN_USABLE_CLIPS,
     InsufficientClipsError,
+    _longest_valid_run,
     clip_duration,
     score_clip,
     score_clips,
@@ -92,6 +93,24 @@ def test_noise_clip_is_not_usable_despite_high_raw_sharpness(tmp_path):
     # consecutive frames are incoherent, not because sharpness was low.
     assert result["usable"] is False
     assert result["valid_trim"] is None
+
+
+def test_moderate_real_world_motion_between_frames_is_still_coherent():
+    # Real bug found 2026-07-08 testing 17 real 4K clips from an actual
+    # event: after the sharpness/resolution fix, every frame cleared
+    # MIN_SHARPNESS, but only 3 of 17 clips passed overall, because
+    # MAX_COHERENT_MOTION (30.0) was calibrated only against a synthetic
+    # smooth-pan fixture that scores ~3-7. Real camera footage, even
+    # genuinely usable footage with no actual blur, naturally shows
+    # inter-frame motion in the 40-65 range from ordinary handheld
+    # micro-shake, autofocus, and busy real scenes, nowhere near the ~95 a
+    # pure noise clip lands at. The threshold must accept that range.
+    sharpness = [50.0] * 8
+    motion = [45.0] * 7
+
+    run = _longest_valid_run(sharpness, motion)
+
+    assert run == (0, 7)
 
 
 @needs_ffmpeg

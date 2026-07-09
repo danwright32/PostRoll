@@ -51,9 +51,13 @@ SCORING_LONG_EDGE = 320
 MIN_SHARPNESS = 25.0
 
 # Mean pixel delta between consecutive frames above this reads as incoherent
-# (noise), not real motion. Calibrated against fixtures: genuine motion
-# (a moving test pattern) lands ~5-7, pure per-frame random noise lands ~95.
-MAX_COHERENT_MOTION = 30.0
+# (noise), not real motion. The synthetic moving-gradient fixture lands
+# ~5-7 and pure per-frame random noise lands ~95, but real camera footage
+# (busy real scenes, ordinary handheld micro-shake, autofocus) sits well
+# above the gradient fixture even when genuinely usable: measured 13-66
+# across 17 real clips from an actual event, 2026-07-08. Set with headroom
+# above that real range and comfortable margin below the noise fixture.
+MAX_COHERENT_MOTION = 70.0
 
 # A valid_trim window shorter than this isn't worth keeping.
 MIN_VALID_TRIM_SECONDS = 2.0
