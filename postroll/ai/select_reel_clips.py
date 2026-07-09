@@ -19,7 +19,8 @@ Usage:
 
     scored = score_clips(clip_paths)  # Stage 1
     plan = select_reel_clips(scored)  # Stage 2
-    # plan == {"selections": [{clip_path, trim_in, trim_out, transition_after}, ...],
+    # plan == {"selections": [{clip_path, trim_in, trim_out, transition_after,
+    #                          crop_x, crop_y, crop_confidence}, ...],
     #          "rationale": "..."}
 """
 
@@ -161,6 +162,29 @@ def _clamp(value: float, low: float, high: float) -> float:
 # target isn't worth a warning, only a real shortfall is.
 DURATION_SHORTFALL_TOLERANCE = 2.0
 
+# A tight crop is a static window over a possibly-moving shot: Claude's
+# self-reported confidence alone can't detect a pan (it judges from 3
+# stills), so a code-level gate also requires the clip's Stage 1 motion
+# score to sit below this. Real footage measured 13-66 mean pixel delta
+# across 17 clips from an actual event (2026-07-08, the same calibration
+# as clip_scorer.py's MAX_COHERENT_MOTION); 30.0 admits only the calm
+# bottom of that range. Phase 4's real-reel comparison against Dan's
+# CapCut baseline is the recalibration point.
+MAX_CROP_MOTION = 30.0
+
+
+def crop_allowed(confidence: str, motion_score: object) -> bool:
+    """Hard gate for a tight crop (plan #148, Phase 0): only when Claude
+    reports high confidence AND Stage 1 measured the clip as calm. Fails
+    closed when the motion score is missing or non-numeric: no data, no
+    tight crop. Nothing calls this until Phase 2 threads the motion score
+    through Stage 2."""
+    if confidence != "high":
+        return False
+    if isinstance(motion_score, bool) or not isinstance(motion_score, (int, float)):
+        return False
+    return motion_score < MAX_CROP_MOTION
+
 
 def _annotate_duration_shortfall(selections: list[dict], rationale: str) -> str:
     """Claude can undershoot its own stated target duration substantially
@@ -217,11 +241,24 @@ def apply_selection(data: object, candidates: list[dict]) -> dict:
         if transition not in ("cut", "crossfade"):
             transition = "cut"
 
+        # Crop fields (plan #148, Phase 0): same [-1, 1] convention as the
+        # app's CropOffset, 0 = centered. Anything missing or malformed
+        # collapses to today's centered crop; a bad crop value must never
+        # cost the selection itself.
+        crop_x = _clamp(_as_float(item.get("crop_x"), 0.0), -1.0, 1.0)
+        crop_y = _clamp(_as_float(item.get("crop_y"), 0.0), -1.0, 1.0)
+        crop_confidence = item.get("crop_confidence")
+        if crop_confidence not in ("high", "low"):
+            crop_confidence = "low"
+
         selections.append({
             "clip_path": clip["path"],
             "trim_in": trim_in,
             "trim_out": trim_out,
             "transition_after": transition,
+            "crop_x": crop_x,
+            "crop_y": crop_y,
+            "crop_confidence": crop_confidence,
         })
 
     if not selections:
