@@ -1547,16 +1547,14 @@ private struct CaptionSection: View {
                             .padding(.vertical, Spacing.md)
                     }
 
-                    if let onImportFridayClips {
-                        Button(action: onImportFridayClips) {
-                            Label("Import Clips…", systemImage: "film")
-                                .font(.system(size: 12))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.roseGold)
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.bottom, Spacing.xs)
-                    }
+                    // Friday auto-cut clip reel retired (2026-07-09): even after
+                    // closing the pacing/crop/title-card gaps, the output still
+                    // didn't clear Dan's bar against his own CapCut edit, and he
+                    // decided to keep cutting Friday reels externally instead.
+                    // The "Import Clips…" entry point is removed so new imports
+                    // can't start the auto-cut pipeline; everything downstream
+                    // (FridayClipEditor, crop popover, title card toggle, Stage
+                    // 1/2/3) is left in place, dormant, not deleted.
                     if fridayRegenStartedAt != nil {
                         PipelineStatusView(startedAt: fridayRegenStartedAt)
                             .padding(.horizontal, Spacing.xl)
