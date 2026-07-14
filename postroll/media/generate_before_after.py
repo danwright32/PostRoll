@@ -95,6 +95,27 @@ def apply_cream_strip(canvas: Image.Image, y: int, h: int) -> Image.Image:
     return canvas
 
 
+def pick_label_color(canvas: Image.Image, lx: int, ly: int, w: int, h: int) -> str:
+    """Choose "dark" or "light" from the pixels the label will actually sit on.
+
+    The labels used to be hardcoded white, which vanished whenever they landed on
+    a bright part of the frame (a lit stage banner, a white wall).
+    """
+    box = (
+        max(0, lx), max(0, ly),
+        min(canvas.width, lx + w), min(canvas.height, ly + h),
+    )
+    if box[2] <= box[0] or box[3] <= box[1]:
+        return "light"
+
+    patch = canvas.convert("RGB").crop(box).resize((10, 10), Image.LANCZOS)
+    pixels = list(patch.getdata())
+    luminance = sum(
+        0.299 * r + 0.587 * g + 0.114 * b for r, g, b in pixels
+    ) / len(pixels)
+    return "dark" if luminance > 140 else "light"
+
+
 def fit_photo(photo: Image.Image, avail_w: int, max_h: int) -> Image.Image:
     """Fit photo to width, maintaining aspect ratio, capping at max height."""
     ratio = photo.width / photo.height
@@ -156,9 +177,9 @@ def generate_before_after(
     org: str = "",
     venue: str = "",
     logo_path: str | None = None,
-    raw_label_color: str = "light",  # "light" or "dark"
+    raw_label_color: str = "auto",  # "auto" (pick from the pixels beneath), "light" or "dark"
     raw_label_pos: str = "left",  # "left" or "right"
-    edit_label_color: str = "light",
+    edit_label_color: str = "auto",
     edit_label_pos: str = "left",
     bw_path: str | None = None,
 ) -> str:
@@ -287,10 +308,7 @@ def generate_before_after(
         px = (CANVAS_W - photo_resized.width) // 2
         canvas.paste(photo_resized.convert("RGBA"), (px, y), photo_resized.convert("RGBA"))
 
-        # Draw label
         draw = ImageDraw.Draw(canvas)
-        fill = (255, 255, 255) if label_color == "light" else TEXT_DARK
-        shadow_fill = (0, 0, 0, 140) if label_color == "light" else (255, 255, 255, 100)
 
         # Total label width (with letter spacing) for alignment.
         total_w = 0
@@ -311,6 +329,15 @@ def generate_before_after(
         else:
             lx = px + photo_resized.width - LABEL_MARGIN - total_w
             ly = y + LABEL_MARGIN
+
+        # Pick the colour from what the label actually lands on, now that its
+        # position is known. Hardcoded white vanished on a lit stage banner.
+        if label_color == "auto":
+            label_color = pick_label_color(
+                canvas, lx, ly, total_w, LABEL_FONT_SIZE + LABEL_MARGIN
+            )
+        fill = (255, 255, 255) if label_color == "light" else TEXT_DARK
+        shadow_fill = (0, 0, 0, 140) if label_color == "light" else (255, 255, 255, 100)
 
         # Shadow for readability
         shadow_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))

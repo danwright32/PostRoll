@@ -170,6 +170,38 @@ def test_morph_labels_are_dark_enough_to_read_on_cream():
     assert slider_mod.LABEL_COLOR == slider_mod.TEXT_DARK
 
 
+# ── before/after labels must contrast with whatever is under them ───────────
+#
+# The RAW/Edit labels were hardcoded white. On Dan's Home'r Bust! frames they
+# landed on a bright blue-and-white stage banner and vanished. The colour must be
+# chosen from the pixels the label actually sits on.
+
+def test_label_colour_is_picked_from_what_is_underneath():
+    bright = Image.new("RGB", (200, 100), (240, 240, 245))
+    dark = Image.new("RGB", (200, 100), (25, 25, 30))
+    assert ba_mod.pick_label_color(bright, 0, 0, 200, 100) == "dark"
+    assert ba_mod.pick_label_color(dark, 0, 0, 200, 100) == "light"
+
+
+def test_before_after_label_reads_on_a_bright_photo(tmp_path):
+    # A near-white photo: the label must come out dark, not white-on-white.
+    bright = tmp_path / "bright.jpg"
+    Image.new("RGB", (1500, 1000), (238, 240, 245)).save(str(bright), "JPEG")
+    out = str(tmp_path / "ba_bright.png")
+    ba_mod.generate_before_after(str(bright), str(bright), out,
+                                 event_name="E", org="O", venue="V")
+    img = Image.open(out).convert("RGB")
+
+    # The photo band starts below the header. Scan it for the label's dark ink;
+    # with the old hardcoded white there is none anywhere on the bright photo.
+    header_end = 420
+    found_dark = any(
+        sum(img.getpixel((x, y))) < 300
+        for y in range(header_end, 1500, 2) for x in range(0, 1080, 2)
+    )
+    assert found_dark, "the RAW label is invisible on a bright photo"
+
+
 # ── Thursday scroll reel: brand cream mat + hairline, like the collage ──────
 
 def _photo_set(tmp_path, colour, n=4, size=(1500, 1000)):

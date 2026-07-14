@@ -365,11 +365,17 @@ def generate_reel_slider(
             color-over-B&W composite so both afters show at once (3-photo mode).
     """
     if audio_path is None:
+        # Fail loud. This used to swallow the error and render a reel with no
+        # audio track at all, which shipped silently to Instagram with nobody
+        # any the wiser. A reel with no music is not a successful render.
+        from postroll.audio import fetch_audio
         try:
-            from postroll.audio import fetch_audio
             audio_path = fetch_audio(_DEFAULT_AUDIO_TAGS)
-        except Exception:
-            audio_path = None  # generate silent reel; user can add music on Instagram
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not resolve audio for the Tuesday reel: {exc}. "
+                "Refusing to render a silent reel."
+            ) from exc
 
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)

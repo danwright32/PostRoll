@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -28,6 +29,10 @@ from typing import Any
 JAMENDO_TRACKS_URL = "https://api.jamendo.com/v3.0/tracks"
 DEFAULT_CACHE_DIR = Path.home() / ".postroll" / "audio_cache"
 _SEARCH_LIMIT = 20  # tracks fetched per search; picks randomly from top 10
+# Jamendo's search is flaky: it returns zero downloadable tracks for tags that work
+# on the next call. Retry before treating an empty result as the real answer.
+_SEARCH_ATTEMPTS = 3
+_SEARCH_RETRY_DELAY = 1.0  # seconds between attempts
 
 
 def fetch_audio_candidates(
@@ -135,10 +140,21 @@ def fetch_audio(
     cache = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
     cache.mkdir(parents=True, exist_ok=True)
 
-    tracks = _search_tracks(tags, client_id)
+    # Jamendo intermittently answers with zero downloadable tracks for tags that
+    # work on the very next call, so a single empty search is not a real answer.
+    # This flake is what left a Tuesday reel with no music at all.
+    tracks: list[dict[str, Any]] = []
+    for attempt in range(_SEARCH_ATTEMPTS):
+        tracks = _search_tracks(tags, client_id)
+        if tracks:
+            break
+        if attempt < _SEARCH_ATTEMPTS - 1:
+            time.sleep(_SEARCH_RETRY_DELAY)
+
     if not tracks:
         raise RuntimeError(
-            f"No downloadable Jamendo tracks found for tags={tags!r}. "
+            f"No downloadable Jamendo tracks found for tags={tags!r} after "
+            f"{_SEARCH_ATTEMPTS} attempts. "
             "Try different tags or verify your JAMENDO_CLIENT_ID."
         )
 
