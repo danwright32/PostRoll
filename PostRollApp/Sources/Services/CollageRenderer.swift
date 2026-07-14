@@ -192,6 +192,16 @@ private struct StaticCollageView: View {
                     cellCtx.draw(img, in: drawRect)
                 }
             }
+
+            // Hairline LAST: the gap repaint above would erase the ring Python
+            // baked into the base PNG, so restroke it over the finished gutters.
+            for cell in cells {
+                let ring = CollageGeometry.hairlineRect(
+                    x: CGFloat(cell.x), y: CGFloat(cell.y),
+                    w: CGFloat(cell.w), h: CGFloat(cell.h))
+                context.stroke(Path(ring), with: .color(CollageGeometry.hairlineColor),
+                               lineWidth: CollageGeometry.hairlineWidth)
+            }
         }
         .frame(width: CollageRenderer.canvasSize.width,
                height: CollageRenderer.canvasSize.height)

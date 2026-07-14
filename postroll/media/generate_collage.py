@@ -41,6 +41,12 @@ STRIP_CREAM = (252, 250, 247)  # matches story/before-after cream
 TEXT_DARK = (60, 55, 50)
 ROSE_GOLD = (160, 105, 95)
 
+# Hairline: the 1px ring immediately OUTSIDE each cell, so a print is framed
+# without the line eating a row of the photograph. Swift strokes the same ring
+# (CollageGeometry.hairlineRect) after it repaints the gutters, because a
+# hairline baked only into this PNG would be painted over on export.
+HAIRLINE = (214, 208, 200)
+
 # Logo
 LOGO_WIDTH = 240
 PLATE_PADDING = 24  # inset of the plate's text and logo from its own edges
@@ -488,7 +494,20 @@ def paste_planned_cells(
             "w": cell["w"],
             "h": cell["h"],
         })
+    draw_hairlines(canvas, sidecar)
     return sidecar
+
+
+def draw_hairlines(canvas: Image.Image, cells: list[dict]) -> None:
+    """Frame each print with a 1px ring immediately outside its cell.
+
+    Outside, never inside: the line must not consume a row of the photograph.
+    `CollageGeometry.hairlineRect` strokes the identical ring on the Swift side.
+    """
+    draw = ImageDraw.Draw(canvas)
+    for cell in cells:
+        x, y, w, h = cell["x"], cell["y"], cell["w"], cell["h"]
+        draw.rectangle([x - 1, y - 1, x + w, y + h], outline=HAIRLINE, width=1)
 
 
 def draw_branded_strip(
@@ -564,6 +583,8 @@ def render_cell_layout_override(
         photo = Image.open(path)
         cropped = crop_to_fill(photo, w, h, ox, oy, oz)
         canvas.paste(cropped, (x, y))
+
+    draw_hairlines(canvas, cell_layout)
 
     # Group cells into rows by y-overlap
     sorted_cells = sorted(cell_layout, key=lambda c: c["y"])

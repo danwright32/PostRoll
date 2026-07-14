@@ -80,4 +80,29 @@ final class CollageGeometryTests: XCTestCase {
     func testGroupCellsByRowEmpty() {
         XCTAssertTrue(CollageGeometry.groupCellsByRow([]).isEmpty)
     }
+
+    // MARK: - Hairline
+
+    /// The ring must land immediately OUTSIDE the cell, never inside it, or the
+    /// line eats a row of the photograph. Stroking a rect with lineWidth 1
+    /// centres the line on the rect's edge, so the rect has to be outset by half
+    /// the line width: centred on x - 0.5, the stroke covers pixel column x - 1.
+    /// This is the same ring generate_collage.py bakes into the base PNG
+    /// (draw_hairlines), and the two must not drift by a pixel or the export
+    /// shows a doubled line.
+    func testHairlineRectSitsJustOutsideTheCell() {
+        let ring = CollageGeometry.hairlineRect(x: 48, y: 100, w: 984, h: 400)
+        XCTAssertEqual(ring.minX, 47.5)
+        XCTAssertEqual(ring.minY, 99.5)
+        XCTAssertEqual(ring.maxX, 1032.5)
+        XCTAssertEqual(ring.maxY, 500.5)
+        // The cell itself is fully enclosed, so no stroke falls inside it.
+        XCTAssertTrue(ring.contains(CGRect(x: 48, y: 100, width: 984, height: 400)))
+    }
+
+    func testHairlineRectGrowsByExactlyOneLineWidth() {
+        let ring = CollageGeometry.hairlineRect(x: 0, y: 0, w: 100, h: 50)
+        XCTAssertEqual(ring.width, 100 + CollageGeometry.hairlineWidth)
+        XCTAssertEqual(ring.height, 50 + CollageGeometry.hairlineWidth)
+    }
 }

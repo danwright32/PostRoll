@@ -3868,6 +3868,22 @@ private struct CollagePreviewThumbnail: View {
                                 }
                             }
                         }
+
+                        // Restroke the hairline ring the gap fill above just painted
+                        // over. Without an override the PNG's own ring is untouched,
+                        // so this only runs in the same case the gap fill does.
+                        ForEach(Array(baseCells.enumerated()), id: \.0) { _, cell in
+                            Rectangle()
+                                .strokeBorder(CollageGeometry.hairlineColor,
+                                              lineWidth: CollageGeometry.hairlineWidth)
+                                .frame(width: CGFloat(cell.w) * sx + CollageGeometry.hairlineWidth * 2,
+                                       height: CGFloat(cell.h) * sy + CollageGeometry.hairlineWidth * 2)
+                                .position(
+                                    x: CGFloat(cell.x) * sx + CGFloat(cell.w) * sx / 2,
+                                    y: CGFloat(cell.y) * sy + CGFloat(cell.h) * sy / 2
+                                )
+                                .allowsHitTesting(false)
+                        }
                     }
 
                     // Per-cell drag/tap targets — each in its own sub-view so

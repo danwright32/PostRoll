@@ -23,6 +23,23 @@ enum CollageGeometry {
     /// Darkening scrim multiplier over the blurred background.
     static let scrimDarkness: Double = 0.3
 
+    /// Hairline framing each print: the 1px ring immediately OUTSIDE the cell, so
+    /// the line never eats a row of the photograph. Must stay in lockstep with
+    /// `HAIRLINE` and `draw_hairlines` in generate_collage.py. Python bakes the
+    /// ring into the base PNG, but the gap repaint below would paint over it, so
+    /// both draw paths stroke it again on top.
+    static let hairlineColor = Color(red: 214 / 255, green: 208 / 255, blue: 200 / 255)
+    static let hairlineWidth: CGFloat = 1
+
+    /// Stroking this rect with `hairlineWidth` lands the line on the pixel ring
+    /// just outside the cell: centred on cell.x - 0.5, it covers column x-1.
+    static func hairlineRect(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat) -> CGRect {
+        CGRect(x: x - hairlineWidth / 2,
+               y: y - hairlineWidth / 2,
+               width: w + hairlineWidth,
+               height: h + hairlineWidth)
+    }
+
     /// Photo overflows its cell (zoomed in) at scale ≥ 1; below that it's the
     /// zoomed-out "blur" presentation centred over a blurred background.
     static func isFillMode(scale: Double) -> Bool { scale >= 1.0 }

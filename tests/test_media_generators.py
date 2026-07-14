@@ -25,6 +25,7 @@ from postroll.media import generate_reel_slider as slider_mod
 from postroll.media.generate_collage import (
     CANVAS_H,
     CANVAS_W,
+    HAIRLINE,
     MAT,
     MIN_HEIGHT_RETENTION,
     MIN_WIDTH_RETENTION,
@@ -422,6 +423,29 @@ def test_mat_colour_is_fixed_brand_cream_whatever_the_photos(tmp_path):
     corner_dark = Image.open(dark).convert("RGB").getpixel((4, 4))
     assert corner_blue == STRIP_CREAM
     assert corner_dark == STRIP_CREAM
+
+
+def test_each_print_gets_a_hairline_just_outside_its_cell(tmp_path):
+    # The hairline is the 1px ring IMMEDIATELY OUTSIDE each cell, never inside it,
+    # so it frames the print without eating a row of the photograph. Swift strokes
+    # the same ring after it repaints the gutters (CollageGeometry.hairlineRect);
+    # if the two disagree by a pixel you get a doubled or offset line on export.
+    out = tmp_path / "hair.png"
+    photos = _photo_set(tmp_path, (10, 200, 10))   # vivid green, unmistakable vs cream
+    generate_collage(photo_paths=photos, output_path=str(out), event_name="A",
+                     write_layout_sidecar=False)
+    img = Image.open(out).convert("RGB")
+
+    ratios = [1500 / 1000] * 4
+    split = distinct_collage_splits(4, ratios)[0]
+    cells, _ = plan_collage_cells(ratios, split[0], split[1], random.Random(0))
+    top = cells[0]
+    mid_x = top["x"] + top["w"] // 2
+
+    assert img.getpixel((mid_x, top["y"] - 1)) == HAIRLINE, "ring sits just above the cell"
+    assert img.getpixel((top["x"] - 1, top["y"] + top["h"] // 2)) == HAIRLINE, "and just left"
+    # The cell's own first pixel row is still photograph, not hairline.
+    assert img.getpixel((mid_x, top["y"])) != HAIRLINE, "hairline must not eat into the photo"
 
 
 def test_branded_strip_is_inset_as_a_caption_plate(tmp_path):
