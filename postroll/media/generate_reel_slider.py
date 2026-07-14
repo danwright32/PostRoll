@@ -77,10 +77,6 @@ LOGO_WIDTH = 200
 # Audio
 AUDIO_FADE_DURATION = 2.0  # fade out in last 2 seconds
 
-# Background
-BG_BLUR_RADIUS = 50
-BG_DARKEN = 40
-
 
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
     try:
@@ -90,23 +86,13 @@ def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
 
 
 def prepare_photo_simple(photo: Image.Image, edit_photo: Image.Image) -> tuple[Image.Image, int]:
-    """Fit photo to width on blurred edit background. Returns (canvas, photo_y)."""
-    photo_ratio = photo.width / photo.height
+    """Fit photo to width on a flat cream background. Returns (canvas, photo_y).
 
-    # Blurred background from edit photo
-    canvas_ratio = CANVAS_W / CANVAS_H
-    if edit_photo.width / edit_photo.height > canvas_ratio:
-        bg_scale = CANVAS_H / edit_photo.height
-    else:
-        bg_scale = CANVAS_W / edit_photo.width
-    bg_w = int(edit_photo.width * bg_scale)
-    bg_h = int(edit_photo.height * bg_scale)
-    bg = edit_photo.resize((bg_w, bg_h), Image.LANCZOS)
-    bg_left = (bg_w - CANVAS_W) // 2
-    bg_top = (bg_h - CANVAS_H) // 2
-    bg = bg.crop((bg_left, bg_top, bg_left + CANVAS_W, bg_top + CANVAS_H))
-    bg = bg.filter(ImageFilter.GaussianBlur(radius=BG_BLUR_RADIUS))
-    canvas = bg.convert("RGB")
+    edit_photo is kept for signature compatibility but no longer used: the
+    letterbox is brand cream (gallery style), not a blurred copy of the edit.
+    """
+    photo_ratio = photo.width / photo.height
+    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
 
     # Fit photo to width, center vertically
     fit_w = CANVAS_W
@@ -128,20 +114,11 @@ def prepare_stacked_after(
     footer on a blurred background. Used as the slider's reveal target so both
     afters are visible at once. Each photo fits to its own aspect, so the B&W
     can be a different crop than the color.
+
+    bg_photo is kept for signature compatibility but no longer used: the
+    background is flat brand cream (gallery style).
     """
-    canvas_ratio = CANVAS_W / CANVAS_H
-    if bg_photo.width / bg_photo.height > canvas_ratio:
-        bg_scale = CANVAS_H / bg_photo.height
-    else:
-        bg_scale = CANVAS_W / bg_photo.width
-    bg_w = int(bg_photo.width * bg_scale)
-    bg_h = int(bg_photo.height * bg_scale)
-    bg = bg_photo.resize((bg_w, bg_h), Image.LANCZOS)
-    bg_left = (bg_w - CANVAS_W) // 2
-    bg_top = (bg_h - CANVAS_H) // 2
-    bg = bg.crop((bg_left, bg_top, bg_left + CANVAS_W, bg_top + CANVAS_H))
-    bg = bg.filter(ImageFilter.GaussianBlur(radius=BG_BLUR_RADIUS))
-    canvas = bg.convert("RGB")
+    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
 
     content_top = HEADER_H
     content_bottom = CANVAS_H - FOOTER_H

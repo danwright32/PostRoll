@@ -73,6 +73,11 @@ def get_video_duration(path: str) -> float:
     return float(result.stdout.strip())
 
 
+def build_background() -> Image.Image:
+    """Flat brand-cream background behind the recording (gallery style)."""
+    return Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
+
+
 def build_chrome_overlay(event_name: str, org: str, venue: str,
                          logo_path: str | None) -> Image.Image:
     """Transparent cream header/footer overlay composited over the recording.
@@ -206,23 +211,9 @@ def generate_reel_screen(
         scale_w = scale_w - (scale_w % 2)
         scale_h = scale_h - (scale_h % 2)
 
-        # Step 2: Create blurred background from edit photo
-        edit_photo = Image.open(edit_path)
-        bg_ratio = edit_photo.width / edit_photo.height
-        canvas_ratio = CANVAS_W / CANVAS_H
-        if bg_ratio > canvas_ratio:
-            bg_scale = CANVAS_H / edit_photo.height
-        else:
-            bg_scale = CANVAS_W / edit_photo.width
-        bg_w = int(edit_photo.width * bg_scale)
-        bg_h = int(edit_photo.height * bg_scale)
-        bg = edit_photo.resize((bg_w, bg_h), Image.LANCZOS)
-        bg_left = (bg_w - CANVAS_W) // 2
-        bg_top = (bg_h - CANVAS_H) // 2
-        bg = bg.crop((bg_left, bg_top, bg_left + CANVAS_W, bg_top + CANVAS_H))
-        bg = bg.filter(ImageFilter.GaussianBlur(radius=50))
+        # Step 2: Flat cream background (gallery style) behind the recording
         bg_path = str(tmpdir_path / "bg.png")
-        bg.save(bg_path)
+        build_background().save(bg_path)
 
         # Step 3: Create branded chrome overlay (header + footer)
         chrome = build_chrome_overlay(event_name, org, venue, logo_path)

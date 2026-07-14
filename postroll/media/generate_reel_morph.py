@@ -72,9 +72,6 @@ FOOTER_H = 100
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 LOGO_WIDTH = 200
 
-# Background
-BG_BLUR_RADIUS = 50
-
 # Audio
 AUDIO_FADE_DURATION = 2.0
 
@@ -87,21 +84,14 @@ def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
 
 
 def prepare_photo(photo: Image.Image, bg_photo: Image.Image) -> Image.Image:
-    """Fit photo to width on blurred edit background."""
+    """Fit photo to width on a flat cream background (gallery style).
+
+    bg_photo is accepted for signature compatibility with the callers but is no
+    longer used: the letterbox above and below the photo is now brand cream, not
+    a blurred, darkened copy of the edit.
+    """
     photo_ratio = photo.width / photo.height
-    canvas_ratio = CANVAS_W / CANVAS_H
-    if bg_photo.width / bg_photo.height > canvas_ratio:
-        bg_scale = CANVAS_H / bg_photo.height
-    else:
-        bg_scale = CANVAS_W / bg_photo.width
-    bg_w = int(bg_photo.width * bg_scale)
-    bg_h = int(bg_photo.height * bg_scale)
-    bg = bg_photo.resize((bg_w, bg_h), Image.LANCZOS)
-    bg_left = (bg_w - CANVAS_W) // 2
-    bg_top = (bg_h - CANVAS_H) // 2
-    bg = bg.crop((bg_left, bg_top, bg_left + CANVAS_W, bg_top + CANVAS_H))
-    bg = bg.filter(ImageFilter.GaussianBlur(radius=BG_BLUR_RADIUS))
-    canvas = bg.convert("RGB")
+    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
 
     fit_w = CANVAS_W
     fit_h = int(CANVAS_W / photo_ratio)

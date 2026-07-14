@@ -87,6 +87,44 @@ def test_story_has_no_rose_gold_divider_bar(sample_photo, tmp_output):
         "story still draws the rose-gold divider bar"
 
 
+def _landscape(color=(20, 60, 140), size=(300, 200)):
+    return Image.new("RGB", size, color)
+
+
+def test_before_after_background_is_flat_cream(sample_photo_dark, tmp_output):
+    # On a dark event the old semi-transparent cream over a blurred photo read
+    # grey. Flat cream must render true cream in the header band.
+    out = str(tmp_output / "ba_cream.png")
+    ba_mod.generate_before_after(
+        str(sample_photo_dark), str(sample_photo_dark), out,
+        event_name="Event", org="Org", venue="Venue",
+    )
+    img = Image.open(out).convert("RGB")
+    assert img.getpixel((20, 20)) == ba_mod.CREAM, "before/after header is not flat cream"
+
+
+def test_morph_background_is_cream_not_blurred_photo():
+    # The letterbox above/below the centred photo must be cream, not a blurred
+    # copy of the (blue) edit photo.
+    canvas = morph_mod.prepare_photo(_landscape(), _landscape())
+    assert canvas.convert("RGB").getpixel((10, 10)) == morph_mod.CREAM
+
+
+def test_slider_background_is_cream_not_blurred_photo():
+    canvas, _ = slider_mod.prepare_photo_simple(_landscape(), _landscape())
+    assert canvas.convert("RGB").getpixel((10, 10)) == slider_mod.CREAM
+
+
+def test_slider_stacked_after_background_is_cream():
+    canvas = slider_mod.prepare_stacked_after(_landscape(), _landscape(), _landscape())
+    assert canvas.convert("RGB").getpixel((10, 10)) == slider_mod.CREAM
+
+
+def test_screen_background_is_cream():
+    bg = screen_mod.build_background()
+    assert bg.convert("RGB").getpixel((10, 10)) == screen_mod.CREAM
+
+
 def test_before_after_has_no_rose_gold_rule(sample_photo, tmp_output):
     out = str(tmp_output / "ba.png")
     ba_mod.generate_before_after(

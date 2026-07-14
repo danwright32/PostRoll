@@ -56,10 +56,6 @@ FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 FONT_DETAIL_LIGHT = 7
 FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
 
-# Background
-BG_BLUR_RADIUS = 60  # heavy blur — smooth color wash, not muddy detail
-BG_DARKEN_OPACITY = 30  # minimal darkening to preserve warm tones
-
 
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
     try:
@@ -90,46 +86,6 @@ def draw_spaced_text_centered(
         draw.text((x, y), ch, font=font, fill=fill)
         bbox = draw.textbbox((0, 0), ch, font=font)
         x += (bbox[2] - bbox[0]) + spacing
-
-
-def create_blurred_background(photo: Image.Image) -> Image.Image:
-    """Create a blurred background from a photo."""
-    photo_ratio = photo.width / photo.height
-    canvas_ratio = CANVAS_W / CANVAS_H
-
-    if photo_ratio > canvas_ratio:
-        scale = CANVAS_H / photo.height
-    else:
-        scale = CANVAS_W / photo.width
-
-    new_w = int(photo.width * scale)
-    new_h = int(photo.height * scale)
-    bg = photo.resize((new_w, new_h), Image.LANCZOS)
-
-    left = (new_w - CANVAS_W) // 2
-    top = (new_h - CANVAS_H) // 2
-    bg = bg.crop((left, top, left + CANVAS_W, top + CANVAS_H))
-    bg = bg.filter(ImageFilter.GaussianBlur(radius=BG_BLUR_RADIUS))
-
-    # Check average brightness — if dark, brighten the blur
-    bg_rgb = bg.convert("RGB")
-    pixels = list(bg_rgb.resize((50, 50), Image.LANCZOS).getdata())
-    avg_brightness = sum(p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114 for p in pixels) / len(pixels)
-
-    bg = bg.convert("RGBA")
-    if avg_brightness < 80:
-        # Dark photo — lighten heavily so cream tinting looks warm, not muddy
-        brighten = Image.new("RGBA", (CANVAS_W, CANVAS_H), (255, 255, 255, 160))
-        bg = Image.alpha_composite(bg, brighten)
-    elif avg_brightness < 130:
-        # Medium photo — lighten moderately
-        brighten = Image.new("RGBA", (CANVAS_W, CANVAS_H), (255, 255, 255, 80))
-        bg = Image.alpha_composite(bg, brighten)
-
-    darken = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, BG_DARKEN_OPACITY))
-    bg = Image.alpha_composite(bg, darken)
-
-    return bg
 
 
 def apply_cream_strip(canvas: Image.Image, y: int, h: int) -> Image.Image:
@@ -226,8 +182,10 @@ def generate_before_after(
     label_font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_BOLD)
     detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_LIGHT)
 
-    # Create blurred background
-    canvas = create_blurred_background(edit_photo)
+    # Flat cream background (gallery style): the cream bands compose cream over
+    # cream, so the header/footer read true cream instead of grey over a blurred,
+    # darkened copy of the photo.
+    canvas = Image.new("RGBA", (CANVAS_W, CANVAS_H), (*CREAM, 255))
 
     # Auto-fit the script title — wraps to two lines (or shrinks) if the title
     # doesn't fit on one at max size.
