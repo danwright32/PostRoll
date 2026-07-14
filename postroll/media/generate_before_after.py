@@ -42,7 +42,7 @@ DIVIDER_H = 2
 LABEL_FONT_SIZE = 28
 LABEL_LETTER_SPACING = 8
 LABEL_MARGIN = 40   # snug to the photo's top-left corner; reel closing-frame zoom may crop slightly but the label isn't load-bearing
-MID_STRIP_H = 55  # cream strip between photos with "Edit" label
+LABEL_STRIP_H = 58  # cream strip ABOVE each photo carrying its RAW/Edit/B&W label
 EDITED_PHOTO_SCALE = 1.12  # in 3-photo mode, edits render slightly larger than the RAW
 LOGO_WIDTH = 280
 BOTTOM_CREAM_H = 130  # taller bottom to balance the top
@@ -93,27 +93,6 @@ def apply_cream_strip(canvas: Image.Image, y: int, h: int) -> Image.Image:
     strip = Image.new("RGBA", (CANVAS_W, h), (*CREAM, CREAM_OPACITY))
     canvas.paste(strip, (0, y), strip)
     return canvas
-
-
-def pick_label_color(canvas: Image.Image, lx: int, ly: int, w: int, h: int) -> str:
-    """Choose "dark" or "light" from the pixels the label will actually sit on.
-
-    The labels used to be hardcoded white, which vanished whenever they landed on
-    a bright part of the frame (a lit stage banner, a white wall).
-    """
-    box = (
-        max(0, lx), max(0, ly),
-        min(canvas.width, lx + w), min(canvas.height, ly + h),
-    )
-    if box[2] <= box[0] or box[3] <= box[1]:
-        return "light"
-
-    patch = canvas.convert("RGB").crop(box).resize((10, 10), Image.LANCZOS)
-    pixels = list(patch.getdata())
-    luminance = sum(
-        0.299 * r + 0.587 * g + 0.114 * b for r, g, b in pixels
-    ) / len(pixels)
-    return "dark" if luminance > 140 else "light"
 
 
 def fit_photo(photo: Image.Image, avail_w: int, max_h: int) -> Image.Image:
@@ -237,9 +216,10 @@ def generate_before_after(
     photo_count = len(source_photos)
 
     # Reserve header + footer + chrome first; photos share what's left, so the
-    # notch-safe title area is never squeezed by tall photos. One mid-strip sits
-    # between each adjacent pair of photos.
-    fixed_chrome = DIVIDER_H * 2 + MID_STRIP_H * (photo_count - 1)
+    # notch-safe title area is never squeezed by tall photos. Each photo gets a
+    # cream label strip ABOVE it (RAW / Edit / B&W), so the label is always dark
+    # ink on cream and legible over any photo, never overlaid on a busy frame.
+    fixed_chrome = DIVIDER_H * 2 + LABEL_STRIP_H * photo_count
     photos_budget = CANVAS_H - header_min_needed - BOTTOM_CREAM_H - fixed_chrome
 
     # Height budget per photo. In 3-photo mode the edits (color + B&W) get a
@@ -292,78 +272,26 @@ def generate_before_after(
     # space is kept as an invisible cream gap so the layout math stays put.
     y += DIVIDER_H
 
-    # === PHOTOS with configurable labels ===
-    label_configs = [
-        (resized_photos[0], "RAW", raw_label_color, raw_label_pos),
-        (resized_photos[1], "Edit", edit_label_color, edit_label_pos),
-    ]
-    if bw_photo is not None:
-        label_configs.append((resized_photos[2], "B&W", "light", "left"))
+    # === PHOTOS, each under a cream label strip ===
+    labels = ["RAW", "Edit"] + (["B&W"] if bw_photo is not None else [])
 
-    # In 3-photo mode the photos are inset, so labels sit in the left margin
-    # beside each photo rather than overlaid on the corner.
-    label_in_margin = bw_photo is not None
+    for photo_resized, label_text in zip(resized_photos, labels):
+        # Cream strip ABOVE the photo, carrying the label in dark ink. Left-aligned,
+        # letter-spaced, vertically centred in the strip.
+        canvas = apply_cream_strip(canvas, y, LABEL_STRIP_H)
+        draw = ImageDraw.Draw(canvas)
+        lb = label_font.getbbox(label_text)
+        ly = y + (LABEL_STRIP_H - (lb[3] - lb[1])) // 2 - lb[1]
+        tx = LABEL_MARGIN
+        for ch in label_text:
+            draw.text((tx, ly), ch, font=label_font, fill=TEXT_DARK)
+            cb = draw.textbbox((0, 0), ch, font=label_font)
+            tx += (cb[2] - cb[0]) + LABEL_LETTER_SPACING
+        y += LABEL_STRIP_H
 
-    for i, (photo_resized, label_text, label_color, label_pos) in enumerate(label_configs):
         px = (CANVAS_W - photo_resized.width) // 2
         canvas.paste(photo_resized.convert("RGBA"), (px, y), photo_resized.convert("RGBA"))
-
-        draw = ImageDraw.Draw(canvas)
-
-        # Total label width (with letter spacing) for alignment.
-        total_w = 0
-        for ch in label_text:
-            bbox = draw.textbbox((0, 0), ch, font=label_font)
-            total_w += (bbox[2] - bbox[0]) + LABEL_LETTER_SPACING
-        total_w -= LABEL_LETTER_SPACING
-
-        if label_in_margin:
-            # Left margin, snug to the photo's left edge, vertically centered.
-            lb = label_font.getbbox(label_text)
-            label_h = lb[3] - lb[1]
-            lx = max(LABEL_MARGIN, px - LABEL_MARGIN - total_w)
-            ly = y + (photo_resized.height - label_h) // 2
-        elif label_pos == "left":
-            lx = px + LABEL_MARGIN
-            ly = y + LABEL_MARGIN
-        else:
-            lx = px + photo_resized.width - LABEL_MARGIN - total_w
-            ly = y + LABEL_MARGIN
-
-        # Pick the colour from what the label actually lands on, now that its
-        # position is known. Hardcoded white vanished on a lit stage banner.
-        if label_color == "auto":
-            label_color = pick_label_color(
-                canvas, lx, ly, total_w, LABEL_FONT_SIZE + LABEL_MARGIN
-            )
-        fill = (255, 255, 255) if label_color == "light" else TEXT_DARK
-        shadow_fill = (0, 0, 0, 140) if label_color == "light" else (255, 255, 255, 100)
-
-        # Shadow for readability
-        shadow_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-        sd = ImageDraw.Draw(shadow_layer)
-        sx = lx
-        for ch in label_text:
-            sd.text((sx + 2, ly + 2), ch, font=label_font, fill=shadow_fill)
-            bbox_ch = sd.textbbox((0, 0), ch, font=label_font)
-            sx += (bbox_ch[2] - bbox_ch[0]) + LABEL_LETTER_SPACING
-        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=3))
-        canvas = Image.alpha_composite(canvas.convert("RGBA"), shadow_layer)
-
-        # Main text
-        draw = ImageDraw.Draw(canvas)
-        tx = lx
-        for ch in label_text:
-            draw.text((tx, ly), ch, font=label_font, fill=fill)
-            bbox_ch = draw.textbbox((0, 0), ch, font=label_font)
-            tx += (bbox_ch[2] - bbox_ch[0]) + LABEL_LETTER_SPACING
-
         y += photo_resized.height
-
-        # Mid-strip between adjacent photos (not after the last one)
-        if i < len(label_configs) - 1:
-            canvas = apply_cream_strip(canvas, y, MID_STRIP_H)
-            y += MID_STRIP_H
 
     # Photos → footer boundary: no rule line (gallery style); keep the gap.
     y += DIVIDER_H

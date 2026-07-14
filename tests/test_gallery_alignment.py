@@ -176,11 +176,31 @@ def test_morph_labels_are_dark_enough_to_read_on_cream():
 # landed on a bright blue-and-white stage banner and vanished. The colour must be
 # chosen from the pixels the label actually sits on.
 
-def test_label_colour_is_picked_from_what_is_underneath():
-    bright = Image.new("RGB", (200, 100), (240, 240, 245))
-    dark = Image.new("RGB", (200, 100), (25, 25, 30))
-    assert ba_mod.pick_label_color(bright, 0, 0, 200, 100) == "dark"
-    assert ba_mod.pick_label_color(dark, 0, 0, 200, 100) == "light"
+def test_before_after_labels_sit_in_a_cream_band_above_each_photo(tmp_path):
+    # The RAW/Edit labels were drawn ON the photos, so on a busy stage banner they
+    # were unreadable whatever colour they took. They now sit in a cream band above
+    # each photo: dark ink on cream, legible on any photo.
+    vivid = tmp_path / "vivid.jpg"
+    Image.new("RGB", (1500, 1000), (30, 90, 200)).save(str(vivid), "JPEG")  # solid blue, no cream
+    out = str(tmp_path / "ba_labels.png")
+    ba_mod.generate_before_after(str(vivid), str(vivid), out,
+                                 event_name="E", org="O", venue="V")
+    img = Image.open(out).convert("RGB")
+
+    # Find the topmost row with the RAW label's dark ink.
+    def row_has_dark(y):
+        return any(sum(img.getpixel((x, y))) < 260 for x in range(0, 1080, 3))
+
+    label_y = next((y for y in range(430, 1500, 2) if row_has_dark(y)), None)
+    assert label_y is not None, "no label ink found"
+
+    # The pixels the label sits on must be cream (a strip), not the blue photo.
+    surround = [img.getpixel((x, label_y)) for x in range(0, 1080, 3)
+                if sum(img.getpixel((x, label_y))) >= 260]
+    assert surround, "label row has no background pixels"
+    creamish = sum(1 for p in surround if p[0] > 230 and p[1] > 225 and p[2] > 215)
+    assert creamish > len(surround) * 0.8, \
+        "the label is sitting on the photo, not in a cream band above it"
 
 
 def test_before_after_label_reads_on_a_bright_photo(tmp_path):
