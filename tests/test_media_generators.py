@@ -496,6 +496,27 @@ def test_branded_strip_is_inset_as_a_caption_plate(tmp_path):
     assert img.getpixel((CANVAS_W - MAT // 2, mid)) == STRIP_CREAM, "and right of it"
 
 
+def test_plate_has_no_rose_gold_rule_lines(tmp_path):
+    # The rose-gold rules above and below the plate were a holdover from the old
+    # edge-to-edge strip. In the cream gallery mat they read as leftover dividers,
+    # so the plate must have no rule lines: its top and bottom edges are cream.
+    out = tmp_path / "norules.png"
+    photos = _photo_set(tmp_path, (30, 30, 30))
+    generate_collage(photo_paths=photos, output_path=str(out), event_name="A",
+                     write_layout_sidecar=False)
+    img = Image.open(out).convert("RGB")
+
+    ratios = [1500 / 1000] * 4
+    split = distinct_collage_splits(4, ratios)[0]
+    _, strip_y = plan_collage_cells(ratios, split[0], split[1], random.Random(0))
+
+    # A column inside the plate but clear of the text and logo.
+    x = CANVAS_W // 2
+    for edge_y in (strip_y, strip_y + STRIP_H - 1):
+        assert img.getpixel((x, edge_y)) == STRIP_CREAM, \
+            f"plate edge row {edge_y} must be cream, not a rule line"
+
+
 # ===================================================================
 # ffmpeg command construction
 # ===================================================================

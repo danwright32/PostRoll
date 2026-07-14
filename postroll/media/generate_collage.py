@@ -39,7 +39,6 @@ GAP = 16  # gutter between prints
 STRIP_H = 90
 STRIP_CREAM = (252, 250, 247)  # matches story/before-after cream
 TEXT_DARK = (60, 55, 50)
-ROSE_GOLD = (160, 105, 95)
 
 # Hairline: the 1px ring immediately OUTSIDE each cell, so a print is framed
 # without the line eating a row of the photograph. Swift strokes the same ring
@@ -553,9 +552,8 @@ def draw_branded_strip(
 
     draw = ImageDraw.Draw(canvas_rgba)
 
-    # Rose-gold rules at the top and bottom of the plate
-    draw.line([(left, y), (right, y)], fill=ROSE_GOLD, width=2)
-    draw.line([(left, y + STRIP_H - 1), (right, y + STRIP_H - 1)], fill=ROSE_GOLD, width=2)
+    # No rule lines: the plate is cream on a cream mat, so a rule would read as a
+    # leftover divider from the old edge-to-edge strip.
 
     title_font = load_font(FONT_SCRIPT, 42)
     detail_font = load_font(FONT_DETAIL, 18, index=PLATE_DETAIL_WEIGHT)
