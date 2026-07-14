@@ -70,6 +70,9 @@ FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 # Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
 FONT_DETAIL_LIGHT = 7
 FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
+# RAW/Edit labels sit on the cream mat now, so they are dark. They used to be white,
+# which only worked against the old blurred, darkened photo background.
+LABEL_COLOR = TEXT_DARK
 LABEL_FONT_SIZE = 38
 LABEL_MARGIN = 30
 LOGO_WIDTH = 200
@@ -260,15 +263,11 @@ def generate_frame(
         edit_strip = edit_zoomed.crop((0, 0, min(divider_x, CANVAS_W), CANVAS_H))
         frame.paste(edit_strip, (0, 0))
 
-    # Clean divider line — no glow, just a crisp white line
+    # Crisp white divider. No drop shadow: on the cream mat there is nothing to
+    # divide (both sides are the same cream), so a shadow only streaks the mat.
+    # Over the photo the white line still reads on its own.
     if 0 < divider_x < CANVAS_W:
         draw = ImageDraw.Draw(frame)
-        # Subtle shadow
-        draw.line(
-            [(divider_x + 2, 0), (divider_x + 2, CANVAS_H)],
-            fill=(0, 0, 0, 50), width=DIVIDER_WIDTH + 2,
-        )
-        # Main line
         draw.line(
             [(divider_x, 0), (divider_x, CANVAS_H)],
             fill=DIVIDER_COLOR, width=DIVIDER_WIDTH,
@@ -283,29 +282,19 @@ def generate_frame(
     if show_edit_label and divider_x > LABEL_MARGIN:
         lx = LABEL_MARGIN
 
-        # Draw label on a separate layer, then mask to divider position
+        # Dark text, no shadow: the label sits on the cream mat now, so white was
+        # invisible and the drop shadow was the only thing showing.
         label_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-
-        # Shadow
-        shadow_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-        sd = ImageDraw.Draw(shadow_layer)
-        sd.text((lx, label_y), "E d i t", font=font, fill=(0, 0, 0, 120))
-        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=3))
-
-        # Text
         ld = ImageDraw.Draw(label_layer)
-        ld.text((lx, label_y), "E d i t", font=font, fill=(255, 255, 255, 255))
+        ld.text((lx, label_y), "E d i t", font=font, fill=(*LABEL_COLOR, 255))
 
-        # Clip both layers to left of divider
+        # Clip to left of divider
         mask = Image.new("L", (CANVAS_W, CANVAS_H), 0)
         md = ImageDraw.Draw(mask)
         md.rectangle([(0, 0), (divider_x, CANVAS_H)], fill=255)
-
-        shadow_layer.putalpha(Image.composite(shadow_layer.split()[3], Image.new("L", (CANVAS_W, CANVAS_H), 0), mask))
         label_layer.putalpha(Image.composite(label_layer.split()[3], Image.new("L", (CANVAS_W, CANVAS_H), 0), mask))
 
         frame_rgba = frame.convert("RGBA")
-        frame_rgba = Image.alpha_composite(frame_rgba, shadow_layer)
         frame_rgba = Image.alpha_composite(frame_rgba, label_layer)
         frame = frame_rgba.convert("RGB")
 
@@ -329,14 +318,9 @@ def generate_frame(
             label_alpha = int(255 * (1 - push))
 
         if label_alpha > 10:
-            shadow = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-            sd = ImageDraw.Draw(shadow)
-            sd.text((lx, label_y), raw_text, font=font, fill=(0, 0, 0, min(120, label_alpha)))
-            shadow = shadow.filter(ImageFilter.GaussianBlur(radius=3))
             frame_rgba = frame.convert("RGBA")
-            frame_rgba = Image.alpha_composite(frame_rgba, shadow)
             draw = ImageDraw.Draw(frame_rgba)
-            draw.text((lx, label_y), raw_text, font=font, fill=(255, 255, 255, label_alpha))
+            draw.text((lx, label_y), raw_text, font=font, fill=(*LABEL_COLOR, label_alpha))
             frame = frame_rgba.convert("RGB")
 
     # Logo watermark during hold-on-edit

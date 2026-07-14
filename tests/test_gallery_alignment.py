@@ -125,6 +125,51 @@ def test_screen_background_is_cream():
     assert bg.convert("RGB").getpixel((10, 10)) == screen_mod.CREAM
 
 
+# ── Labels and dividers must survive the cream background ──────────────────
+#
+# Caught by rendering a real reel: the RAW/Edit labels were white and the slider's
+# divider carried a dark shadow, both of which only worked because they sat on a
+# dark blurred backdrop. On cream the labels vanished and the shadow left a stray
+# dark line through the mat.
+
+def _slider_frame(divider_x=540):
+    photo = _landscape(size=(1500, 1000))          # 3:2, so it letterboxes onto cream
+    raw_canvas, photo_y = slider_mod.prepare_photo_simple(photo, photo)
+    edit_canvas, _ = slider_mod.prepare_photo_simple(photo, photo)
+    font = slider_mod.load_font(
+        slider_mod.FONT_DETAIL, slider_mod.LABEL_FONT_SIZE,
+        index=slider_mod.FONT_DETAIL_BOLD,
+    )
+    frame = slider_mod.generate_frame(raw_canvas, edit_canvas, divider_x, font)
+    return frame.convert("RGB"), photo_y
+
+
+def _darkest_in(img, box):
+    x0, y0, x1, y1 = box
+    return min(min(img.getpixel((x, y))) for x in range(x0, x1, 2) for y in range(y0, y1, 2))
+
+
+def test_slider_labels_are_dark_enough_to_read_on_cream():
+    frame, _ = _slider_frame()
+    label_y = int(slider_mod.CANVAS_H * 0.75)
+    box = (slider_mod.LABEL_MARGIN, label_y, slider_mod.LABEL_MARGIN + 180, label_y + 40)
+    assert _darkest_in(frame, box) < 120, "the Edit label is not legible on the cream mat"
+
+
+def test_slider_divider_leaves_no_dark_line_across_the_cream():
+    # In the cream band there is nothing to divide (both sides are the same cream),
+    # so the divider must not leave a shadow streak across the mat.
+    frame, photo_y = _slider_frame()
+    y = photo_y // 2   # comfortably inside the cream above the photo
+    darkest = min(min(frame.getpixel((x, y))) for x in range(0, slider_mod.CANVAS_W, 2))
+    assert darkest > 200, "the divider's shadow is streaking through the cream mat"
+
+
+def test_morph_labels_are_dark_enough_to_read_on_cream():
+    assert morph_mod.LABEL_COLOR == morph_mod.TEXT_DARK
+    assert slider_mod.LABEL_COLOR == slider_mod.TEXT_DARK
+
+
 def test_before_after_has_no_rose_gold_rule(sample_photo, tmp_output):
     out = str(tmp_output / "ba.png")
     ba_mod.generate_before_after(

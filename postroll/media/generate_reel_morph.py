@@ -65,6 +65,9 @@ LABEL_MARGIN = 30
 CREAM = (252, 250, 247)
 CREAM_OPACITY = 210
 TEXT_DARK = (60, 55, 50)
+# RAW/Edit labels sit on the cream mat now, so they are dark. They used to be white,
+# which only worked against the old blurred, darkened photo background.
+LABEL_COLOR = TEXT_DARK
 ROSE_GOLD = (160, 105, 95)
 HEADER_H = 340  # tall enough to push title clear of the iPhone notch / Dynamic Island
 TITLE_TOP_Y = 170  # clears notch (~120px) + Dynamic Island with breathing room
@@ -211,25 +214,19 @@ def generate_split_frame(
     left_divider = center - half_gap
 
     if left_divider > raw_lx:  # RAW area still covers the label
-        shadow_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-        sd = ImageDraw.Draw(shadow_layer)
-        sd.text((raw_lx, label_y), "R A W", font=font, fill=(0, 0, 0, 120))
-        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=3))
-
+        # Dark text, no shadow: the label sits on the cream mat now.
         label_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
         ld = ImageDraw.Draw(label_layer)
-        ld.text((raw_lx, label_y), "R A W", font=font, fill=(255, 255, 255, 255))
+        ld.text((raw_lx, label_y), "R A W", font=font, fill=(*LABEL_COLOR, 255))
 
         if half_gap > 0:
             # Mask to RAW area (left of left divider)
             mask = Image.new("L", (CANVAS_W, CANVAS_H), 0)
             md = ImageDraw.Draw(mask)
             md.rectangle([(0, 0), (left_divider, CANVAS_H)], fill=255)
-            shadow_layer.putalpha(Image.composite(shadow_layer.split()[3], Image.new("L", (CANVAS_W, CANVAS_H), 0), mask))
             label_layer.putalpha(Image.composite(label_layer.split()[3], Image.new("L", (CANVAS_W, CANVAS_H), 0), mask))
 
         frame_rgba = frame.convert("RGBA")
-        frame_rgba = Image.alpha_composite(frame_rgba, shadow_layer)
         frame_rgba = Image.alpha_composite(frame_rgba, label_layer)
         frame = frame_rgba.convert("RGB")
 
@@ -245,14 +242,10 @@ def generate_split_frame(
         end_x = CANVAS_W - LABEL_MARGIN - etw
         edit_lx = int(start_x + (end_x - start_x) * split_progress)
 
-        # Draw on separate layers, then clip to edit area
+        # Dark text, no shadow: the label sits on the cream mat now.
         label_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-        shadow_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-        sd = ImageDraw.Draw(shadow_layer)
-        sd.text((edit_lx, label_y), edit_text, font=font, fill=(0, 0, 0, 120))
-        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=3))
         ld = ImageDraw.Draw(label_layer)
-        ld.text((edit_lx, label_y), edit_text, font=font, fill=(255, 255, 255, 255))
+        ld.text((edit_lx, label_y), edit_text, font=font, fill=(*LABEL_COLOR, 255))
 
         # Mask: only show within the edit area (between the dividers)
         left_edge = center - half_gap
@@ -261,11 +254,9 @@ def generate_split_frame(
         md = ImageDraw.Draw(mask)
         md.rectangle([(left_edge, 0), (right_edge, CANVAS_H)], fill=255)
 
-        shadow_layer.putalpha(Image.composite(shadow_layer.split()[3], Image.new("L", (CANVAS_W, CANVAS_H), 0), mask))
         label_layer.putalpha(Image.composite(label_layer.split()[3], Image.new("L", (CANVAS_W, CANVAS_H), 0), mask))
 
         frame_rgba = frame.convert("RGBA")
-        frame_rgba = Image.alpha_composite(frame_rgba, shadow_layer)
         frame_rgba = Image.alpha_composite(frame_rgba, label_layer)
         frame = frame_rgba.convert("RGB")
 
