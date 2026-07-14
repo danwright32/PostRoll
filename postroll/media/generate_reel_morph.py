@@ -49,31 +49,45 @@ RAW_COOL_SHIFT = 0
 ZOOM_START = 1.0
 ZOOM_END = 1.0
 
-# Split divider
+# Split divider (drawn only within the print)
 DIVIDER_WIDTH = 4
 DIVIDER_COLOR = (255, 255, 255)
 
-# Labels
+# Fonts
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-# Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
-FONT_DETAIL_LIGHT = 7
-FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
-LABEL_FONT_SIZE = 38
-LABEL_MARGIN = 30
-
-# Branded chrome
-CREAM = (252, 250, 247)
-CREAM_OPACITY = 210
-TEXT_DARK = (60, 55, 50)
-# RAW/Edit labels sit on the cream mat now, so they are dark. They used to be white,
-# which only worked against the old blurred, darkened photo background.
-LABEL_COLOR = TEXT_DARK
-ROSE_GOLD = (160, 105, 95)
-HEADER_H = 340  # tall enough to push title clear of the iPhone notch / Dynamic Island
-TITLE_TOP_Y = 170  # clears notch (~120px) + Dynamic Island with breathing room
-FOOTER_H = 100
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
-LOGO_WIDTH = 200
+FONT_DETAIL_LIGHT = 7
+FONT_DETAIL_BOLD = 1
+FONT_DETAIL_MEDIUM = 10
+
+# === Program-plate composition (the approved Tuesday reel look) ===
+# A printed-program page: masthead top-left, the photo matted and hung as a print,
+# a two-line caption placard below it, and a footer colophon closing the bottom.
+CREAM = (252, 250, 247)
+CREAM_EDGE = (212, 201, 192)   # the print's hairline
+TEXT_DARK = (60, 55, 50)
+WARM_MID = (122, 104, 96)      # the quiet placard subtitle
+ROSE_GOLD = (160, 105, 95)     # the one accent: rules + the live state word
+
+MAT = 72
+PRINT_W = CANVAS_W - 2 * MAT
+MASTHEAD_Y = 176               # SignPainter title
+VENUE_Y = 285
+RULE_Y = 338
+PRINT_Y = 430                  # the print is hung here
+FOOTER_RULE_Y = CANVAS_H - 214  # colophon rule; logo centred beneath
+LOGO_WIDTH = 340
+
+# Set once per reel from the photo's aspect (raw and edit share it).
+_PRINT_H = 624
+
+# The caption is a two-line placard matching the Friday before/after wording, and it
+# crossfades from BEFORE to AFTER on the wipe's curve. The wording map is imported so
+# it can never drift from the closing frame.
+from .generate_before_after import placard_text  # noqa: E402
+BEFORE_STATE, AFTER_STATE = "RAW", "Edit"
+BEFORE_ALPHA = 1.0
+AFTER_ALPHA = 0.0
 
 # Audio
 AUDIO_FADE_DURATION = 2.0
@@ -86,22 +100,37 @@ def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
         return ImageFont.load_default()
 
 
+def _tracked(draw, text, font, fill, x, y, spacing):
+    for ch in text:
+        draw.text((x, y), ch, font=font, fill=fill)
+        b = draw.textbbox((0, 0), ch, font=font)
+        x += (b[2] - b[0]) + spacing
+
+
 def prepare_photo(photo: Image.Image, bg_photo: Image.Image) -> Image.Image:
-    """Fit photo to width on a flat cream background (gallery style).
+    """Hang the photo as a matted print on the cream mat.
 
-    bg_photo is accepted for signature compatibility with the callers but is no
-    longer used: the letterbox above and below the photo is now brand cream, not
-    a blurred, darkened copy of the edit.
+    A soft drop shadow and a cream hairline make it read as a print on paper. Both
+    the RAW and Edit canvases use the SAME print rectangle, so the split wipe (which
+    reveals the edit's centre strip) only shows where there is a print to divide;
+    the surrounding mat is cream-over-cream and stays still. bg_photo is unused.
     """
-    photo_ratio = photo.width / photo.height
-    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
+    global _PRINT_H
+    _PRINT_H = int(PRINT_W / (photo.width / photo.height))
 
-    fit_w = CANVAS_W
-    fit_h = int(CANVAS_W / photo_ratio)
-    resized = photo.resize((fit_w, fit_h), Image.LANCZOS)
-    py = (CANVAS_H - fit_h) // 2
-    canvas.paste(resized, (0, py))
-    return canvas
+    canvas = Image.new("RGBA", (CANVAS_W, CANVAS_H), (*CREAM, 255))
+    shadow = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rectangle(
+        [MAT + 3, PRINT_Y + 6, MAT + PRINT_W + 3, PRINT_Y + _PRINT_H + 8],
+        fill=(60, 55, 50, 44))
+    canvas.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(14)))
+
+    canvas.paste(photo.resize((PRINT_W, _PRINT_H), Image.LANCZOS).convert("RGBA"),
+                 (MAT, PRINT_Y))
+    ImageDraw.Draw(canvas).rectangle(
+        [MAT - 1, PRINT_Y - 1, MAT + PRINT_W, PRINT_Y + _PRINT_H],
+        outline=CREAM_EDGE, width=1)
+    return canvas.convert("RGB")
 
 
 def apply_zoom(img: Image.Image, zoom: float) -> Image.Image:
@@ -115,53 +144,63 @@ def apply_zoom(img: Image.Image, zoom: float) -> Image.Image:
     return img.crop((left, top, left + new_w, top + new_h)).resize((w, h), Image.LANCZOS)
 
 
+def _smooth(x):
+    x = max(0.0, min(1.0, x))
+    return x * x * (3 - 2 * x)  # smoothstep, matches the photo's ease
+
+
+def set_caption_state(progress: float) -> None:
+    """Dissolve the caption placard THROUGH EMPTY on the wipe's curve: BEFORE fades
+    out, then AFTER fades in. A straight cross-dissolve would overlap two different
+    words in one spot and read as garbled, so they never coexist."""
+    global BEFORE_ALPHA, AFTER_ALPHA
+    BEFORE_ALPHA = _smooth((0.48 - progress) / 0.18)
+    AFTER_ALPHA = _smooth((progress - 0.52) / 0.18)
+
+
+def _draw_placard(canvas_rgba, state, alpha):
+    if alpha <= 0.003:
+        return canvas_rgba
+    word, subtitle = placard_text(state)
+    layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    y = PRINT_Y + _PRINT_H + 34
+    _tracked(d, word, load_font(FONT_DETAIL, 20, index=FONT_DETAIL_BOLD), (*ROSE_GOLD, 255), MAT, y, 6)
+    _tracked(d, subtitle, load_font(FONT_DETAIL, 14, index=FONT_DETAIL_MEDIUM), (*WARM_MID, 255), MAT, y + 32, 4)
+    if alpha < 1.0:
+        layer.putalpha(layer.split()[3].point(lambda a: int(a * alpha)))
+    return Image.alpha_composite(canvas_rgba, layer)
+
+
 def draw_branded_chrome(frame, event_name, org, venue, logo):
-    """Draw cream header and footer."""
-    frame_rgba = frame.convert("RGBA")
-    header = Image.new("RGBA", (CANVAS_W, HEADER_H), (*CREAM, CREAM_OPACITY))
-    frame_rgba.paste(header, (0, 0), header)
-    draw = ImageDraw.Draw(frame_rgba)
+    """Program-plate chrome: masthead, footer colophon, and the crossfading placards."""
+    c = frame.convert("RGBA")
+    d = ImageDraw.Draw(c)
 
-    title_font = load_font(FONT_SCRIPT, 70)
-    detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_LIGHT)
-    bbox = draw.textbbox((0, 0), event_name, font=title_font)
-    tw = bbox[2] - bbox[0]
-    draw.text(((CANVAS_W - tw) // 2, TITLE_TOP_Y), event_name, font=title_font, fill=TEXT_DARK)
+    # Masthead, top-left, shifted down so it isn't jammed at the very edge.
+    d.text((MAT, MASTHEAD_Y), event_name, font=load_font(FONT_SCRIPT, 74), fill=TEXT_DARK)
+    detail_lines = [s for s in (org, venue) if s]
+    if org and venue and org.strip().casefold() == event_name.strip().casefold():
+        detail_lines = [venue]  # org duplicates the title; drop it, keep the venue
+    if detail_lines:
+        _tracked(d, detail_lines[0].upper(),
+                 load_font(FONT_DETAIL, 19, index=FONT_DETAIL_LIGHT), WARM_MID, MAT, VENUE_Y, 5)
+    d.line([(MAT, RULE_Y), (CANVAS_W - MAT, RULE_Y)], fill=ROSE_GOLD, width=1)
 
-    title_h = bbox[3] - bbox[1]
-    info_y = TITLE_TOP_Y + title_h + 20
-    for j, line in enumerate([org, venue]):
-        if line:
-            total_w = sum(draw.textbbox((0, 0), ch, font=detail_font)[2] -
-                         draw.textbbox((0, 0), ch, font=detail_font)[0] + 6
-                         for ch in line) - 6
-            x = (CANVAS_W - total_w) // 2
-            for ch in line:
-                draw.text((x, info_y + j * 36), ch, font=detail_font, fill=TEXT_DARK)
-                cb = draw.textbbox((0, 0), ch, font=detail_font)
-                x += (cb[2] - cb[0]) + 6
-
-    footer_y = CANVAS_H - FOOTER_H
-    footer = Image.new("RGBA", (CANVAS_W, FOOTER_H), (*CREAM, CREAM_OPACITY))
-    frame_rgba.paste(footer, (0, footer_y), footer)
+    # Footer colophon closing the bottom.
+    d.line([(MAT, FOOTER_RULE_Y), (CANVAS_W - MAT, FOOTER_RULE_Y)], fill=ROSE_GOLD, width=1)
     if logo:
-        lx = (CANVAS_W - logo.width) // 2
-        ly = footer_y + (FOOTER_H - logo.height) // 2
-        frame_rgba.paste(logo, (lx, ly), logo)
-    return frame_rgba.convert("RGB")
+        c.alpha_composite(logo, ((CANVAS_W - logo.width) // 2, FOOTER_RULE_Y + 40))
+
+    c = _draw_placard(c, BEFORE_STATE, BEFORE_ALPHA)
+    c = _draw_placard(c, AFTER_STATE, AFTER_ALPHA)
+    return c.convert("RGB")
 
 
 def draw_label(frame, text, x, y, font, alpha=255):
-    """Draw a label with shadow."""
-    shadow = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-    sd = ImageDraw.Draw(shadow)
-    sd.text((x, y), text, font=font, fill=(0, 0, 0, min(120, alpha)))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=3))
-    f = frame.convert("RGBA")
-    f = Image.alpha_composite(f, shadow)
-    draw = ImageDraw.Draw(f)
-    draw.text((x, y), text, font=font, fill=(255, 255, 255, alpha))
-    return f.convert("RGB")
+    """Hold-on-edit / closing: pin the caption to full AFTER. The chrome draws it."""
+    set_caption_state(1.0)
+    return frame
 
 
 def ease_in_out(t):
@@ -174,91 +213,31 @@ def generate_split_frame(
     split_progress: float,
     font: ImageFont.FreeTypeFont,
 ) -> Image.Image:
-    """Generate a frame with the split view.
+    """One frame of the split: the edit is revealed from the centre of the PRINT
+    outward. The wipe and its divider live only inside the print rectangle; the
+    surrounding cream mat is identical in both canvases, so nothing moves there.
+    The BEFORE/AFTER caption is a crossfading placard the chrome draws, not a label
+    here, so set its state from the wipe position.
 
-    split_progress: 0.0 = full RAW, 0.5 = 50/50 split, 1.0 = full edit
+    split_progress: 0.0 = full RAW, 1.0 = full edit.
     """
-    center = CANVAS_W // 2
-
+    set_caption_state(split_progress)
     if split_progress >= 1.0:
         return edit_canvas.copy()
 
     center = CANVAS_W // 2
     half_gap = int(center * split_progress)
-
     frame = raw_canvas.copy()
 
     if half_gap > 0:
-        # Show edit in the center portion
-        right_start = center - half_gap
-        right_end = center + half_gap
-
-        if right_end > right_start:
-            edit_strip = edit_canvas.crop((right_start, 0, right_end, CANVAS_H))
-            frame.paste(edit_strip, (right_start, 0))
-
-        # Divider lines at the split edges
+        a, b = center - half_gap, center + half_gap
+        if b > a:
+            frame.paste(edit_canvas.crop((a, 0, b, CANVAS_H)), (a, 0))
         draw = ImageDraw.Draw(frame)
-        if right_start > 0:
-            draw.line([(right_start, 0), (right_start, CANVAS_H)],
-                     fill=DIVIDER_COLOR, width=DIVIDER_WIDTH)
-        if right_end < CANVAS_W:
-            draw.line([(right_end, 0), (right_end, CANVAS_H)],
-                     fill=DIVIDER_COLOR, width=DIVIDER_WIDTH)
-
-    # Labels in the blurred area above photo
-    label_y = int(CANVAS_H * 0.75)
-
-    # RAW label — always visible, masked to RAW area once split starts
-    raw_lx = LABEL_MARGIN
-    left_divider = center - half_gap
-
-    if left_divider > raw_lx:  # RAW area still covers the label
-        # Dark text, no shadow: the label sits on the cream mat now.
-        label_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-        ld = ImageDraw.Draw(label_layer)
-        ld.text((raw_lx, label_y), "R A W", font=font, fill=(*LABEL_COLOR, 255))
-
-        if half_gap > 0:
-            # Mask to RAW area (left of left divider)
-            mask = Image.new("L", (CANVAS_W, CANVAS_H), 0)
-            md = ImageDraw.Draw(mask)
-            md.rectangle([(0, 0), (left_divider, CANVAS_H)], fill=255)
-            label_layer.putalpha(Image.composite(label_layer.split()[3], Image.new("L", (CANVAS_W, CANVAS_H), 0), mask))
-
-        frame_rgba = frame.convert("RGBA")
-        frame_rgba = Image.alpha_composite(frame_rgba, label_layer)
-        frame = frame_rgba.convert("RGB")
-
-    # Edit label — revealed by the split opening, masked to the edit area
-    edit_text = "E d i t"
-    tmp_draw = ImageDraw.Draw(frame)
-    eb = tmp_draw.textbbox((0, 0), edit_text, font=font)
-    etw = eb[2] - eb[0]
-
-    if half_gap > 10:
-        # Label slides from center toward right side, following the split
-        start_x = center + LABEL_MARGIN
-        end_x = CANVAS_W - LABEL_MARGIN - etw
-        edit_lx = int(start_x + (end_x - start_x) * split_progress)
-
-        # Dark text, no shadow: the label sits on the cream mat now.
-        label_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-        ld = ImageDraw.Draw(label_layer)
-        ld.text((edit_lx, label_y), edit_text, font=font, fill=(*LABEL_COLOR, 255))
-
-        # Mask: only show within the edit area (between the dividers)
-        left_edge = center - half_gap
-        right_edge = center + half_gap
-        mask = Image.new("L", (CANVAS_W, CANVAS_H), 0)
-        md = ImageDraw.Draw(mask)
-        md.rectangle([(left_edge, 0), (right_edge, CANVAS_H)], fill=255)
-
-        label_layer.putalpha(Image.composite(label_layer.split()[3], Image.new("L", (CANVAS_W, CANVAS_H), 0), mask))
-
-        frame_rgba = frame.convert("RGBA")
-        frame_rgba = Image.alpha_composite(frame_rgba, label_layer)
-        frame = frame_rgba.convert("RGB")
+        for x in (a, b):
+            if MAT < x < CANVAS_W - MAT:  # only where there is a print to divide
+                draw.line([(x, PRINT_Y), (x, PRINT_Y + _PRINT_H)],
+                          fill=DIVIDER_COLOR, width=DIVIDER_WIDTH)
 
     return frame
 
@@ -293,7 +272,9 @@ def generate_reel_morph(
 
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
-    font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_BOLD)
+    # Passed through to generate_split_frame/draw_label for signature compatibility;
+    # the caption is now the chrome's placard, so the font itself is unused there.
+    font = load_font(FONT_DETAIL, 20, index=FONT_DETAIL_BOLD)
 
     raw_canvas = prepare_photo(raw_photo, edit_photo)
     edit_canvas = prepare_photo(edit_photo, edit_photo)
@@ -340,15 +321,9 @@ def generate_reel_morph(
                 frame = generate_split_frame(raw_z, edit_z, split, font)
 
             elif i < p3:
-                # Hold on full edit
+                # Hold on full edit; pin the caption to AFTER (chrome draws it).
                 frame = edit_z.copy()
-                edit_text = "E d i t"
-                tmp_draw = ImageDraw.Draw(frame)
-                eb = tmp_draw.textbbox((0, 0), edit_text, font=font)
-                etw = eb[2] - eb[0]
-                frame = draw_label(frame, edit_text,
-                                  CANVAS_W - LABEL_MARGIN - etw,
-                                  int(CANVAS_H * 0.75), font)
+                set_caption_state(1.0)
 
             elif i < p4:
                 # Crossfade to closing frame. Keep the reel chrome on the

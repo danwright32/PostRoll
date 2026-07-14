@@ -94,6 +94,18 @@ LOGO_BLACK = str(ASSETS_DIR / "logo-black.png")
 
 DAY_ORDER = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]
 
+
+def resolve_tuesday_reel_style(bw, requested: str | None) -> str:
+    """Which Tuesday reel style to render.
+
+    3-photo mode (a B&W after present) keeps the slider reveal so the
+    color-over-B&W reveal reads consistently. Otherwise an explicit request wins,
+    and the default is the program-plate morph (the approved Tuesday reel look).
+    """
+    if bw:
+        return "slider"
+    return requested or "morph"
+
 # On-disk folder names used for exports. Numbered so Finder sorts chronologically.
 # Must match DayName.folderName in PostRollApp/Sources/Models/Event.swift.
 DAY_FOLDER_NAMES = {
@@ -319,11 +331,7 @@ def generate_media(
             audio          = day_info.get("audio")
             target_duration = float(day_info.get("target_duration", 20.0))
 
-            # 3-photo mode (B&W present) always uses the slider reveal so the
-            # color-over-B&W reveal reads consistently; otherwise pick a style.
-            reel_style = "slider" if bw else (
-                day_info.get("reel_style") or random.choice(["slider", "morph"])
-            )
+            reel_style = resolve_tuesday_reel_style(bw, day_info.get("reel_style"))
 
             # Also generate the standalone before/after PNG. Serves two roles:
             #   1. Closing frame for the slider/morph reel (always needed on disk).

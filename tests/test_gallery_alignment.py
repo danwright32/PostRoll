@@ -47,8 +47,9 @@ def test_scroll_chrome_has_no_rose_gold_rules():
     _assert_no_chrome_rules(scroll_mod)
 
 
-def test_morph_chrome_has_no_rose_gold_rules():
-    _assert_no_chrome_rules(morph_mod)
+# morph is intentionally excluded from the no-rules cleanup: it is now the
+# program-plate reel, which uses rose-gold rules as part of its design (see the
+# program-plate tests below).
 
 
 def test_slider_chrome_has_no_rose_gold_rules():
@@ -165,9 +166,50 @@ def test_slider_divider_leaves_no_dark_line_across_the_cream():
     assert darkest > 200, "the divider's shadow is streaking through the cream mat"
 
 
-def test_morph_labels_are_dark_enough_to_read_on_cream():
-    assert morph_mod.LABEL_COLOR == morph_mod.TEXT_DARK
+def test_slider_labels_are_dark_enough_to_read_on_cream():
     assert slider_mod.LABEL_COLOR == slider_mod.TEXT_DARK
+
+
+# ── morph is the program-plate Tuesday reel ─────────────────────────────────
+#
+# A printed-program page: masthead top-left on a rose-gold rule, the photo hung
+# as a matted print, a crossfading BEFORE/AFTER placard, and a footer colophon.
+
+def test_morph_prints_the_photo_matted_not_full_bleed():
+    canvas = morph_mod.prepare_photo(_landscape(size=(1500, 1000)), _landscape())
+    rgb = canvas.convert("RGB")
+    assert rgb.getpixel((10, 10)) == morph_mod.CREAM, "top mat"
+    # The print sits inside the side mat, hung at PRINT_Y, not filling the frame.
+    assert rgb.getpixel((morph_mod.MAT // 2, morph_mod.PRINT_Y + 40)) == morph_mod.CREAM, \
+        "side mat"
+    mid_x = morph_mod.CANVAS_W // 2
+    assert rgb.getpixel((mid_x, morph_mod.PRINT_Y + 40)) != morph_mod.CREAM, \
+        "the print itself is missing"
+
+
+def test_morph_has_masthead_and_footer_colophon_rules():
+    frame = Image.new("RGB", (morph_mod.CANVAS_W, morph_mod.CANVAS_H), morph_mod.CREAM)
+    out = morph_mod.draw_branded_chrome(frame, "Home'r Bust!", "Home'r Bust!",
+                                        "David Geffen Hall Lobby", None)
+    assert _row_has_color(out, morph_mod.RULE_Y, morph_mod.ROSE_GOLD), "masthead rule"
+    assert _row_has_color(out, morph_mod.FOOTER_RULE_Y, morph_mod.ROSE_GOLD), "colophon rule"
+
+
+def test_morph_caption_crossfades_through_empty():
+    # BEFORE fades out, then AFTER fades in; they never overlap (which would garble
+    # two different words in one spot).
+    morph_mod.set_caption_state(0.30)
+    assert morph_mod.BEFORE_ALPHA > 0.9 and morph_mod.AFTER_ALPHA < 0.05
+    morph_mod.set_caption_state(0.50)
+    assert morph_mod.BEFORE_ALPHA < 0.05 and morph_mod.AFTER_ALPHA < 0.05  # through empty
+    morph_mod.set_caption_state(0.70)
+    assert morph_mod.AFTER_ALPHA > 0.9 and morph_mod.BEFORE_ALPHA < 0.05
+
+
+def test_morph_caption_wording_matches_the_friday_story():
+    from postroll.media.generate_before_after import placard_text as ba_placard
+    assert morph_mod.placard_text("RAW") == ba_placard("RAW")
+    assert morph_mod.placard_text("Edit") == ba_placard("Edit")
 
 
 # ── before/after labels must contrast with whatever is under them ───────────
