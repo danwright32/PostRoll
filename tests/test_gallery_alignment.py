@@ -372,7 +372,7 @@ def test_scroll_reel_colophon_is_dark_and_fills_the_width(tmp_path):
     ink = _colophon_ink(strip, cells)
     assert ink is not None, "the colophon is invisible below the photos"
     min_x, max_x, _, _ = ink
-    assert max_x - min_x > 800, "the colophon is too small to fill the space"
+    assert max_x - min_x > 600, "the colophon is too small to fill the space"
 
 
 def test_scroll_reel_colophon_tucks_right_under_the_photos(tmp_path):
@@ -384,8 +384,8 @@ def test_scroll_reel_colophon_tucks_right_under_the_photos(tmp_path):
     ink = _colophon_ink(strip, cells)
     assert ink is not None, "the colophon is missing"
     _, _, ink_top, last_photo_bottom = ink
-    assert ink_top - last_photo_bottom < 120, \
-        "the colophon is not tucked under the photos"
+    assert ink_top - last_photo_bottom < 90, \
+        "the colophon is not tucked right under the photos"
 
 
 def test_scroll_photos_sit_in_an_even_mat_with_a_hairline(tmp_path):

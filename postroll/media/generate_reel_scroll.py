@@ -77,12 +77,13 @@ FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 # Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
 FONT_DETAIL_LIGHT = 7
-# Span exactly the photo strip, so the wordmark's edges line up with the prints
-# above it rather than floating at some arbitrary width.
-LOGO_WIDTH = CANVAS_W - 2 * MAT
-# The colophon sits in the strip, right under the last print: a gallery gap above
-# it, then even breathing room below before the frame's bottom mask.
-COLOPHON_GAP_ABOVE = 56
+# Wide enough to read as the signature under the gallery without spanning the full
+# mat, which felt like a banner. The asset carries transparent side margins, so its
+# visible ink is a bit under this.
+LOGO_WIDTH = 800
+# The colophon sits in the strip, tucked right under the last print: a small gap
+# above it, then even breathing room below before the frame's bottom mask.
+COLOPHON_GAP_ABOVE = 24
 COLOPHON_GAP_BELOW = 56
 
 # The brand wordmark baked into the strip under the photos. The cream footer is the
