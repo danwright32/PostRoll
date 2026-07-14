@@ -38,10 +38,12 @@ TEXT_DARK = (60, 55, 50)  # same as story template org/venue text
 WARM_MID = (122, 104, 96)  # quiet secondary text (the placard subtitle)
 ROSE_GOLD = (160, 105, 95)  # divider — same as story template
 
-# Layout
+# Layout: left-aligned program plate (matches the Tuesday reel body)
 DIVIDER_H = 2
 LABEL_LETTER_SPACING = 8
 LABEL_MARGIN = 40
+MAT = 72                 # even side mat; the photos are hung as matted prints
+CREAM_EDGE = (212, 201, 192)  # the print's hairline
 # Caption placard ABOVE each photo, centred like a museum wall card: a state word
 # over a quiet subtitle. Centred to share the title's axis so it reads composed,
 # not stuck in a corner.
@@ -78,6 +80,14 @@ PLACARD_TEXT = {
 def placard_text(state: str) -> tuple[str, str]:
     """(word, subtitle) for a photo's gallery caption card."""
     return PLACARD_TEXT.get(state, (state.upper(), ""))
+
+
+def _tracked(draw, text, font, fill, x, y, spacing):
+    """Draw left-aligned, letter-spaced text (the program-plate look)."""
+    for ch in text:
+        draw.text((x, y), ch, font=font, fill=fill)
+        b = draw.textbbox((0, 0), ch, font=font)
+        x += (b[2] - b[0]) + spacing
 
 
 def header_detail_lines(event_name: str, org: str, venue: str) -> list[str]:
@@ -273,7 +283,7 @@ def generate_before_after(
     photo_caps = [int(photos_budget * (w / total_weight)) for w in weights]
 
     resized_photos = [
-        fit_photo(p, CANVAS_W, cap) for p, cap in zip(source_photos, photo_caps)
+        fit_photo(p, CANVAS_W - 2 * MAT, cap) for p, cap in zip(source_photos, photo_caps)
     ]
     total_photo_h = sum(p.height for p in resized_photos)
 
@@ -290,56 +300,49 @@ def generate_before_after(
     canvas = apply_cream_strip(canvas, 0, header_cream_h)
     draw = ImageDraw.Draw(canvas)
 
-    # Title — auto-shrunk and possibly two-line. Each line drawn centered.
-    # title_h_single, title_line_gap, info_y already computed above when we
-    # sized the header.
+    # Masthead, top-LEFT (matches the Tuesday reel body), on a rose-gold rule.
     title_y = TITLE_TOP_PADDING
     for i, line in enumerate(title_lines):
-        bbox = draw.textbbox((0, 0), line, font=title_font)
-        tw = bbox[2] - bbox[0]
-        tx = (CANVAS_W - tw) // 2
-        draw.text((tx, title_y + i * title_line_gap), line, font=title_font, fill=TEXT_DARK)
+        draw.text((MAT, title_y + i * title_line_gap), line, font=title_font, fill=TEXT_DARK)
 
-    # Org/venue follow the title. When the org equals the event name it is
-    # dropped and the venue moves up (header_detail_lines).
+    # Org/venue follow the title, left-aligned. The org is dropped when it equals
+    # the event name (header_detail_lines).
+    detail_bottom = info_y
     for j, line in enumerate(detail_lines):
-        draw_spaced_text_centered(draw, line, detail_font, TEXT_DARK, CANVAS_W // 2, info_y + j * 42)
+        _tracked(draw, line.upper(), detail_font, WARM_MID, MAT, info_y + j * 42, 5)
+        detail_bottom = info_y + j * 42 + 30
+    rule_y = detail_bottom + 20
+    draw.line([(MAT, rule_y), (CANVAS_W - MAT, rule_y)], fill=ROSE_GOLD, width=1)
 
-    y = header_cream_h
+    y = header_cream_h + DIVIDER_H
 
-    # Header → photos boundary: no rule line (gallery style). The DIVIDER_H of
-    # space is kept as an invisible cream gap so the layout math stays put.
-    y += DIVIDER_H
-
-    # === PHOTOS, each under a centred gallery-caption placard ===
+    # === PHOTOS, each a matted print under a LEFT-aligned caption placard ===
     states = ["RAW", "Edit"] + (["B&W"] if bw_photo is not None else [])
 
     for photo_resized, state in zip(resized_photos, states):
-        # Cream card ABOVE the photo: a state word over a quiet subtitle, both
-        # centred on the title's axis so the caption reads composed, not stuck.
         canvas = apply_cream_strip(canvas, y, LABEL_STRIP_H)
         draw = ImageDraw.Draw(canvas)
         word, subtitle = placard_text(state)
-        draw_spaced_text_centered(
-            draw, word, placard_font, TEXT_DARK, CANVAS_W // 2, y + 22,
-            spacing=PLACARD_LETTER_SPACING,
-        )
+        _tracked(draw, word, placard_font, ROSE_GOLD, MAT, y + 18, PLACARD_LETTER_SPACING)
         if subtitle:
-            draw_spaced_text_centered(
-                draw, subtitle, subtitle_font, WARM_MID, CANVAS_W // 2, y + 60,
-                spacing=SUBTITLE_LETTER_SPACING,
-            )
+            _tracked(draw, subtitle, subtitle_font, WARM_MID, MAT, y + 56, SUBTITLE_LETTER_SPACING)
         y += LABEL_STRIP_H
 
-        px = (CANVAS_W - photo_resized.width) // 2
+        px = MAT
         canvas.paste(photo_resized.convert("RGBA"), (px, y), photo_resized.convert("RGBA"))
+        ImageDraw.Draw(canvas).rectangle(
+            [px - 1, y - 1, px + photo_resized.width, y + photo_resized.height],
+            outline=CREAM_EDGE, width=1)
         y += photo_resized.height
 
-    # Photos → footer boundary: no rule line (gallery style); keep the gap.
     y += DIVIDER_H
 
-    # === BOTTOM CREAM: logo (extends to bottom edge) ===
+    # === FOOTER COLOPHON: a rose-gold rule and the centred DW mark ===
+    # The rule closes the page whether or not a logo is supplied.
     canvas = apply_cream_strip(canvas, y, footer_cream_h)
+    draw = ImageDraw.Draw(canvas)
+
+    logo = None
     if logo_path and Path(logo_path).exists():
         logo = Image.open(logo_path).convert("RGBA")
         logo_scale = LOGO_WIDTH / logo.width
@@ -347,9 +350,12 @@ def generate_before_after(
             (int(logo.width * logo_scale), int(logo.height * logo_scale)),
             Image.LANCZOS,
         )
-        lx = (CANVAS_W - logo.width) // 2
-        ly = y + (footer_cream_h - logo.height) // 2
-        canvas.paste(logo, (lx, ly), logo)
+
+    logo_h = logo.height if logo else 0
+    rule_y = y + max(20, (footer_cream_h - logo_h) // 2 - 20)
+    draw.line([(MAT, rule_y), (CANVAS_W - MAT, rule_y)], fill=ROSE_GOLD, width=1)
+    if logo:
+        canvas.paste(logo, ((CANVAS_W - logo.width) // 2, rule_y + 32), logo)
 
     # Save
     output = Path(output_path)

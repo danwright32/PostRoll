@@ -9,6 +9,7 @@ motif are intentionally out of scope.
 
 from __future__ import annotations
 
+import pytest
 from PIL import Image, ImageFont
 
 from postroll.media import generate_reel_scroll as scroll_mod
@@ -253,72 +254,71 @@ def test_placard_text_maps_states_to_gallery_wording():
     assert ba_mod.placard_text("B&W")[0] == "B&W"
 
 
-def test_before_after_caption_is_a_centred_placard(tmp_path):
-    # Dan: flush-left labels "feel stuck where they fit." The caption now sits on
-    # the title's axis, centred, so it reads composed.
+def test_before_after_is_left_aligned_program_plate(tmp_path):
+    # Dan chose the left-aligned program-plate closing frame (matches the reel
+    # body): masthead top-left on a rose-gold rule, left placards, footer colophon.
     vivid = tmp_path / "vivid.jpg"
     Image.new("RGB", (1500, 1000), (30, 90, 200)).save(str(vivid), "JPEG")
-    out = str(tmp_path / "ba_placard.png")
+    out = str(tmp_path / "ba_left.png")
     ba_mod.generate_before_after(str(vivid), str(vivid), out,
+                                 event_name="Event", org="Org", venue="Venue")
+    img = Image.open(out).convert("RGB")
+
+    # The masthead title's ink starts on the left, not centred.
+    title_cols = [x for y in range(60, 260, 2) for x in range(0, 1080, 2)
+                  if sum(img.getpixel((x, y))) < 300]
+    assert title_cols and min(title_cols) < 220, "masthead title is not left-aligned"
+
+    # A rose-gold rule under the masthead and a footer colophon rule near the bottom.
+    def has_rose(y):
+        return any(img.getpixel((x, y)) == ba_mod.ROSE_GOLD for x in range(0, 1080, 3))
+    assert any(has_rose(y) for y in range(250, 420)), "no masthead rose-gold rule"
+    assert any(has_rose(y) for y in range(img.height - 260, img.height - 60)), \
+        "no footer colophon rule"
+
+    # The caption placard word sits on the left, not centred.
+    rows = _placard_word_rows(img, ba_mod.ROSE_GOLD)
+    assert rows, "no caption word found"
+    assert min(rows[0][1]) < 200, "the caption is not left-aligned"
+
+
+def _placard_word_rows(img, rose):
+    """Rows holding a caption word: rose-gold ink concentrated on the LEFT.
+
+    Distinguishes the word from the full-width rose-gold rules (masthead/colophon),
+    which span the whole frame.
+    """
+    rows = []
+    for y in range(0, img.height, 2):
+        xs = [x for x in range(0, img.width, 2) if img.getpixel((x, y)) == rose]
+        if xs and max(xs) < img.width * 0.55:   # left-concentrated → a word, not a rule
+            rows.append((y, xs))
+    return rows
+
+
+@pytest.mark.parametrize("colour", [(30, 90, 200), (238, 240, 245)])
+def test_before_after_caption_reads_on_any_photo(tmp_path, colour):
+    # The captions used to be drawn ON the photos, so they vanished on a busy or
+    # bright frame. They now sit in a cream band above each print, in rose-gold, so
+    # they are legible whether the photo is dark blue or near-white.
+    photo = tmp_path / f"p{colour[0]}.jpg"
+    Image.new("RGB", (1500, 1000), colour).save(str(photo), "JPEG")
+    out = str(tmp_path / f"ba{colour[0]}.png")
+    ba_mod.generate_before_after(str(photo), str(photo), out,
                                  event_name="E", org="O", venue="V")
     img = Image.open(out).convert("RGB")
 
-    # Topmost band with the placard's dark word.
-    def dark_cols(y):
-        return [x for x in range(0, 1080, 2) if sum(img.getpixel((x, y))) < 260]
+    rows = _placard_word_rows(img, ba_mod.ROSE_GOLD)
+    assert rows, "no caption word found"
 
-    label_y = next((y for y in range(430, 1500, 2) if dark_cols(y)), None)
-    assert label_y is not None
-    cols = dark_cols(label_y)
-    centroid = sum(cols) / len(cols)
-    assert abs(centroid - 540) < 130, "the caption is not centred on the title's axis"
-    assert min(cols) > 200, "the caption is still flush-left, not centred"
+    y, xs = rows[0]
+    assert min(xs) < 200, "the caption is not left-aligned"
 
-
-def test_before_after_labels_sit_in_a_cream_band_above_each_photo(tmp_path):
-    # The RAW/Edit labels were drawn ON the photos, so on a busy stage banner they
-    # were unreadable whatever colour they took. They now sit in a cream band above
-    # each photo: dark ink on cream, legible on any photo.
-    vivid = tmp_path / "vivid.jpg"
-    Image.new("RGB", (1500, 1000), (30, 90, 200)).save(str(vivid), "JPEG")  # solid blue, no cream
-    out = str(tmp_path / "ba_labels.png")
-    ba_mod.generate_before_after(str(vivid), str(vivid), out,
-                                 event_name="E", org="O", venue="V")
-    img = Image.open(out).convert("RGB")
-
-    # Find the topmost row with the RAW label's dark ink.
-    def row_has_dark(y):
-        return any(sum(img.getpixel((x, y))) < 260 for x in range(0, 1080, 3))
-
-    label_y = next((y for y in range(430, 1500, 2) if row_has_dark(y)), None)
-    assert label_y is not None, "no label ink found"
-
-    # The pixels the label sits on must be cream (a strip), not the blue photo.
-    surround = [img.getpixel((x, label_y)) for x in range(0, 1080, 3)
-                if sum(img.getpixel((x, label_y))) >= 260]
-    assert surround, "label row has no background pixels"
-    creamish = sum(1 for p in surround if p[0] > 230 and p[1] > 225 and p[2] > 215)
-    assert creamish > len(surround) * 0.8, \
-        "the label is sitting on the photo, not in a cream band above it"
-
-
-def test_before_after_label_reads_on_a_bright_photo(tmp_path):
-    # A near-white photo: the label must come out dark, not white-on-white.
-    bright = tmp_path / "bright.jpg"
-    Image.new("RGB", (1500, 1000), (238, 240, 245)).save(str(bright), "JPEG")
-    out = str(tmp_path / "ba_bright.png")
-    ba_mod.generate_before_after(str(bright), str(bright), out,
-                                 event_name="E", org="O", venue="V")
-    img = Image.open(out).convert("RGB")
-
-    # The photo band starts below the header. Scan it for the label's dark ink;
-    # with the old hardcoded white there is none anywhere on the bright photo.
-    header_end = 420
-    found_dark = any(
-        sum(img.getpixel((x, y))) < 300
-        for y in range(header_end, 1500, 2) for x in range(0, 1080, 2)
-    )
-    assert found_dark, "the RAW label is invisible on a bright photo"
+    # And it sits on cream, not on the photo.
+    bg = [img.getpixel((x, y)) for x in range(0, img.width, 3)
+          if img.getpixel((x, y)) != ba_mod.ROSE_GOLD]
+    creamish = sum(1 for p in bg if p[0] > 230 and p[1] > 225 and p[2] > 215)
+    assert creamish > len(bg) * 0.75, "the caption is on the photo, not a cream band"
 
 
 # ── Thursday scroll reel: brand cream mat + hairline, like the collage ──────
@@ -355,14 +355,6 @@ def test_scroll_photos_sit_in_an_even_mat_with_a_hairline(tmp_path):
         "the hairline must not eat into the photo"
 
 
-def test_before_after_has_no_rose_gold_rule(sample_photo, tmp_output):
-    out = str(tmp_output / "ba.png")
-    ba_mod.generate_before_after(
-        str(sample_photo), str(sample_photo), out,
-        event_name="Event", org="Org", venue="Venue",
-    )
-    img = Image.open(out).convert("RGB")
-    # No full-width rose-gold rule anywhere: scan a set of rows across the frame.
-    for y in range(0, img.height, 20):
-        assert not _row_has_color(img, y, ba_mod.ROSE_GOLD), \
-            f"before/after still draws a rose-gold rule at y={y}"
+# The before/after intentionally carries rose-gold rules again: it is now the
+# left-aligned program plate (masthead rule + footer colophon), matching the reel
+# body. See test_before_after_is_left_aligned_program_plate.
