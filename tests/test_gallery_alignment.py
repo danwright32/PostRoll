@@ -170,6 +170,40 @@ def test_morph_labels_are_dark_enough_to_read_on_cream():
     assert slider_mod.LABEL_COLOR == slider_mod.TEXT_DARK
 
 
+# ── Thursday scroll reel: brand cream mat + hairline, like the collage ──────
+
+def _photo_set(tmp_path, colour, n=4, size=(1500, 1000)):
+    paths = []
+    for i in range(n):
+        p = tmp_path / f"s{colour[0]}_{i}.jpg"
+        Image.new("RGB", size, colour).save(str(p), "JPEG")
+        paths.append(str(p))
+    return paths
+
+
+def test_scroll_strip_uses_brand_cream_not_its_own_warmer_cream(tmp_path):
+    # It filled the gaps with 240,235,228 while every other template used the brand
+    # cream 252,250,247, so it was the one quietly off-brand surface.
+    photos = _photo_set(tmp_path, (30, 90, 160), n=6)
+    strip = scroll_mod.build_collage_strip(photos, seed=0)
+    assert strip.convert("RGB").getpixel((5, 5)) == scroll_mod.CREAM
+
+
+def test_scroll_photos_sit_in_an_even_mat_with_a_hairline(tmp_path):
+    photos = _photo_set(tmp_path, (30, 90, 160), n=6)
+    strip, cells = scroll_mod.build_collage_strip(photos, seed=0, return_layout=True)
+    rgb = strip.convert("RGB")
+
+    assert min(c["x"] for c in cells) == scroll_mod.MAT, "left mat"
+    assert max(c["x"] + c["w"] for c in cells) == scroll_mod.CANVAS_W - scroll_mod.MAT, "right mat"
+
+    top = min(cells, key=lambda c: c["y"])
+    assert rgb.getpixel((top["x"] + top["w"] // 2, top["y"] - 1)) == scroll_mod.HAIRLINE, \
+        "each print is framed by a hairline, as in the collage"
+    assert rgb.getpixel((top["x"] + top["w"] // 2, top["y"])) != scroll_mod.HAIRLINE, \
+        "the hairline must not eat into the photo"
+
+
 def test_before_after_has_no_rose_gold_rule(sample_photo, tmp_output):
     out = str(tmp_output / "ba.png")
     ba_mod.generate_before_after(

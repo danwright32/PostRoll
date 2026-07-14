@@ -36,11 +36,21 @@ CANVAS_W = 1080
 CANVAS_H = 1920
 FPS = 30
 
-# Collage layout
-ROW_GAP = 8            # gap between rows (cream colored)
-COL_GAP = 8            # gap between photos in a row
-SIDE_MARGIN = 30       # left/right margins
-CREAM_BG = (240, 235, 228)  # warm cream for gaps
+# Brand palette (declared before the layout so the mat can use the real cream)
+CREAM = (252, 250, 247)
+TEXT_DARK = (60, 55, 50)
+ROSE_GOLD = (160, 105, 95)
+# Hairline framing each print, matching the collage.
+HAIRLINE = (214, 208, 200)
+
+# Gallery mat, matching the collage: an even cream border with real gutters.
+# The gaps used to be filled with a warmer 240,235,228 while every other template
+# used the brand cream, which left this the one off-brand surface.
+MAT = 48
+GAP = 16
+ROW_GAP = GAP          # gap between rows
+COL_GAP = GAP          # gap between photos in a row
+SIDE_MARGIN = MAT      # kept as an alias; the mat is the side margin
 
 # Row patterns — fewer heroes, more pairs/trios for even density
 ROW_SIZES = [2, 3, 2, 3, 2, 3, 3, 1, 2, 3, 2, 3]  # hero every ~8th row
@@ -57,10 +67,7 @@ HOLD_END = 1.0           # hold at bottom before closing
 CLOSING_FRAME_DURATION = 5.0
 
 # Branded chrome
-CREAM = (252, 250, 247)
 CREAM_OPACITY = 210
-TEXT_DARK = (60, 55, 50)
-ROSE_GOLD = (160, 105, 95)
 HEADER_H = 220
 FOOTER_H = 100
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
@@ -174,8 +181,9 @@ def build_collage_strip(
     bottom_pad = FOOTER_H + 30  # just enough to clear footer with a small gap
     total_h = top_pad + sum(h for _, h, _ in row_data) + ROW_GAP * (len(row_data) - 1) + bottom_pad
 
-    # Create strip with cream background
-    strip = Image.new("RGB", (CANVAS_W, total_h), CREAM_BG)
+    # Create strip on the brand cream mat
+    strip = Image.new("RGB", (CANVAS_W, total_h), CREAM)
+    strip_draw = ImageDraw.Draw(strip)
 
     cells: list[dict] = []
 
@@ -193,6 +201,12 @@ def build_collage_strip(
                 photos[photo_idx], widths[col_idx], row_h, ox, oy, oz,
             )
             strip.paste(cropped, (x, y))
+            # Hairline just OUTSIDE the cell, so it frames the print without
+            # eating a row of the photograph (same ring as the collage).
+            strip_draw.rectangle(
+                [x - 1, y - 1, x + widths[col_idx], y + row_h],
+                outline=HAIRLINE, width=1,
+            )
             cells.append({
                 "photo_path": str(photo_paths[photo_idx]),
                 "x": x,
@@ -349,7 +363,7 @@ def generate_reel_scroll(
     # to canvas height with the cream background and collapse the scroll
     # phase to a short hold instead.
     if strip_h <= CANVAS_H:
-        padded = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM_BG)
+        padded = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
         padded.paste(strip, (0, 0))
         strip = padded
         strip_h = CANVAS_H
