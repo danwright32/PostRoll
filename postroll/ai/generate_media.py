@@ -92,6 +92,10 @@ ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 LOGO_WHITE = str(ASSETS_DIR / "logo-white.png")
 LOGO_BLACK = str(ASSETS_DIR / "logo-black.png")
 
+# The scroll reel's footer is cream, not a photo, so the mark has to be the dark
+# one. It shipped as LOGO_WHITE and rendered white-on-cream: invisible.
+THURSDAY_REEL_LOGO = LOGO_BLACK
+
 DAY_ORDER = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]
 
 
@@ -487,7 +491,7 @@ def generate_media(
                         org=org,
                         venue=venue,
                         output_path=reel_path,
-                        logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                        logo_path=THURSDAY_REEL_LOGO,
                         scroll_duration=scroll_duration,
                         seed=seed,
                         crop_offsets=crop_offsets,

@@ -340,6 +340,31 @@ def test_scroll_strip_uses_brand_cream_not_its_own_warmer_cream(tmp_path):
     assert strip.convert("RGB").getpixel((5, 5)) == scroll_mod.CREAM
 
 
+def test_scroll_reel_logo_reads_as_dark_ink_on_the_cream_footer():
+    # The reel footer is cream (252,250,247) but the pipeline handed the reel the
+    # WHITE logo, so Dan's wordmark rendered as white-on-cream: a ghost. Every other
+    # template already used the black mark on cream. Measure the dark-ink extent in
+    # the footer band the same way the before/after logo test does, so both the
+    # colour and the size are pinned by the pixels rather than by the constant.
+    from postroll.ai import generate_media as gm
+
+    logo = scroll_mod.load_logo(gm.THURSDAY_REEL_LOGO)
+    assert logo is not None, "the reel must ship with a logo asset"
+
+    frame = scroll_mod.draw_branded_chrome(
+        _blank_frame(scroll_mod), "Test Event", "Org", "Venue", logo
+    )
+    footer_top = scroll_mod.CANVAS_H - scroll_mod.FOOTER_H
+    dark_x = [
+        x
+        for y in range(footer_top, scroll_mod.CANVAS_H)
+        for x in range(scroll_mod.CANVAS_W)
+        if sum(frame.getpixel((x, y))) < 600
+    ]
+    assert dark_x, "the logo is invisible on the cream footer"
+    assert max(dark_x) - min(dark_x) > 320, "the logo is too small to read"
+
+
 def test_scroll_photos_sit_in_an_even_mat_with_a_hairline(tmp_path):
     photos = _photo_set(tmp_path, (30, 90, 160), n=6)
     strip, cells = scroll_mod.build_collage_strip(photos, seed=0, return_layout=True)

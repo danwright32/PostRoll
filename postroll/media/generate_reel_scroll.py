@@ -74,7 +74,7 @@ FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 # Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
 FONT_DETAIL_LIGHT = 7
-LOGO_WIDTH = 200
+LOGO_WIDTH = 450
 
 # Audio
 AUDIO_FADE_DURATION = 5.0
@@ -85,6 +85,17 @@ def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
         return ImageFont.truetype(path, size, index=index)
     except (OSError, IOError):
         return ImageFont.load_default()
+
+
+def load_logo(logo_path: str | None) -> Image.Image | None:
+    """Load the wordmark and scale it to LOGO_WIDTH, or None if there isn't one."""
+    if not logo_path or not Path(logo_path).exists():
+        return None
+    logo = Image.open(logo_path).convert("RGBA")
+    scale = LOGO_WIDTH / logo.width
+    return logo.resize(
+        (int(logo.width * scale), int(logo.height * scale)), Image.LANCZOS
+    )
 
 
 def ease_in_out(t: float) -> float:
@@ -377,15 +388,7 @@ def generate_reel_scroll(
     # When the strip exactly fills the canvas this is 0 (a static frame).
     max_scroll = max(0, strip_h - CANVAS_H)
 
-    # Load logo
-    logo = None
-    if logo_path and Path(logo_path).exists():
-        logo = Image.open(logo_path).convert("RGBA")
-        logo_scale = LOGO_WIDTH / logo.width
-        logo = logo.resize(
-            (int(logo.width * logo_scale), int(logo.height * logo_scale)),
-            Image.LANCZOS,
-        )
+    logo = load_logo(logo_path)
 
     # Load closing frame
     closing_frame = None
