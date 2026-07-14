@@ -9,11 +9,13 @@ explicit stream selection, and atomic temp encodes.
 
 from __future__ import annotations
 
+import json
 import random
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from PIL import Image
 
 from postroll.media import generate_reel_morph as morph_mod
@@ -21,10 +23,21 @@ from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
 from postroll.media.generate_collage import (
+    CANVAS_H,
+    CANVAS_W,
+    MAT,
+    MIN_HEIGHT_RETENTION,
+    MIN_WIDTH_RETENTION,
+    STRIP_CREAM,
+    STRIP_H,
+    cell_retention,
     crop_to_fill,
+    generate_collage,
     generate_collage_candidates,
     choose_collage_split,
     distinct_collage_splits,
+    plan_collage_cells,
+    split_fits_photos,
 )
 from postroll.ai import swap_reel_audio as swap_mod
 
@@ -100,18 +113,22 @@ def test_distinct_splits_for_ten_photos_keep_even_halves():
 
 def test_gallery_candidates_have_distinct_layouts(tmp_path):
     # With auto seeds, the gallery must show structurally different arrangements,
-    # and each candidate's seed must reproduce its arrangement.
+    # and each candidate's seed must reproduce its arrangement. The seed now
+    # resolves against the photos' own aspect ratios, exactly as the final render
+    # does, so a gallery thumbnail can't disagree with the collage it produces.
     photos = []
+    ratios = []
     for i in range(4):
         p = tmp_path / f"p{i}.jpg"
         Image.new("RGB", (800, 600), (120, 140, 150)).save(str(p), "JPEG")
         photos.append(str(p))
+        ratios.append(800 / 600)
     results = generate_collage_candidates(
         photo_paths=photos, output_dir=str(tmp_path / "cand"), count=5, event_name="Test"
     )
     # Map each candidate's stored seed back to the arrangement it renders.
     arrangements = {
-        tuple(tuple(p) for p in choose_collage_split(4, random.Random(r["seed"])))
+        tuple(tuple(p) for p in choose_collage_split(4, random.Random(r["seed"]), ratios))
         for r in results
     }
     assert len(arrangements) == len(results), "every gallery candidate is a distinct layout"
@@ -160,9 +177,14 @@ def test_collage_candidates_render_distinct_files(tmp_path):
     results = generate_collage_candidates(
         photo_paths=photos, output_dir=str(out_dir), count=5, event_name="Test"
     )
-    assert len(results) == 5
+    # The gallery offers exactly the layouts that fit these photos' shape, capped
+    # at `count`. It must never pad itself back up to `count` with layouts that
+    # breach the crop budget. For a landscape set that is fewer than 5.
+    expected = distinct_collage_splits(4, [800 / 600] * 4)[:5]
+    assert len(results) == len(expected)
+    assert 0 < len(results) <= 5
     # Distinct seeds and one PNG per candidate, all on disk.
-    assert len({r["seed"] for r in results}) == 5
+    assert len({r["seed"] for r in results}) == len(results)
     for r in results:
         assert Path(r["path"]).exists()
 
@@ -196,6 +218,228 @@ def test_collage_candidates_honor_explicit_seeds(tmp_path):
         event_name="Test", seeds=[111, 222],
     )
     assert [r["seed"] for r in results] == [111, 222]
+
+
+# ===================================================================
+# Crop budget: landscape sources must never be sliced into slivers
+#
+# Dan shoots every frame in 3:2 landscape. The old layout forced each half of
+# the canvas to exactly 911px, so a half holding a single 3-across row stretched
+# that row ~4x past its natural height and crop_to_fill paid for it by throwing
+# away ~78% of each frame's WIDTH (a 295x911 slot fed from a 3:2 frame).
+#
+# The budget is deliberately asymmetric: trimming a landscape frame's top and
+# bottom is a normal photographic crop, but cutting into its sides destroys the
+# composition. So height may be trimmed hard, width may barely be touched.
+# ===================================================================
+
+
+LANDSCAPE = 3 / 2
+
+
+def _ratios(n: int, ratio: float = LANDSCAPE) -> list[float]:
+    return [ratio] * n
+
+
+def test_cell_retention_reports_the_cropped_axis():
+    # A 3:2 frame in a square cell loses width; in a wide cell it loses height.
+    assert cell_retention(100, 100, LANDSCAPE) == pytest.approx(1 / 1.5)
+    assert cell_retention(300, 100, LANDSCAPE) == pytest.approx(1.5 / 3.0)
+    # A cell that matches the photo crops nothing.
+    assert cell_retention(150, 100, LANDSCAPE) == pytest.approx(1.0)
+
+
+def test_the_sliver_layout_that_shipped_is_now_rejected():
+    # ([1], [3]), "hero over trio", is exactly the layout in Dan's Home'r Bust!
+    # collage. Three 3:2 frames in a single 911px-tall row keep ~22% of their
+    # width. It must not survive the budget for a landscape set.
+    assert not split_fits_photos(([1], [3]), _ratios(4))
+    assert not split_fits_photos(([3], [1]), _ratios(4))
+    # The flat 2x2 grid is nearly as bad: ~0.6-aspect cells from 1.5 frames.
+    assert not split_fits_photos(([2], [2]), _ratios(4))
+
+
+def test_four_landscape_photos_still_have_valid_layouts():
+    valid = distinct_collage_splits(4, _ratios(4))
+    assert len(valid) >= 3, "a landscape set must still get a real layout gallery"
+    for split in valid:
+        assert split_fits_photos(split, _ratios(4))
+
+
+def test_no_landscape_cell_loses_more_than_the_width_budget():
+    # The real invariant, checked against the cells that actually get rendered.
+    for n in (4, 6, 10):
+        ratios = _ratios(n)
+        for split in distinct_collage_splits(n, ratios):
+            cells, _ = plan_collage_cells(ratios, split[0], split[1], random.Random(0))
+            assert len(cells) == n
+            for cell in cells:
+                keep = cell_retention(cell["w"], cell["h"], LANDSCAPE)
+                cropped_width = (cell["w"] / cell["h"]) < LANDSCAPE
+                floor = MIN_WIDTH_RETENTION if cropped_width else MIN_HEIGHT_RETENTION
+                assert keep >= floor, (
+                    f"n={n} split={split} cell {cell['w']}x{cell['h']} keeps "
+                    f"only {keep:.0%} of the frame's "
+                    f"{'width' if cropped_width else 'height'}"
+                )
+
+
+def test_the_budget_is_shape_aware_not_a_ban_on_layouts():
+    # The same arrangement is judged on the photos it has to hold. A 2x2 grid
+    # hands each cell a ~0.6 aspect: fine for a portrait frame, ruinous for a
+    # landscape one. The budget must reject it for Dan's 3:2 set and allow it for
+    # a portrait set, rather than banning the layout outright.
+    assert not split_fits_photos(([2], [2]), _ratios(4))
+    assert split_fits_photos(([2], [2]), [2 / 3] * 4)
+
+
+def test_three_across_survives_where_the_row_is_naturally_short():
+    # A trio row is not banned either. In a 10-photo layout the trio row is only
+    # ~136px tall, which three landscape frames fill happily. It is only the
+    # 4-photo case, where one trio row has to absorb half the canvas, that turns
+    # them into slivers.
+    assert split_fits_photos(([1, 3, 1], [2, 2, 1]), _ratios(10))
+    assert not split_fits_photos(([1], [3]), _ratios(4))
+
+
+def test_default_layout_is_full_width_pair_full_width(tmp_path):
+    # Dan's chosen default for a landscape set. With no stored seed the collage
+    # must land on it every time, not draw one of the three at random.
+    ratios = _ratios(4)
+    assert distinct_collage_splits(4, ratios)[0] == ([1], [2, 1])
+
+    photos = []
+    for i in range(4):
+        p = tmp_path / f"p{i}.jpg"
+        Image.new("RGB", (1500, 1000), (90, 120, 150)).save(str(p), "JPEG")
+        photos.append(str(p))
+
+    layouts = set()
+    for i in range(5):
+        out = tmp_path / f"c{i}.png"
+        generate_collage(photo_paths=photos, output_path=str(out), event_name="Test")
+        cells = json.loads((tmp_path / f"c{i}_layout.json").read_text())
+        layouts.add(tuple((c["w"], c["h"]) for c in cells))
+    assert len(layouts) == 1, "an unseeded collage must be deterministic"
+
+    # ...and it is the hero / pair / hero shape: one full-width row, then a pair.
+    widths = [w for w, _ in next(iter(layouts))]
+    assert widths[0] == CANVAS_W - 2 * MAT
+    assert widths[1] != widths[0] and widths[2] != widths[0]
+    assert widths[3] == CANVAS_W - 2 * MAT
+
+
+def test_six_photo_collage_has_a_safe_layout():
+    # Regression: TOP/BOTTOM_PATTERNS only ever covered the 5-photo half of a
+    # 10-photo collage, so a 6-photo set fell through to a single [3] row per
+    # half: trio-over-trio, the same sliver crop as the 4-photo bug.
+    valid = distinct_collage_splits(6, _ratios(6))
+    assert valid, "a 6-photo landscape collage must have at least one safe layout"
+    for split in valid:
+        assert split_fits_photos(split, _ratios(6))
+    assert (([3], [3]) not in [(tuple(t), tuple(b)) for t, b in valid])
+
+
+def test_rows_are_not_stretched_past_their_natural_height():
+    # The root cause: each half was forced to a fixed height, so a half holding a
+    # single row stretched it to ~911px whatever shape its photos were. Rows are
+    # now sized from the real photo shapes under one shared scale, so every cell
+    # in a 4-photo layout stays in the neighbourhood of the frame's proportions.
+    # The old ([1], [3]) produced 0.32-aspect cells, 0.21x the frame.
+    ratios = _ratios(4)
+    cells, _ = plan_collage_cells(ratios, [1], [2, 1], random.Random(0))
+    for cell in cells:
+        assert 0.7 < (cell["w"] / cell["h"]) / LANDSCAPE < 2.0
+
+
+def test_branded_strip_stays_near_the_middle():
+    # The strip is the thing a re-sharer cannot crop out, so it must not drift to
+    # the top or bottom edge once it is allowed to float between rows.
+    for n in (4, 6, 10):
+        ratios = _ratios(n)
+        for split in distinct_collage_splits(n, ratios):
+            _, strip_y = plan_collage_cells(ratios, split[0], split[1], random.Random(0))
+            assert 0.30 * CANVAS_H <= strip_y <= 0.70 * CANVAS_H, (
+                f"n={n} split={split} put the branded strip at "
+                f"{strip_y / CANVAS_H:.0%} of the canvas"
+            )
+
+
+def test_cells_fill_the_canvas_without_overlap():
+    # A shared scale must exactly consume the space inside the mat: no dead band
+    # at the bottom, no row running off the edge.
+    ratios = _ratios(10)
+    split = distinct_collage_splits(10, ratios)[0]
+    cells, _ = plan_collage_cells(ratios, split[0], split[1], random.Random(0))
+    bottom = max(c["y"] + c["h"] for c in cells)
+    assert abs(bottom - (CANVAS_H - MAT)) <= 2, f"layout ends at {bottom}"
+    for cell in cells:
+        assert cell["x"] >= MAT and cell["x"] + cell["w"] <= CANVAS_W - MAT
+
+
+# ===================================================================
+# Gallery style: cream mat, even on all four sides
+#
+# The photos used to bleed off the top and bottom of the canvas with a 40px side
+# border, so nothing read as matted, and the mat colour was blended toward the
+# photos' average (a blue stage greyed it, a dark room dirtied it). The mat is
+# now an even border of fixed brand cream, and the branded strip sits inside it
+# as a caption plate rather than running edge to edge.
+# ===================================================================
+
+
+def _photo_set(tmp_path, colour, n=4, size=(1500, 1000)):
+    paths = []
+    for i in range(n):
+        p = tmp_path / f"{colour[0]}_{i}.jpg"
+        Image.new("RGB", size, colour).save(str(p), "JPEG")
+        paths.append(str(p))
+    return paths
+
+
+def test_photos_are_matted_evenly_on_all_four_sides():
+    ratios = _ratios(4)
+    split = distinct_collage_splits(4, ratios)[0]
+    cells, _ = plan_collage_cells(ratios, split[0], split[1], random.Random(0))
+    assert min(c["y"] for c in cells) == MAT, "top mat"
+    assert abs(max(c["y"] + c["h"] for c in cells) - (CANVAS_H - MAT)) <= 2, "bottom mat"
+    assert min(c["x"] for c in cells) == MAT, "left mat"
+    assert max(c["x"] + c["w"] for c in cells) == CANVAS_W - MAT, "right mat"
+
+
+def test_mat_colour_is_fixed_brand_cream_whatever_the_photos(tmp_path):
+    # The regression that started this: a blue stage pulled the mat to grey-blue
+    # and a dark room pulled it to muddy grey. Two wildly different photo sets
+    # must now produce byte-identical mat colour.
+    blue = tmp_path / "blue.png"
+    dark = tmp_path / "dark.png"
+    generate_collage(photo_paths=_photo_set(tmp_path, (20, 90, 200)),
+                     output_path=str(blue), event_name="A", write_layout_sidecar=False)
+    generate_collage(photo_paths=_photo_set(tmp_path, (25, 22, 20)),
+                     output_path=str(dark), event_name="A", write_layout_sidecar=False)
+
+    corner_blue = Image.open(blue).convert("RGB").getpixel((4, 4))
+    corner_dark = Image.open(dark).convert("RGB").getpixel((4, 4))
+    assert corner_blue == STRIP_CREAM
+    assert corner_dark == STRIP_CREAM
+
+
+def test_branded_strip_is_inset_as_a_caption_plate(tmp_path):
+    # The strip used to run the full canvas width. It now sits inside the mat, so
+    # the mat colour still shows to the left and right of it.
+    out = tmp_path / "plate.png"
+    photos = _photo_set(tmp_path, (30, 30, 30))
+    generate_collage(photo_paths=photos, output_path=str(out), event_name="A",
+                     write_layout_sidecar=False)
+    img = Image.open(out).convert("RGB")
+
+    ratios = [1500 / 1000] * 4
+    split = distinct_collage_splits(4, ratios)[0]
+    _, strip_y = plan_collage_cells(ratios, split[0], split[1], random.Random(0))
+    mid = strip_y + STRIP_H // 2
+
+    assert img.getpixel((MAT // 2, mid)) == STRIP_CREAM, "mat shows left of the plate"
+    assert img.getpixel((CANVAS_W - MAT // 2, mid)) == STRIP_CREAM, "and right of it"
 
 
 # ===================================================================

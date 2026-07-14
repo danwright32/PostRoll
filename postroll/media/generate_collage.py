@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -28,18 +29,21 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 CANVAS_W = 1080
 CANVAS_H = 1920
 
-GAP = 8  # slightly wider gaps — more editorial
-SIDE_MARGIN = 40  # left/right borders — reduces horizontal stretch, less vertical crop
+# Gallery mat: an even cream border on all four sides, with the photos hung
+# inside it. The photos used to bleed off the top and bottom of the canvas with a
+# 40px side border only, so nothing read as matted.
+MAT = 48
+GAP = 16  # gutter between prints
 
-# Branded center strip
-STRIP_H = 90  # compact branded center strip
+# Branded center strip: a caption plate inset to the mat, not an edge-to-edge band.
+STRIP_H = 90
 STRIP_CREAM = (252, 250, 247)  # matches story/before-after cream
-STRIP_OPACITY = 230
 TEXT_DARK = (60, 55, 50)
 ROSE_GOLD = (160, 105, 95)
 
 # Logo
 LOGO_WIDTH = 240
+PLATE_PADDING = 24  # inset of the plate's text and logo from its own edges
 
 # Fonts (shared with brand system)
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
@@ -63,6 +67,16 @@ BOTTOM_PATTERNS = [
     [2, 3],          # pair → trio
 ]
 
+# Row patterns for a half holding 1-4 photos. TOP/BOTTOM_PATTERNS only cover the
+# 5-photo half of a 10-photo collage; without these, a 6-photo collage fell back
+# to a single [3] row per half, the same sliver crop as the 4-photo case.
+SMALL_HALF_PATTERNS: dict[int, list[list[int]]] = {
+    1: [[1]],
+    2: [[2], [1, 1]],
+    3: [[3], [2, 1], [1, 2], [1, 1, 1]],
+    4: [[2, 2], [1, 3], [3, 1], [1, 2, 1], [2, 1, 1], [1, 1, 2], [1, 1, 1, 1]],
+}
+
 # Dedicated 4-photo arrangements (top_pattern, bottom_pattern). The even 2/2
 # split only ever yields a flat 2x2 grid, so offer asymmetric hero layouts too.
 FOUR_PHOTO_LAYOUTS = [
@@ -71,47 +85,246 @@ FOUR_PHOTO_LAYOUTS = [
     ([2], [2]),       # balanced 2x2 grid
     ([1], [2, 1]),    # hero over (pair then hero)
     ([2, 1], [1]),    # (pair then hero) over hero
+    ([1, 1], [1, 1]), # four full-width bands
 ]
 
+# Column width splits per row size. Shared by the renderer and the crop-budget
+# check so the two can't disagree about how narrow a column may get.
+WIDTH_SPLITS: dict[int, list[tuple[float, ...]]] = {
+    1: [(1.0,)],
+    2: [(0.56, 0.44), (0.44, 0.56), (0.58, 0.42),
+        (0.42, 0.58), (0.55, 0.45), (0.45, 0.55)],
+    3: [(0.40, 0.30, 0.30), (0.30, 0.40, 0.30), (0.30, 0.30, 0.40),
+        (0.42, 0.30, 0.28), (0.28, 0.30, 0.42)],
+}
 
-def choose_collage_split(n: int, rng: random.Random) -> tuple[list[int], list[int]]:
-    """Pick (top_pattern, bottom_pattern) for an n-photo masonry collage.
+# === Crop budget ===
+#
+# Every photo is fill-cropped into its cell, so a cell whose shape disagrees with
+# the frame's shape throws pixels away. The budget is deliberately asymmetric:
+# trimming a landscape frame's top and bottom is a normal photographic crop, but
+# cutting into its sides destroys the composition. Dan shoots 3:2 landscape, and
+# the old fixed-height halves could hand a 3:2 frame a 0.32-aspect slot, keeping
+# 22% of its width.
+#
+# Height may go to 45% (a 3:2 frame becomes a ~3.3:1 band, a strong but honest
+# editorial crop). Width may not go below 62%, which is what kills the slivers.
+MIN_WIDTH_RETENTION = 0.62
+MIN_HEIGHT_RETENTION = 0.45
 
-    Each pattern is a list of per-row photo counts. For 4 photos we draw from a
-    curated set of dynamic arrangements; for other counts we keep the original
-    near-even top/bottom split and choose matching row patterns.
+# The branded strip is the thing a re-sharer can't crop out, so it has to stay
+# near the middle even though it now floats to a natural row boundary.
+STRIP_MIN_FRACTION = 0.30
+STRIP_MAX_FRACTION = 0.70
+
+
+def cell_retention(cell_w: float, cell_h: float, photo_ratio: float) -> float:
+    """Fraction of the constrained axis a fill-crop into this cell keeps.
+
+    Returns 1.0 when the cell matches the frame. Below that, the shorter of the
+    two axes is the one being cropped away.
     """
-    if n == 4:
-        top, bottom = rng.choice(FOUR_PHOTO_LAYOUTS)
-        return list(top), list(bottom)
-    top_count = n // 2
-    bottom_count = n - top_count
-    valid_top = [p for p in TOP_PATTERNS if sum(p) == top_count] or [[top_count]]
-    valid_bottom = [p for p in BOTTOM_PATTERNS if sum(p) == bottom_count] or [[bottom_count]]
-    return rng.choice(valid_top), rng.choice(valid_bottom)
+    cell_ratio = cell_w / cell_h
+    if photo_ratio > cell_ratio:
+        return cell_ratio / photo_ratio   # cell is narrower than the frame → width lost
+    return photo_ratio / cell_ratio       # cell is taller than the frame → height lost
 
 
-def distinct_collage_splits(n: int) -> list[tuple[list[int], list[int]]]:
-    """Every distinct (top_pattern, bottom_pattern) arrangement for n photos.
+def _row_heights(rows: list[int], photo_ratios: list[float]) -> list[int]:
+    """Height of each row under ONE scale shared across the whole canvas.
 
-    The set `choose_collage_split` draws from, enumerated so the layout gallery
-    can show one of each structural arrangement instead of random repeats (#70).
+    This is the fix for the sliver crop. Each half used to be forced to exactly
+    half the photo area, so a half holding a single row stretched that row to
+    ~911px no matter what shape its photos were. Sizing every row from its
+    photos' real aspect ratios and scaling them all together means a row is only
+    ever as tall as its share of the canvas, not as tall as its half.
     """
+    inner_gaps = max(0, len(rows) - 2)   # one boundary carries the strip instead
+    avail_h = CANVAS_H - 2 * MAT - STRIP_H - inner_gaps * GAP
+
+    naturals: list[float] = []
+    idx = 0
+    for photos_in_row in rows:
+        avail_w = CANVAS_W - 2 * MAT - (photos_in_row - 1) * GAP
+        naturals.append(avail_w / sum(photo_ratios[idx:idx + photos_in_row]))
+        idx += photos_in_row
+
+    scale = avail_h / sum(naturals)
+    heights = [int(h * scale) for h in naturals]
+    heights[-1] += avail_h - sum(heights)   # absorb rounding into the last row
+    return heights
+
+
+def plan_collage_cells(
+    photo_ratios: list[float],
+    top_pattern: list[int],
+    bottom_pattern: list[int],
+    rng: random.Random,
+) -> tuple[list[dict], int]:
+    """Lay out every cell for a split, returning (cells, strip_y).
+
+    Cells carry {index, x, y, w, h} in canvas pixels. The branded strip sits at
+    the boundary between the last top row and the first bottom row, wherever the
+    photo shapes put that boundary.
+    """
+    rows = list(top_pattern) + list(bottom_pattern)
+    heights = _row_heights(rows, photo_ratios)
+
+    cells: list[dict] = []
+    strip_y = 0
+    photo_idx = 0
+    y = MAT   # hang the first row below the top mat
+
+    for row_idx, photos_in_row in enumerate(rows):
+        row_h = heights[row_idx]
+        avail_w = CANVAS_W - 2 * MAT - (photos_in_row - 1) * GAP
+        widths = compute_widths(photos_in_row, avail_w, rng)
+
+        x = MAT
+        for col_idx in range(photos_in_row):
+            cells.append({
+                "index": photo_idx,
+                "x": x,
+                "y": y,
+                "w": widths[col_idx],
+                "h": row_h,
+            })
+            x += widths[col_idx] + GAP
+            photo_idx += 1
+
+        y += row_h
+        if row_idx == len(top_pattern) - 1:
+            strip_y = y
+            y += STRIP_H
+        elif row_idx < len(rows) - 1:
+            y += GAP
+
+    return cells, strip_y
+
+
+def split_fits_photos(
+    split: tuple[list[int], list[int]],
+    photo_ratios: list[float],
+) -> bool:
+    """Does this arrangement stay inside the crop budget for these photos?
+
+    Checked against the WORST column width the row could draw, not the one a
+    particular seed happens to pick, so a layout can't pass validation and then
+    render a sliver on a different seed.
+    """
+    top_pattern, bottom_pattern = split
+    rows = list(top_pattern) + list(bottom_pattern)
+    if sum(rows) != len(photo_ratios):
+        return False
+
+    heights = _row_heights(rows, photo_ratios)
+
+    # The strip must not drift to an edge, or it stops being a centre strip.
+    strip_y = MAT + sum(heights[:len(top_pattern)]) + max(0, len(top_pattern) - 1) * GAP
+    if not (STRIP_MIN_FRACTION * CANVAS_H <= strip_y <= STRIP_MAX_FRACTION * CANVAS_H):
+        return False
+
+    photo_idx = 0
+    for row_idx, photos_in_row in enumerate(rows):
+        row_h = heights[row_idx]
+        if row_h <= 0:
+            return False
+        avail_w = CANVAS_W - 2 * MAT - (photos_in_row - 1) * GAP
+
+        for fractions in WIDTH_SPLITS.get(photos_in_row, [(1.0 / photos_in_row,) * photos_in_row]):
+            for col_idx, fraction in enumerate(fractions):
+                ratio = photo_ratios[photo_idx + col_idx]
+                cell_w = avail_w * fraction
+                keep = cell_retention(cell_w, row_h, ratio)
+                cropping_width = (cell_w / row_h) < ratio
+                floor = MIN_WIDTH_RETENTION if cropping_width else MIN_HEIGHT_RETENTION
+                if keep < floor:
+                    return False
+
+        photo_idx += photos_in_row
+
+    return True
+
+
+def _half_patterns(count: int, pool: list[list[int]]) -> list[list[int]]:
+    """Row patterns for a half holding `count` photos."""
+    from_pool = [p for p in pool if sum(p) == count]
+    if from_pool:
+        return from_pool
+    return SMALL_HALF_PATTERNS.get(count) or [[count]]
+
+
+def _all_splits(n: int) -> list[tuple[list[int], list[int]]]:
+    """Every arrangement for n photos, before the crop budget is applied."""
     if n == 4:
         return [(list(t), list(b)) for t, b in FOUR_PHOTO_LAYOUTS]
     top_count = n // 2
     bottom_count = n - top_count
-    valid_top = [p for p in TOP_PATTERNS if sum(p) == top_count] or [[top_count]]
-    valid_bottom = [p for p in BOTTOM_PATTERNS if sum(p) == bottom_count] or [[bottom_count]]
+    valid_top = _half_patterns(top_count, TOP_PATTERNS)
+    valid_bottom = _half_patterns(bottom_count, BOTTOM_PATTERNS)
     return [(list(t), list(b)) for t in valid_top for b in valid_bottom]
 
 
-def _seed_for_split(n: int, target: tuple[list[int], list[int]], limit: int = 100_000) -> int:
+def distinct_collage_splits(
+    n: int,
+    photo_ratios: list[float] | None = None,
+) -> list[tuple[list[int], list[int]]]:
+    """Every distinct (top_pattern, bottom_pattern) arrangement for n photos.
+
+    The set `choose_collage_split` draws from, enumerated so the layout gallery
+    can show one of each structural arrangement instead of random repeats (#70).
+
+    With `photo_ratios`, arrangements that would breach the crop budget for those
+    specific photos are dropped. This is what makes the layout shape-aware: a
+    3-across row survives where the row is naturally short, and disappears where
+    it would have to be stretched into slivers.
+    """
+    splits = _all_splits(n)
+    if photo_ratios is None:
+        return splits
+
+    fitting = [s for s in splits if split_fits_photos(s, photo_ratios)]
+    if fitting:
+        return fitting
+
+    # No arrangement in the pool can hold these photos without breaching the crop
+    # budget. Say so rather than quietly rendering the sliver anyway.
+    print(
+        f"WARNING: no collage layout fits {n} photos of aspect "
+        f"{[round(r, 2) for r in photo_ratios]} within the crop budget "
+        f"(width ≥ {MIN_WIDTH_RETENTION:.0%}, height ≥ {MIN_HEIGHT_RETENTION:.0%}). "
+        f"Falling back to {splits[0]}, which will crop harder than intended.",
+        file=sys.stderr,
+    )
+    return splits[:1]
+
+
+def choose_collage_split(
+    n: int,
+    rng: random.Random,
+    photo_ratios: list[float] | None = None,
+) -> tuple[list[int], list[int]]:
+    """Pick (top_pattern, bottom_pattern) for an n-photo masonry collage.
+
+    Each pattern is a list of per-row photo counts. When `photo_ratios` is given,
+    only arrangements that respect the crop budget for those photos are drawn.
+    """
+    options = distinct_collage_splits(n, photo_ratios)
+    top, bottom = rng.choice(options)
+    return list(top), list(bottom)
+
+
+def _seed_for_split(
+    n: int,
+    target: tuple[list[int], list[int]],
+    photo_ratios: list[float] | None = None,
+    limit: int = 100_000,
+) -> int:
     """Find a seed whose `choose_collage_split` yields `target`, so a gallery
     candidate's stored seed reproduces its exact arrangement on final render."""
     want = (tuple(target[0]), tuple(target[1]))
     for seed in range(limit):
-        top, bottom = choose_collage_split(n, random.Random(seed))
+        top, bottom = choose_collage_split(n, random.Random(seed), photo_ratios)
         if (tuple(top), tuple(bottom)) == want:
             return seed
     return 0
@@ -236,109 +449,46 @@ def _place_on_blur(
     return bg
 
 
-def calculate_row_heights(
-    pattern: list[int],
-    photos: list[Image.Image],
-    total_h: int,
-) -> list[int]:
-    """Calculate row heights based on photo aspect ratios, scaled to fit."""
-    total_gaps_v = (len(pattern) - 1) * GAP
-    avail_h = total_h - total_gaps_v
-
-    natural_heights = []
-    photo_idx = 0
-    for photos_in_row in pattern:
-        row_gaps = (photos_in_row - 1) * GAP
-        avail_w = CANVAS_W - 2 * SIDE_MARGIN - row_gaps
-
-        ratios = [photos[photo_idx + j].width / photos[photo_idx + j].height
-                  for j in range(photos_in_row)]
-        natural_h = avail_w / sum(ratios)
-        natural_heights.append(natural_h)
-        photo_idx += photos_in_row
-
-    total_natural = sum(natural_heights)
-    scale = avail_h / total_natural
-    heights = [int(h * scale) for h in natural_heights]
-
-    # Fix rounding
-    used = sum(heights) + total_gaps_v
-    heights[-1] += (total_h - used)
-    return heights
-
-
 def compute_widths(photos_in_row: int, avail_w: int, rng: random.Random) -> list[int]:
     """Compute column widths with intentional asymmetry."""
-    if photos_in_row == 1:
-        return [avail_w]
-    elif photos_in_row == 2:
-        split = rng.choice([0.56, 0.44, 0.58, 0.42, 0.55, 0.45])
-        w1 = int(avail_w * split)
-        return [w1, avail_w - w1]
-    elif photos_in_row == 3:
-        splits = rng.choice([
-            (0.40, 0.30, 0.30),
-            (0.30, 0.40, 0.30),
-            (0.30, 0.30, 0.40),
-            (0.42, 0.30, 0.28),
-            (0.28, 0.30, 0.42),
-        ])
-        w1 = int(avail_w * splits[0])
-        w2 = int(avail_w * splits[1])
-        return [w1, w2, avail_w - w1 - w2]
-    else:
+    options = WIDTH_SPLITS.get(photos_in_row)
+    if not options:
         base = avail_w // photos_in_row
         widths = [base] * photos_in_row
         widths[-1] = avail_w - base * (photos_in_row - 1)
         return widths
 
+    fractions = rng.choice(options)
+    widths = [int(avail_w * f) for f in fractions[:-1]]
+    widths.append(avail_w - sum(widths))
+    return widths
 
-def place_photo_rows(
+
+def paste_planned_cells(
     canvas: Image.Image,
     photos: list[Image.Image],
-    pattern: list[int],
-    y_start: int,
-    total_h: int,
-    rng: random.Random,
+    photo_paths: list[str],
+    cells: list[dict],
     offsets: list[tuple[float, float, float]] | None = None,
-    photo_paths: list[str] | None = None,
-    cells_out: list | None = None,
-) -> int:
-    """Place rows of photos on the canvas. Returns y position after last row.
+) -> list[dict]:
+    """Paste each photo into its planned cell. Returns the layout sidecar cells.
 
-    offsets: optional list of (crop_offset_x, crop_offset_y, zoom) parallel to photos.
-    photo_paths: optional parallel list of source paths — recorded in cells_out.
-    cells_out: optional list to append cell dicts {photo_path, x, y, w, h} to.
+    offsets: optional (crop_offset_x, crop_offset_y, zoom) triples parallel to photos.
     """
-    heights = calculate_row_heights(pattern, photos, total_h)
-    photo_idx = 0
-    y = y_start
-
-    for row_idx, photos_in_row in enumerate(pattern):
-        row_h = heights[row_idx]
-        row_gaps = (photos_in_row - 1) * GAP
-        avail_w = CANVAS_W - 2 * SIDE_MARGIN - row_gaps
-        widths = compute_widths(photos_in_row, avail_w, rng)
-
-        x = SIDE_MARGIN
-        for col_idx in range(photos_in_row):
-            ox, oy, oz = (offsets[photo_idx] if offsets and photo_idx < len(offsets) else (0.0, 0.0, 1.0))
-            cropped = crop_to_fill(photos[photo_idx], widths[col_idx], row_h, ox, oy, oz)
-            canvas.paste(cropped, (x, y))
-            if cells_out is not None and photo_paths and photo_idx < len(photo_paths):
-                cells_out.append({
-                    "photo_path": photo_paths[photo_idx],
-                    "x": x,
-                    "y": y,
-                    "w": widths[col_idx],
-                    "h": row_h,
-                })
-            x += widths[col_idx] + GAP
-            photo_idx += 1
-
-        y += row_h + GAP
-
-    return y
+    sidecar: list[dict] = []
+    for cell in cells:
+        idx = cell["index"]
+        ox, oy, oz = (offsets[idx] if offsets and idx < len(offsets) else (0.0, 0.0, 1.0))
+        cropped = crop_to_fill(photos[idx], cell["w"], cell["h"], ox, oy, oz)
+        canvas.paste(cropped, (cell["x"], cell["y"]))
+        sidecar.append({
+            "photo_path": photo_paths[idx],
+            "x": cell["x"],
+            "y": cell["y"],
+            "w": cell["w"],
+            "h": cell["h"],
+        })
+    return sidecar
 
 
 def draw_branded_strip(
@@ -348,45 +498,41 @@ def draw_branded_strip(
     org: str,
     venue: str,
     logo_path: str | None,
-    photo_tint: tuple[int, int, int],
 ) -> Image.Image:
-    """Draw the branded center strip with event info and logo."""
-    # Cream strip with subtle photo tint
-    tinted_cream = (
-        (STRIP_CREAM[0] * 3 + photo_tint[0]) // 4,
-        (STRIP_CREAM[1] * 3 + photo_tint[1]) // 4,
-        (STRIP_CREAM[2] * 3 + photo_tint[2]) // 4,
-    )
-    strip = Image.new("RGBA", (CANVAS_W, STRIP_H), (*tinted_cream, STRIP_OPACITY))
+    """Draw the caption plate: event info and logo, inset to the mat.
+
+    The plate is fixed brand cream. It used to be blended a quarter of the way
+    toward the photos' average colour, which made the logo lockup a different
+    colour at every event (grey-blue under a blue stage, muddy grey in a dark
+    room). A brand mark that changes colour with the stage lighting is not a
+    brand mark.
+    """
+    left = MAT
+    right = CANVAS_W - MAT
+
     canvas_rgba = canvas.convert("RGBA")
-    canvas_rgba.paste(strip, (0, y), strip)
+    plate = Image.new("RGBA", (right - left, STRIP_H), (*STRIP_CREAM, 255))
+    canvas_rgba.paste(plate, (left, y), plate)
 
     draw = ImageDraw.Draw(canvas_rgba)
 
-    # Rose-gold dividers at top and bottom of strip
-    draw.line([(0, y), (CANVAS_W, y)], fill=ROSE_GOLD, width=2)
-    draw.line([(0, y + STRIP_H - 1), (CANVAS_W, y + STRIP_H - 1)], fill=ROSE_GOLD, width=2)
+    # Rose-gold rules at the top and bottom of the plate
+    draw.line([(left, y), (right, y)], fill=ROSE_GOLD, width=2)
+    draw.line([(left, y + STRIP_H - 1), (right, y + STRIP_H - 1)], fill=ROSE_GOLD, width=2)
 
-    # Left side: event name in script + org/venue on same level
     title_font = load_font(FONT_SCRIPT, 42)
     detail_font = load_font(FONT_DETAIL, 18, index=FONT_DETAIL_THIN)
 
-    # Title
-    title_x = 35
-    title_y = y + 10
-    draw.text((title_x, title_y), event_name, font=title_font, fill=TEXT_DARK)
+    title_x = left + PLATE_PADDING
+    draw.text((title_x, y + 10), event_name, font=title_font, fill=TEXT_DARK)
 
-    # Org · Venue below title
     org_venue = f"{org}  ·  {venue}" if org and venue else org or venue
-    detail_y = y + 58
-    # Draw with spacing
     dx = title_x
     for ch in org_venue:
-        draw.text((dx, detail_y), ch, font=detail_font, fill=TEXT_DARK)
+        draw.text((dx, y + 58), ch, font=detail_font, fill=TEXT_DARK)
         bbox = draw.textbbox((0, 0), ch, font=detail_font)
         dx += (bbox[2] - bbox[0]) + 4
 
-    # Right side: logo
     if logo_path and Path(logo_path).exists():
         logo = Image.open(logo_path).convert("RGBA")
         scale = LOGO_WIDTH / logo.width
@@ -394,24 +540,11 @@ def draw_branded_strip(
             (int(logo.width * scale), int(logo.height * scale)),
             Image.LANCZOS,
         )
-        lx = CANVAS_W - 30 - logo.width
+        lx = right - PLATE_PADDING - logo.width
         ly = y + (STRIP_H - logo.height) // 2
         canvas_rgba.paste(logo, (lx, ly), logo)
 
     return canvas_rgba
-
-
-def get_photo_tint(photos: list[Image.Image]) -> tuple[int, int, int]:
-    """Sample average color from all photos for cream tinting."""
-    total_r, total_g, total_b, count = 0, 0, 0, 0
-    for photo in photos:
-        small = photo.resize((20, 20), Image.LANCZOS).convert("RGB")
-        for r, g, b in small.getdata():
-            total_r += r
-            total_g += g
-            total_b += b
-            count += 1
-    return (total_r // count, total_g // count, total_b // count)
 
 
 def render_cell_layout_override(
@@ -468,12 +601,16 @@ def generate_collage(
     cell_layout: list[dict] | None = None,
     write_layout_sidecar: bool = True,
 ) -> str:
-    """Generate a masonry collage with branded center strip.
+    """Generate a gallery-style collage: photos matted in cream, caption plate between.
 
     Layout:
-        - Top photo rows (5 photos)
-        - Branded strip (event name, org/venue, logo) — impossible to crop out
-        - Bottom photo rows (5 photos, ends strong)
+        - Top photo rows, hung inside an even cream mat
+        - Caption plate (event name, org/venue, logo), inset to the mat
+        - Bottom photo rows
+
+    Rows are sized from the photos' real aspect ratios under one shared scale, and
+    arrangements that would crop a frame past the budget are never offered. See
+    `split_fits_photos`.
 
     crop_offsets: optional list of (x, y, zoom) triples in [-1, 1] / [≥1] parallel to photo_paths.
     cell_layout:  optional list of {photo_path, x, y, w, h} dicts. When provided the masonry
@@ -481,14 +618,9 @@ def generate_collage(
     """
     all_photos = [Image.open(p) for p in photo_paths]
 
-    # Get photo tint for cream coloring (used for canvas background + strip)
-    photo_tint = get_photo_tint(all_photos)
-    gap_color = (
-        (STRIP_CREAM[0] * 2 + photo_tint[0]) // 3,
-        (STRIP_CREAM[1] * 2 + photo_tint[1]) // 3,
-        (STRIP_CREAM[2] * 2 + photo_tint[2]) // 3,
-    )
-    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), gap_color)
+    # The mat is fixed brand cream. It used to be blended toward the photos'
+    # average colour, so a blue stage greyed it and a dark room dirtied it.
+    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), STRIP_CREAM)
     cells: list[dict] = []
 
     if cell_layout:
@@ -501,42 +633,29 @@ def generate_collage(
                     offsets_by_path[path] = (float(t[0]), float(t[1]), float(t[2]))
 
         strip_y = render_cell_layout_override(canvas, cell_layout, offsets_by_path)
-        canvas = draw_branded_strip(
-            canvas, strip_y, event_name, org, venue, logo_path, photo_tint
-        )
+        canvas = draw_branded_strip(canvas, strip_y, event_name, org, venue, logo_path)
         cells = list(cell_layout)
         mode_desc = f"override ({len(cell_layout)} cells)"
     else:
         # ── Masonry mode: compute layout from photo ratios + pattern ───────
-        rng = random.Random(seed)
         n = len(all_photos)
-        top_pattern, bottom_pattern = choose_collage_split(n, rng)
-        top_count = sum(top_pattern)
-        bottom_count = n - top_count
-        top_photos = all_photos[:top_count]
-        bottom_photos = all_photos[top_count:]
+        ratios = [p.width / p.height for p in all_photos]
+        options = distinct_collage_splits(n, ratios)
 
-        photo_area_h = CANVAS_H - STRIP_H - GAP
-        top_h = int(photo_area_h * 0.50)
-        bottom_h = photo_area_h - top_h
+        # With no stored seed the collage must be deterministic, not a fresh draw
+        # every render. The first fitting arrangement is the default.
+        rng = random.Random(0 if seed is None else seed)
+        if seed is None:
+            top_pattern, bottom_pattern = [list(p) for p in options[0]]
+        else:
+            top_pattern, bottom_pattern = choose_collage_split(n, rng, ratios)
 
-        top_offsets = crop_offsets[:top_count] if crop_offsets else None
-        bottom_offsets = crop_offsets[top_count:] if crop_offsets else None
+        planned, strip_y = plan_collage_cells(ratios, top_pattern, bottom_pattern, rng)
 
-        y = 0
-        y = place_photo_rows(
-            canvas, top_photos, top_pattern, y, top_h, rng, top_offsets,
-            photo_paths=list(photo_paths[:top_count]), cells_out=cells,
+        cells = paste_planned_cells(
+            canvas, all_photos, list(photo_paths), planned, crop_offsets
         )
-        strip_y = y - GAP
-        canvas = draw_branded_strip(
-            canvas, strip_y, event_name, org, venue, logo_path, photo_tint
-        )
-        bottom_y = strip_y + STRIP_H
-        place_photo_rows(
-            canvas, bottom_photos, bottom_pattern, bottom_y, bottom_h, rng, bottom_offsets,
-            photo_paths=list(photo_paths[top_count:]), cells_out=cells,
-        )
+        canvas = draw_branded_strip(canvas, strip_y, event_name, org, venue, logo_path)
         mode_desc = f"top={top_pattern}, bottom={bottom_pattern}"
 
     # Save PNG
@@ -584,8 +703,17 @@ def generate_collage_candidates(
         # Pick one seed per distinct structural arrangement so the gallery shows
         # genuinely different layouts, not random repeats (#70). Each seed
         # reproduces its arrangement on the final render.
-        splits = distinct_collage_splits(len(photo_paths))[:count]
-        seeds = [_seed_for_split(len(photo_paths), split) for split in splits]
+        #
+        # The pool is filtered by the photos' own aspect ratios, so the gallery
+        # can only ever offer layouts that stay inside the crop budget for THIS
+        # set. generate_collage() filters with the same ratios, so a candidate's
+        # stored seed still reproduces exactly the layout that was shown.
+        ratios = []
+        for p in photo_paths:
+            with Image.open(p) as im:
+                ratios.append(im.width / im.height)
+        splits = distinct_collage_splits(len(photo_paths), ratios)[:count]
+        seeds = [_seed_for_split(len(photo_paths), split, ratios) for split in splits]
     results: list[dict] = []
     for seed in seeds:
         out = out_dir / f"candidate_{seed}.png"
