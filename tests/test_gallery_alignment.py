@@ -23,6 +23,28 @@ from postroll.media import generate_before_after as ba_mod
 THIN_FACES = {"Thin", "Thin Italic", "UltraLight", "UltraLight Italic"}
 
 
+def _mac_fonts_available() -> bool:
+    """Whether the macOS system fonts the templates render with can be opened.
+
+    The app is macOS-only, so these are always present on Dan's machine, but the
+    Linux CI runner has no HelveticaNeue or SignPainter. Tests that assert on real
+    font rendering (weight, laid-out ink) cannot mean anything without them, so
+    they skip there rather than erroring on a missing resource.
+    """
+    try:
+        ImageFont.truetype(scroll_mod.FONT_DETAIL, 12, index=scroll_mod.FONT_DETAIL_LIGHT)
+        ImageFont.truetype(scroll_mod.FONT_SCRIPT, 12)
+        return True
+    except OSError:
+        return False
+
+
+requires_mac_fonts = pytest.mark.skipif(
+    not _mac_fonts_available(),
+    reason="renders with macOS system fonts (HelveticaNeue/SignPainter), absent on Linux CI",
+)
+
+
 def _row_has_color(img, y, color):
     px = img.convert("RGB")
     return any(px.getpixel((x, y)) == color for x in range(0, px.width, 3))
@@ -73,6 +95,7 @@ def _assert_detail_weight_not_thin(mod):
     assert face[1] not in THIN_FACES, f"{mod.__name__}: detail text still {face[1]}"
 
 
+@requires_mac_fonts
 def test_all_templates_use_a_non_thin_detail_weight():
     for mod in (scroll_mod, morph_mod, slider_mod, screen_mod, ba_mod, story_mod):
         _assert_detail_weight_not_thin(mod)
@@ -227,6 +250,7 @@ def test_header_detail_lines_drops_org_when_it_equals_the_event():
     assert ba_mod.header_detail_lines("A", " a ", "V") == ["V"]  # case/space insensitive
 
 
+@requires_mac_fonts
 def test_before_after_subtitle_is_heavier_than_light():
     from postroll.media.generate_before_after import FONT_DETAIL, SUBTITLE_WEIGHT
     face = ImageFont.truetype(FONT_DETAIL, 15, index=SUBTITLE_WEIGHT).getname()
@@ -254,6 +278,7 @@ def test_placard_text_maps_states_to_gallery_wording():
     assert ba_mod.placard_text("B&W")[0] == "B&W"
 
 
+@requires_mac_fonts
 def test_before_after_is_left_aligned_program_plate(tmp_path):
     # Dan chose the left-aligned program-plate closing frame (matches the reel
     # body): masthead top-left on a rose-gold rule, left placards, footer colophon.
@@ -296,6 +321,7 @@ def _placard_word_rows(img, rose):
     return rows
 
 
+@requires_mac_fonts
 @pytest.mark.parametrize("colour", [(30, 90, 200), (238, 240, 245)])
 def test_before_after_caption_reads_on_any_photo(tmp_path, colour):
     # The captions used to be drawn ON the photos, so they vanished on a busy or
