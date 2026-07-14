@@ -176,6 +176,35 @@ def test_morph_labels_are_dark_enough_to_read_on_cream():
 # landed on a bright blue-and-white stage banner and vanished. The colour must be
 # chosen from the pixels the label actually sits on.
 
+def test_header_detail_lines_drops_org_when_it_equals_the_event():
+    assert ba_mod.header_detail_lines("Home'r Bust!", "Home'r Bust!", "David Geffen Hall Lobby") \
+        == ["David Geffen Hall Lobby"]
+    assert ba_mod.header_detail_lines("Perpetual Light", "DCINY", "Carnegie Hall") \
+        == ["DCINY", "Carnegie Hall"]
+    assert ba_mod.header_detail_lines("A", " a ", "V") == ["V"]  # case/space insensitive
+
+
+def test_before_after_subtitle_is_heavier_than_light():
+    from postroll.media.generate_before_after import FONT_DETAIL, SUBTITLE_WEIGHT
+    face = ImageFont.truetype(FONT_DETAIL, 15, index=SUBTITLE_WEIGHT).getname()
+    assert face[1] not in ("Thin", "Thin Italic", "UltraLight", "UltraLight Italic",
+                           "Light", "Light Italic")
+
+
+def test_before_after_logo_is_large_enough_to_read(tmp_path):
+    out = str(tmp_path / "logo.png")
+    vivid = tmp_path / "v.jpg"
+    Image.new("RGB", (1500, 1000), (30, 90, 200)).save(str(vivid), "JPEG")
+    ba_mod.generate_before_after(str(vivid), str(vivid), out, event_name="E", org="O",
+                                 venue="V", logo_path="postroll/assets/logo-black.png")
+    img = Image.open(out).convert("RGB")
+    # The logo sits in the bottom cream. Measure the dark-ink horizontal extent there.
+    dark_x = [x for y in range(img.height - 120, img.height - 10, 2)
+              for x in range(0, 1080, 2) if sum(img.getpixel((x, y))) < 300]
+    assert dark_x, "no logo found in the footer"
+    assert max(dark_x) - min(dark_x) > 320, "the logo is too small to read"
+
+
 def test_placard_text_maps_states_to_gallery_wording():
     assert ba_mod.placard_text("RAW") == ("BEFORE", "UNEDITED CAPTURE")
     assert ba_mod.placard_text("Edit") == ("AFTER", "FINAL EDIT")

@@ -51,7 +51,7 @@ PLACARD_LETTER_SPACING = 9
 SUBTITLE_FONT_SIZE = 15
 SUBTITLE_LETTER_SPACING = 4
 EDITED_PHOTO_SCALE = 1.12  # in 3-photo mode, edits render slightly larger than the RAW
-LOGO_WIDTH = 280
+LOGO_WIDTH = 460  # readable at phone size, including the small PHOTOGRAPHY.COM line
 BOTTOM_CREAM_H = 130  # taller bottom to balance the top
 HEADER_MIN_H = 400  # min header height to accommodate notch-safe title + org + venue
 TITLE_TOP_PADDING = 170  # clears iPhone notch/Dynamic Island (~120px) with breathing room
@@ -63,6 +63,8 @@ FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 FONT_DETAIL_LIGHT = 7
 FONT_DETAIL_BOLD = 1
 FONT_DETAIL_MEDIUM = 10  # the placard state word
+# The placard subtitle in Light read too thin at phone size; Medium holds up.
+SUBTITLE_WEIGHT = FONT_DETAIL_MEDIUM
 
 
 # The gallery-card wording for each photo. A state word over a quiet subtitle.
@@ -76,6 +78,22 @@ PLACARD_TEXT = {
 def placard_text(state: str) -> tuple[str, str]:
     """(word, subtitle) for a photo's gallery caption card."""
     return PLACARD_TEXT.get(state, (state.upper(), ""))
+
+
+def header_detail_lines(event_name: str, org: str, venue: str) -> list[str]:
+    """The letterspaced lines under the script title.
+
+    When the org matches the event name it is already the big script title, so it
+    is dropped and the venue moves up into its place.
+    """
+    org = (org or "").strip()
+    venue = (venue or "").strip()
+    lines = []
+    if org and org.casefold() != (event_name or "").strip().casefold():
+        lines.append(org)
+    if venue:
+        lines.append(venue)
+    return lines
 
 
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
@@ -201,7 +219,7 @@ def generate_before_after(
     edit_photo = Image.open(edit_path)
     bw_photo = Image.open(bw_path) if bw_path else None
     placard_font = load_font(FONT_DETAIL, PLACARD_FONT_SIZE, index=FONT_DETAIL_MEDIUM)
-    subtitle_font = load_font(FONT_DETAIL, SUBTITLE_FONT_SIZE, index=FONT_DETAIL_LIGHT)
+    subtitle_font = load_font(FONT_DETAIL, SUBTITLE_FONT_SIZE, index=SUBTITLE_WEIGHT)
     detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_LIGHT)
 
     # Flat cream background (gallery style): the cream bands compose cream over
@@ -226,9 +244,9 @@ def generate_before_after(
     title_block_bottom = (
         TITLE_TOP_PADDING + (len(title_lines) - 1) * title_line_gap + title_h_single
     )
-    org_venue_count = sum(1 for s in (org, venue) if s)
+    detail_lines = header_detail_lines(event_name, org, venue)
     info_y = TITLE_TOP_PADDING + (len(title_lines) - 1) * title_line_gap + 110
-    info_block_bottom = info_y + max(0, org_venue_count - 1) * 42 + 36
+    info_block_bottom = info_y + max(0, len(detail_lines) - 1) * 42 + 36
     header_min_needed = max(HEADER_MIN_H, info_block_bottom + 30)  # 30px breathing room
 
     # Photos to stack: RAW + color edit, plus the B&W after when supplied.
@@ -282,11 +300,10 @@ def generate_before_after(
         tx = (CANVAS_W - tw) // 2
         draw.text((tx, title_y + i * title_line_gap), line, font=title_font, fill=TEXT_DARK)
 
-    # Org/venue follow the title (single or wrapped). Fixed offset from the
-    # last title line so the spacing stays consistent regardless of wrap.
-    for j, line in enumerate([org, venue]):
-        if line:
-            draw_spaced_text_centered(draw, line, detail_font, TEXT_DARK, CANVAS_W // 2, info_y + j * 42)
+    # Org/venue follow the title. When the org equals the event name it is
+    # dropped and the venue moves up (header_detail_lines).
+    for j, line in enumerate(detail_lines):
+        draw_spaced_text_centered(draw, line, detail_font, TEXT_DARK, CANVAS_W // 2, info_y + j * 42)
 
     y = header_cream_h
 
