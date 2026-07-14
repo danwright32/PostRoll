@@ -340,29 +340,52 @@ def test_scroll_strip_uses_brand_cream_not_its_own_warmer_cream(tmp_path):
     assert strip.convert("RGB").getpixel((5, 5)) == scroll_mod.CREAM
 
 
-def test_scroll_reel_logo_reads_as_dark_ink_on_the_cream_footer():
-    # The reel footer is cream (252,250,247) but the pipeline handed the reel the
-    # WHITE logo, so Dan's wordmark rendered as white-on-cream: a ghost. Every other
-    # template already used the black mark on cream. Measure the dark-ink extent in
-    # the footer band the same way the before/after logo test does, so both the
-    # colour and the size are pinned by the pixels rather than by the constant.
-    from postroll.ai import generate_media as gm
+def _colophon_ink(strip, cells):
+    """Bounding box of the wordmark's dark ink in the cream below the photos.
 
-    logo = scroll_mod.load_logo(gm.THURSDAY_REEL_LOGO)
-    assert logo is not None, "the reel must ship with a logo asset"
-
-    frame = scroll_mod.draw_branded_chrome(
-        _blank_frame(scroll_mod), "Test Event", "Org", "Venue", logo
-    )
-    footer_top = scroll_mod.CANVAS_H - scroll_mod.FOOTER_H
-    dark_x = [
-        x
-        for y in range(footer_top, scroll_mod.CANVAS_H)
-        for x in range(scroll_mod.CANVAS_W)
-        if sum(frame.getpixel((x, y))) < 600
+    Returns (min_x, max_x, min_y, last_photo_bottom) or None when nothing dark
+    sits below the photos.
+    """
+    rgb = strip.convert("RGB")
+    last_photo_bottom = max(c["y"] + c["h"] for c in cells)
+    dark = [
+        (x, y)
+        for y in range(last_photo_bottom, strip.height)
+        for x in range(0, scroll_mod.CANVAS_W, 2)
+        if sum(rgb.getpixel((x, y))) < 300
     ]
-    assert dark_x, "the logo is invisible on the cream footer"
-    assert max(dark_x) - min(dark_x) > 320, "the logo is too small to read"
+    if not dark:
+        return None
+    xs = [p[0] for p in dark]
+    ys = [p[1] for p in dark]
+    return min(xs), max(xs), min(ys), last_photo_bottom
+
+
+def test_scroll_reel_colophon_is_dark_and_fills_the_width(tmp_path):
+    # The reel shipped the WHITE mark on a cream footer, so it rendered as a ghost,
+    # and even once black it was a timid 200px mark. Dan wants it big enough to fill
+    # the space under the photos. It is the black mark scaled to the photo strip
+    # width, so its ink spans most of the frame. Measure the ink, not the box: the
+    # asset carries transparent side margins.
+    photos = _photo_set(tmp_path, (30, 90, 160), n=6)
+    strip, cells = scroll_mod.build_collage_strip(photos, seed=0, return_layout=True)
+    ink = _colophon_ink(strip, cells)
+    assert ink is not None, "the colophon is invisible below the photos"
+    min_x, max_x, _, _ = ink
+    assert max_x - min_x > 800, "the colophon is too small to fill the space"
+
+
+def test_scroll_reel_colophon_tucks_right_under_the_photos(tmp_path):
+    # It used to be pinned to the very bottom of the frame with a big empty cream
+    # band above it. Dan wants it right under the last photo, not floating at the
+    # bottom. The gap between the last print and the top of the mark stays small.
+    photos = _photo_set(tmp_path, (30, 90, 160), n=6)
+    strip, cells = scroll_mod.build_collage_strip(photos, seed=0, return_layout=True)
+    ink = _colophon_ink(strip, cells)
+    assert ink is not None, "the colophon is missing"
+    _, _, ink_top, last_photo_bottom = ink
+    assert ink_top - last_photo_bottom < 120, \
+        "the colophon is not tucked under the photos"
 
 
 def test_scroll_photos_sit_in_an_even_mat_with_a_hairline(tmp_path):

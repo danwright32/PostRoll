@@ -69,12 +69,26 @@ CLOSING_FRAME_DURATION = 5.0
 # Branded chrome
 CREAM_OPACITY = 210
 HEADER_H = 220
+# The footer is only a cream mask now: it softens photos scrolling in at the bottom
+# edge. The colophon no longer lives here (it is baked into the strip right under
+# the last photo), so this is back to a thin band.
 FOOTER_H = 100
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 # Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
 FONT_DETAIL_LIGHT = 7
-LOGO_WIDTH = 450
+# Span exactly the photo strip, so the wordmark's edges line up with the prints
+# above it rather than floating at some arbitrary width.
+LOGO_WIDTH = CANVAS_W - 2 * MAT
+# The colophon sits in the strip, right under the last print: a gallery gap above
+# it, then even breathing room below before the frame's bottom mask.
+COLOPHON_GAP_ABOVE = 56
+COLOPHON_GAP_BELOW = 56
+
+# The brand wordmark baked into the strip under the photos. The cream footer is the
+# mask this reads best against, so it is the dark mark.
+_ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+DEFAULT_LOGO = str(_ASSETS_DIR / "logo-black.png")
 
 # Audio
 AUDIO_FADE_DURATION = 5.0
@@ -114,6 +128,7 @@ def build_collage_strip(
     seed: int | None = None,
     crop_offsets: list[tuple[float, float, float]] | None = None,
     return_layout: bool = False,
+    logo_path: str | None = DEFAULT_LOGO,
 ):
     """Build a tall collage strip from photos arranged in masonry rows.
 
@@ -122,6 +137,9 @@ def build_collage_strip(
     return_layout: when True, returns (strip_image, cells) where cells is a
                    list of {photo_path, x, y, w, h} dicts in strip-pixel
                    coordinates — used by the app to overlay crop controls.
+    logo_path: the colophon baked into the cream right under the last print.
+               None draws no mark. Defaults to the brand dark wordmark so the
+               editor preview and the video render show the same thing.
     """
     rng = random.Random(seed)
     photos = [Image.open(p) for p in photo_paths]
@@ -187,9 +205,16 @@ def build_collage_strip(
         row_data.append((photos_in_row, natural_h, widths))
         photo_idx += photos_in_row
 
-    # Add padding at top and bottom so photos aren't hidden behind chrome
+    # The colophon is baked into the strip right under the last print, so the
+    # bottom padding has to reserve room for it: a gap under the photos, the mark,
+    # then even breathing room and the frame's bottom mask below it.
+    logo = load_logo(logo_path)
     top_pad = HEADER_H + ROW_GAP * 3  # extra breathing room below header
-    bottom_pad = FOOTER_H + 30  # just enough to clear footer with a small gap
+    if logo:
+        bottom_pad = (COLOPHON_GAP_ABOVE + logo.height
+                      + COLOPHON_GAP_BELOW + FOOTER_H)
+    else:
+        bottom_pad = FOOTER_H + 30
     total_h = top_pad + sum(h for _, h, _ in row_data) + ROW_GAP * (len(row_data) - 1) + bottom_pad
 
     # Create strip on the brand cream mat
@@ -228,6 +253,13 @@ def build_collage_strip(
             x += widths[col_idx] + COL_GAP
             photo_idx += 1
         y += row_h + ROW_GAP
+
+    # Colophon: the wordmark tucked right under the last print, centred on the mat.
+    if logo and cells:
+        last_photo_bottom = max(c["y"] + c["h"] for c in cells)
+        logo_x = (CANVAS_W - logo.width) // 2
+        logo_y = last_photo_bottom + COLOPHON_GAP_ABOVE
+        strip.paste(logo, (logo_x, logo_y), logo)
 
     if return_layout:
         return strip, cells
@@ -364,7 +396,9 @@ def generate_reel_scroll(
 
     # Build collage strip
     print(f"Building collage strip from {n} photos...")
-    strip = build_collage_strip(photo_paths, seed=seed, crop_offsets=crop_offsets)
+    strip = build_collage_strip(
+        photo_paths, seed=seed, crop_offsets=crop_offsets, logo_path=logo_path,
+    )
     strip_h = strip.height
     print(f"Strip size: {CANVAS_W}x{strip_h}")
 
@@ -388,7 +422,8 @@ def generate_reel_scroll(
     # When the strip exactly fills the canvas this is 0 (a static frame).
     max_scroll = max(0, strip_h - CANVAS_H)
 
-    logo = load_logo(logo_path)
+    # The colophon is baked into the strip (above), so the footer chrome is just a
+    # cream mask now: pass no logo to it.
 
     # Load closing frame
     closing_frame = None
@@ -411,11 +446,11 @@ def generate_reel_scroll(
                 eased = ease_in_out(t)
                 scroll_y = int(eased * max_scroll)
                 frame = strip.crop((0, scroll_y, CANVAS_W, scroll_y + CANVAS_H))
-                frame = draw_branded_chrome(frame, event_name, org, venue, logo)
+                frame = draw_branded_chrome(frame, event_name, org, venue, None)
 
             elif i < scroll_frames + hold_frames:
                 frame = strip.crop((0, max_scroll, CANVAS_W, max_scroll + CANVAS_H))
-                frame = draw_branded_chrome(frame, event_name, org, venue, logo)
+                frame = draw_branded_chrome(frame, event_name, org, venue, None)
 
             else:
                 if closing_frame:
@@ -423,13 +458,13 @@ def generate_reel_scroll(
                     if closing_i < FPS:
                         blend = closing_i / FPS
                         last = strip.crop((0, max_scroll, CANVAS_W, max_scroll + CANVAS_H))
-                        last = draw_branded_chrome(last, event_name, org, venue, logo)
+                        last = draw_branded_chrome(last, event_name, org, venue, None)
                         frame = Image.blend(last, closing_frame, blend)
                     else:
                         frame = closing_frame
                 else:
                     frame = strip.crop((0, max_scroll, CANVAS_W, max_scroll + CANVAS_H))
-                    frame = draw_branded_chrome(frame, event_name, org, venue, logo)
+                    frame = draw_branded_chrome(frame, event_name, org, venue, None)
 
             frame.save(str(tmpdir / f"frame_{i:05d}.png"), "PNG")
 
