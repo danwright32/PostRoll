@@ -32,6 +32,7 @@ from postroll.media.generate_collage import (
     STRIP_CREAM,
     STRIP_H,
     cell_retention,
+    plate_detail_line,
     crop_to_fill,
     generate_collage,
     generate_collage_candidates,
@@ -446,6 +447,35 @@ def test_each_print_gets_a_hairline_just_outside_its_cell(tmp_path):
     assert img.getpixel((top["x"] - 1, top["y"] + top["h"] // 2)) == HAIRLINE, "and just left"
     # The cell's own first pixel row is still photograph, not hairline.
     assert img.getpixel((mid_x, top["y"])) != HAIRLINE, "hairline must not eat into the photo"
+
+
+def test_plate_detail_line_drops_org_when_it_equals_the_event():
+    # When the org and the event name are the same, the org is already the big
+    # script title, so repeating it on the detail line is noise. The detail line
+    # becomes just the venue.
+    assert plate_detail_line("Home'r Bust!", "Home'r Bust!", "David Geffen Hall Lobby") \
+        == "David Geffen Hall Lobby"
+    # Case and surrounding whitespace should not defeat the match.
+    assert plate_detail_line("Home'r Bust!", " home'r bust! ", "Weill") == "Weill"
+
+
+def test_plate_detail_line_keeps_both_when_org_differs():
+    assert plate_detail_line("Perpetual Light", "DCINY", "Carnegie Hall") \
+        == "DCINY  ·  Carnegie Hall"
+
+
+def test_plate_detail_line_handles_missing_pieces():
+    assert plate_detail_line("A", "A", "") == ""          # org==event, no venue
+    assert plate_detail_line("A", "", "Carnegie") == "Carnegie"
+    assert plate_detail_line("A", "DCINY", "") == "DCINY"
+
+
+def test_collage_detail_uses_a_heavier_weight_than_thin():
+    # The venue line rendered spindly because it used Helvetica Neue Thin, the
+    # lightest weight. It must now load a heavier face so it renders cleanly.
+    from postroll.media.generate_collage import PLATE_DETAIL_WEIGHT, FONT_DETAIL, load_font
+    face = load_font(FONT_DETAIL, 18, index=PLATE_DETAIL_WEIGHT).getname()
+    assert face[1] not in ("Thin", "Thin Italic", "UltraLight", "UltraLight Italic")
 
 
 def test_branded_strip_is_inset_as_a_caption_plate(tmp_path):

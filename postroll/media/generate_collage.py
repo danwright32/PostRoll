@@ -54,7 +54,10 @@ PLATE_PADDING = 24  # inset of the plate's text and logo from its own edges
 # Fonts (shared with brand system)
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-FONT_DETAIL_THIN = 12
+FONT_DETAIL_THIN = 12   # Helvetica Neue Thin (the .ttc face index)
+# The plate's detail line rendered spindly in Thin. Light (index 7) is one step
+# heavier and reads cleanly at plate size without looking bold.
+PLATE_DETAIL_WEIGHT = 7
 
 # Layout patterns: (top_half, bottom_half) — photos split around center strip
 # Top gets 5, bottom gets 5
@@ -510,6 +513,21 @@ def draw_hairlines(canvas: Image.Image, cells: list[dict]) -> None:
         draw.rectangle([x - 1, y - 1, x + w, y + h], outline=HAIRLINE, width=1)
 
 
+def plate_detail_line(event_name: str, org: str, venue: str) -> str:
+    """The text under the script title on the caption plate.
+
+    When the org and the event name are the same, the org is already the big
+    script title, so it is dropped from the detail line and only the venue shows.
+    """
+    org = (org or "").strip()
+    venue = (venue or "").strip()
+    if org and org.casefold() == (event_name or "").strip().casefold():
+        return venue
+    if org and venue:
+        return f"{org}  ·  {venue}"
+    return org or venue
+
+
 def draw_branded_strip(
     canvas: Image.Image,
     y: int,
@@ -540,14 +558,14 @@ def draw_branded_strip(
     draw.line([(left, y + STRIP_H - 1), (right, y + STRIP_H - 1)], fill=ROSE_GOLD, width=2)
 
     title_font = load_font(FONT_SCRIPT, 42)
-    detail_font = load_font(FONT_DETAIL, 18, index=FONT_DETAIL_THIN)
+    detail_font = load_font(FONT_DETAIL, 18, index=PLATE_DETAIL_WEIGHT)
 
     title_x = left + PLATE_PADDING
     draw.text((title_x, y + 10), event_name, font=title_font, fill=TEXT_DARK)
 
-    org_venue = f"{org}  ·  {venue}" if org and venue else org or venue
+    detail = plate_detail_line(event_name, org, venue)
     dx = title_x
-    for ch in org_venue:
+    for ch in detail:
         draw.text((dx, y + 58), ch, font=detail_font, fill=TEXT_DARK)
         bbox = draw.textbbox((0, 0), ch, font=detail_font)
         dx += (bbox[2] - bbox[0]) + 4
