@@ -52,7 +52,8 @@ TITLE_TOP_PADDING = 170  # clears iPhone notch/Dynamic Island (~120px) with brea
 # Fonts (same as story template)
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-FONT_DETAIL_THIN = 12
+# Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
+FONT_DETAIL_LIGHT = 7
 FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
 
 # Background
@@ -179,18 +180,14 @@ def draw_header(
     draw.text((tx, start_y), event_name, font=title_font, fill=TEXT_DARK)
 
     # Org and venue — Helvetica Neue Thin with spacing
-    detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_THIN)
+    detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_LIGHT)
     org_venue_y = start_y + text_h + 45
 
     for i, line in enumerate([org, venue]):
         y = org_venue_y + i * 42
         draw_spaced_text_centered(draw, line, detail_font, TEXT_DARK, CANVAS_W // 2, y)
 
-    # Rose-gold divider at bottom of header
-    draw.line(
-        [(200, header_h - 2), (CANVAS_W - 200, header_h - 2)],
-        fill=ROSE_GOLD, width=DIVIDER_H,
-    )
+    # No rule line at the header bottom (gallery style).
 
     return canvas
 
@@ -227,7 +224,7 @@ def generate_before_after(
     edit_photo = Image.open(edit_path)
     bw_photo = Image.open(bw_path) if bw_path else None
     label_font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_BOLD)
-    detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_THIN)
+    detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_LIGHT)
 
     # Create blurred background
     canvas = create_blurred_background(edit_photo)
@@ -312,8 +309,8 @@ def generate_before_after(
 
     y = header_cream_h
 
-    # === ROSE-GOLD DIVIDER (header → photos) ===
-    draw.line([(0, y), (CANVAS_W, y)], fill=ROSE_GOLD, width=DIVIDER_H)
+    # Header → photos boundary: no rule line (gallery style). The DIVIDER_H of
+    # space is kept as an invisible cream gap so the layout math stays put.
     y += DIVIDER_H
 
     # === PHOTOS with configurable labels ===
@@ -383,9 +380,7 @@ def generate_before_after(
             canvas = apply_cream_strip(canvas, y, MID_STRIP_H)
             y += MID_STRIP_H
 
-    # === ROSE-GOLD DIVIDER (photos → footer) ===
-    draw = ImageDraw.Draw(canvas)
-    draw.line([(0, y), (CANVAS_W, y)], fill=ROSE_GOLD, width=DIVIDER_H)
+    # Photos → footer boundary: no rule line (gallery style); keep the gap.
     y += DIVIDER_H
 
     # === BOTTOM CREAM: logo (extends to bottom edge) ===

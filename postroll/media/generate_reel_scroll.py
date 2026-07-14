@@ -65,7 +65,8 @@ HEADER_H = 220
 FOOTER_H = 100
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-FONT_DETAIL_THIN = 12
+# Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
+FONT_DETAIL_LIGHT = 7
 LOGO_WIDTH = 200
 
 # Audio
@@ -216,10 +217,9 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
     header = Image.new("RGBA", (CANVAS_W, HEADER_H), (*CREAM, 255))
     frame_rgba.paste(header, (0, 0), header)
     draw = ImageDraw.Draw(frame_rgba)
-    draw.line([(0, HEADER_H - 1), (CANVAS_W, HEADER_H - 1)], fill=ROSE_GOLD, width=2)
 
     title_font = load_font(FONT_SCRIPT, 70)
-    detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_THIN)
+    detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_LIGHT)
     bbox = draw.textbbox((0, 0), event_name, font=title_font)
     tw = bbox[2] - bbox[0]
     draw.text(((CANVAS_W - tw) // 2, 35), event_name, font=title_font, fill=TEXT_DARK)
@@ -240,8 +240,6 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
     footer_y = CANVAS_H - FOOTER_H
     footer = Image.new("RGBA", (CANVAS_W, FOOTER_H), (*CREAM, 255))
     frame_rgba.paste(footer, (0, footer_y), footer)
-    draw = ImageDraw.Draw(frame_rgba)
-    draw.line([(0, footer_y), (CANVAS_W, footer_y)], fill=ROSE_GOLD, width=2)
 
     if logo:
         lx = (CANVAS_W - logo.width) // 2

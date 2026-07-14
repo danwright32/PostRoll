@@ -55,7 +55,8 @@ DIVIDER_COLOR = (255, 255, 255)
 
 # Labels
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-FONT_DETAIL_THIN = 12
+# Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
+FONT_DETAIL_LIGHT = 7
 FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
 LABEL_FONT_SIZE = 38
 LABEL_MARGIN = 30
@@ -127,10 +128,9 @@ def draw_branded_chrome(frame, event_name, org, venue, logo):
     header = Image.new("RGBA", (CANVAS_W, HEADER_H), (*CREAM, CREAM_OPACITY))
     frame_rgba.paste(header, (0, 0), header)
     draw = ImageDraw.Draw(frame_rgba)
-    draw.line([(0, HEADER_H - 1), (CANVAS_W, HEADER_H - 1)], fill=ROSE_GOLD, width=2)
 
     title_font = load_font(FONT_SCRIPT, 70)
-    detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_THIN)
+    detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_LIGHT)
     bbox = draw.textbbox((0, 0), event_name, font=title_font)
     tw = bbox[2] - bbox[0]
     draw.text(((CANVAS_W - tw) // 2, TITLE_TOP_Y), event_name, font=title_font, fill=TEXT_DARK)
@@ -151,8 +151,6 @@ def draw_branded_chrome(frame, event_name, org, venue, logo):
     footer_y = CANVAS_H - FOOTER_H
     footer = Image.new("RGBA", (CANVAS_W, FOOTER_H), (*CREAM, CREAM_OPACITY))
     frame_rgba.paste(footer, (0, footer_y), footer)
-    draw = ImageDraw.Draw(frame_rgba)
-    draw.line([(0, footer_y), (CANVAS_W, footer_y)], fill=ROSE_GOLD, width=2)
     if logo:
         lx = (CANVAS_W - logo.width) // 2
         ly = footer_y + (FOOTER_H - logo.height) // 2

@@ -48,7 +48,8 @@ TITLE_TOP_Y = 170  # clears notch (~120px) + Dynamic Island with breathing room
 FOOTER_H = 100
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-FONT_DETAIL_THIN = 12
+# Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
+FONT_DETAIL_LIGHT = 7
 LOGO_WIDTH = 200
 
 # Audio
@@ -70,6 +71,57 @@ def get_video_duration(path: str) -> float:
         capture_output=True, text=True,
     )
     return float(result.stdout.strip())
+
+
+def build_chrome_overlay(event_name: str, org: str, venue: str,
+                         logo_path: str | None) -> Image.Image:
+    """Transparent cream header/footer overlay composited over the recording.
+
+    Extracted from the inline build so it is testable and consistent with the
+    other reels' draw_branded_chrome. No rule lines (gallery style); detail text
+    in Light, not Thin.
+    """
+    chrome = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
+
+    header = Image.new("RGBA", (CANVAS_W, HEADER_H), (*CREAM, CREAM_OPACITY))
+    chrome.paste(header, (0, 0), header)
+    draw = ImageDraw.Draw(chrome)
+
+    title_font = load_font(FONT_SCRIPT, 70)
+    detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_LIGHT)
+    bbox = draw.textbbox((0, 0), event_name, font=title_font)
+    tw = bbox[2] - bbox[0]
+    draw.text(((CANVAS_W - tw) // 2, TITLE_TOP_Y), event_name, font=title_font, fill=TEXT_DARK)
+
+    title_h = bbox[3] - bbox[1]
+    info_y = TITLE_TOP_Y + title_h + 20
+    for j, line in enumerate([org, venue]):
+        if line:
+            total_w = sum(draw.textbbox((0, 0), ch, font=detail_font)[2] -
+                         draw.textbbox((0, 0), ch, font=detail_font)[0] + 6
+                         for ch in line) - 6
+            x = (CANVAS_W - total_w) // 2
+            for ch in line:
+                draw.text((x, info_y + j * 36), ch, font=detail_font, fill=TEXT_DARK)
+                cb = draw.textbbox((0, 0), ch, font=detail_font)
+                x += (cb[2] - cb[0]) + 6
+
+    footer_y = CANVAS_H - FOOTER_H
+    footer = Image.new("RGBA", (CANVAS_W, FOOTER_H), (*CREAM, CREAM_OPACITY))
+    chrome.paste(footer, (0, footer_y), footer)
+
+    if logo_path and Path(logo_path).exists():
+        logo = Image.open(logo_path).convert("RGBA")
+        logo_scale = LOGO_WIDTH / logo.width
+        logo = logo.resize(
+            (int(logo.width * logo_scale), int(logo.height * logo_scale)),
+            Image.LANCZOS,
+        )
+        lx = (CANVAS_W - logo.width) // 2
+        ly = footer_y + (FOOTER_H - logo.height) // 2
+        chrome.paste(logo, (lx, ly), logo)
+
+    return chrome
 
 
 from postroll.ai.audio_tags import TUESDAY_DEFAULT_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
@@ -173,51 +225,7 @@ def generate_reel_screen(
         bg.save(bg_path)
 
         # Step 3: Create branded chrome overlay (header + footer)
-        chrome = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-
-        # Header
-        header = Image.new("RGBA", (CANVAS_W, HEADER_H), (*CREAM, CREAM_OPACITY))
-        chrome.paste(header, (0, 0), header)
-        draw = ImageDraw.Draw(chrome)
-        draw.line([(0, HEADER_H - 1), (CANVAS_W, HEADER_H - 1)], fill=ROSE_GOLD, width=2)
-
-        title_font = load_font(FONT_SCRIPT, 70)
-        detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_THIN)
-        bbox = draw.textbbox((0, 0), event_name, font=title_font)
-        tw = bbox[2] - bbox[0]
-        draw.text(((CANVAS_W - tw) // 2, TITLE_TOP_Y), event_name, font=title_font, fill=TEXT_DARK)
-
-        title_h = bbox[3] - bbox[1]
-        info_y = TITLE_TOP_Y + title_h + 20
-        for j, line in enumerate([org, venue]):
-            if line:
-                total_w = sum(draw.textbbox((0, 0), ch, font=detail_font)[2] -
-                             draw.textbbox((0, 0), ch, font=detail_font)[0] + 6
-                             for ch in line) - 6
-                x = (CANVAS_W - total_w) // 2
-                for ch in line:
-                    draw.text((x, info_y + j * 36), ch, font=detail_font, fill=TEXT_DARK)
-                    cb = draw.textbbox((0, 0), ch, font=detail_font)
-                    x += (cb[2] - cb[0]) + 6
-
-        # Footer
-        footer_y = CANVAS_H - FOOTER_H
-        footer = Image.new("RGBA", (CANVAS_W, FOOTER_H), (*CREAM, CREAM_OPACITY))
-        chrome.paste(footer, (0, footer_y), footer)
-        draw = ImageDraw.Draw(chrome)
-        draw.line([(0, footer_y), (CANVAS_W, footer_y)], fill=ROSE_GOLD, width=2)
-
-        if logo_path and Path(logo_path).exists():
-            logo = Image.open(logo_path).convert("RGBA")
-            logo_scale = LOGO_WIDTH / logo.width
-            logo = logo.resize(
-                (int(logo.width * logo_scale), int(logo.height * logo_scale)),
-                Image.LANCZOS,
-            )
-            lx = (CANVAS_W - logo.width) // 2
-            ly = footer_y + (FOOTER_H - logo.height) // 2
-            chrome.paste(logo, (lx, ly), logo)
-
+        chrome = build_chrome_overlay(event_name, org, venue, logo_path)
         chrome_path = str(tmpdir_path / "chrome.png")
         chrome.save(chrome_path)
 

@@ -38,10 +38,7 @@ EVENT_NAME_Y = 130  # script title — breathing room from top
 PHOTO_TOP_Y = 260  # tighter to title (~50px gap after text)
 PHOTO_SIDE_MARGIN = 20
 PHOTO_BOTTOM_Y = 1450  # larger photo area (~1190px tall)
-DIVIDER_Y = 1480  # 30px below photo
-DIVIDER_THICKNESS = 2
-DIVIDER_MARGIN = 200  # inset from each side
-ORG_VENUE_Y = 1530  # 50px below divider
+ORG_VENUE_Y = 1530  # in the cream caption band below the photo
 ORG_VENUE_LINE_SPACING = 55  # slightly tighter line height
 LOGO_BOTTOM_MARGIN = 100
 
@@ -52,7 +49,8 @@ BG_DARKEN_OPACITY = 70  # lighter overlay, let warm tones show through
 # Fonts (macOS system fonts)
 FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-FONT_DETAIL_INDEX = 12  # Thin weight
+FONT_DETAIL_INDEX = 7  # Light weight (Thin rendered spindly)
+FONT_DETAIL_LIGHT = FONT_DETAIL_INDEX  # alias for the cross-template alignment tests
 
 
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
@@ -175,14 +173,6 @@ def place_photo(canvas: Image.Image, photo: Image.Image) -> tuple[Image.Image, i
     canvas.paste(resized_rgba, (x, y), resized_rgba)
 
     return canvas, y
-
-
-def draw_divider(draw: ImageDraw.ImageDraw):
-    """Draw the rose-gold divider line."""
-    x1 = DIVIDER_MARGIN
-    x2 = CANVAS_W - DIVIDER_MARGIN
-    y = DIVIDER_Y
-    draw.line([(x1, y), (x2, y)], fill=ROSE_GOLD_DARK, width=DIVIDER_THICKNESS)
 
 
 def _fit_script_title(
@@ -403,9 +393,8 @@ def generate_story(
     # 3. Draw title with shadow (returns new RGBA canvas)
     canvas = draw_title(canvas, event_name, photo_top_y=photo_top_y)
 
-    # 4. Draw divider and org/venue text
+    # 4. Draw org/venue text (no rule line, gallery style)
     draw = ImageDraw.Draw(canvas)
-    draw_divider(draw)
     draw_text(draw, org, venue)
 
     # 5. Place logo
