@@ -35,14 +35,21 @@ CANVAS_H = 1920
 CREAM = (252, 250, 247)  # same as story template lower section
 CREAM_OPACITY = 185  # lower opacity lets blurred photo warmth show through
 TEXT_DARK = (60, 55, 50)  # same as story template org/venue text
+WARM_MID = (122, 104, 96)  # quiet secondary text (the placard subtitle)
 ROSE_GOLD = (160, 105, 95)  # divider — same as story template
 
 # Layout
 DIVIDER_H = 2
-LABEL_FONT_SIZE = 28
 LABEL_LETTER_SPACING = 8
-LABEL_MARGIN = 40   # snug to the photo's top-left corner; reel closing-frame zoom may crop slightly but the label isn't load-bearing
-LABEL_STRIP_H = 58  # cream strip ABOVE each photo carrying its RAW/Edit/B&W label
+LABEL_MARGIN = 40
+# Caption placard ABOVE each photo, centred like a museum wall card: a state word
+# over a quiet subtitle. Centred to share the title's axis so it reads composed,
+# not stuck in a corner.
+LABEL_STRIP_H = 92
+PLACARD_FONT_SIZE = 24
+PLACARD_LETTER_SPACING = 9
+SUBTITLE_FONT_SIZE = 15
+SUBTITLE_LETTER_SPACING = 4
 EDITED_PHOTO_SCALE = 1.12  # in 3-photo mode, edits render slightly larger than the RAW
 LOGO_WIDTH = 280
 BOTTOM_CREAM_H = 130  # taller bottom to balance the top
@@ -54,7 +61,21 @@ FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
 # Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
 FONT_DETAIL_LIGHT = 7
-FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
+FONT_DETAIL_BOLD = 1
+FONT_DETAIL_MEDIUM = 10  # the placard state word
+
+
+# The gallery-card wording for each photo. A state word over a quiet subtitle.
+PLACARD_TEXT = {
+    "RAW": ("BEFORE", "UNEDITED CAPTURE"),
+    "Edit": ("AFTER", "FINAL EDIT"),
+    "B&W": ("B&W", "BLACK & WHITE"),
+}
+
+
+def placard_text(state: str) -> tuple[str, str]:
+    """(word, subtitle) for a photo's gallery caption card."""
+    return PLACARD_TEXT.get(state, (state.upper(), ""))
 
 
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
@@ -179,7 +200,8 @@ def generate_before_after(
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
     bw_photo = Image.open(bw_path) if bw_path else None
-    label_font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_BOLD)
+    placard_font = load_font(FONT_DETAIL, PLACARD_FONT_SIZE, index=FONT_DETAIL_MEDIUM)
+    subtitle_font = load_font(FONT_DETAIL, SUBTITLE_FONT_SIZE, index=FONT_DETAIL_LIGHT)
     detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_LIGHT)
 
     # Flat cream background (gallery style): the cream bands compose cream over
@@ -272,21 +294,24 @@ def generate_before_after(
     # space is kept as an invisible cream gap so the layout math stays put.
     y += DIVIDER_H
 
-    # === PHOTOS, each under a cream label strip ===
-    labels = ["RAW", "Edit"] + (["B&W"] if bw_photo is not None else [])
+    # === PHOTOS, each under a centred gallery-caption placard ===
+    states = ["RAW", "Edit"] + (["B&W"] if bw_photo is not None else [])
 
-    for photo_resized, label_text in zip(resized_photos, labels):
-        # Cream strip ABOVE the photo, carrying the label in dark ink. Left-aligned,
-        # letter-spaced, vertically centred in the strip.
+    for photo_resized, state in zip(resized_photos, states):
+        # Cream card ABOVE the photo: a state word over a quiet subtitle, both
+        # centred on the title's axis so the caption reads composed, not stuck.
         canvas = apply_cream_strip(canvas, y, LABEL_STRIP_H)
         draw = ImageDraw.Draw(canvas)
-        lb = label_font.getbbox(label_text)
-        ly = y + (LABEL_STRIP_H - (lb[3] - lb[1])) // 2 - lb[1]
-        tx = LABEL_MARGIN
-        for ch in label_text:
-            draw.text((tx, ly), ch, font=label_font, fill=TEXT_DARK)
-            cb = draw.textbbox((0, 0), ch, font=label_font)
-            tx += (cb[2] - cb[0]) + LABEL_LETTER_SPACING
+        word, subtitle = placard_text(state)
+        draw_spaced_text_centered(
+            draw, word, placard_font, TEXT_DARK, CANVAS_W // 2, y + 22,
+            spacing=PLACARD_LETTER_SPACING,
+        )
+        if subtitle:
+            draw_spaced_text_centered(
+                draw, subtitle, subtitle_font, WARM_MID, CANVAS_W // 2, y + 60,
+                spacing=SUBTITLE_LETTER_SPACING,
+            )
         y += LABEL_STRIP_H
 
         px = (CANVAS_W - photo_resized.width) // 2

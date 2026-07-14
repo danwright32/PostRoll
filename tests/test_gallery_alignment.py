@@ -176,6 +176,34 @@ def test_morph_labels_are_dark_enough_to_read_on_cream():
 # landed on a bright blue-and-white stage banner and vanished. The colour must be
 # chosen from the pixels the label actually sits on.
 
+def test_placard_text_maps_states_to_gallery_wording():
+    assert ba_mod.placard_text("RAW") == ("BEFORE", "UNEDITED CAPTURE")
+    assert ba_mod.placard_text("Edit") == ("AFTER", "FINAL EDIT")
+    assert ba_mod.placard_text("B&W")[0] == "B&W"
+
+
+def test_before_after_caption_is_a_centred_placard(tmp_path):
+    # Dan: flush-left labels "feel stuck where they fit." The caption now sits on
+    # the title's axis, centred, so it reads composed.
+    vivid = tmp_path / "vivid.jpg"
+    Image.new("RGB", (1500, 1000), (30, 90, 200)).save(str(vivid), "JPEG")
+    out = str(tmp_path / "ba_placard.png")
+    ba_mod.generate_before_after(str(vivid), str(vivid), out,
+                                 event_name="E", org="O", venue="V")
+    img = Image.open(out).convert("RGB")
+
+    # Topmost band with the placard's dark word.
+    def dark_cols(y):
+        return [x for x in range(0, 1080, 2) if sum(img.getpixel((x, y))) < 260]
+
+    label_y = next((y for y in range(430, 1500, 2) if dark_cols(y)), None)
+    assert label_y is not None
+    cols = dark_cols(label_y)
+    centroid = sum(cols) / len(cols)
+    assert abs(centroid - 540) < 130, "the caption is not centred on the title's axis"
+    assert min(cols) > 200, "the caption is still flush-left, not centred"
+
+
 def test_before_after_labels_sit_in_a_cream_band_above_each_photo(tmp_path):
     # The RAW/Edit labels were drawn ON the photos, so on a busy stage banner they
     # were unreadable whatever colour they took. They now sit in a cream band above
