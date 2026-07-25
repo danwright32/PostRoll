@@ -764,3 +764,78 @@ def test_swap_reel_audio_fits_user_audio_to_video(tmp_path):
     assert "1:a:0" in final
     assert "-t" in final
     assert result["reel"] == str(reel.resolve())
+
+
+# ── Stale cell_layout override (Wednesday story that stopped generating) ───────
+# A saved cell layout records the photo paths that were in play when it was made.
+# Change the day's photos (or let MediaReclaim move the originals into app
+# storage) and those paths can name files that no longer exist. The renderer used
+# to open every cell path unconditionally, so one dead path raised
+# FileNotFoundError and took the whole collage down: no collage meant no
+# Wednesday story, on every regen, until the override was cleared.
+
+
+def test_cell_layout_naming_a_missing_file_falls_back_to_the_auto_layout(tmp_path, capsys):
+    photos = _photo_set(tmp_path, (10, 200, 10))
+    stale = [
+        {"photo_path": "/Users/dan/Downloads/gone/photo-11.jpg", "x": 40, "y": 0, "w": 1000, "h": 387},
+        {"photo_path": photos[0], "x": 40, "y": 395, "w": 1000, "h": 387},
+    ]
+    out = tmp_path / "stale.png"
+
+    generate_collage(photo_paths=photos, output_path=str(out), event_name="A",
+                     cell_layout=stale, write_layout_sidecar=False)
+
+    # The collage is the deliverable; the layout override is a nicety. Produce the
+    # collage from the automatic layout rather than failing the whole day.
+    assert out.exists()
+    assert Image.open(out).size == (1080, 1920)
+    # Loud about why the user's dragged layout was not honoured.
+    assert "cell_layout ignored" in capsys.readouterr().err
+
+
+def test_cell_layout_for_a_different_photo_set_falls_back_to_the_auto_layout(tmp_path, capsys):
+    # The exact reported shape: 10 cells left from the old 10-photo Wednesday,
+    # 4 photos now assigned. The files all exist here, so this pins the photo-set
+    # mismatch on its own, independent of any missing file.
+    photos = _photo_set(tmp_path, (10, 200, 10))
+    extra = _photo_set(tmp_path, (200, 10, 10), n=6)
+    stale = [
+        {"photo_path": p, "x": 40, "y": i * 180, "w": 1000, "h": 170}
+        for i, p in enumerate(photos + extra)
+    ]
+    out = tmp_path / "mismatch.png"
+
+    generate_collage(photo_paths=photos, output_path=str(out), event_name="A",
+                     cell_layout=stale, write_layout_sidecar=False)
+
+    assert out.exists()
+    assert "cell_layout ignored" in capsys.readouterr().err
+
+
+def test_a_matching_cell_layout_is_still_honoured(tmp_path, capsys):
+    # The guard must not throw away a legitimate override: same photos, same
+    # count, user-chosen positions. Cell 0 is placed at a distinctive spot that
+    # the automatic layout would never choose, so honouring it is observable.
+    photos = _photo_set(tmp_path, (10, 200, 10), n=2)
+    layout = [
+        {"photo_path": photos[0], "x": 40, "y": 0,    "w": 1000, "h": 600},
+        {"photo_path": photos[1], "x": 40, "y": 1300, "w": 1000, "h": 600},
+    ]
+    out = tmp_path / "honoured.png"
+
+    generate_collage(photo_paths=photos, output_path=str(out), event_name="A",
+                     cell_layout=layout, write_layout_sidecar=False)
+
+    assert "cell_layout ignored" not in capsys.readouterr().err
+    img = Image.open(out).convert("RGB")
+
+    # Green photo ink where the override put it (JPEG round-trip shifts the exact
+    # value by a point, so assert the hue rather than an exact triple).
+    def is_green(xy):
+        r, g, b = img.getpixel(xy)
+        return g > 150 and r < 60 and b < 60
+
+    assert is_green((540, 300)), "cell 0 must be drawn where the override put it"
+    assert is_green((540, 1600)), "cell 1 must be drawn where the override put it"
+    assert img.getpixel((540, 1000)) == STRIP_CREAM, "the gap the override left stays cream"

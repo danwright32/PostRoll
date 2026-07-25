@@ -613,7 +613,11 @@ actor PythonBridge {
                 if offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }) {
                     entry["crop_offsets"] = offsets
                 }
-                if let cellOverride = pd.collageCellOverride, !cellOverride.isEmpty {
+                // Reconciled against the day's current photos: a layout left over
+                // from a different photo set names files that may no longer exist,
+                // and Python opens every cell path (a missing one killed the whole
+                // collage). nil falls back to the automatic masonry layout.
+                if let cellOverride = CollageCell.usable(pd.collageCellOverride, forPhotos: pd.photoPaths) {
                     entry["cell_layout"] = cellOverride.map { [
                         "photo_path": $0.photoPath,
                         "x": $0.x, "y": $0.y,

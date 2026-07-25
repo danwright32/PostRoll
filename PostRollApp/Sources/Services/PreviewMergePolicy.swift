@@ -29,6 +29,38 @@ enum PreviewMergePolicy {
         return merged
     }
 
+    /// Key used for a graphics run that died outright rather than reporting a
+    /// per-day failure. Names no day, so it can never be passed to --only-days.
+    static let graphicsRunKey = "graphics"
+
+    /// Fold a graphics run's per-day failures into the ones already recorded.
+    ///
+    /// `renderedDays` is the set of days this run actually re-rendered: nil for a
+    /// full run (it owns every day, so `fresh` replaces the lot), and empty for a
+    /// caption-only retry that skipped graphics entirely. Only rendered days are
+    /// cleared, so a retry can never silently erase a failure it never re-attempted.
+    static func mergeMediaErrors(existing: [String: String],
+                                 fresh: [String: String],
+                                 renderedDays: Set<String>?) -> [String: String] {
+        guard let renderedDays else { return fresh }
+        var merged = existing
+        for day in renderedDays { merged.removeValue(forKey: day) }
+        merged.merge(fresh) { _, new in new }
+        return merged
+    }
+
+    /// How to retry a set of failed keys. A graphics failure needs its day's media
+    /// re-rendered, which the default partial retry skips, so the retry button
+    /// would otherwise appear to do nothing. `days` nil means run the whole thing:
+    /// the only failure left is the non-day graphics crash key.
+    static func retryPlan(failedKeys: Set<String>, mediaErrorKeys: Set<String>)
+        -> (days: Set<String>?, regenerateGraphics: Bool?) {
+        let dayKeys = failedKeys.filter { $0 != graphicsRunKey }
+        guard !dayKeys.isEmpty else { return (nil, nil) }
+        let needsGraphics = dayKeys.contains { mediaErrorKeys.contains($0) }
+        return (dayKeys, needsGraphics ? true : nil)
+    }
+
     /// Attempts to satisfy one day's exported assets purely from already-
     /// rendered previews (no Python regen): every listed asset file must
     /// still exist on disk. Generic over asset key by construction: a

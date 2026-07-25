@@ -55,15 +55,37 @@ final class GenerationManager {
         let doGraphics = PreviewMergePolicy.shouldRenderGraphics(
             regenerateGraphics: regenerateGraphics, isFullRun: onlyDays == nil)
         let task = Task { [weak self] in
-            let graphicsTask: Task<PythonBridge.PreviewGenerationResult?, Never>? = doGraphics
-                ? Task { try? await PythonBridge.shared.runPreviewGeneration(event: ev, days: onlyDays.map { Array($0) }) }
+            // Result, not `try?`: a graphics crash used to vanish here, and so did
+            // the per-day errors of a run that exited cleanly. Either way the run
+            // reported success and the day just silently had no media.
+            let graphicsTask: Task<Result<PythonBridge.PreviewGenerationResult, Error>?, Never>? = doGraphics
+                ? Task {
+                    do { return .success(try await PythonBridge.shared.runPreviewGeneration(
+                        event: ev, days: onlyDays.map { Array($0) })) }
+                    catch { return .failure(error) }
+                }
                 : nil
 
             do {
                 let result = try await PythonBridge.shared.runWeekGeneration(event: ev, onlyDays: onlyDays)
-                let mediaResult = await graphicsTask?.value
+                let graphicsOutcome = await graphicsTask?.value
+                var mediaResult: PythonBridge.PreviewGenerationResult?
+                var mediaErrors: [String: String] = [:]
+                switch graphicsOutcome {
+                case .success(let r):
+                    mediaResult = r
+                    mediaErrors = r.errors
+                case .failure(let error):
+                    mediaErrors = [PreviewMergePolicy.graphicsRunKey: error.localizedDescription]
+                case nil:
+                    break   // graphics didn't run this time
+                }
                 self?.finishSuccess(eventID: eventID, snapshot: ev, onlyDays: onlyDays,
                                     result: result, mediaPaths: mediaResult?.paths,
+                                    mediaErrors: mediaErrors,
+                                    // A full graphics run owns every day's errors (nil);
+                                    // a partial owns only its days; skipped owns none.
+                                    renderedDays: doGraphics ? onlyDays : [],
                                     fridayClipPlan: mediaResult?.fridayClipPlan,
                                     coverPicks: mediaResult?.coverPicks ?? [:], appState: appState)
             } catch is CancellationError {
@@ -92,6 +114,8 @@ final class GenerationManager {
 
     private func finishSuccess(eventID: Event.ID, snapshot ev: Event, onlyDays: Set<String>?,
                                result: WeekGenerationResult, mediaPaths: [String: [String: String]]?,
+                               mediaErrors: [String: String] = [:],
+                               renderedDays: Set<String>? = nil,
                                fridayClipPlan: FridayClipPlan? = nil,
                                coverPicks: [String: CoverPick] = [:], appState: AppState) {
         let elapsed = tracker.job(for: eventID)?.elapsedSeconds ?? 0
@@ -132,6 +156,11 @@ final class GenerationManager {
         // regenerated days so other days' approved previews survive.
         saved.previewMediaPaths = PreviewMergePolicy.merge(
             existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: onlyDays == nil)
+
+        // Graphics failures are recorded, not dropped: a day whose collage or reel
+        // died has to say so on the asset screen instead of just showing nothing.
+        saved.mediaErrors = PreviewMergePolicy.mergeMediaErrors(
+            existing: saved.mediaErrors, fresh: mediaErrors, renderedDays: renderedDays)
 
         saved.applyFridayClipPlan(fridayClipPlan)
         for (day, pick) in coverPicks { saved.applyCoverPick(pick, forDay: day) }

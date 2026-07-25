@@ -992,6 +992,11 @@ struct CaptionReviewView: View {
     /// new media paths, bump the version so AVPlayer reloads, and notify.
     @MainActor
     private func applyRegenResult(_ result: PythonBridge.PreviewGenerationResult, day: DayName) {
+        // Keep the asset screen's failure list in step with what happened here, so
+        // a day fixed (or broken again) from the review screen doesn't leave a
+        // contradictory message behind on the previous screen.
+        recordMediaOutcome(day: day, error: result.errors[day.rawValue])
+
         if let pyError = result.errors[day.rawValue] {
             regenerateError = "\(day.displayName) regeneration failed: \(pyError)"
         } else if let dayPaths = result.paths[day.rawValue], !dayPaths.isEmpty {
@@ -1010,6 +1015,18 @@ struct CaptionReviewView: View {
         } else {
             regenerateError = "\(day.displayName) regeneration produced no output"
         }
+    }
+
+    /// Record (or clear) a day's graphics failure on the live event, so the asset
+    /// screen's failure list reflects the latest attempt from either screen.
+    @MainActor
+    private func recordMediaOutcome(day: DayName, error: String?) {
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        let existing = ev.mediaErrors[day.rawValue]
+        guard existing != error else { return }
+        if let error { ev.mediaErrors[day.rawValue] = error }
+        else { ev.mediaErrors.removeValue(forKey: day.rawValue) }
+        appState.updateEvent(ev)
     }
 
     /// Regenerate (or manually override) just the day's cover image (#141).
@@ -3777,8 +3794,10 @@ private struct CollagePreviewThumbnail: View {
     }
 
     /// Base cells — user-dragged override if present, otherwise JSON-loaded positions.
+    /// An override that no longer fits the day's photo set is ignored here for the
+    /// same reason the renderers ignore it: its cells name photos that are gone.
     private var baseCells: [CollageCell] {
-        cellOverride.wrappedValue ?? cells
+        CollageCell.usable(cellOverride.wrappedValue, forPhotos: photoURLs) ?? cells
     }
 
     /// Re-links layout-JSON cell paths to the day's current photo set by
@@ -3786,6 +3805,17 @@ private struct CollagePreviewThumbnail: View {
     /// (PostingDay.rebindingPhotos), so only the JSON-loaded cells need this.
     private func rebasedToCurrentPhotos(_ loaded: [CollageCell]) -> [CollageCell] {
         CollageCell.rebasing(loaded, toCurrentPhotos: photoURLs)
+    }
+
+    /// Drop a saved layout that can no longer describe the day's photo set, so it
+    /// stops being written back to events.json on every save and stops suppressing
+    /// the automatic layout. Editing the photos leaves exactly this behind.
+    @MainActor
+    private func discardUnusableOverride() {
+        guard let stored = cellOverride.wrappedValue, !stored.isEmpty,
+              CollageCell.usable(stored, forPhotos: photoURLs) == nil
+        else { return }
+        cellOverride.wrappedValue = nil
     }
 
     /// Renders the collage the way the editor shows it (base PNG plus the live
@@ -4146,6 +4176,7 @@ private struct CollagePreviewThumbnail: View {
                 image = loadedImage
                 cells = rebasedToCurrentPhotos(loadedCells)
                 gapColor = sampledGap
+                discardUnusableOverride()
             }
         }
         // Reload PNG + layout JSON when Python regeneration finishes in-place

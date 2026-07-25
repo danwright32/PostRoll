@@ -344,9 +344,21 @@ struct AssetGenerationView: View {
 
     // MARK: - Done
 
+    /// Every failure from the last run, keyed by day. The caption step and the
+    /// graphics step fail independently and are stored separately, so a day can
+    /// carry one of each (Claude timed out AND the collage died); both messages
+    /// show. Graphics failures used to be dropped entirely, which is how a dead
+    /// Wednesday collage read as a clean run with no story.
+    private var allFailures: [String: String] {
+        var combined = event.weekResult?.errors ?? [:]
+        for (key, message) in event.mediaErrors {
+            combined[key] = combined[key].map { "\($0)\n\(message)" } ?? message
+        }
+        return combined
+    }
+
     private var failedDayKeys: [String] {
-        (event.weekResult?.errors.keys)
-            .map { Array($0).sorted() } ?? []
+        allFailures.keys.sorted()
     }
 
     /// Days the user can re-run individually. Includes any day they assigned
@@ -376,7 +388,11 @@ struct AssetGenerationView: View {
     }
 
     private func failedDayLabel(_ key: String) -> String {
-        key == "blog" ? "Blog post" : key.capitalized
+        switch key {
+        case "blog": return "Blog post"
+        case PreviewMergePolicy.graphicsRunKey: return "Visual assets"
+        default: return key.capitalized
+        }
     }
 
     private var failedDaysSummary: String {
@@ -468,9 +484,9 @@ struct AssetGenerationView: View {
     }
 
     private var failedDayInfos: [FailedDayInfo] {
-        guard let errors = event.weekResult?.errors else { return [] }
+        let failures = allFailures
         return failedDayKeys.compactMap { key in
-            guard let raw = errors[key] else { return nil }
+            guard let raw = failures[key] else { return nil }
             let (text, fixable) = humanizeError(day: key, raw: raw)
             return FailedDayInfo(id: key, label: failedDayLabel(key), message: text, fixable: fixable)
         }
@@ -547,17 +563,25 @@ struct AssetGenerationView: View {
                             .foregroundStyle(Color.roseGold)
                     }
                     Button("Retry \(failedDaysSummary)") {
-                        startGeneration(retryDays: Set(failedDayKeys))
+                        // A graphics failure needs its day's media re-rendered,
+                        // which the default partial retry skips: without this the
+                        // retry would re-write the caption and leave the missing
+                        // collage or reel exactly as missing.
+                        let plan = PreviewMergePolicy.retryPlan(
+                            failedKeys: Set(failedDayKeys),
+                            mediaErrorKeys: Set(event.mediaErrors.keys))
+                        startGeneration(retryDays: plan.days,
+                                        regenerateGraphics: plan.regenerateGraphics)
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.roseGold)
                 }
 
-                // Regenerate any single day. Lists every day that has photos
-                // assigned (so the user can re-roll captions / graphics for it
-                // without nuking the others). Blog and "all" stay as separate
-                // shortcuts below.
+                // Re-roll a single day's caption without nuking the others. Lists
+                // every day that has photos assigned. Graphics are not re-rendered
+                // (that is what the failure Retry above and the review screen's
+                // per-day ↺ are for). Blog and "all" stay as separate shortcuts.
                 if !regenerableDayKeys.isEmpty {
                     Menu {
                         ForEach(regenerableDayKeys, id: \.self) { dayKey in
@@ -704,9 +728,11 @@ struct AssetGenerationView: View {
     /// Hand the run off to GenerationManager, which owns it at app scope so it
     /// outlives this view. The success/failure write-back and timing all happen
     /// there; this view just reflects the manager's state.
-    private func startGeneration(retryDays: Set<String>? = nil) {
+    private func startGeneration(retryDays: Set<String>? = nil,
+                                 regenerateGraphics: Bool? = nil) {
         forceConfigure = false
-        genManager.start(eventID: event.id, retryDays: retryDays, appState: appState)
+        genManager.start(eventID: event.id, retryDays: retryDays, appState: appState,
+                         regenerateGraphics: regenerateGraphics)
     }
 
     private func cancelGeneration() {

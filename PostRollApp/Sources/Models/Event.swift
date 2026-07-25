@@ -63,6 +63,13 @@ struct Event: Identifiable, Codable, Hashable {
     // e.g. ["sunday": ["story": "/path/to/story.png"], "wednesday": ["collage": "/path/..."]]
     var previewMediaPaths: [String: [String: String]] = [:]
 
+    /// Per-day failures from the graphics step of the last run that rendered that
+    /// day (day key → raw Python message), plus `PreviewMergePolicy.graphicsRunKey`
+    /// when the whole graphics run died. Kept separate from `weekResult.errors`
+    /// (the caption step) because the two steps fail and retry independently: a
+    /// caption-only retry must not clear a collage failure it never re-attempted.
+    var mediaErrors: [String: String] = [:]
+
     // Export
     var exportPath: URL?
 
@@ -129,6 +136,7 @@ extension Event {
         blogPhotoPaths    = try c.decodeIfPresent([URL].self,                      forKey: .blogPhotoPaths)    ?? []
         weekResult        = try c.decodeIfPresent(WeekGenerationResult.self,       forKey: .weekResult)
         previewMediaPaths = try c.decodeIfPresent([String: [String: String]].self, forKey: .previewMediaPaths) ?? [:]
+        mediaErrors       = try c.decodeIfPresent([String: String].self,           forKey: .mediaErrors)       ?? [:]
         exportPath        = try c.decodeIfPresent(URL.self,                        forKey: .exportPath)
         archivedAt        = try c.decodeIfPresent(Date.self,                       forKey: .archivedAt)
     }
@@ -428,6 +436,29 @@ extension CollageCell {
             }
             return cell
         }
+    }
+
+    /// The saved layout reconciled against a day's current photo set, or nil when
+    /// it no longer describes that set and must give way to the automatic layout.
+    ///
+    /// A layout records whatever paths were in play when it was made, and two
+    /// things later invalidate it. MediaReclaim copies an original into app
+    /// storage and rewrites the day's photoPaths, which `rebasing` repairs. And
+    /// changing the day's photos (or switching posting preset) leaves cells naming
+    /// photos the day no longer has, which nothing can repair: honouring such a
+    /// layout means asking the renderer to open a file that may be long gone. That
+    /// is exactly how a Wednesday with a leftover 10 cell layout and 4 assigned
+    /// photos stopped producing a collage, and therefore a story, on every regen.
+    ///
+    /// Usable means a one to one match: every cell resolves to a current photo and
+    /// every current photo has a cell, so no photo is dropped or drawn twice.
+    static func usable(_ cells: [CollageCell]?, forPhotos photoURLs: [URL]) -> [CollageCell]? {
+        guard let cells, !cells.isEmpty, !photoURLs.isEmpty,
+              cells.count == photoURLs.count
+        else { return nil }
+        let rebased = rebasing(cells, toCurrentPhotos: photoURLs)
+        guard Set(rebased.map(\.photoPath)) == Set(photoURLs.map(\.path)) else { return nil }
+        return rebased
     }
 
     /// Drops `droppedPath` onto the cell at `idx`, swapping it with whichever

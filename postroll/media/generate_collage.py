@@ -626,6 +626,45 @@ def render_cell_layout_override(
     return strip_y
 
 
+def usable_cell_layout(
+    cell_layout: list[dict] | None, photo_paths: list[str]
+) -> list[dict] | None:
+    """``cell_layout`` if it still describes ``photo_paths``, else None.
+
+    A saved layout records whatever paths were in play when the user dragged the
+    frames. Changing the day's photos, or moving the originals into app storage,
+    leaves cells naming files that may no longer exist. Rendering such a layout
+    means opening a missing file, which used to raise out of the whole render:
+    one stale layout stopped the Wednesday collage (and so the Wednesday story)
+    generating at all, on every retry.
+
+    Usable means one cell per photo, every cell on a photo this collage is being
+    built from, and every file present on disk. Anything else falls back to the
+    automatic layout: the collage is the deliverable, the override is a nicety.
+    The caller (Swift) applies the same rule, so this is the render's own backstop.
+    """
+    if not cell_layout:
+        return None
+    wanted = {str(Path(p)) for p in photo_paths}
+    cell_names = [str(Path(c.get("photo_path", ""))) for c in cell_layout]
+    reasons: list[str] = []
+    if len(cell_layout) != len(photo_paths):
+        reasons.append(f"{len(cell_layout)} cells for {len(photo_paths)} photos")
+    if set(cell_names) != wanted:
+        reasons.append("cells name a different photo set")
+    missing = [n for n in cell_names if not Path(n).exists()]
+    if missing:
+        reasons.append(f"{len(missing)} cell file(s) missing, first: {missing[0]}")
+    if reasons:
+        print(
+            f"[generate_collage] cell_layout ignored ({'; '.join(reasons)}). "
+            "Using the automatic layout instead.",
+            flush=True, file=sys.stderr,
+        )
+        return None
+    return cell_layout
+
+
 def generate_collage(
     photo_paths: list[str],
     output_path: str,
@@ -654,6 +693,7 @@ def generate_collage(
                   pattern is skipped and each photo is rendered at the exact supplied coordinates.
     """
     all_photos = [Image.open(p) for p in photo_paths]
+    cell_layout = usable_cell_layout(cell_layout, photo_paths)
 
     # The mat is fixed brand cream. It used to be blended toward the photos'
     # average colour, so a blue stage greyed it and a dark room dirtied it.

@@ -234,15 +234,18 @@ final class ExportManager {
         guard FileManager.default.fileExists(atPath: baseURL.path) else { return nil }
 
         let pd = event.days[day.rawValue]
+        // Both sources are reconciled against the day's current photos: a layout
+        // made for a different photo set would render cells from missing files,
+        // which CollageRenderer skips silently, leaving holes in the export.
+        let photos = pd?.photoPaths ?? []
         let cells: [CollageCell]? = {
-            if let override = pd?.collageCellOverride, !override.isEmpty { return override }
+            if let override = CollageCell.usable(pd?.collageCellOverride, forPhotos: photos) { return override }
             let layoutURL = baseURL.deletingLastPathComponent()
                 .appendingPathComponent(baseURL.deletingPathExtension().lastPathComponent + "_layout.json")
             guard let data = try? Data(contentsOf: layoutURL),
-                  let decoded = try? JSONDecoder().decode([CollageCell].self, from: data),
-                  !decoded.isEmpty
+                  let decoded = try? JSONDecoder().decode([CollageCell].self, from: data)
             else { return nil }
-            return decoded
+            return CollageCell.usable(decoded, forPhotos: photos)
         }()
         guard let cells else { return nil }
 
