@@ -16,7 +16,27 @@ final class EventStoreTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        // Permission based tests leave the file or its directory unreadable;
+        // restore access so the temp tree can actually be removed.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.path)
         try? FileManager.default.removeItem(at: dir)
+    }
+
+    /// Permission bits mean nothing to root, so the read-failure tests would
+    /// silently pass by loading the file successfully.
+    private func skipIfRoot() throws {
+        try XCTSkipIf(getuid() == 0, "permission based tests are meaningless as root")
+    }
+
+    private func writeValidStore() throws -> Event {
+        let event = Event(name: "Show", org: "Org", venue: "Hall", date: Date(), shootType: .fullShow)
+        EventStore.save([event], to: store)
+        return event
+    }
+
+    private func chmod(_ url: URL, _ mode: Int) throws {
+        try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: url.path)
     }
 
     private func corruptBackups() throws -> [String] {
@@ -70,6 +90,113 @@ final class EventStoreTests: XCTestCase {
         XCTAssertEqual(previous.map(\.name), ["First"])
         let current = EventStore.load(from: store)
         XCTAssertEqual(current.events.map(\.name), ["Second"])
+    }
+
+    // MARK: - Read failure is not corruption (issue #74)
+
+    func testUnreadableFileIsNeitherSetAsideNorCalledCorrupt() throws {
+        try skipIfRoot()
+        _ = try writeValidStore()
+        let original = try Data(contentsOf: store)
+        try chmod(store, 0o000)
+
+        let result = EventStore.load(from: store)
+
+        XCTAssertEqual(result.status, .unreadable, "a read failure is not a decode failure")
+        XCTAssertFalse(result.isAuthoritative, "an unreadable store must not pass as the real event list")
+        XCTAssertNotNil(result.recoveryMessage, "the user has to be told the store could not be read")
+        // The file itself must be exactly where it was, untouched.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.path))
+        XCTAssertEqual(try corruptBackups(), [], "a read failure must never rename the store")
+        try chmod(store, 0o644)
+        XCTAssertEqual(try Data(contentsOf: store), original)
+    }
+
+    func testUnreadableMessageReadsAsOneSentence() throws {
+        try skipIfRoot()
+        _ = try writeValidStore()
+        try chmod(store, 0o000)
+
+        let message = try XCTUnwrap(EventStore.load(from: store).recoveryMessage)
+
+        // The system's error text already ends in a period, so splicing it into
+        // a sentence produced "view it.." on screen.
+        XCTAssertFalse(message.contains(".."), "message runs two periods together: \(message)")
+    }
+
+    func testSaveIsRefusedWhileTheStoreIsUnreadable() throws {
+        try skipIfRoot()
+        _ = try writeValidStore()
+        let original = try Data(contentsOf: store)
+        try chmod(store, 0o000)
+
+        XCTAssertEqual(EventStore.load(from: store).status, .unreadable)
+        // Even once the file is physically writable again, saving stays blocked
+        // until a load proves the store can be read: otherwise the first edit
+        // writes an empty list over every event.
+        try chmod(store, 0o644)
+        let outcome = EventStore.save([], to: store)
+
+        XCTAssertEqual(outcome, .blocked)
+        XCTAssertEqual(try Data(contentsOf: store), original, "the intact store must survive the blocked save")
+    }
+
+    func testSuccessfulReloadUnblocksSaving() throws {
+        try skipIfRoot()
+        let event = try writeValidStore()
+        try chmod(store, 0o000)
+        XCTAssertEqual(EventStore.load(from: store).status, .unreadable)
+        try chmod(store, 0o644)
+
+        let reloaded = EventStore.load(from: store)
+        XCTAssertEqual(reloaded.status, .ok)
+        XCTAssertEqual(reloaded.events.map(\.id), [event.id])
+
+        let second = Event(name: "Second", org: "Org", venue: "Hall", date: Date(), shootType: .fullShow)
+        XCTAssertEqual(EventStore.save([event, second], to: store), .saved)
+        XCTAssertEqual(EventStore.load(from: store).events.map(\.name), ["Show", "Second"])
+    }
+
+    func testSetAsideFailureBlocksSavesAndLeavesTheFileInPlace() throws {
+        try skipIfRoot()
+        try Data("definitely not json".utf8).write(to: store)
+        // A read only directory: the file still reads and still fails to decode,
+        // but it cannot be moved aside.
+        try chmod(dir, 0o500)
+
+        let result = EventStore.load(from: store)
+
+        XCTAssertEqual(result.status, .corrupt(setAsideAs: nil), "the set aside did not happen")
+        XCTAssertFalse(result.isAuthoritative)
+        XCTAssertNotNil(result.recoveryMessage)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.path))
+
+        // Saving would erode the only copy of the real data, so it is refused
+        // even after the directory becomes writable again.
+        try chmod(dir, 0o755)
+        XCTAssertEqual(EventStore.save([], to: store), .blocked)
+        XCTAssertEqual(try String(contentsOf: store, encoding: .utf8), "definitely not json")
+    }
+
+    func testCorruptStoreThatWasSetAsideStaysSaveable() throws {
+        try Data("definitely not json".utf8).write(to: store)
+
+        let result = EventStore.load(from: store)
+
+        guard case .corrupt(let name) = result.status else {
+            return XCTFail("expected a corrupt status, got \(result.status)")
+        }
+        XCTAssertNotNil(name, "the file was moved aside, so its name is known")
+        XCTAssertFalse(result.isAuthoritative)
+        // The original is preserved under a new name, so starting fresh is safe.
+        XCTAssertEqual(EventStore.save([], to: store), .saved)
+    }
+
+    func testMissingFileIsNotTreatedAsAReadFailure() {
+        let result = EventStore.load(from: dir.appendingPathComponent("nothing-here.json"))
+
+        XCTAssertEqual(result.status, .ok)
+        XCTAssertTrue(result.isAuthoritative, "a first launch has an authoritative empty list")
     }
 
     func testStoreRecoverySetAsideMovesFile() throws {

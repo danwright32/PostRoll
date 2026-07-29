@@ -11,9 +11,16 @@ final class AppState {
     var selectedEventID: Event.ID?
     var showingNewEvent = false
 
-    /// Set when events.json existed but could not be decoded at launch.
-    /// Shown once as an alert; the unreadable file was moved aside.
+    /// Set when events.json existed but its contents could not be decoded.
+    /// Shown once as a dismissible alert; the bad file was moved aside, so
+    /// starting from an empty list is safe.
     var dataLoadWarning: String?
+
+    /// Set when events.json could not be read at all (a permission denial, an
+    /// I/O error). The file is intact and untouched, its contents are unknown,
+    /// and saving is refused, so the app must not let the user work in what
+    /// looks like an empty library. Shown as a blocking alert with a retry.
+    var storeUnavailable: String?
 
     // Analytics navigation
     var sidebarMode: SidebarMode = .events
@@ -24,9 +31,31 @@ final class AppState {
         // /PostRoll once the `.migrated` marker is present (the move was done
         // out-of-band, deliberately NOT on launch), otherwise the legacy
         // ~/Documents/PostRoll. No migration runs here.
+        loadStore()
+    }
+
+    /// Reads the store and, only when what came back is the real event list,
+    /// runs the launch sweeps. Every sweep below deletes files or rewrites the
+    /// store based on which events exist, so running any of them against a list
+    /// we failed to read would delete media for events that are still there.
+    /// Also used by the retry button on the store-unavailable alert.
+    func loadStore() {
         let loaded = EventStore.load()
         events = loaded.events
-        dataLoadWarning = loaded.recoveryMessage
+        switch loaded.status {
+        case .ok:
+            dataLoadWarning = nil
+            storeUnavailable = nil
+        case .corrupt:
+            dataLoadWarning = loaded.recoveryMessage
+            storeUnavailable = nil
+        case .unreadable:
+            dataLoadWarning = nil
+            storeUnavailable = loaded.recoveryMessage
+        }
+
+        guard loaded.isAuthoritative else { return }
+
         // Sweep: events past OCR review (photosAssigned and beyond) no longer
         // need their program images on disk — OCRReviewView.confirmAndAdvance
         // clears them when the user moves forward. We keep images alive
@@ -57,12 +86,11 @@ final class AppState {
 
         if dirty { EventStore.save(events) }
 
-        // Reclaim photos/audio copies left behind by deleted events. Skipped
-        // when the events file couldn't be read: an empty/partial events array
-        // would orphan (and delete) every media file.
-        if dataLoadWarning == nil {
-            OrphanedMediaCleanup.sweep(events: events)
-        }
+        // Reclaim photos/audio copies left behind by deleted events. Only
+        // reachable on an authoritative load (guarded above): against an
+        // empty or partial events array this would orphan, and delete, every
+        // media file on disk.
+        OrphanedMediaCleanup.sweep(events: events)
     }
 
     func addEvent(_ event: Event) {
