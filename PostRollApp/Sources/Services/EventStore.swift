@@ -102,6 +102,15 @@ enum EventStore {
         var isAuthoritative: Bool { status == .ok }
     }
 
+    /// System error text already ends in a period, so it cannot simply be
+    /// dropped into the middle of a sentence.
+    static func unreadableMessage(_ error: Error) -> String {
+        let reason = error.localizedDescription
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return "PostRoll could not read your saved events: \(reason). Nothing was changed or deleted, and nothing new will be saved until the file can be read again."
+    }
+
     // load/save take the URL as a parameter (defaulting to the real store)
     // so tests can exercise the recovery and backup paths against a temp
     // directory without ever touching live data.
@@ -121,7 +130,7 @@ enum EventStore {
             return LoadResult(
                 events: [],
                 status: .unreadable,
-                recoveryMessage: "PostRoll could not read your saved events: \(error.localizedDescription). Nothing was changed or deleted, and nothing new will be saved until the file can be read again."
+                recoveryMessage: unreadableMessage(error)
             )
         }
 
@@ -157,7 +166,7 @@ enum EventStore {
             return LoadResult(
                 events: [],
                 status: .unreadable,
-                recoveryMessage: "PostRoll could not read your saved events: \(error.localizedDescription). Nothing was changed or deleted, and nothing new will be saved until the file can be read again."
+                recoveryMessage: unreadableMessage(error)
             )
         }
     }

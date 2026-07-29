@@ -112,6 +112,18 @@ final class EventStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: store), original)
     }
 
+    func testUnreadableMessageReadsAsOneSentence() throws {
+        try skipIfRoot()
+        _ = try writeValidStore()
+        try chmod(store, 0o000)
+
+        let message = try XCTUnwrap(EventStore.load(from: store).recoveryMessage)
+
+        // The system's error text already ends in a period, so splicing it into
+        // a sentence produced "view it.." on screen.
+        XCTAssertFalse(message.contains(".."), "message runs two periods together: \(message)")
+    }
+
     func testSaveIsRefusedWhileTheStoreIsUnreadable() throws {
         try skipIfRoot()
         _ = try writeValidStore()
