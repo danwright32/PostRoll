@@ -22,6 +22,11 @@ final class AppState {
     /// looks like an empty library. Shown as a blocking alert with a retry.
     var storeUnavailable: String?
 
+    /// An event that has been removed from the list but is still inside its
+    /// undo window. Its media is deliberately still on disk.
+    private(set) var pendingDeletion: Event?
+    private var finalizeDeletionWork: DispatchWorkItem?
+
     // Analytics navigation
     var sidebarMode: SidebarMode = .events
     var insightsSection: InsightsSection = .overview
@@ -105,12 +110,48 @@ final class AppState {
         EventStore.save(events)
     }
 
+    /// Removes the event and starts its undo window. Its media stays on disk
+    /// until the window closes, so Undo restores a working event rather than
+    /// one whose photos were deleted a second earlier.
     func deleteEvent(id: Event.ID) {
+        guard let event = events.first(where: { $0.id == id }) else { return }
+        // Only one undo is ever offered, so an earlier pending delete is now
+        // final and its media can go.
+        finalizePendingDeletion()
+
         events.removeAll { $0.id == id }
         if selectedEventID == id { selectedEventID = nil }
         EventStore.save(events)
-        // The deleted event's imported photos are now orphaned; reclaim any not
-        // shared with a surviving event.
+        pendingDeletion = event
+
+        // Anything else the delete orphaned is reclaimed now; the event itself
+        // still counts as an owner of its files until the window closes.
+        OrphanedMediaCleanup.sweep(
+            events: DeletionPolicy.mediaOwners(events: events, pendingDeletion: event)
+        )
+
+        let work = DispatchWorkItem { [weak self] in self?.finalizePendingDeletion() }
+        finalizeDeletionWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + DeletionPolicy.undoWindow, execute: work)
+    }
+
+    /// Puts back the event that is still inside its undo window, media intact.
+    func undoDelete() {
+        finalizeDeletionWork?.cancel()
+        finalizeDeletionWork = nil
+        guard let event = pendingDeletion else { return }
+        pendingDeletion = nil
+        addEvent(event)
+    }
+
+    /// Ends the undo window: the event is gone for good, so its media is
+    /// reclaimed. Safe to call when nothing is pending. If the app quits first,
+    /// the sweep at next launch reclaims the files instead.
+    func finalizePendingDeletion() {
+        finalizeDeletionWork?.cancel()
+        finalizeDeletionWork = nil
+        guard pendingDeletion != nil else { return }
+        pendingDeletion = nil
         OrphanedMediaCleanup.sweep(events: events)
     }
 

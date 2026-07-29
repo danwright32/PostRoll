@@ -46,8 +46,10 @@
 		470ABEB07BD213026F531A04 /* ArchiveCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2A64A47B5C709FD62EFC35 /* ArchiveCleanupTests.swift */; };
 		4748433821759810C8623629 /* ProgramPDFBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E40B3AE76401EAAFF392BCB /* ProgramPDFBuilder.swift */; };
 		48A4E837A7EB2B8500EB4C2D /* ArchiveCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB9E4B9B7EC3C8B0195232E0 /* ArchiveCleanup.swift */; };
+		4A9A699828271BBD8A2F81AE /* DeletionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8AECAB81F70E2420E3996E /* DeletionPolicyTests.swift */; };
 		4B625D03417CBEF7C7B17BF7 /* DayStateMergerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CBB9FE0732F7C89DCD4B8D /* DayStateMergerTests.swift */; };
 		4B62ED97467BB7097539610D /* OCRResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = D92CD520B46A8592B9C5493C /* OCRResult.swift */; };
+		4CC1FFD84E8F3A443CC29760 /* DeletionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF513C026211726925EAD399 /* DeletionPolicy.swift */; };
 		4D7791D4CCDCBEC92CA8458D /* CollageGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584DFA6398241E1B1181F5B4 /* CollageGeometryTests.swift */; };
 		4E800BF325AA929687599262 /* CaptionReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC095CA3EC9408DC5D2486B2 /* CaptionReviewView.swift */; };
 		4FA7D267E5A7AD62F627E54E /* FridayReviewDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30ACB2B5694C77A74D9AB6CF /* FridayReviewDisplayTests.swift */; };
@@ -79,6 +81,7 @@
 		7CE28048247ABBF65F7BE126 /* DayStateMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE5B174E1C9527180BFF2E2 /* DayStateMerger.swift */; };
 		7DDABDA70CEF29B32A429D7D /* EventExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54CCFB41C29B650FC93DCF01 /* EventExporter.swift */; };
 		7FDD5EADF254776472ADEE9A /* Event.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD025AADE68A58F67848071 /* Event.swift */; };
+		8020B87D9C21AA80D139E7F6 /* DeletionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF513C026211726925EAD399 /* DeletionPolicy.swift */; };
 		81304E8C7DFDDF966E63E46D /* CollageCandidateCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E97F6D547BC8A7723659213 /* CollageCandidateCache.swift */; };
 		82C249F3E5DCFA8E1D257EFD /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD0514CA7990CF2688E9E5ED /* AppState.swift */; };
 		83F2E7C284CED5AB5E9D3853 /* EventExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54CCFB41C29B650FC93DCF01 /* EventExporter.swift */; };
@@ -174,6 +177,7 @@
 		24AECB505A695D36F23862F9 /* MediaReclaim.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReclaim.swift; sourceTree = "<group>"; };
 		2744E745D0D8E9DADE2015C0 /* MediaReclaimTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReclaimTests.swift; sourceTree = "<group>"; };
 		296F4BECD83FCE57CD51D69B /* CoverReviewDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverReviewDisplayTests.swift; sourceTree = "<group>"; };
+		2A8AECAB81F70E2420E3996E /* DeletionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletionPolicyTests.swift; sourceTree = "<group>"; };
 		30734A52AAEC8C7D2F66AA83 /* EventStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStoreTests.swift; sourceTree = "<group>"; };
 		3090D877CEFCB9583146E70C /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		30ACB2B5694C77A74D9AB6CF /* FridayReviewDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FridayReviewDisplayTests.swift; sourceTree = "<group>"; };
@@ -267,6 +271,7 @@
 		FA9E36A1293C2F0C1D658AB1 /* CoverRegenerationManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverRegenerationManifestTests.swift; sourceTree = "<group>"; };
 		FC095CA3EC9408DC5D2486B2 /* CaptionReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionReviewView.swift; sourceTree = "<group>"; };
 		FD0514CA7990CF2688E9E5ED /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		FF513C026211726925EAD399 /* DeletionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletionPolicy.swift; sourceTree = "<group>"; };
 		FFB5AA22E06BCDCFE77EBF90 /* EventListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventListView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -344,6 +349,7 @@
 				4A48BAAC376D511DC5794DF5 /* CoverReviewDisplay.swift */,
 				992815881B3D0ADB1B48FFB4 /* DataMigration.swift */,
 				CAE5B174E1C9527180BFF2E2 /* DayStateMerger.swift */,
+				FF513C026211726925EAD399 /* DeletionPolicy.swift */,
 				54CCFB41C29B650FC93DCF01 /* EventExporter.swift */,
 				7B9BB61B6F46DB4923B3A2C6 /* EventJobTracker.swift */,
 				8089518478AA10F4DC5A9A83 /* EventStore.swift */,
@@ -407,6 +413,7 @@
 				296F4BECD83FCE57CD51D69B /* CoverReviewDisplayTests.swift */,
 				B63250E69964610C3E6239F4 /* DataMigrationTests.swift */,
 				D3CBB9FE0732F7C89DCD4B8D /* DayStateMergerTests.swift */,
+				2A8AECAB81F70E2420E3996E /* DeletionPolicyTests.swift */,
 				EBF97A1181DDF030E1E3BA51 /* EventCoverPickWritebackTests.swift */,
 				CC3E912717BD14F25AD7B4F3 /* EventExporterTests.swift */,
 				76D12DE3DE33EAF68DD7B671 /* EventFridayClipPlanWritebackTests.swift */,
@@ -576,6 +583,7 @@
 				A5872D130A9DFB832E27CF32 /* CoverReviewDisplay.swift in Sources */,
 				10B54FC7A897A476FC90FC03 /* DataMigration.swift in Sources */,
 				32388054577B5C231271A428 /* DayStateMerger.swift in Sources */,
+				8020B87D9C21AA80D139E7F6 /* DeletionPolicy.swift in Sources */,
 				E16572303B16295D9390DA70 /* DesignTokens.swift in Sources */,
 				F7C3308291DB915741B393B8 /* Event.swift in Sources */,
 				BF0F254EEE3D9C64ADD26EFF /* EventDetailView.swift in Sources */,
@@ -663,6 +671,8 @@
 				6D26777A36FA83CB4F44CCCA /* DataMigrationTests.swift in Sources */,
 				7CE28048247ABBF65F7BE126 /* DayStateMerger.swift in Sources */,
 				4B625D03417CBEF7C7B17BF7 /* DayStateMergerTests.swift in Sources */,
+				4CC1FFD84E8F3A443CC29760 /* DeletionPolicy.swift in Sources */,
+				4A9A699828271BBD8A2F81AE /* DeletionPolicyTests.swift in Sources */,
 				7A887F4C860FCA10F1F9988A /* DesignTokens.swift in Sources */,
 				7FDD5EADF254776472ADEE9A /* Event.swift in Sources */,
 				06387B186BEAE5EAF1BCB776 /* EventCoverPickWritebackTests.swift in Sources */,

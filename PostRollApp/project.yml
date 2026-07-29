@@ -44,6 +44,7 @@ targets:
       - path: Sources/Services/ArchiveCleanup.swift
       - path: Sources/Services/AppPaths.swift
       - path: Sources/Services/OrphanedMediaCleanup.swift
+      - path: Sources/Services/DeletionPolicy.swift
       - path: Sources/Services/MediaReclaim.swift
       - path: Sources/Services/DayStateMerger.swift
       - path: Sources/Services/EventJobTracker.swift
