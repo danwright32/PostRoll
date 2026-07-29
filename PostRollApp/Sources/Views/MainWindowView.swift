@@ -70,6 +70,22 @@ struct MainWindowView: View {
         } message: {
             Text(appState.dataLoadWarning ?? "")
         }
+        // A store that could not be read is a different situation from a store
+        // that was read and turned out to be bad: the events are still there,
+        // we just cannot see them, and saving is refused. Blocking here keeps
+        // the user out of an app that looks empty and quietly discards edits.
+        .alert(
+            "PostRoll cannot open your events",
+            isPresented: Binding(
+                get: { appState.storeUnavailable != nil },
+                set: { _ in }
+            )
+        ) {
+            Button("Try Again") { appState.loadStore() }
+            Button("Quit PostRoll") { NSApplication.shared.terminate(nil) }
+        } message: {
+            Text(appState.storeUnavailable ?? "")
+        }
     }
 }
 

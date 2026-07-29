@@ -15,8 +15,9 @@ import Foundation
 ///   includes the baked programPDFPath and each rasterised page's retained source
 ///   PDF, which is found by filename convention rather than a stored field.
 /// - The caller MUST NOT run this when events.json failed to load (an empty or
-///   partial events array would orphan — and delete — everything). AppState
-///   guards on `dataLoadWarning == nil`.
+///   partial events array would orphan, and delete, everything). AppState
+///   guards on `EventStore.LoadResult.isAuthoritative`, which is true only when
+///   the store was actually read.
 enum OrphanedMediaCleanup {
 
     /// Deletes orphaned files and returns how many were removed.
