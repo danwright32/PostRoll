@@ -3,7 +3,10 @@ import SwiftUI
 struct EventListView: View {
     @Environment(AppState.self) private var appState
     @Environment(HashtagStore.self) private var hashtagStore
-    @State private var recentlyDeleted: Event?
+    /// Name of the event awaiting undo, kept only for the banner's wording.
+    /// The event itself lives in AppState, which owns the undo window and the
+    /// media that goes with it.
+    @State private var deletedName: String?
     @State private var recentlyDuplicatedID: Event.ID?
     @State private var showUndoBanner = false
     @State private var undoDismissWork: DispatchWorkItem?
@@ -97,51 +100,19 @@ struct EventListView: View {
                         Button("Duplicate") {
                             if let newID = appState.duplicateEvent(id: event.id) {
                                 recentlyDuplicatedID = newID
-                                recentlyDeleted = nil
-                                undoDismissWork?.cancel()
-                                withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = true }
-                                let work = DispatchWorkItem {
-                                    withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = false }
-                                    recentlyDuplicatedID = nil
-                                }
-                                undoDismissWork = work
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
+                                deletedName = nil
+                                presentUndoBanner { recentlyDuplicatedID = nil }
                             }
                         }
                         .keyboardShortcut("d", modifiers: .command)
                         Divider()
                         Button("Delete", role: .destructive) {
-                            if let event = appState.events.first(where: { $0.id == event.id }) {
-                                recentlyDeleted = event
-                                recentlyDuplicatedID = nil
-                                appState.deleteEvent(id: event.id)
-                                undoDismissWork?.cancel()
-                                withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = true }
-                                let work = DispatchWorkItem {
-                                    withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = false }
-                                    recentlyDeleted = nil
-                                }
-                                undoDismissWork = work
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
-                            }
+                            deleteWithUndo(id: event.id)
                         }
                     }
             }
             .onDeleteCommand {
-                if let id = appState.selectedEventID,
-                   let event = appState.events.first(where: { $0.id == id }) {
-                    recentlyDeleted = event
-                    recentlyDuplicatedID = nil
-                    appState.deleteEvent(id: id)
-                    undoDismissWork?.cancel()
-                    withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = true }
-                    let work = DispatchWorkItem {
-                        withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = false }
-                        recentlyDeleted = nil
-                    }
-                    undoDismissWork = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
-                }
+                if let id = appState.selectedEventID { deleteWithUndo(id: id) }
             }
         }
         .scrollContentBackground(.hidden)
@@ -251,24 +222,49 @@ struct EventListView: View {
                     if let id = recentlyDuplicatedID,
                        let name = appState.events.first(where: { $0.id == id })?.name {
                         return "\"\(name)\" duplicated."
-                    } else if let name = recentlyDeleted?.name {
-                        return "\"\(name)\" deleted."
+                    } else if let deletedName {
+                        return "\"\(deletedName)\" deleted."
                     }
                     return "Event deleted."
                 }()) {
                     undoDismissWork?.cancel()
-                    if let event = recentlyDeleted {
-                        appState.addEvent(event)
+                    if deletedName != nil {
+                        // AppState still holds the event and has kept its media
+                        // on disk for exactly this.
+                        appState.undoDelete()
                     } else if let id = recentlyDuplicatedID {
                         appState.deleteEvent(id: id)
                     }
                     withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = false }
-                    recentlyDeleted = nil
+                    deletedName = nil
                     recentlyDuplicatedID = nil
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+    }
+
+    /// The one delete path. Every entry point (the context menu, the Delete
+    /// key, anything added later) goes through here, so none of them can skip
+    /// the undo window that keeps the event's media on disk.
+    private func deleteWithUndo(id: Event.ID) {
+        guard let event = appState.events.first(where: { $0.id == id }) else { return }
+        deletedName = event.name
+        recentlyDuplicatedID = nil
+        appState.deleteEvent(id: id)
+        presentUndoBanner { deletedName = nil }
+    }
+
+    /// Shows the banner for exactly as long as the undo is actually good for.
+    private func presentUndoBanner(onExpire: @escaping () -> Void) {
+        undoDismissWork?.cancel()
+        withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = true }
+        let work = DispatchWorkItem {
+            withAnimation(.easeOut(duration: 0.2)) { showUndoBanner = false }
+            onExpire()
+        }
+        undoDismissWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + DeletionPolicy.undoWindow, execute: work)
     }
 
     private func commitRename(event: Event) {
