@@ -51,6 +51,7 @@ from .ai_tells import (
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_prompt, run_review_pass, load_brand_voice, ClaudeError
+from .blog_quality import check_blog
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
@@ -99,6 +100,67 @@ BLOG_WRITING_RULES = """\
   the concept, attaching the through-line to each performer in turn.
   Catch it by naming the point each paragraph makes; if two
   paragraphs make the same point, they are one paragraph.
+- STATE THE THROUGH-LINE ONCE, AT THE TOP, AND LET THE REST OF THE
+  POST DEMONSTRATE IT. Saying it again later is not reinforcement, it
+  is repetition. A corrected draft made the same point four times (in
+  the opening, again at "What I noticed in the first few minutes",
+  again at "the performer kept earning moments I hadn't set up for",
+  and again in the closing line). Three of those four were cuts.
+- DO NOT BUILD A THESIS THE SHOOT DID NOT EARN. If the honest spine
+  is positional ("here is where I could stand"), say that plainly. Do
+  not upgrade it into a claim about the nature of the work. An
+  inflated thesis is the most common way this post stops being true.
+- NO PARAGRAPH EXISTS TO INTRODUCE THE IMAGE BELOW IT. Paragraphs are
+  about the show or about the working conditions. Photos sit near the
+  relevant copy without being narrated by it. BANNED shape: "The
+  ODYSSEUS suitcase showed up in a few frames as a kind of running
+  visual anchor" is a caption wearing a paragraph.
+- CONSOLIDATE RELATED WORKING DETAILS IN ONE PLACE. Do not split the
+  same subject (where Dan could stand and move) across the top and
+  the bottom of the post.
+- EVERY CLAIM ABOUT THE VENUE, THE SETUP OR WHO ARRANGED IT IS
+  VERIFIED BEFORE IT GOES IN. Assumed provenance is a fabrication.
+  Use only what the program and enrichment data actually say. If the
+  billing, the presenter or the pairing is not in the data, leave it
+  out rather than approximating it.
+- VERIFY CHARACTER ATTRIBUTIONS. A performer holding a prop is not
+  automatically the title character. A corrected draft wrote "playing
+  Odysseus with a prop staff"; the character was Aegyptius. If the
+  data does not say who a performer is playing in a given moment, do
+  not name the character.
+- NEVER INVENT NUMBERS. No count in the source data means no number
+  in the post. BANNED: "thirty seconds to reposition". This is
+  checked in code after generation and reported.
+- ANY CLAIM TRACED TO THE PERFORMER MUST ACTUALLY COME FROM THE
+  PERFORMER OR FROM PUBLISHED MATERIALS. BANNED: "a lifelong one by
+  his own account" when nothing in the data says so.
+- POSITION IS AN INPUT TO THE WHOLE POST, NOT ONE SENTENCE. When
+  where Dan shot from changes, every downstream sentence changes too,
+  including the alt text. A draft that had him "working around the
+  edge of the seated audience, moving when Medeiros moved" when he
+  actually shot from the back of the house needed three or four
+  further edits, in the photo markers as well as the prose.
+- CUT SENTENCES THAT SOUND LIKE OBSERVATIONS BUT STATE NOTHING.
+  BANNED: "I held on the moment and let it run", "moving when
+  Medeiros moved", "Medeiros didn't stay in one register for long".
+  TEST: if removing the sentence loses no information, it was never
+  carrying any.
+- CUT INTERPRETATION OF THE PHOTO. Do not tell the reader what an
+  image reads as or what was real in it. BANNED: "The mess was real,
+  the concentration was real, and the image reads as both at once."
+- CUT BALANCED ANTITHESIS, PULL-QUOTE SHAPES AND APHORISMS ABOUT THE
+  NATURE OF AMBITIOUS PROJECTS. BANNED shape: "ambitious in the way
+  that projects nobody's quite done before tend to be".
+- DO NOT REVIEW THE PERFORMANCE. Assessment is not the photographer's
+  lane. BANNED: "a performance that was already this fully realized".
+- DO NOT CRITICISE THE CLIENT'S STAGE OR SETUP, even when factually
+  accurate. BANNED: "is a small room", "what looked like the contents
+  of several storage units". Both read as knocks on the venue and the
+  set to the people who booked the shoot.
+- USE THE SAME CONSTRUCTION ONCE. A corrected draft ran "something
+  between a game show host and a Greek chorus" and "something between
+  a stadium and a temple" in one post. Two is one too many. This is
+  checked in code after generation.
 - THE MERGE IS THE EXPECTED MOVE. When multiple performers illustrate
   the same observation, the STRONG move is to combine them into one
   paragraph that uses two photos, or to feature one and let the
@@ -1194,10 +1256,19 @@ Photo placement rules:
   The filename MUST be copied verbatim from the `Photo N: …` label
   attached to that specific image — do NOT reorder, swap, or
   hallucinate filenames. The alt text MUST describe what is actually
-  visible in THAT image (the one whose label you copied), 15-35 words:
+  visible in THAT image (the one whose label you copied), 15-25 words:
   who, what, where, lighting, gestures. If the photo is of a poster,
   building exterior, empty stage, or program book, say so — do not
-  describe a performance that is not in the frame. Example:
+  describe a performance that is not in the frame.
+  NAME THE PERFORMER AND THE VENUE IN EVERY MARKER. Write "Joseph
+  Medeiros ... at Greenwich House Theater", never "A male performer".
+  A corrected draft had "A male performer" seven times and named the
+  venue in none of them.
+  VARY THE OPENING. Do not start more than two markers the same way.
+  NO INFERRED INNER STATES. Describe what the camera recorded, not
+  what somebody felt or who an expression was aimed at. BANNED: "in
+  intense concentration", "with focused expression", "grinning toward
+  the audience". A grin is visible; who it was for is not. Example:
     [PHOTO: 003_DSC4821.jpg | Conductor leading a full chorus from the
     podium at Carnegie Hall, arms raised mid-phrase, blue stage light
     behind the choir risers]
@@ -1628,11 +1699,23 @@ def generate_blog(
     final_body = _fix_second_person(final_body)
     final_body = _fix_missing_contractions(final_body)
 
+    # Deterministic backstops for the rules a prompt cannot hold (#201).
+    # These REPORT rather than rewrite: nobody can supply the true number that
+    # replaces an invented one, and alt text cannot be rewritten without seeing
+    # the photograph. Reported loudly so a draft is never quietly shipped with
+    # them, and returned so the review screen can show exactly what to fix.
+    findings = check_blog(final_body, program=program, venue=venue)
+    for f in findings:
+        print(f"[generate_blog] CHECK {f.code}: {f.message} ({f.detail})",
+              flush=True, file=sys.stderr)
+
     deterministic_title = _build_blog_title(event=event, venue=venue)
     return {
         "title": deterministic_title or data.get("title", "").strip(),
         "body": final_body,
         "photo_count": len(resolved),
+        "findings": [{"code": f.code, "message": f.message, "detail": f.detail}
+                     for f in findings],
     }
 
 

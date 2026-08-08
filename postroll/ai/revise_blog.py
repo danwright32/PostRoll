@@ -52,6 +52,7 @@ from .ai_tells import (
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
+from .blog_quality import check_blog
 from .generate_blog import (
     _fix_missing_contractions,
     _fix_second_person,
@@ -205,10 +206,21 @@ def revise_blog(
     final_body = _fix_wrong_names(final_body, program)
     final_body = _fix_second_person(final_body)
     final_body = _fix_missing_contractions(final_body)
+    # A revision is a live path back into the blog, and "add more detail" is
+    # exactly the request most likely to reintroduce an invented number or a
+    # performance review, so it runs the same deterministic checks the first
+    # pass does (#201).
+    findings = check_blog(final_body, program=program, venue=venue)
+    for f in findings:
+        print(f"[revise_blog] CHECK {f.code}: {f.message} ({f.detail})",
+              flush=True, file=sys.stderr)
+
     return {
         "title":       data.get("title", title).strip(),
         "body":        final_body,
         "photo_count": photo_count,
+        "findings": [{"code": f.code, "message": f.message, "detail": f.detail}
+                     for f in findings],
     }
 
 
