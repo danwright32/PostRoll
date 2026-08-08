@@ -35,6 +35,13 @@ from typing import Any
 
 from .claude_client import run_json_prompt, ClaudeError
 from ..media.page_regions import image_budget_for, split_page
+from .ocr_batching import batch_images, merge_program_data
+
+#: Ceiling for one OCR request's images, in base64 bytes. The API refuses a
+#: request over 32 MB outright; the headroom covers the prompt and envelope.
+#: Splitting pages into bands (#208) doubled how much a program carries, so
+#: an eight page program now needs several requests rather than one (#216).
+MAX_REQUEST_BYTES = 25_000_000
 
 #: The model every OCR prompt here uses. Named once so the per-image budget
 #: the pages are split for cannot drift from the model that reads them: split
@@ -466,12 +473,33 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
         tmp_path = Path(tmp)
         resolved = _normalize_image_paths(image_paths, tmp_path)
 
+        # Several requests when the program is too big for one. Merged rather
+        # than last-one-wins, or the notes from the first pages would silently
+        # disappear behind the notes from the last (#216).
+        batches = batch_images(resolved, limit_bytes=MAX_REQUEST_BYTES)
+        if len(batches) > 1:
+            print(f"[ocr] program too large for one request; sending "
+                  f"{len(resolved)} image(s) in {len(batches)} batches",
+                  file=sys.stderr, flush=True)
+
+        per_batch: list[dict[str, Any] | None] = []
+        for batch in batches:
+            image_list = "\n".join(f"- {p}" for p in batch)
+            batch_prompt = PROMPT_TEMPLATE.format(image_list=image_list)
+            result = run_json_prompt(batch_prompt, timeout=600, image_paths=batch,
+                                     step="ocr:focused", model=OCR_MODEL)
+            per_batch.append(result if isinstance(result, dict) else None)
+            if not isinstance(result, dict) and len(batches) == 1:
+                # Single-batch programs keep the existing retry and salvage
+                # path below, which needs the raw non-dict response.
+                per_batch = []
+                data = result
+                break
+        else:
+            data = merge_program_data(per_batch) if per_batch else {}
+
         image_list = "\n".join(f"- {p}" for p in resolved)
         base_prompt = PROMPT_TEMPLATE.format(image_list=image_list)
-
-        # First attempt
-        data = run_json_prompt(base_prompt, timeout=600, image_paths=resolved, step="ocr:focused",
-                               model=OCR_MODEL)
 
         # Retry once if Claude returned a top-level array (or other non-dict).
         # Some programs — especially notes/lyrics-only PDFs with no cast list —
