@@ -36,6 +36,7 @@ from typing import Any
 from .claude_client import run_json_prompt, ClaudeError
 from ..media.page_regions import image_budget_for, split_page
 from .ocr_batching import batch_images, merge_program_data
+from .ocr_batching import _dedupe as _dedupe_dicts
 
 #: Ceiling for one OCR request's images, in base64 bytes. The API refuses a
 #: request over 32 MB outright; the headroom covers the prompt and envelope.
@@ -388,6 +389,14 @@ def _extract_prose_only(resolved_paths: list[str]) -> dict[str, str]:
     """
     image_list = "\n".join(f"- {p}" for p in resolved_paths)
     prompt = PROSE_PROMPT_TEMPLATE.format(image_list=image_list)
+    batches = batch_images(resolved_paths, limit_bytes=MAX_REQUEST_BYTES)
+    if len(batches) > 1:
+        # Merged rather than last-one-wins, or the prose from the first pages
+        # disappears behind the prose from the last (#216).
+        parts = [_extract_prose_only(batch) for batch in batches]
+        merged = merge_program_data(parts)
+        return {k: v for k, v in merged.items() if isinstance(v, str)}
+
     data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths,
                            step="ocr:prose", model=OCR_MODEL)
     if not isinstance(data, dict):
@@ -425,6 +434,17 @@ def _run_focused_array_prompt(
     Claude usually returns the array directly; if it wraps the array in a
     single-key object, unwrap it under any of the expected key names.
     """
+    # Batched for the same reason the main call is (#216): a large program's
+    # recovery call would otherwise send every page at once and be refused,
+    # which is the defect that fix closed reappearing on a quieter path.
+    batches = batch_images(resolved_paths, limit_bytes=MAX_REQUEST_BYTES)
+    if len(batches) > 1:
+        out: list[dict[str, Any]] = []
+        for batch in batches:
+            part = _run_focused_array_prompt(prompt, batch, unwrap_keys)
+            out.extend(part)
+        return _dedupe_dicts(out)
+
     data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths,
                            step="ocr:focused_array", model=OCR_MODEL)
     if isinstance(data, list):

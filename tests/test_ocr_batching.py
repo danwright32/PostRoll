@@ -238,3 +238,54 @@ def test_a_two_page_program_of_real_bands_still_fits_one_request(tmp_path):
         bands.append(str(p))
 
     assert len(ob.batch_images(bands, limit_bytes=25_000_000)) == 1
+
+
+# ── the recovery calls have the same limit ────────────────────────────────────
+
+def test_the_recovery_calls_are_batched_too(tmp_path, monkeypatch):
+    """The main OCR call was batched (#216) and the three fallbacks that fire
+    when a field comes back empty were not, so a large program still blew the
+    request limit on the less common path. Measured before this test: an eight
+    page program's recovery call sent 39.5 MB against a 25 MB limit."""
+    import postroll.ai.ocr_program as op
+
+    monkeypatch.setattr(op, "MAX_REQUEST_BYTES", 500_000)
+    pages = _fake_images(tmp_path, count=6, kb_each=200)
+    sizes = []
+
+    def fake_run_json(prompt, timeout=600, image_paths=None, **kwargs):
+        sizes.append(ob.encoded_size(image_paths or []))
+        # Empty pieces and performers, so every recovery path fires.
+        return {"performers": [], "pieces": [], "program_notes": ""}
+
+    monkeypatch.setattr(op, "run_json_prompt", fake_run_json)
+    monkeypatch.setattr(op, "split_page", lambda p, d, **kw: [p])
+    op.extract_program(pages)
+
+    assert sizes, "no call was made"
+    assert max(sizes) <= 500_000, (
+        f"a call carried {max(sizes)} bytes against a 500,000 limit; "
+        "a recovery path is still sending every page at once"
+    )
+
+
+def test_a_recovery_call_still_recovers_across_all_the_batches(tmp_path, monkeypatch):
+    """Batching the fallback must not mean it only looks at the first pages."""
+    import postroll.ai.ocr_program as op
+
+    monkeypatch.setattr(op, "MAX_REQUEST_BYTES", 500_000)
+    pages = _fake_images(tmp_path, count=6, kb_each=200)
+    seen = []
+
+    def fake_run_json(prompt, timeout=600, image_paths=None, **kwargs):
+        seen.extend(image_paths or [])
+        if "ONLY the performers" in prompt or "performers" in prompt[:200]:
+            return {"performers": [{"name": f"P{len(seen)}", "role": "actor"}]}
+        return {"performers": [], "pieces": [], "program_notes": ""}
+
+    monkeypatch.setattr(op, "run_json_prompt", fake_run_json)
+    monkeypatch.setattr(op, "split_page", lambda p, d, **kw: [p])
+    op.extract_program(pages)
+
+    assert len(set(seen)) == len(pages), \
+        "some pages were never looked at by any call"
