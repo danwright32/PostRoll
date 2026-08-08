@@ -57,6 +57,7 @@ from .ai_tells import (
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
+from .performer_hashtags import strip_performer_hashtags
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
@@ -195,8 +196,13 @@ list in the brand voice doc above.
 These are targets for the BODY only, excluding the credit stanza.
 
 **Stage 4 — hashtags.** 6–12 hashtags. Required: #dwphotony, venue,
-org/show, composer/playwright/band, performers visible, genre. Plus
-one #-tag per @ handle in tag_handles (so they're searchable too).
+org/show, composer/playwright/band, genre. Do NOT add a hashtag for a
+performer, cast member, conductor or choreographer unless that person
+is genuinely famous (a household name or a major figure in their
+field); credit everyone else inline in the caption body instead. Plus
+one #-tag per @ handle in tag_handles that belongs to an ORGANIZATION
+or VENUE (so they're searchable too). A person's handle stays an
+@mention in the body and never becomes a hashtag.
 
 Return JSON ONLY in this exact shape (no markdown fences, no
 commentary). `alt_texts` and `scene_labels` are arrays but their
@@ -207,14 +213,27 @@ per photo only for carousels.
   "alt_texts": ["<stage 1 output>", ...],
   "scene_labels": ["<stage 2 output>", ...],
   "caption": "<stage 3 output, including @ mentions>",
-  "hashtags": ["#dwphotony", ...]
+  "hashtags": ["#dwphotony", ...],
+  "famous_people": ["<any person above you judged genuinely famous>", ...]
 }}
+
+`famous_people` is how a genuinely famous performer keeps their hashtag:
+list only people who are household names or major figures in their
+field, and leave it empty otherwise. It is not shown to anyone; it is
+read by the check that removes ordinary performers' name tags.
 
 Hashtag rules (re-stated for emphasis):
 - ALWAYS include #dwphotony.
 - Include a venue hashtag derived from "{venue}".
 - Include an organization hashtag derived from "{org}".
-- Include performer/conductor hashtags if any are listed above.
+- Performer, cast, conductor and choreographer hashtags ONLY when the
+  person is genuinely famous (a household name or a major figure in
+  their field), so the tag actually aids discovery. Do not turn
+  ordinary performer names into hashtags: a tag like #janesmith for a
+  local cast member is noise, not reach. Credit those people inline in
+  the caption body instead (as an @mention if they have a handle,
+  otherwise by plain name). Composer, playwright and band tags are NOT
+  subject to this: repertoire search works differently, so keep them.
 - Add 2-3 relevant tags (genre, instrument, repertoire, city).
 - Total 6-10 hashtags. No padding.
 
@@ -806,7 +825,17 @@ def generate_caption(
 
     return {
         "caption": strip_em_dashes(data.get("caption", "").strip()),
-        "hashtags": data.get("hashtags", []),
+        # Deterministic backstop, not a second ask of the model: the prompt
+        # above states the fame gate, and this enforces it against the program
+        # data. A rule that lives only in a prompt is a hope (#199).
+        "hashtags": strip_performer_hashtags(
+            data.get("hashtags", []),
+            program=program,
+            name_mentions=name_mentions,
+            photo_tags=photo_tags,
+            tag_handles=tag_handles,
+            famous=data.get("famous_people") or [],
+        ),
         "alt_texts": [strip_em_dashes(str(a).strip()) for a in alt_texts],
         "scene_labels": scene_labels,
     }

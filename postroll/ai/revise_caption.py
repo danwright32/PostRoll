@@ -52,6 +52,7 @@ from .ai_tells import (
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
+from .performer_hashtags import strip_performer_hashtags
 from .generate_captions import _format_performers
 
 
@@ -158,7 +159,14 @@ def revise_caption(
     # Merge revised text with locked photo-derived fields
     return {
         "caption":      strip_em_dashes(data.get("caption", caption_text).strip()),
-        "hashtags":     data.get("hashtags", hashtags),
+        # A revision is a live path back into the caption, and "add more tags"
+        # is exactly the request most likely to reintroduce a performer's name
+        # as a hashtag, so it runs the same gate the first pass does (#199).
+        "hashtags":     strip_performer_hashtags(
+            data.get("hashtags", hashtags),
+            program=program,
+            famous=data.get("famous_people") or [],
+        ),
         "alt_texts":    existing.get("alt_texts", []),
         "scene_labels": existing.get("scene_labels", []),
     }
