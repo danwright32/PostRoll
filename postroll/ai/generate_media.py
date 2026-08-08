@@ -137,6 +137,28 @@ def _has_ffmpeg() -> bool:
 # Swift-side track picker can call the same logic via a CLI shim.
 from .audio_tags import thursday_tags as _derive_audio_tags  # noqa: E402
 
+from ..media.missing_media import MissingMediaError, require_present  # noqa: E402
+
+
+def _missing_chosen_media(day_info: dict) -> str | None:
+    """Message naming every photo this day CHOSE that is not on disk.
+
+    A slot left empty is not missing, so it is not reported here; a slot that
+    holds a path to a file that no longer exists is. One check for both the
+    before/after graphic and the reel, so the same input can't produce a crash
+    on one surface and a quietly different render on the other (#180).
+    """
+    problems: list[str] = []
+    for key, label in (("raw_photo", "RAW photo"),
+                       ("edited_photo", "edited photo"),
+                       ("bw_photo", "B&W photo")):
+        try:
+            require_present(day_info.get(key), label)
+        except MissingMediaError as exc:
+            problems.append(str(exc))
+    return "; ".join(problems) if problems else None
+
+
 def _render_cover(
     *,
     day_name: str,
@@ -337,6 +359,15 @@ def generate_media(
 
             reel_style = resolve_tuesday_reel_style(bw, day_info.get("reel_style"))
 
+            # A photo that was chosen and has since gone missing is a fixable
+            # input problem, reported by name. Everything below is skipped
+            # rather than rendered without it: a two-photo reel in place of the
+            # three-photo one asked for looks exactly like success (#180).
+            missing_inputs = _missing_chosen_media(day_info)
+            if missing_inputs:
+                print(f"[generate_media] tuesday: ERROR — {missing_inputs}", flush=True, file=sys.stderr)
+                errors["tuesday"] = missing_inputs
+
             # Also generate the standalone before/after PNG. Serves two roles:
             #   1. Closing frame for the slider/morph reel (always needed on disk).
             #   2. Standalone story cover in the final export folder.
@@ -351,7 +382,7 @@ def generate_media(
                 ba_path = tuesday_ba_tempfile.name
             else:
                 ba_path = str(day_dir / "before_after.png")
-            if raw and edit:
+            if raw and edit and not missing_inputs:
                 try:
                     generate_before_after(
                         raw_path=raw,
@@ -370,7 +401,7 @@ def generate_media(
                     print(f"[generate_media] tuesday: before/after failed (non-fatal): {e}", flush=True, file=sys.stderr)
                     ba_path = None
 
-            if ffmpeg_available and not static_only and raw and edit:
+            if ffmpeg_available and not static_only and raw and edit and not missing_inputs:
                 # Screen recording reel takes priority when available — except in
                 # 3-photo mode, which always uses the still-image slider reveal.
                 if rec and not bw:
@@ -440,8 +471,10 @@ def generate_media(
             else:
                 print("[generate_media] tuesday: reel skipped (no raw/edited photos assigned)", flush=True)
 
-            # Story fallback if no reel was produced
-            if "reel" not in day_result and photos:
+            # Story fallback if no reel was produced. Not offered when an input
+            # is missing: a story in place of the reel is a different post, and
+            # the person needs to fix the file, not receive a substitute.
+            if "reel" not in day_result and photos and not missing_inputs:
                 try:
                     story_path = str(day_dir / "story.png")
                     generate_story(
@@ -557,6 +590,14 @@ def generate_media(
             bw    = day_info.get("bw_photo")   # optional B&W after → 3-photo graphic
             clips = day_info.get("clips") or []
 
+            # Same named condition as Tuesday, reported the same way: the two
+            # days share these photos, so they must not disagree about what a
+            # missing one means (#180).
+            missing_inputs = _missing_chosen_media(day_info)
+            if missing_inputs:
+                print(f"[generate_media] friday: ERROR — {missing_inputs}", flush=True, file=sys.stderr)
+                errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + missing_inputs
+
             # Auto-cut clip reel: only attempted when clips were imported.
             # Any failure (too few usable clips, Claude error, ffmpeg crash)
             # falls through to exactly today's before/after/story behavior
@@ -651,7 +692,7 @@ def generate_media(
                         persist_pick_to=day_dir / "cover_frame.jpg",
                     )
 
-            if not reel_rendered and raw and edit:
+            if not reel_rendered and raw and edit and not missing_inputs:
                 try:
                     ba_path = str(day_dir / "before_after.png")
                     generate_before_after(
@@ -670,8 +711,9 @@ def generate_media(
                     msg = f"before/after failed: {e}"
                     print(f"[generate_media] friday: ERROR — {msg}", flush=True, file=sys.stderr)
                     errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + msg
-            elif not reel_rendered:
-                # Fallback: story template
+            elif not reel_rendered and not missing_inputs:
+                # Fallback: story template. Only when the inputs were never
+                # chosen, never as a substitute for one that has gone missing.
                 reason = "missing raw_photo/edited_photo"
                 print(f"[generate_media] friday: before/after skipped ({reason}), generating story", flush=True)
                 if photos:

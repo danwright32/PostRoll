@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 # Reuse the title-fitting helper from the story template so single-line
 # shrink + two-line wrap behavior stays consistent across both layouts.
 from .generate_story import _fit_script_title
+from .missing_media import require_present
 
 
 # === Design Tokens (shared with story template) ===
@@ -225,6 +226,13 @@ def generate_before_after(
     below the color edit, so the layout reads RAW / Edit / B&W. Each photo
     fits to width at its own height, so the B&W can be a different crop.
     """
+    # Every chosen input is checked by name before anything is opened, so a
+    # missing file reports which slot it was rather than a bare
+    # FileNotFoundError naming a path (#180).
+    raw_path = require_present(raw_path, "RAW photo")
+    edit_path = require_present(edit_path, "edited photo")
+    bw_path = require_present(bw_path, "B&W photo")
+
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
     bw_photo = Image.open(bw_path) if bw_path else None

@@ -335,6 +335,7 @@ def generate_frame(
 
 
 from postroll.ai.audio_tags import TUESDAY_DEFAULT_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
+from .missing_media import require_present  # noqa: E402
 
 
 def generate_reel_slider(
@@ -364,6 +365,14 @@ def generate_reel_slider(
         bw_path: Optional B&W after. When set, the slider reveals RAW into a
             color-over-B&W composite so both afters show at once (3-photo mode).
     """
+    # Same check as the before/after graphic: a B&W that was chosen but is not
+    # on disk is reported, never quietly dropped. Falling back to the two-photo
+    # treatment here produced a plausible file that was not the one asked for,
+    # so there was nothing to notice (#180).
+    raw_path = require_present(raw_path, "RAW photo")
+    edit_path = require_present(edit_path, "edited photo")
+    bw_path = require_present(bw_path, "B&W photo")
+
     if audio_path is None:
         # Fail loud. This used to swallow the error and render a reel with no
         # audio track at all, which shipped silently to Instagram with nobody
@@ -382,7 +391,7 @@ def generate_reel_slider(
     font = load_font(FONT_DETAIL, LABEL_FONT_SIZE, index=FONT_DETAIL_BOLD)
 
     # 3-photo mode: the revealed "after" is the color edit stacked over the B&W.
-    three_photo = bool(bw_path) and Path(bw_path).exists()
+    three_photo = bool(bw_path)
 
     # Pre-render the before (RAW) at fit-to-width
     raw_canvas, photo_y = prepare_photo_simple(raw_photo, edit_photo)
