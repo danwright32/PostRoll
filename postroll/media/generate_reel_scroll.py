@@ -27,7 +27,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # Reuse the collage's pan/zoom-aware crop so per-photo offsets produce
 # identical output in both the strip preview PNG and the final encoded reel.
-from .generate_collage import crop_to_fill as _crop_to_fill
+from .generate_collage import DEFAULT_CROP_OFFSET, crop_to_fill as _crop_to_fill
 
 
 # === Design Tokens ===
@@ -233,7 +233,7 @@ def build_collage_strip(
             if crop_offsets and photo_idx < len(crop_offsets):
                 ox, oy, oz = crop_offsets[photo_idx]
             else:
-                ox, oy, oz = 0.0, 0.0, 1.0
+                ox, oy, oz = DEFAULT_CROP_OFFSET
             cropped = _crop_to_fill(
                 photos[photo_idx], widths[col_idx], row_h, ox, oy, oz,
             )

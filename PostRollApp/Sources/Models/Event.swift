@@ -681,8 +681,18 @@ struct ReelClipOverride: Codable, Hashable, Identifiable {
 /// x/y are in [-1, 1]: 0 = centred, ±1 = full shift to that edge.
 /// scale ≥ 1 zooms the photo within its cell frame (1 = fill exactly, 2 = 2× zoom).
 struct CropOffset: Codable, Hashable {
+    /// The vertical framing every surface starts from: the photo's top edge.
+    ///
+    /// Performing-arts frames compose the subject in the upper part of the
+    /// picture, so a centred crop quietly takes a slice off the heads. The
+    /// pixels a fill has to discard come off the BOTTOM, always (#167). A crop
+    /// the user has actually dragged still wins; this only moves the starting
+    /// point. It applies to the fill case alone: a photo zoomed out below fill
+    /// has nothing to crop, and both draw paths centre it regardless of `y`.
+    static let topAnchoredY: Double = -1.0
+
     var x:     Double = 0    // horizontal: -1 = left, +1 = right
-    var y:     Double = 0    // vertical:   -1 = top,  +1 = bottom
+    var y:     Double = CropOffset.topAnchoredY  // vertical: -1 = top, +1 = bottom
     var scale: Double = 1.0  // zoom: 1 = default fill, >1 zooms in
 
     enum CodingKeys: String, CodingKey { case x, y, scale }
@@ -692,7 +702,7 @@ extension CropOffset {
     init(from decoder: Decoder) throws {
         let c   = try decoder.container(keyedBy: CodingKeys.self)
         x       = try c.decodeIfPresent(Double.self, forKey: .x)     ?? 0
-        y       = try c.decodeIfPresent(Double.self, forKey: .y)     ?? 0
+        y       = try c.decodeIfPresent(Double.self, forKey: .y)     ?? CropOffset.topAnchoredY
         scale   = try c.decodeIfPresent(Double.self, forKey: .scale) ?? 1.0
     }
 }

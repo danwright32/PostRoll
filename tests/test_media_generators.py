@@ -61,7 +61,10 @@ def _gradient_photo() -> Image.Image:
 
 
 def test_crop_centered_uses_half_overflow():
-    out = crop_to_fill(_gradient_photo(), 100, 100)
+    # An EXPLICIT centred offset, which is no longer the default: an unset
+    # offset is top-anchored so the crop comes off the bottom (#167, pinned in
+    # test_top_anchored_crop.py). The half-overflow formula itself is unchanged.
+    out = crop_to_fill(_gradient_photo(), 100, 100, crop_offset_y=0.0)
     assert out.size == (100, 100)
     # overflow is 100 rows; centred crop starts at 50
     assert out.getpixel((0, 0))[0] == 50

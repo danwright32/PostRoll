@@ -367,12 +367,27 @@ def draw_spaced_text_centered(
         x += (bbox[2] - bbox[0]) + spacing
 
 
+# The vertical framing every crop starts from: the photo's top edge.
+#
+# Performing-arts frames compose the subject in the upper part of the picture,
+# so a centred fill quietly takes a slice off the heads. The pixels a fill has
+# to discard come off the BOTTOM, always (#167). Mirrors CropOffset.topAnchoredY
+# on the Swift side; the two must move together or the editor shows one framing
+# and the export produces another.
+TOP_ANCHORED_CROP_Y = -1.0
+
+# What an unset per-photo offset means, shared by every call site so the rule
+# can't be applied to some surfaces and not others. `None` for y is "unset",
+# which resolves differently in the two branches below.
+DEFAULT_CROP_OFFSET: tuple[float, float | None, float] = (0.0, None, 1.0)
+
+
 def crop_to_fill(
     photo: Image.Image,
     target_w: int,
     target_h: int,
     crop_offset_x: float = 0.0,
-    crop_offset_y: float = 0.0,
+    crop_offset_y: float | None = None,
     zoom: float = 1.0,
 ) -> Image.Image:
     """Scale photo to fill target dimensions, then pan/zoom.
@@ -380,6 +395,11 @@ def crop_to_fill(
     zoom >= 1.0  photo fills (or overfills) the cell; cropped to fit.
     zoom < 1.0   photo is smaller than fill; placed on a blurred bg with pan offset.
     crop_offset_x / crop_offset_y in [-1, 1]: 0 = centred, ±1 = edge.
+
+    An unset (None) crop_offset_y is top-anchored in the crop branch and centred
+    in the zoomed-out branch: below fill there is nothing to discard, so pinning
+    the photo to the top edge of its cell is not what "crop from the bottom"
+    means. An offset the user actually set always wins.
     """
     photo_ratio = photo.width / photo.height
     target_ratio = target_w / target_h
@@ -395,9 +415,12 @@ def crop_to_fill(
 
     if zoom < 1.0:
         return _place_on_blur(photo, new_w, new_h, target_w, target_h,
-                              crop_offset_x, crop_offset_y)
+                              crop_offset_x,
+                              0.0 if crop_offset_y is None else crop_offset_y)
 
     # zoom >= 1.0 — photo fills/overfills; crop to cell
+    if crop_offset_y is None:
+        crop_offset_y = TOP_ANCHORED_CROP_Y
     resized = photo.resize((new_w, new_h), Image.LANCZOS)
     overflow_x = max(0, new_w - target_w)
     overflow_y = max(0, new_h - target_h)
@@ -486,7 +509,7 @@ def paste_planned_cells(
     sidecar: list[dict] = []
     for cell in cells:
         idx = cell["index"]
-        ox, oy, oz = (offsets[idx] if offsets and idx < len(offsets) else (0.0, 0.0, 1.0))
+        ox, oy, oz = (offsets[idx] if offsets and idx < len(offsets) else DEFAULT_CROP_OFFSET)
         cropped = crop_to_fill(photos[idx], cell["w"], cell["h"], ox, oy, oz)
         canvas.paste(cropped, (cell["x"], cell["y"]))
         sidecar.append({
@@ -595,7 +618,7 @@ def render_cell_layout_override(
     for cell in cell_layout:
         path = cell["photo_path"]
         x, y, w, h = cell["x"], cell["y"], cell["w"], cell["h"]
-        ox, oy, oz = offsets_by_path.get(path, (0.0, 0.0, 1.0))
+        ox, oy, oz = offsets_by_path.get(path, DEFAULT_CROP_OFFSET)
         photo = Image.open(path)
         cropped = crop_to_fill(photo, w, h, ox, oy, oz)
         canvas.paste(cropped, (x, y))
