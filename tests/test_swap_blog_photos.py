@@ -51,3 +51,27 @@ def test_passes_image_labels_matching_prompt_filenames(photo):
     assert "- DSC4821.jpg" in captured["prompt"]
     assert result["photo_count"] == 1
     assert "DSC4821.jpg" in result["body"]
+
+
+def test_swapped_body_has_em_dashes_stripped(monkeypatch, tmp_path):
+    """The photo swap sends the whole body back to the model and returns its
+    text. Its two sibling paths (generate_blog, revise_blog) both strip dashes
+    on the way out; this one did not, so a post whose photos were swapped could
+    ship an em dash into published copy, breaking the one writing rule Dan's own
+    pre-push hook enforces (#203)."""
+    import postroll.ai.swap_blog_photos as swap
+
+    photo = tmp_path / "a.jpg"
+    photo.write_bytes(b"\xff\xd8\xff\xdb" + b"0" * 64)
+
+    monkeypatch.setattr(swap, "run_json_prompt", lambda *a, **k: {
+        # Escapes, not literals: this file must NAME the banned characters,
+        # and the pre-push hook cannot tell a line banning one from a line
+        # using one. Written as escapes so the file holds neither.
+        "body": "The room was full \u2014 the light was not \u2013 and it held.",
+    })
+
+    result = swap.swap_blog_photos(body="original body", photo_paths=[str(photo)])
+
+    assert "\u2014" not in result["body"], "em dash reached the published body"
+    assert "\u2013" not in result["body"], "en dash reached the published body"

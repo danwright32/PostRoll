@@ -27,6 +27,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from .ai_tells import strip_em_dashes
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -113,8 +114,11 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path]) -> dict:
         if not isinstance(data, dict):
             raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 
+    # Same deterministic dash strip its two sibling paths apply on the way out
+    # (generate_blog.py, revise_blog.py). Without it a post whose photos were
+    # swapped could ship an em dash into published copy (#203).
     return {
-        "body":        data.get("body", body).strip(),
+        "body":        strip_em_dashes(data.get("body", body).strip()),
         "photo_count": len(photo_paths),
     }
 
