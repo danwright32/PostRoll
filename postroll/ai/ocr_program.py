@@ -34,6 +34,13 @@ from pathlib import Path
 from typing import Any
 
 from .claude_client import run_json_prompt, ClaudeError
+from ..media.page_regions import image_budget_for, split_page
+
+#: The model every OCR prompt here uses. Named once so the per-image budget
+#: the pages are split for cannot drift from the model that reads them: split
+#: for one budget and read by a model with another, the bands are either
+#: needlessly small or silently reduced again (#208).
+OCR_MODEL = "sonnet"
 
 
 HEIC_SUFFIXES = {".heic", ".heif"}
@@ -305,12 +312,24 @@ def _convert_heic_to_jpeg(src: Path, dest_dir: Path, prefix: str = "") -> Path:
 def _normalize_image_paths(
     image_paths: list[str | Path], tmp_dir: Path
 ) -> list[str]:
-    """Stage all images into one temp dir as JPEGs.
+    """Stage all images into one temp dir, splitting oversized pages into bands.
 
     HEIC files are converted via sips. Other formats are copied as-is.
     Centralizing into one dir means Claude only needs --add-dir for one
     path regardless of where the originals live.
+
+    A page larger than the model's per-image budget is then split into bands,
+    because a whole program page capped to that budget puts its small print on
+    the boundary of legibility: measured on the real BLUDLINE page, the
+    performer "Safa" read as "5afa" 0 times out of 5, and the same band sent as
+    its own image read correctly 5 times out of 5 (#200, #207). Each band is
+    capped by its own long edge, so it arrives at a third more resolution.
+
+    Splitting here rather than at each call site means every OCR prompt (the
+    focused ones, the prose pass and the retry) gets it, instead of whichever
+    one somebody remembered.
     """
+    budget = image_budget_for(OCR_MODEL)
     resolved: list[str] = []
     for i, p in enumerate(image_paths):
         path = Path(p).expanduser().resolve()
@@ -324,7 +343,18 @@ def _normalize_image_paths(
             staged = tmp_dir / f"{i:03d}_{path.name}"
             shutil.copy2(path, staged)
 
-        resolved.append(str(staged))
+        try:
+            bands = split_page(staged, tmp_dir, budget=budget)
+        except Exception as e:  # noqa: BLE001
+            # A page we cannot split is still a page we can read, just on the
+            # path that misreads small type. Say so rather than failing the
+            # whole upload or pretending it was fine.
+            print(f"warning: could not split {staged.name} into bands ({e}); "
+                  "sending it whole, so small print may be misread",
+                  file=sys.stderr, flush=True)
+            bands = [Path(staged)]
+
+        resolved.extend(str(b) for b in bands)
     return resolved
 
 
@@ -351,7 +381,8 @@ def _extract_prose_only(resolved_paths: list[str]) -> dict[str, str]:
     """
     image_list = "\n".join(f"- {p}" for p in resolved_paths)
     prompt = PROSE_PROMPT_TEMPLATE.format(image_list=image_list)
-    data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths, step="ocr:prose")
+    data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths,
+                           step="ocr:prose", model=OCR_MODEL)
     if not isinstance(data, dict):
         return {}
     out: dict[str, str] = {}
@@ -388,7 +419,7 @@ def _run_focused_array_prompt(
     single-key object, unwrap it under any of the expected key names.
     """
     data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths,
-                           step="ocr:focused_array")
+                           step="ocr:focused_array", model=OCR_MODEL)
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
     if isinstance(data, dict):
@@ -439,7 +470,8 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
         base_prompt = PROMPT_TEMPLATE.format(image_list=image_list)
 
         # First attempt
-        data = run_json_prompt(base_prompt, timeout=600, image_paths=resolved, step="ocr:focused")
+        data = run_json_prompt(base_prompt, timeout=600, image_paths=resolved, step="ocr:focused",
+                               model=OCR_MODEL)
 
         # Retry once if Claude returned a top-level array (or other non-dict).
         # Some programs — especially notes/lyrics-only PDFs with no cast list —
@@ -457,7 +489,8 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
                 "Use empty arrays/strings for fields the program doesn't cover.\n\n"
                 + base_prompt
             )
-            data = run_json_prompt(retry_prompt, timeout=600, image_paths=resolved, step="ocr:focused_retry")
+            data = run_json_prompt(retry_prompt, timeout=600, image_paths=resolved, step="ocr:focused_retry",
+                               model=OCR_MODEL)
 
         # Last-resort salvage: if it's still a list, wrap it under whichever schema
         # key the items resemble. Better to give the user partial OCR they can edit
