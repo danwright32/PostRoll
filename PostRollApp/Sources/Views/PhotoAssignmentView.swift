@@ -1187,6 +1187,9 @@ private struct PhotoTaggingSheet: View {
 
     @State private var image: NSImage?
     @State private var loadFailed = false
+    /// What the last add-to-all actually did. Held until the next one so the
+    /// confirmation doesn't vanish before it's read.
+    @State private var applyResult: String?
 
     private var safeIndex: Int {
         PhotoTagSheetNavigation.clamped(index: index, count: photos.count)
@@ -1224,21 +1227,36 @@ private struct PhotoTaggingSheet: View {
                     PhotoTagEditor(tags: tagsBinding, suggestions: suggestions)
                         .id(currentURL?.absoluteString ?? "none")
 
+                    // Deliberately quiet: stepping to the next photo is the
+                    // common action and owns the one filled button in here.
+                    // This is the occasional one, for a performer in every shot.
                     if photos.count > 1 {
                         Button(action: applyToAll) {
-                            Text("Add these to all \(photos.count) photos")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(tagsBinding.wrappedValue.isEmpty ? Color.warmMid : Color.cream)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 7)
-                                .background(
-                                    RoundedRectangle(cornerRadius: Radius.xs)
-                                        .fill(tagsBinding.wrappedValue.isEmpty ? Color.creamDeep : Color.roseGold)
-                                )
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.on.square")
+                                    .font(.system(size: 9))
+                                Text("Add these to all \(photos.count) photos")
+                                    .font(.system(size: 10))
+                            }
+                            .foregroundStyle(tagsBinding.wrappedValue.isEmpty
+                                             ? Color.warmFaint : Color.roseGold)
                         }
                         .buttonStyle(.plain)
                         .disabled(tagsBinding.wrappedValue.isEmpty)
                         .help("Copies this photo's tags onto every photo in this day. Tags already on a photo are kept.")
+
+                        if let applyResult {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.roseGold)
+                                Text(applyResult)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.warmMid)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .transition(.opacity)
+                        }
                     }
                 }
                 .frame(width: 260)
@@ -1321,17 +1339,29 @@ private struct PhotoTaggingSheet: View {
 
             Spacer()
 
+            // The primary action: walking the carousel is what this sheet is
+            // for, so it gets the one filled button.
+            let canNext = PhotoTagSheetNavigation.canGoNext(from: safeIndex, count: photos.count)
             Button {
                 index = PhotoTagSheetNavigation.next(from: safeIndex, count: photos.count)
             } label: {
-                Label("Next", systemImage: "chevron.right")
-                    .font(.system(size: 12))
-                    .labelStyle(.titleAndIcon)
+                HStack(spacing: 5) {
+                    Text(canNext ? "Next photo" : "Last photo")
+                        .font(.system(size: 12, weight: .medium))
+                    if canNext {
+                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
+                    }
+                }
+                .foregroundStyle(canNext ? Color.cream : Color.warmMid)
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.xs)
+                        .fill(canNext ? Color.roseGold : Color.creamDeep)
+                )
             }
             .buttonStyle(.plain)
-            .foregroundStyle(PhotoTagSheetNavigation.canGoNext(from: safeIndex, count: photos.count)
-                             ? Color.roseGold : Color.warmFaint)
-            .disabled(!PhotoTagSheetNavigation.canGoNext(from: safeIndex, count: photos.count))
+            .disabled(!canNext)
             .keyboardShortcut(.rightArrow, modifiers: [])
         }
         .padding(.horizontal, Spacing.lg)
@@ -1341,16 +1371,28 @@ private struct PhotoTaggingSheet: View {
     /// Copies the photo on screen onto every photo in the scope, adding only:
     /// a photo that already carries other tags keeps them.
     private func applyToAll() {
-        photoTags = PhotoTagBatch.applyingToAll(
-            tags: tagsBinding.wrappedValue,
-            dayPhotos: photos.map(\.absoluteString),
-            in: photoTags)
+        let keys = photos.map(\.absoluteString)
+        let before = photoTags
+        let after = PhotoTagBatch.applyingToAll(
+            tags: tagsBinding.wrappedValue, dayPhotos: keys, in: before)
+        photoTags = after
+
+        // Report what actually changed, not what was asked for.
+        let changed = PhotoTagBatch.photosChanged(from: before, to: after, in: keys)
+        withAnimation(.easeOut(duration: 0.15)) {
+            applyResult = changed == 0
+                ? "Everyone here was already on all \(photos.count) photos."
+                : "Added to \(changed) other photo\(changed == 1 ? "" : "s")."
+        }
     }
 
     private func loadCurrent() async {
         guard let url = currentURL else { return }
         image = nil
         loadFailed = false
+        // The confirmation described the photo we just left, so it must not
+        // sit under the next one as though it applied to that.
+        applyResult = nil
         let loaded = await Task.detached { NSImage(contentsOf: url) }.value
         image = loaded
         loadFailed = (loaded == nil)

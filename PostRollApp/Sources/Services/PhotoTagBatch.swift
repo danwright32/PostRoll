@@ -35,4 +35,14 @@ enum PhotoTagBatch {
                               in existing: [String: [String]]) -> [String: [String]] {
         applying(tags: tags, to: dayPhotos, in: existing)
     }
+
+    /// How many of the day's photos actually gained a tag. The confirmation
+    /// shown afterwards has to report this rather than the number of photos
+    /// asked for: telling Dan it was added to all four when three already had
+    /// that person is a success message for something that did not happen.
+    static func photosChanged(from before: [String: [String]],
+                              to after: [String: [String]],
+                              in dayPhotos: [String]) -> Int {
+        dayPhotos.filter { (before[$0] ?? []) != (after[$0] ?? []) }.count
+    }
 }

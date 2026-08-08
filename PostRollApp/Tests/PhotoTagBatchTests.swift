@@ -84,4 +84,37 @@ final class PhotoTagBatchTests: XCTestCase {
         let existing = [a: ["Mike Bono"]]
         XCTAssertEqual(PhotoTagBatch.applyingToAll(tags: ["Ana"], dayPhotos: [], in: existing), existing)
     }
+
+    // MARK: - Reporting what actually happened
+    //
+    // The button gave no sign it had done anything, so it read as broken while
+    // working. Whatever it reports has to be what actually changed: claiming
+    // "added to all 4" when three already had the tag is a false success.
+
+    func testReportsEveryPhotoWhenNoneHadTheTag() {
+        let before: [String: [String]] = [:]
+        let after = PhotoTagBatch.applyingToAll(tags: ["Ana Ruiz"], dayPhotos: [a, b, c], in: before)
+        XCTAssertEqual(PhotoTagBatch.photosChanged(from: before, to: after, in: [a, b, c]), 3)
+    }
+
+    func testReportsOnlyThePhotosThatDidNotAlreadyHaveIt() {
+        let before = [a: ["Ana Ruiz"], b: ["Ana Ruiz"]]
+        let after = PhotoTagBatch.applyingToAll(tags: ["Ana Ruiz"], dayPhotos: [a, b, c], in: before)
+        XCTAssertEqual(PhotoTagBatch.photosChanged(from: before, to: after, in: [a, b, c]), 1,
+                       "two photos already had her, so only one changed")
+    }
+
+    func testReportsNothingWhenEveryPhotoAlreadyHadTheTag() {
+        let before = [a: ["Ana Ruiz"], b: ["ana ruiz"]]
+        let after = PhotoTagBatch.applyingToAll(tags: ["Ana Ruiz"], dayPhotos: [a, b], in: before)
+        XCTAssertEqual(PhotoTagBatch.photosChanged(from: before, to: after, in: [a, b]), 0,
+                       "nothing changed, and saying otherwise would be a false success")
+    }
+
+    func testChangesOutsideTheDayAreNotCounted() {
+        let before = [a: ["Ana"]]
+        var after = before
+        after["file:///photos/gone.jpg"] = ["Ghost"]
+        XCTAssertEqual(PhotoTagBatch.photosChanged(from: before, to: after, in: [a]), 0)
+    }
 }
