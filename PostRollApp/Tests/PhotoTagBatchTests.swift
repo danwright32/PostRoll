@@ -1,17 +1,15 @@
 import XCTest
 
 /// Issue #172: tagging a 10-photo Wednesday carousel one photo at a time is
-/// slow, so several photos can be selected and tagged in one pass. The
-/// selection and the merge are pure logic, kept out of the view so both can
-/// be tested: a merge that clobbered a photo's existing tags, or a selection
-/// that drifted after photos were removed, would quietly lose Dan's work.
+/// slow, so the tagging sheet can copy the photo on screen's tags onto every
+/// photo in the day at once. The merge is pure logic, kept out of the view so
+/// it can be tested: one that clobbered a photo's existing tags would quietly
+/// lose work with nothing to show it had happened.
 final class PhotoTagBatchTests: XCTestCase {
 
     private let a = "file:///photos/a.jpg"
     private let b = "file:///photos/b.jpg"
     private let c = "file:///photos/c.jpg"
-    private let d = "file:///photos/d.jpg"
-    private var ordered: [String] { [a, b, c, d] }
 
     // MARK: - Applying tags to many photos
 
@@ -58,112 +56,32 @@ final class PhotoTagBatchTests: XCTestCase {
         XCTAssertNil(result[a], "an all-blank batch must not leave an empty tag entry behind")
     }
 
-    // MARK: - Selection
+    // MARK: - Add to every photo in the day
 
-    func testToggleAddsThenRemoves() {
-        var sel = PhotoSelection()
-        sel.toggle(b)
-        XCTAssertEqual(sel.keys, [b])
-        sel.toggle(b)
-        XCTAssertTrue(sel.keys.isEmpty)
+    func testAddToAllReachesEveryPhotoInTheDay() {
+        let result = PhotoTagBatch.applyingToAll(tags: ["Ana Ruiz"], dayPhotos: [a, b, c], in: [:])
+        XCTAssertEqual(result[a], ["Ana Ruiz"])
+        XCTAssertEqual(result[b], ["Ana Ruiz"])
+        XCTAssertEqual(result[c], ["Ana Ruiz"])
     }
 
-    func testShiftExtendsTheRangeForwardFromTheLastPhotoClicked() {
-        var sel = PhotoSelection()
-        sel.toggle(a)
-        sel.extend(to: c, in: ordered)
-        XCTAssertEqual(sel.keys, [a, b, c], "the range is inclusive of both ends")
-        XCTAssertFalse(sel.keys.contains(d))
+    func testAddToAllKeepsWhatEachPhotoAlreadyHad() {
+        let existing = [b: ["Mike Bono"]]
+        let result = PhotoTagBatch.applyingToAll(tags: ["Ana Ruiz"], dayPhotos: [a, b], in: existing)
+        XCTAssertEqual(result[b], ["Mike Bono", "Ana Ruiz"],
+                       "the performer in every shot is added, not swapped for who was already there")
     }
 
-    func testShiftExtendsTheRangeBackwardsToo() {
-        var sel = PhotoSelection()
-        sel.toggle(d)
-        sel.extend(to: b, in: ordered)
-        XCTAssertEqual(sel.keys, [b, c, d])
+    func testAddToAllLeavesStaleEntriesForRemovedPhotosAlone() {
+        let stale = ["file:///photos/gone.jpg": ["Old Tag"]]
+        let result = PhotoTagBatch.applyingToAll(tags: ["Ana Ruiz"], dayPhotos: [a], in: stale)
+        XCTAssertEqual(result["file:///photos/gone.jpg"], ["Old Tag"],
+                       "a photo no longer in the day must not be tagged by an add-to-all")
+        XCTAssertEqual(result[a], ["Ana Ruiz"])
     }
 
-    func testExtendingWithNothingSelectedYetJustSelectsThatPhoto() {
-        var sel = PhotoSelection()
-        sel.extend(to: c, in: ordered)
-        XCTAssertEqual(sel.keys, [c])
-    }
-
-    func testExtendingKeepsWhatWasAlreadySelectedElsewhere() {
-        var sel = PhotoSelection()
-        sel.toggle(a)
-        sel.toggle(c)          // anchor is now c
-        sel.extend(to: d, in: ordered)
-        XCTAssertEqual(sel.keys, [a, c, d], "an earlier pick outside the new range survives")
-    }
-
-    // MARK: - Degenerate input
-
-    func testExtendingToAPhotoThatIsNoLongerInTheDayIsIgnored() {
-        var sel = PhotoSelection()
-        sel.toggle(a)
-        sel.extend(to: "file:///photos/gone.jpg", in: ordered)
-        XCTAssertEqual(sel.keys, [a], "a stale key must not wipe or corrupt the selection")
-    }
-
-    func testSelectionDropsPhotosRemovedFromTheDay() {
-        var sel = PhotoSelection()
-        sel.toggle(a)
-        sel.toggle(c)
-        sel.prune(to: [a, b])
-        XCTAssertEqual(sel.keys, [a], "a deleted photo must not stay selected and get tagged later")
-    }
-
-    func testPruningAlsoDropsAStaleAnchor() {
-        var sel = PhotoSelection()
-        sel.toggle(c)
-        sel.prune(to: [a, b])
-        sel.extend(to: b, in: [a, b])
-        XCTAssertEqual(sel.keys, [b], "with the anchor gone, extend selects just the target")
-    }
-
-    // MARK: - Ordering the selection for the tagging sheet
-
-    func testSelectedPhotosComeBackInTheDaysOrderNotClickOrder() {
-        var sel = PhotoSelection()
-        sel.toggle(c)
-        sel.toggle(a)
-        XCTAssertEqual(PhotoTagBatch.ordered(sel.keys, in: ordered), [a, c],
-                       "the sheet walks the carousel in posting order, not the order photos were clicked")
-    }
-
-    func testOrderingDropsAKeyNoLongerInTheDay() {
-        let stale: Set<String> = [a, "file:///photos/gone.jpg"]
-        XCTAssertEqual(PhotoTagBatch.ordered(stale, in: ordered), [a],
-                       "a photo removed from the day must not be walked or tagged")
-    }
-
-    func testOrderingAnEmptySelectionGivesNothing() {
-        XCTAssertTrue(PhotoTagBatch.ordered([], in: ordered).isEmpty)
-    }
-
-    // MARK: - What the tagging sheet walks
-
-    func testNoSelectionMeansTheSheetWalksTheWholeDay() {
-        XCTAssertEqual(PhotoTagBatch.scope([], in: ordered), ordered,
-                       "opening the sheet from a photo's own tag button walks every photo in the day")
-    }
-
-    func testASelectionMeansTheSheetWalksOnlyThoseSelectedPhotos() {
-        XCTAssertEqual(PhotoTagBatch.scope([d, b], in: ordered), [b, d],
-                       "opening the sheet from the selection bar walks the picked photos, in posting order")
-    }
-
-    func testASelectionWhosePhotosAreAllGoneFallsBackToNothingNotTheWholeDay() {
-        XCTAssertTrue(PhotoTagBatch.scope(["file:///photos/gone.jpg"], in: ordered).isEmpty,
-                      "a stale selection must not silently widen to tagging every photo in the day")
-    }
-
-    func testClearEmptiesTheSelection() {
-        var sel = PhotoSelection()
-        sel.toggle(a)
-        sel.toggle(b)
-        sel.clear()
-        XCTAssertTrue(sel.keys.isEmpty)
+    func testAddToAllOnADayWithNoPhotosChangesNothing() {
+        let existing = [a: ["Mike Bono"]]
+        XCTAssertEqual(PhotoTagBatch.applyingToAll(tags: ["Ana"], dayPhotos: [], in: existing), existing)
     }
 }
