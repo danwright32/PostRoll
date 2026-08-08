@@ -855,12 +855,18 @@ private struct PhotoDaySection: View {
 
     @ViewBuilder
     private func thumbView(for url: URL, at i: Int) -> some View {
-        if let offsetsBinding = cropOffsets {
-            let cropBinding = Binding<CropOffset>(
-                get: { offsetsBinding.wrappedValue[url.absoluteString] ?? CropOffset() },
-                set: { offsetsBinding.wrappedValue[url.absoluteString] = $0 }
-            )
-            // Per-photo tags are Wednesday only; nil binding hides the tag affordance.
+        // Crop (Wednesday, Thursday) and tagging (every carousel day) cover
+        // different days, so each affordance answers only to its own binding.
+        // Gating tagging on the crop binding hid it entirely on Sunday and
+        // Monday, where crop is off but the carousel is real.
+        if PhotoThumbControls.usesDetailedThumb(cropEnabled: cropOffsets != nil,
+                                                taggingEnabled: photoTags != nil) {
+            let cropBinding: Binding<CropOffset>? = cropOffsets.map { offsetsBinding in
+                Binding<CropOffset>(
+                    get: { offsetsBinding.wrappedValue[url.absoluteString] ?? CropOffset() },
+                    set: { offsetsBinding.wrappedValue[url.absoluteString] = $0 }
+                )
+            }
             let tagBinding: Binding<[String]>? = photoTags.map { tags in
                 Binding<[String]>(
                     get: { tags.wrappedValue[url.absoluteString] ?? [] },
@@ -939,7 +945,9 @@ private struct PhotoDaySection: View {
 
 private struct CroppablePhotoThumb: View {
     let url: URL
-    @Binding var cropOffset: CropOffset
+    /// Nil on a day that doesn't crop, which hides the crop button without
+    /// touching any of the other controls.
+    var cropOffset: Binding<CropOffset>? = nil
     var photoTags: Binding<[String]>? = nil
     var tagSuggestions: [PhotoTagSuggestion] = []
     var isReorderTarget: Bool = false
@@ -957,7 +965,8 @@ private struct CroppablePhotoThumb: View {
     @State private var showingTagPopover = false
     @State private var isHovered = false
 
-    var hasCrop: Bool { cropOffset.x != 0 || cropOffset.y != 0 }
+    var offset: CropOffset { cropOffset?.wrappedValue ?? CropOffset() }
+    var hasCrop: Bool { offset.x != 0 || offset.y != 0 }
     var hasTags: Bool { !(photoTags?.wrappedValue.isEmpty ?? true) }
 
     var body: some View {
@@ -968,7 +977,7 @@ private struct CroppablePhotoThumb: View {
                     Image(nsImage: image)
                         .resizable()
                         .scaledToFill()
-                        .offset(x: cropOffset.x * ox, y: cropOffset.y * oy)
+                        .offset(x: offset.x * ox, y: offset.y * oy)
                         .frame(width: 80, height: 80)
                         .clipped()
                 } else if loadFailed {
@@ -1030,26 +1039,29 @@ private struct CroppablePhotoThumb: View {
             .padding(3)
             .opacity(isHovered ? 1 : 0)
 
-            // Crop button — bottom left, visible on hover or when a crop is active
+            // Crop button (bottom left), visible on hover or when a crop is
+            // active. Absent entirely on a day that doesn't crop.
             VStack {
                 Spacer()
                 HStack {
-                    Button {
-                        showingCropPopover = true
-                    } label: {
-                        Image(systemName: hasCrop ? "crop.rotate" : "crop")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(hasCrop ? Color.roseGold : .white.opacity(0.85))
-                            .padding(3)
-                            .background(Color.black.opacity(0.35))
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    if let cropBinding = cropOffset {
+                        Button {
+                            showingCropPopover = true
+                        } label: {
+                            Image(systemName: hasCrop ? "crop.rotate" : "crop")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(hasCrop ? Color.roseGold : .white.opacity(0.85))
+                                .padding(3)
+                                .background(Color.black.opacity(0.35))
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Adjust crop position")
+                        .popover(isPresented: $showingCropPopover, arrowEdge: .bottom) {
+                            CropOffsetPopover(image: image, cropOffset: cropBinding)
+                        }
+                        .opacity(isHovered || hasCrop ? 1 : 0)
                     }
-                    .buttonStyle(.plain)
-                    .help("Adjust crop position")
-                    .popover(isPresented: $showingCropPopover, arrowEdge: .bottom) {
-                        CropOffsetPopover(image: image, cropOffset: $cropOffset)
-                    }
-                    .opacity(isHovered || hasCrop ? 1 : 0)
 
                     if let tagBinding = photoTags {
                         Button {
