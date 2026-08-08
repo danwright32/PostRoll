@@ -67,6 +67,8 @@
 		5AA2695527FDC9FE9D69F842 /* FridayReviewDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6AA2AE88362A839C17311F /* FridayReviewDisplay.swift */; };
 		616D66684D8DEC793B55C7F0 /* TestTargetHygieneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8FCB22FC37C59AF0CF4F0F /* TestTargetHygieneTests.swift */; };
 		6667EECE61AD240E93F94AD9 /* CoverReviewDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 296F4BECD83FCE57CD51D69B /* CoverReviewDisplayTests.swift */; };
+		6A2B201A6CF0F5D6ED1C43F7 /* PhotoTagSheetNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62620037F78394758921A456 /* PhotoTagSheetNavigation.swift */; };
+		6ACC01FABA07442727895FA2 /* PhotoTagSheetNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62620037F78394758921A456 /* PhotoTagSheetNavigation.swift */; };
 		6AFE134A61C3F9790D3A0349 /* CollageGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDAEF16332BD6FA5E410B65 /* CollageGeometry.swift */; };
 		6B1AE726F19C587CEE5F3996 /* EventStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30734A52AAEC8C7D2F66AA83 /* EventStoreTests.swift */; };
 		6C71EC9FE6B95569EFB60D36 /* AppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF84F91C6AB5E2AF9EBA988E /* AppPaths.swift */; };
@@ -150,6 +152,7 @@
 		F574621F63DFACE936FF04D4 /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E176B25F0D09B134F669698 /* PythonBridge.swift */; };
 		F6911248743B1B73AC170AB6 /* PerformerPanelDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4B539E47E7035AFC9A3260F /* PerformerPanelDisplay.swift */; };
 		F7287FF02FF430AADD4D5853 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3090D877CEFCB9583146E70C /* NotificationService.swift */; };
+		F77167B271D905670C030D8C /* PhotoTagSheetNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA97B555966A9023C41462C4 /* PhotoTagSheetNavigationTests.swift */; };
 		F7C3308291DB915741B393B8 /* Event.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD025AADE68A58F67848071 /* Event.swift */; };
 		F84283C1A2E6E8B575960AB5 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62ACB2F17962B8CB7B7C6BC0 /* KeychainStore.swift */; };
 		F919B310442E2174AFBFA260 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62ACB2F17962B8CB7B7C6BC0 /* KeychainStore.swift */; };
@@ -208,6 +211,7 @@
 		584DFA6398241E1B1181F5B4 /* CollageGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollageGeometryTests.swift; sourceTree = "<group>"; };
 		59244790F9F8206EDF755055 /* PhotoThumbControlsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoThumbControlsTests.swift; sourceTree = "<group>"; };
 		5C5C6B3E95CFD0CF0A230DEC /* FridayManifestClipsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FridayManifestClipsTests.swift; sourceTree = "<group>"; };
+		62620037F78394758921A456 /* PhotoTagSheetNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTagSheetNavigation.swift; sourceTree = "<group>"; };
 		62ACB2F17962B8CB7B7C6BC0 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		6750316591A729CE9F71D7EA /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		677D6FC4AA7CD6673840AC38 /* PhotoTagsCodableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTagsCodableTests.swift; sourceTree = "<group>"; };
@@ -280,6 +284,7 @@
 		E4BEB62FA9022665E1A22746 /* AssetGenerationDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetGenerationDisplayTests.swift; sourceTree = "<group>"; };
 		E6B46444B5BF92C486CD5CE4 /* ClipCropFrameStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipCropFrameStrip.swift; sourceTree = "<group>"; };
 		EA6AA2AE88362A839C17311F /* FridayReviewDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FridayReviewDisplay.swift; sourceTree = "<group>"; };
+		EA97B555966A9023C41462C4 /* PhotoTagSheetNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTagSheetNavigationTests.swift; sourceTree = "<group>"; };
 		EBF97A1181DDF030E1E3BA51 /* EventCoverPickWritebackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCoverPickWritebackTests.swift; sourceTree = "<group>"; };
 		F33CF4948C312ECC3CA2464F /* StagePillStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagePillStateTests.swift; sourceTree = "<group>"; };
 		F3D8E207CB219F815A1757C1 /* LegacyDataReclaim.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyDataReclaim.swift; sourceTree = "<group>"; };
@@ -384,6 +389,7 @@
 				A633BF0DA8C2886AB1351758 /* OrphanedMediaCleanup.swift */,
 				D4B539E47E7035AFC9A3260F /* PerformerPanelDisplay.swift */,
 				C137661992FCCFE51C4072D3 /* PhotoTagBatch.swift */,
+				62620037F78394758921A456 /* PhotoTagSheetNavigation.swift */,
 				521CB33CE86D4664B1A8BCF5 /* PhotoThumbControls.swift */,
 				0E6716B61EC5A881EA45EAFE /* PipelineProgress.swift */,
 				B3D01AD78F4EA1A52E642B5A /* PostingPresetStore.swift */,
@@ -453,6 +459,7 @@
 				9851A2EB1A9B4746A7F59C98 /* PhotoTagBatchTests.swift */,
 				25FDF93CB5765B59593B978B /* PhotoTagCaptionCreditTests.swift */,
 				677D6FC4AA7CD6673840AC38 /* PhotoTagsCodableTests.swift */,
+				EA97B555966A9023C41462C4 /* PhotoTagSheetNavigationTests.swift */,
 				59244790F9F8206EDF755055 /* PhotoThumbControlsTests.swift */,
 				B38F6BB35ECEC431626123F2 /* PipelineProgressTests.swift */,
 				E46688CE84EED24AE7EF6948 /* PostingDayClipTests.swift */,
@@ -642,6 +649,7 @@
 				0DF9D7830E37BB75F04725E3 /* PerformerPanelDisplay.swift in Sources */,
 				EFF754FDE2898CB112E7EA15 /* PhotoAssignmentView.swift in Sources */,
 				FEF4AAD94FE86FA9A6F02931 /* PhotoTagBatch.swift in Sources */,
+				6A2B201A6CF0F5D6ED1C43F7 /* PhotoTagSheetNavigation.swift in Sources */,
 				293DE2386C367446459BD883 /* PhotoThumbControls.swift in Sources */,
 				F003296E0C38A01ABDFEF972 /* PipelineProgress.swift in Sources */,
 				204B8C3CE504D46191ECD811 /* PostRollApp.swift in Sources */,
@@ -733,6 +741,8 @@
 				CDD244E3A61A5B3988E3459E /* PhotoTagBatch.swift in Sources */,
 				8CDE144CBEBCF239F6364F90 /* PhotoTagBatchTests.swift in Sources */,
 				785CE3323503B1B9F1BBAE1A /* PhotoTagCaptionCreditTests.swift in Sources */,
+				6ACC01FABA07442727895FA2 /* PhotoTagSheetNavigation.swift in Sources */,
+				F77167B271D905670C030D8C /* PhotoTagSheetNavigationTests.swift in Sources */,
 				9DFBA9DB326309749128F012 /* PhotoTagsCodableTests.swift in Sources */,
 				6F0680A88775CD42106EDCD3 /* PhotoThumbControls.swift in Sources */,
 				A9D3FD5222E56196BF372491 /* PhotoThumbControlsTests.swift in Sources */,

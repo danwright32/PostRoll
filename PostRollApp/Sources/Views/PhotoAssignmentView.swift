@@ -715,6 +715,8 @@ private struct PhotoDaySection: View {
     @State private var selection = PhotoSelection()
     @State private var batchTags: [String] = []
     @State private var showingBatchTagPopover = false
+    /// Index of the photo open in the tagging sheet; nil when it's closed.
+    @State private var taggingIndex: Int? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -799,6 +801,19 @@ private struct PhotoDaySection: View {
         // collect a later batch tag.
         .onChange(of: photos) { _, newValue in
             selection.prune(to: newValue.map(\.absoluteString))
+        }
+        .sheet(isPresented: Binding(get: { taggingIndex != nil },
+                                    set: { if !$0 { taggingIndex = nil } })) {
+            if let tagsBinding = photoTags, taggingIndex != nil {
+                PhotoTaggingSheet(
+                    photos: photos,
+                    photoTags: tagsBinding,
+                    suggestions: tagSuggestions,
+                    index: Binding(get: { taggingIndex ?? 0 },
+                                   set: { taggingIndex = $0 }),
+                    onClose: { taggingIndex = nil }
+                )
+            }
         }
     }
 
@@ -892,6 +907,7 @@ private struct PhotoDaySection: View {
                                         selection.toggle(key)
                                     }
                                 },
+                                onTag: photoTags == nil ? nil : { taggingIndex = i },
                                 onPreview: onPreview,
                                 onRemove: { removePhoto(url) })
         } else {
@@ -956,13 +972,15 @@ private struct CroppablePhotoThumb: View {
     /// range rather than toggle one photo.
     var isSelected: Bool? = nil
     var onSelect: ((_ extending: Bool) -> Void)? = nil
+    /// Opens the tagging sheet for this photo. The sheet needs the whole day's
+    /// photo list to step through, so it's owned by the grid, not the thumb.
+    var onTag: (() -> Void)? = nil
     var onPreview: ((URL) -> Void)? = nil
     let onRemove: () -> Void
 
     @State private var image: NSImage?
     @State private var loadFailed = false
     @State private var showingCropPopover = false
-    @State private var showingTagPopover = false
     @State private var isHovered = false
 
     var offset: CropOffset { cropOffset?.wrappedValue ?? CropOffset() }
@@ -1063,10 +1081,8 @@ private struct CroppablePhotoThumb: View {
                         .opacity(isHovered || hasCrop ? 1 : 0)
                     }
 
-                    if let tagBinding = photoTags {
-                        Button {
-                            showingTagPopover = true
-                        } label: {
+                    if let tagBinding = photoTags, let onTag {
+                        Button(action: onTag) {
                             Image(systemName: hasTags ? "tag.fill" : "tag")
                                 .font(.system(size: 9, weight: .medium))
                                 .foregroundStyle(hasTags ? Color.roseGold : .white.opacity(0.85))
@@ -1076,9 +1092,7 @@ private struct CroppablePhotoThumb: View {
                         }
                         .buttonStyle(.plain)
                         .help(hasTags ? "Tagged: \(tagBinding.wrappedValue.joined(separator: ", "))" : "Tag people in this photo")
-                        .popover(isPresented: $showingTagPopover, arrowEdge: .bottom) {
-                            PhotoTagPopover(tags: tagBinding, suggestions: tagSuggestions)
-                        }
+                        .accessibilityLabel(hasTags ? "Edit tags for this photo" : "Tag people in this photo")
                         // Always visible so per-photo tagging is discoverable;
                         // softer when the photo has no tags yet.
                         .opacity(hasTags || isHovered ? 1 : 0.9)
@@ -1130,20 +1144,15 @@ struct PhotoTagSuggestion: Identifiable, Hashable {
     var id: String { token }
 }
 
-/// Edits the per-photo people tags for a single Wednesday carousel photo.
-/// Tags are free text (names or @handles), comma-separated, and are written
-/// into the master CAPTIONS.txt under the Wednesday section at export. The
-/// event's performers are offered as one-tap suggestions.
-private struct PhotoTagPopover: View {
+/// The tag editing controls themselves: type a name or @handle, see what's
+/// already tagged, one-tap the event's performers. Shared by the popover
+/// (batch tagging) and the tagging sheet (one photo, shown large) so the two
+/// surfaces can't drift apart.
+private struct PhotoTagEditor: View {
     @Binding var tags: [String]
     var suggestions: [PhotoTagSuggestion] = []
-    /// Batch mode (#172) reuses this same popover, retitled, with an explicit
-    /// apply button: one tagging surface, not two that drift apart.
-    var title: String = "TAG PEOPLE IN THIS PHOTO"
-    var hint: String = "Names or @handles. Saved into CAPTIONS.txt for this photo so you know who to tag on the carousel slide."
     var tagsHeading: String = "TAGGED IN THIS PHOTO"
-    var applyLabel: String? = nil
-    var onApply: (() -> Void)? = nil
+    var autoFocus: Bool = true
     @State private var newTag: String = ""
     @FocusState private var focused: Bool
 
@@ -1155,16 +1164,6 @@ private struct PhotoTagPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text(title)
-                .font(.system(size: 9, weight: .medium))
-                .tracking(1.0)
-                .foregroundStyle(Color.warmMid)
-
-            Text(hint)
-                .font(.system(size: 10))
-                .foregroundStyle(Color.warmMid.opacity(0.8))
-                .fixedSize(horizontal: false, vertical: true)
-
             HStack(spacing: 6) {
                 TextField("Add a name or @handle", text: $newTag)
                     .textFieldStyle(.plain)
@@ -1214,6 +1213,7 @@ private struct PhotoTagPopover: View {
                                             .foregroundStyle(Color.warmMid)
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityLabel("Remove \(tag)")
                                 }
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
@@ -1234,27 +1234,8 @@ private struct PhotoTagPopover: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 220)
-
-            if let applyLabel, let onApply {
-                Button(action: onApply) {
-                    Text(applyLabel)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(tags.isEmpty ? Color.warmMid : Color.cream)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 7)
-                        .background(
-                            RoundedRectangle(cornerRadius: Radius.xs)
-                                .fill(tags.isEmpty ? Color.creamDeep : Color.roseGold)
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(tags.isEmpty)
-            }
         }
-        .padding(Spacing.md)
-        .frame(width: 280)
-        .onAppear { focused = true }
+        .onAppear { if autoFocus { focused = true } }
     }
 
     /// Splits free text on commas and adds each token.
@@ -1270,6 +1251,208 @@ private struct PhotoTagPopover: View {
         if !tags.contains(where: { $0.lowercased() == trimmed.lowercased() }) {
             tags.append(trimmed)
         }
+    }
+}
+
+/// Adds the same tags to every photo in a batch selection (#172). There is no
+/// single photo to show here, so this stays a compact popover; tagging one
+/// photo uses PhotoTaggingSheet, which shows the photo large.
+private struct PhotoTagPopover: View {
+    @Binding var tags: [String]
+    var suggestions: [PhotoTagSuggestion] = []
+    var title: String
+    var hint: String
+    var tagsHeading: String
+    var applyLabel: String
+    var onApply: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text(title)
+                .font(.system(size: 9, weight: .medium))
+                .tracking(1.0)
+                .foregroundStyle(Color.warmMid)
+
+            Text(hint)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.warmMid.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+
+            PhotoTagEditor(tags: $tags, suggestions: suggestions, tagsHeading: tagsHeading)
+                .frame(maxHeight: 260)
+
+            Button(action: onApply) {
+                Text(applyLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(tags.isEmpty ? Color.warmMid : Color.cream)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.xs)
+                            .fill(tags.isEmpty ? Color.creamDeep : Color.roseGold)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(tags.isEmpty)
+        }
+        .padding(Spacing.md)
+        .frame(width: 280)
+    }
+}
+
+/// Tags one photo at a time with the photo shown large, and walks the day's
+/// carousel with previous/next. An 80pt thumbnail is too small to tell who is
+/// actually in a wide stage shot, which is the whole reason tagging exists.
+private struct PhotoTaggingSheet: View {
+    let photos: [URL]
+    @Binding var photoTags: [String: [String]]
+    var suggestions: [PhotoTagSuggestion] = []
+    @Binding var index: Int
+    let onClose: () -> Void
+
+    @State private var image: NSImage?
+    @State private var loadFailed = false
+
+    private var safeIndex: Int {
+        PhotoTagSheetNavigation.clamped(index: index, count: photos.count)
+    }
+    private var currentURL: URL? {
+        photos.isEmpty ? nil : photos[safeIndex]
+    }
+    private var tagsBinding: Binding<[String]> {
+        Binding<[String]>(
+            get: { currentURL.flatMap { photoTags[$0.absoluteString] } ?? [] },
+            set: { newValue in
+                guard let key = currentURL?.absoluteString else { return }
+                photoTags[key] = newValue.isEmpty ? nil : newValue
+            }
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            RoseGoldDivider(opacity: 0.2)
+
+            HStack(alignment: .top, spacing: Spacing.lg) {
+                photoPane
+                    .frame(width: 460)
+
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text("Names or @handles. Saved into CAPTIONS.txt for this photo so you know who to tag on the slide.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.warmMid.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Re-created per photo so the text field clears and the
+                    // chips reflect the photo now on screen, not the last one.
+                    PhotoTagEditor(tags: tagsBinding, suggestions: suggestions)
+                        .id(currentURL?.absoluteString ?? "none")
+                }
+                .frame(width: 260)
+            }
+            .padding(Spacing.lg)
+
+            RoseGoldDivider(opacity: 0.2)
+            footer
+        }
+        .frame(width: 800, height: 560)
+        .background(Color.cream)
+        .task(id: currentURL) { await loadCurrent() }
+    }
+
+    private var header: some View {
+        HStack {
+            Text("TAG PEOPLE")
+                .font(.system(size: 10, weight: .medium))
+                .tracking(1.2)
+                .foregroundStyle(Color.roseGold)
+            Spacer()
+            Text(PhotoTagSheetNavigation.label(index: safeIndex, count: photos.count))
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmMid)
+            Spacer()
+            Button(action: onClose) {
+                Image(systemName: "xmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Color.cream, Color.warmMid)
+                    .font(.system(size: 18))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)
+            .accessibilityLabel("Close tagging")
+        }
+        .padding(.horizontal, Spacing.lg)
+        .padding(.vertical, Spacing.md)
+    }
+
+    @ViewBuilder
+    private var photoPane: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: Radius.md).fill(Color.creamDeep)
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+            } else if loadFailed {
+                // An unreadable photo says so rather than sitting on a
+                // spinner that looks identical to still loading.
+                VStack(spacing: Spacing.sm) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Color.roseGold)
+                    Text("This photo could not be opened.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warmMid)
+                }
+            } else {
+                ProgressView().controlSize(.small).tint(Color.roseGold)
+            }
+        }
+        .frame(height: 380)
+    }
+
+    private var footer: some View {
+        HStack {
+            Button {
+                index = PhotoTagSheetNavigation.previous(from: safeIndex, count: photos.count)
+            } label: {
+                Label("Previous", systemImage: "chevron.left")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(PhotoTagSheetNavigation.canGoPrevious(from: safeIndex, count: photos.count)
+                             ? Color.roseGold : Color.warmFaint)
+            .disabled(!PhotoTagSheetNavigation.canGoPrevious(from: safeIndex, count: photos.count))
+            .keyboardShortcut(.leftArrow, modifiers: [])
+
+            Spacer()
+
+            Button {
+                index = PhotoTagSheetNavigation.next(from: safeIndex, count: photos.count)
+            } label: {
+                Label("Next", systemImage: "chevron.right")
+                    .font(.system(size: 12))
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(PhotoTagSheetNavigation.canGoNext(from: safeIndex, count: photos.count)
+                             ? Color.roseGold : Color.warmFaint)
+            .disabled(!PhotoTagSheetNavigation.canGoNext(from: safeIndex, count: photos.count))
+            .keyboardShortcut(.rightArrow, modifiers: [])
+        }
+        .padding(.horizontal, Spacing.lg)
+        .padding(.vertical, Spacing.md)
+    }
+
+    private func loadCurrent() async {
+        guard let url = currentURL else { return }
+        image = nil
+        loadFailed = false
+        let loaded = await Task.detached { NSImage(contentsOf: url) }.value
+        image = loaded
+        loadFailed = (loaded == nil)
     }
 }
 
