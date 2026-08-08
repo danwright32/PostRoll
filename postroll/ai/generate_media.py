@@ -142,6 +142,23 @@ from .audio_tags import thursday_tags as _derive_audio_tags  # noqa: E402
 from ..media.missing_media import MissingMediaError, require_present  # noqa: E402
 
 
+def _record_error(errors: dict, day: str, message: str) -> None:
+    """Add a failure to a day's report without erasing what's already there.
+
+    A day can fail for more than one reason at once (a missing B&W photo AND no
+    ffmpeg installed). Each write used to replace the last, so whichever check
+    ran second silently erased the first and the report claimed one cause when
+    there were two. Identical messages are not repeated.
+    """
+    existing = errors.get(day)
+    if not existing:
+        errors[day] = message
+        return
+    if message in existing:
+        return
+    errors[day] = f"{existing}; {message}"
+
+
 def _missing_chosen_media(day_info: dict) -> str | None:
     """Message naming every photo this day CHOSE that is not on disk.
 
@@ -214,7 +231,7 @@ def _render_cover(
     except Exception as e:
         msg = f"cover failed: {e}"
         print(f"[generate_media] {day_name}: ERROR: {msg}", flush=True, file=sys.stderr)
-        errors[day_name] = (errors.get(day_name) + "; " if day_name in errors else "") + msg
+        _record_error(errors, day_name, msg)
 
 
 def generate_media(
@@ -314,7 +331,7 @@ def generate_media(
                 except Exception as e:
                     msg = f"story failed: {e}"
                     print(f"[generate_media] {day_name}: ERROR — {msg}", flush=True, file=sys.stderr)
-                    errors[day_name] = msg
+                    _record_error(errors, day_name, msg)
             elif kind == COLLAGE_CAROUSEL:
                 try:
                     collage_path = str(day_dir / "collage.png")
@@ -345,7 +362,7 @@ def generate_media(
                 except Exception as e:
                     msg = f"collage failed: {e}"
                     print(f"[generate_media] {day_name}: ERROR — {msg}", flush=True, file=sys.stderr)
-                    errors[day_name] = msg
+                    _record_error(errors, day_name, msg)
 
         # ──────────────────────────────────────────────────────────────
         # Tuesday — speed edit reel (screen recording + RAW + edited)
@@ -369,7 +386,7 @@ def generate_media(
             missing_inputs = _missing_chosen_media(day_info)
             if missing_inputs:
                 print(f"[generate_media] tuesday: ERROR: {missing_inputs}", flush=True, file=sys.stderr)
-                errors["tuesday"] = missing_inputs
+                _record_error(errors, "tuesday", missing_inputs)
 
             # Also generate the standalone before/after PNG. Serves two roles:
             #   1. Closing frame for the slider/morph reel (always needed on disk).
@@ -428,7 +445,7 @@ def generate_media(
                     except Exception as e:
                         msg = f"speed edit reel failed: {e}"
                         print(f"[generate_media] tuesday: ERROR — {msg}", flush=True, file=sys.stderr)
-                        errors["tuesday"] = msg
+                        _record_error(errors, "tuesday", msg)
                 else:
                     # Still-image reel: slider reveal or split-compare morph
                     try:
@@ -466,12 +483,12 @@ def generate_media(
                     except Exception as e:
                         msg = f"{reel_style} reel failed: {e}"
                         print(f"[generate_media] tuesday: ERROR — {msg}", flush=True, file=sys.stderr)
-                        errors["tuesday"] = msg
+                        _record_error(errors, "tuesday", msg)
             elif not ffmpeg_available:
                 # Not a log line and a still image: the reel that was asked for
                 # cannot be made, and the person needs the install command (#87).
                 print(f"[generate_media] tuesday: ERROR: {tools.message}", flush=True, file=sys.stderr)
-                errors["tuesday"] = tools.message
+                _record_error(errors, "tuesday", tools.message)
             elif static_only:
                 print("[generate_media] tuesday: reel skipped (static-only preview)", flush=True)
             else:
@@ -493,7 +510,7 @@ def generate_media(
                     )
                     day_result["story"] = story_path
                 except Exception as e:
-                    errors["tuesday"] = f"story fallback failed: {e}"
+                    _record_error(errors, "tuesday", f"story fallback failed: {e}")
 
             # Clean up the temp before/after PNG (used only as the reel's
             # closing frame during final export).
@@ -556,7 +573,7 @@ def generate_media(
                 except Exception as e:
                     msg = f"scroll reel failed: {e}"
                     print(f"[generate_media] thursday: ERROR — {msg}", flush=True, file=sys.stderr)
-                    errors["thursday"] = msg
+                    _record_error(errors, "thursday", msg)
             else:
                 if static_only:
                     print("[generate_media] thursday: reel skipped (static-only preview), generating story", flush=True)
@@ -572,10 +589,10 @@ def generate_media(
                         )
                         day_result["story"] = story_path
                     except Exception as e:
-                        errors["thursday"] = f"story fallback failed: {e}"
+                        _record_error(errors, "thursday", f"story fallback failed: {e}")
                 else:
                     print(f"[generate_media] thursday: ERROR: {tools.message}", flush=True, file=sys.stderr)
-                    errors["thursday"] = tools.message
+                    _record_error(errors, "thursday", tools.message)
 
             _render_cover(
                 day_name="thursday",
@@ -602,7 +619,7 @@ def generate_media(
             missing_inputs = _missing_chosen_media(day_info)
             if missing_inputs:
                 print(f"[generate_media] friday: ERROR: {missing_inputs}", flush=True, file=sys.stderr)
-                errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + missing_inputs
+                _record_error(errors, "friday", missing_inputs)
 
             # Auto-cut clip reel: only attempted when clips were imported.
             # Any failure (too few usable clips, Claude error, ffmpeg crash)
@@ -615,7 +632,7 @@ def generate_media(
                 # before/after below still runs, but the person is told why the
                 # reel isn't there (#87).
                 print(f"[generate_media] friday: ERROR: {tools.message}", flush=True, file=sys.stderr)
-                errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + tools.message
+                _record_error(errors, "friday", tools.message)
             if ffmpeg_available and not static_only and clips:
                 try:
                     scored = score_clips(clips)
@@ -684,11 +701,11 @@ def generate_media(
                     # buttons the UI can't infer from generic error text.
                     msg = f"insufficient_clips: {e}"
                     print(f"[generate_media] friday: {msg}", flush=True, file=sys.stderr)
-                    errors["friday"] = msg
+                    _record_error(errors, "friday", msg)
                 except Exception as e:
                     msg = f"clip reel skipped: {e}"
                     print(f"[generate_media] friday: {msg}", flush=True, file=sys.stderr)
-                    errors["friday"] = msg
+                    _record_error(errors, "friday", msg)
 
             if reel_rendered:
                 with tempfile.TemporaryDirectory(prefix="postroll-coverframes-") as cover_tmp:
@@ -722,7 +739,7 @@ def generate_media(
                 except Exception as e:
                     msg = f"before/after failed: {e}"
                     print(f"[generate_media] friday: ERROR — {msg}", flush=True, file=sys.stderr)
-                    errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + msg
+                    _record_error(errors, "friday", msg)
             elif not reel_rendered and not missing_inputs:
                 # Fallback: story template. Only when the inputs were never
                 # chosen, never as a substitute for one that has gone missing.
@@ -742,7 +759,7 @@ def generate_media(
                         day_result["story"] = story_path
                     except Exception as e:
                         msg = f"story fallback failed: {e}"
-                        errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + msg
+                        _record_error(errors, "friday", msg)
 
         results[day_name] = day_result or None
 

@@ -142,3 +142,26 @@ def test_style_decision_and_render_agree_on_a_present_bw(sample_photo):
     # The style picks 3-photo from bw alone. That is only safe because the
     # render now refuses a missing bw instead of quietly dropping to 2 photos.
     assert resolve_tuesday_reel_style(bw=str(sample_photo), requested="morph") == "slider"
+
+
+def test_two_independent_failures_on_one_day_both_survive(
+    monkeypatch, tmp_path, sample_photo, tmp_output
+):
+    """A day can fail for more than one reason at once. Each write to the day's
+    error used to replace the last, so whichever check ran second silently
+    erased the first: with no ffmpeg installed, the missing B&W photo vanished
+    from the report entirely. Caught by CI, whose runners have no ffmpeg."""
+    from postroll.ai.generate_media import generate_media
+
+    monkeypatch.setattr("shutil.which", lambda name: None)   # no ffmpeg
+    gone = tmp_path / "bw.jpg"
+
+    results = generate_media(
+        _manifest("tuesday", tmp_path, sample_photo, str(gone)),
+        tmp_output,
+        static_only=False,
+    )
+
+    message = results["errors"].get("tuesday", "")
+    assert "B&W photo" in message, f"the missing photo was erased by the other failure: {message}"
+    assert "ffmpeg" in message, f"the missing toolchain was erased by the other failure: {message}"
