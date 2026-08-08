@@ -54,6 +54,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from . import cap_signals
 from .generate_captions import generate_caption
 from .generate_blog import generate_blog
 from .select_reel_photos import select_reel_photos, DEFAULT_MAX_REEL_PHOTOS
@@ -306,6 +307,28 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
             raise
         except Exception as e:
             t_captions_end = time.time()
+            # A usage cap makes every remaining day fail the same way, so it is
+            # promoted out of this handler rather than filed as one bad day and
+            # hammered five more times (#211). Only a RECOGNISED cap: an
+            # unfamiliar error stays ordinary, because halting on anything we
+            # do not understand turns every new error string into a cancelled
+            # evening.
+            signal = cap_signals.classify(str(e))
+            if cap_signals.should_halt(signal):
+                reason = "Claude usage limit reached"
+                if signal.resets_at:
+                    reason += f", resets at {signal.resets_at}"
+                reason += ". Everything generated so far is saved."
+                # Persisted HERE rather than relying on the FatalGenerationError
+                # clause above: that clause is a sibling of this one, so an
+                # exception raised inside this handler is not caught by it and
+                # the partial week would be lost on the way out (#206, #211).
+                print(f"[generate_week] {day_name}: STOPPING: {reason}",
+                      flush=True, file=sys.stderr)
+                results["errors"] = errors
+                _write_results(output_path, results, complete=False,
+                               stopped_reason=reason)
+                raise FatalGenerationError(reason) from e
             print(f"[generate_week] {day_name}: ERROR: {e}", flush=True, file=sys.stderr)
             errors[day_name] = str(e)
             results[day_name] = None
