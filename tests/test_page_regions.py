@@ -248,3 +248,29 @@ def test_the_ocr_path_leaves_a_small_page_alone(tmp_path, monkeypatch):
     op.extract_program([str(page)])
 
     assert len(sent[0]) == 1, "a page that needs no splitting was split anyway"
+
+
+def test_a_page_that_cannot_be_split_is_still_read_and_says_so(tmp_path, monkeypatch, capsys):
+    """A page we cannot split is still a page we can read, just on the path
+    that misreads small type. Failing the whole upload would lose the program;
+    staying silent would hide that the names on it are less trustworthy."""
+    import postroll.ai.ocr_program as op
+
+    page = _page(tmp_path, width=3024, height=4032, name="broken.png")
+
+    def boom(*a, **kw):
+        raise OSError("cannot write band")
+
+    monkeypatch.setattr(op, "split_page", boom)
+    sent: list[list[str]] = []
+
+    def fake_run_json(prompt, timeout=600, image_paths=None, **kwargs):
+        sent.append(list(image_paths or []))
+        return {"performers": [], "pieces": []}
+
+    monkeypatch.setattr(op, "run_json_prompt", fake_run_json)
+    op.extract_program([str(page)])
+
+    assert len(sent[0]) == 1, "the page was dropped instead of being sent whole"
+    err = capsys.readouterr().err.lower()
+    assert "misread" in err, "the reader is not told the small print is less reliable"
