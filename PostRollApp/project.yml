@@ -53,6 +53,8 @@ targets:
       - path: Sources/Services/CollageCandidate.swift
       - path: Sources/Services/CollageCandidateCache.swift
       - path: Sources/Services/PreviewMergePolicy.swift
+      - path: Sources/Services/PerformerPanelDisplay.swift
+      - path: Sources/Services/PhotoTagBatch.swift
       - path: Sources/Services/FridayReviewDisplay.swift
       - path: Sources/Services/CoverReviewDisplay.swift
       - path: Sources/Services/PipelineProgress.swift

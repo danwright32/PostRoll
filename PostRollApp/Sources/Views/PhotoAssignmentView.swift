@@ -305,6 +305,7 @@ struct PhotoAssignmentView: View {
                             selectedPerformerIDs: performerBinding(day),
                             handles: handleBinding(day),
                             names: plainNameBinding(day),
+                            isCarouselDay: isCollageDay(day),
                             onChanged: { save() }
                         )
                     }
@@ -709,6 +710,11 @@ private struct PhotoDaySection: View {
     @State private var isExpanded = true
     @State private var isDropTargeted = false
     @State private var reorderTargetIndex: Int? = nil
+    // Batch tagging (#172): which photos are picked out, and the tags being
+    // composed for them. Only ever used where photoTags is non-nil.
+    @State private var selection = PhotoSelection()
+    @State private var batchTags: [String] = []
+    @State private var showingBatchTagPopover = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -768,6 +774,9 @@ private struct PhotoDaySection: View {
                             }
                         }
                     }
+                    if photoTags != nil, !selection.isEmpty {
+                        batchTagBar
+                    }
                     if let collageNote {
                         Text(collageNote).font(.system(size: 10)).foregroundStyle(Color.warmMid).padding(.top, 2)
                     }
@@ -786,6 +795,62 @@ private struct PhotoDaySection: View {
             RoseGoldDivider(opacity: 0.3)
         }
         .onDrop(of: [.image, .fileURL], isTargeted: $isDropTargeted) { handleDrop($0) }
+        // A photo removed or reordered away must not stay silently selected and
+        // collect a later batch tag.
+        .onChange(of: photos) { _, newValue in
+            selection.prune(to: newValue.map(\.absoluteString))
+        }
+    }
+
+    /// Shown once at least one photo is selected: how many, and the one action
+    /// that selection exists for.
+    private var batchTagBar: some View {
+        HStack(spacing: Spacing.sm) {
+            Text("\(selection.count) selected")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.warmDark)
+
+            Button("Tag \(selection.count == 1 ? "this photo" : "these \(selection.count)")…") {
+                batchTags = []
+                showingBatchTagPopover = true
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(Color.roseGold)
+            .popover(isPresented: $showingBatchTagPopover, arrowEdge: .bottom) {
+                PhotoTagPopover(
+                    tags: $batchTags,
+                    suggestions: tagSuggestions,
+                    title: "TAG PEOPLE IN \(selection.count) PHOTO\(selection.count == 1 ? "" : "S")",
+                    hint: "Names or @handles. Added to every selected photo. Tags already on a photo are kept.",
+                    tagsHeading: "ADDING TO EVERY SELECTED PHOTO",
+                    applyLabel: "Add to \(selection.count) photo\(selection.count == 1 ? "" : "s")",
+                    onApply: applyBatchTags
+                )
+            }
+
+            Button("Clear") { selection.clear() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmMid)
+
+            Spacer()
+        }
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: Radius.xs).fill(Color.roseGold.opacity(0.08)))
+    }
+
+    private func applyBatchTags() {
+        guard let tagsBinding = photoTags else { return }
+        // Write in the day's photo order so the stored tags line up with how
+        // the carousel reads, not with the selection's insertion order.
+        let keys = photos.map(\.absoluteString).filter { selection.contains($0) }
+        tagsBinding.wrappedValue = PhotoTagBatch.applying(
+            tags: batchTags, to: keys, in: tagsBinding.wrappedValue)
+        batchTags = []
+        showingBatchTagPopover = false
+        selection.clear()
     }
 
     @ViewBuilder
@@ -812,6 +877,15 @@ private struct PhotoDaySection: View {
                                 photoTags: tagBinding,
                                 tagSuggestions: tagSuggestions,
                                 isReorderTarget: reorderTargetIndex == i,
+                                isSelected: photoTags == nil ? nil : selection.contains(url.absoluteString),
+                                onSelect: photoTags == nil ? nil : { extending in
+                                    let key = url.absoluteString
+                                    if extending {
+                                        selection.extend(to: key, in: photos.map(\.absoluteString))
+                                    } else {
+                                        selection.toggle(key)
+                                    }
+                                },
                                 onPreview: onPreview,
                                 onRemove: { removePhoto(url) })
         } else {
@@ -869,6 +943,11 @@ private struct CroppablePhotoThumb: View {
     var photoTags: Binding<[String]>? = nil
     var tagSuggestions: [PhotoTagSuggestion] = []
     var isReorderTarget: Bool = false
+    /// Batch tagging (#172). Non-nil only where per-photo tagging exists; the
+    /// Bool passed back says whether shift was held, so the grid can extend a
+    /// range rather than toggle one photo.
+    var isSelected: Bool? = nil
+    var onSelect: ((_ extending: Bool) -> Void)? = nil
     var onPreview: ((URL) -> Void)? = nil
     let onRemove: () -> Void
 
@@ -912,6 +991,33 @@ private struct CroppablePhotoThumb: View {
             .opacity(isReorderTarget ? 0.75 : 1.0)
             .animation(.easeOut(duration: 0.1), value: isReorderTarget)
             .onTapGesture { onPreview?(url) }
+
+            // Selection circle (top left), always drawn where batch tagging is
+            // available so it reads as a control at rest, not on hover only.
+            if let isSelected, let onSelect {
+                VStack {
+                    HStack {
+                        Button {
+                            onSelect(NSEvent.modifierFlags.contains(.shift))
+                        } label: {
+                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                .symbolRenderingMode(isSelected ? .palette : .monochrome)
+                                .foregroundStyle(isSelected ? Color.cream : .white.opacity(0.9),
+                                                 Color.roseGold)
+                                .font(.system(size: 15))
+                                .shadow(color: .black.opacity(0.35), radius: 1.5)
+                        }
+                        .buttonStyle(.plain)
+                        .help(isSelected ? "Selected. Shift-click to select a range."
+                                         : "Select this photo to tag several at once. Shift-click to select a range.")
+                        .accessibilityLabel(isSelected ? "Deselect photo" : "Select photo")
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(3)
+                .frame(width: 80, height: 80)
+            }
 
             // Remove button — top right
             Button(action: onRemove) {
@@ -1019,6 +1125,13 @@ struct PhotoTagSuggestion: Identifiable, Hashable {
 private struct PhotoTagPopover: View {
     @Binding var tags: [String]
     var suggestions: [PhotoTagSuggestion] = []
+    /// Batch mode (#172) reuses this same popover, retitled, with an explicit
+    /// apply button: one tagging surface, not two that drift apart.
+    var title: String = "TAG PEOPLE IN THIS PHOTO"
+    var hint: String = "Names or @handles. Saved into CAPTIONS.txt for this photo so you know who to tag on the carousel slide."
+    var tagsHeading: String = "TAGGED IN THIS PHOTO"
+    var applyLabel: String? = nil
+    var onApply: (() -> Void)? = nil
     @State private var newTag: String = ""
     @FocusState private var focused: Bool
 
@@ -1030,12 +1143,12 @@ private struct PhotoTagPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("TAG PEOPLE IN THIS PHOTO")
+            Text(title)
                 .font(.system(size: 9, weight: .medium))
                 .tracking(1.0)
                 .foregroundStyle(Color.warmMid)
 
-            Text("Names or @handles. Saved into CAPTIONS.txt for this photo so you know who to tag on the carousel slide.")
+            Text(hint)
                 .font(.system(size: 10))
                 .foregroundStyle(Color.warmMid.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)
@@ -1072,7 +1185,7 @@ private struct PhotoTagPopover: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     if !tags.isEmpty {
-                        Text("TAGGED IN THIS PHOTO")
+                        Text(tagsHeading)
                             .font(.system(size: 8, weight: .medium))
                             .tracking(0.8)
                             .foregroundStyle(Color.warmMid.opacity(0.7))
@@ -1110,6 +1223,22 @@ private struct PhotoTagPopover: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxHeight: 220)
+
+            if let applyLabel, let onApply {
+                Button(action: onApply) {
+                    Text(applyLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(tags.isEmpty ? Color.warmMid : Color.cream)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: Radius.xs)
+                                .fill(tags.isEmpty ? Color.creamDeep : Color.roseGold)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(tags.isEmpty)
+            }
         }
         .padding(Spacing.md)
         .frame(width: 280)
@@ -2137,9 +2266,30 @@ private struct PerformerAssignmentSection: View {
     @Binding var selectedPerformerIDs: Set<UUID>
     @Binding var handles: String
     @Binding var names: String
+    /// True on a day laid out as a per-photo carousel, where people are tagged
+    /// on the photos themselves and this panel is the fallback (#171).
+    let isCarouselDay: Bool
     let onChanged: () -> Void
 
-    @State private var isExpanded = true
+    @State private var isExpanded: Bool
+
+    init(day: DayName, performers: [Performer], eventHandles: String,
+         selectedPerformerIDs: Binding<Set<UUID>>, handles: Binding<String>,
+         names: Binding<String>, isCarouselDay: Bool, onChanged: @escaping () -> Void) {
+        self.day = day
+        self.performers = performers
+        self.eventHandles = eventHandles
+        self._selectedPerformerIDs = selectedPerformerIDs
+        self._handles = handles
+        self._names = names
+        self.isCarouselDay = isCarouselDay
+        self.onChanged = onChanged
+        let hasContent = !handles.wrappedValue.isEmpty
+            || !names.wrappedValue.isEmpty
+            || !selectedPerformerIDs.wrappedValue.isEmpty
+        self._isExpanded = State(initialValue: PerformerPanelDisplay.startsExpanded(
+            isCarouselDay: isCarouselDay, hasContent: hasContent))
+    }
 
     private var hasContent: Bool {
         !handles.isEmpty || !names.isEmpty || !selectedPerformerIDs.isEmpty
@@ -2152,7 +2302,7 @@ private struct PerformerAssignmentSection: View {
                     Image(systemName: hasContent ? "person.crop.rectangle.stack.fill" : "person.crop.rectangle.stack")
                         .font(.system(size: 11))
                         .foregroundStyle(hasContent ? Color.roseGold : Color.warmMid)
-                    Text("ASSIGN PERFORMERS")
+                    Text(PerformerPanelDisplay.title(isCarouselDay: isCarouselDay))
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
                         .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
@@ -2174,6 +2324,13 @@ private struct PerformerAssignmentSection: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
+                    if let hint = PerformerPanelDisplay.hint(isCarouselDay: isCarouselDay) {
+                        Text(hint)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.warmMid.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     if !performers.isEmpty {
                         PerformerCheckboxGrid(
                             performers: performers,

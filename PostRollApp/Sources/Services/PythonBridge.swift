@@ -12,6 +12,21 @@ actor PythonBridge {
         "unknown", "n/a", "na", "none", "-", "no", "skip",
     ]
 
+    /// Drops later case-insensitive repeats, keeping the first spelling seen.
+    /// Credits arrive from several places (event handles, performer checkboxes,
+    /// typed-in extras, per-photo tags) and the same person routinely turns up
+    /// in more than one.
+    nonisolated static func dedupedPreservingOrder(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for value in values {
+            let key = value.trimmingCharacters(in: .whitespaces).lowercased()
+            guard !key.isEmpty, seen.insert(key).inserted else { continue }
+            out.append(value)
+        }
+        return out
+    }
+
     nonisolated static func isRealHandle(_ handle: String) -> Bool {
         var h = handle.trimmingCharacters(in: .whitespaces).lowercased()
         if h.hasPrefix("@") { h = String(h.dropFirst()) }
@@ -1002,9 +1017,34 @@ actor PythonBridge {
                 }
             }
 
-            // Event-wide handles (org, venue) + selected performer handles + manual day handles
-            let allHandles = eventHandleList + performerHandles + pd.tagHandles
-            let allNames   = performerNames + pd.nameMentions
+            // People tagged on individual photos are credited by the caption too
+            // (#171). Without this, tagging a carousel photo only produced the
+            // PHOTO TAGS list in CAPTIONS.txt and Dan had to tick the same
+            // person again at day level to get them into the caption.
+            var photoTagHandles: [String] = []
+            var photoTagNames: [String] = []
+            for tags in pd.photoTags.values {
+                for raw in tags {
+                    let tag = raw.trimmingCharacters(in: .whitespaces)
+                    guard !tag.isEmpty else { continue }
+                    if tag.hasPrefix("@") {
+                        if Self.isRealHandle(tag) { photoTagHandles.append(tag) }
+                    } else {
+                        photoTagNames.append(tag)
+                    }
+                }
+            }
+            // photoTags iterates a dictionary, so sort for a stable manifest.
+            photoTagHandles.sort()
+            photoTagNames.sort()
+
+            // Event-wide handles (org, venue) + selected performer handles +
+            // manual day handles + per-photo tags. Deduped case-insensitively so
+            // someone picked two ways is credited once.
+            let allHandles = Self.dedupedPreservingOrder(
+                eventHandleList + performerHandles + pd.tagHandles + photoTagHandles)
+            let allNames = Self.dedupedPreservingOrder(
+                performerNames + pd.nameMentions + photoTagNames)
             if !allHandles.isEmpty { dayEntry["tag_handles"]   = allHandles }
             if !allNames.isEmpty   { dayEntry["name_mentions"] = allNames }
             if !pd.notes.isEmpty   { dayEntry["notes"]         = pd.notes }
