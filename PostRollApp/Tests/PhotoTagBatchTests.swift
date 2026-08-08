@@ -122,6 +122,43 @@ final class PhotoTagBatchTests: XCTestCase {
         XCTAssertEqual(sel.keys, [b], "with the anchor gone, extend selects just the target")
     }
 
+    // MARK: - Ordering the selection for the tagging sheet
+
+    func testSelectedPhotosComeBackInTheDaysOrderNotClickOrder() {
+        var sel = PhotoSelection()
+        sel.toggle(c)
+        sel.toggle(a)
+        XCTAssertEqual(PhotoTagBatch.ordered(sel.keys, in: ordered), [a, c],
+                       "the sheet walks the carousel in posting order, not the order photos were clicked")
+    }
+
+    func testOrderingDropsAKeyNoLongerInTheDay() {
+        let stale: Set<String> = [a, "file:///photos/gone.jpg"]
+        XCTAssertEqual(PhotoTagBatch.ordered(stale, in: ordered), [a],
+                       "a photo removed from the day must not be walked or tagged")
+    }
+
+    func testOrderingAnEmptySelectionGivesNothing() {
+        XCTAssertTrue(PhotoTagBatch.ordered([], in: ordered).isEmpty)
+    }
+
+    // MARK: - What the tagging sheet walks
+
+    func testNoSelectionMeansTheSheetWalksTheWholeDay() {
+        XCTAssertEqual(PhotoTagBatch.scope([], in: ordered), ordered,
+                       "opening the sheet from a photo's own tag button walks every photo in the day")
+    }
+
+    func testASelectionMeansTheSheetWalksOnlyThoseSelectedPhotos() {
+        XCTAssertEqual(PhotoTagBatch.scope([d, b], in: ordered), [b, d],
+                       "opening the sheet from the selection bar walks the picked photos, in posting order")
+    }
+
+    func testASelectionWhosePhotosAreAllGoneFallsBackToNothingNotTheWholeDay() {
+        XCTAssertTrue(PhotoTagBatch.scope(["file:///photos/gone.jpg"], in: ordered).isEmpty,
+                      "a stale selection must not silently widen to tagging every photo in the day")
+    }
+
     func testClearEmptiesTheSelection() {
         var sel = PhotoSelection()
         sel.toggle(a)

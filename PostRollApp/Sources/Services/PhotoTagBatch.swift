@@ -26,6 +26,25 @@ enum PhotoTagBatch {
         }
         return updated
     }
+
+    /// The selected photos in the day's posting order, dropping any that have
+    /// since been removed. The tagging sheet walks this, so it must read the
+    /// way the carousel does rather than the order photos happened to be
+    /// clicked.
+    static func ordered(_ selected: Set<String>, in ordered: [String]) -> [String] {
+        ordered.filter { selected.contains($0) }
+    }
+
+    /// What the tagging sheet walks. An empty scope means it was opened from a
+    /// photo's own tag button and covers the whole day. A non-empty scope came
+    /// from the selection bar and covers only those photos, in posting order,
+    /// dropping any since removed. A scope whose photos are all gone stays
+    /// empty rather than widening back to the whole day, which would silently
+    /// put every photo in reach of an apply-to-all.
+    static func scope(_ scope: [String], in dayPhotos: [String]) -> [String] {
+        guard !scope.isEmpty else { return dayPhotos }
+        return ordered(Set(scope), in: dayPhotos)
+    }
 }
 
 /// Which photos are currently picked out for a batch action, plus the anchor

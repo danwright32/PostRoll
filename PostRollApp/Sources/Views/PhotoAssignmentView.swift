@@ -57,6 +57,14 @@ struct PhotoAssignmentView: View {
     /// plain name. Performers marked as appearing in that day's photos are listed
     /// first so the common picks are closest to hand.
     private func tagSuggestions(for day: DayName) -> [PhotoTagSuggestion] {
+        // The event's own accounts (organization, venue, and anything else
+        // written into those free-text fields) are taggable on a photo too:
+        // a shot of the room or the presenting festival is often about them
+        // rather than a performer.
+        let eventAccounts = EventHandleSuggestions
+            .tokens(fromAll: [event.eventHandles])
+            .map { PhotoTagSuggestion(token: $0, display: $0) }
+
         let performers = event.ocrResult?.performers ?? []
         let selected = dayPerformers[day] ?? []
         let ordered = performers.sorted { a, b in
@@ -64,7 +72,7 @@ struct PhotoAssignmentView: View {
             if aSel != bSel { return aSel }
             return false
         }
-        return ordered.compactMap { p in
+        let performerSuggestions = ordered.compactMap { p -> PhotoTagSuggestion? in
             let name = p.name.trimmingCharacters(in: .whitespaces)
             let handle = p.handle.trimmingCharacters(in: .whitespaces)
             let realHandle = PythonBridge.isRealHandle(handle)
@@ -79,6 +87,13 @@ struct PhotoAssignmentView: View {
             if realHandle { parts.append(normalizedHandle) }
             let display = parts.isEmpty ? token : parts.joined(separator: " ")
             return PhotoTagSuggestion(token: token, display: display)
+        }
+
+        // Performers first: they're the common pick, and the event's own
+        // accounts are a handful that stay findable at the end.
+        var seen = Set<String>()
+        return (performerSuggestions + eventAccounts).filter {
+            seen.insert($0.token.lowercased()).inserted
         }
     }
 
@@ -713,10 +728,11 @@ private struct PhotoDaySection: View {
     // Batch tagging (#172): which photos are picked out, and the tags being
     // composed for them. Only ever used where photoTags is non-nil.
     @State private var selection = PhotoSelection()
-    @State private var batchTags: [String] = []
-    @State private var showingBatchTagPopover = false
     /// Index of the photo open in the tagging sheet; nil when it's closed.
     @State private var taggingIndex: Int? = nil
+    /// Which photos the open sheet walks. Empty means the whole day (opened
+    /// from a photo's own tag button); non-empty is a batch selection.
+    @State private var taggingScope: [String] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -803,18 +819,33 @@ private struct PhotoDaySection: View {
             selection.prune(to: newValue.map(\.absoluteString))
         }
         .sheet(isPresented: Binding(get: { taggingIndex != nil },
-                                    set: { if !$0 { taggingIndex = nil } })) {
+                                    set: { if !$0 { closeTagging() } })) {
             if let tagsBinding = photoTags, taggingIndex != nil {
                 PhotoTaggingSheet(
-                    photos: photos,
+                    photos: scopedPhotos,
                     photoTags: tagsBinding,
                     suggestions: tagSuggestions,
+                    isBatch: !taggingScope.isEmpty,
                     index: Binding(get: { taggingIndex ?? 0 },
                                    set: { taggingIndex = $0 }),
-                    onClose: { taggingIndex = nil }
+                    onClose: closeTagging
                 )
             }
         }
+    }
+
+    /// The photos the open sheet walks: the batch selection when there is one,
+    /// otherwise the whole day.
+    private var scopedPhotos: [URL] {
+        let keys = PhotoTagBatch.scope(taggingScope, in: photos.map(\.absoluteString))
+        let wanted = Set(keys)
+        return photos.filter { wanted.contains($0.absoluteString) }
+    }
+
+    private func closeTagging() {
+        taggingIndex = nil
+        taggingScope = []
+        selection.clear()
     }
 
     /// Shown once at least one photo is selected: how many, and the one action
@@ -826,23 +857,13 @@ private struct PhotoDaySection: View {
                 .foregroundStyle(Color.warmDark)
 
             Button("Tag \(selection.count == 1 ? "this photo" : "these \(selection.count)")…") {
-                batchTags = []
-                showingBatchTagPopover = true
+                taggingScope = PhotoTagBatch.ordered(selection.keys,
+                                                     in: photos.map(\.absoluteString))
+                taggingIndex = 0
             }
             .buttonStyle(.plain)
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(Color.roseGold)
-            .popover(isPresented: $showingBatchTagPopover, arrowEdge: .bottom) {
-                PhotoTagPopover(
-                    tags: $batchTags,
-                    suggestions: tagSuggestions,
-                    title: "TAG PEOPLE IN \(selection.count) PHOTO\(selection.count == 1 ? "" : "S")",
-                    hint: "Names or @handles. Added to every selected photo. Tags already on a photo are kept.",
-                    tagsHeading: "ADDING TO EVERY SELECTED PHOTO",
-                    applyLabel: "Add to \(selection.count) photo\(selection.count == 1 ? "" : "s")",
-                    onApply: applyBatchTags
-                )
-            }
 
             Button("Clear") { selection.clear() }
                 .buttonStyle(.plain)
@@ -854,18 +875,6 @@ private struct PhotoDaySection: View {
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: Radius.xs).fill(Color.roseGold.opacity(0.08)))
-    }
-
-    private func applyBatchTags() {
-        guard let tagsBinding = photoTags else { return }
-        // Write in the day's photo order so the stored tags line up with how
-        // the carousel reads, not with the selection's insertion order.
-        let keys = photos.map(\.absoluteString).filter { selection.contains($0) }
-        tagsBinding.wrappedValue = PhotoTagBatch.applying(
-            tags: batchTags, to: keys, in: tagsBinding.wrappedValue)
-        batchTags = []
-        showingBatchTagPopover = false
-        selection.clear()
     }
 
     @ViewBuilder
@@ -1254,59 +1263,19 @@ private struct PhotoTagEditor: View {
     }
 }
 
-/// Adds the same tags to every photo in a batch selection (#172). There is no
-/// single photo to show here, so this stays a compact popover; tagging one
-/// photo uses PhotoTaggingSheet, which shows the photo large.
-private struct PhotoTagPopover: View {
-    @Binding var tags: [String]
-    var suggestions: [PhotoTagSuggestion] = []
-    var title: String
-    var hint: String
-    var tagsHeading: String
-    var applyLabel: String
-    var onApply: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text(title)
-                .font(.system(size: 9, weight: .medium))
-                .tracking(1.0)
-                .foregroundStyle(Color.warmMid)
-
-            Text(hint)
-                .font(.system(size: 10))
-                .foregroundStyle(Color.warmMid.opacity(0.8))
-                .fixedSize(horizontal: false, vertical: true)
-
-            PhotoTagEditor(tags: $tags, suggestions: suggestions, tagsHeading: tagsHeading)
-                .frame(maxHeight: 260)
-
-            Button(action: onApply) {
-                Text(applyLabel)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(tags.isEmpty ? Color.warmMid : Color.cream)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: Radius.xs)
-                            .fill(tags.isEmpty ? Color.creamDeep : Color.roseGold)
-                    )
-            }
-            .buttonStyle(.plain)
-            .disabled(tags.isEmpty)
-        }
-        .padding(Spacing.md)
-        .frame(width: 280)
-    }
-}
-
-/// Tags one photo at a time with the photo shown large, and walks the day's
-/// carousel with previous/next. An 80pt thumbnail is too small to tell who is
-/// actually in a wide stage shot, which is the whole reason tagging exists.
+/// The one place people are tagged. Shows the photo large (an 80pt thumbnail
+/// is too small to tell who is actually in a wide stage shot, which is the
+/// whole reason tagging exists) and walks previous/next.
+///
+/// `photos` is the scope being walked: the whole day when opened from a
+/// photo's tag button, or just the selected photos when opened from the
+/// selection bar. In the second case `isBatch` is true and the current
+/// photo's tags can be copied onto every photo in the scope in one go (#172).
 private struct PhotoTaggingSheet: View {
     let photos: [URL]
     @Binding var photoTags: [String: [String]]
     var suggestions: [PhotoTagSuggestion] = []
+    var isBatch: Bool = false
     @Binding var index: Int
     let onClose: () -> Void
 
@@ -1348,6 +1317,23 @@ private struct PhotoTaggingSheet: View {
                     // chips reflect the photo now on screen, not the last one.
                     PhotoTagEditor(tags: tagsBinding, suggestions: suggestions)
                         .id(currentURL?.absoluteString ?? "none")
+
+                    if isBatch, photos.count > 1 {
+                        Button(action: applyToAll) {
+                            Text("Add these to all \(photos.count) selected")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(tagsBinding.wrappedValue.isEmpty ? Color.warmMid : Color.cream)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 7)
+                                .background(
+                                    RoundedRectangle(cornerRadius: Radius.xs)
+                                        .fill(tagsBinding.wrappedValue.isEmpty ? Color.creamDeep : Color.roseGold)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(tagsBinding.wrappedValue.isEmpty)
+                        .help("Copies this photo's tags onto every selected photo. Tags already on a photo are kept.")
+                    }
                 }
                 .frame(width: 260)
             }
@@ -1444,6 +1430,15 @@ private struct PhotoTaggingSheet: View {
         }
         .padding(.horizontal, Spacing.lg)
         .padding(.vertical, Spacing.md)
+    }
+
+    /// Copies the photo on screen onto every photo in the scope, adding only:
+    /// a photo that already carries other tags keeps them.
+    private func applyToAll() {
+        photoTags = PhotoTagBatch.applying(
+            tags: tagsBinding.wrappedValue,
+            to: photos.map(\.absoluteString),
+            in: photoTags)
     }
 
     private func loadCurrent() async {
