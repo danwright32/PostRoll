@@ -77,17 +77,22 @@ def load_brand_voice() -> str:
 # Long-edge cap applied before upload. Sending anything larger mostly inflates
 # the request (413 request_too_large on big batches) and upload time.
 #
-# It is NOT, on its own, what the model ends up seeing. Measured on the real
-# BLUDLINE program page (#207): a 3024x4032 page capped to 1176x1568 by this
-# constant reads the performer "Safa" as "5afa" on every run, while the SAME
-# pixels, cropped to a 1176x250 band and sent as their own image, read "Safa"
-# on every run. Masking the page down to just that band while keeping the
-# 1176x1568 canvas still failed, so the driver is the image's total area, not
-# its content or the glyph's pixel size: a 1.84MP image is reduced further
-# server side, a 0.29MP one is not.
+# Capping a whole program page here puts its small print exactly ON the
+# boundary of legibility. Measured on the real BLUDLINE page (#207), five runs
+# per build: a 3024x4032 page capped to 1176x1568 reads the performer "Safa"
+# as "5afa" 0 times out of 5 correct, under three different resamplers, and
+# still fails when everything except that band is painted white. The same band
+# cropped and sent as its own image reads "Safa" 5 out of 5.
 #
-# The fix is therefore to split a page into pieces that each fit the model's
-# vision budget, not to raise this number (#208). Left as-is until that lands.
+# Total area, resampling and surrounding content were each tested and each
+# ruled out: builds at the same 1.84MP area and the same 0.389 scale both pass
+# and fail. What decides it is sub-pixel sampling phase, which nothing here
+# controls. So this constant cannot be tuned into correctness.
+#
+# The fix is to give each region of interest its own image, so it gets the full
+# per-image budget instead of a share of the page's (#208). Left as-is until
+# that lands. Note the budget belongs to the RESOLVED MODEL, not to this
+# module: sonnet-4-6 and the Opus 4.7+ tier do not share a limit.
 MAX_IMAGE_EDGE = 1568
 
 
