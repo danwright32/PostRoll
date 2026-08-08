@@ -107,6 +107,41 @@ def _extract_clip_plan_frames(
     return frames
 
 
+class FatalGenerationError(RuntimeError):
+    """A condition that makes continuing the run pointless or harmful.
+
+    The motivating case is a usage cap: once it is hit, every remaining day
+    would fail the same way, so carrying on wastes time hammering a wall and
+    buries the real reason under a pile of per-day errors. Dan's requirement is
+    that such a run STOPS and asks him rather than spending anything further.
+
+    Deliberately NOT a subclass of ClaudeError, and deliberately re-raised by
+    the per-day handler, because that handler's whole job is to let one bad day
+    pass. Anything that must stop the week has to be visibly exempt from it
+    (#206).
+    """
+
+
+def _write_results(output_path: Path, results: dict, *, complete: bool,
+                   stopped_reason: str | None = None) -> None:
+    """Persist what has been generated so far, atomically.
+
+    Called after every day rather than once at the end. A run can be stopped by
+    something that is not an exception at all: the app's own watchdog SIGTERMs
+    the subprocess at 1800s, and before this the whole week's captions, already
+    generated and already paid for, went with it (#206, L5).
+
+    Written to a temp file and moved into place so a kill mid-write cannot
+    leave a truncated file where a good one used to be.
+    """
+    payload = dict(results)
+    payload["complete"] = complete
+    payload["stopped_reason"] = stopped_reason
+    tmp = output_path.with_suffix(output_path.suffix + ".part")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(output_path)
+
+
 def _auto_post_type(day: str, photo_count: int, preset: str = DEFAULT_PRESET) -> str:
     """Pick a sensible post_type when the manifest doesn't specify one.
 
@@ -254,11 +289,24 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
                 existing_captions.append(result["caption"])
             t_captions_end = time.time()
             print(f"[generate_week] {day_name}: done", flush=True)
+        except FatalGenerationError as e:
+            # Never swallowed. Everything finished so far is already on disk
+            # from the write below; record why the run stopped and re-raise so
+            # the caller can ask Dan what to do (#206).
+            t_captions_end = time.time()
+            print(f"[generate_week] {day_name}: STOPPING: {e}", flush=True, file=sys.stderr)
+            results["errors"] = errors
+            _write_results(output_path, results, complete=False, stopped_reason=str(e))
+            raise
         except Exception as e:
             t_captions_end = time.time()
-            print(f"[generate_week] {day_name}: ERROR — {e}", flush=True, file=sys.stderr)
+            print(f"[generate_week] {day_name}: ERROR: {e}", flush=True, file=sys.stderr)
             errors[day_name] = str(e)
             results[day_name] = None
+
+        # Persist after every day, so a kill at any point keeps what finished.
+        results["errors"] = errors
+        _write_results(output_path, results, complete=False)
 
     # Blog post
     if blog_photos:
@@ -279,9 +327,15 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
             results["blog"] = blog_result
             t_blog_end = time.time()
             print("[generate_week] blog: done", flush=True)
+        except FatalGenerationError as e:
+            t_blog_end = time.time()
+            print(f"[generate_week] blog: STOPPING: {e}", flush=True, file=sys.stderr)
+            results["errors"] = errors
+            _write_results(output_path, results, complete=False, stopped_reason=str(e))
+            raise
         except Exception as e:
             t_blog_end = time.time()
-            print(f"[generate_week] blog: ERROR — {e}", flush=True, file=sys.stderr)
+            print(f"[generate_week] blog: ERROR: {e}", flush=True, file=sys.stderr)
             errors["blog"] = str(e)
             results["blog"] = None
     else:
@@ -290,10 +344,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
     t_total = time.time()
     results["errors"] = errors
 
-    output_path.write_text(
-        json.dumps(results, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _write_results(output_path, results, complete=True)
     print(f"[generate_week] output written to {output_path}", flush=True)
 
     # Write per-phase timing data for the Swift layer to consume
