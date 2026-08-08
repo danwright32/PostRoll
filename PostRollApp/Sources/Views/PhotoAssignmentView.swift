@@ -602,7 +602,7 @@ struct PhotoAssignmentView: View {
             importResultMessage = imported + ImportFailureText.message(failures)
             importResultIsError = true
         } else if totalImported == 0 {
-            importResultMessage = "No photos found. Expected subfolders named sunday–friday or day 1–day 6."
+            importResultMessage = "No photos found. Expected subfolders named sunday to friday, or day 1 to day 6."
             importResultIsError = true
         } else {
             importResultMessage = "Imported \(totalImported) photo\(totalImported == 1 ? "" : "s")."

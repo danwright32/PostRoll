@@ -394,7 +394,7 @@ struct OCRReviewView: View {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
 
         // Now that the user has finalized the OCR, the program images are no
-        // longer needed — but only once the searchable PDF that replaces them
+        // longer needed, but only once the searchable PDF that replaces them
         // is verified to exist. These scans are the only copies of the program
         // (the sites they come from block re-download), and deleting them on a
         // bake that had failed, or one still running, destroyed it outright

@@ -39,7 +39,7 @@ enum MissingMediaScan {
         let slot: MediaSlot
         let url: URL
 
-        /// e.g. "Tuesday B&W photo" — what the banner says is missing.
+        /// e.g. "Tuesday B&W photo": what the banner says is missing.
         var displayName: String { "\(day.displayName) \(slot.displayName)" }
     }
 

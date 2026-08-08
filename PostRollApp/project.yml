@@ -73,6 +73,7 @@ targets:
       - path: Sources/Services/MissingMediaScan.swift
       - path: Sources/Services/StoredErrorPolicy.swift
       - path: Sources/Services/PythonBridgeError.swift
+      - path: Sources/Services/ProcessRunner.swift
       - path: Sources/Services/PythonBridge.swift
       - path: Sources/Services/TimingStore.swift
       - path: Sources/Services/KeychainStore.swift

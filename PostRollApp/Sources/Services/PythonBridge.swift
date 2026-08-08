@@ -1657,6 +1657,34 @@ actor PythonBridge {
         try content.write(to: file, atomically: true, encoding: .utf8)
     }
 
+    /// How the Anthropic API key reaches the Python subprocess.
+    ///
+    /// The value goes in the process ENVIRONMENT and only the carrier variable's
+    /// name appears in the script. The script is handed to zsh as a process
+    /// argument, and argv is readable by any process running as the same user
+    /// and is captured in sysdiagnose bundles and screen recordings, so a key
+    /// embedded there was exposed on every generation, OCR and analytics call
+    /// despite being stored in the Keychain (#81).
+    ///
+    /// The promotion happens in the script rather than by setting
+    /// ANTHROPIC_API_KEY directly, because `zsh -l` sources the user's profile
+    /// after launch and a profile export would otherwise win over the key the
+    /// user entered in the app.
+    ///
+    /// Returns nothing at all when there is no stored key, so the profile's own
+    /// export stands rather than being overwritten with an empty value.
+    static func apiKeyDelivery(_ key: String?) -> (environment: [String: String], scriptLines: String) {
+        let carrier = "POSTROLL_ANTHROPIC_API_KEY"
+        guard let key, !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return ([:], "")
+        }
+        let lines = """
+            export ANTHROPIC_API_KEY="$\(carrier)"
+            unset \(carrier)
+            """
+        return ([carrier: key], lines)
+    }
+
     // MARK: - Private
 
     /// Runs the Python command via `zsh -l` so the user's login shell profile
@@ -1699,18 +1727,12 @@ actor PythonBridge {
         // `exec` replaces the shell with the Python process so that terminating
         // this Process object directly kills the Python subprocess, not just the
         // shell wrapper.
-        let apiKeyExport: String
-        if let key = KeychainStore.readAPIKey() {
-            let escaped = key.replacingOccurrences(of: "'", with: "'\"'\"'")
-            apiKeyExport = "export ANTHROPIC_API_KEY='\(escaped)'"
-        } else {
-            apiKeyExport = ""
-        }
+        let apiKey = Self.apiKeyDelivery(KeychainStore.readAPIKey())
 
         let script = """
             export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
             [ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc"
-            \(apiKeyExport)
+            \(apiKey.scriptLines)
             \(brandVoiceExport)
             cd '\(root.path)'
             if [ -f '\(logPath)' ]; then
@@ -1720,87 +1742,27 @@ actor PythonBridge {
             exec \(quotedArgs) 2>> '\(logPath)'
             """
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-c", script]
-
-        let stderrPipe = Pipe()
-        process.standardError = stderrPipe
-
-        // Watchdog: no Python invocation may hang the UI forever. A wedged
-        // network call inside the pipeline previously left progress spinners
-        // running indefinitely with no way to recover except user cancel.
-        // The limit is deliberately generous (full week generation runs
-        // far under it); it exists only to catch genuinely stuck processes.
-        final class TimeoutFlag: @unchecked Sendable {
-            private let lock = NSLock()
-            private var _fired = false
-            var fired: Bool {
-                get { lock.withLock { _fired } }
-                set { lock.withLock { _fired = newValue } }
-            }
-        }
-        let timedOut = TimeoutFlag()
-        // terminate()/isRunning are safe cross thread; the onCancel handler
-        // below already relies on that from a nonisolated context.
-        nonisolated(unsafe) let watchedProcess = process
-        let watchdog = Task.detached {
-            try? await Task.sleep(for: .seconds(timeout))
-            if !Task.isCancelled, watchedProcess.isRunning {
-                timedOut.fired = true
-                watchedProcess.terminate()
-            }
-        }
-        defer { watchdog.cancel() }
-
-        // Use terminationHandler (non-blocking) + withTaskCancellationHandler so
-        // cancelling the calling Swift task immediately sends SIGTERM to the process.
-        do {
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                // The handler must be installed before run(): a process that
-                // exits instantly (bad module name, argparse exit 2) can
-                // otherwise terminate before the handler exists, and the
-                // continuation would hang forever.
-                process.terminationHandler = { p in
-                    let status = p.terminationStatus
-                    if status == 0 {
-                        cont.resume()
-                    } else {
-                        // Python's stderr is redirected into postroll.log by the
-                        // script above, so the pipe only ever carries pre-exec
-                        // shell output. When it's empty, read the log tail so
-                        // humanise() sees the real traceback instead of "".
-                        // Scoped to runMarker: the log file is shared across
-                        // every invocation, and an unscoped tail can leak a
-                        // stray digit sequence from an unrelated older entry
-                        // into humanise()'s substring matching (e.g. a UUID
-                        // containing "413" misreporting an unrelated 401 as
-                        // "photos too large").
-                        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                        var stderr = String(data: stderrData, encoding: .utf8) ?? ""
-                        if stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                           let logText = try? String(contentsOf: logURL, encoding: .utf8) {
-                            stderr = PythonBridgeLog.scopedTail(logText, marker: runMarker)
-                        }
-                        cont.resume(throwing: PythonBridgeError.scriptFailed(exitCode: status, stderr: stderr))
-                    }
-                }
-                do {
-                    try process.run()
-                } catch {
-                    process.terminationHandler = nil
-                    cont.resume(throwing: error)
-                }
-            }
-        } onCancel: {
-            if process.isRunning { process.terminate() }
-        }
-        } catch {
-            if timedOut.fired {
-                throw PythonBridgeError.timedOut(seconds: timeout)
-            }
-            throw error
-        }
+        // The subprocess plumbing lives in ProcessRunner so its timeout,
+        // cancellation and empty-stderr paths are covered by tests against real
+        // executables rather than only by hand (#86).
+        let runner = ProcessRunner(
+            executable: URL(fileURLWithPath: "/bin/zsh"),
+            arguments: ["-l", "-c", script],
+            environment: apiKey.environment.isEmpty
+                ? nil
+                : ProcessInfo.processInfo.environment.merging(apiKey.environment) { _, new in new },
+            timeout: timeout,
+            logFallback: {
+                // Python's stderr is redirected into postroll.log by the script
+                // above, so the pipe only ever carries pre-exec shell output.
+                // Scoped to runMarker: the log is shared across every
+                // invocation, and an unscoped tail can pull a stray digit
+                // sequence out of an unrelated older entry into humanise()'s
+                // substring matching (a UUID containing "413" misreporting an
+                // unrelated 401 as "photos too large").
+                guard let logText = try? String(contentsOf: logURL, encoding: .utf8) else { return "" }
+                return PythonBridgeLog.scopedTail(logText, marker: runMarker)
+            })
+        try await runner.run()
     }
 }

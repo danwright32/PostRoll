@@ -127,10 +127,12 @@ def _slug(text: str) -> str:
     return result.strip("_")
 
 
+from ..media.ffmpeg_check import ffmpeg_status  # noqa: E402
+
+
 def _has_ffmpeg() -> bool:
-    """Return True if ffmpeg is available on PATH."""
-    import shutil
-    return shutil.which("ffmpeg") is not None
+    """Return True if the whole ffmpeg toolchain (ffmpeg AND ffprobe) is on PATH."""
+    return ffmpeg_status().available
 
 
 # Thursday's audio tag derivation lives in postroll.ai.audio_tags so the
@@ -256,7 +258,8 @@ def generate_media(
 
     results: dict[str, Any] = {}
     errors: dict[str, str] = {}
-    ffmpeg_available = _has_ffmpeg()
+    tools = ffmpeg_status()
+    ffmpeg_available = tools.available
 
     for day_name in DAY_ORDER:
         if only_days is not None and day_name not in only_days:
@@ -365,7 +368,7 @@ def generate_media(
             # three-photo one asked for looks exactly like success (#180).
             missing_inputs = _missing_chosen_media(day_info)
             if missing_inputs:
-                print(f"[generate_media] tuesday: ERROR — {missing_inputs}", flush=True, file=sys.stderr)
+                print(f"[generate_media] tuesday: ERROR: {missing_inputs}", flush=True, file=sys.stderr)
                 errors["tuesday"] = missing_inputs
 
             # Also generate the standalone before/after PNG. Serves two roles:
@@ -465,7 +468,10 @@ def generate_media(
                         print(f"[generate_media] tuesday: ERROR — {msg}", flush=True, file=sys.stderr)
                         errors["tuesday"] = msg
             elif not ffmpeg_available:
-                print("[generate_media] tuesday: reel skipped (ffmpeg not available)", flush=True)
+                # Not a log line and a still image: the reel that was asked for
+                # cannot be made, and the person needs the install command (#87).
+                print(f"[generate_media] tuesday: ERROR: {tools.message}", flush=True, file=sys.stderr)
+                errors["tuesday"] = tools.message
             elif static_only:
                 print("[generate_media] tuesday: reel skipped (static-only preview)", flush=True)
             else:
@@ -568,8 +574,8 @@ def generate_media(
                     except Exception as e:
                         errors["thursday"] = f"story fallback failed: {e}"
                 else:
-                    print("[generate_media] thursday: reel skipped — ffmpeg not available", flush=True)
-                    errors["thursday"] = "ffmpeg not available — install ffmpeg to generate Thursday reel"
+                    print(f"[generate_media] thursday: ERROR: {tools.message}", flush=True, file=sys.stderr)
+                    errors["thursday"] = tools.message
 
             _render_cover(
                 day_name="thursday",
@@ -595,7 +601,7 @@ def generate_media(
             # missing one means (#180).
             missing_inputs = _missing_chosen_media(day_info)
             if missing_inputs:
-                print(f"[generate_media] friday: ERROR — {missing_inputs}", flush=True, file=sys.stderr)
+                print(f"[generate_media] friday: ERROR: {missing_inputs}", flush=True, file=sys.stderr)
                 errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + missing_inputs
 
             # Auto-cut clip reel: only attempted when clips were imported.
@@ -604,6 +610,12 @@ def generate_media(
             # below: Friday must never silently produce nothing just
             # because the reel attempt didn't pan out.
             reel_rendered = False
+            if clips and not ffmpeg_available and not static_only:
+                # Clips were imported for a reel that can't be encoded. The
+                # before/after below still runs, but the person is told why the
+                # reel isn't there (#87).
+                print(f"[generate_media] friday: ERROR: {tools.message}", flush=True, file=sys.stderr)
+                errors["friday"] = (errors.get("friday") + "; " if "friday" in errors else "") + tools.message
             if ffmpeg_available and not static_only and clips:
                 try:
                     scored = score_clips(clips)

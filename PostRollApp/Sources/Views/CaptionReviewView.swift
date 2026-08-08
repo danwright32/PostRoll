@@ -524,7 +524,7 @@ struct CaptionReviewView: View {
     /// after a remount can't put two writers on the same output files (#75).
     private func generateGraphics() {
         graphics.startFullRun(eventID: event.id, appState: appState) {
-            // Fresh generation already wrote reel_preview.png as a side effect —
+            // Fresh generation already wrote reel_preview.png as a side effect,
             // this just resolves the URL so the Thursday card is instant when
             // expanded.
             prepareThursdayEditor()

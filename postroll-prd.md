@@ -10,7 +10,7 @@
 
 PostRoll is a local Mac application that automates the weekly social media content pipeline for Dan Wright Photography. It replaces the current manual workflow of creating visual assets in Canva/Final Cut/Photoshop, writing captions, composing blog posts, and scheduling across platforms via Metricool.
 
-The app is a GUI wrapper over Claude Code for AI-powered tasks (caption writing, blog drafting, collaborator lookup) and uses Python + ffmpeg for media processing. By using Claude Code as the LLM backend, there are no ongoing API costs for AI features.
+The app is a GUI over Claude for AI-powered tasks (caption writing, blog drafting, collaborator lookup) and uses Python + ffmpeg for media processing. AI calls go through the Anthropic API with the key stored in the app's Keychain, which is metered per token: a week's generation is a real, recurring cost. The Claude Code CLI is a fallback, used only when no API key is set or when a call needs a CLI-only tool (WebSearch, WebFetch, Bash). An earlier version of this document claimed the AI features were free; they are not, and the cost analysis in section 12 has been corrected.
 
 ### 1.1 Goals
 
@@ -238,7 +238,7 @@ Process:
 
 ### 6.1 Caption Writing
 
-**Engine:** Claude Code (invoked locally, no API cost)
+**Engine:** Anthropic API (metered per token). The Claude Code CLI is the fallback when no API key is set.
 **Style guide:** `postroll/assets/brand-voice.md` (loaded at runtime, evolves via Phase 4 feedback loop — see § 13)
 **Source:** `postroll/ai/generate_captions.py`
 
@@ -351,7 +351,7 @@ Local Mac desktop application with GUI. Not a web app. Runs on Dan's machine.
 ### 8.2 Core Architecture
 
 - **GUI layer:** SwiftUI (native macOS, chosen April 2026)
-- **AI engine:** Claude Code (invoked via CLI subprocess)
+- **AI engine:** Anthropic API via the Python SDK, with the Claude Code CLI as a fallback (no key set, or a call needing WebSearch/WebFetch/Bash)
 - **Media pipeline:** Python + Pillow (static images) + ffmpeg (video/audio)
 - **Scheduling:** API client modules per platform (or single Metricool client)
 - **Data storage:** Local SQLite database for event data, scheduled posts, account cache
@@ -472,15 +472,24 @@ The app generates a checklist of actions that cannot be automated, including:
 
 ### Projected Costs (Option B — Direct APIs)
 - Hosting/infrastructure: $0 (local app)
-- Claude Code: $0 (uses existing subscription)
+- **Anthropic API: metered per token, not $0.** Every week's run makes multi-pass
+  caption calls, a blog call, and vision calls over the photos, all billed
+  against Dan's own API key. This line previously read "$0 (uses existing
+  subscription)", which was never true of the shipped app: the key is stored in
+  the Keychain and the metered SDK path is the default. The Claude Code CLI
+  path, which does draw on the subscription instead, runs only when no key is
+  set or a call needs a CLI-only tool.
 - API costs: Most social media APIs are free for posting. Need to verify.
 - ffmpeg/Pillow/Tesseract: Free (open source)
-- **Total: ~$0/year** (potential full savings of $216/year)
+- **Total: Anthropic usage per week, plus $0 for everything else.** The $216/year
+  Metricool saving still stands; it is offset by whatever the AI usage comes to,
+  which is not currently measured or displayed anywhere in the app.
 
 ### Projected Costs (Option A — Metricool API)
 - Metricool: $216/year (unchanged)
+- Anthropic API: the same metered usage as Option B
 - Everything else: $0
-- **Total: $216/year** (no savings, but significant time savings)
+- **Total: $216/year plus Anthropic usage** (no Metricool savings, but significant time savings)
 
 ### Development Cost
 - Dan's time building the app (with Claude Code assistance)
