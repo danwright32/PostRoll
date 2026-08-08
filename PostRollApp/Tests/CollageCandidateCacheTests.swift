@@ -9,7 +9,12 @@ final class CollageCandidateCacheTests: XCTestCase {
 
     private var root: URL!
 
-    override func setUpWithError() throws {
+    // The async form of setUp/tearDown, deliberately: these touch main-actor
+    // state (the shared cache), and the two Xcode versions in play disagree
+    // about the throwing form. One rejects a @MainActor override of the
+    // nonisolated `setUpWithError`, the other rejects touching main-actor state
+    // without one. The async override inherits the class's isolation on both.
+    override func setUp() async throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("collage-cache-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -17,7 +22,7 @@ final class CollageCandidateCacheTests: XCTestCase {
         for day in DayName.allCases { CollageCandidateCache.shared.remove(day: day) }
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         for day in DayName.allCases { CollageCandidateCache.shared.remove(day: day) }
         try? FileManager.default.removeItem(at: root)
     }
