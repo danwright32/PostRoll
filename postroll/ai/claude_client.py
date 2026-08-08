@@ -27,14 +27,15 @@ from typing import Any
 
 import anthropic
 
-from . import usage_log
+from . import transport, usage_log
 
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 BRAND_VOICE_PATH = ASSETS_DIR / "brand-voice.md"
 
-# Tools that require the Claude Code CLI (not available in SDK)
-_CLI_ONLY_TOOLS = {"WebSearch", "WebFetch", "Bash"}
+# Tools that require the Claude Code CLI (not available in SDK). Defined once,
+# in transport, so the resolver and the error message below cannot disagree.
+_CLI_ONLY_TOOLS = transport.CLI_ONLY_TOOLS
 
 _MODEL_ALIASES: dict[str, str] = {
     "sonnet": "claude-sonnet-4-6",
@@ -139,11 +140,9 @@ def _image_block(path: Path) -> dict:
 def _needs_cli(allowed_tools: list[str] | None) -> bool:
     """Return True if any requested tool requires the Claude Code CLI,
     or if no ANTHROPIC_API_KEY is set (fall back to CLI auth)."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return True
-    if not allowed_tools:
-        return False
-    return bool(set(allowed_tools) & _CLI_ONLY_TOOLS)
+    return transport.choose_transport(
+        transport.Request(prompt="", allowed_tools=tuple(allowed_tools or ()))
+    ).transport == "cli"
 
 
 # ── SDK path ──────────────────────────────────────────────────────────────────
@@ -200,18 +199,18 @@ def _run_sdk(
         # transient blip doesn't fail a multi-pass generation chain.
         max_retries=4,
     )
-    content: list[dict] = []
     paths = list(image_paths or [])
-    labels = list(image_labels) if image_labels is not None else None
-    if labels is not None and len(labels) != len(paths):
-        raise ValueError(
-            f"image_labels has {len(labels)} entries but image_paths has {len(paths)}"
-        )
-    for i, p in enumerate(paths):
-        if labels is not None:
-            content.append({"type": "text", "text": f"Photo {i + 1}: {labels[i]}"})
-        content.append(_image_block(Path(p)))
-    content.append({"type": "text", "text": prompt})
+    content = transport.build_content(transport.Request(
+        prompt=prompt,
+        model=model,
+        step=step,
+        image_paths=tuple(Path(p) for p in paths),
+        image_labels=tuple(image_labels) if image_labels is not None else None,
+    ))
+    # Counted on every call, not just when a transport is known to be unable to
+    # carry images: a block that goes missing here would otherwise be answered
+    # from the photos that did arrive, confidently (#210).
+    transport.assert_images_intact(content, expected=len(paths), transport="sdk")
 
     try:
         message = client.messages.create(
