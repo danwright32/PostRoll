@@ -142,7 +142,7 @@ def test_respond_to_flag_correction_returns_patch(sample_photo):
 def test_respond_to_flag_passes_history_to_prompt(sample_photo):
     captured = {}
 
-    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None, **kwargs):
         captured["prompt"] = prompt
         return {"assistant_reply": "ok", "patch": None, "resolved": False}
 
@@ -182,7 +182,7 @@ def test_respond_to_flag_prompt_warns_about_stale_indices(sample_photo):
     """
     captured = {}
 
-    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None):
+    def fake_run_json(prompt, timeout=300, allowed_dirs=None, allowed_tools=None, image_paths=None, **kwargs):
         captured["prompt"] = prompt
         return {"assistant_reply": "ok", "patch": None, "resolved": False}
 

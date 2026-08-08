@@ -403,7 +403,7 @@ def select_reel_clips(
             clip_seconds_max=TARGET_CLIP_SECONDS_MAX,
         )
 
-        data = run_json_prompt(prompt, timeout=timeout, image_paths=staged, image_labels=labels)
+        data = run_json_prompt(prompt, timeout=timeout, image_paths=staged, image_labels=labels, step="select_reel_clips")
         return apply_selection(data, candidates)
 
     if tmp_dir is not None:

@@ -775,6 +775,7 @@ def generate_caption(
             timeout=600,
             image_paths=staged_paths,
             image_labels=photo_filenames,
+            step="caption",
         )
 
         if not isinstance(data, dict):

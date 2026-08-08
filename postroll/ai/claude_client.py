@@ -27,6 +27,8 @@ from typing import Any
 
 import anthropic
 
+from . import usage_log
+
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 BRAND_VOICE_PATH = ASSETS_DIR / "brand-voice.md"
@@ -72,9 +74,20 @@ def load_brand_voice() -> str:
     return target.read_text(encoding="utf-8")
 
 
-# The API downscales images to this long edge server side before
-# tokenising, so sending anything larger only inflates the request
-# (413 request_too_large on big batches) and upload time.
+# Long-edge cap applied before upload. Sending anything larger mostly inflates
+# the request (413 request_too_large on big batches) and upload time.
+#
+# It is NOT, on its own, what the model ends up seeing. Measured on the real
+# BLUDLINE program page (#207): a 3024x4032 page capped to 1176x1568 by this
+# constant reads the performer "Safa" as "5afa" on every run, while the SAME
+# pixels, cropped to a 1176x250 band and sent as their own image, read "Safa"
+# on every run. Masking the page down to just that band while keeping the
+# 1176x1568 canvas still failed, so the driver is the image's total area, not
+# its content or the glyph's pixel size: a 1.84MP image is reduced further
+# server side, a 0.29MP one is not.
+#
+# The fix is therefore to split a page into pieces that each fit the model's
+# vision budget, not to raise this number (#208). Left as-is until that lands.
 MAX_IMAGE_EDGE = 1568
 
 
@@ -130,6 +143,42 @@ def _needs_cli(allowed_tools: list[str] | None) -> bool:
 
 # ── SDK path ──────────────────────────────────────────────────────────────────
 
+def _record_usage(message: Any, model: str, step: str) -> None:
+    """Log what this call cost. Never raises: the answer is already paid for.
+
+    A response with no usable token counts is NOT recorded as a zero-token
+    call. Zero would total as a free call rather than an unmeasured one, so it
+    is reported on stderr and left out, which is what `Summary.complete` and
+    the operator both need to see.
+    """
+    raw = getattr(message, "usage", None)
+    counts = {
+        key: getattr(raw, key, None)
+        for key in ("input_tokens", "output_tokens")
+    }
+    if not all(isinstance(v, int) for v in counts.values()):
+        print(
+            f"warning: no usage counts on the {step} response, so this call is "
+            "missing from the AI spend total.",
+            file=sys.stderr, flush=True,
+        )
+        return
+    try:
+        usage_log.record(
+            usage_log.Usage(
+                model=model,
+                input_tokens=counts["input_tokens"],
+                output_tokens=counts["output_tokens"],
+                cache_read_tokens=getattr(raw, "cache_read_input_tokens", 0) or 0,
+                cache_write_tokens=getattr(raw, "cache_creation_input_tokens", 0) or 0,
+            ),
+            step=step,
+        )
+    except Exception as e:  # noqa: BLE001 - bookkeeping must not fail a paid run
+        print(f"warning: could not record {step} usage: {e}",
+              file=sys.stderr, flush=True)
+
+
 def _run_sdk(
     prompt: str,
     *,
@@ -137,6 +186,7 @@ def _run_sdk(
     image_paths: list[str | Path] | None,
     image_labels: list[str] | None,
     model: str,
+    step: str = "unknown",
 ) -> str:
     client = anthropic.Anthropic(
         api_key=os.environ.get("ANTHROPIC_API_KEY"),
@@ -169,6 +219,10 @@ def _run_sdk(
         )
     except anthropic.APIError as e:
         raise ClaudeError(f"Anthropic API error: {e}") from e
+
+    # Before the truncation check below: a response cut off at the cap still
+    # burned every one of those tokens and still appears on the bill.
+    _record_usage(message, _resolve_model(model), step)
 
     if message.stop_reason == "max_tokens":
         # A truncated response would otherwise surface as a confusing JSON
@@ -244,6 +298,7 @@ def run_prompt(
     allowed_dirs: list[str | Path] | None = None,
     allowed_tools: list[str] | None = None,
     model: str = "sonnet",
+    step: str = "unknown",
 ) -> str:
     """Send a prompt to Claude and return the raw text response.
 
@@ -288,6 +343,7 @@ def run_prompt(
         image_paths=image_paths,
         image_labels=image_labels,
         model=model,
+        step=step,
     )
 
 
@@ -300,6 +356,7 @@ def run_json_prompt(
     allowed_dirs: list[str | Path] | None = None,
     allowed_tools: list[str] | None = None,
     model: str = "sonnet",
+    step: str = "unknown",
 ) -> Any:
     """Send a prompt that should return JSON and parse the response."""
     raw = run_prompt(
@@ -310,6 +367,7 @@ def run_json_prompt(
         allowed_dirs=allowed_dirs,
         allowed_tools=allowed_tools,
         model=model,
+        step=step,
     )
     return _extract_json(raw)
 
@@ -339,7 +397,10 @@ def run_review_pass(
     """
     run = runner or run_json_prompt
     try:
-        data = run(prompt, timeout=timeout)
+        # Each caption and blog runs two of these on top of the draft, so they
+        # are attributed separately: lumped into the draft's step they would
+        # hide the largest multiplier on a week's bill.
+        data = run(prompt, timeout=timeout, step=f"review:{label}")
     except ClaudeError as e:
         print(
             f"warning: {label} pass failed, keeping previous draft: {e}",

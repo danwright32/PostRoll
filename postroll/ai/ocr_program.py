@@ -351,7 +351,7 @@ def _extract_prose_only(resolved_paths: list[str]) -> dict[str, str]:
     """
     image_list = "\n".join(f"- {p}" for p in resolved_paths)
     prompt = PROSE_PROMPT_TEMPLATE.format(image_list=image_list)
-    data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths)
+    data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths, step="ocr:prose")
     if not isinstance(data, dict):
         return {}
     out: dict[str, str] = {}
@@ -387,7 +387,8 @@ def _run_focused_array_prompt(
     Claude usually returns the array directly; if it wraps the array in a
     single-key object, unwrap it under any of the expected key names.
     """
-    data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths)
+    data = run_json_prompt(prompt, timeout=600, image_paths=resolved_paths,
+                           step="ocr:focused_array")
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
     if isinstance(data, dict):
@@ -438,7 +439,7 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
         base_prompt = PROMPT_TEMPLATE.format(image_list=image_list)
 
         # First attempt
-        data = run_json_prompt(base_prompt, timeout=600, image_paths=resolved)
+        data = run_json_prompt(base_prompt, timeout=600, image_paths=resolved, step="ocr:focused")
 
         # Retry once if Claude returned a top-level array (or other non-dict).
         # Some programs — especially notes/lyrics-only PDFs with no cast list —
@@ -456,7 +457,7 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
                 "Use empty arrays/strings for fields the program doesn't cover.\n\n"
                 + base_prompt
             )
-            data = run_json_prompt(retry_prompt, timeout=600, image_paths=resolved)
+            data = run_json_prompt(retry_prompt, timeout=600, image_paths=resolved, step="ocr:focused_retry")
 
         # Last-resort salvage: if it's still a list, wrap it under whichever schema
         # key the items resemble. Better to give the user partial OCR they can edit

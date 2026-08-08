@@ -348,7 +348,7 @@ def main() -> None:
 
     print(f"Analyzing {len(compact_feed)} feed posts + {len(compact_stories)} stories…", file=sys.stderr)
 
-    result = run_json_prompt(prompt, timeout=600)
+    result = run_json_prompt(prompt, timeout=600, step="analyze_posts")
 
     if not isinstance(result, dict):
         raise ValueError(f"Expected dict from Claude, got {type(result)}")

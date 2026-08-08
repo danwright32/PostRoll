@@ -257,6 +257,7 @@ def enrich_program(
             timeout=900,  # web research can take a while
             allowed_dirs=[tmp_path],
             allowed_tools=["Read", "WebSearch", "WebFetch"],
+            step="enrich",
         )
 
     if not isinstance(data, dict):
@@ -343,6 +344,7 @@ def fetch_performers_from_url(url: str) -> list[dict]:
         prompt,
         timeout=120,
         allowed_tools=["WebFetch"],
+        step="enrich:performers",
     )
     if not isinstance(data, list):
         raise ClaudeError(f"Expected JSON array, got {type(data).__name__}")
@@ -439,6 +441,7 @@ def suggest_handles(
         prompt,
         timeout=600,
         allowed_tools=["WebSearch", "WebFetch"],
+        step="enrich:piece_notes",
     )
     # Claude sometimes wraps the array in an object — unwrap it
     if isinstance(data, dict):
@@ -538,6 +541,7 @@ def fetch_piece_notes(
         prompt,
         timeout=600,
         allowed_tools=["WebSearch", "WebFetch"],
+        step="enrich:handles",
     )
     # Unwrap if Claude wrapped the array in an object
     if isinstance(data, dict):

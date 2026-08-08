@@ -31,7 +31,7 @@ def test_passes_image_labels_matching_prompt_filenames(photo):
     correlating by attachment order invents alt text for the wrong photo."""
     captured = {}
 
-    def fake_run(prompt, timeout=300, image_paths=None, image_labels=None):
+    def fake_run(prompt, timeout=300, image_paths=None, image_labels=None, **kwargs):
         captured["prompt"] = prompt
         captured["image_paths"] = image_paths
         captured["image_labels"] = image_labels

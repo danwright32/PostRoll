@@ -161,7 +161,7 @@ def select_cover_photo(
             candidate_list=_format_candidate_list(labels),
         )
 
-        data = run_json_prompt(prompt, timeout=timeout, image_paths=staged, image_labels=labels)
+        data = run_json_prompt(prompt, timeout=timeout, image_paths=staged, image_labels=labels, step="select_cover_photo")
         return apply_cover_pick(data, candidates)
 
     try:

@@ -206,6 +206,7 @@ def respond_to_flag(
             prompt,
             timeout=300,
             image_paths=staged,
+            step="review_flag",
         )
 
     if not isinstance(data, dict):

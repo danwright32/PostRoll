@@ -138,7 +138,7 @@ def revise_caption(
         performers=_format_performers(program.get("performers", [])),
     )
 
-    data = run_json_prompt(prompt, timeout=300)
+    data = run_json_prompt(prompt, timeout=300, step="revise_caption")
 
     if not isinstance(data, dict):
         raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")

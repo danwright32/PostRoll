@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -169,6 +170,11 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
     blog_photos   = manifest.get("blog_photos", [])
     event_url     = manifest.get("event_url", "")
     preset        = manifest.get("preset", DEFAULT_PRESET)
+
+    # Every AI call this run makes records against this event, so "what did
+    # this week cost" has an answer (#207). One process handles one event, so
+    # the label is set once here rather than threaded through every call site.
+    os.environ["POSTROLL_EVENT"] = f"{event} {date}".strip()
 
     results: dict[str, Any] = {}
     errors:  dict[str, str] = {}

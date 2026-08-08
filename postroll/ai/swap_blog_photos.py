@@ -110,6 +110,7 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path]) -> dict:
             timeout=300,
             image_paths=resolved,
             image_labels=photo_filenames,
+            step="swap_blog_photos",
         )
         if not isinstance(data, dict):
             raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")

@@ -1673,6 +1673,18 @@ actor PythonBridge {
     ///
     /// Returns nothing at all when there is no stored key, so the profile's own
     /// export stands rather than being overwritten with an empty value.
+    /// Tell Python where the app's data lives.
+    ///
+    /// `AppPaths.resolveRoot` chooses between Documents and Application Support
+    /// on a migration marker; nothing in the Python package can reproduce that,
+    /// so a Python-side guess would write the AI usage log (#207) to a folder
+    /// the app never reads. The path is single-quoted for the shell script, and
+    /// any apostrophe in it is escaped, because a home folder can contain one.
+    static func dataDirExport(_ root: URL) -> String {
+        let escaped = root.path.replacingOccurrences(of: "'", with: "'\"'\"'")
+        return "export POSTROLL_DATA_DIR='\(escaped)'"
+    }
+
     static func apiKeyDelivery(_ key: String?) -> (environment: [String: String], scriptLines: String) {
         let carrier = "POSTROLL_ANTHROPIC_API_KEY"
         guard let key, !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -1714,6 +1726,11 @@ actor PythonBridge {
             .replacingOccurrences(of: "'", with: "'\"'\"'")
         let brandVoiceExport = "export POSTROLL_BRAND_VOICE='\(brandVoicePath)'"
 
+        // Python cannot reproduce AppPaths' marker-gated choice between
+        // Documents and Application Support, so the app tells it. The AI usage
+        // log (#207) is written here.
+        let dataDirExport = Self.dataDirExport(AppPaths.root)
+
         let quotedArgs = ([python] + args)
             .map { "'" + $0.replacingOccurrences(of: "'", with: "'\"'\"'") + "'" }
             .joined(separator: " ")
@@ -1734,6 +1751,7 @@ actor PythonBridge {
             [ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc"
             \(apiKey.scriptLines)
             \(brandVoiceExport)
+            \(dataDirExport)
             cd '\(root.path)'
             if [ -f '\(logPath)' ]; then
                 tail -n 500 '\(logPath)' > '\(logPath).tmp' && mv '\(logPath).tmp' '\(logPath)'

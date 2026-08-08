@@ -211,7 +211,7 @@ def test_run_review_pass_keeps_prior_draft_on_failure():
 
     prior = {"caption": "the paid-for draft", "hashtags": ["#a"]}
 
-    def failing_runner(prompt, timeout=300):
+    def failing_runner(prompt, timeout=300, **kwargs):
         raise ClaudeError("overloaded")
 
     result = run_review_pass("review it", prior, label="voice", runner=failing_runner)
@@ -223,7 +223,7 @@ def test_run_review_pass_keeps_prior_draft_on_non_dict():
 
     prior = {"caption": "draft"}
     result = run_review_pass(
-        "review it", prior, label="humanizer", runner=lambda p, timeout=300: ["wrong shape"]
+        "review it", prior, label="humanizer", runner=lambda p, timeout=300, **kw: ["wrong shape"]
     )
     assert result == prior
 
@@ -234,7 +234,7 @@ def test_run_review_pass_returns_revision_on_success():
     prior = {"caption": "draft"}
     revised = {"caption": "improved draft"}
     result = run_review_pass(
-        "review it", prior, label="voice", runner=lambda p, timeout=300: revised
+        "review it", prior, label="voice", runner=lambda p, timeout=300, **kw: revised
     )
     assert result == revised
 
@@ -336,7 +336,7 @@ def test_run_review_pass_validator_keeps_prior_on_broken_invariant():
 
     result = run_review_pass(
         "review", prior, label="humanizer",
-        runner=lambda p, timeout=300: revised,
+        runner=lambda p, timeout=300, **kw: revised,
         validate=lambda pr, rv: "dropped markers" if "[PHOTO:" not in rv["body"] else None,
     )
     assert result == prior

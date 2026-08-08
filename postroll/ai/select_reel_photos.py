@@ -124,6 +124,7 @@ def select_reel_photos(
             timeout=600,
             image_paths=staged,
             image_labels=labels,
+            step="select_reel_photos",
         )
 
     if not isinstance(data, dict) or "selected_indices" not in data:

@@ -167,7 +167,7 @@ def revise_blog(
         pieces=_format_pieces(program.get("pieces", [])),
     )
 
-    data = run_json_prompt(prompt, timeout=600)
+    data = run_json_prompt(prompt, timeout=600, step="revise_blog")
     if not isinstance(data, dict):
         raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 

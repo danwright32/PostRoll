@@ -1489,6 +1489,7 @@ def _fix_second_person(body: str) -> str:
             raw = run_prompt(
                 _SECOND_PERSON_PARAGRAPH_PROMPT.format(paragraph=original),
                 timeout=120,
+                step="blog",
             )
         except ClaudeError:
             continue
@@ -1521,6 +1522,7 @@ def _fix_missing_contractions(body: str) -> str:
             raw = run_prompt(
                 _CONTRACTION_PARAGRAPH_PROMPT.format(paragraph=original),
                 timeout=120,
+                step="blog",
             )
         except ClaudeError:
             continue
@@ -1647,6 +1649,7 @@ def generate_blog(
             timeout=600,
             image_paths=resolved,
             image_labels=photo_filenames,
+            step="blog:photo_choice",
         )
 
         if not isinstance(data, dict):

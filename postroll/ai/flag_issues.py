@@ -151,6 +151,7 @@ def flag_issues(
             prompt,
             timeout=600,
             image_paths=staged,
+            step="flag_issues",
         )
 
     if not isinstance(data, list):

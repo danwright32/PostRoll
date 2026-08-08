@@ -127,7 +127,7 @@ def learn_from_edits(
         edit_pairs=edit_pairs_text,
     )
 
-    data = run_json_prompt(prompt, timeout=120)
+    data = run_json_prompt(prompt, timeout=120, step="learn_from_edits")
     if not isinstance(data, dict):
         return {"suggestion": None}
 

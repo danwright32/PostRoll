@@ -158,6 +158,7 @@
 		E564B252BCA2619F958D0910 /* ProcessRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894B9318CC6809232F0CA2F8 /* ProcessRunnerTests.swift */; };
 		E9B3111FF501C77F84E9F8D3 /* PostingPresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D01AD78F4EA1A52E642B5A /* PostingPresetStore.swift */; };
 		EA02F129EDB2AE1877EB94F4 /* ExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67DBCC41F23BCD37CD1B842C /* ExportView.swift */; };
+		EB0D6169EC03E2A24531E079 /* DataDirExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8848A60E361D54711A772EBB /* DataDirExportTests.swift */; };
 		EC9CDF247EB7F02FEF88FD05 /* AnalyticsDatesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C87C92505985A015591B53B /* AnalyticsDatesTests.swift */; };
 		ECF547E11F3729797A2A65D7 /* MediaPresence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4DE081A534A262028467FCA /* MediaPresence.swift */; };
 		EDA477A0B60D1F0D6A0D01FF /* OCRResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = D92CD520B46A8592B9C5493C /* OCRResult.swift */; };
@@ -262,6 +263,7 @@
 		7E88DAFB144BC95C1E6B87EA /* StoredErrorPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoredErrorPolicyTests.swift; sourceTree = "<group>"; };
 		8089518478AA10F4DC5A9A83 /* EventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStore.swift; sourceTree = "<group>"; };
 		871FEB947457130340BB8140 /* NewEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewEventSheet.swift; sourceTree = "<group>"; };
+		8848A60E361D54711A772EBB /* DataDirExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataDirExportTests.swift; sourceTree = "<group>"; };
 		88E0E0D7A8E5639D8A201397 /* CollageCandidate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollageCandidate.swift; sourceTree = "<group>"; };
 		894B9318CC6809232F0CA2F8 /* ProcessRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunnerTests.swift; sourceTree = "<group>"; };
 		89580BC6221599F5163857E3 /* PhotoAssignmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoAssignmentView.swift; sourceTree = "<group>"; };
@@ -487,6 +489,7 @@
 				0734077F9E41D6D4653FA829 /* CoverManifestTests.swift */,
 				FA9E36A1293C2F0C1D658AB1 /* CoverRegenerationManifestTests.swift */,
 				296F4BECD83FCE57CD51D69B /* CoverReviewDisplayTests.swift */,
+				8848A60E361D54711A772EBB /* DataDirExportTests.swift */,
 				B63250E69964610C3E6239F4 /* DataMigrationTests.swift */,
 				D3CBB9FE0732F7C89DCD4B8D /* DayStateMergerTests.swift */,
 				2A8AECAB81F70E2420E3996E /* DeletionPolicyTests.swift */,
@@ -769,6 +772,7 @@
 				FA79C3FD1D4E4A782771EB70 /* CoverRegenerationManifestTests.swift in Sources */,
 				01C46B9BAFAA78A034F385F5 /* CoverReviewDisplay.swift in Sources */,
 				6667EECE61AD240E93F94AD9 /* CoverReviewDisplayTests.swift in Sources */,
+				EB0D6169EC03E2A24531E079 /* DataDirExportTests.swift in Sources */,
 				58CFFF062922CB5CFD0A07AE /* DataMigration.swift in Sources */,
 				6D26777A36FA83CB4F44CCCA /* DataMigrationTests.swift in Sources */,
 				7CE28048247ABBF65F7BE126 /* DayStateMerger.swift in Sources */,
