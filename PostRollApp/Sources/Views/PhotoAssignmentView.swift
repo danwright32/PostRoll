@@ -321,6 +321,9 @@ struct PhotoAssignmentView: View {
                             handles: handleBinding(day),
                             names: plainNameBinding(day),
                             isCarouselDay: isCollageDay(day),
+                            creditedFromPhotos: PerformerPanelDisplay.creditedFromPhotos(
+                                dayPhotoTags[day] ?? [:],
+                                photoOrder: (dayPhotos[day] ?? []).map(\.absoluteString)),
                             onChanged: { save() }
                         )
                     }
@@ -2362,13 +2365,17 @@ private struct PerformerAssignmentSection: View {
     /// True on a day laid out as a per-photo carousel, where people are tagged
     /// on the photos themselves and this panel is the fallback (#171).
     let isCarouselDay: Bool
+    /// Everyone the day's photo tags already credit. Shown so it's visible
+    /// that they reach the caption without being ticked here too.
+    let creditedFromPhotos: [String]
     let onChanged: () -> Void
 
     @State private var isExpanded: Bool
 
     init(day: DayName, performers: [Performer], eventHandles: String,
          selectedPerformerIDs: Binding<Set<UUID>>, handles: Binding<String>,
-         names: Binding<String>, isCarouselDay: Bool, onChanged: @escaping () -> Void) {
+         names: Binding<String>, isCarouselDay: Bool,
+         creditedFromPhotos: [String], onChanged: @escaping () -> Void) {
         self.day = day
         self.performers = performers
         self.eventHandles = eventHandles
@@ -2376,6 +2383,7 @@ private struct PerformerAssignmentSection: View {
         self._handles = handles
         self._names = names
         self.isCarouselDay = isCarouselDay
+        self.creditedFromPhotos = creditedFromPhotos
         self.onChanged = onChanged
         let hasContent = !handles.wrappedValue.isEmpty
             || !names.wrappedValue.isEmpty
@@ -2422,6 +2430,21 @@ private struct PerformerAssignmentSection: View {
                             .font(.system(size: 10))
                             .foregroundStyle(Color.warmMid.opacity(0.85))
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // The caption credits these already. Saying so stops the
+                    // same people being ticked below a second time.
+                    if !creditedFromPhotos.isEmpty {
+                        HStack(alignment: .top, spacing: 5) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.roseGold.opacity(0.8))
+                            Text("Already credited from the photos: \(creditedFromPhotos.joined(separator: ", "))")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.warmMid)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.bottom, 2)
                     }
 
                     if !performers.isEmpty {

@@ -25,4 +25,22 @@ enum PerformerPanelDisplay {
         guard isCarouselDay else { return nil }
         return "Tag people on the photos above. Use this only for someone who belongs to the post but isn't in any one photo."
     }
+
+    /// Everyone the day's photo tags already credit, in carousel order, each
+    /// listed once. The caption picks these up on its own, so the panel has to
+    /// show them: an empty-looking panel reads as nobody being tagged and
+    /// invites ticking the same people a second time.
+    static func creditedFromPhotos(_ photoTags: [String: [String]],
+                                   photoOrder: [String]) -> [String] {
+        var out: [String] = []
+        var seen = Set<String>()
+        for key in photoOrder {
+            for raw in photoTags[key] ?? [] {
+                let tag = raw.trimmingCharacters(in: .whitespaces)
+                guard !tag.isEmpty, seen.insert(tag.lowercased()).inserted else { continue }
+                out.append(tag)
+            }
+        }
+        return out
+    }
 }

@@ -48,6 +48,49 @@ final class PerformerPanelDisplayTests: XCTestCase {
                       "the hint has to point back at per-photo tagging to be worth showing")
     }
 
+    // MARK: - Showing who the photos already credit
+
+    /// People tagged on individual photos are credited by the caption
+    /// automatically, but the panel showed only its own checkboxes, so there
+    /// was no way to tell they had been counted. Silence there reads as "not
+    /// tagged" and invites ticking everyone a second time.
+    func testListsWhoThePhotosAlreadyCreditInPhotoOrder() {
+        let tags = ["p2": ["Pete White"], "p1": ["Fermin Suero, Jr.", "@safa.wav"]]
+        XCTAssertEqual(
+            PerformerPanelDisplay.creditedFromPhotos(tags, photoOrder: ["p1", "p2", "p3"]),
+            ["Fermin Suero, Jr.", "@safa.wav", "Pete White"],
+            "reads in carousel order, not dictionary order")
+    }
+
+    func testSomeoneTaggedOnSeveralPhotosIsListedOnce() {
+        let tags = ["p1": ["Ana Ruiz"], "p2": ["ana ruiz"], "p3": ["Ana Ruiz"]]
+        XCTAssertEqual(
+            PerformerPanelDisplay.creditedFromPhotos(tags, photoOrder: ["p1", "p2", "p3"]),
+            ["Ana Ruiz"])
+    }
+
+    func testNothingTaggedOnAnyPhotoListsNobody() {
+        XCTAssertTrue(
+            PerformerPanelDisplay.creditedFromPhotos([:], photoOrder: ["p1"]).isEmpty)
+        XCTAssertTrue(
+            PerformerPanelDisplay.creditedFromPhotos(["p1": []], photoOrder: ["p1"]).isEmpty)
+    }
+
+    func testABlankTagIsNotListedAsACredit() {
+        let tags = ["p1": ["  ", "Real Person"]]
+        XCTAssertEqual(
+            PerformerPanelDisplay.creditedFromPhotos(tags, photoOrder: ["p1"]),
+            ["Real Person"])
+    }
+
+    func testTagsLeftOnARemovedPhotoAreNotListed() {
+        let tags = ["gone": ["Ghost"], "p1": ["Real Person"]]
+        XCTAssertEqual(
+            PerformerPanelDisplay.creditedFromPhotos(tags, photoOrder: ["p1"]),
+            ["Real Person"],
+            "a stale entry must not claim someone is credited when their photo is gone")
+    }
+
     func testNonCarouselDayShowsNoHint() {
         XCTAssertNil(PerformerPanelDisplay.hint(isCarouselDay: false),
                      "there is no per-photo tagging to contrast with on a single-photo day")
