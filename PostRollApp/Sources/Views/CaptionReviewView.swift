@@ -83,8 +83,13 @@ struct CaptionReviewView: View {
     @State private var showLearnSheet = false
 
     // Preview graphics generation
-    @State private var isGeneratingGraphics = false
-    @State private var regeneratingDays: Set<DayName> = []
+    // Preview-graphic runs are owned by PreviewGraphicsManager, not this view:
+    // EventDetailView remounts the screen via .id(event.id) on every event
+    // switch, which used to discard this state while the Task kept running, so
+    // coming back auto-started a second writer and showed no progress (#75).
+    private var graphics: PreviewGraphicsManager { PreviewGraphicsManager.shared }
+    private var isGeneratingGraphics: Bool { graphics.isGenerating(event.id) }
+    private var regeneratingDays: Set<DayName> { graphics.regeneratingDays(event.id) }
     /// When each day's current regen started, so the UI can show elapsed
     /// time instead of a bare spinner (#135's Friday pipeline in particular:
     /// import copy + Stage 1 scoring + Stage 2 Claude + ffmpeg render can
@@ -314,6 +319,22 @@ struct CaptionReviewView: View {
                     .padding(Spacing.xl)
                 } else {
                     VStack(spacing: 0) {
+                        // A preview run that died used to be indistinguishable
+                        // from one that never started: the error went into a
+                        // `try?` and the screen just showed no graphics (#75).
+                        if let graphicsError = graphics.failure(for: event.id) {
+                            BrandBanner(
+                                icon: "exclamationmark.triangle",
+                                message: "The story graphics couldn't be generated: \(graphicsError)",
+                                style: .error,
+                                actions: [
+                                    BrandBannerAction(label: "Try again", action: { generateGraphics() }),
+                                    BrandBannerAction(label: "Dismiss", action: { graphics.clearFailure(for: event.id) }),
+                                ]
+                            )
+                            .padding(.horizontal, Spacing.xl)
+                            .padding(.bottom, Spacing.sm)
+                        }
                         HStack {
                             Button("Regenerate All…") { showRegenerateConfirm = true }
                                 .buttonStyle(.plain)
@@ -463,6 +484,13 @@ struct CaptionReviewView: View {
         do {
             let live = liveEvent
             let newResult = try await PythonBridge.shared.runWeekGeneration(event: live)
+            // Persist FIRST, through the store. This is three to six minutes of
+            // paid Claude output, and writing it only into this view's @State
+            // lost it outright whenever the screen had been remounted by an
+            // event switch, while the success notification still fired (#76).
+            var ev = appState.events.first(where: { $0.id == event.id }) ?? live
+            ev.weekResult = newResult
+            appState.updateEvent(ev)
             result = newResult
             mergeGlobalTags()
             NotificationService.shared.notifyRegenerationComplete(eventName: live.name, what: "Captions")
@@ -491,28 +519,15 @@ struct CaptionReviewView: View {
 
     // MARK: - Preview graphics
 
+    /// Starts the full preview run, or joins the one already in flight. The
+    /// manager refuses a second concurrent run for this event, so an auto-start
+    /// after a remount can't put two writers on the same output files (#75).
     private func generateGraphics() {
-        isGeneratingGraphics = true
-        Task {
-            if let result = try? await PythonBridge.shared.runPreviewGeneration(event: liveEvent),
-               !result.paths.isEmpty {
-                await MainActor.run {
-                    // Base the write-back on the live event: the run takes a
-                    // minute or more and a snapshot would revert interleaved edits.
-                    var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-                    ev.previewMediaPaths = result.paths
-                    ev.applyFridayClipPlan(result.fridayClipPlan)
-                    for (day, pick) in result.coverPicks { ev.applyCoverPick(pick, forDay: day) }
-                    appState.updateEvent(ev)
-                }
-            }
-            await MainActor.run {
-                isGeneratingGraphics = false
-                // Fresh generation already wrote reel_preview.png as a side
-                // effect — this just resolves the URL so the Thursday card is
-                // instant when expanded.
-                prepareThursdayEditor()
-            }
+        graphics.startFullRun(eventID: event.id, appState: appState) {
+            // Fresh generation already wrote reel_preview.png as a side effect —
+            // this just resolves the URL so the Thursday card is instant when
+            // expanded.
+            prepareThursdayEditor()
         }
     }
 
@@ -553,7 +568,7 @@ struct CaptionReviewView: View {
         ev.days[day.rawValue] = pd
         appState.updateEvent(ev)
 
-        regeneratingDays.insert(day)
+        graphics.beginDayRegen(day, for: event.id)
         regenerateError = nil
         Task {
             do {
@@ -561,7 +576,7 @@ struct CaptionReviewView: View {
                 await MainActor.run {
                     // Bump the version so SwiftUI rebuilds AVPlayer with the updated file.
                     graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
-                    regeneratingDays.remove(day)
+                    graphics.endDayRegen(day, for: event.id)
                     NotificationService.shared.notifyRegenerationComplete(
                         eventName: liveEvent.name,
                         what: "\(day.displayName) audio"
@@ -569,7 +584,7 @@ struct CaptionReviewView: View {
                 }
             } catch {
                 await MainActor.run {
-                    regeneratingDays.remove(day)
+                    graphics.endDayRegen(day, for: event.id)
                     regenerateError = "\(day.displayName) audio swap failed: \(error.localizedDescription)"
                 }
             }
@@ -632,7 +647,7 @@ struct CaptionReviewView: View {
         ev.days[day.rawValue] = pd
         appState.updateEvent(ev)
 
-        regeneratingDays.insert(day)
+        graphics.beginDayRegen(day, for: event.id)
         regenerateError = nil
         Task {
             do {
@@ -641,7 +656,7 @@ struct CaptionReviewView: View {
                 )
                 await MainActor.run {
                     graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
-                    regeneratingDays.remove(day)
+                    graphics.endDayRegen(day, for: event.id)
                     NotificationService.shared.notifyRegenerationComplete(
                         eventName: liveEvent.name,
                         what: "\(day.displayName) audio"
@@ -649,7 +664,7 @@ struct CaptionReviewView: View {
                 }
             } catch {
                 await MainActor.run {
-                    regeneratingDays.remove(day)
+                    graphics.endDayRegen(day, for: event.id)
                     regenerateError = "\(day.displayName) audio upload failed: \(error.localizedDescription)"
                 }
             }
@@ -787,7 +802,7 @@ struct CaptionReviewView: View {
         ev.days[DayName.friday.rawValue]?.fridayClipOverride = override
         appState.updateEvent(ev)
 
-        regeneratingDays.insert(.friday)
+        graphics.beginDayRegen(.friday, for: event.id)
         regenerationStartTimes[.friday] = Date()
         regenerateError = nil
         Task {
@@ -795,7 +810,7 @@ struct CaptionReviewView: View {
                 let liveEvent = appState.events.first(where: { $0.id == event.id }) ?? ev
                 let reelPath = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
                 await MainActor.run {
-                    regeneratingDays.remove(.friday)
+                    graphics.endDayRegen(.friday, for: event.id)
                     regenerationStartTimes[.friday] = nil
                     guard let reelPath else {
                         regenerateError = "Friday reel edit couldn't be applied: no reel to update"
@@ -810,7 +825,7 @@ struct CaptionReviewView: View {
                 }
             } catch {
                 await MainActor.run {
-                    regeneratingDays.remove(.friday)
+                    graphics.endDayRegen(.friday, for: event.id)
                     regenerationStartTimes[.friday] = nil
                     regenerateError = "Friday reel edit failed: \(error.localizedDescription)"
                 }
@@ -984,7 +999,7 @@ struct CaptionReviewView: View {
             appState.updateEvent(eventSnapshot)
         }
 
-        regeneratingDays.insert(day)
+        graphics.beginDayRegen(day, for: event.id)
         regenerationStartTimes[day] = Date()
         regenerateError = nil
         Task {
@@ -994,7 +1009,7 @@ struct CaptionReviewView: View {
             if day == .thursday, !newLayout,
                let result = await speculativeReel.take(matching: eventSnapshot) {
                 await MainActor.run {
-                    regeneratingDays.remove(day)
+                    graphics.endDayRegen(day, for: event.id)
                     regenerationStartTimes[day] = nil
                     applyRegenResult(result, day: day)
                 }
@@ -1019,7 +1034,7 @@ struct CaptionReviewView: View {
             }
 
             await MainActor.run {
-                regeneratingDays.remove(day)
+                graphics.endDayRegen(day, for: event.id)
                 regenerationStartTimes[day] = nil
                 switch outcome {
                 case .failure(let error):
