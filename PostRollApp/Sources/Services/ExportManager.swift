@@ -92,11 +92,16 @@ final class ExportManager {
         do {
             // Step 1: text export (fast, on background thread). The security
             // scope is released once the synchronous export returns.
-            let folder = try await Task.detached {
+            let textExport = try await Task.detached {
                 defer { destinationRoot.stopAccessingSecurityScopedResource() }
                 return try EventExporter.export(event: capturedEvent, to: destinationRoot, days: scopedDays,
                                                 preset: capturedEvent.effectivePostingPreset)
             }.value
+            let folder = textExport.folder
+            // Files the export meant to copy and couldn't. Carried all the way
+            // to the done screen: an export folder that is short a photo used
+            // to report success and still stamp the event as Exported (#79).
+            var droppedAssets = textExport.dropped
 
             tracker.update(eventID) {
                 $0.phase = .generatingMedia(folder)
@@ -174,7 +179,13 @@ final class ExportManager {
                             let src = URL(fileURLWithPath: srcPath)
                             let dest = dayDir.appendingPathComponent(src.lastPathComponent)
                             try? FileManager.default.removeItem(at: dest)
-                            _ = try? FileManager.default.copyItem(at: src, to: dest)
+                            do {
+                                try FileManager.default.copyItem(at: src, to: dest)
+                            } catch {
+                                droppedAssets.append(EventExporter.DroppedAsset(
+                                    label: "\(day.displayName) \(src.lastPathComponent)",
+                                    source: src, reason: error.localizedDescription))
+                            }
                         }
                     }
                 } catch {
@@ -182,8 +193,15 @@ final class ExportManager {
                 }
             }
 
+            // The dropped-asset warning shares the done screen's error slot with
+            // the Python error: both mean the folder isn't what it claims.
+            let dropWarning = EventExporter.Outcome(folder: folder, dropped: droppedAssets).warning
+            let combinedError = [mediaError, dropWarning].compactMap { $0 }.joined(separator: "\n\n")
+
             finishSuccess(eventID: eventID, folder: folder, onlyDay: onlyDay,
-                          daysNeedingPython: daysNeedingPython, mediaError: mediaError, appState: appState)
+                          daysNeedingPython: daysNeedingPython,
+                          mediaError: combinedError.isEmpty ? nil : combinedError,
+                          appState: appState)
         } catch is CancellationError {
             // Cancelled (skipMedia handles its own terminal state).
         } catch {
@@ -197,7 +215,8 @@ final class ExportManager {
     }
 
     private func finishSuccess(eventID: Event.ID, folder: URL, onlyDay: DayName?,
-                               daysNeedingPython: [String], mediaError: String?, appState: AppState) {
+                               daysNeedingPython: [String], mediaError: String?,
+                               appState: AppState) {
         // Only learn from full copy-only runs so the mean stays a clean signal
         // for the common fast path.
         if onlyDay == nil && daysNeedingPython.isEmpty {
@@ -213,9 +232,15 @@ final class ExportManager {
         // A full export is the real "Exported" milestone: stamp the live event
         // so the sidebar pill stops reading "Ready to Export" and the archive
         // clock starts from actual completion. Single-day re-exports don't.
+        // The archive clock starts the 60-day countdown that reclaims this
+        // event's photos, so it is only stamped on an export that is actually
+        // complete. An export missing files, or one whose assets failed to
+        // render, is not that milestone (#79); the folder still exists and its
+        // path is recorded so it can be opened and re-exported once whatever
+        // went wrong is fixed.
         if onlyDay == nil, var ev = appState.events.first(where: { $0.id == eventID }) {
             ev.exportPath = folder
-            ev.archivedAt = Date()
+            if mediaError == nil { ev.archivedAt = Date() }
             appState.updateEvent(ev)
         }
         NotificationService.shared.notifyExportComplete(

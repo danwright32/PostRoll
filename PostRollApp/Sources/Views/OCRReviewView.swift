@@ -391,16 +391,29 @@ struct OCRReviewView: View {
             .filter { !$0.isEmpty }
         let deduped = Array(NSOrderedSet(array: combined)) as? [String] ?? combined
 
-        // Now that the user has finalized the OCR, the program images are no
-        // longer needed. (Cleanup is gated here, not at OCR completion, so the
-        // flag-review step can re-read images if needed.)
-        ProgramImageCleanup.delete(urls: event.programImagePaths)
-
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+
+        // Now that the user has finalized the OCR, the program images are no
+        // longer needed — but only once the searchable PDF that replaces them
+        // is verified to exist. These scans are the only copies of the program
+        // (the sites they come from block re-download), and deleting them on a
+        // bake that had failed, or one still running, destroyed it outright
+        // (#80). When the PDF isn't ready the scans stay and the bake is
+        // re-run; that bake deletes them itself once it has succeeded.
+        switch ProgramScanRetention.decide(for: ev) {
+        case .deleteScans:
+            ProgramImageCleanup.delete(urls: ev.programImagePaths)
+            ev.programImagePaths = []
+        case .nothingToDelete:
+            break
+        case .keepScans:
+            ProgramPDFBakery.shared.bake(event: ev, appState: appState,
+                                         deletingScansOnSuccess: true)
+        }
+
         ev.ocrResult = ocr
         ev.ocrReviewDone = true
         ev.eventHandles = deduped.joined(separator: ", ")
-        ev.programImagePaths = []
         ev.pendingFlags = []
         ev.pendingFlagsError = nil
         ev.stage = .photosAssigned

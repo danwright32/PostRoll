@@ -171,23 +171,12 @@ struct ProgramUploadView: View {
     /// stores it on the event. Done here, while the page scans are freshly
     /// imported, because ArchiveCleanup reclaims those scans 60 days after
     /// export — after which the PDF is the only copy of the program left.
+    ///
+    /// Owned by ProgramPDFBakery rather than a detached Task started here: a
+    /// failure has to be recorded rather than dropped by a `try?`, and a second
+    /// bake must not start while one is in flight (#80).
     private func buildProgramPDF(for ev: Event) {
-        let pages = ev.programImagePaths
-        guard !pages.isEmpty else { return }
-        let eventID = ev.id
-        let dest = AppPaths.programPDFFile(eventID: eventID)
-        let fingerprint = ProgramPDFBuilder.fingerprint(of: pages)
-        Task.detached(priority: .utility) {
-            guard let url = try? ProgramPDFBuilder.writePDF(from: pages, to: dest) else { return }
-            await MainActor.run {
-                // Read the live event back: the user may have renamed it or moved
-                // on while OCR was running. Never write a stale captured copy.
-                guard var live = appState.events.first(where: { $0.id == eventID }) else { return }
-                live.programPDFPath = url
-                live.programPDFFingerprint = fingerprint
-                appState.updateEvent(live)
-            }
-        }
+        ProgramPDFBakery.shared.bake(event: ev, appState: appState)
     }
 
     private func skipProgram() {

@@ -310,12 +310,18 @@ struct ExportView: View {
         VStack(spacing: Spacing.lg) {
             Spacer().frame(height: Spacing.lg)
 
-            Image(systemName: "checkmark.circle.fill")
+            // An export that lost files is not a completed export, so it does
+            // not get the checkmark, the word "complete", or the claim that the
+            // event is archived: none of those were true and all three read as
+            // success (#79).
+            let incomplete = mediaError != nil
+
+            Image(systemName: incomplete ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                 .font(.system(size: 44))
-                .foregroundStyle(Color.roseGold.opacity(0.7))
+                .foregroundStyle(incomplete ? Color.roseDeep : Color.roseGold.opacity(0.7))
                 .padding(.top, Spacing.xl)
 
-            Text("Export complete")
+            Text(incomplete ? "Export incomplete" : "Export complete")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.warmDark)
 
@@ -327,15 +333,20 @@ struct ExportView: View {
                 .frame(width: 80)
 
             if let mediaErr = mediaError {
+                // The message is whatever actually failed. It used to append
+                // "Check that ffmpeg is installed" to every cause, which sends
+                // the diagnosis somewhere unrelated for a missing photo.
                 BrandBanner(
                     icon: "exclamationmark.triangle",
-                    message: "Captions + blog exported. Visual assets failed: \(mediaErr). Check that ffmpeg is installed.",
-                    style: .warning
+                    message: "The captions and blog were exported. \(mediaErr)",
+                    style: .error
                 )
                 .frame(maxWidth: 400)
             }
 
-            Text("This event is now archived. Use the archive button in the sidebar to revisit it.")
+            Text(incomplete
+                 ? "This event has NOT been archived, so nothing is on the clock to be cleaned up. Fix what's listed above and export again."
+                 : "This event is now archived. Use the archive button in the sidebar to revisit it.")
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid.opacity(0.75))
                 .multilineTextAlignment(.center)

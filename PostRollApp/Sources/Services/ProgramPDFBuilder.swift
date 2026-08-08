@@ -128,6 +128,38 @@ struct ProgramPDFBuilder {
         return destination
     }
 
+    /// `writePDF`, plus a read-back proving the file is genuinely there and not
+    /// empty before the caller is told it succeeded.
+    ///
+    /// This is what makes deleting the program page scans safe: the scans are
+    /// the only copies of the program, so the thing replacing them has to be
+    /// verified to exist rather than assumed from a call that didn't throw
+    /// (#80). Writes to a temp file and moves it into place, so a crash
+    /// mid-write can't leave a truncated PDF where a good one used to be.
+    @discardableResult
+    static func writeVerifiedPDF(from imagePaths: [URL], to destination: URL) throws -> URL {
+        let data = try makePDF(from: imagePaths)
+        guard !data.isEmpty else { throw BuildError.encodingFailed }
+
+        let fm = FileManager.default
+        try fm.createDirectory(at: destination.deletingLastPathComponent(),
+                               withIntermediateDirectories: true)
+        let temp = destination.deletingLastPathComponent()
+            .appendingPathComponent(".\(destination.lastPathComponent).\(UUID().uuidString).part")
+        try data.write(to: temp, options: .atomic)
+        defer { try? fm.removeItem(at: temp) }
+
+        if fm.fileExists(atPath: destination.path) {
+            _ = try fm.replaceItemAt(destination, withItemAt: temp)
+        } else {
+            try fm.moveItem(at: temp, to: destination)
+        }
+
+        let size = (try? fm.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? nil
+        guard let size, size > 0 else { throw BuildError.encodingFailed }
+        return destination
+    }
+
     // MARK: - Rasterising an upload
 
     /// Rasterises each page of `url` to a 2× PNG in `dir` (named by

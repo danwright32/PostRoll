@@ -65,7 +65,7 @@ final class EventExporterTests: XCTestCase {
         let p2 = makeFile("shot-277.jpg")
         let event = makeEvent(wednesdayPhotos: [p1, p2])
 
-        let folder = try EventExporter.export(event: event, to: root)
+        let folder = try EventExporter.export(event: event, to: root).folder
         let fm = FileManager.default
 
         XCTAssertEqual(folder.lastPathComponent,
@@ -103,12 +103,12 @@ final class EventExporterTests: XCTestCase {
     func testFullReexportRebuildsAndRemovesOrphans() throws {
         let p1 = makeFile("shot-100.jpg")
         let p2 = makeFile("shot-277.jpg")
-        let first = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1, p2]), to: root)
+        let first = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1, p2]), to: root).folder
         XCTAssertTrue(FileManager.default.fileExists(atPath: first.appendingPathComponent("4. Wednesday/carousel/02.jpg").path))
 
         // Re-export with Wednesday trimmed to one photo: the stale 02.jpg must
         // not survive (full export rebuilds the folder from scratch).
-        let second = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1]), to: root)
+        let second = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1]), to: root).folder
         XCTAssertTrue(FileManager.default.fileExists(atPath: second.appendingPathComponent("4. Wednesday/carousel/01.jpg").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: second.appendingPathComponent("4. Wednesday/carousel/02.jpg").path),
                        "orphaned carousel photo from the previous export must be gone")
@@ -116,7 +116,7 @@ final class EventExporterTests: XCTestCase {
 
     func testSingleDayExportLeavesMasterFilesUntouched() throws {
         let event = makeEvent(wednesdayPhotos: [makeFile("shot-100.jpg")])
-        let folder = try EventExporter.export(event: event, to: root)
+        let folder = try EventExporter.export(event: event, to: root).folder
 
         let captionsURL = folder.appendingPathComponent("CAPTIONS.txt")
         let before = try String(contentsOf: captionsURL, encoding: .utf8)
@@ -151,7 +151,7 @@ final class EventExporterTests: XCTestCase {
 
     func testBalancedPresetExportsSundayAsCarouselWithNumberedAltText() throws {
         let (event, _) = makeSundayCarouselEvent()
-        let folder = try EventExporter.export(event: event, to: root, preset: .balanced)
+        let folder = try EventExporter.export(event: event, to: root, preset: .balanced).folder
         let fm = FileManager.default
 
         // Sunday gets a carousel/ of its four assigned photos, zero-padded.
@@ -185,7 +185,7 @@ final class EventExporterTests: XCTestCase {
         result.sunday = caption("Sunday carousel", alt: ["a", "b", "c", "d"])
         event.weekResult = result
 
-        let folder = try EventExporter.export(event: event, to: root, preset: .balanced)
+        let folder = try EventExporter.export(event: event, to: root, preset: .balanced).folder
         let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
         XCTAssertTrue(captions.contains("PHOTO TAGS:"))
         XCTAssertTrue(captions.contains("22: Mike Bono, @mikebonomusic"))
@@ -212,7 +212,7 @@ final class EventExporterTests: XCTestCase {
         XCTAssertEqual(event.effectivePostingPreset, .classic)
 
         let folder = try EventExporter.export(event: event, to: root,
-                                              preset: event.effectivePostingPreset)
+                                              preset: event.effectivePostingPreset).folder
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: folder.appendingPathComponent("1. Sunday/carousel").path),
             "a classic override exports Sunday as a single photo, not a carousel, despite a balanced default")
@@ -220,7 +220,7 @@ final class EventExporterTests: XCTestCase {
 
     func testClassicPresetKeepsSundaySinglePhoto() throws {
         let (event, _) = makeSundayCarouselEvent()
-        let folder = try EventExporter.export(event: event, to: root, preset: .classic)
+        let folder = try EventExporter.export(event: event, to: root, preset: .classic).folder
         let fm = FileManager.default
 
         // No carousel subfolder under classic — Sunday is a single feed photo.
@@ -258,7 +258,7 @@ final class EventExporterTests: XCTestCase {
         result.friday = caption("A night of highlights, cut together.", hashtags: ["#dwphotony"])
         event.weekResult = result
 
-        let folder = try EventExporter.export(event: event, to: root)
+        let folder = try EventExporter.export(event: event, to: root).folder
         let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
 
         XCTAssertTrue(captions.contains("=== FRIDAY ==="))
@@ -271,5 +271,95 @@ final class EventExporterTests: XCTestCase {
         XCTAssertEqual(EventExporter.slug("Music From Inside"), "music_from_inside")
         XCTAssertEqual(EventExporter.slug("Reverence & Resistance"), "reverence_resistance")
         XCTAssertEqual(EventExporter.slug("  Trailing!!  "), "trailing")
+    }
+}
+
+/// An export that quietly drops a photo produces a folder Dan uploads with
+/// content missing, and the event still reads "Exported" (#79). Every copy the
+/// export intended to make is now accounted for.
+final class ExportCompletenessTests: XCTestCase {
+
+    private var root: URL!
+    private var assets: URL!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("export-completeness-\(UUID().uuidString)")
+        assets = root.appendingPathComponent("_assets")
+        try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    private func makeFile(_ name: String) -> URL {
+        let url = assets.appendingPathComponent(name)
+        FileManager.default.createFile(atPath: url.path, contents: Data("img".utf8))
+        return url
+    }
+
+    private func event(wednesdayPhotos: [URL], blogPhotos: [URL]) -> Event {
+        var event = Event(name: "Music From Inside", org: "Decoda", venue: "Hall",
+                          date: Date(timeIntervalSince1970: 1_700_000_000), shootType: .fullShow)
+        var wed = PostingDay(day: .wednesday)
+        wed.photoPaths = wednesdayPhotos
+        event.days = [DayName.wednesday.rawValue: wed]
+        event.blogPhotoPaths = blogPhotos
+        var result = WeekGenerationResult()
+        var cap = DayCaption(); cap.caption = "Carousel day"
+        result.wednesday = cap
+        result.blog = BlogOutput(title: "Inside the Music", body: "Body.")
+        event.weekResult = result
+        return event
+    }
+
+    func testACleanExportReportsNothingDropped() throws {
+        let ev = event(wednesdayPhotos: [makeFile("a.jpg"), makeFile("b.jpg")],
+                       blogPhotos: [makeFile("blog1.jpg")])
+
+        let outcome = try EventExporter.export(event: ev, to: root)
+
+        XCTAssertTrue(outcome.dropped.isEmpty)
+        XCTAssertTrue(outcome.isComplete)
+        XCTAssertNil(outcome.warning)
+    }
+
+    func testAMissingCarouselPhotoIsReportedNotSkipped() throws {
+        let present = makeFile("a.jpg")
+        let gone = assets.appendingPathComponent("gone.jpg")   // never created
+        let ev = event(wednesdayPhotos: [present, gone], blogPhotos: [])
+
+        let outcome = try EventExporter.export(event: ev, to: root)
+
+        XCTAssertFalse(outcome.isComplete, "the folder is short a photo")
+        XCTAssertEqual(outcome.dropped.map(\.source), [gone])
+        let warning = try XCTUnwrap(outcome.warning)
+        XCTAssertTrue(warning.contains("gone.jpg"), warning)
+        XCTAssertTrue(warning.lowercased().contains("wednesday"), warning)
+    }
+
+    func testAMissingBlogPhotoIsReported() throws {
+        let gone = assets.appendingPathComponent("blogX.jpg")
+        let ev = event(wednesdayPhotos: [makeFile("a.jpg")], blogPhotos: [gone])
+
+        let outcome = try EventExporter.export(event: ev, to: root)
+
+        XCTAssertEqual(outcome.dropped.map(\.source), [gone])
+        XCTAssertTrue(try XCTUnwrap(outcome.warning).lowercased().contains("blog"))
+    }
+
+    func testTheFilesThatDidCopyStillLand() throws {
+        let present = makeFile("a.jpg")
+        let gone = assets.appendingPathComponent("gone.jpg")
+        let ev = event(wednesdayPhotos: [present, gone], blogPhotos: [])
+
+        let outcome = try EventExporter.export(event: ev, to: root)
+
+        let carousel = outcome.folder
+            .appendingPathComponent(DayName.wednesday.folderName)
+            .appendingPathComponent("carousel")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: carousel.appendingPathComponent("01.jpg").path),
+                      "one bad photo must not cost the good ones")
     }
 }

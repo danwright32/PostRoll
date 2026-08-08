@@ -62,6 +62,7 @@ targets:
       - path: Sources/Services/CoverReviewDisplay.swift
       - path: Sources/Services/PipelineProgress.swift
       - path: Sources/Services/ProgramPDFBuilder.swift
+      - path: Sources/Services/ProgramScanRetention.swift
       - path: Sources/Services/DataMigration.swift
       - path: Sources/Services/CollageRenderer.swift
       - path: Sources/Services/CollageGeometry.swift

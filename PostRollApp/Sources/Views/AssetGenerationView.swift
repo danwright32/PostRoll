@@ -365,6 +365,14 @@ struct AssetGenerationView: View {
     /// photos to (or the Tuesday/Friday RAW+edited pair), in DAY_ORDER. Friday
     /// is included only if Tuesday's RAW+edited are set, since Friday's story
     /// derives from those.
+    /// Says which state the program PDF is in, so "Preparing…" isn't shown for
+    /// a bake that has already failed and a live bake isn't invisible.
+    private var programPDFButtonLabel: String {
+        if ProgramPDFBakery.shared.isBaking(event.id) { return "Building program PDF…" }
+        if isPreparingProgramPDF { return "Preparing program PDF…" }
+        return "Download program PDF"
+    }
+
     private var regenerableDayKeys: [String] {
         DayName.allCases.compactMap { day in
             guard let pd = event.days[day.rawValue] else { return nil }
@@ -600,13 +608,27 @@ struct AssetGenerationView: View {
                 }
 
                 if !event.programImagePaths.isEmpty || event.programPDFPath != nil {
-                    Button(isPreparingProgramPDF ? "Preparing program PDF…" : "Download program PDF") {
+                    Button(programPDFButtonLabel) {
                         downloadProgramPDF()
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.roseGold)
-                    .disabled(isPreparingProgramPDF)
+                    .disabled(isPreparingProgramPDF || ProgramPDFBakery.shared.isBaking(event.id))
+                }
+
+                // A failed bake used to be dropped by a `try?`, so the program
+                // just stopped existing with nothing said (#80).
+                if let bakeError = ProgramPDFBakery.shared.failure(for: event.id) {
+                    BrandBanner(
+                        icon: "exclamationmark.triangle",
+                        message: "The searchable program PDF couldn't be built: \(bakeError). The page scans have been kept.",
+                        style: .error,
+                        actions: [BrandBannerAction(label: "Try again", action: {
+                            ProgramPDFBakery.shared.bake(event: event, appState: appState,
+                                                         deletingScansOnSuccess: true)
+                        })]
+                    )
                 }
 
                 if !event.blogPhotoPaths.isEmpty {

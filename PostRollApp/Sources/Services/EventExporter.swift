@@ -3,6 +3,35 @@ import Foundation
 // MARK: - EventExporter
 
 struct EventExporter {
+
+    /// One file the export meant to copy and couldn't. Carries where it came
+    /// from and what it was for, so the warning names the day and the file
+    /// rather than just saying something went wrong.
+    struct DroppedAsset: Equatable {
+        /// Where it belonged, e.g. "Wednesday carousel photo 2" or "blog photo 1".
+        let label: String
+        let source: URL
+        let reason: String
+    }
+
+    /// What an export produced. `dropped` is empty on a clean run; anything in
+    /// it means the folder is short a file, which used to be invisible because
+    /// every copy went through `try?` (#79).
+    struct Outcome {
+        let folder: URL
+        let dropped: [DroppedAsset]
+
+        var isComplete: Bool { dropped.isEmpty }
+
+        /// What to show the user, or nil when nothing was dropped.
+        var warning: String? {
+            guard !dropped.isEmpty else { return nil }
+            let lines = dropped.map { "\($0.label) (\($0.source.lastPathComponent)): \($0.reason)" }
+            let count = dropped.count
+            return "\(count) file\(count == 1 ? "" : "s") couldn't be copied into the export folder, so \(count == 1 ? "it is" : "they are") missing from it:\n" + lines.joined(separator: "\n")
+        }
+    }
+
     /// Export one event. Pass `days = nil` (the default) to export the whole week;
     /// pass a specific set to export only those days, in which case the master
     /// CAPTIONS.txt and Blog are left untouched so they keep reflecting the
@@ -10,7 +39,20 @@ struct EventExporter {
     /// anything else in the app: an earlier version of this doc comment
     /// claimed one was, which was never true.)
     static func export(event: Event, to root: URL, days: Set<DayName>? = nil,
-                       preset: PostingPreset = .balanced) throws -> URL {
+                       preset: PostingPreset = .balanced) throws -> Outcome {
+        // Every intended copy is accounted for: a source that isn't there, or a
+        // copy that fails, is recorded rather than skipped, because an export
+        // folder short a photo gets uploaded looking complete (#79).
+        var dropped: [DroppedAsset] = []
+        func copy(_ source: URL, to dest: URL, label: String) {
+            do {
+                try FileManager.default.copyItem(at: source, to: dest)
+            } catch {
+                dropped.append(DroppedAsset(label: label, source: source,
+                                            reason: error.localizedDescription))
+            }
+        }
+
         let folderName = "\(slug(event.org))_\(slug(event.name))_\(event.isoDate)"
         let folder = root.appendingPathComponent(folderName)
 
@@ -53,7 +95,8 @@ struct EventExporter {
                     for (i, photo) in photos.enumerated() {
                         let ext = photo.pathExtension
                         let dest = carouselDir.appendingPathComponent("\(String(format: "%02d", i + 1)).\(ext)")
-                        try? FileManager.default.copyItem(at: photo, to: dest)
+                        copy(photo, to: dest,
+                             label: "\(day.displayName) carousel photo \(i + 1)")
                     }
                 }
             }
@@ -73,7 +116,7 @@ struct EventExporter {
                 for (i, photo) in event.blogPhotoPaths.enumerated() {
                     let ext = photo.pathExtension
                     let dest = blogDir.appendingPathComponent("photo_\(String(format: "%02d", i + 1)).\(ext)")
-                    try? FileManager.default.copyItem(at: photo, to: dest)
+                    copy(photo, to: dest, label: "blog photo \(i + 1)")
                 }
             }
 
@@ -82,7 +125,7 @@ struct EventExporter {
                                       atomically: true, encoding: .utf8)
         }
 
-        return folder
+        return Outcome(folder: folder, dropped: dropped)
     }
 
     // MARK: - Text generators
