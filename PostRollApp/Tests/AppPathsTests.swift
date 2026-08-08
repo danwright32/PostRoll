@@ -138,9 +138,9 @@ final class AppPathsTests: XCTestCase {
     // storedClip is the sanctioned way to persist a Friday clip import pick
     // (#135), mirroring storedPhoto/storedAudio: routes through clipsDir so a
     // raw ~/Downloads/~/Desktop URL never reaches PostingDay.clipPaths.
-    func testStoredClipRoutesIntoClipsDir() {
+    func testStoredClipRoutesIntoClipsDir() throws {
         let already = AppPaths.clipsDir.appendingPathComponent("already.mov")
-        XCTAssertEqual(AppPaths.storedClip(already), already,
+        XCTAssertEqual(try AppPaths.storedClip(already).get(), already,
                         "already inside clipsDir: returned unchanged, no duplicate copy")
     }
 

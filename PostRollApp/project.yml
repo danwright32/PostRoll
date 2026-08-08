@@ -68,6 +68,8 @@ targets:
       - path: Sources/Services/ClipCropFrameStrip.swift
       - path: Sources/Services/LegacyDataReclaim.swift
       - path: Sources/Services/MediaPresence.swift
+      - path: Sources/Services/MissingMediaScan.swift
+      - path: Sources/Services/StoredErrorPolicy.swift
       - path: Sources/Services/PythonBridgeError.swift
       - path: Sources/Services/PythonBridge.swift
       - path: Sources/Services/TimingStore.swift

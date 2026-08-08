@@ -146,7 +146,32 @@ enum AppPaths {
     /// copy failure. `storageRoot` is injectable so tests can run against a
     /// temporary tree.
     static func importedCopy(of url: URL, into dir: URL, storageRoot: URL = AppPaths.root) -> URL? {
-        if isInside(url, root: storageRoot) { return url }
+        try? importedCopyResult(of: url, into: dir, storageRoot: storageRoot).get()
+    }
+
+    /// Why a picked file couldn't be brought into app storage, in the terms the
+    /// person who picked it needs: which file, and what went wrong.
+    struct ImportCopyFailure: Error, Equatable {
+        let fileName: String
+        let message: String
+    }
+
+
+    /// Copies an external file into `dir` (inside the app's storage) and returns
+    /// the new URL. Files the user picks from ~/Downloads, ~/Desktop, etc. are
+    /// gated by macOS per app launch; copying them into the app's own folder
+    /// means later reads (thumbnails, export) don't re-trigger that permission
+    /// prompt. Names are uniquified so two different files can't collide.
+    /// Returns `url` unchanged when it is already inside app storage.
+    ///
+    /// A failure is returned, never swallowed: handing the caller the external
+    /// URL to persist is what let an import report success and then break the
+    /// moment the source folder was renamed (#179). `storageRoot` is injectable
+    /// so tests can run against a temporary tree.
+    static func importedCopyResult(
+        of url: URL, into dir: URL, storageRoot: URL = AppPaths.root
+    ) -> Result<URL, ImportCopyFailure> {
+        if isInside(url, root: storageRoot) { return .success(url) }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var dest = dir.appendingPathComponent(url.lastPathComponent)
         if FileManager.default.fileExists(atPath: dest.path) {
@@ -156,10 +181,11 @@ enum AppPaths {
         }
         do {
             try FileManager.default.copyItem(at: url, to: dest)
-            return dest
+            return .success(dest)
         } catch {
             NSLog("AppPaths.importedCopy failed for \(url.lastPathComponent): \(error)")
-            return nil
+            return .failure(ImportCopyFailure(fileName: url.lastPathComponent,
+                                              message: error.localizedDescription))
         }
     }
 
@@ -167,9 +193,65 @@ enum AppPaths {
     /// persist. Every import entry point (file picker, folder/auto import) must
     /// route picked URLs through these so a raw ~/Downloads/~/Desktop URL never
     /// reaches the Event model — otherwise later reads (collage edits, exports)
-    /// re-trigger the macOS permission prompt. Returns `url` unchanged only when
-    /// the copy fails or it is already inside app storage.
-    static func storedPhoto(_ url: URL) -> URL { importedCopy(of: url, into: photosDir) ?? url }
-    static func storedAudio(_ url: URL) -> URL { importedCopy(of: url, into: audioDir) ?? url }
-    static func storedClip(_ url: URL) -> URL { importedCopy(of: url, into: clipsDir) ?? url }
+    /// re-trigger the macOS permission prompt.
+    ///
+    /// These return a Result rather than a URL on purpose: a call site cannot
+    /// persist the picked path by accident, because it never gets it back.
+    static func storedPhoto(_ url: URL) -> Result<URL, ImportCopyFailure> {
+        importedCopyResult(of: url, into: photosDir)
+    }
+    static func storedAudio(_ url: URL) -> Result<URL, ImportCopyFailure> {
+        importedCopyResult(of: url, into: audioDir)
+    }
+    static func storedClip(_ url: URL) -> Result<URL, ImportCopyFailure> {
+        importedCopyResult(of: url, into: clipsDir)
+    }
+}
+
+/// What the user is told when a picked file couldn't be brought into app
+/// storage. Those files are deliberately NOT imported (persisting the external
+/// path is what silently broke events when a source folder was renamed, #179),
+/// so the message has to say they were left out. Kept out of the view so the
+/// wording can be pinned by a test.
+enum ImportFailureText {
+    static func message(_ failures: [AppPaths.ImportCopyFailure]) -> String {
+        guard let first = failures.first else { return "" }
+        if failures.count == 1 {
+            return "\(first.fileName) was not imported: PostRoll couldn't copy it into its own storage (\(first.message)). Linking it where it sits would break as soon as that folder moves."
+        }
+        let names = failures.map(\.fileName).joined(separator: ", ")
+        return "\(failures.count) files were not imported: PostRoll couldn't copy them into its own storage. Files: \(names)."
+    }
+}
+
+/// One place every "the user picked some files" path goes through, so a picked
+/// URL can't reach the Event model without being copied into app storage first
+/// (#77, #145) and a copy that fails can't be silently swapped for the external
+/// path (#179).
+enum ImportedPicks {
+    struct Outcome {
+        /// The picks that made it into app storage. Safe to persist.
+        let stored: [URL]
+        /// The picks that did not, deliberately left out.
+        let failures: [AppPaths.ImportCopyFailure]
+
+        /// What to show the user, or nil when everything copied.
+        var failureMessage: String? {
+            failures.isEmpty ? nil : ImportFailureText.message(failures)
+        }
+    }
+
+    static func copy(_ urls: [URL],
+                     into dir: URL = AppPaths.photosDir,
+                     storageRoot: URL = AppPaths.root) -> Outcome {
+        var stored: [URL] = []
+        var failures: [AppPaths.ImportCopyFailure] = []
+        for url in urls {
+            switch AppPaths.importedCopyResult(of: url, into: dir, storageRoot: storageRoot) {
+            case .success(let copied): stored.append(copied)
+            case .failure(let error):  failures.append(error)
+            }
+        }
+        return Outcome(stored: stored, failures: failures)
+    }
 }

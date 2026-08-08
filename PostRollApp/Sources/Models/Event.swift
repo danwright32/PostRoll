@@ -300,6 +300,11 @@ extension PostingDay {
         if let cells = collageCellOverride {
             pd.collageCellOverride = cells.filter { !removePaths.contains($0.photoPath) }
         }
+        // The standalone media slots aren't in photoPaths, so they have to be
+        // cleared by hand or the day keeps referencing a file that's gone.
+        for slot in MediaSlot.allCases where remove.contains(where: { $0 == pd[slot] }) {
+            pd[slot] = nil
+        }
         return pd
     }
 
@@ -322,6 +327,12 @@ extension PostingDay {
                 if let newPath = pathRemap[$0.photoPath] { cell.photoPath = newPath }
                 return cell
             }
+        }
+        // The standalone media slots aren't in photoPaths, so they move only if
+        // they're remapped here. The B&W photo in particular has no filename
+        // fallback anywhere downstream, so a stale path stays broken.
+        for slot in MediaSlot.allCases {
+            if let current = pd[slot], let moved = remap[current] { pd[slot] = moved }
         }
         return pd
     }
@@ -735,4 +746,81 @@ struct PostingDay: Codable, Hashable {
     // non-nil-means-user override semantics as fridayClipPlan/fridayClipOverride.
     var coverPick: CoverPick? = nil
     var coverOverride: String? = nil
+}
+
+// MARK: - Standalone media slots
+
+/// The single-file media references a day carries outside its photo grid. They
+/// live in named fields rather than an array, so anything that walks "every
+/// file this day points at" (the missing-file scan, a re-link, a removal) has
+/// to enumerate them. This enum is that enumeration, so a new slot can't be
+/// added and silently skipped by all three.
+enum MediaSlot: String, CaseIterable, Hashable {
+    case rawPhoto
+    case editedPhoto
+    case bwPhoto
+    case screenRecording
+
+    /// How the slot is named on screen, for a message that has to say which
+    /// control to go fix.
+    var displayName: String {
+        switch self {
+        case .rawPhoto:        return "RAW photo"
+        case .editedPhoto:     return "edited photo"
+        case .bwPhoto:         return "B&W photo"
+        case .screenRecording: return "screen recording"
+        }
+    }
+}
+
+extension PostingDay {
+    /// Reads/writes a standalone media slot by name, so callers can loop over
+    /// `MediaSlot.allCases` instead of repeating four lines each time.
+    subscript(slot: MediaSlot) -> URL? {
+        get {
+            switch slot {
+            case .rawPhoto:        return rawPhotoPath
+            case .editedPhoto:     return editedPhotoPath
+            case .bwPhoto:         return bwPhotoPath
+            case .screenRecording: return screenRecordingPath
+            }
+        }
+        set {
+            switch slot {
+            case .rawPhoto:        rawPhotoPath = newValue
+            case .editedPhoto:     editedPhotoPath = newValue
+            case .bwPhoto:         bwPhotoPath = newValue
+            case .screenRecording: screenRecordingPath = newValue
+            }
+        }
+    }
+}
+
+// MARK: - Event-wide photo re-link
+
+extension Event {
+    /// Applies a photo remap (old -> new) to every day and to the derived blog
+    /// photo list, so a re-link moves EVERY reference to a moved file: the day
+    /// grid, its crops and tags, the collage layout, and the standalone media
+    /// slots. Rebinding a throwaway copy of a day and writing three fields back
+    /// is what let the collage layout and the B&W photo keep pointing at a dead
+    /// folder after a re-link (#177).
+    func rebindingPhotos(_ remap: [URL: URL]) -> Event {
+        guard !remap.isEmpty else { return self }
+        var ev = self
+        for (key, day) in days { ev.days[key] = day.rebindingPhotos(remap) }
+        ev.blogPhotoPaths = blogPhotoPaths.map { remap[$0] ?? $0 }
+        return ev
+    }
+
+    /// Drops every reference to the given photos across every day and the blog
+    /// photo list. Counterpart to `rebindingPhotos` for the "Remove missing"
+    /// route.
+    func removingPhotos(_ remove: Set<URL>) -> Event {
+        guard !remove.isEmpty else { return self }
+        var ev = self
+        for (key, day) in days { ev.days[key] = day.removingPhotos(remove) }
+        ev.blogPhotoPaths = blogPhotoPaths.filter { !remove.contains($0) }
+        return ev
+    }
 }

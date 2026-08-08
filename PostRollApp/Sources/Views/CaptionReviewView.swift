@@ -206,7 +206,7 @@ struct CaptionReviewView: View {
                                 panel.allowedContentTypes = [.image]
                                 panel.allowsMultipleSelection = false
                                 if panel.runModal() == .OK, let url = panel.url {
-                                    inlineRawPhoto = url
+                                    if let stored = storedPick(url) { inlineRawPhoto = stored }
                                 }
                             } : nil,
                             onPickInlineEdited: day == .tuesday ? {
@@ -215,7 +215,7 @@ struct CaptionReviewView: View {
                                 panel.allowedContentTypes = [.image]
                                 panel.allowsMultipleSelection = false
                                 if panel.runModal() == .OK, let url = panel.url {
-                                    inlineEditedPhoto = url
+                                    if let stored = storedPick(url) { inlineEditedPhoto = stored }
                                 }
                             } : nil,
                             onPickInlineBW: day == .tuesday ? {
@@ -224,7 +224,7 @@ struct CaptionReviewView: View {
                                 panel.allowedContentTypes = [.image]
                                 panel.allowsMultipleSelection = false
                                 if panel.runModal() == .OK, let url = panel.url {
-                                    inlineBWPhoto = url
+                                    if let stored = storedPick(url) { inlineBWPhoto = stored }
                                 }
                             } : nil,
                             onClearInlineBW: day == .tuesday ? { inlineBWPhoto = nil } : nil,
@@ -251,7 +251,14 @@ struct CaptionReviewView: View {
                                     // ~/Downloads or ~/Desktop URL loses read access on
                                     // next launch (feedback_folder_import_skips_copy),
                                     // the same discipline every other import path here follows.
-                                    regenerateCover(day: day, overrideSource: AppPaths.storedPhoto(url))
+                                    switch AppPaths.storedPhoto(url) {
+                                    case .success(let stored):
+                                        regenerateCover(day: day, overrideSource: stored)
+                                    case .failure(let error):
+                                        // Refuse rather than regenerate off the
+                                        // external path, and say so (#179).
+                                        regenerateError = ImportFailureText.message([error])
+                                    }
                                 }
                             } : nil
                         )
@@ -582,6 +589,24 @@ struct CaptionReviewView: View {
         regenerateGraphic(day: day)
     }
 
+    /// Copies one picked file into app storage, or reports the failure and
+    /// returns nil. Every picker on this screen goes through it: a path outside
+    /// app storage loses read access on the next launch and dies outright if the
+    /// user renames the folder (#77, #145), and silently persisting it on a
+    /// failed copy is what made that invisible (#179).
+    private func storedPick(_ url: URL) -> URL? {
+        let outcome = ImportedPicks.copy([url])
+        if let message = outcome.failureMessage { regenerateError = message }
+        return outcome.stored.first
+    }
+
+    /// Batch form of `storedPick`: keeps what copied, reports what didn't.
+    private func storedPicks(_ urls: [URL]) -> [URL] {
+        let outcome = ImportedPicks.copy(urls)
+        if let message = outcome.failureMessage { regenerateError = message }
+        return outcome.stored
+    }
+
     private func uploadReelAudio(day: DayName, url: URL) {
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
@@ -667,8 +692,9 @@ struct CaptionReviewView: View {
         panel.title = "Select B&W edit"
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        assignReelPhotosAndGenerate(raw: raw, edited: edited, bw: url)
+        guard panel.runModal() == .OK, let url = panel.url,
+              let stored = storedPick(url) else { return }
+        assignReelPhotosAndGenerate(raw: raw, edited: edited, bw: stored)
     }
 
     /// Remove the B&W after and fall back to the classic two-photo before/after,
@@ -687,14 +713,16 @@ struct CaptionReviewView: View {
             rawPanel.title = "Select RAW (unedited) photo"
             rawPanel.allowedContentTypes = [.image]
             rawPanel.allowsMultipleSelection = false
-            guard rawPanel.runModal() == .OK, let rawURL = rawPanel.url else { return }
+            guard rawPanel.runModal() == .OK, let picked = rawPanel.url,
+                  let rawURL = storedPick(picked) else { return }
 
             // Step 2: Pick Edited photo
             let editedPanel = NSOpenPanel()
             editedPanel.title = "Select Edited photo"
             editedPanel.allowedContentTypes = [.image]
             editedPanel.allowsMultipleSelection = false
-            guard editedPanel.runModal() == .OK, let editedURL = editedPanel.url else { return }
+            guard editedPanel.runModal() == .OK, let pickedEdited = editedPanel.url,
+                  let editedURL = storedPick(pickedEdited) else { return }
 
             // Preserve any existing B&W assignment when re-picking RAW/Edited.
             let existingBW = appState.events.first(where: { $0.id == event.id })?
@@ -708,17 +736,11 @@ struct CaptionReviewView: View {
             panel.allowsMultipleSelection = true
             guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
 
-            print("[PostRoll:changeReelPhotos] NSOpenPanel returned \(panel.urls.count) files:")
-            for (i, url) in panel.urls.enumerated() {
-                print("  [\(i)] \(url.lastPathComponent)")
-            }
+            let picks = storedPicks(panel.urls)
+            guard !picks.isEmpty else { return }
             var ev = appState.events.first(where: { $0.id == event.id }) ?? event
             var thu = ev.days[DayName.thursday.rawValue] ?? PostingDay(day: .thursday)
-            thu.photoPaths = panel.urls.sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending }
-            print("[PostRoll:changeReelPhotos] After sort, \(thu.photoPaths.count) photos:")
-            for (i, url) in thu.photoPaths.enumerated() {
-                print("  [\(i)] \(url.lastPathComponent)")
-            }
+            thu.photoPaths = picks.sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending }
             ev.days[DayName.thursday.rawValue] = thu
             appState.updateEvent(ev)
             regenerateGraphic(day: .thursday)
@@ -735,7 +757,18 @@ struct CaptionReviewView: View {
         panel.allowsMultipleSelection = true
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
 
-        let copied = panel.urls.map { AppPaths.storedClip($0) }
+        var copied: [URL] = []
+        var failures: [AppPaths.ImportCopyFailure] = []
+        for url in panel.urls {
+            switch AppPaths.storedClip(url) {
+            case .success(let stored): copied.append(stored)
+            case .failure(let error):  failures.append(error)
+            }
+        }
+        if !failures.isEmpty { regenerateError = ImportFailureText.message(failures) }
+        // Every pick failed to copy: nothing was imported, so don't kick off a
+        // render that would produce the same reel as before (#179).
+        guard !copied.isEmpty else { return }
 
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         let fri = ev.days[DayName.friday.rawValue] ?? PostingDay(day: .friday)
@@ -806,7 +839,15 @@ struct CaptionReviewView: View {
         panel.allowedContentTypes = [.movie]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let picked = panel.url else { return }
-        let newPath = AppPaths.storedClip(picked).path
+        let newPath: String
+        switch AppPaths.storedClip(picked) {
+        case .success(let stored): newPath = stored.path
+        case .failure(let error):
+            // Refuse the swap rather than pointing the override at a file
+            // outside app storage (#179).
+            regenerateError = ImportFailureText.message([error])
+            return
+        }
 
         let live = appState.events.first(where: { $0.id == event.id }) ?? event
         guard let fri = live.days[DayName.friday.rawValue] else { return }
@@ -859,9 +900,11 @@ struct CaptionReviewView: View {
             return
         }
 
+        let picks = storedPicks(panel.urls)
+        guard !picks.isEmpty else { return }
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
-        pd.photoPaths = panel.urls.sorted {
+        pd.photoPaths = picks.sorted {
             $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending
         }
         // Crop offsets and the cell layout are keyed to the old photo paths, so
@@ -2380,7 +2423,12 @@ private struct BlogSection: View {
         panel.title = "Select Blog Photos"
         panel.message = "Choose photos for the blog post (4–7 recommended)"
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        let urls = panel.urls
+        // Copy into app storage before these become the blog's photo paths, so
+        // a later render can't fail on a folder the user renamed (#77).
+        let outcome = ImportedPicks.copy(panel.urls)
+        if let message = outcome.failureMessage { photoSwapError = message }
+        let urls = outcome.stored
+        guard !urls.isEmpty else { return }
         let snapshot = blog
         isSwappingPhotos = true
         photoSwapError = nil

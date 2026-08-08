@@ -11,9 +11,13 @@ struct PhotoAssignmentView: View {
     @State private var dayPhotos: [DayName: [URL]]
     @State private var pickerTarget: PickerTarget? = nil
     @State private var importResultMessage: String? = nil
+    // Whether that message is a failure. Explicit rather than sniffed from the
+    // text, so a new failure message can't render with a checkmark on it.
+    @State private var importResultIsError = false
     @State private var previewURL: URL? = nil
-    // Photos whose files can't be found on disk (moved or deleted).
-    @State private var missingPhotos: Set<URL> = []
+    // Every referenced file that can't be found on disk (moved or deleted):
+    // day-grid photos AND the standalone Tuesday RAW/edited/B&W/screen recording.
+    @State private var missingMedia = MissingMediaScan.Result()
 
     // Tuesday: speed edit reel inputs
     @State private var tuesdayScreenRecording: URL?
@@ -198,17 +202,18 @@ struct PhotoAssignmentView: View {
 
                 if let msg = importResultMessage {
                     BrandBanner(
-                        icon: msg.hasPrefix("No photos") ? "exclamationmark.circle" : "checkmark.circle",
+                        icon: importResultIsError ? "exclamationmark.circle" : "checkmark.circle",
                         message: msg,
-                        style: msg.hasPrefix("No photos") ? .error : .info
+                        style: importResultIsError ? .error : .info
                     )
                     .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.sm)
                 }
 
-                if !missingPhotos.isEmpty {
+                if !missingMedia.isEmpty {
                     MissingPhotosBanner(
-                        count: missingPhotos.count,
+                        photoCount: missingMedia.photos.count,
+                        standaloneNames: missingMedia.standalone.map(\.displayName),
                         onLocate: locateMissingPhotos,
                         onRemove: removeMissingPhotos
                     )
@@ -269,6 +274,7 @@ struct PhotoAssignmentView: View {
                             bwPhoto:         $tuesdayBWPhoto,
                             targetDuration:  $tuesdayTargetDuration,
                             dayPhotos:       dayPhotos[.tuesday] ?? [],
+                            missingSlots:    missingSlots(for: .tuesday),
                             onPickScreenRecording: { presentPicker(.tuesdayScreenRecording) },
                             onPickRawPhoto:        { presentPicker(.tuesdayRawPhoto) },
                             onPickEditedPhoto:     { presentPicker(.tuesdayEditedPhoto) },
@@ -355,7 +361,17 @@ struct PhotoAssignmentView: View {
         }
         } // ZStack
         .animation(.easeOut(duration: 0.18), value: previewURL != nil)
-        .task(id: dayPhotos.mapValues(\.count)) { await scanMissingPhotos() }
+        .task(id: missingScanKey) { await scanMissingPhotos() }
+    }
+
+    /// Re-scans whenever any referenced path changes, not just when a day's
+    /// photo COUNT changes: a re-link swaps URLs without changing any count,
+    /// and the standalone slots aren't counted at all.
+    private var missingScanKey: String {
+        var parts = DayName.allCases.map { (dayPhotos[$0] ?? []).map(\.path).joined(separator: "|") }
+        parts += [tuesdayRawPhoto, tuesdayEditedPhoto, tuesdayBWPhoto, tuesdayScreenRecording]
+            .map { $0?.path ?? "" }
+        return parts.joined(separator: "//")
     }
 
     // MARK: - File picker
@@ -450,22 +466,43 @@ struct PhotoAssignmentView: View {
 
     private func handlePickedFiles(_ urls: [URL]) {
         guard let url = urls.first else { return }
+        var failures: [AppPaths.ImportCopyFailure] = []
+
+        /// Copies the pick into app storage, or records the failure and hands
+        /// back nil. A file that can't be brought into storage is NOT imported:
+        /// keeping the external path is what breaks the event when its folder
+        /// is later renamed (#179).
+        func store(_ u: URL, audio: Bool = false) -> URL? {
+            switch audio ? AppPaths.storedAudio(u) : AppPaths.storedPhoto(u) {
+            case .success(let stored): return stored
+            case .failure(let error):  failures.append(error); return nil
+            }
+        }
+
+        // Days whose inputs this import changed, so their stored errors stop
+        // presenting as current (#181).
+        var touched: Set<String> = []
         switch pickerTarget {
         case .day(let day):
             var list = dayPhotos[day] ?? []
             for u in urls {
-                let stored = AppPaths.storedPhoto(u)
-                if !list.contains(stored) { list.append(stored) }
+                guard let stored = store(u) else { continue }
+                if !list.contains(stored) { list.append(stored); touched.insert(day.rawValue) }
             }
             dayPhotos[day] = list
-        case .tuesdayScreenRecording: tuesdayScreenRecording = AppPaths.storedPhoto(url)
-        case .tuesdayRawPhoto:        tuesdayRawPhoto = AppPaths.storedPhoto(url)
-        case .tuesdayEditedPhoto:     tuesdayEditedPhoto = AppPaths.storedPhoto(url)
-        case .tuesdayBWPhoto:         tuesdayBWPhoto = AppPaths.storedPhoto(url)
-        case .thursdayAudio:          thursdayAudio = AppPaths.storedAudio(url)
+        case .tuesdayScreenRecording: if let s = store(url) { tuesdayScreenRecording = s; touched = tuesdayReelDays }
+        case .tuesdayRawPhoto:        if let s = store(url) { tuesdayRawPhoto = s; touched = tuesdayReelDays }
+        case .tuesdayEditedPhoto:     if let s = store(url) { tuesdayEditedPhoto = s; touched = tuesdayReelDays }
+        case .tuesdayBWPhoto:         if let s = store(url) { tuesdayBWPhoto = s; touched = tuesdayReelDays }
+        case .thursdayAudio:          if let s = store(url, audio: true) { thursdayAudio = s; touched = [DayName.thursday.rawValue] }
         case nil: break
         }
         save()
+        clearStoredErrors(forDays: touched)
+        if !failures.isEmpty {
+            importResultMessage = ImportFailureText.message(failures)
+            importResultIsError = true
+        }
     }
 
     private func importFromFolder(_ root: URL) {
@@ -493,6 +530,19 @@ struct PhotoAssignmentView: View {
         }
 
         var totalImported = 0
+        var failures: [AppPaths.ImportCopyFailure] = []
+        // Days this import changed, so their stored errors stop presenting as
+        // current (#181).
+        var touched: Set<String> = []
+
+        /// Same rule as the file picker: a file that can't be copied into app
+        /// storage is left out and reported, never linked where it sits (#179).
+        func store(_ u: URL, audio: Bool = false) -> URL? {
+            switch audio ? AppPaths.storedAudio(u) : AppPaths.storedPhoto(u) {
+            case .success(let stored): return stored
+            case .failure(let error):  failures.append(error); return nil
+            }
+        }
 
         for (index, day) in DayName.allCases.enumerated() {
             // Accept named subfolders (sunday, monday…) or numbered (day 1, Day 1, day1…)
@@ -509,8 +559,8 @@ struct PhotoAssignmentView: View {
             if !images.isEmpty {
                 var list = dayPhotos[day] ?? []
                 for u in images {
-                    let stored = AppPaths.storedPhoto(u)
-                    if !list.contains(stored) { list.append(stored); totalImported += 1 }
+                    guard let stored = store(u) else { continue }
+                    if !list.contains(stored) { list.append(stored); totalImported += 1; touched.insert(day.rawValue) }
                 }
                 dayPhotos[day] = list
             }
@@ -521,77 +571,158 @@ struct PhotoAssignmentView: View {
             case .tuesday:
                 if tuesdayScreenRecording == nil,
                    let rec = contents.first(where: { videoExts.contains($0.pathExtension.lowercased()) }) {
-                    tuesdayScreenRecording = AppPaths.storedPhoto(rec)
+                    tuesdayScreenRecording = store(rec)
+                    if tuesdayScreenRecording != nil { touched.formUnion(tuesdayReelDays) }
                 }
                 for file in contents where imageExts.contains(file.pathExtension.lowercased()) {
                     let name = file.deletingPathExtension().lastPathComponent.lowercased()
-                    if tuesdayRawPhoto == nil, isRaw(name) { tuesdayRawPhoto = AppPaths.storedPhoto(file) }
-                    else if tuesdayEditedPhoto == nil, isEdited(name) { tuesdayEditedPhoto = AppPaths.storedPhoto(file) }
+                    if tuesdayRawPhoto == nil, isRaw(name) {
+                        tuesdayRawPhoto = store(file)
+                        if tuesdayRawPhoto != nil { touched.formUnion(tuesdayReelDays) }
+                    } else if tuesdayEditedPhoto == nil, isEdited(name) {
+                        tuesdayEditedPhoto = store(file)
+                        if tuesdayEditedPhoto != nil { touched.formUnion(tuesdayReelDays) }
+                    }
                 }
             case .thursday:
                 if thursdayAudio == nil,
                    let audio = contents.first(where: { audioExts.contains($0.pathExtension.lowercased()) }) {
-                    thursdayAudio = AppPaths.storedAudio(audio)
+                    thursdayAudio = store(audio, audio: true)
+                    if thursdayAudio != nil { touched.insert(DayName.thursday.rawValue) }
                 }
             default: break
             }
         }
 
         save()
+        clearStoredErrors(forDays: touched)
 
-        importResultMessage = totalImported == 0
-            ? "No photos found. Expected subfolders named sunday–friday or day 1–day 6."
-            : "Imported \(totalImported) photo\(totalImported == 1 ? "" : "s")."
+        if !failures.isEmpty {
+            let imported = totalImported == 0 ? "" : "Imported \(totalImported) photo\(totalImported == 1 ? "" : "s"). "
+            importResultMessage = imported + ImportFailureText.message(failures)
+            importResultIsError = true
+        } else if totalImported == 0 {
+            importResultMessage = "No photos found. Expected subfolders named sunday–friday or day 1–day 6."
+            importResultIsError = true
+        } else {
+            importResultMessage = "Imported \(totalImported) photo\(totalImported == 1 ? "" : "s")."
+            importResultIsError = false
+        }
     }
 
     // MARK: - Missing media
 
-    /// Marks photos whose files are gone from disk so the UI can flag them.
-    /// Runs off the main thread because it stats every assigned photo.
+    /// Marks every referenced file that's gone from disk so the UI can flag it:
+    /// the day grids AND the standalone RAW/edited/B&W/screen recording, which
+    /// nothing used to check (#178). Runs off the main thread because it stats
+    /// every one of them.
     private func scanMissingPhotos() async {
-        let all = dayPhotos.values.flatMap { $0 }
-        let missing = await Task.detached(priority: .utility) {
-            Set(all.filter { !FileManager.default.fileExists(atPath: $0.path) })
+        let snapshot = liveEvent()
+        let found = await Task.detached(priority: .utility) {
+            MissingMediaScan.scan(snapshot)
         }.value
-        missingPhotos = missing
+        missingMedia = found
+    }
+
+    /// Tuesday's RAW/edited/B&W feed the Tuesday reel AND the Friday
+    /// before/after, so re-picking one changes the inputs of both days.
+    private var tuesdayReelDays: Set<String> {
+        [DayName.tuesday.rawValue, DayName.friday.rawValue]
+    }
+
+    /// Drops the stored generation errors for days whose inputs just changed. A
+    /// stored error is a claim about a past run against past inputs; once those
+    /// change it is no longer about the current state (#181).
+    private func clearStoredErrors(forDays days: Set<String>) {
+        guard !days.isEmpty else { return }
+        let before = liveEvent()
+        let cleared = StoredErrorPolicy.clearingErrors(in: before, forDays: days)
+        if cleared != before { appState.updateEvent(cleared) }
+    }
+
+    /// Which of a day's standalone slots are currently flagged as missing, for
+    /// marking the control that sets each one.
+    private func missingSlots(for day: DayName) -> Set<MediaSlot> {
+        Set(missingMedia.standalone.filter { $0.day == day }.map(\.slot))
+    }
+
+    /// The event as it currently stands in the store. The `event` this view was
+    /// built with goes stale the moment anything else writes to it, so every
+    /// read-modify-write starts here.
+    private func liveEvent() -> Event {
+        appState.events.first(where: { $0.id == event.id }) ?? event
+    }
+
+    /// Pulls the photo-related view state back out of `ev` after a whole-event
+    /// rewrite (re-link, remove-missing), so the screen shows what was just
+    /// persisted instead of the pre-rewrite paths.
+    private func syncPhotoState(from ev: Event) {
+        for day in DayName.allCases {
+            let pd = ev.days[day.rawValue]
+            dayPhotos[day] = pd?.photoPaths ?? []
+            dayCropOffsets[day] = pd?.cropOffsets ?? [:]
+            dayPhotoTags[day] = pd?.photoTags ?? [:]
+        }
+        let tue = ev.days[DayName.tuesday.rawValue]
+        tuesdayScreenRecording = tue?.screenRecordingPath
+        tuesdayRawPhoto        = tue?.rawPhotoPath
+        tuesdayEditedPhoto     = tue?.editedPhotoPath
+        tuesdayBWPhoto         = tue?.bwPhotoPath
     }
 
     /// Asks for a folder, then re-links any missing photo whose filename is
     /// found inside it (recursively), copying the re-found file into app
     /// storage and carrying its crop/tags over. Order is preserved.
     private func locateMissingPhotos() {
-        guard !missingPhotos.isEmpty else { return }
+        guard !missingMedia.isEmpty else { return }
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Locate"
-        panel.message = "Choose the folder these photos were moved to."
+        panel.message = "Choose the folder these files were moved to."
         guard panel.runModal() == .OK, let folder = panel.url else { return }
 
         let byName = filesByName(in: folder)
         var remap: [URL: URL] = [:]
-        for missing in missingPhotos {
+        var copyFailures: [String] = []
+        for missing in missingMedia.allURLs {
             guard let found = byName[missing.lastPathComponent] else { continue }
-            remap[missing] = AppPaths.importedCopy(of: found, into: AppPaths.photosDir) ?? found
+            switch AppPaths.importedCopyResult(of: found, into: AppPaths.photosDir) {
+            case .success(let stored): remap[missing] = stored
+            // A re-found file that can't be copied into app storage is left
+            // alone rather than re-linked to a path outside it: adopting the
+            // external path is what puts the event back where it started (#179).
+            case .failure: copyFailures.append(found.lastPathComponent)
+            }
         }
         guard !remap.isEmpty else {
-            importResultMessage = "No matching photos were found in that folder."
+            importResultMessage = copyFailures.isEmpty
+                ? "No matching files were found in that folder."
+                : "Found \(copyFailures.count) file\(copyFailures.count == 1 ? "" : "s") but couldn't copy \(copyFailures.count == 1 ? "it" : "them") into PostRoll's storage: \(copyFailures.joined(separator: ", "))."
+            importResultIsError = true
             return
         }
 
-        for day in DayName.allCases {
-            var pd = PostingDay(day: day)
-            pd.photoPaths = dayPhotos[day] ?? []
-            pd.cropOffsets = dayCropOffsets[day] ?? [:]
-            pd.photoTags = dayPhotoTags[day] ?? [:]
-            let rebound = pd.rebindingPhotos(remap)
-            dayPhotos[day] = rebound.photoPaths
-            dayCropOffsets[day] = rebound.cropOffsets
-            dayPhotoTags[day] = rebound.photoTags
+        // Rebind the REAL event, not a throwaway day: the collage layout, the
+        // collage/reel crops and the standalone media all hang off the stored
+        // day and were being computed and dropped on the floor (#177).
+        let before = liveEvent()
+        // Worked out BEFORE the rebind, while the event still references the old
+        // paths. The stored errors named those very files, so once they move the
+        // errors stop being a claim about the current state (#181).
+        let touched = StoredErrorPolicy.daysReferencing(Set(remap.keys), in: before)
+        let rebound = StoredErrorPolicy.clearingErrors(
+            in: before.rebindingPhotos(remap), forDays: touched)
+        appState.updateEvent(rebound)
+        syncPhotoState(from: rebound)
+
+        var message = "Re-linked \(remap.count) file\(remap.count == 1 ? "" : "s")."
+        if !copyFailures.isEmpty {
+            message += " Couldn't copy \(copyFailures.joined(separator: ", ")) into PostRoll's storage, so \(copyFailures.count == 1 ? "it is" : "they are") still missing."
         }
-        importResultMessage = "Re-linked \(remap.count) photo\(remap.count == 1 ? "" : "s")."
-        save()
+        importResultMessage = message
+        importResultIsError = !copyFailures.isEmpty
         Task { await scanMissingPhotos() }
     }
 
@@ -618,8 +749,18 @@ struct PhotoAssignmentView: View {
         panel.prompt = "Locate"
         panel.message = "Choose the audio file to use for the Thursday reel."
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        thursdayAudio = AppPaths.storedAudio(url)
-        save()
+        switch AppPaths.storedAudio(url) {
+        case .success(let stored):
+            thursdayAudio = stored
+            save()
+            // The Thursday reel's stored failure named the old audio file.
+            let before = liveEvent()
+            let cleared = StoredErrorPolicy.clearingErrors(in: before, forDays: [DayName.thursday.rawValue])
+            if cleared != before { appState.updateEvent(cleared) }
+        case .failure(let error):
+            importResultMessage = ImportFailureText.message([error])
+            importResultIsError = true
+        }
         Task { await scanMissingAudio() }
     }
 
@@ -638,26 +779,23 @@ struct PhotoAssignmentView: View {
     /// Drops every missing photo from each day (and its per-photo crop/tag
     /// entries), then persists. Leaves on-disk photos untouched.
     private func removeMissingPhotos() {
-        guard !missingPhotos.isEmpty else { return }
-        for day in DayName.allCases {
-            var pd = PostingDay(day: day)
-            pd.photoPaths = dayPhotos[day] ?? []
-            pd.cropOffsets = dayCropOffsets[day] ?? [:]
-            pd.photoTags = dayPhotoTags[day] ?? [:]
-            let stripped = pd.removingPhotos(missingPhotos)
-            guard stripped.photoPaths.count != pd.photoPaths.count else { continue }
-            dayPhotos[day] = stripped.photoPaths
-            dayCropOffsets[day] = stripped.cropOffsets
-            dayPhotoTags[day] = stripped.photoTags
-        }
-        missingPhotos = []
-        save()
+        let gone = missingMedia.allURLs
+        guard !gone.isEmpty else { return }
+        let before = liveEvent()
+        let touched = StoredErrorPolicy.daysReferencing(gone, in: before)
+        let stripped = StoredErrorPolicy.clearingErrors(
+            in: before.removingPhotos(gone), forDays: touched)
+        appState.updateEvent(stripped)
+        syncPhotoState(from: stripped)
+        missingMedia = MissingMediaScan.Result()
     }
 
     // MARK: - Persistence
 
     private func save() {
-        var ev = event
+        // Live read: the captured `event` goes stale as soon as anything else
+        // writes to this event, and writing a stale copy back would undo it.
+        var ev = liveEvent()
         for day in DayName.allCases {
             var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
             pd.photoPaths  = dayPhotos[day] ?? []
@@ -877,7 +1015,12 @@ private struct PhotoDaySection: View {
             if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
                     guard let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                    Task { @MainActor in if !photos.contains(url) { photos.append(url) } }
+                    // A Finder drag hands over the file where it sits. Copy it
+                    // into app storage like every other import route, or the
+                    // event holds a ~/Downloads path that dies when that folder
+                    // is renamed (#77).
+                    guard let stored = Self.permanentPhotoCopy(of: url) else { return }
+                    Task { @MainActor in if !photos.contains(stored) { photos.append(stored) } }
                 }
             } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
                 provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, _ in
@@ -1560,6 +1703,9 @@ private struct TuesdayReelSection: View {
     @Binding var bwPhoto: URL?
     @Binding var targetDuration: Double
     let dayPhotos: [URL]
+    /// Slots whose file is set but gone from disk. Marked on the control that
+    /// sets them, so a dead B&W path is visible where it can be fixed (#178).
+    var missingSlots: Set<MediaSlot> = []
     let onPickScreenRecording: () -> Void
     let onPickRawPhoto: () -> Void
     let onPickEditedPhoto: () -> Void
@@ -1606,6 +1752,7 @@ private struct TuesdayReelSection: View {
 
                     BeforeAfterPicker(
                         label: "RAW Photo",
+                        isMissing: missingSlots.contains(.rawPhoto),
                         selected: rawPhoto,
                         otherSelected: editedPhoto,
                         dayPhotos: dayPhotos,
@@ -1623,6 +1770,7 @@ private struct TuesdayReelSection: View {
                     )
                     BeforeAfterPicker(
                         label: "Edited Photo",
+                        isMissing: missingSlots.contains(.editedPhoto),
                         selected: editedPhoto,
                         otherSelected: rawPhoto,
                         dayPhotos: dayPhotos,
@@ -1655,6 +1803,7 @@ private struct TuesdayReelSection: View {
                     // empty for the normal two-photo before/after.
                     BeforeAfterPicker(
                         label: "B&W Edit (optional)",
+                        isMissing: missingSlots.contains(.bwPhoto),
                         selected: bwPhoto,
                         otherSelected: nil,
                         dayPhotos: dayPhotos,
@@ -1669,6 +1818,7 @@ private struct TuesdayReelSection: View {
                     }
 
                     SingleFilePicker(label: "Screen Recording", url: screenRecording,
+                                     isMissing: missingSlots.contains(.screenRecording),
                                      onPick: onPickScreenRecording, onClear: { screenRecording = nil })
 
                     if screenRecording != nil && hasReelInputs {
@@ -1910,6 +2060,8 @@ private struct FridayBeforeAfterSection: View {
 
 private struct BeforeAfterPicker: View {
     let label: String
+    /// The chosen file is set but gone from disk.
+    var isMissing: Bool = false
     let selected: URL?
     let otherSelected: URL?       // Hidden from this row's strip
     let dayPhotos: [URL]
@@ -1924,12 +2076,19 @@ private struct BeforeAfterPicker: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.sm) {
-            Text(label.uppercased())
-                .font(.system(size: 9, weight: .medium))
-                .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
-                .frame(width: 110, alignment: .leading)
-                .padding(.top, 16)  // Aligns with thumbnail centers
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label.uppercased())
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(isMissing ? Color.roseDeep : Color.warmMid)
+                if isMissing {
+                    Label("file missing", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Color.roseDeep)
+                }
+            }
+            .frame(width: 110, alignment: .leading)
+            .padding(.top, 16)  // Aligns with thumbnail centers
 
             if dayPhotos.isEmpty {
                 HStack(spacing: 6) {
@@ -2041,6 +2200,8 @@ private struct BeforeAfterThumb: View {
 private struct SingleFilePicker: View {
     let label: String
     let url: URL?
+    /// The chosen file is set but gone from disk.
+    var isMissing: Bool = false
     let onPick: () -> Void
     let onClear: () -> Void
 
@@ -2049,15 +2210,20 @@ private struct SingleFilePicker: View {
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(isMissing ? Color.roseDeep : Color.warmMid)
                 .frame(width: 110, alignment: .leading)
 
             if let url {
                 Text(url.lastPathComponent)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(isMissing ? Color.roseDeep : Color.warmDark)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if isMissing {
+                    Label("file missing", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Color.roseDeep)
+                }
                 Spacer()
                 Button(action: onClear) {
                     Image(systemName: "xmark.circle.fill")
@@ -2179,7 +2345,10 @@ private struct PhotoThumb: View {
 /// Banner shown when an event references photos whose files are gone, offering
 /// to drop the dead references in one click.
 private struct MissingPhotosBanner: View {
-    let count: Int
+    let photoCount: Int
+    /// Named standalone files (e.g. "Tuesday B&W photo"), so the banner points
+    /// at the control to fix rather than only counting files.
+    var standaloneNames: [String] = []
     let onLocate: () -> Void
     let onRemove: () -> Void
 
@@ -2188,7 +2357,7 @@ private struct MissingPhotosBanner: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 12))
                 .foregroundStyle(Color.roseGold)
-            Text("\(count) photo\(count == 1 ? "" : "s") can't be found — the file\(count == 1 ? " was" : "s were") moved or deleted off disk.")
+            Text(MissingMediaBannerText.message(photoCount: photoCount, standaloneNames: standaloneNames))
                 .font(.system(size: 11))
                 .foregroundStyle(Color.warmDark)
                 .fixedSize(horizontal: false, vertical: true)
