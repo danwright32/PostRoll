@@ -117,9 +117,15 @@ def test_generate_media_reports_the_missing_bw_on_both_days(
 
 
 @pytest.mark.parametrize("day", ["tuesday", "friday"])
-def test_generate_media_does_not_ship_a_two_photo_render_instead(
+def test_a_missing_optional_bw_still_produces_the_days_graphics(
     day, tmp_path, sample_photo, tmp_output
 ):
+    """The B&W photo is OPTIONAL. A missing one is reported, but it must not
+    cost the day its output: that would make an optional input mandatory the
+    moment it is chosen, which is not what optional means (Dan, 2026-08-07).
+
+    The original defect was the reel SILENTLY dropping to two photos. Reporting
+    it is the fix; refusing to render was an overcorrection."""
     from postroll.ai.generate_media import generate_media
 
     gone = tmp_path / "bw.jpg"
@@ -129,11 +135,47 @@ def test_generate_media_does_not_ship_a_two_photo_render_instead(
         static_only=True,
     )
 
+    assert "B&W photo" in results["errors"].get(day, ""), "the missing file is still named"
+    produced = results.get(day) or {}
+    assert produced, f"{day} produced nothing because an OPTIONAL photo was missing"
+    key = "story_cover" if day == "tuesday" else "before_after"
+    assert key in produced, f"the two-photo {key} should still have been rendered"
+
+
+@pytest.mark.parametrize("day", ["tuesday", "friday"])
+def test_a_missing_REQUIRED_photo_does_block_the_day(
+    day, tmp_path, sample_photo, tmp_output
+):
+    """The RAW and edited photos are not optional: there is no before/after to
+    make without them, so a substitute would be a different post."""
+    from postroll.ai.generate_media import generate_media
+
+    gone = tmp_path / "raw.jpg"
+    manifest = _manifest(day, tmp_path, sample_photo, "")
+    manifest["days"][day]["raw_photo"] = str(gone)
+
+    results = generate_media(manifest, tmp_output, static_only=True)
+
+    assert "RAW photo" in results["errors"].get(day, "")
     produced = results.get(day) or {}
     for key in ("story_cover", "before_after", "reel"):
-        assert key not in produced, (
-            f"{day} shipped a {key} built without the B&W photo that was asked for"
-        )
+        assert key not in produced, f"{day} rendered a {key} without the RAW photo"
+
+
+def test_the_style_falls_back_to_two_photo_when_the_bw_is_gone(tmp_path, sample_photo, tmp_output):
+    """The 3-photo style is chosen from the B&W photo's presence. When that file
+    is missing the style has to fall back too, or the style and the render
+    disagree about which post this is."""
+    from postroll.ai.generate_media import generate_media
+
+    gone = tmp_path / "bw.jpg"
+    results = generate_media(
+        _manifest("tuesday", tmp_path, sample_photo, str(gone)),
+        tmp_output, static_only=True,
+    )
+
+    assert "B&W photo" in results["errors"].get("tuesday", "")
+    assert results.get("tuesday"), "the day still renders, in its two-photo form"
 
 
 def test_style_decision_and_render_agree_on_a_present_bw(sample_photo):

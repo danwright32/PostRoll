@@ -159,23 +159,51 @@ def _record_error(errors: dict, day: str, message: str) -> None:
     errors[day] = f"{existing}; {message}"
 
 
-def _missing_chosen_media(day_info: dict) -> str | None:
-    """Message naming every photo this day CHOSE that is not on disk.
+#: Photos a before/after or a speed-edit reel cannot be made without. Their
+#: absence blocks the render, because a substitute would be a different post.
+REQUIRED_PHOTO_SLOTS = (("raw_photo", "RAW photo"), ("edited_photo", "edited photo"))
 
-    A slot left empty is not missing, so it is not reported here; a slot that
-    holds a path to a file that no longer exists is. One check for both the
-    before/after graphic and the reel, so the same input can't produce a crash
-    on one surface and a quietly different render on the other (#180).
+#: Photos that change the treatment when present and are simply not used when
+#: absent. Their absence is REPORTED but never blocks: optional has to mean
+#: optional, or choosing a file quietly makes it mandatory (Dan, 2026-08-07).
+OPTIONAL_PHOTO_SLOTS = (("bw_photo", "B&W photo"),)
+
+
+def _missing_photos(day_info: dict, slots) -> str | None:
+    """Message naming every photo in `slots` this day CHOSE that is not on disk.
+
+    A slot left empty is not missing, so it is not reported; a slot holding a
+    path to a file that no longer exists is. One check for both the before/after
+    graphic and the reel, so the same input can't crash one surface and quietly
+    change the other (#180).
     """
     problems: list[str] = []
-    for key, label in (("raw_photo", "RAW photo"),
-                       ("edited_photo", "edited photo"),
-                       ("bw_photo", "B&W photo")):
+    for key, label in slots:
         try:
             require_present(day_info.get(key), label)
         except MissingMediaError as exc:
             problems.append(str(exc))
     return "; ".join(problems) if problems else None
+
+
+def _resolve_photo_inputs(day_info: dict, day_name: str, errors: dict) -> tuple[str | None, bool]:
+    """Report every chosen-but-missing photo, and say whether to render.
+
+    Returns the B&W path to actually use (None when it is unset OR missing) and
+    whether the day's required inputs are intact. A missing OPTIONAL photo is
+    named in the day's errors and the day still renders, in the form it would
+    have taken without that photo. A missing REQUIRED photo stops the render.
+    """
+    for message in (_missing_photos(day_info, OPTIONAL_PHOTO_SLOTS),
+                    _missing_photos(day_info, REQUIRED_PHOTO_SLOTS)):
+        if message:
+            print(f"[generate_media] {day_name}: ERROR: {message}", flush=True, file=sys.stderr)
+            _record_error(errors, day_name, message)
+
+    bw = day_info.get("bw_photo")
+    bw_usable = bool(bw) and Path(bw).exists()
+    can_render = _missing_photos(day_info, REQUIRED_PHOTO_SLOTS) is None
+    return (bw if bw_usable else None), can_render
 
 
 def _render_cover(
@@ -377,16 +405,17 @@ def generate_media(
             audio          = day_info.get("audio")
             target_duration = float(day_info.get("target_duration", 20.0))
 
-            reel_style = resolve_tuesday_reel_style(bw, day_info.get("reel_style"))
+            # A chosen photo that has gone missing is a fixable input problem,
+            # named in this day's errors. A missing OPTIONAL photo still lets
+            # the day render in its without-that-photo form; a missing REQUIRED
+            # one stops it, because there is no before/after without a before.
+            bw, inputs_ok = _resolve_photo_inputs(day_info, "tuesday", errors)
+            missing_inputs = not inputs_ok
 
-            # A photo that was chosen and has since gone missing is a fixable
-            # input problem, reported by name. Everything below is skipped
-            # rather than rendered without it: a two-photo reel in place of the
-            # three-photo one asked for looks exactly like success (#180).
-            missing_inputs = _missing_chosen_media(day_info)
-            if missing_inputs:
-                print(f"[generate_media] tuesday: ERROR: {missing_inputs}", flush=True, file=sys.stderr)
-                _record_error(errors, "tuesday", missing_inputs)
+            # Resolved AFTER the check: the 3-photo style is picked from the
+            # B&W photo's presence, so a missing file has to fall back here too
+            # or the style and the render disagree about which post this is.
+            reel_style = resolve_tuesday_reel_style(bw, day_info.get("reel_style"))
 
             # Also generate the standalone before/after PNG. Serves two roles:
             #   1. Closing frame for the slider/morph reel (always needed on disk).
@@ -613,13 +642,11 @@ def generate_media(
             bw    = day_info.get("bw_photo")   # optional B&W after → 3-photo graphic
             clips = day_info.get("clips") or []
 
-            # Same named condition as Tuesday, reported the same way: the two
+            # Same named condition as Tuesday, resolved the same way: the two
             # days share these photos, so they must not disagree about what a
             # missing one means (#180).
-            missing_inputs = _missing_chosen_media(day_info)
-            if missing_inputs:
-                print(f"[generate_media] friday: ERROR: {missing_inputs}", flush=True, file=sys.stderr)
-                _record_error(errors, "friday", missing_inputs)
+            bw, inputs_ok = _resolve_photo_inputs(day_info, "friday", errors)
+            missing_inputs = not inputs_ok
 
             # Auto-cut clip reel: only attempted when clips were imported.
             # Any failure (too few usable clips, Claude error, ffmpeg crash)
