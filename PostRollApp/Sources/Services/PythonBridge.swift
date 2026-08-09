@@ -1748,11 +1748,16 @@ actor PythonBridge {
             .joined(separator: " ")
 
         let logPath = logURL.path.replacingOccurrences(of: "'", with: "'\"'\"'")
-        // The log file is shared across every Python invocation for the app's
-        // lifetime. When the fallback below has to read it (see readDataToEndOfFile),
-        // this marker lets it isolate just this run's own output instead of
-        // conflating it with unrelated older entries.
+        // This run's own stderr file. The shared log is truncated by whichever
+        // run starts next, and that truncation swaps the inode under any run
+        // already appending, so a shared file could lose this run's output
+        // entirely and hand back somebody else's (#90).
         let runMarker = UUID().uuidString
+        let runLogURL = PythonBridgeLog.runLogURL(in: logsDir, marker: runMarker)
+        let runLogPath = runLogURL.path.replacingOccurrences(of: "'", with: "'\"'\"'")
+        // Rotation moves here, out of the launch script, so it happens once
+        // under a lock instead of racing every concurrent run.
+        PythonBridgeLog.rotate(logURL)
         // `exec` replaces the shell with the Python process so that terminating
         // this Process object directly kills the Python subprocess, not just the
         // shell wrapper.
@@ -1765,11 +1770,8 @@ actor PythonBridge {
             \(brandVoiceExport)
             \(dataDirExport)
             cd '\(root.path)'
-            if [ -f '\(logPath)' ]; then
-                tail -n 500 '\(logPath)' > '\(logPath).tmp' && mv '\(logPath).tmp' '\(logPath)'
-            fi
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running [\(runMarker)]:" \(quotedArgs) >> '\(logPath)'
-            exec \(quotedArgs) 2>> '\(logPath)'
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running [\(runMarker)]:" \(quotedArgs) >> '\(runLogPath)'
+            exec \(quotedArgs) 2>> '\(runLogPath)'
             """
 
         // The subprocess plumbing lives in ProcessRunner so its timeout,
@@ -1783,16 +1785,18 @@ actor PythonBridge {
                 : ProcessInfo.processInfo.environment.merging(apiKey.environment) { _, new in new },
             timeout: timeout,
             logFallback: {
-                // Python's stderr is redirected into postroll.log by the script
-                // above, so the pipe only ever carries pre-exec shell output.
-                // Scoped to runMarker: the log is shared across every
-                // invocation, and an unscoped tail can pull a stray digit
-                // sequence out of an unrelated older entry into humanise()'s
-                // substring matching (a UUID containing "413" misreporting an
-                // unrelated 401 as "photos too large").
-                guard let logText = try? String(contentsOf: logURL, encoding: .utf8) else { return "" }
-                return PythonBridgeLog.scopedTail(logText, marker: runMarker)
+                // Python's stderr is redirected into this run's own file by the
+                // script above, so the pipe only ever carries pre-exec shell
+                // output. Reading that private file means no other run can have
+                // truncated it and none of its lines can belong to another
+                // operation, which is what let a UUID containing "413" in an
+                // unrelated entry misreport a 401 as "photos too large".
+                PythonBridgeLog.runOutput(runLog: runLogURL, sharedLog: logURL,
+                                          marker: runMarker)
             })
+        // Fold into the shared log whatever happened, so the history a human
+        // reads still has every run in it, and no per-run file is left behind.
+        defer { PythonBridgeLog.foldIntoShared(runLog: runLogURL, sharedLog: logURL) }
         try await runner.run()
     }
 }
