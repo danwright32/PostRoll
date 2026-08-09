@@ -121,3 +121,53 @@ def test_unreadable_source_raises(tmp_path):
 
     with pytest.raises(RuntimeError):
         fit_audio_to_duration(bad, out, duration=10.0)
+
+
+# ── An exit code is not proof of output ───────────────────────────────────────
+#
+# Found by CI once #106 stopped these tests skipping silently: on the Linux
+# ffmpeg the crossfaded loop graph exits 0 and writes a file ffprobe cannot
+# read. Success was claimed from the exit code alone, so a reel would have
+# shipped with broken audio and nothing would have said so.
+
+
+def test_a_zero_exit_that_produced_nothing_is_not_success(tmp_path, monkeypatch):
+    """The failure mode CI caught: ffmpeg says fine, the file is not."""
+    src = tmp_path / "src.wav"
+    out = tmp_path / "out.wav"
+    src.write_bytes(b"not really audio")
+
+    # Source probes as short, so the loop path is taken; every ffmpeg call
+    # "succeeds" and writes nothing.
+    monkeypatch.setattr("postroll.media.audio_fit.audio_duration",
+                        lambda p: 3.0 if str(p) == str(src) else None)
+    monkeypatch.setattr("postroll.media.audio_fit._run", lambda cmd: True)
+
+    with pytest.raises(RuntimeError, match="Could not fit audio"):
+        fit_audio_to_duration(src, out, duration=12.0, crossfade=1.0)
+
+
+def test_an_unreadable_loop_result_falls_back_to_the_trim(tmp_path, monkeypatch):
+    """The loop graph failing must degrade to the plain trim, not to an error,
+    because the trim still produces usable audio."""
+    src = tmp_path / "src.wav"
+    out = tmp_path / "out.wav"
+    src.write_bytes(b"x")
+
+    calls: list[str] = []
+
+    def fake_run(cmd):
+        calls.append("loop" if "-filter_complex" in cmd else "trim")
+        return True
+
+    def fake_duration(p):
+        if str(p) == str(src):
+            return 3.0
+        # Unreadable after the loop attempt, readable after the trim.
+        return 12.0 if "trim" in calls else None
+
+    monkeypatch.setattr("postroll.media.audio_fit._run", fake_run)
+    monkeypatch.setattr("postroll.media.audio_fit.audio_duration", fake_duration)
+
+    assert fit_audio_to_duration(src, out, duration=12.0, crossfade=1.0) == str(out)
+    assert calls == ["loop", "trim"], calls

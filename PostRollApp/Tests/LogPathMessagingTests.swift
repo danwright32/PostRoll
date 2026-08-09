@@ -7,8 +7,13 @@ import XCTest
 /// to look when this keeps failing".
 ///
 /// The path is derived from AppPaths now, so it cannot drift from the real one
-/// a second time. These assert the derivation rather than the literal string,
-/// so moving the data root again keeps them honest.
+/// a second time.
+///
+/// These assert the DERIVATION, never that the path is not in Documents. An
+/// earlier version asserted the latter and failed in CI, correctly: AppPaths'
+/// root is gated on a migration marker, so on a machine that has not migrated
+/// the logs genuinely are in Documents and naming it is the right answer. The
+/// assertion had encoded one developer machine's state as a universal truth.
 final class LogPathMessagingTests: XCTestCase {
 
     func testTheDisplayPathPointsAtTheRealLogsFolder() {
@@ -17,9 +22,14 @@ final class LogPathMessagingTests: XCTestCase {
         XCTAssertEqual(shown, real)
     }
 
-    func testTheDisplayPathIsNotTheAbandonedDocumentsFolder() {
-        XCTAssertFalse(AppPaths.logsDirDisplayPath.contains("Documents/PostRoll"),
-                       "logs moved out of Documents; a message naming it sends Dan to an empty folder")
+    func testTheDisplayPathFollowsTheRootWhereverItIs() {
+        // The property that matters and holds on every machine: the string
+        // tracks the real root, migrated or not. A hardcoded literal would
+        // stop matching the moment the root differs from it.
+        XCTAssertTrue(AppPaths.logsDirDisplayPath.hasSuffix("PostRoll/logs"),
+                      AppPaths.logsDirDisplayPath)
+        XCTAssertTrue(AppPaths.logsDir.path.hasSuffix(
+            AppPaths.logsDirDisplayPath.replacingOccurrences(of: "~", with: "")))
     }
 
     func testTheDisplayPathIsAbbreviatedRatherThanTheFullHomePath() {
@@ -32,7 +42,6 @@ final class LogPathMessagingTests: XCTestCase {
     func testUnreadableOutputPointsAtTheRealLogsFolder() {
         let message = PythonBridgeError.invalidOutput("boom").errorDescription ?? ""
         XCTAssertTrue(message.contains(AppPaths.logsDirDisplayPath), message)
-        XCTAssertFalse(message.contains("Documents/PostRoll"), message)
     }
 
     func testAnUnrecognisedFailurePointsAtTheRealLogsFolder() {
@@ -42,7 +51,6 @@ final class LogPathMessagingTests: XCTestCase {
             .scriptFailed(exitCode: 1, stderr: "something nobody has classified")
             .errorDescription ?? ""
         XCTAssertTrue(message.contains(AppPaths.logsDirDisplayPath), message)
-        XCTAssertFalse(message.contains("Documents/PostRoll"), message)
     }
 
     func testAClassifiedFailureStillGetsItsOwnMessage() {

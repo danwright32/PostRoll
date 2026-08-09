@@ -77,6 +77,18 @@ def _run(cmd: list[str]) -> bool:
     return subprocess.run(cmd, capture_output=True, text=True).returncode == 0
 
 
+def _usable(path: str) -> bool:
+    """Whether ffmpeg actually produced a readable audio file.
+
+    An exit code of 0 is not proof of output. On the Linux ffmpeg in CI the
+    crossfaded loop graph exits 0 and writes a file ffprobe cannot read, and
+    because success was claimed from the exit code alone, a reel shipped with
+    silent or broken audio and nothing said so. Checking the artifact turns
+    that into either the trim fallback or a loud error.
+    """
+    return audio_duration(path) is not None
+
+
 def fit_audio_to_duration(
     src: str | Path,
     out_path: str | Path,
@@ -99,7 +111,7 @@ def fit_audio_to_duration(
         looped = ["ffmpeg", "-y", "-loglevel", "error", "-i", src,
                   "-filter_complex", graph, "-map", "[aout]",
                   "-t", f"{duration:.3f}", "-c:a", "pcm_s16le", out_path]
-        if _run(looped):
+        if _run(looped) and _usable(out_path):
             return out_path
         # Fall through to trim/pad if the loop graph fails for any reason.
 
@@ -108,7 +120,7 @@ def fit_audio_to_duration(
     trimmed = ["ffmpeg", "-y", "-loglevel", "error", "-i", src,
                "-af", f"atrim=0:{duration:.3f},apad",
                "-t", f"{duration:.3f}", "-c:a", "pcm_s16le", out_path]
-    if _run(trimmed):
+    if _run(trimmed) and _usable(out_path):
         return out_path
 
     Path(out_path).unlink(missing_ok=True)
