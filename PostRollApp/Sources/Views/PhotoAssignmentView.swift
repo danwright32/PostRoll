@@ -1218,12 +1218,6 @@ private struct CroppablePhotoThumb: View {
 /// One performer suggestion offered in the per-photo tag popover. `token` is
 /// what gets inserted into the tag list (an @handle when there is one, else
 /// the plain name); `display` also shows the name alongside the handle.
-struct PhotoTagSuggestion: Identifiable, Hashable {
-    let token: String
-    let display: String
-    var id: String { token }
-}
-
 /// The tag editing controls themselves: type a name or @handle, see what's
 /// already tagged, one-tap the event's performers. Shared by the popover
 /// (batch tagging) and the tagging sheet (one photo, shown large) so the two
@@ -1242,10 +1236,17 @@ private struct PhotoTagEditor: View {
     @State private var newTag: String = ""
     @FocusState private var focused: Bool
 
-    /// Suggestions not already present in the current tags.
+    /// Suggestions not already present in the current tags, narrowed by
+    /// whatever has been typed.
+    ///
+    /// The list is walked once per PHOTO now rather than once per day, so its
+    /// length multiplies by the size of the carousel and scrolling it was the
+    /// real cost of tagging (#192). The same field that adds a new tag filters
+    /// the offers, so nothing extra has to be learned.
     private var available: [PhotoTagSuggestion] {
         let current = Set(tags.map { $0.lowercased() })
-        return suggestions.filter { !current.contains($0.token.lowercased()) }
+        let unused = suggestions.filter { !current.contains($0.token.lowercased()) }
+        return PhotoTagSheetNavigation.filtered(unused, query: newTag)
     }
 
     var body: some View {
@@ -1390,6 +1391,9 @@ private struct PhotoTaggingSheet: View {
     /// What the last add-to-all actually did. Held until the next one so the
     /// confirmation doesn't vanish before it's read.
     @State private var applyResult: String?
+    /// When the confirmation went up, so it can read as something that just
+    /// happened rather than as current state (#193).
+    @State private var applyResultShownAt: Date?
     /// The tags as they were before the last apply-to-all, so it can be
     /// reversed in one click rather than photo by photo (#187).
     @State private var tagUndo = PhotoTagUndo()
@@ -1449,6 +1453,9 @@ private struct PhotoTaggingSheet: View {
                         .help("Copies this photo's tags onto every photo in this day. Tags already on a photo are kept.")
 
                         if let applyResult {
+                          TimelineView(.periodic(from: .now, by: 1)) { context in
+                           if PhotoTagSheetNavigation.confirmationVisible(
+                                shownAt: applyResultShownAt, now: context.date) {
                             HStack(spacing: 4) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 10))
@@ -1469,6 +1476,8 @@ private struct PhotoTaggingSheet: View {
                                 }
                             }
                             .transition(.opacity)
+                           }
+                          }
                         }
                     }
                 }
@@ -1554,27 +1563,33 @@ private struct PhotoTaggingSheet: View {
 
             // The primary action: walking the carousel is what this sheet is
             // for, so it gets the one filled button.
-            let canNext = PhotoTagSheetNavigation.canGoNext(from: safeIndex, count: photos.count)
+            // On the last photo this finishes rather than greying out: that is
+            // the moment the work is done, so the control the eye goes to after
+            // each Next should complete the pass instead of refusing (#194).
+            let action = PhotoTagSheetNavigation.primaryAction(index: safeIndex,
+                                                              count: photos.count)
             Button {
-                index = PhotoTagSheetNavigation.next(from: safeIndex, count: photos.count)
+                switch action {
+                case .next: index = PhotoTagSheetNavigation.next(from: safeIndex, count: photos.count)
+                case .done: onClose()
+                }
             } label: {
                 HStack(spacing: 5) {
-                    Text(canNext ? "Next photo" : "Last photo")
+                    Text(action.label)
                         .font(.system(size: 12, weight: .medium))
-                    if canNext {
+                    if action == .next {
                         Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
                     }
                 }
-                .foregroundStyle(canNext ? Color.cream : Color.warmMid)
+                .foregroundStyle(Color.cream)
                 .padding(.horizontal, Spacing.md)
                 .padding(.vertical, 7)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.xs)
-                        .fill(canNext ? Color.roseGold : Color.creamDeep)
+                        .fill(Color.roseGold)
                 )
             }
             .buttonStyle(.plain)
-            .disabled(!canNext)
             .keyboardShortcut(.rightArrow, modifiers: [])
         }
         .padding(.horizontal, Spacing.lg)
@@ -1593,6 +1608,7 @@ private struct PhotoTaggingSheet: View {
         // Report what actually changed, not what was asked for.
         let changed = PhotoTagBatch.photosChanged(from: before, to: after, in: keys)
         tagUndo.record(before: before, photosChanged: changed)
+        applyResultShownAt = Date()
         withAnimation(.easeOut(duration: 0.15)) {
             applyResult = changed == 0
                 ? "Everyone here was already on all \(photos.count) photos."

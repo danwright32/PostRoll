@@ -3,6 +3,9 @@ import SwiftUI
 struct SettingsView: View {
     @State private var apiKey: String = KeychainStore.readAPIKey() ?? ""
     @State private var saved = false
+    /// Set when a save was refused by the keychain, so a write that did not
+    /// land cannot present as a successful one (#112).
+    @State private var saveError: String?
 
     // Default posting layout for new events (#66). Per-event overrides live on
     // the Export page; this is the fallback an event uses until it's overridden.
@@ -17,20 +20,44 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                SecureField("sk-ant-…", text: $apiKey)
+                // Placeholder shows the SHAPE of a whole key rather than just
+                // its prefix: "sk-ant-…" read as the field already accounting
+                // for the prefix, so only the part after it got pasted, and the
+                // result was the same generic "invalid x-api-key" as a wrong
+                // key with nothing to tell the two apart (#128).
+                SecureField("Paste the whole key, starting sk-ant-", text: $apiKey)
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 380)
-                    .onChange(of: apiKey) { saved = false }
+                    .onChange(of: apiKey) { saved = false; saveError = nil }
+
+                if let warning = KeychainStore.formatWarning(for: apiKey) {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.system(size: 11))
+                        .frame(width: 380, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 HStack {
                     Button("Save") {
                         let trimmed = KeychainStore.sanitize(apiKey)
                         if trimmed.isEmpty {
                             KeychainStore.deleteAPIKey()
+                            saved = true
+                            saveError = nil
+                        } else if KeychainStore.saveAPIKey(trimmed) {
+                            saved = true
+                            saveError = nil
                         } else {
-                            KeychainStore.saveAPIKey(trimmed)
+                            // A refused write used to report exactly like a
+                            // successful one, so the next run failed with an
+                            // authentication error pointing nowhere near the
+                            // real cause (#112).
+                            saved = false
+                            saveError = "The key could not be saved to your keychain. "
+                                      + "Nothing was stored, so generation will keep using "
+                                      + "the previous key if there is one."
                         }
-                        saved = true
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(KeychainStore.sanitize(apiKey) ==
@@ -41,6 +68,14 @@ struct SettingsView: View {
                             .foregroundStyle(.green)
                             .font(.system(size: 13))
                     }
+                }
+
+                if let saveError {
+                    Label(saveError, systemImage: "xmark.octagon.fill")
+                        .foregroundStyle(.red)
+                        .font(.system(size: 11))
+                        .frame(width: 380, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             } header: {
                 Text("Anthropic API Key")
