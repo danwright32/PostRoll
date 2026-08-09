@@ -47,8 +47,10 @@ def encoded_size(paths: list[str | Path]) -> int:
     Sizing on the file would over-split and make an ordinary two page program
     pay for extra requests to solve a problem only large programs have.
 
-    Cached per file (path, size, mtime) so a batching pass does not re-encode
-    the same page for every candidate grouping.
+    The encode itself is cached in `claude_client` (#220), so measuring a page
+    here and then sending it costs one encode rather than two, and a batching
+    pass that considers the same page in several candidate groupings pays for
+    it once.
     """
     from .claude_client import _image_block
 

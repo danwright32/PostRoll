@@ -17,13 +17,16 @@ final class ExportCompletionTests: XCTestCase {
 
     private var destination: URL!
 
-    override func setUpWithError() throws {
+    // async throws, not setUpWithError: on a @MainActor test class the
+    // non-isolated variant cannot touch a main-actor property, which the older
+    // Xcode in CI rejects outright even though the newer one here accepts it.
+    override func setUp() async throws {
         destination = FileManager.default.temporaryDirectory
             .appendingPathComponent("export-completion-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: destination)
     }
 
