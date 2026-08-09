@@ -1283,17 +1283,31 @@ actor PythonBridge {
 
     /// Run postroll.ai.flag_issues against the OCR result + program images.
     /// Returns the flags Claude raised — empty array means OCR looked clean.
-    func runFlagIssues(ocr: OCRResult, imagePaths: [URL]) async throws -> [OCRFlag] {
+    /// - Parameter visionText: the text layer Apple Vision baked into the program
+    ///   PDF at upload time, when it is available and current. Passing it turns on
+    ///   the spelling cross-check in `flag_issues` (#209): every performer name and
+    ///   handle the program's own text cannot confirm comes back as a flag. Passing
+    ///   nil runs the model review alone, and the caller is responsible for telling
+    ///   Dan the check did not run, because a silently skipped cross-check looks
+    ///   exactly like a program with nothing wrong in it.
+    func runFlagIssues(
+        ocr: OCRResult,
+        imagePaths: [URL],
+        visionText: String? = nil
+    ) async throws -> [OCRFlag] {
         guard !imagePaths.isEmpty else { return [] }
 
         let programFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("postroll_flag_program_\(UUID().uuidString).json")
         let outputFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("postroll_flag_out_\(UUID().uuidString).json")
+        let visionFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_flag_vision_\(UUID().uuidString).txt")
 
         defer {
             try? FileManager.default.removeItem(at: programFile)
             try? FileManager.default.removeItem(at: outputFile)
+            try? FileManager.default.removeItem(at: visionFile)
         }
 
         let programData = try JSONEncoder().encode(ocr)
@@ -1303,6 +1317,11 @@ actor PythonBridge {
         for url in imagePaths {
             args.append("--image")
             args.append(url.path)
+        }
+        if let visionText {
+            try visionText.write(to: visionFile, atomically: true, encoding: .utf8)
+            args.append("--vision-text")
+            args.append(visionFile.path)
         }
         args.append("--output")
         args.append(outputFile.path)

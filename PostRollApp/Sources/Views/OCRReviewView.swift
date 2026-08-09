@@ -41,6 +41,13 @@ struct OCRReviewView: View {
             .pendingFlagsError
     }
 
+    /// Why the program's own text could not be used to check spelling (#209).
+    /// Read live for the same reason as the flag error above.
+    private var liveVisionSkipped: String? {
+        (appState.events.first(where: { $0.id == event.id }) ?? event)
+            .visionCheckSkipped
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
@@ -59,6 +66,18 @@ struct OCRReviewView: View {
                             icon: "exclamationmark.circle",
                             message: issues.joined(separator: " "),
                             style: .error
+                        )
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.md)
+                    }
+
+                    if let visionSkipped = liveVisionSkipped {
+                        BrandBanner(
+                            icon: "text.magnifyingglass",
+                            message: "Names were not spell-checked against the program. "
+                                   + visionSkipped
+                                   + " Check performer names and handles carefully below.",
+                            style: .warning
                         )
                         .padding(.horizontal, Spacing.xl)
                         .padding(.bottom, Spacing.md)
@@ -416,6 +435,7 @@ struct OCRReviewView: View {
         ev.eventHandles = deduped.joined(separator: ", ")
         ev.pendingFlags = []
         ev.pendingFlagsError = nil
+        ev.visionCheckSkipped = nil
         ev.stage = .photosAssigned
         appState.updateEvent(ev)
     }
