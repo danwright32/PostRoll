@@ -132,9 +132,12 @@ struct CaptionReviewView: View {
                         .padding(.bottom, Spacing.sm)
 
                     StageBackButton(label: "Back to generation") {
-                        var ev = event
-                        ev.stage = .assetsGenerated
-                        appState.updateEvent(ev)
+                        // Live read, never the captured prop, which is a snapshot from
+                        // when this screen was built and reverts anything saved since (#103).
+                        if let ev = EventStageTransition.applying(
+                                .assetsGenerated, toEventWithID: event.id, in: appState.events) {
+                            appState.updateEvent(ev)
+                        }
                     }
                     .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.md)

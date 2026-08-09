@@ -91,9 +91,12 @@ struct ExportView: View {
     private var readyContent: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
             StageBackButton(label: "Back to caption review") {
-                var ev = event
-                ev.stage = .captionsReviewed
-                appState.updateEvent(ev)
+                // Live read, never the captured prop, which is a snapshot from
+                // when this screen was built and reverts anything saved since (#103).
+                if let ev = EventStageTransition.applying(
+                        .captionsReviewed, toEventWithID: event.id, in: appState.events) {
+                    appState.updateEvent(ev)
+                }
             }
             .padding(.horizontal, Spacing.xl)
             .padding(.top, Spacing.sm)

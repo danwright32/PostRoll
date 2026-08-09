@@ -195,9 +195,12 @@ struct AssetGenerationView: View {
                     .padding(.bottom, Spacing.sm)
 
                 StageBackButton(label: "Back to photo assignment") {
-                    var ev = event
-                    ev.stage = .photosAssigned
-                    appState.updateEvent(ev)
+                    // Live read, never the captured prop, which is a snapshot from
+                    // when this screen was built and reverts anything saved since (#103).
+                    if let ev = EventStageTransition.applying(
+                            .photosAssigned, toEventWithID: event.id, in: appState.events) {
+                        appState.updateEvent(ev)
+                    }
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.md)
@@ -503,9 +506,12 @@ struct AssetGenerationView: View {
     /// Send the user back to the photo-assignment stage so they can fix
     /// missing inputs, then return here when they click forward again.
     private func goFixInputs() {
-        var ev = event
-        ev.stage = .photosAssigned
-        appState.updateEvent(ev)
+        // Live read, never the captured prop, which is a snapshot from
+        // when this screen was built and reverts anything saved since (#103).
+        if let ev = EventStageTransition.applying(
+                .photosAssigned, toEventWithID: event.id, in: appState.events) {
+            appState.updateEvent(ev)
+        }
     }
 
     private var doneView: some View {

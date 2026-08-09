@@ -182,7 +182,15 @@ struct PhotoAssignmentView: View {
                     .padding(.bottom, Spacing.sm)
 
                 StageBackButton(label: "Back to OCR review") {
-                    var ev = event; ev.stage = .ocrDone; appState.updateEvent(ev)
+                    // Live read, never the captured prop: writing the snapshot
+                    // back would revert everything saved since this screen
+                    // opened, which is the opposite of what the label below
+                    // promises (#103).
+                    save()
+                    if let moved = EventStageTransition.applying(
+                        .ocrDone, toEventWithID: event.id, in: appState.events) {
+                        appState.updateEvent(moved)
+                    }
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.xs)
@@ -843,9 +851,13 @@ struct PhotoAssignmentView: View {
 
     private func advance() {
         save()
-        var ev = event
-        ev.stage = .assetsGenerated
-        appState.updateEvent(ev)
+        // save() has just written every assignment, tag, note and crop offset.
+        // Building the stage change from the captured `event` prop instead of
+        // the live record wrote a pre-assignment snapshot straight back over
+        // all of it (#103).
+        guard let moved = EventStageTransition.applying(
+            .assetsGenerated, toEventWithID: event.id, in: appState.events) else { return }
+        appState.updateEvent(moved)
     }
 }
 

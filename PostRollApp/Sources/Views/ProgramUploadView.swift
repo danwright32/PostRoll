@@ -48,7 +48,9 @@ struct ProgramUploadView: View {
                                     .strokeBorder(Color.creamEdge, lineWidth: 1))
                         )
                         .onChange(of: eventURL) { _, url in
-                            var ev = event
+                            // Live read, never the captured prop (#103).
+                            guard var ev = appState.events.first(where: { $0.id == event.id })
+                            else { return }
                             ev.eventURL = url
                             appState.updateEvent(ev)
                         }
@@ -119,26 +121,35 @@ struct ProgramUploadView: View {
     private func appendFiles(_ urls: [URL]) {
         isImporting = true
         Task {
-            var ev = event
+            // Collected first, merged into a LIVE read below. Reading the event
+            // before these awaits and writing it back afterwards was the worst
+            // version of #103: the async gap guarantees the snapshot is stale,
+            // so anything saved while the import ran was reverted.
+            var added: [URL] = []
             for url in urls {
                 if url.pathExtension.lowercased() == "pdf" {
                     let pages = await Task.detached(priority: .userInitiated) {
                         Self.rasterisePDF(at: url)
                     }.value
-                    for page in pages where !ev.programImagePaths.contains(page) {
-                        ev.programImagePaths.append(page)
+                    for page in pages where !added.contains(page) {
+                        added.append(page)
                     }
                 } else {
                     let stored = await Task.detached(priority: .userInitiated) {
                         Self.permanentCopy(of: url) ?? url
                     }.value
-                    if !ev.programImagePaths.contains(stored) {
-                        ev.programImagePaths.append(stored)
+                    if !added.contains(stored) {
+                        added.append(stored)
                     }
                 }
             }
             await MainActor.run {
-                appState.updateEvent(ev)
+                if var ev = appState.events.first(where: { $0.id == event.id }) {
+                    for page in added where !ev.programImagePaths.contains(page) {
+                        ev.programImagePaths.append(page)
+                    }
+                    appState.updateEvent(ev)
+                }
                 isImporting = false
             }
         }
@@ -161,9 +172,14 @@ struct ProgramUploadView: View {
     }
 
     private func advanceToOCR() {
-        var ev = event
-        ev.stage = .programUploaded
+        // Live read, never the captured prop, which is a snapshot from
+        // when this screen was built and reverts anything saved since (#103).
+        guard let ev = EventStageTransition.applying(
+                .programUploaded, toEventWithID: event.id, in: appState.events)
+        else { return }
         appState.updateEvent(ev)
+        // Baked from the same live event that was just stored, so the bake and
+        // the record agree on which pages exist.
         buildProgramPDF(for: ev)
     }
 
@@ -180,7 +196,9 @@ struct ProgramUploadView: View {
     }
 
     private func skipProgram() {
-        var ev = event
+        // Live read: the captured prop is a snapshot from when this screen was
+        // built, and writing it back reverts anything saved since (#103).
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.ocrResult = OCRResult()
         ev.ocrReviewDone = true
         ev.stage = .ocrDone
@@ -246,8 +264,9 @@ struct EventHeader: View {
 
     private func commitRename() {
         let trimmed = editName.trimmingCharacters(in: .whitespaces)
-        if !trimmed.isEmpty {
-            var ev = event
+        if !trimmed.isEmpty,
+           var ev = appState.events.first(where: { $0.id == event.id }) {
+            // Live read (#103): renaming must not revert other saved work.
             ev.name = trimmed
             appState.updateEvent(ev)
         }
