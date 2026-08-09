@@ -23,3 +23,16 @@ preview/
 
 # Editor/agent local state
 PostRollApp/.claude/
+
+# Local scratch that is not part of the product (#170). These sit in the
+# working tree and were false-tripping the pre-push style gate, which scans
+# untracked files, so a clean push was blocked by files unrelated to it.
+canvas.png
+collage-check.png
+export-preview.txt
+.playwright-mcp/
+
+# Standalone localhost collage editor: a prototype superseded by the in-app
+# SwiftUI editor, which is the source of truth for collage geometry. Kept on
+# disk, deliberately not part of the repo.
+scripts/
