@@ -344,6 +344,7 @@ private struct EventRow: View {
                           isReading: ocrManager.isRunning(event.id),
                           readingFailed: ocrManager.hasFailed(event.id),
                           isExporting: exportManager.isExporting(event.id),
+                          isFinishingMedia: exportManager.isFinishingMedia(event.id),
                           isSelected: isSelected)
             }
             .font(.system(size: 10))
@@ -382,6 +383,7 @@ struct StagePill: View {
     var isReading: Bool = false
     var readingFailed: Bool = false
     var isExporting: Bool = false
+    var isFinishingMedia: Bool = false
     var isSelected: Bool = false
 
     /// Subtle alive-signal pulse while any background work runs.
@@ -395,6 +397,7 @@ struct StagePill: View {
             isReading: isReading,
             readingFailed: readingFailed,
             isExporting: isExporting,
+            isFinishingMedia: isFinishingMedia,
             awaitingGeneration: awaitingGeneration,
             awaitingExport: awaitingExport
         )
@@ -407,6 +410,7 @@ struct StagePill: View {
         case .generating:         return .roseGold
         case .generationFailed:   return .roseDeep
         case .exporting:          return .roseGold
+        case .finishingMedia:     return .roseGold
         case .awaitingGeneration: return .stagePhotosAssigned
         case .awaitingExport:     return .stageCaptionsReviewed
         case .stage(let s):
@@ -429,6 +433,7 @@ struct StagePill: View {
         case .generating:         return "Generating content in the background. You can keep working on other events."
         case .generationFailed:   return "Generation hit an error. Open this event to see what happened and retry."
         case .exporting:          return "Exporting in the background. You can keep working on other events."
+        case .finishingMedia:     return "The folder is ready and the captions are in it. Reels and images are still being written."
         case .awaitingGeneration: return "Step 4: Photos assigned. Click Generate All to create assets."
         case .awaitingExport:     return "Step 6: Captions approved. Choose a folder and export."
         case .stage(let s):

@@ -352,6 +352,22 @@ struct ExportView: View {
 
     private func doneContent(folder: URL, mediaError: String?) -> some View {
         VStack(spacing: Spacing.lg) {
+            // A route back into the event, matching the ready screen. Without
+            // it a finished export trapped the event: the detail pane routes on
+            // the stage, the stage is .exported, so this was the only reachable
+            // screen and the only way out was quitting the app (#182).
+            HStack {
+                StageBackButton(label: "Back to caption review") {
+                    exportManager.clear(eventID: event.id)
+                    if let ev = EventStageTransition.applying(
+                            .captionsReviewed, toEventWithID: event.id, in: appState.events) {
+                        appState.updateEvent(ev)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, Spacing.xl)
+
             Spacer().frame(height: Spacing.lg)
 
             // An export that lost files is not a completed export, so it does
