@@ -7,7 +7,7 @@ import shutil
 
 import pytest
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageFont
 
 
 # ── ffmpeg gate (#106) ────────────────────────────────────────────────────────
@@ -46,8 +46,34 @@ needs_ffmpeg = pytest.mark.skipif(
 )
 
 
+# The same shape for the reference frames (#163). They render the real
+# templates, which draw with macOS system fonts, so on a runner without those
+# fonts every one of them skips, and a skipped reference check is
+# indistinguishable from a passing one.
+REQUIRE_GOLDENS = os.environ.get("POSTROLL_REQUIRE_GOLDENS") == "1"
+
+
+def mac_fonts_available() -> bool:
+    """Whether the macOS system fonts the templates render with can be opened."""
+    from postroll.media import design_tokens as _tokens
+    try:
+        ImageFont.truetype(_tokens.FONT_DETAIL, 12, index=_tokens.FONT_DETAIL_LIGHT)
+        ImageFont.truetype(_tokens.FONT_SCRIPT, 12)
+        return True
+    except OSError:
+        return False
+
+
+HAVE_MAC_FONTS = mac_fonts_available()
+
+needs_mac_fonts = pytest.mark.skipif(
+    not HAVE_MAC_FONTS and not REQUIRE_GOLDENS,
+    reason="renders with macOS system fonts (HelveticaNeue/SignPainter), absent on Linux CI",
+)
+
+
 def pytest_configure(config):
-    """Stop the run outright when ffmpeg is required but missing.
+    """Stop the run outright when a required external is missing.
 
     In `pytest_configure` rather than at collection so the reason is actually
     printed. Raised later, pytest reports only "no tests ran" and a bare exit
@@ -58,6 +84,12 @@ def pytest_configure(config):
             "POSTROLL_REQUIRE_FFMPEG is set but ffmpeg/ffprobe are not on PATH. "
             "The end-to-end media tests would have skipped silently, which in CI "
             "is indistinguishable from passing. Install ffmpeg on the runner."
+        )
+    if REQUIRE_GOLDENS and not HAVE_MAC_FONTS:
+        raise pytest.UsageError(
+            "POSTROLL_REQUIRE_GOLDENS is set but the macOS system fonts the "
+            "templates render with are missing. Every reference-frame check "
+            "would have skipped, which in CI is indistinguishable from passing."
         )
 
 

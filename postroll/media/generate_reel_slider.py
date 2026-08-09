@@ -81,6 +81,10 @@ RAW_DESATURATION = 0.0  # 0 = full color, 1 = grayscale
 LABEL_COLOR = TEXT_DARK
 LABEL_FONT_SIZE = 38
 LABEL_MARGIN = 30
+# Where the RAW/Edit labels sit. Below the photo, on the cream mat, which is why
+# their colour has to be the dark one: this is the band the reference-frame test
+# checks for legibility (#163).
+LABEL_Y = int(CANVAS_H * 0.75)
 LOGO_WIDTH = 200
 
 # Audio
@@ -282,7 +286,7 @@ def generate_frame(
     draw = ImageDraw.Draw(frame)
 
     # Labels animate with the swipe — slide in/out tied to divider position
-    label_y = int(CANVAS_H * 0.75)
+    label_y = LABEL_Y
 
     # "Edit" label — revealed by the slider (clipped to left of divider)
     if show_edit_label and divider_x > LABEL_MARGIN:

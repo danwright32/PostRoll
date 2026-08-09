@@ -167,3 +167,29 @@ def test_it_regenerates_the_project_rather_than_trusting_the_checked_in_copy(swi
     # stale checked-in copy would test a different set of files than the repo
     # describes.
     assert "xcodegen generate" in swift
+
+
+# ── the reference frames have somewhere to run (#163) ─────────────────────────
+
+def test_the_reference_frames_run_on_a_mac(swift):
+    # They render the real templates, which draw with macOS system fonts the
+    # Linux runner in tests.yml does not have. A recorded frame can only be
+    # compared where it can be reproduced.
+    assert "runs-on: macos" in swift
+    assert "tests/test_golden_frames.py" in swift, (
+        "the reference-frame checks are not run by any job, so they only ever "
+        "guard a template on whoever remembers to run them locally")
+
+
+def test_a_change_to_a_media_generator_runs_the_reference_frames(swift):
+    # The templates are what the frames are OF, so a change to one that does not
+    # trigger the job leaves the check it was written for unrun.
+    assert "postroll/media/**" in swift
+
+
+def test_a_missing_font_or_encoder_fails_the_job_rather_than_skipping(swift):
+    # Both of these turn a skip into a hard error. A reference check that
+    # quietly skips for want of a system font reports green having compared
+    # nothing, which is the exact failure mode it exists to close.
+    assert "POSTROLL_REQUIRE_GOLDENS" in swift
+    assert "POSTROLL_REQUIRE_FFMPEG" in swift

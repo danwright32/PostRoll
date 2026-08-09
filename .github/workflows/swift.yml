@@ -1,4 +1,4 @@
-name: Swift
+name: macOS
 
 # Split out of tests.yml so it can carry its own trigger rules (#233).
 #
@@ -25,6 +25,13 @@ name: Swift
 # is that the next one is added by someone not thinking about this file. Some
 # fixtures there are Python-only, so this occasionally runs the job for nothing,
 # which is the cheap side of the trade against missing a break entirely.
+#
+# It also carries the reference-frame checks (#163), which is why this is the
+# macOS job rather than the Swift job. Those render the real templates, and the
+# templates draw with macOS system fonts (SignPainter, HelveticaNeue) that the
+# Linux runner in tests.yml does not have, so a recorded frame can only be
+# compared on a Mac. Reusing the runner that is already being paid for beats
+# starting a second one.
 on:
   push:
     branches: [main]
@@ -33,14 +40,17 @@ on:
     paths:
       - "PostRollApp/**"
       - "tests/fixtures/**"
+      - "postroll/media/**"
+      - "tests/test_golden_frames.py"
       - ".github/workflows/swift.yml"
   workflow_dispatch:
 
 jobs:
   # Runs the PostRollTests scheme, not the PostRoll scheme, so the GUI-driving
   # PostRollUITests target is excluded: a headless runner cannot reliably drive
-  # XCUIApplication.
-  swift:
+  # XCUIApplication. Then the reference-frame checks, which need this runner's
+  # fonts.
+  macos:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -61,3 +71,26 @@ jobs:
             -scheme PostRollTests \
             -destination 'platform=macOS' \
             test
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # The reel references are pulled out of an encoded file, so this is not
+      # optional here the way it is for most of the Python suite.
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      # Both variables turn a skip into a hard failure. A reference-frame check
+      # that quietly skips for want of ffmpeg or a system font is
+      # indistinguishable from one that passed, which is the whole failure mode
+      # this job exists to close. -ra reports any skip that does remain.
+      - name: Run the reference-frame checks
+        env:
+          POSTROLL_REQUIRE_FFMPEG: "1"
+          POSTROLL_REQUIRE_GOLDENS: "1"
+        run: pytest tests/test_golden_frames.py -v -ra
