@@ -391,10 +391,6 @@ actor PythonBridge {
             let o = pd.reelCropOffsets[url.absoluteString] ?? CropOffset()
             return [o.x, o.y, o.scale]
         }
-        print("[PostRoll:runBuildReelPreview] photoPaths (\(pd.photoPaths.count)):")
-        for (i, url) in pd.photoPaths.enumerated() {
-            print("  [\(i)] \(url.lastPathComponent)")
-        }
         var manifest: [String: Any] = [
             "photos": pd.photoPaths.map { $0.path },
         ]
@@ -585,12 +581,6 @@ actor PythonBridge {
             // reorders (e.g. Thursday swap) live there. Don't re-sort here —
             // doing so would silently revert manual swaps on every regen.
             var entry: [String: Any] = ["photos": pd.photoPaths.map { $0.path }]
-            if dayName == .thursday {
-                print("[PostRoll:buildMediaManifest] Thursday photos in manifest (\(pd.photoPaths.count)):")
-                for (i, url) in pd.photoPaths.enumerated() {
-                    print("  [\(i)] \(url.lastPathComponent)")
-                }
-            }
             switch dayName {
             case .tuesday:
                 if let rec  = pd.screenRecordingPath { entry["screen_recording"]  = rec.path }

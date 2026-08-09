@@ -36,3 +36,10 @@ export-preview.txt
 # SwiftUI editor, which is the source of truth for collage geometry. Kept on
 # disk, deliberately not part of the repo.
 scripts/
+
+# Xcode per-user editor state: which files were open, window positions, scheme
+# ordering. It changes on every launch, belongs to one Mac, and conflicts on
+# every merge. The project itself is generated from project.yml, so nothing
+# here is needed to build (#120).
+**/xcuserdata/
+*.xcuserstate

@@ -289,7 +289,7 @@ Structure (per brand voice skill):
 - Blog post content (program details, repertoire)
 - Collaborator suggestion engine (matching performer names to Instagram accounts)
 
-**Tool:** Python + Tesseract or Claude Code vision
+**Tool:** Python + Claude vision (`postroll/ai/ocr_program.py`), with macOS `sips` for image conversion and Apple Vision for the searchable text layer baked into the stored PDF. Tesseract was considered and never used.
 
 ### 6.4 Collaborator Suggestion Engine
 
@@ -355,7 +355,7 @@ Local Mac desktop application with GUI. Not a web app. Runs on Dan's machine.
 - **Media pipeline:** Python + Pillow (static images) + ffmpeg (video/audio)
 - **Scheduling:** API client modules per platform (or single Metricool client)
 - **Data storage:** Local SQLite database for event data, scheduled posts, account cache
-- **OCR:** Tesseract or Claude Code vision capabilities
+- **OCR:** Claude vision, plus macOS `sips` and Apple Vision. Not Tesseract.
 
 ### 8.3 Workflow
 
@@ -480,7 +480,7 @@ The app generates a checklist of actions that cannot be automated, including:
   path, which does draw on the subscription instead, runs only when no key is
   set or a call needs a CLI-only tool.
 - API costs: Most social media APIs are free for posting. Need to verify.
-- ffmpeg/Pillow/Tesseract: Free (open source)
+- ffmpeg/Pillow: Free (open source)
 - **Total: Anthropic usage per week, plus $0 for everything else.** The $216/year
   Metricool saving still stands; it is offset by whatever the AI usage comes to,
   which is not currently measured or displayed anywhere in the app.
