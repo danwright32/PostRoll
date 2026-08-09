@@ -188,7 +188,10 @@ final class EventExporterTests: XCTestCase {
         let folder = try EventExporter.export(event: event, to: root, preset: .balanced).folder
         let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
         XCTAssertTrue(captions.contains("PHOTO TAGS:"))
-        XCTAssertTrue(captions.contains("22: Mike Bono, @mikebonomusic"))
+        // Bare usernames, no @ (#221): Instagram's tag field takes a username.
+        // A plain name that is not a handle is left as written.
+        XCTAssertTrue(captions.contains("22: Mike Bono, mikebonomusic"), captions)
+        XCTAssertFalse(captions.contains("@mikebonomusic"), captions)
         XCTAssertTrue(captions.contains("44: Catherine Gregory"))
         // Untagged photos don't appear in the tags block.
         let tagsBlock = captions.components(separatedBy: "PHOTO TAGS:")[1]

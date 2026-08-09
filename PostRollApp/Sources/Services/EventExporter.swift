@@ -133,6 +133,7 @@ struct EventExporter {
     private static func masterCaptionText(event: Event, result: WeekGenerationResult?,
                                           preset: PostingPreset) -> String {
         var sections: [String] = []
+        let weekTags = CaptionBlocks.weekTagList(event: event)
         for day in DayName.allCases {
             guard let cap = result?[day] else { continue }
             var block = "=== \(day.displayName.uppercased()) ===\n\(cap.formatted)"
@@ -156,13 +157,23 @@ struct EventExporter {
             if preset.isCollageCarousel(day) {
                 let photoTags = event.days[day.rawValue]?.photoTags ?? [:]
                 let tagLines = photoPaths.enumerated().compactMap { idx, url -> String? in
-                    let tags = photoTags[url.absoluteString] ?? []
+                    // Bare usernames: Instagram's "Tag people" field takes a
+                    // username, not an @ mention (#221).
+                    let tags = (photoTags[url.absoluteString] ?? [])
+                        .map(CaptionBlocks.bareUsername)
+                        .filter { !$0.isEmpty }
                     guard !tags.isEmpty else { return nil }
                     return "\(photoLabel(idx: idx, photoPaths: photoPaths)): \(tags.joined(separator: ", "))"
                 }
                 if !tagLines.isEmpty {
                     block += "\n\nPHOTO TAGS:\n\(tagLines.joined(separator: "\n"))"
                 }
+            } else if day == .tuesday || day == .thursday, !weekTags.isEmpty {
+                // The reel days had no tag list at all, so everyone in the reel
+                // went untagged. They have no per-photo tags to draw on, so
+                // they carry the whole week's list: same shoot, same people
+                // (#222).
+                block += "\n\nTAG LIST:\n\(weekTags.joined(separator: ", "))"
             }
             sections.append(block)
         }

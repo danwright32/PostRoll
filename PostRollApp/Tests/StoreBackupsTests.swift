@@ -203,17 +203,20 @@ final class AnalyticsStoreRecoveryTests: XCTestCase {
     private var dir: URL!
     private var file: URL!
 
-    override func setUp() {
-        super.setUp()
+    // async setUp, not the synchronous override: on a @MainActor test class the
+    // synchronous one is nonisolated, so touching these properties compiles on
+    // Xcode 26 here and fails on the 16.4 CI runs.
+    override func setUp() async throws {
+        try await super.setUp()
         dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("analytics_\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         file = dir.appendingPathComponent("analytics.json")
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: dir)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testACleanLoadReportsNoProblem() {

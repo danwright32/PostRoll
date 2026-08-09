@@ -49,6 +49,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .caption_blocks import (
+    PHOTO_TAGS, REEL_DAYS, TAG_LIST, bare_username, week_tag_list,
+)
+
 from .posting_preset import DEFAULT_PRESET, is_collage_carousel
 
 
@@ -277,6 +281,12 @@ def _master_captions(data: WeekExport) -> str:
         _row("WEDNESDAY", data.wednesday),
         ("THURSDAY", data.thursday.caption, None, None),
     ]
+    # Every handle taggable anywhere this week, for the reel days, which have
+    # no per-photo tags of their own and were exporting no tag list at all
+    # (#222).
+    week_tags = week_tag_list(
+        (cap, photo_tags, photos) for _, cap, photos, photo_tags in days
+    )
     sections: list[str] = []
     for label, cap, photos, photo_tags in days:
         block = f"=== {label} ===\n{_format_caption(cap)}"
@@ -298,11 +308,16 @@ def _master_captions(data: WeekExport) -> str:
         if photos and photo_tags:
             tag_lines = []
             for i, photo in enumerate(photos):
-                tags = photo_tags.get(str(photo)) or []
+                # Bare usernames: Instagram's "Tag people" field takes a
+                # username, not an @ mention (#221).
+                tags = [bare_username(t) for t in (photo_tags.get(str(photo)) or [])]
+                tags = [t for t in tags if t]
                 if tags:
                     tag_lines.append(f"{_photo_label(i, photos)}: {', '.join(tags)}")
             if tag_lines:
-                block += "\n\nPHOTO TAGS:\n" + "\n".join(tag_lines)
+                block += f"\n\n{PHOTO_TAGS}\n" + "\n".join(tag_lines)
+        elif label.lower() in REEL_DAYS and week_tags:
+            block += f"\n\n{TAG_LIST}\n" + ", ".join(week_tags)
 
         sections.append(block)
     return "\n\n".join(sections) + "\n"

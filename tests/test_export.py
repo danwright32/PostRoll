@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from pathlib import Path
 
 import pytest
@@ -72,6 +74,12 @@ PERFORMERS = [
 @pytest.fixture
 def week_data(tmp_path) -> WeekExport:
     src = tmp_path / "src"
+    # Deep copies, never the module-level dicts themselves. They were shared by
+    # every day AND every test, so one test setting a caption key (tag_handles,
+    # say) silently changed the fixture for every test that ran after it, and
+    # the failure surfaced in an unrelated test.
+    sample = deepcopy(SAMPLE_CAPTION)
+    multi = deepcopy(MULTI_CAPTION)
 
     return WeekExport(
         event="Vocal Colors",
@@ -83,28 +91,28 @@ def week_data(tmp_path) -> WeekExport:
             day="sunday",
             photo=_make_photo(src / "sun_photo.jpg"),
             story=_make_png(src / "sun_story.png"),
-            caption=SAMPLE_CAPTION,
+            caption=deepcopy(sample),
         ),
         monday=SingleDayData(
             day="monday",
             photo=_make_photo(src / "mon_photo.jpg"),
             story=_make_png(src / "mon_story.png"),
-            caption=SAMPLE_CAPTION,
+            caption=deepcopy(sample),
         ),
         tuesday=TuesdayData(
             reel=_make_mp4(src / "tue_reel.mp4"),
             story_cover=_make_png(src / "tue_cover.png"),
-            caption=SAMPLE_CAPTION,
+            caption=deepcopy(sample),
         ),
         wednesday=CollageCarouselData(
             day="wednesday",
             carousel_photos=[_make_photo(src / f"wed_{i:02d}.jpg") for i in range(1, 11)],
             collage_story=_make_png(src / "wed_collage.png"),
-            caption=MULTI_CAPTION,
+            caption=deepcopy(multi),
         ),
         thursday=ThursdayData(
             reel=_make_mp4(src / "thu_reel.mp4"),
-            caption=SAMPLE_CAPTION,
+            caption=deepcopy(sample),
         ),
         friday=FridayData(
             before_after=_make_png(src / "fri_ba.png"),
@@ -299,10 +307,50 @@ def test_captions_master_includes_photo_tags(week_data):
     }
     text = _master_captions(week_data)
     assert "PHOTO TAGS:" in text
-    assert "1: Mike Bono, @mikebonomusic" in text
+    # Bare usernames, no @ (#221): Instagram's tag field takes a username.
+    assert "1: Mike Bono, mikebonomusic" in text
     assert "3: Catherine Gregory" in text
     # Untagged photos are omitted from the block.
     assert "2: " not in text.split("PHOTO TAGS:")[1]
+
+
+# ── #222: the reel days had no tag list at all ───────────────────────────────
+
+
+def test_reel_days_carry_the_weeks_tag_list(week_data):
+    """Thursday and Tuesday exported a caption, hashtags and alt text and
+    nothing to paste into Instagram's tag field, so everyone in the reel went
+    untagged. They have no per-photo tags of their own, so they carry the
+    union of everyone taggable anywhere that week."""
+    first = week_data.wednesday.carousel_photos[0]
+    week_data.wednesday.photo_tags = {str(first): ["@safa.wav"]}
+    week_data.sunday.caption["tag_handles"] = ["@ferminsuerojr"]
+
+    text = _master_captions(week_data)
+
+    for label in ("TUESDAY", "THURSDAY"):
+        block = text.split(f"=== {label} ===")[1].split("=== ")[0]
+        assert "TAG LIST:" in block, f"{label} has nothing to paste into the tag field"
+        assert "safa.wav" in block, f"{label} is missing a per-photo tag from elsewhere"
+        assert "ferminsuerojr" in block, f"{label} is missing a day's handle"
+        assert "@" not in block.split("TAG LIST:")[1], "bare usernames only (#221)"
+
+
+def test_reel_days_have_no_tag_list_when_nobody_is_tagged(week_data):
+    text = _master_captions(week_data)
+    thursday = text.split("=== THURSDAY ===")[1]
+    assert "TAG LIST:" not in thursday
+
+
+def test_collage_days_keep_photo_tags_rather_than_the_week_list(week_data):
+    first = week_data.wednesday.carousel_photos[0]
+    week_data.wednesday.photo_tags = {str(first): ["@safa.wav"]}
+
+    text = _master_captions(week_data)
+    wednesday = text.split("=== WEDNESDAY ===")[1].split("=== ")[0]
+
+    assert "PHOTO TAGS:" in wednesday
+    assert "TAG LIST:" not in wednesday, "a carousel day tags per photo, not per week"
 
 
 def test_captions_master_omits_photo_tags_when_none(week_data):
@@ -427,7 +475,7 @@ def _balanced_sunday(src: Path) -> CollageCarouselData:
         day="sunday",
         carousel_photos=[_make_photo(src / f"sun_{i:02d}.jpg") for i in range(1, 5)],
         collage_story=_make_png(src / "sun_collage.png"),
-        caption=MULTI_CAPTION,
+        caption=deepcopy(MULTI_CAPTION),
     )
 
 
@@ -474,7 +522,7 @@ def test_balanced_sunday_emits_per_photo_tags_and_alt(week_data, tmp_path):
     assert "1: Photo 1 alt text." in sunday_block
     # Per-photo people tags for the tagged photos only.
     assert "PHOTO TAGS:" in sunday_block
-    assert "Mike Bono, @mikebonomusic" in sunday_block
+    assert "Mike Bono, mikebonomusic" in sunday_block
     assert "Catherine Gregory" in sunday_block
 
 

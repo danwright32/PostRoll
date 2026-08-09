@@ -66,6 +66,7 @@ targets:
       - path: Sources/Services/EventStageTransition.swift
       - path: Sources/Services/StoreBackups.swift
       - path: Sources/Services/InsightsDisplay.swift
+      - path: Sources/Services/CaptionBlocks.swift
       - path: Sources/Services/AnalyticsStore.swift
       - path: Sources/Services/PipelineProgress.swift
       - path: Sources/Services/ProgramPDFBuilder.swift
