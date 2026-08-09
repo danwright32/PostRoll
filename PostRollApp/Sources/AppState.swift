@@ -98,6 +98,11 @@ final class AppState {
         OrphanedMediaCleanup.sweep(events: events)
     }
 
+    /// Coalesces per-keystroke saves. Owned here rather than by the review
+    /// screen, which remounts whenever Dan switches events and would take a
+    /// pending write down with it.
+    private let storeWriter = DebouncedStoreWriter<[Event]> { EventStore.save($0) }
+
     func addEvent(_ event: Event) {
         events.append(event)
         selectedEventID = event.id
@@ -107,7 +112,33 @@ final class AppState {
     func updateEvent(_ event: Event) {
         guard let index = events.firstIndex(where: { $0.id == event.id }) else { return }
         events[index] = event
+        // Any pending text edit is written first, so an immediate structural
+        // save can never land ahead of the typing that preceded it.
+        storeWriter.flush()
         EventStore.save(events)
+    }
+
+    /// Same as `updateEvent`, but the DISK write is coalesced (#91, #197).
+    ///
+    /// For per-keystroke edits (caption, blog body, notes). The in-memory
+    /// `events` array is updated immediately, exactly as `updateEvent` does, so
+    /// every reader still sees the current text; only the serialisation of the
+    /// whole store is deferred to a pause in typing. Typing a blog body used to
+    /// cost hundreds of full store writes, scaling with how many events exist
+    /// rather than with the size of the edit.
+    func updateEventDebounced(_ event: Event) {
+        guard let index = events.firstIndex(where: { $0.id == event.id }) else { return }
+        events[index] = event
+        storeWriter.schedule(events)
+    }
+
+    /// Write any pending text edit now.
+    ///
+    /// Every path that ends an editing session calls this: navigating away,
+    /// generating, exporting, quitting. A debounce that loses the last sentence
+    /// would be worse than the cost it saves.
+    func flushPendingWrites() {
+        storeWriter.flush()
     }
 
     /// Removes the event and starts its undo window. Its media stays on disk

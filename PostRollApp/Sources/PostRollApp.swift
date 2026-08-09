@@ -28,6 +28,15 @@ struct PostRollApp: App {
                     NotificationService.shared.clearDelivered()
                     NotificationService.shared.clearBadge()
                 }
+                // A debounced edit must never be lost to a quit or to Dan
+                // switching away mid sentence (#91, #197). Both are cheap: the
+                // flush does nothing when no edit is pending.
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    appState.flushPendingWrites()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+                    appState.flushPendingWrites()
+                }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)

@@ -358,6 +358,11 @@ struct CaptionReviewView: View {
                     prepareThursdayEditor()
                 }
             }
+            // The screen remounts whenever Dan switches events, so a debounced
+            // edit still waiting to be written has to be flushed here (#91).
+            .onDisappear {
+                appState.flushPendingWrites()
+            }
             .alert("Regenerate all captions?", isPresented: $showRegenerateConfirm) {
                 Button("Regenerate", role: .destructive) {
                     Task { await regenerateAll() }
@@ -456,14 +461,18 @@ struct CaptionReviewView: View {
     private func captionBinding(_ day: DayName) -> Binding<DayCaption> {
         Binding(
             get: { result[day] ?? DayCaption() },
-            set: { result[day] = $0; save() }
+            // Debounced: this fires on every keystroke in the caption and
+            // hashtag fields (#91, #197).
+            set: { result[day] = $0; saveDebounced() }
         )
     }
 
     private var blogBinding: Binding<BlogOutput> {
         Binding(
             get: { result.blog ?? BlogOutput() },
-            set: { result.blog = $0; save() }
+            // Debounced for the same reason, and it matters most here: the
+            // blog body is the longest thing Dan types.
+            set: { result.blog = $0; saveDebounced() }
         )
     }
 
@@ -1178,7 +1187,23 @@ struct CaptionReviewView: View {
 
     // MARK: - Persistence
 
+    /// Persist on a pause in typing rather than on every keystroke.
+    ///
+    /// The in-memory event is updated immediately either way, so nothing reads
+    /// stale text; only the whole-store serialisation waits (#91, #197).
+    private func saveDebounced() {
+        appState.updateEventDebounced(mergedEvent())
+    }
+
     private func save() {
+        appState.updateEvent(mergedEvent())
+    }
+
+    /// The live event with this screen's local state merged in.
+    ///
+    /// Always re-read from AppState rather than using the captured `event`
+    /// prop, which goes stale the moment anything else writes.
+    private func mergedEvent() -> Event {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.weekResult = result
         DayStateMerger.mergeLocalStateIntoDays(
@@ -1188,7 +1213,7 @@ struct CaptionReviewView: View {
             collageCellOverrides: dayCollageCellOverrides,
             fridayClipOverride: dayFridayClipOverride
         )
-        appState.updateEvent(ev)
+        return ev
     }
 
     private func advance() {
