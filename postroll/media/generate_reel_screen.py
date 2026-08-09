@@ -26,8 +26,20 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .audio_fit import fit_audio_to_duration
 
+from .design_tokens import (
+    CREAM,
+    FONT_DETAIL,
+    FONT_DETAIL_LIGHT,
+    FONT_SCRIPT,
+    # ROSE_GOLD is read by the chrome tests through this module's
+    # namespace rather than by the template itself, so the linter
+    # cannot see the use.
+    ROSE_GOLD,  # noqa: F401
+    TEXT_DARK,
+)
 
-# === Design Tokens ===
+
+# === Layout, specific to this template ===
 
 CANVAS_W = 1080
 CANVAS_H = 1920
@@ -39,17 +51,10 @@ TRANSITION_DURATION = 0.7
 TARGET_EDIT_DURATION = 20.0
 
 # Branded chrome
-CREAM = (252, 250, 247)
 CREAM_OPACITY = 210
-TEXT_DARK = (60, 55, 50)
-ROSE_GOLD = (160, 105, 95)
 HEADER_H = 340  # tall enough to push title clear of the iPhone notch / Dynamic Island
 TITLE_TOP_Y = 170  # clears notch (~120px) + Dynamic Island with breathing room
 FOOTER_H = 100
-FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
-FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-# Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
-FONT_DETAIL_LIGHT = 7
 LOGO_WIDTH = 200
 
 # Audio

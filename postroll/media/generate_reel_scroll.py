@@ -29,25 +29,35 @@ from PIL import Image, ImageDraw, ImageFont
 # identical output in both the strip preview PNG and the final encoded reel.
 from .generate_collage import DEFAULT_CROP_OFFSET, crop_to_fill as _crop_to_fill
 
+from .design_tokens import (
+    CREAM,
+    FONT_DETAIL,
+    FONT_DETAIL_LIGHT,
+    FONT_SCRIPT,
+    GUTTER as GAP,
+    HAIRLINE,
+    MAT_GALLERY as MAT,
+    # ROSE_GOLD is read by the chrome tests through this module's
+    # namespace rather than by the template itself, so the linter
+    # cannot see the use.
+    ROSE_GOLD,  # noqa: F401
+    TEXT_DARK,
+)
 
-# === Design Tokens ===
+# HAIRLINE frames each print, matching the collage.
+#
+# MAT and GAP are the gallery mat, also matching the collage: an even cream
+# border with real gutters. The gaps used to be filled with a warmer
+# 240,235,228 while every other template used the brand cream, which left this
+# the one off-brand surface.
+
+
+# === Layout, specific to this template ===
 
 CANVAS_W = 1080
 CANVAS_H = 1920
 FPS = 30
 
-# Brand palette (declared before the layout so the mat can use the real cream)
-CREAM = (252, 250, 247)
-TEXT_DARK = (60, 55, 50)
-ROSE_GOLD = (160, 105, 95)
-# Hairline framing each print, matching the collage.
-HAIRLINE = (214, 208, 200)
-
-# Gallery mat, matching the collage: an even cream border with real gutters.
-# The gaps used to be filled with a warmer 240,235,228 while every other template
-# used the brand cream, which left this the one off-brand surface.
-MAT = 48
-GAP = 16
 ROW_GAP = GAP          # gap between rows
 COL_GAP = GAP          # gap between photos in a row
 SIDE_MARGIN = MAT      # kept as an alias; the mat is the side margin
@@ -73,10 +83,6 @@ HEADER_H = 220
 # edge. The colophon no longer lives here (it is baked into the strip right under
 # the last photo), so this is back to a thin band.
 FOOTER_H = 100
-FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
-FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-# Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
-FONT_DETAIL_LIGHT = 7
 # Wide enough to read as the signature under the gallery without spanning the full
 # mat, which felt like a banner. The asset carries transparent side margins, so its
 # visible ink is a bit under this.

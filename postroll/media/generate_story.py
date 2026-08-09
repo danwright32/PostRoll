@@ -18,19 +18,27 @@ import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from .design_tokens import (
+    FONT_DETAIL,
+    FONT_DETAIL_LIGHT,
+    FONT_SCRIPT,
+    ROSE_GOLD as ROSE_GOLD_ON_CREAM,
+    ROSE_GOLD_LIGHT,
+    TEXT_DARK,
+)
 
-# === Design Tokens ===
+
+# === Layout, specific to this template ===
 
 CANVAS_W = 1080
 CANVAS_H = 1920
 
-# Rose gold divider
-ROSE_GOLD = (196, 135, 122)  # #C4877A
+# Two rose golds, because this template paints on two backgrounds: the lighter
+# one over the blurred photograph, the on-cream accent below it.
+ROSE_GOLD = ROSE_GOLD_LIGHT
+ROSE_GOLD_DARK = ROSE_GOLD_ON_CREAM
 
-# Text colors
 TEXT_WHITE = (255, 255, 255)  # title (on blurred background)
-TEXT_DARK = (60, 55, 50)  # org/venue (on cream overlay)
-ROSE_GOLD_DARK = (160, 105, 95)  # divider on cream background
 
 # Layout — title above photo, generous spacing
 EVENT_NAME_Y = 130  # script title — breathing room from top
@@ -45,11 +53,9 @@ LOGO_BOTTOM_MARGIN = 100
 BG_BLUR_RADIUS = 40
 BG_DARKEN_OPACITY = 70  # lighter overlay, let warm tones show through
 
-# Fonts (macOS system fonts)
-FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
-FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-FONT_DETAIL_INDEX = 7  # Light weight (Thin rendered spindly)
-FONT_DETAIL_LIGHT = FONT_DETAIL_INDEX  # alias for the cross-template alignment tests
+# Light weight (Thin rendered spindly). The second name is what the
+# cross-template alignment tests read.
+FONT_DETAIL_INDEX = FONT_DETAIL_LIGHT
 
 
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
