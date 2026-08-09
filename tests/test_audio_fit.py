@@ -16,6 +16,7 @@ import pytest
 from postroll.media.audio_fit import (
     DEFAULT_CROSSFADE,
     _loop_copies,
+    _loop_command,
     _loop_filtergraph,
     audio_duration,
     fit_audio_to_duration,
@@ -55,13 +56,36 @@ def test_default_crossfade_is_short_and_equal_power():
 
 def test_loop_filtergraph_structure():
     graph = _loop_filtergraph(copies=3, crossfade=1.0, duration=46.0)
-    # One split into 3 streams.
-    assert "asplit=3[s0][s1][s2]" in graph
+    # Each copy is its own input, never branches of one asplit: sharing a
+    # decoder across an acrossfade is what broke on the Linux ffmpeg.
+    assert "asplit" not in graph
+    assert "[0:a][1:a]" in graph and "[2:a]" in graph
     # Two crossfade joins for three copies, with an equal-power curve.
     assert graph.count("acrossfade=") == 2
     assert "c1=qsin:c2=qsin" in graph
     # Trimmed to the exact target, exposed as [aout].
     assert "atrim=0:46.000[aout]" in graph
+
+
+def test_the_loop_command_passes_the_source_once_per_copy():
+    """The graph references [0:a] through [N-1:a], so the command has to supply
+    that many inputs or ffmpeg fails on a stream that was never opened."""
+    cmd = _loop_command("/tmp/a.wav", "/tmp/out.wav", copies=3,
+                        graph=_loop_filtergraph(3, 1.0, 46.0), duration=46.0)
+    assert cmd.count("-i") == 3
+    assert cmd.count("/tmp/a.wav") == 3
+    assert cmd[-1] == "/tmp/out.wav"
+    assert "[aout]" in cmd
+
+
+def test_the_input_count_always_matches_the_graph():
+    for copies in (2, 3, 5, 8):
+        graph = _loop_filtergraph(copies, 0.5, 30.0)
+        cmd = _loop_command("/s.wav", "/o.wav", copies=copies, graph=graph,
+                            duration=30.0)
+        highest = max(int(t.split(":")[0]) for t in graph.split("[")
+                      if t[:1].isdigit() and ":a]" in t)
+        assert cmd.count("-i") == highest + 1, copies
 
 
 # ===================================================================

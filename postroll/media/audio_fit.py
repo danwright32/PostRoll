@@ -58,19 +58,38 @@ def _loop_copies(audio_len: float, duration: float, crossfade: float) -> int:
 
 
 def _loop_filtergraph(copies: int, crossfade: float, duration: float) -> str:
-    """filter_complex: split the single input into `copies` identical streams,
-    crossfade them end to end, then trim to exactly `duration`."""
-    splits = "".join(f"[s{i}]" for i in range(copies))
-    parts = [f"[0:a]asplit={copies}{splits}"]
-    prev = "s0"
+    """filter_complex chaining `copies` separate inputs of the same file with
+    crossfaded seams, then trimming to exactly `duration`.
+
+    Each copy is its OWN `-i` input (see `_loop_command`) rather than branches
+    of one `asplit`. acrossfade has to buffer the tail of its first input while
+    reading the head of its second, and when both branches come from a single
+    decoder that pattern is version dependent: on the Linux ffmpeg in CI it
+    exits 0 and writes a file ffprobe cannot read, which then fell back to
+    silence padding, the exact thing this function exists to avoid. Separate
+    inputs give each side its own decoder, which is what the filter expects.
+    """
+    parts = []
+    prev = "0:a"
     for i in range(1, copies):
         nxt = f"x{i}"
         # Equal-power curve (qsin) on both sides so the seam holds a constant
         # perceived loudness instead of dipping ~6 dB through a linear blend.
-        parts.append(f"[{prev}][s{i}]acrossfade=d={crossfade:.3f}:c1=qsin:c2=qsin[{nxt}]")
+        parts.append(f"[{prev}][{i}:a]acrossfade=d={crossfade:.3f}:c1=qsin:c2=qsin[{nxt}]")
         prev = nxt
     parts.append(f"[{prev}]atrim=0:{duration:.3f}[aout]")
     return ";".join(parts)
+
+
+def _loop_command(src: str, out_path: str, *, copies: int, graph: str,
+                  duration: float) -> list[str]:
+    """The ffmpeg call for `graph`: the source repeated as `copies` inputs."""
+    cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+    for _ in range(copies):
+        cmd += ["-i", src]
+    cmd += ["-filter_complex", graph, "-map", "[aout]",
+            "-t", f"{duration:.3f}", "-c:a", "pcm_s16le", out_path]
+    return cmd
 
 
 def _run(cmd: list[str]) -> bool:
@@ -107,10 +126,10 @@ def fit_audio_to_duration(
 
     if length is not None and length < duration:
         cross = min(crossfade, length / 2)
-        graph = _loop_filtergraph(_loop_copies(length, duration, cross), cross, duration)
-        looped = ["ffmpeg", "-y", "-loglevel", "error", "-i", src,
-                  "-filter_complex", graph, "-map", "[aout]",
-                  "-t", f"{duration:.3f}", "-c:a", "pcm_s16le", out_path]
+        copies = _loop_copies(length, duration, cross)
+        graph = _loop_filtergraph(copies, cross, duration)
+        looped = _loop_command(src, out_path, copies=copies, graph=graph,
+                               duration=duration)
         if _run(looped) and _usable(out_path):
             return out_path
         # Fall through to trim/pad if the loop graph fails for any reason.
