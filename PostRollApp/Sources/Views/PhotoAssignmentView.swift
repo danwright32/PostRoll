@@ -1220,6 +1220,12 @@ struct PhotoTagSuggestion: Identifiable, Hashable {
 /// (batch tagging) and the tagging sheet (one photo, shown large) so the two
 /// surfaces can't drift apart.
 private struct PhotoTagEditor: View {
+    /// Measured, so the "there is more" hint only shows while it is true (#190).
+    @State private var suggestionContentHeight: CGFloat = 0
+    @State private var suggestionViewportHeight: CGFloat = 0
+    @State private var suggestionScrollOffset: CGFloat = 0
+    private let scrollSpace = "photoTagSuggestions"
+
     @Binding var tags: [String]
     var suggestions: [PhotoTagSuggestion] = []
     var tagsHeading: String = "TAGGED IN THIS PHOTO"
@@ -1304,6 +1310,36 @@ private struct PhotoTagEditor: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                // Measured against the viewport below, to know whether the
+                // list actually continues past the clipped edge (#190).
+                .background(GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { suggestionContentHeight = proxy.size.height }
+                        .onChange(of: proxy.size.height) { _, h in suggestionContentHeight = h }
+                        .onChange(of: proxy.frame(in: .named(scrollSpace)).minY) { _, y in
+                            suggestionScrollOffset = -y
+                        }
+                })
+            }
+            .coordinateSpace(name: scrollSpace)
+            .background(GeometryReader { proxy in
+                Color.clear
+                    .onAppear { suggestionViewportHeight = proxy.size.height }
+                    .onChange(of: proxy.size.height) { _, h in suggestionViewportHeight = h }
+            })
+            // macOS hides scrollbars until a gesture starts, so without this an
+            // overflowing list of performers reads as a complete one and
+            // everybody below the cut is unfindable (#190).
+            .overlay(alignment: .bottom) {
+                if ScrollEdgeFade.showsBottom(contentHeight: suggestionContentHeight,
+                                              viewportHeight: suggestionViewportHeight,
+                                              scrollOffset: suggestionScrollOffset) {
+                    LinearGradient(colors: [Color.cream.opacity(0), Color.cream],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 22)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .onAppear { if autoFocus { focused = true } }
