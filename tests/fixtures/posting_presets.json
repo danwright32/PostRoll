@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "The posting presets, stated once, asserted by BOTH implementations (#107).",
+    "postroll/posting_preset.py is the declared source of truth and had no direct",
+    "Python tests; only its Swift mirror (PostingPreset) was pinned, so the",
+    "declared source could change and only the copy would complain.",
+    "",
+    "Every case here is checked by tests/test_posting_preset.py and by",
+    "PostRollApp/Tests/PostingPresetTests.swift. Adding a case obliges both.",
+    "",
+    "A null format means the day is NOT governed by the preset (Tuesday,",
+    "Thursday, Friday have fixed formats) and the caller uses that day's own",
+    "handling. That is different from a day that does not exist."
+  ],
+  "default_preset": "balanced",
+  "formats": {
+    "single": "single",
+    "collage_carousel": "collage_carousel"
+  },
+  "cases": [
+    { "preset": "balanced", "day": "sunday",    "format": "collage_carousel", "count": 4 },
+    { "preset": "balanced", "day": "monday",    "format": "collage_carousel", "count": 4 },
+    { "preset": "balanced", "day": "wednesday", "format": "collage_carousel", "count": 4 },
+    { "preset": "balanced", "day": "tuesday",   "format": null, "count": null },
+    { "preset": "balanced", "day": "thursday",  "format": null, "count": null },
+    { "preset": "balanced", "day": "friday",    "format": null, "count": null },
+
+    { "preset": "classic",  "day": "sunday",    "format": "single", "count": 1 },
+    { "preset": "classic",  "day": "monday",    "format": "single", "count": 1 },
+    { "preset": "classic",  "day": "wednesday", "format": "collage_carousel", "count": 10 },
+    { "preset": "classic",  "day": "tuesday",   "format": null, "count": null },
+    { "preset": "classic",  "day": "thursday",  "format": null, "count": null },
+    { "preset": "classic",  "day": "friday",    "format": null, "count": null }
+  ],
+  "unknown_preset_falls_back_to_default": [
+    { "preset": "nonsense",  "day": "sunday", "format": "collage_carousel", "count": 4 },
+    { "preset": "",          "day": "sunday", "format": "collage_carousel", "count": 4 }
+  ]
+}
