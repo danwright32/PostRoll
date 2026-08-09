@@ -31,8 +31,7 @@
         "late_first_photo"
       ],
       "accepted_on_corrected": {
-        "alt_text_inferred_state": "A genuine miss in Dan's own correction: one marker still reads 'grinning toward'. Rule 19 bans reading who an expression was aimed at, so the check is right and the corrected post is not perfect. Recorded rather than excused.",
-        "invented_number": "False positive. The only numerals left are 'Matchbook Spark Vol. 2' and 'Book 2 of Homer's Odyssey', both parts of titles rather than counts. The check cannot tell a title from a measurement."
+        "alt_text_inferred_state": "A genuine miss in Dan's own correction: one marker still reads 'grinning toward'. Rule 19 bans reading who an expression was aimed at, so the check is right and the corrected post is not perfect. Recorded rather than excused."
       }
     },
     {
@@ -46,8 +45,7 @@
         "demographic_grouping"
       ],
       "accepted_on_corrected": {
-        "alt_text_missing_performer": "Three group shots whose alt text is 'Four BLUDLINE performers at mic stands' and similar. Naming eight people in a 25 word alt text is not possible, so the rule and the format are in genuine tension here. Worth Dan's decision rather than a silent exemption.",
-        "invented_number": "False positive, and the case #201 explicitly blesses. 'Eight people at mic stands' is derivable from the named cast list, and 'Vol. 2' is part of a title. The check compares against numerals in the program data and cannot count a list."
+        "alt_text_missing_performer": "Three group shots whose alt text is 'Four BLUDLINE performers at mic stands' and similar. Naming eight people in a 25 word alt text is not possible, so the rule and the format are in genuine tension here. Worth Dan's decision rather than a silent exemption."
       }
     }
   ]
