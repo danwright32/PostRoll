@@ -185,3 +185,110 @@ def test_failed_download_leaves_no_file_at_cache_path(tmp_path):
 
     assert not dest.exists()
     assert list(tmp_path.glob("*.part")) == []
+
+
+# ── #93: a Jamendo outage must not surface as a bare URLError ─────────────────
+#
+# `_search_tracks` called urlopen with no try/except while its sibling
+# `_search_tracks_namesearch` wrapped the identical call, so a DNS failure or a
+# 5xx during the tag path aborted a whole reel render with a raw Python
+# traceback instead of the documented RuntimeError.
+
+import urllib.error
+
+from postroll.audio import (
+    JamendoUnavailable, _search_tracks_namesearch, fetch_audio_candidates,
+)
+
+
+def _urlopen_raising(exc, calls):
+    def fake(url, timeout=15):
+        calls.append(url)
+        raise exc
+    return fake
+
+
+@pytest.mark.parametrize("make_exc", [
+    lambda: urllib.error.URLError("dns failure"),
+    lambda: urllib.error.HTTPError("u", 503, "Service Unavailable", {}, None),
+    lambda: TimeoutError("timed out"),
+], ids=["urlerror", "http_503", "timeout"])
+def test_search_tracks_raises_a_named_error_not_a_bare_urlerror(monkeypatch, make_exc):
+    exc = make_exc()
+    calls: list[str] = []
+    monkeypatch.setattr("postroll.audio.urllib.request.urlopen",
+                        _urlopen_raising(exc, calls))
+    monkeypatch.setattr("postroll.audio.time.sleep", lambda s: None)
+
+    with pytest.raises(JamendoUnavailable, match="music service"):
+        _search_tracks("cinematic", "key")
+
+
+def test_search_tracks_retries_a_transient_failure_before_giving_up(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr("postroll.audio.urllib.request.urlopen",
+                        _urlopen_raising(urllib.error.URLError("blip"), calls))
+    monkeypatch.setattr("postroll.audio.time.sleep", lambda s: None)
+
+    with pytest.raises(JamendoUnavailable):
+        _search_tracks("cinematic", "key")
+
+    assert len(calls) > 1, "a single transient GET is worth retrying"
+
+
+def test_search_tracks_recovers_when_the_retry_succeeds(monkeypatch):
+    payload = {"results": [{"id": 1, "name": "A", "artist_name": "B",
+                            "duration": 100, "audiodownload": "http://x/a.mp3",
+                            "audiodownload_allowed": True}]}
+    state = {"n": 0}
+
+    def flaky(url, timeout=15):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise urllib.error.URLError("blip")
+        return _mock_urlopen(payload)
+
+    monkeypatch.setattr("postroll.audio.urllib.request.urlopen", flaky)
+    monkeypatch.setattr("postroll.audio.time.sleep", lambda s: None)
+
+    assert len(_search_tracks("cinematic", "key")) == 1
+
+
+def test_a_jamendo_outage_is_a_runtime_error_callers_already_handle(monkeypatch):
+    """JamendoUnavailable is a RuntimeError, so every existing caller that
+    already catches the documented RuntimeError keeps working."""
+    assert issubclass(JamendoUnavailable, RuntimeError)
+
+
+def test_fetch_audio_surfaces_the_outage_rather_than_no_tracks_found(monkeypatch, tmp_path):
+    """Distinct causes get distinct messages: 'could not reach' is not the
+    same as 'nothing matched your tags', and only one of them is retryable."""
+    monkeypatch.setenv("JAMENDO_CLIENT_ID", "testkey")
+    monkeypatch.setattr("postroll.audio.urllib.request.urlopen",
+                        _urlopen_raising(urllib.error.URLError("down"), []))
+    monkeypatch.setattr("postroll.audio.time.sleep", lambda s: None)
+
+    with pytest.raises(JamendoUnavailable, match="music service"):
+        fetch_audio(tags="cinematic", cache_dir=tmp_path)
+
+
+def test_fetch_audio_candidates_surfaces_the_outage_too(monkeypatch, tmp_path):
+    monkeypatch.setenv("JAMENDO_CLIENT_ID", "testkey")
+    monkeypatch.setattr("postroll.audio.urllib.request.urlopen",
+                        _urlopen_raising(urllib.error.URLError("down"), []))
+    monkeypatch.setattr("postroll.audio.time.sleep", lambda s: None)
+
+    with pytest.raises(JamendoUnavailable):
+        fetch_audio_candidates(tags="cinematic", cache_dir=tmp_path)
+
+
+def test_namesearch_degrades_to_empty_but_says_so(monkeypatch, capsys):
+    """The program-match path runs many queries in a loop and is best effort,
+    so it degrades. It must still report, or a total outage looks exactly like
+    'no piece matched' and stays invisible."""
+    monkeypatch.setattr("postroll.audio.urllib.request.urlopen",
+                        _urlopen_raising(urllib.error.URLError("down"), []))
+    monkeypatch.setattr("postroll.audio.time.sleep", lambda s: None)
+
+    assert _search_tracks_namesearch("Brahms", "key") == []
+    assert "music service" in capsys.readouterr().err

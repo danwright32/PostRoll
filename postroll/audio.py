@@ -21,6 +21,8 @@ import json
 import os
 import random
 import time
+import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -31,6 +33,12 @@ DEFAULT_CACHE_DIR = Path.home() / ".postroll" / "audio_cache"
 _SEARCH_LIMIT = 20  # tracks fetched per search; picks randomly from top 10
 # Jamendo's search is flaky: it returns zero downloadable tracks for tags that work
 # on the next call. Retry before treating an empty result as the real answer.
+#: Retries for a single transient GET against Jamendo (DNS blip, 5xx, timeout).
+#: Separate from _SEARCH_ATTEMPTS, which retries a search that SUCCEEDED and
+#: came back empty. The two are different failures and are counted separately.
+_HTTP_ATTEMPTS = 3
+_HTTP_RETRY_DELAY = 1.0
+
 _SEARCH_ATTEMPTS = 3
 _SEARCH_RETRY_DELAY = 1.0  # seconds between attempts
 
@@ -177,6 +185,43 @@ def fetch_audio(
     return str(cached)
 
 
+class JamendoUnavailable(RuntimeError):
+    """Jamendo could not be reached or answered with an error.
+
+    A RuntimeError so every caller already handling the documented
+    "no tracks found" contract keeps working, but a distinct type because the
+    two are different problems: one is retryable and says nothing about the
+    tags, the other means the search genuinely matched nothing (#93).
+    """
+
+
+def _jamendo_json(url: str, *, what: str) -> dict[str, Any]:
+    """GET a Jamendo endpoint and parse the JSON, retrying a transient blip.
+
+    One implementation for both search paths. They previously carried the
+    identical call with different error handling, so a DNS failure on the tag
+    path escaped as a bare URLError and killed a whole reel render with a
+    traceback, while the same failure on the namesearch path was swallowed.
+    """
+    last: Exception | None = None
+    for attempt in range(_HTTP_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(url, timeout=15) as resp:
+                data: dict[str, Any] = json.loads(resp.read().decode())
+            return data
+        except (urllib.error.URLError, TimeoutError, OSError,
+                json.JSONDecodeError) as e:
+            last = e
+            if attempt < _HTTP_ATTEMPTS - 1:
+                time.sleep(_HTTP_RETRY_DELAY)
+    raise JamendoUnavailable(
+        f"Could not reach the music service to {what} "
+        f"({_HTTP_ATTEMPTS} attempts, last error: {last}). "
+        "This is a network or Jamendo problem, not a problem with the tags. "
+        "Check the connection and retry."
+    ) from last
+
+
 def _search_tracks(tags: str, client_id: str) -> list[dict[str, Any]]:
     params = urllib.parse.urlencode(
         {
@@ -189,8 +234,7 @@ def _search_tracks(tags: str, client_id: str) -> list[dict[str, Any]]:
         }
     )
     url = f"{JAMENDO_TRACKS_URL}?{params}"
-    with urllib.request.urlopen(url, timeout=15) as resp:
-        data: dict[str, Any] = json.loads(resp.read().decode())
+    data = _jamendo_json(url, what=f"search for {tags!r}")
     return [
         t
         for t in data.get("results", [])
@@ -278,7 +322,13 @@ def _score_match(track: dict[str, Any], composer: str, title: str) -> int:
 
 def _search_tracks_namesearch(query: str, client_id: str) -> list[dict[str, Any]]:
     """Full-text search across track + artist names. Different endpoint usage
-    than `_search_tracks` (which filters by tag)."""
+    than `_search_tracks` (which filters by tag).
+
+    Best effort: this runs once per candidate query across every program piece,
+    so one unreachable query degrades to no match rather than failing the whole
+    program search. It still REPORTS, because a total outage would otherwise be
+    indistinguishable from "nothing in the program matched" (#93).
+    """
     params = urllib.parse.urlencode(
         {
             "client_id": client_id,
@@ -291,9 +341,9 @@ def _search_tracks_namesearch(query: str, client_id: str) -> list[dict[str, Any]
     )
     url = f"{JAMENDO_TRACKS_URL}?{params}"
     try:
-        with urllib.request.urlopen(url, timeout=15) as resp:
-            data: dict[str, Any] = json.loads(resp.read().decode())
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        data = _jamendo_json(url, what=f"look up {query!r}")
+    except JamendoUnavailable as e:
+        print(f"warning: {e}", file=sys.stderr, flush=True)
         return []
     return [
         t for t in data.get("results", [])
