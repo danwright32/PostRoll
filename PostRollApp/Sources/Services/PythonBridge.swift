@@ -1196,13 +1196,13 @@ actor PythonBridge {
         } catch {
             // runProcess stderr is empty (redirected to log file) — provide a useful message
             throw PythonBridgeError.invalidOutput(
-                "Handle lookup failed. The web search may have timed out — try again with fewer performers, or check ~/Documents/PostRoll/logs."
+                "Handle lookup failed. The web search may have timed out — try again with fewer performers, or check \(AppPaths.logsDirDisplayPath)."
             )
         }
 
         guard FileManager.default.fileExists(atPath: outputFile.path) else {
             throw PythonBridgeError.invalidOutput(
-                "Handle lookup produced no output. Check ~/Documents/PostRoll/logs for details."
+                "Handle lookup produced no output. Check \(AppPaths.logsDirDisplayPath) for details."
             )
         }
 

@@ -2,9 +2,47 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+
 import pytest
 from pathlib import Path
 from PIL import Image
+
+
+# ── ffmpeg gate (#106) ────────────────────────────────────────────────────────
+#
+# One definition, imported by every suite with end-to-end ffmpeg tests, rather
+# than the same two lines copied into three files where they can drift.
+#
+# The end-to-end reel and audio-fit tests skip when ffmpeg is absent, which is
+# right on a machine that does not have it and wrong in CI, where a silent skip
+# looks exactly like a pass. Setting POSTROLL_REQUIRE_FFMPEG=1 removes the skip,
+# so a runner without ffmpeg fails loudly instead of reporting green having run
+# none of them.
+
+HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+REQUIRE_FFMPEG = os.environ.get("POSTROLL_REQUIRE_FFMPEG", "").strip() not in ("", "0", "false")
+
+needs_ffmpeg = pytest.mark.skipif(
+    not HAVE_FFMPEG and not REQUIRE_FFMPEG,
+    reason="ffmpeg/ffprobe not installed",
+)
+
+
+def pytest_configure(config):
+    """Stop the run outright when ffmpeg is required but missing.
+
+    In `pytest_configure` rather than at collection so the reason is actually
+    printed. Raised later, pytest reports only "no tests ran" and a bare exit
+    code 4, which fails the build without saying why.
+    """
+    if REQUIRE_FFMPEG and not HAVE_FFMPEG:
+        raise pytest.UsageError(
+            "POSTROLL_REQUIRE_FFMPEG is set but ffmpeg/ffprobe are not on PATH. "
+            "The end-to-end media tests would have skipped silently, which in CI "
+            "is indistinguishable from passing. Install ffmpeg on the runner."
+        )
 
 
 @pytest.fixture

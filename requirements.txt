@@ -1,2 +1,8 @@
-Pillow>=11.0
-anthropic>=0.40.0
+# Pinned exactly, not floored (#105). A ">=" line means every CI run installs
+# whatever shipped that morning, so an upstream release breaks the build with no
+# change on our side, which has already happened once. Bump these deliberately.
+Pillow==11.3.0
+anthropic==0.96.0
+
+# Test-only, pinned for the same reason: CI installed pytest unpinned.
+pytest==8.4.2

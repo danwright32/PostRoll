@@ -19,10 +19,24 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest
+        run: pip install -r requirements.txt
 
+      # Installed explicitly rather than inherited from whatever the runner
+      # image happens to ship (#106). The end-to-end audio and reel tests skip
+      # without it, and a silent skip in CI is indistinguishable from a pass.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Confirm ffmpeg is actually here
+        run: ffmpeg -version && ffprobe -version
+
+      # POSTROLL_REQUIRE_FFMPEG turns the skip into a hard failure, so the
+      # tests cannot quietly stop running if a future image drops ffmpeg.
+      # -ra reports every skip that does remain, so none is invisible.
       - name: Run tests
-        run: PYTHONPATH=. pytest tests/ -v
+        env:
+          POSTROLL_REQUIRE_FFMPEG: "1"
+        run: PYTHONPATH=. pytest tests/ -v -ra
 
   # The Swift suites (data safety, crop parity, media path integrity, stored
   # error policy) were never executed by CI, so every one of them was unenforced

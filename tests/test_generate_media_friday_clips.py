@@ -17,8 +17,9 @@ import pytest
 
 import postroll.ai.generate_media as gm_mod
 
-HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
-needs_ffmpeg = pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
+# One shared gate (#106): POSTROLL_REQUIRE_FFMPEG=1 turns a silent skip into
+# a loud failure, which is what CI needs.
+from conftest import HAVE_FFMPEG, needs_ffmpeg  # noqa: F401
 
 
 def _make_gradient(path, seconds=3.0):

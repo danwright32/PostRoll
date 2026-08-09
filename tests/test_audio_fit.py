@@ -21,8 +21,9 @@ from postroll.media.audio_fit import (
     fit_audio_to_duration,
 )
 
-HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
-needs_ffmpeg = pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
+# One shared gate (#106): POSTROLL_REQUIRE_FFMPEG=1 turns a silent skip into
+# a loud failure, which is what CI needs.
+from conftest import HAVE_FFMPEG, needs_ffmpeg  # noqa: F401
 
 
 # ===================================================================

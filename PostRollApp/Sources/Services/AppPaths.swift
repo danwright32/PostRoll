@@ -84,6 +84,16 @@ enum AppPaths {
     /// Python subprocess never writes to the TCC-protected folder during a run.
     static var logsDir: URL { root.appendingPathComponent("logs") }
     static var logFile: URL { logsDir.appendingPathComponent("postroll.log") }
+
+    /// The logs folder as it should appear in a message to Dan.
+    ///
+    /// Derived, never written out by hand: the data root moved to Application
+    /// Support and every hardcoded "~/Documents/PostRoll/logs" in a user-facing
+    /// string kept pointing at the old place, sending him to a folder with
+    /// nothing in it (#101).
+    static var logsDirDisplayPath: String {
+        (logsDir.path as NSString).abbreviatingWithTildeInPath
+    }
     /// Writable brand voice doc. Lives under the data root (not the TCC-protected
     /// Documents checkout) so generation-time reads/appends never prompt. Seeded
     /// once from the checkout's read-only default via `ensureBrandVoiceSeeded`.

@@ -2,15 +2,22 @@ BUILD_DIR := PostRollApp/build
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
-.PHONY: install build test test-python clean
+.PHONY: install install-force build test test-python clean
 
 # One build-and-install implementation, not two. This used to run its own
 # xcodebuild and cp, skipping the xattr clear, the stable-identity signing and
 # the signature verification that build-install.sh added specifically to stop
 # macOS re-prompting for Documents access on every rebuild (#83). Installing
 # through this target produced an unsigned bundle and reintroduced the prompts.
+# build-install.sh runs both test suites before it installs anything (#98), so
+# the gate applies to the `postroll` alias too, which calls the script directly
+# and never goes through make.
 install:
 	@./PostRollApp/build-install.sh --launch
+
+install-force:
+	@echo "Installing WITHOUT running the tests."
+	@SKIP_INSTALL_TESTS=1 ./PostRollApp/build-install.sh --launch
 
 build:
 	@xcodebuild \

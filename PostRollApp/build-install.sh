@@ -13,6 +13,33 @@ APP_NAME="PostRoll.app"
 DEST="/Applications/${APP_NAME}"
 BUILD_DIR="$(pwd)/build"
 
+# Nothing ran the tests before a build reached /Applications, so a red suite
+# could be installed and used without anyone noticing (#98). The gate lives
+# here rather than only in the Makefile because the `postroll` alias calls this
+# script directly and would otherwise skip it entirely.
+#
+# SKIP_INSTALL_TESTS=1 ./build-install.sh installs a known-red build on purpose.
+if [[ "${SKIP_INSTALL_TESTS:-0}" == "1" ]]; then
+  echo "==> Skipping tests (SKIP_INSTALL_TESTS=1)"
+else
+  echo "==> Running the Swift tests before installing"
+  xcodebuild -project "${PROJECT}" -scheme PostRollTests -destination 'platform=macOS' test \
+    | (command -v xcbeautify >/dev/null && xcbeautify || cat)
+
+  echo "==> Running the Python tests before installing"
+  REPO_ROOT="$(cd .. && pwd)"
+  if [[ -x "${REPO_ROOT}/venv/bin/python" ]]; then
+    (cd "${REPO_ROOT}" && PYTHONPATH=. venv/bin/python -m pytest tests/ -q)
+  else
+    # A missing venv is not a pass. Refuse rather than install a bundle whose
+    # entire generation pipeline went unchecked.
+    echo "Error: ${REPO_ROOT}/venv/bin/python not found, so the Python suite" >&2
+    echo "       could not run. Create the venv, or re-run with" >&2
+    echo "       SKIP_INSTALL_TESTS=1 to install without it." >&2
+    exit 1
+  fi
+fi
+
 echo "==> Building ${SCHEME} (${CONFIG})"
 xcodebuild \
   -project "${PROJECT}" \

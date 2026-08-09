@@ -141,7 +141,8 @@ enum EventStore {
         } catch let error as DecodingError {
             // Genuine corruption: the bytes are there and they are not events.
             NSLog("EventStore: failed to decode \(url.lastPathComponent): \(error)")
-            let folder = url.deletingLastPathComponent().path
+            let folder = (url.deletingLastPathComponent().path as NSString)
+                .abbreviatingWithTildeInPath
             guard let backup = StoreRecovery.setAside(url) else {
                 // The original could not be preserved, so it is still the only
                 // copy. Saving now would erode it one generation at a time.

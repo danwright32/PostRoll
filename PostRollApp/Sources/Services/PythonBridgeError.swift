@@ -13,7 +13,7 @@ enum PythonBridgeError: LocalizedError {
         case .outputMissing:
             return "Generation finished but produced no output. Check that the program PDF has readable text and try again."
         case .invalidOutput:
-            return "Generated output couldn't be read. Try regenerating. If it keeps failing, check ~/Documents/PostRoll/logs."
+            return "Generated output couldn't be read. Try regenerating. If it keeps failing, check \(AppPaths.logsDirDisplayPath)."
         case .timedOut(let seconds):
             return "The operation was still running after \(Int(seconds / 60)) minutes and was stopped. Check your internet connection and try again."
         }
@@ -50,7 +50,7 @@ enum PythonBridgeError: LocalizedError {
         let trimmed = stderr.split(separator: "\n").last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
             .map(String.init) ?? stderr
         let preview = trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
-        return "Generation failed: \(preview). Check ~/Documents/PostRoll/logs if this persists."
+        return "Generation failed: \(preview). Check \(AppPaths.logsDirDisplayPath) if this persists."
     }
 }
 
