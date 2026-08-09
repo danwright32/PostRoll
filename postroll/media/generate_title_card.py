@@ -55,8 +55,12 @@ def _probe_duration(path: str | Path) -> float:
     )
     try:
         return float(proc.stdout.strip())
-    except ValueError:
-        raise TitleCardError(f"could not probe duration of {path}: {proc.stderr.strip()}")
+    except ValueError as e:
+        # `from e` keeps what actually failed to parse attached, so a probe that
+        # printed something unexpected is diagnosable rather than just "could
+        # not probe".
+        raise TitleCardError(
+            f"could not probe duration of {path}: {proc.stderr.strip()}") from e
 
 
 def render_title_card_image(event_name: str, output_path: str | Path) -> str:

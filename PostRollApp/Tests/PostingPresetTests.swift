@@ -87,34 +87,43 @@ final class PostingPresetTests: XCTestCase {
               date: Date(timeIntervalSince1970: 1_700_000_000), shootType: .fullShow)
     }
 
-    private func withGlobalPreset(_ preset: PostingPreset, _ body: () -> Void) {
-        let key = PostingPreset.storageKey
-        let original = UserDefaults.standard.string(forKey: key)
-        defer {
-            if let original { UserDefaults.standard.set(original, forKey: key) }
-            else { UserDefaults.standard.removeObject(forKey: key) }
-        }
-        UserDefaults.standard.set(preset.rawValue, forKey: key)
-        body()
+    /// A scratch defaults store holding this preset, handed to the code under
+    /// test.
+    ///
+    /// The real preference is never read or written. Saving and restoring it
+    /// around the test was careful but not safe: a crash between the two left
+    /// Dan's actual posting layout changed, and two suites running at once
+    /// clobbered each other (#116).
+    private func scratchDefaults(_ preset: PostingPreset) -> UserDefaults {
+        let suite = "postroll.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.set(preset.rawValue, forKey: PostingPreset.storageKey)
+        addTeardownBlock { UserDefaults().removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
+    private func withGlobalPreset(_ preset: PostingPreset,
+                                  _ body: (UserDefaults) -> Void) {
+        body(scratchDefaults(preset))
     }
 
     func testEffectivePresetUsesOverrideWhenSet() {
         var event = makeEvent()
         event.postingPresetOverride = .classic
         // The override wins regardless of the global default.
-        withGlobalPreset(.balanced) {
-            XCTAssertEqual(event.effectivePostingPreset, .classic)
+        withGlobalPreset(.balanced) { defaults in
+            XCTAssertEqual(event.effectivePostingPreset(in: defaults), .classic)
         }
     }
 
     func testEffectivePresetFallsBackToGlobalWhenNoOverride() {
         var event = makeEvent()
         event.postingPresetOverride = nil
-        withGlobalPreset(.classic) {
-            XCTAssertEqual(event.effectivePostingPreset, .classic)
+        withGlobalPreset(.classic) { defaults in
+            XCTAssertEqual(event.effectivePostingPreset(in: defaults), .classic)
         }
-        withGlobalPreset(.balanced) {
-            XCTAssertEqual(event.effectivePostingPreset, .balanced)
+        withGlobalPreset(.balanced) { defaults in
+            XCTAssertEqual(event.effectivePostingPreset(in: defaults), .balanced)
         }
     }
 
@@ -137,22 +146,20 @@ final class PostingPresetTests: XCTestCase {
 
     @MainActor
     func testStoreDefaultsToBalancedAndPersists() {
-        let key = PostingPreset.storageKey
-        let original = UserDefaults.standard.string(forKey: key)
-        defer {
-            if let original { UserDefaults.standard.set(original, forKey: key) }
-            else { UserDefaults.standard.removeObject(forKey: key) }
-        }
+        // Its own scratch suite, so the real preference is neither read nor
+        // written and two suites running at once cannot collide (#116).
+        let suite = "postroll.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { UserDefaults().removePersistentDomain(forName: suite) }
 
-        UserDefaults.standard.removeObject(forKey: key)
-        XCTAssertEqual(PostingPresetStore().selected, .balanced,
+        XCTAssertEqual(PostingPresetStore(defaults: defaults).selected, .balanced,
                        "a fresh store defaults to balanced")
 
-        let store = PostingPresetStore()
+        let store = PostingPresetStore(defaults: defaults)
         store.selected = .classic
         store.save()
-        XCTAssertEqual(PostingPreset.current, .classic)
-        XCTAssertEqual(PostingPresetStore().selected, .classic,
+        XCTAssertEqual(PostingPreset.current(in: defaults), .classic)
+        XCTAssertEqual(PostingPresetStore(defaults: defaults).selected, .classic,
                        "a new store reads back the persisted preset")
     }
 }

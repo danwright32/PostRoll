@@ -1,0 +1,46 @@
+# Tooling configuration for the Python side of PostRoll.
+#
+# This is configuration only. The package itself is not installed; the app runs
+# it in place with `python -m postroll.ai.<module>` from the repo root.
+
+[tool.pytest.ini_options]
+# Where the suites live, so `pytest` with no arguments runs the right thing and
+# cannot wander into venv/ or the Swift tree (#114).
+testpaths = ["tests"]
+
+# The repo root on sys.path, replacing the `PYTHONPATH=.` prefix that every
+# invocation had to remember. A test run that works locally and fails in CI
+# because one of them forgot the prefix is a difference with no meaning.
+pythonpath = ["."]
+
+# -ra reports every skip, so a suite that quietly stops running is visible
+# rather than reading as a pass. --strict-markers turns a typo in a marker name
+# into an error instead of a silently unfiltered test.
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Deliberately narrow (#113). A lint that lands with hundreds of pre-existing
+# violations gets switched off or ignored, so this starts with the rules that
+# catch real defects rather than style opinions:
+#   E9  syntax errors and the like
+#   F   pyflakes: undefined names, unused imports, f-strings with no placeholder
+#   B   bugbear: mutable default arguments, except-without-raise, and friends
+# Style rules can be added later, one at a time, each with its own cleanup.
+select = ["E9", "F", "B"]
+
+# B905 is zip() without an explicit strict=. It is a real safety property, and
+# turning it on would raise where two sequences silently differ in length, but
+# it changes runtime behaviour at 15 call sites and each needs its own decision
+# about what a mismatch there should do. Left off deliberately rather than
+# switched on blind; #113 records that the rest of the set is enforced.
+ignore = ["B905"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests reach for star-imports, unused fixtures, loop variables they only
+# partly unpack, and objects built in default arguments. None of those mean
+# anything in a test the way they do in the pipeline.
+"tests/*" = ["F401", "F811", "B007", "B008"]

@@ -98,7 +98,9 @@ def load_brand_voice() -> str:
 # and sonnet-4-6 and the Opus 4.7+ tier do not share a limit, so `_image_block`
 # reads it from `image_budget_for` (#218). This alias exists only for the
 # comparison tool under tools/, which reports the cap it used.
-from ..media.page_regions import DEFAULT_IMAGE_BUDGET as MAX_IMAGE_EDGE  # noqa: E402
+
+
+from ..media.page_regions import DEFAULT_IMAGE_BUDGET as MAX_IMAGE_EDGE  # noqa: E402,F401  (re-exported for tools/ and the tests that pin the cap)
 
 
 def _image_block(path: Path, *, model: str = "") -> dict:

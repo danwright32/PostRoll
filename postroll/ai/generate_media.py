@@ -59,7 +59,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import random
 import re
 import shutil
 import sys
@@ -77,7 +76,9 @@ from .audio_tags import resolve_reel_audio
 from .select_reel_clips import select_reel_clips
 from .select_cover_photo import (
     select_cover_photo,
-    COVER_FRAMES_PER_CLIP,
+    # Re-exported: the cover tests pin the per-clip frame count through this
+    # module, which is where the behaviour lives from their point of view.
+    COVER_FRAMES_PER_CLIP,  # noqa: F401
     _cover_candidates_from_photos,
     _cover_candidates_from_friday_plan,
 )
@@ -625,7 +626,10 @@ def generate_media(
                 day_name="thursday",
                 day_dir=day_dir,
                 day_info=day_info,
-                build_candidates=lambda: _cover_candidates_from_photos(photos),
+                # B023 is a false positive here: _render_cover calls
+                # build_candidates() synchronously, so the lambda never outlives
+                # this loop iteration and the late binding cannot bite.
+                build_candidates=lambda: _cover_candidates_from_photos(photos),  # noqa: B023
                 event=event, org=org, venue=venue,
                 day_result=day_result, errors=errors,
             )
@@ -738,8 +742,10 @@ def generate_media(
                         day_name="friday",
                         day_dir=day_dir,
                         day_info=day_info,
+                        # Called synchronously inside _render_cover, so the
+                        # loop variable cannot change under it (B023).
                         build_candidates=lambda: _cover_candidates_from_friday_plan(
-                            plan["selections"], Path(cover_tmp)
+                            plan["selections"], Path(cover_tmp)  # noqa: B023
                         ),
                         event=event, org=org, venue=venue,
                         day_result=day_result, errors=errors,

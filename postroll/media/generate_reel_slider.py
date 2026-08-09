@@ -26,7 +26,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 
 
 # === Design Tokens ===
@@ -428,7 +428,6 @@ def generate_reel_slider(
     reveal_frames = int(REVEAL_DURATION * FPS)
     hold_edit_frames = int(HOLD_EDIT_DURATION * FPS)
     transition_frames = int(TRANSITION_DURATION * FPS)
-    closing_frames = int(CLOSING_FRAME_DURATION * FPS)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)

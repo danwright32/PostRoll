@@ -47,7 +47,16 @@ struct Event: Identifiable, Codable, Hashable {
     /// The layout this event actually uses: its own override, or the app wide
     /// default when it has none.
     var effectivePostingPreset: PostingPreset {
-        postingPresetOverride ?? PostingPreset.current
+        effectivePostingPreset(in: .standard)
+    }
+
+    /// This event's layout, reading the app wide default from a given store.
+    ///
+    /// The store is a parameter so a test can point it at a scratch suite
+    /// rather than writing Dan's real posting preference and putting it back
+    /// afterwards (#116).
+    func effectivePostingPreset(in defaults: UserDefaults) -> PostingPreset {
+        postingPresetOverride ?? PostingPreset.current(in: defaults)
     }
 
     // Per-day photo assignments (keyed by DayName.rawValue)

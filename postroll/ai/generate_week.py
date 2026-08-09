@@ -215,7 +215,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
             selections = ((day_info.get("clips_plan") or {}).get("selections")) or []
             if not selections:
                 results[day_name] = None
-                print(f"[generate_week] friday: no clip plan, skipping caption", flush=True)
+                print("[generate_week] friday: no clip plan, skipping caption", flush=True)
                 continue
             try:
                 photos = _extract_clip_plan_frames(selections)

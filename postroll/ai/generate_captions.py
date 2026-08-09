@@ -49,7 +49,6 @@ from pathlib import Path
 from typing import Any
 
 from .ai_tells import (
-    HUMANIZER_DEFAULT_PATH,
     build_review_prompt,
     build_voice_review_prompt,
     is_humanizer_available,
