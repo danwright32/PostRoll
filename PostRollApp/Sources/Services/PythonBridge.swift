@@ -808,7 +808,11 @@ actor PythonBridge {
 
     /// Replace [PHOTO: ...] markers in the existing blog body with new markers
     /// for a different set of photos. All prose is preserved verbatim.
-    func runBlogPhotoSwap(currentBody: String, photoPaths: [URL]) async throws -> BlogOutput {
+    /// `event` carries the program and venue so the swapped-in alt text can be
+    /// held to the same naming rules and the same deterministic checks as the
+    /// generate and revise paths (#201).
+    func runBlogPhotoSwap(currentBody: String, photoPaths: [URL],
+                          event: Event? = nil) async throws -> BlogOutput {
         let tmp = FileManager.default.temporaryDirectory
         let manifestFile = tmp.appendingPathComponent("postroll_swap_photos_\(UUID().uuidString).json")
         let outputFile   = tmp.appendingPathComponent("postroll_swapped_\(UUID().uuidString).json")
@@ -818,10 +822,18 @@ actor PythonBridge {
             try? FileManager.default.removeItem(at: outputFile)
         }
 
-        let manifest: [String: Any] = [
+        var manifest: [String: Any] = [
             "body":        currentBody,
             "photo_paths": photoPaths.map { $0.path },
         ]
+        if let event {
+            manifest["venue"] = event.venue
+            if let ocr = event.ocrResult,
+               let program = try? JSONSerialization.jsonObject(
+                   with: JSONEncoder().encode(ocr)) {
+                manifest["program"] = program
+            }
+        }
         let manifestData = try JSONSerialization.data(
             withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
         )

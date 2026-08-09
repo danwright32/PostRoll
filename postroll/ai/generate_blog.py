@@ -140,6 +140,43 @@ BLOG_WRITING_RULES = """\
   edge of the seated audience, moving when Medeiros moved" when he
   actually shot from the back of the house needed three or four
   further edits, in the photo markers as well as the prose.
+- POSITION IS ONE RECORDED FACT FOR THE WHOLE SHOOT, AND EVERY POST
+  FROM THAT SHOOT INHERITS IT. Never infer where Dan stood from what
+  the photos look like. A close frame means a long lens, not a close
+  photographer. Two posts from one night at Greenwich House Theater
+  contradicted each other because the second narrated position from
+  the images: BANNED, all from that draft, "The stage was close, the
+  audience was close", "I was working within reach of what was
+  happening", "I was close enough that I didn't have to choose
+  between the group frame and the individual face". He shot both
+  halves from the back of the house. If the position is not in the
+  data given to you, write nothing about position at all.
+- AN OPENING BUILT ON AN INVENTED POSITION CANNOT BE PATCHED. If the
+  position claims come out of the opening paragraph, the opening has
+  nothing left holding it up and must be rebuilt from the through-line
+  rather than repaired sentence by sentence.
+- NEVER GROUP PERFORMERS BY GENDER OR ANY OTHER DEMOGRAPHIC, AND
+  NEVER TRAIL OFF INTO "AND THE OTHERS". Name everyone or name no
+  one. BANNED: "The female performers in the cast, Ladibree, Safa,
+  and the others". This is checked in code after generation.
+- DO NOT READ THE VENUE'S PRE-EXISTING SETUP AS EVIDENCE ABOUT THE
+  PRODUCTION. What was already in the room is the theater's, not a
+  statement about the work. BANNED: "the set behind them still
+  clearly a workshop-stage setup rather than a finished production
+  design". That is a fabrication and a knock on the client at once.
+- THE PRACTICAL VALUE PARAGRAPH MUST NOT NARRATE THE PHOTOS OR TELL
+  THE READER WHAT THEY PROVE. BANNED: "A wide shot of the full cast
+  at the stands shows the scope. A close frame of Suero mid-verse
+  shows who this is and why it matters." The point about what the
+  images are for carries that beat on its own.
+- EACH PHOTO MUST MATCH THE COPY IT SITS NEXT TO. A draft said the
+  night ended with the full cast at the stands and placed a single
+  guitarist under it. Check every marker against the paragraph above
+  it before returning.
+- NO INFERRED INNER STATES IN THE BODY EITHER, not only in alt text.
+  BANNED: "Not performing for the room but working something out",
+  "the concentration was right there on the surface", "deeply
+  focused". Write the visible gesture and stop.
 - CUT SENTENCES THAT SOUND LIKE OBSERVATIONS BUT STATE NOTHING.
   BANNED: "I held on the moment and let it run", "moving when
   Medeiros moved", "Medeiros didn't stay in one register for long".
@@ -1264,6 +1301,10 @@ Photo placement rules:
   Medeiros ... at Greenwich House Theater", never "A male performer".
   A corrected draft had "A male performer" seven times and named the
   venue in none of them.
+  NAME PEOPLE BY NAME, NEVER BY APPEARANCE OR GENDER. "A woman in a
+  striped top" becomes "Safa"; "A bearded performer in a white shirt"
+  becomes "Fermin Suero, Jr.". This is checked in code after
+  generation.
   VARY THE OPENING. Do not start more than two markers the same way.
   NO INFERRED INNER STATES. Describe what the camera recorded, not
   what somebody felt or who an expression was aimed at. BANNED: "in

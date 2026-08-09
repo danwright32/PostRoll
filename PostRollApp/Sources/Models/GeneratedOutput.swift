@@ -39,17 +39,59 @@ struct DayCaption: Codable, Hashable {
 
 // MARK: - Blog post result (mirrors Python generate_blog output)
 
+/// One deterministic blog check that fired (#201). These report rather than
+/// rewrite: nobody can supply the true number that replaces an invented one,
+/// and alt text cannot be rewritten without seeing the photograph, so the
+/// quoted text is what lets Dan fix it in seconds.
+struct BlogFinding: Codable, Hashable, Identifiable {
+    var code: String = ""
+    var message: String = ""
+    var detail: String = ""
+
+    var id: String { "\(code)|\(detail)" }
+
+    init(code: String = "", message: String = "", detail: String = "") {
+        self.code = code
+        self.message = message
+        self.detail = detail
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        code    = try c.decodeIfPresent(String.self, forKey: .code)    ?? ""
+        message = try c.decodeIfPresent(String.self, forKey: .message) ?? ""
+        detail  = try c.decodeIfPresent(String.self, forKey: .detail)  ?? ""
+    }
+}
+
 struct BlogOutput: Codable, Hashable {
     var title: String = ""
     var body: String = ""
     var photoCount: Int = 0
     /// Body exactly as generated — never overwritten by edits.
     var generatedBody: String = ""
+    /// What the deterministic checks caught (#201).
+    var findings: [BlogFinding] = []
+    /// The exact body `findings` were measured against.
+    ///
+    /// Its own field rather than a reuse of `generatedBody`, because the two
+    /// answer different questions. `generatedBody` asks "has Dan edited this",
+    /// while this asks "do the findings still describe what is on screen". A
+    /// photo swap regenerates the markers and re-runs the checks without being
+    /// an edit, so inferring one from the other reports fresh findings as stale.
+    var findingsBody: String = ""
 
     enum CodingKeys: String, CodingKey {
-        case title, body
+        case title, body, findings
         case photoCount    = "photo_count"
         case generatedBody = "generated_body"
+        case findingsBody  = "findings_body"
+    }
+
+    /// Attach findings from a Python run, pinning the body they describe.
+    mutating func applyFindings(_ found: [BlogFinding], checkedBody: String) {
+        findings = found
+        findingsBody = checkedBody
     }
 
     var wasEdited: Bool {
@@ -141,6 +183,8 @@ extension BlogOutput {
         body          = try c.decodeIfPresent(String.self, forKey: .body)          ?? ""
         photoCount    = try c.decodeIfPresent(Int.self,    forKey: .photoCount)    ?? 0
         generatedBody = try c.decodeIfPresent(String.self, forKey: .generatedBody) ?? ""
+        findings      = try c.decodeIfPresent([BlogFinding].self, forKey: .findings) ?? []
+        findingsBody  = try c.decodeIfPresent(String.self, forKey: .findingsBody) ?? ""
     }
 }
 

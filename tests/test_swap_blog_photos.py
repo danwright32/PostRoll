@@ -75,3 +75,60 @@ def test_swapped_body_has_em_dashes_stripped(monkeypatch, tmp_path):
 
     assert "\u2014" not in result["body"], "em dash reached the published body"
     assert "\u2013" not in result["body"], "en dash reached the published body"
+
+
+# ── #201: the alt text rules apply on this path too ───────────────────────────
+#
+# The swap rewrites every alt text in the post, so it is the path MOST likely
+# to break the alt text rules, and it was the one path carrying neither the
+# rules nor the checks: it still asked for 15 to 35 words and never named the
+# performer or the venue.
+
+
+def _swap_returning(body_out, **kwargs):
+    def fake_run(prompt, timeout=300, image_paths=None, image_labels=None, **kw):
+        fake_run.prompt = prompt
+        return {"body": body_out, "photo_count": 1}
+    with patch("postroll.ai.swap_blog_photos.run_json_prompt", side_effect=fake_run):
+        result = swap_blog_photos(body="[PHOTO: old.jpg | old alt]\nProse.", **kwargs)
+    return result, fake_run.prompt
+
+
+PROGRAM = {"performers": [{"name": "Joseph Medeiros"}]}
+VENUE = "Greenwich House Theater"
+
+
+def test_swap_prompt_asks_for_the_same_alt_text_band_as_generation(photo):
+    _, prompt = _swap_returning(
+        "[PHOTO: DSC4821.jpg | a]\nProse.", photo_paths=[photo])
+    assert "15 to 25 words" in prompt
+    assert "35" not in prompt, "the 15 to 35 band was corrected to 15 to 25 (#201)"
+
+
+def test_swap_prompt_carries_the_naming_rules(photo):
+    _, prompt = _swap_returning(
+        "[PHOTO: DSC4821.jpg | a]\nProse.",
+        photo_paths=[photo], program=PROGRAM, venue=VENUE)
+    assert "Joseph Medeiros" in prompt
+    assert VENUE in prompt
+
+
+def test_swap_reports_alt_text_that_breaks_the_rules(photo):
+    """The failure this exists to catch: a swapped-in marker that names nobody
+    and no venue comes back reported, not silently accepted."""
+    bad = ("[PHOTO: DSC4821.jpg | A male performer on stage in intense "
+           "concentration under warm light]\nProse.")
+    result, _ = _swap_returning(bad, photo_paths=[photo], program=PROGRAM, venue=VENUE)
+
+    codes = {f["code"] for f in result["findings"]}
+    assert "alt_text_missing_venue" in codes
+    assert "alt_text_missing_performer" in codes
+    assert "alt_text_appearance_descriptor" in codes
+
+
+def test_swap_stays_quiet_on_a_good_marker(photo):
+    good = ("[PHOTO: DSC4821.jpg | Joseph Medeiros mid-gesture on the Greenwich "
+            "House Theater stage, one arm raised, warm light from the side]\n"
+            "Prose.")
+    result, _ = _swap_returning(good, photo_paths=[photo], program=PROGRAM, venue=VENUE)
+    assert result["findings"] == []

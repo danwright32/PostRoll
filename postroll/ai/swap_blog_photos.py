@@ -8,13 +8,16 @@ exactly. Only the marker lines change.
 Input manifest:
 {
   "body": "<current blog body with [PHOTO: ...] markers>",
-  "photo_paths": ["/path/to/p1.jpg", ...]
+  "photo_paths": ["/path/to/p1.jpg", ...],
+  "program": {"performers": [{"name": "..."}]},   // optional, for alt text naming
+  "venue": "..."                                   // optional, for alt text naming
 }
 
 Output JSON:
 {
   "body": "<updated body with new markers>",
-  "photo_count": <N>
+  "photo_count": <N>,
+  "findings": [{"code": "...", "message": "...", "detail": "..."}]
 }
 """
 
@@ -28,6 +31,7 @@ import tempfile
 from pathlib import Path
 
 from .ai_tells import strip_em_dashes
+from .blog_quality import check_blog
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -40,8 +44,14 @@ YOUR ONLY JOB: replace the [PHOTO: ...] marker lines with new ones for the new p
 
 Rules:
 - Do NOT change any prose. Not one word, comma, or paragraph break.
-- Look at each new photo. Write an alt text for each (15–35 words: who, what, where,
-  lighting, gestures — useful for a reader who cannot see the image).
+- Look at each new photo. Write an alt text for each: 15 to 25 words covering who,
+  what, where, lighting and gestures, useful for a reader who cannot see the image.
+{naming_rules}- NAME PEOPLE BY NAME, never by appearance or gender. Not "A male
+  performer", not "A woman in a striped top", not "A bearded performer".
+- NO INFERRED INNER STATES. Describe what the camera recorded, not what somebody
+  felt or who an expression was aimed at. Banned: "in intense concentration",
+  "with focused expression", "grinning toward the audience".
+- VARY THE OPENING. Do not start more than two markers the same way.
 - Use this exact format, on its own line between paragraphs:
     [PHOTO: filename.jpg | alt text description]
   where "filename.jpg" is the base filename only, no directory path.
@@ -64,10 +74,16 @@ Return JSON ONLY (no markdown fences, no commentary):
 """
 
 
-def swap_blog_photos(*, body: str, photo_paths: list[str | Path]) -> dict:
+def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
+                     program: dict | None = None, venue: str = "") -> dict:
     """Replace [PHOTO: ...] markers in body with markers for new photos.
 
     All prose is preserved verbatim. Only the marker lines change.
+
+    `program` and `venue` carry the alt text naming rules into the prompt and
+    let the deterministic checks run on the way out. This path REWRITES every
+    alt text in the post, so it is the one most likely to break the alt text
+    rules, and it was the only one of the three carrying neither (#201).
     """
     if not photo_paths:
         raise ValueError("No photo paths provided")
@@ -99,10 +115,21 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path]) -> dict:
         ]
         photo_list = "\n".join(f"- {n}" for n in photo_filenames)
 
+        names = [str(p.get("name", "")).strip()
+                 for p in (program or {}).get("performers") or []
+                 if str(p.get("name", "")).strip()]
+        naming_rules = ""
+        if venue.strip():
+            naming_rules += f"- NAME THE VENUE in every marker: {venue.strip()}.\n"
+        if names:
+            naming_rules += ("- NAME THE PERFORMER in every marker. The people on "
+                             "this bill are: " + ", ".join(names) + ".\n")
+
         prompt = PROMPT.format(
             photo_count=len(resolved),
             photo_list=photo_list,
             body=body,
+            naming_rules=naming_rules,
         )
 
         data = run_json_prompt(
@@ -118,9 +145,21 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path]) -> dict:
     # Same deterministic dash strip its two sibling paths apply on the way out
     # (generate_blog.py, revise_blog.py). Without it a post whose photos were
     # swapped could ship an em dash into published copy (#203).
+    final_body = strip_em_dashes(data.get("body", body).strip())
+
+    # The same deterministic checks the generate and revise paths run (#201).
+    # Reported, never rewritten: alt text cannot be corrected without seeing
+    # the photograph.
+    findings = check_blog(final_body, program=program, venue=venue)
+    for f in findings:
+        print(f"[swap_blog_photos] CHECK {f.code}: {f.message} ({f.detail})",
+              flush=True, file=sys.stderr)
+
     return {
-        "body":        strip_em_dashes(data.get("body", body).strip()),
+        "body":        final_body,
         "photo_count": len(photo_paths),
+        "findings": [{"code": f.code, "message": f.message, "detail": f.detail}
+                     for f in findings],
     }
 
 
@@ -135,6 +174,8 @@ def main() -> int:
         result = swap_blog_photos(
             body=m["body"],
             photo_paths=m["photo_paths"],
+            program=m.get("program"),
+            venue=m.get("venue", ""),
         )
     except (ClaudeError, FileNotFoundError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)

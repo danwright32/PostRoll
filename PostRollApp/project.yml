@@ -61,6 +61,7 @@ targets:
       - path: Sources/Services/EventHandleSuggestions.swift
       - path: Sources/Services/FridayReviewDisplay.swift
       - path: Sources/Services/CoverReviewDisplay.swift
+      - path: Sources/Services/BlogFindingsDisplay.swift
       - path: Sources/Services/PipelineProgress.swift
       - path: Sources/Services/ProgramPDFBuilder.swift
       - path: Sources/Services/ProgramScanRetention.swift

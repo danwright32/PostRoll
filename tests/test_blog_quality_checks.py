@@ -190,6 +190,56 @@ def test_a_first_marker_after_more_than_two_paragraphs_is_reported():
 
 # ── the findings have to be usable ────────────────────────────────────────────
 
+# ── 24. no demographic grouping of performers ─────────────────────────────────
+
+
+@pytest.mark.parametrize("phrase", [
+    "The female performers in the cast, Ladibree and Safa, held the chorus.",
+    "The male singers carried the low end.",
+    "The women in the cast traded the verse between them.",
+    "Ladibree, Safa, and the others took the second verse.",
+])
+def test_grouping_performers_by_demographic_is_reported(phrase):
+    """Rule 24: name everyone or name no one. Real failures from the
+    BLUDLINE draft, which wrote 'The female performers in the cast,
+    Ladibree, Safa, and the others'."""
+    body = (f"{phrase}\n\n"
+            "[PHOTO: a.jpg | Joseph Medeiros at Greenwich House Theater "
+            "mid-gesture with one arm raised and warm light from the side]\n")
+    assert "demographic_grouping" in codes(check_blog(body, program=PROGRAM, venue=VENUE))
+
+
+def test_naming_every_performer_is_allowed():
+    body = ("Ladibree and Safa traded the second verse between them.\n\n"
+            "[PHOTO: a.jpg | Joseph Medeiros at Greenwich House Theater "
+            "mid-gesture with one arm raised and warm light from the side]\n")
+    assert "demographic_grouping" not in codes(check_blog(body, program=PROGRAM, venue=VENUE))
+
+
+# ── 29. alt text names people, never appearance or gender ─────────────────────
+
+
+@pytest.mark.parametrize("opening", [
+    "A woman in a striped top",
+    "A bearded performer in a white shirt",
+    "A male performer",
+    "A young man",
+])
+def test_alt_text_identifying_someone_by_appearance_is_reported(opening):
+    """Rule 29: 'A woman in a striped top' becomes 'Safa'. Reported even when
+    a performer is also named, so the descriptor itself is caught."""
+    body = ("The set was already in place when I got there.\n\n"
+            f"[PHOTO: a.jpg | {opening} beside Joseph Medeiros at Greenwich "
+            "House Theater, one arm raised toward the back wall]\n")
+    assert "alt_text_appearance_descriptor" in codes(
+        check_blog(body, program=PROGRAM, venue=VENUE))
+
+
+def test_alt_text_naming_the_person_is_allowed():
+    assert "alt_text_appearance_descriptor" not in codes(
+        check_blog(_clean_body(), program=PROGRAM, venue=VENUE))
+
+
 def test_every_finding_names_the_rule_and_quotes_the_offending_text():
     long_alt = " ".join(["word"] * 30)
     body = (f"He had thirty seconds.\n\n[PHOTO: a.jpg | {long_alt}]\n\n"

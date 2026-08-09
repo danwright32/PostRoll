@@ -49,6 +49,29 @@ DIRECTED_INTENT = (
     r"playing (?:to|toward|towards) the (?:audience|crowd|camera)",
 )
 
+#: Rule 24: performers are named, never collected into a demographic group.
+#: From the BLUDLINE draft: "The female performers in the cast, Ladibree,
+#: Safa, and the others". Name everyone or name no one.
+DEMOGRAPHIC_GROUPING = (
+    r"\band the others\b",
+    r"\bthe (?:female|male) (?:performers?|singers?|dancers?|musicians?|"
+    r"actors?|vocalists?|cast)\b",
+    r"\bthe (?:women|men|girls|boys) (?:in|of) the "
+    r"(?:cast|group|ensemble|show|band|chorus)\b",
+)
+
+#: Rule 29: alt text names the person. A descriptor standing in for a name is
+#: reported even when a performer is also named in the same marker, because the
+#: descriptor is the thing to replace.
+APPEARANCE_DESCRIPTOR = (
+    r"\ba (?:young |older |tall |short |slim )*(?:wo)?man\b",
+    r"\b(?:male|female) (?:performers?|singers?|dancers?|musicians?|"
+    r"actors?|vocalists?)\b",
+    r"\ba (?:bearded|blonde|blond|brunette|red-haired|grey-haired|gray-haired|"
+    r"dark-haired)\b",
+    r"\ba (?:girl|boy)\b",
+)
+
 _PHOTO_MARKER = re.compile(r"\[PHOTO:\s*([^\|\]]+?)\s*\|\s*([^\]]*)\]", re.DOTALL)
 
 _NUMBER_WORDS = (
@@ -160,6 +183,17 @@ def check_blog(body: str, *, program: dict[str, Any] | None = None,
                 "Alt text describes what the camera recorded, not what someone felt.",
                 f"{name}: {', '.join(hits)} in '{alt[:80]}'"))
 
+    # 29. alt text names the person, never their appearance or gender
+    for name, alt in markers:
+        low = alt.lower()
+        hits = [m.group(0) for pat in APPEARANCE_DESCRIPTOR
+                for m in [re.search(pat, low)] if m]
+        if hits:
+            findings.append(Finding(
+                "alt_text_appearance_descriptor",
+                "Alt text names the person, never their appearance or gender.",
+                f"{name}: {', '.join(hits)} in '{alt[:80]}'"))
+
     # 8. never invent numbers
     known = _program_numbers(program, venue)
     prose = " ".join(_prose_paragraphs(body))
@@ -180,6 +214,16 @@ def check_blog(body: str, *, program: dict[str, Any] | None = None,
                 "invented_number",
                 "No count in the source data means no number in the post.",
                 f"'{word}' does not appear in the program data"))
+
+    # 24. no demographic grouping of performers
+    for pat in DEMOGRAPHIC_GROUPING:
+        m = re.search(pat, prose, re.IGNORECASE)
+        if m:
+            findings.append(Finding(
+                "demographic_grouping",
+                "Name every performer or name none; do not group them by "
+                "gender or trail off into 'and the others'.",
+                f"'{m.group(0)}' in '{prose[max(0, m.start() - 30):m.end() + 30]}'"))
 
     # 16. use a construction once
     uses = _CONSTRUCTION.findall(prose)

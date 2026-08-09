@@ -1149,7 +1149,9 @@ struct CaptionReviewView: View {
             feedback: feedback,
             currentBlog: current
         )
-        result.blog = revised
+        var next = revised
+        next.applyFindings(revised.findings, checkedBody: revised.body)
+        result.blog = next
         save()
     }
 
@@ -1157,11 +1159,14 @@ struct CaptionReviewView: View {
         guard let current = result.blog else { return }
         let updated = try await PythonBridge.shared.runBlogPhotoSwap(
             currentBody: current.body,
-            photoPaths: urls
+            photoPaths: urls,
+            event: liveEvent
         )
         var updatedBlog = current
         updatedBlog.body = updated.body
         updatedBlog.photoCount = urls.count
+        // The swap rewrites every alt text, so its checks describe THIS body.
+        updatedBlog.applyFindings(updated.findings, checkedBody: updated.body)
         result.blog = updatedBlog
         save()
         // blogPhotoPaths lives outside weekResult — re-read live event so
@@ -2294,6 +2299,62 @@ private struct BlogSection: View {
     @State private var photoSwapError: String?
     @State private var undoBlog: BlogOutput? = nil
 
+    /// The deterministic checks from #201. They report rather than rewrite,
+    /// so this panel IS the feature: the quoted text is what lets Dan fix each
+    /// one. Once he edits the body the checks no longer describe it, so the
+    /// panel says so instead of continuing to assert stale findings.
+    @ViewBuilder
+    private var blogFindingsPanel: some View {
+        if let summary = BlogFindingsDisplay.summary(blog: blog) {
+            let stale = BlogFindingsDisplay.isStale(blog: blog)
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                HStack(spacing: 6) {
+                    Image(systemName: stale ? "clock.arrow.circlepath" : "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                    Text(summary.uppercased())
+                        .font(.system(size: 10, weight: .medium))
+                        .tracking(0.8)
+                }
+                .foregroundStyle(stale ? Color.warmMid : Color.roseDeep)
+
+                if stale {
+                    Text("These ran against the draft as generated. You have edited it since, so some may already be fixed. Regenerate or revise to re-check.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warmMid)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                ForEach(BlogFindingsDisplay.grouped(findings: blog.findings), id: \.code) { group in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(group.message)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.warmDark)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(group.details, id: \.self) { detail in
+                            Text(detail)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.warmMid)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm)
+                    .fill((stale ? Color.warmMid : Color.roseDeep).opacity(0.07))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.sm)
+                            .stroke((stale ? Color.warmMid : Color.roseDeep).opacity(0.45),
+                                    lineWidth: 1.5)
+                    )
+            )
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Button(action: onToggle) {
@@ -2311,6 +2372,22 @@ private struct BlogSection: View {
                         }
                     }
                     Spacer()
+                    // Visible while collapsed, so the checks are not something
+                    // Dan has to open the section to discover (#201).
+                    if let summary = BlogFindingsDisplay.summary(blog: blog) {
+                        Text(summary)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(BlogFindingsDisplay.isStale(blog: blog)
+                                             ? Color.warmMid : Color.roseDeep)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule().fill(
+                                    (BlogFindingsDisplay.isStale(blog: blog)
+                                     ? Color.warmMid : Color.roseDeep).opacity(0.12))
+                            )
+                            .accessibilityLabel("Blog checks: \(summary)")
+                    }
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.warmMid)
@@ -2323,6 +2400,8 @@ private struct BlogSection: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: Spacing.md) {
+                    blogFindingsPanel
+
                     ReviewTextArea(label: "Title", text: $blog.title, minHeight: 36)
 
                     VStack(alignment: .leading, spacing: 5) {
