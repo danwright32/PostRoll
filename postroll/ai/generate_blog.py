@@ -1467,6 +1467,26 @@ PARAGRAPH:
 {paragraph}"""
 
 
+def _prose_indices_without_contractions(body: str) -> list[int]:
+    """Positions in ``body.split("\n\n")`` of prose paragraphs with no
+    contraction.
+
+    Positions rather than text, because the caller has to put a rewrite back
+    and a text search covers the whole body including the ``[PHOTO:]`` markers
+    (#109). A marker whose alt text repeats a sentence from the prose then
+    takes the rewrite, which damages the alt text and leaves the prose exactly
+    as it was.
+    """
+    out: list[int] = []
+    for i, part in enumerate(body.split("\n\n")):
+        s = part.strip()
+        if not s or s.startswith("[PHOTO:"):
+            continue
+        if not _CONTRACTION_RE.search(s):
+            out.append(i)
+    return out
+
+
 def _paragraphs_without_contractions(body: str) -> list[str]:
     """Prose paragraphs (not [PHOTO:] markers) that contain no contraction.
     Possessive 's does not count as a contraction."""
@@ -1500,6 +1520,27 @@ PARAGRAPH:
 {paragraph}"""
 
 
+def _prose_indices_with_second_person(body: str) -> list[int]:
+    """Positions in ``body.split("\n\n")`` of prose paragraphs that address
+    the reader, excluding the closing call to action. See
+    `_prose_indices_without_contractions` for why positions and not text.
+    """
+    parts = body.split("\n\n")
+    prose = [i for i, part in enumerate(parts)
+             if part.strip() and not part.strip().startswith("[PHOTO:")]
+    if not prose:
+        return []
+    cta = prose[-1]
+    out: list[int] = []
+    for i in prose:
+        if i == cta:
+            continue
+        unquoted = _QUOTED_SPAN_RE.sub("", parts[i].strip())
+        if _SECOND_PERSON_RE.search(unquoted):
+            out.append(i)
+    return out
+
+
 def _paragraphs_with_second_person(body: str) -> list[str]:
     """Prose paragraphs (not markers, not the closing CTA) that address the
     reader outside of quoted speech."""
@@ -1523,10 +1564,12 @@ def _fix_second_person(body: str) -> str:
     then splice it back. Leaves a paragraph unchanged if the call fails or
     the rewrite still contains second person."""
     body = (body or "").strip()
-    offenders = _paragraphs_with_second_person(body)
+    parts = body.split("\n\n")
+    offenders = _prose_indices_with_second_person(body)
     if not offenders:
         return body
-    for original in offenders:
+    for index in offenders:
+        original = parts[index].strip()
         try:
             raw = run_prompt(
                 _SECOND_PERSON_PARAGRAPH_PROMPT.format(paragraph=original),
@@ -1541,7 +1584,10 @@ def _fix_second_person(body: str) -> str:
             continue
         reworded = max(candidates, key=len)
         if "[PHOTO:" not in reworded and len(reworded) < len(original) * 2 + 80:
-            body = body.replace(original, reworded, 1)
+            # By position: the paragraph the check judged is the one that
+            # changes, and a marker can never be at a prose index (#109).
+            parts[index] = reworded
+    body = "\n\n".join(parts)
     leftover = _paragraphs_with_second_person(body)
     if leftover:
         print(
@@ -1556,10 +1602,12 @@ def _fix_missing_contractions(body: str) -> str:
     it carries a contraction, then splice it back. Returns the corrected body;
     leaves a paragraph unchanged if the call fails or doesn't add one."""
     body = (body or "").strip()
-    offenders = _paragraphs_without_contractions(body)
+    parts = body.split("\n\n")
+    offenders = _prose_indices_without_contractions(body)
     if not offenders:
         return body
-    for original in offenders:
+    for index in offenders:
+        original = parts[index].strip()
         try:
             raw = run_prompt(
                 _CONTRACTION_PARAGRAPH_PROMPT.format(paragraph=original),
@@ -1575,7 +1623,8 @@ def _fix_missing_contractions(body: str) -> str:
             continue
         reworded = max(candidates, key=len)
         if "[PHOTO:" not in reworded and len(reworded) < len(original) * 2 + 80:
-            body = body.replace(original, reworded, 1)
+            parts[index] = reworded
+    body = "\n\n".join(parts)
     leftover = _paragraphs_without_contractions(body)
     if leftover:
         print(
