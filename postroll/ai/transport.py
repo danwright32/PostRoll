@@ -80,7 +80,9 @@ def build_content(req: Request) -> list[dict]:
             # top leaves the model correlating by guess, which is how invented
             # alt text gets in.
             content.append({"type": "text", "text": f"Photo {i + 1}: {labels[i]}"})
-        content.append(_image_block(Path(p)))
+        # The cap follows the request's model (#218): a bigger-budget model
+        # must not be sent images shrunk to a smaller one's limit.
+        content.append(_image_block(Path(p), model=req.model))
     content.append({"type": "text", "text": req.prompt})
     return content
 

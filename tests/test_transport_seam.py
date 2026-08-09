@@ -29,10 +29,19 @@ from postroll.ai.claude_client import ClaudeError
 
 @pytest.fixture
 def images(tmp_path):
+    """Real JPEGs, not a few bytes with a JPEG magic number.
+
+    A stand-in that cannot actually be opened is not a photo, and since #215
+    an unopenable file is refused outright rather than uploaded as-is. Pinning
+    the seam against fake bytes would have been testing the refusal path while
+    claiming to test the image-carrying one.
+    """
+    from PIL import Image
+
     out = []
     for n in ("a", "b", "c"):
         p = tmp_path / f"{n}.jpg"
-        p.write_bytes(b"\xff\xd8\xff\xdb" + b"0" * 64)
+        Image.new("RGB", (120, 90), (40, 60, 80)).save(p)
         out.append(p)
     return out
 

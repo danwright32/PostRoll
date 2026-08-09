@@ -403,3 +403,84 @@ def test_run_review_pass_validator_keeps_prior_on_broken_invariant():
         validate=lambda pr, rv: "dropped markers" if "[PHOTO:" not in rv["body"] else None,
     )
     assert result == prior
+
+
+# === Image budget and resize failure (#218, #215) ===
+
+
+def test_the_image_cap_follows_the_resolved_model(tmp_path):
+    """#218: two places decided how large an image may be, the module constant
+    here and image_budget_for in the splitter. They agreed for the pinned model
+    and would drift silently on the next model change."""
+    from postroll.ai.claude_client import _image_block
+    from postroll.media.page_regions import image_budget_for
+    from PIL import Image
+    import base64, io
+
+    src = tmp_path / "wide.jpg"
+    Image.new("RGB", (4000, 2000), (10, 20, 30)).save(src)
+
+    for model in ("sonnet", "claude-sonnet-4-6"):
+        block = _image_block(src, model=model)
+        decoded = base64.standard_b64decode(block["source"]["data"])
+        with Image.open(io.BytesIO(decoded)) as out:
+            assert max(out.size) == image_budget_for(model), model
+
+
+def test_a_bigger_budget_sends_a_bigger_image(tmp_path, monkeypatch):
+    """The cap must MOVE with the model, which a constant cannot do."""
+    from postroll.ai import claude_client as cc
+    from PIL import Image
+    import base64, io
+
+    src = tmp_path / "wide.jpg"
+    Image.new("RGB", (4000, 2000), (10, 20, 30)).save(src)
+
+    monkeypatch.setattr("postroll.media.page_regions.image_budget_for",
+                        lambda model: 800)
+    block = cc._image_block(src, model="anything")
+    decoded = base64.standard_b64decode(block["source"]["data"])
+    with Image.open(io.BytesIO(decoded)) as out:
+        assert max(out.size) == 800
+
+
+def test_a_failed_resize_refuses_rather_than_sending_the_original(tmp_path, monkeypatch):
+    """#215: the resize was wrapped in a bare except that printed a warning and
+    carried on with the full-size original.
+
+    That was justified by 'the API downscales server side; we just upload
+    more', and #200 established the server-side downscale is exactly what
+    destroys character accuracy in program text. So a resize failure silently
+    produced the WORST case for OCR, and the only trace was a log line."""
+    from postroll.ai import claude_client as cc
+
+    src = tmp_path / "page.png"
+    src.write_bytes(b"not a real png")
+
+    with pytest.raises(ClaudeError) as excinfo:
+        cc._image_block(src)
+
+    assert "page.png" in str(excinfo.value), "the message must name the file"
+
+
+def test_the_refusal_explains_why_sending_it_would_be_worse(tmp_path):
+    from postroll.ai import claude_client as cc
+
+    src = tmp_path / "broken.jpg"
+    src.write_bytes(b"\xff\xd8 not really a jpeg")
+
+    with pytest.raises(ClaudeError, match="reduce"):
+        cc._image_block(src)
+
+
+def test_a_small_valid_image_still_goes_through_untouched(tmp_path):
+    """The refusal must not fire on the ordinary case."""
+    from postroll.ai.claude_client import _image_block
+    from PIL import Image
+    import base64
+
+    src = tmp_path / "small.jpg"
+    Image.new("RGB", (800, 600), (90, 70, 60)).save(src)
+
+    block = _image_block(src)
+    assert base64.standard_b64decode(block["source"]["data"]) == src.read_bytes()

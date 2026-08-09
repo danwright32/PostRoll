@@ -91,19 +91,37 @@ def load_brand_voice() -> str:
 # controls. So this constant cannot be tuned into correctness.
 #
 # The fix is to give each region of interest its own image, so it gets the full
-# per-image budget instead of a share of the page's (#208). Left as-is until
-# that lands. Note the budget belongs to the RESOLVED MODEL, not to this
-# module: sonnet-4-6 and the Opus 4.7+ tier do not share a limit.
-MAX_IMAGE_EDGE = 1568
+# per-image budget instead of a share of the page's (#208).
+#
+# The number itself is no longer kept here. It belongs to the RESOLVED MODEL,
+# and sonnet-4-6 and the Opus 4.7+ tier do not share a limit, so `_image_block`
+# reads it from `image_budget_for` (#218). This alias exists only for the
+# comparison tool under tools/, which reports the cap it used.
+from ..media.page_regions import DEFAULT_IMAGE_BUDGET as MAX_IMAGE_EDGE  # noqa: E402
 
 
-def _image_block(path: Path) -> dict:
+def _image_block(path: Path, *, model: str = "") -> dict:
     """Build an Anthropic base64 image content block from a local file.
 
-    Full resolution concert JPEGs are commonly 5 to 15 MB; anything whose
-    long edge exceeds MAX_IMAGE_EDGE is downscaled in memory first. The
-    model sees identical pixels either way (see MAX_IMAGE_EDGE).
+    Full resolution concert JPEGs are commonly 5 to 15 MB; anything whose long
+    edge exceeds the model's budget is downscaled in memory first.
+
+    The cap comes from `image_budget_for` on the RESOLVED model, not from a
+    constant here (#218). Two places used to answer this question from
+    different sources, agreeing only for the pinned model, so the next model
+    change had to be made in both files or they drifted with no signal.
+
+    A resize that FAILS refuses the call instead of sending the original
+    (#215). That path used to print a warning and carry on, justified by "the
+    API downscales server side; we just upload more". #200 disproved that: the
+    service-side downscale is exactly what destroys character accuracy in
+    program text, so carrying on silently produced the worst possible input for
+    OCR, with a plausible-looking wrong answer and nothing to distinguish it
+    from a good run.
     """
+    from ..media.page_regions import image_budget_for
+
+    cap = image_budget_for(model)
     mime, _ = mimetypes.guess_type(str(path))
     if mime not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
         mime = "image/jpeg"
@@ -113,8 +131,8 @@ def _image_block(path: Path) -> dict:
         from PIL import Image
 
         with Image.open(io.BytesIO(raw)) as img:
-            if max(img.size) > MAX_IMAGE_EDGE:
-                img.thumbnail((MAX_IMAGE_EDGE, MAX_IMAGE_EDGE), Image.LANCZOS)
+            if max(img.size) > cap:
+                img.thumbnail((cap, cap), Image.LANCZOS)
                 buf = io.BytesIO()
                 if mime == "image/png":
                     # Program pages: keep PNG so small text stays crisp
@@ -126,9 +144,12 @@ def _image_block(path: Path) -> dict:
                     mime = "image/jpeg"
                 raw = buf.getvalue()
     except Exception as e:
-        # Not fatal: the API downscales server side; we just upload more.
-        print(f"warning: could not downscale {path.name}: {e}",
-              file=sys.stderr, flush=True)
+        raise ClaudeError(
+            f"Could not prepare {path.name} for upload: {e}. Sending it as-is "
+            "would leave the service to reduce it instead, and that reduction "
+            "is what corrupts characters in program text, so the call is "
+            "refused rather than quietly degraded. Check the file opens."
+        ) from e
 
     data = base64.standard_b64encode(raw).decode()
     return {
