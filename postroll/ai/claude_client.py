@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import io
+from collections import OrderedDict
 import json
 import mimetypes
 import os
@@ -103,7 +104,7 @@ def load_brand_voice() -> str:
 from ..media.page_regions import DEFAULT_IMAGE_BUDGET as MAX_IMAGE_EDGE  # noqa: E402,F401  (re-exported for tools/ and the tests that pin the cap)
 
 
-def _image_block(path: Path, *, model: str = "") -> dict:
+def _build_image_block(path: Path, *, model: str = "") -> dict:
     """Build an Anthropic base64 image content block from a local file.
 
     Full resolution concert JPEGs are commonly 5 to 15 MB; anything whose long
@@ -161,6 +162,61 @@ def _image_block(path: Path, *, model: str = "") -> dict:
     }
 
 
+#: How many encoded images to keep. A base64 page is a megabyte or two, so an
+#: unbounded cache would hold a whole programme in memory for the life of the
+#: process to save work that may never be repeated. Sized to cover the largest
+#: single call: a ten photo carousel, preflighted and then sent, plus headroom.
+IMAGE_BLOCK_CACHE_LIMIT = 16
+
+#: (path, size, mtime, model) -> content block. Insertion ordered, so the
+#: oldest entry is the one evicted.
+_BLOCK_CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
+
+
+def clear_image_block_cache() -> None:
+    _BLOCK_CACHE.clear()
+
+
+def image_block_cache_size() -> int:
+    return len(_BLOCK_CACHE)
+
+
+def _image_block(path: Path, *, model: str = "") -> dict:
+    """An image content block, encoded once per file per model (#220).
+
+    The same image was opened, downscaled and base64-encoded at least twice on
+    every OCR run: once by `ocr_batching.encoded_size` to measure what the
+    request would weigh, and again by `build_content` to send it. The caption
+    preflight added in #228 made it three times. On a thirty page programme
+    that is sixty full-resolution resizes on a step that already takes minutes,
+    and the repeat work cannot produce a different answer from the first.
+
+    Keyed on what the file IS right now (size and mtime) as well as its path,
+    so an image Dan has replaced since is re-encoded rather than served from
+    the previous contents. Keyed on the model too, because the long-edge budget
+    follows the resolved model and a bigger-budget model must not be handed
+    pixels shrunk to a smaller one's limit (#218).
+
+    A file that cannot be stat'ed is not cached at all, so a missing photo
+    still raises rather than being answered from a stale entry.
+    """
+    try:
+        stat = Path(path).stat()
+        key = (str(path), stat.st_size, stat.st_mtime, model)
+    except OSError:
+        # Cannot identify the file, so cannot safely reuse anything for it.
+        return _build_image_block(Path(path), model=model)
+
+    if (hit := _BLOCK_CACHE.get(key)) is not None:
+        return hit
+
+    block = _build_image_block(Path(path), model=model)
+    _BLOCK_CACHE[key] = block
+    while len(_BLOCK_CACHE) > IMAGE_BLOCK_CACHE_LIMIT:
+        _BLOCK_CACHE.popitem(last=False)
+    return block
+
+
 @dataclass(frozen=True)
 class SkippedPhoto:
     """A photo left out of a call because it could not be prepared for upload."""
@@ -189,10 +245,9 @@ def partition_uploadable(
 
     Readability is decided by running the real `_image_block`, not a cheaper
     stand-in: the question is whether the operation that runs at send time
-    succeeds, and anything else can disagree with it. That does mean the kept
-    photos are encoded twice, once here and once when the request is built;
-    #220 removes the duplicate for this caller and for the OCR batcher at the
-    same time, by sharing one prepared block.
+    succeeds, and anything else can disagree with it. The encode is cached
+    (#220), so proving a photo readable here and then sending it costs one
+    encode rather than two.
 
     Raises ClaudeError when nothing survives: a caption written from zero
     photographs is invented rather than degraded.
