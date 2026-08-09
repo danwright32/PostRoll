@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "What the #201 checks are expected to say about each real correction pair.",
+    "",
+    "The drafts and corrections in this folder are Dan's actual work, lifted from",
+    "the stored blog output (generated_body is the draft, body is what he",
+    "corrected it to), not written by hand to make a test pass. They are the only",
+    "concrete evidence of what the generator gets wrong, and they lived in an",
+    "issue body where a prompt change fixing one failure could quietly",
+    "reintroduce another (#204).",
+    "",
+    "`accepted_on_corrected` is the honest part: findings that still fire on a",
+    "post Dan considered finished. Each carries a reason. They are pinned rather",
+    "than tuned away, so the checker's false-positive rate is visible and any NEW",
+    "false positive shows up as a failure instead of blending in. An alert that",
+    "cries wolf gets ignored, so this number is worth watching."
+  ],
+  "pairs": [
+    {
+      "fixture": "one_man_odyssey.json",
+      "draft_must_fire": [
+        "alt_text_length",
+        "alt_text_missing_venue",
+        "alt_text_missing_performer",
+        "alt_text_repeated_opening",
+        "alt_text_inferred_state",
+        "alt_text_appearance_descriptor",
+        "invented_number",
+        "repeated_construction",
+        "stacked_photos",
+        "late_first_photo"
+      ],
+      "accepted_on_corrected": {
+        "alt_text_inferred_state": "A genuine miss in Dan's own correction: one marker still reads 'grinning toward'. Rule 19 bans reading who an expression was aimed at, so the check is right and the corrected post is not perfect. Recorded rather than excused.",
+        "invented_number": "False positive. The only numerals left are 'Matchbook Spark Vol. 2' and 'Book 2 of Homer's Odyssey', both parts of titles rather than counts. The check cannot tell a title from a measurement."
+      }
+    },
+    {
+      "fixture": "bludline.json",
+      "draft_must_fire": [
+        "alt_text_length",
+        "alt_text_missing_venue",
+        "alt_text_missing_performer",
+        "alt_text_inferred_state",
+        "alt_text_appearance_descriptor",
+        "demographic_grouping"
+      ],
+      "accepted_on_corrected": {
+        "alt_text_missing_performer": "Three group shots whose alt text is 'Four BLUDLINE performers at mic stands' and similar. Naming eight people in a 25 word alt text is not possible, so the rule and the format are in genuine tension here. Worth Dan's decision rather than a silent exemption.",
+        "invented_number": "False positive, and the case #201 explicitly blesses. 'Eight people at mic stands' is derivable from the named cast list, and 'Vol. 2' is part of a title. The check compares against numerals in the program data and cannot count a list."
+      }
+    }
+  ]
+}
