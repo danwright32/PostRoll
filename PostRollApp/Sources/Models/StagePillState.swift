@@ -14,6 +14,12 @@ enum StagePillState: Equatable {
     case generating
     case generationFailed
     case exporting          // export in flight
+    /// Text export finished and the folder is open, while assets are still
+    /// being written in the background ("Skip, text export only"). Its own
+    /// state rather than a reuse of `exporting`, because that one flag also
+    /// decided whether Done could dismiss the run, so the sidebar contradicted
+    /// the pane and Done did nothing (#182, L53).
+    case finishingMedia
     case awaitingGeneration
     case awaitingExport
     case stage(EventStage)
@@ -21,7 +27,7 @@ enum StagePillState: Equatable {
     /// True for any in-flight background work — drives the pulsing dot.
     var isBusy: Bool {
         switch self {
-        case .reading, .generating, .exporting: return true
+        case .reading, .generating, .exporting, .finishingMedia: return true
         default: return false
         }
     }
@@ -32,12 +38,15 @@ enum StagePillState: Equatable {
                         isReading: Bool = false,
                         readingFailed: Bool = false,
                         isExporting: Bool = false,
+                        isFinishingMedia: Bool = false,
                         awaitingGeneration: Bool,
                         awaitingExport: Bool) -> StagePillState {
         // Live work first (most informative), then failures, then static labels.
         if isGenerating { return .generating }
         if isReading { return .reading }
         if isExporting { return .exporting }
+        // After exporting, so a run genuinely still in flight wins.
+        if isFinishingMedia { return .finishingMedia }
         if generationFailed { return .generationFailed }
         if readingFailed { return .readingFailed }
         if awaitingGeneration { return .awaitingGeneration }
@@ -52,6 +61,7 @@ enum StagePillState: Equatable {
         case .generating:         return "Generating…"
         case .generationFailed:   return "Needs Attention"
         case .exporting:          return "Exporting…"
+        case .finishingMedia:     return "Finishing assets…"
         case .awaitingGeneration: return "Ready to Generate"
         case .awaitingExport:     return "Ready to Export"
         case .stage(let s):       return s.displayLabel

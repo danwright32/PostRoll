@@ -30,6 +30,11 @@ final class ExportManager {
         /// True for a full export (not a single-day re-export); only a full run
         /// stamps the archived milestone and feeds the timing mean.
         var isFullExport: Bool
+        /// The done screen is showing while assets are still being written
+        /// ("Skip, text export only"). Its own flag rather than a reuse of the
+        /// active set, which also decided whether Done could dismiss the run
+        /// and what the sidebar said (#182).
+        var finishingMedia: Bool = false
         fileprivate var task: Task<Void, Never>?
     }
 
@@ -37,6 +42,13 @@ final class ExportManager {
 
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isExporting(_ id: Event.ID) -> Bool { tracker.isActive(id) }
+
+    /// The done screen is up and the media step is still running behind it.
+    /// Distinct from `isExporting` so the sidebar can say what is actually
+    /// happening without blocking Done (#182).
+    func isFinishingMedia(_ id: Event.ID) -> Bool {
+        tracker.job(for: id)?.finishingMedia == true
+    }
 
     /// Kick off an export. No-op if one is already running for this event, so a
     /// double-click or a view remount can't launch a second concurrent export.
@@ -88,6 +100,19 @@ final class ExportManager {
         tracker.update(eventID) { $0.task = task }
     }
 
+    #if POSTROLL_TESTS
+    /// Test seam: put an event into a given phase without running the pipeline.
+    ///
+    /// Compiled only into the test bundle. Driving these transitions by calling
+    /// `start` and waiting means racing the real export, which writes files and
+    /// shells out to Python, and a test that has to sleep to be right is a test
+    /// that will be flaky later.
+    func setRunForTesting(phase: Phase, isFullExport: Bool = true,
+                          for id: Event.ID) {
+        tracker.begin(Run(phase: phase, isFullExport: isFullExport), for: id)
+    }
+    #endif
+
     /// Dismiss a finished (done/failed) export so the screen returns to ready.
     /// Ignored while a run is still in flight.
     func clear(eventID: Event.ID) {
@@ -102,7 +127,15 @@ final class ExportManager {
     /// handler and could drop the "Exported" stamp.
     func skipMedia(eventID: Event.ID) {
         guard let run = tracker.job(for: eventID), case .generatingMedia(let folder) = run.phase else { return }
-        tracker.update(eventID) { $0.phase = .done(folder, mediaError: nil) }
+        tracker.update(eventID) {
+            $0.phase = .done(folder, mediaError: nil)
+            $0.finishingMedia = true
+        }
+        // Deactivated so the sidebar stops claiming "Exporting…" while the
+        // pane says complete, and so Done can dismiss the run. The underlying
+        // task is NOT cancelled: it keeps finishing media and still stamps the
+        // milestone, which is the whole point of this button (#182).
+        tracker.deactivate(eventID)
     }
 
     // MARK: - Pipeline
@@ -248,6 +281,10 @@ final class ExportManager {
         tracker.update(eventID) {
             $0.task = nil
             $0.phase = .done(folder, mediaError: mediaError)
+            // The media step is genuinely over now, whether or not Skip was
+            // pressed earlier, so the sidebar stops saying assets are still
+            // being written (#182).
+            $0.finishingMedia = false
         }
         tracker.deactivate(eventID)
 
@@ -264,6 +301,18 @@ final class ExportManager {
             ev.exportPath = folder
             if mediaError == nil { ev.archivedAt = Date() }
             appState.updateEvent(ev)
+
+            // Written LAST, and only on a full run that lost nothing, because
+            // its presence is what tells a later reader the folder is finished
+            // (#184). A run that was interrupted, or one missing files, leaves
+            // no manifest, which is the honest state.
+            if mediaError == nil {
+                ExportManifest.write(
+                    ExportManifest.build(folder: folder,
+                                         preset: ev.effectivePostingPreset,
+                                         event: ev.name),
+                    to: folder)
+            }
         }
         NotificationService.shared.notifyExportComplete(
             eventName: appState.events.first(where: { $0.id == eventID })?.name ?? "")
