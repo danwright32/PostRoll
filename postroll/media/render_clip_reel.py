@@ -148,6 +148,9 @@ def _prepare_segment(sel: dict, out_path: Path, *, has_audio: bool) -> float:
     return duration
 
 
+from .probe import probe_duration  # noqa: E402
+
+
 def _segment_has_audio(path: str) -> bool:
     proc = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries",
@@ -316,15 +319,15 @@ def render_clip_reel(
 
 
 def _probe_duration(path: Path) -> float:
-    proc = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-        capture_output=True, text=True,
-    )
-    try:
-        return float(proc.stdout.strip())
-    except ValueError:
+    """Length of a clip, refusing rather than returning an unusable number.
+
+    Through the shared probe (#123), so a failed exit, empty output and "N/A"
+    all arrive here as None instead of three different crashes.
+    """
+    seconds = probe_duration(path)
+    if seconds is None:
         raise RenderClipReelError(f"could not probe duration of {path}")
+    return seconds
 
 
 def _build_mixed_audio(

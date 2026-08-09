@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 from ..audio import fetch_audio
+from ..media.probe import probe_duration
 from .generate_media import _derive_audio_tags
 
 
@@ -63,12 +64,10 @@ def swap_reel_audio(
         audio_path = fetch_audio(tags, seed=effective_seed)
 
     # Probe video duration so we can fade the audio out before it ends.
-    probe = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(reel)],
-        capture_output=True, text=True,
-    )
-    video_dur = float(probe.stdout.strip()) if probe.returncode == 0 else 36.0
+    # Through the shared probe (#123): a zero exit is not a promise anything
+    # was printed, so parsing stdout on returncode alone still raised. The
+    # fallback stays, because a wrong fade point is better than no reel.
+    video_dur = probe_duration(reel) or 36.0
     fade_dur = 5.0
     fade_start = max(0, video_dur - fade_dur)
 

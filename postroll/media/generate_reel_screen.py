@@ -64,13 +64,21 @@ def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
 
 
 def get_video_duration(path: str) -> float:
-    """Get video duration in seconds."""
-    result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "csv=p=0", path],
-        capture_output=True, text=True,
-    )
-    return float(result.stdout.strip())
+    """Video duration in seconds, or a refusal naming the file.
+
+    A screen recording that cannot be probed has no length to build a reel
+    around, so this refuses rather than guessing one. The message names the
+    file, because the old ValueError named the float conversion and left the
+    unreadable video out of it entirely (#123).
+    """
+    seconds = probe_duration(path)
+    if seconds is None:
+        raise RuntimeError(
+            f"Could not read the length of {Path(path).name}. The file may be "
+            "truncated, still copying, or in a format ffprobe cannot open. "
+            "Check it plays, then retry."
+        )
+    return seconds
 
 
 def build_background() -> Image.Image:
@@ -129,6 +137,7 @@ def build_chrome_overlay(event_name: str, org: str, venue: str,
     return chrome
 
 
+from postroll.media.probe import probe_duration  # noqa: E402
 from postroll.ai.audio_tags import TUESDAY_DEFAULT_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
 
 
@@ -322,13 +331,16 @@ def generate_reel_screen(
             if result.returncode != 0:
                 raise RuntimeError(f"Closing frame failed: {result.stderr[-500:]}")
 
-            # Get actual composed duration
-            dur_result = subprocess.run(
-                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                 "-of", "csv=p=0", composed],
-                capture_output=True, text=True,
-            )
-            composed_dur = float(dur_result.stdout.strip())
+            # Get actual composed duration. ffmpeg exited 0 above, but a
+            # graph can exit 0 and still write a file ffprobe cannot read, so
+            # this is checked rather than assumed (#123).
+            composed_dur = probe_duration(composed)
+            if composed_dur is None:
+                raise RuntimeError(
+                    "The composed reel could not be read back after encoding, "
+                    "so its length is unknown and the closing hold cannot be "
+                    "timed. This usually means the encode produced a bad file."
+                )
 
             # Hold the last frame for 2 seconds so viewer sees the finished edit
             held = str(tmpdir_path / "held.mp4")
