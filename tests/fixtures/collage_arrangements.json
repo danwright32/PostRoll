@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "How many distinct collage arrangements the generator can actually choose",
+    "from, per photo count, for Dan's photos (every frame 3:2 landscape).",
+    "",
+    "Generated from distinct_collage_splits filtered by split_fits_photos, the",
+    "same pair the renderer uses. Regenerate with tests/test_collage_arrangements.py,",
+    "which fails when this file and the live function disagree.",
+    "",
+    "It exists so the Swift upload page can decide whether to offer a 'New",
+    "layout' button without reimplementing the split enumeration, which would",
+    "drift from the crop budget rules (#195). Both languages read this one file.",
+    "",
+    "A count of 1 means rerolling redraws the identical collage. A count of 0",
+    "means nothing fits the crop budget and the renderer falls back to a single",
+    "forced layout, so there is nothing to reroll there either."
+  ],
+  "aspect_ratio": 1.5,
+  "arrangements_by_photo_count": {
+    "2": 1,
+    "3": 1,
+    "4": 3,
+    "5": 3,
+    "6": 8,
+    "7": 14,
+    "8": 24,
+    "9": 22,
+    "10": 20,
+    "11": 0,
+    "12": 0,
+    "13": 0,
+    "14": 0
+  }
+}
