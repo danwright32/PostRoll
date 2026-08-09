@@ -138,14 +138,18 @@ def build_chrome_overlay(event_name: str, org: str, venue: str,
 
 
 from postroll.media.probe import probe_duration  # noqa: E402
+from postroll.media.audio_fit import fallback_audio_opts  # noqa: E402
 from postroll.ai.audio_tags import TUESDAY_DEFAULT_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
 
 
-def _fit_reel_audio(audio_path, tmpdir_path, duration, *, shortest_on_fallback):
+def _fit_reel_audio(audio_path, tmpdir_path, duration):
     """Fit `audio_path` to `duration`, looping short tracks with crossfaded
-    seams. Returns (audio_input_path, extra_ffmpeg_opts). On failure, falls back
-    to the raw track with the legacy fade (and -shortest where the caller used
-    it, so a short track still can't run past the video)."""
+    seams. Returns (audio_input_path, extra_ffmpeg_opts).
+
+    On failure the raw track is padded with silence and the output capped at
+    the video length, never `-shortest`: that ended the output when the shorter
+    input ended, so a short track cut the video to the length of the music
+    (#117)."""
     fade = f"afade=t=out:st={duration - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}"
     try:
         fitted = fit_audio_to_duration(
@@ -154,8 +158,8 @@ def _fit_reel_audio(audio_path, tmpdir_path, duration, *, shortest_on_fallback):
     except Exception as e:
         print(f"[generate_reel_screen] audio fit failed, using raw track: {e}",
               file=sys.stderr)
-        opts = ["-af", fade, "-shortest"] if shortest_on_fallback else ["-af", fade]
-        return audio_path, opts
+        return audio_path, fallback_audio_opts(
+            duration=duration, fade_duration=AUDIO_FADE_DURATION)
 
 
 def generate_reel_screen(
@@ -387,7 +391,7 @@ def generate_reel_screen(
                 f.write(f"file '{faded_tl}'\nfile '{faded_cl}'\n")
 
             audio_in, audio_opts = _fit_reel_audio(
-                audio_path, tmpdir_path, actual_total, shortest_on_fallback=False)
+                audio_path, tmpdir_path, actual_total)
             final_cmd = [
                 "ffmpeg", "-y",
                 "-f", "concat", "-safe", "0", "-i", concat_list,
@@ -407,7 +411,7 @@ def generate_reel_screen(
         else:
             # Just add audio
             audio_in, audio_opts = _fit_reel_audio(
-                audio_path, tmpdir_path, target_duration, shortest_on_fallback=True)
+                audio_path, tmpdir_path, target_duration)
             final_cmd = [
                 "ffmpeg", "-y",
                 "-i", composed,
