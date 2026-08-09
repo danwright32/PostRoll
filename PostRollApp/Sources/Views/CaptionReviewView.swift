@@ -4300,6 +4300,34 @@ private struct CollagePreviewThumbnail: View {
                     .padding(6)
                 }
             }
+            // Reset to the automatic layout (#161). Once a day has a saved cell
+            // override the renderer takes that branch forever, so a hand-dragged
+            // collage could never get back to the planner, and after the gallery
+            // mat change it kept the old edge-to-edge geometry with no way to
+            // opt in to the new design. Only shown when there IS an override,
+            // so it never offers to undo something that was never done.
+            .overlay(alignment: .topTrailing) {
+                if CollageLayoutReset.isOffered(cellOverride: cellOverride.wrappedValue) {
+                    Button {
+                        let outcome = CollageLayoutReset.apply(
+                            cellOverride: cellOverride.wrappedValue)
+                        cellOverride.wrappedValue = outcome.cellOverride
+                        selectedCellIndex = outcome.selectedCellIndex
+                        if outcome.shouldRegenerate { onRegenerate?() }
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.white.opacity(0.9))
+                            .padding(7)
+                            .background(Color.black.opacity(0.4))
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRegenerating)
+                    .help("Reset to the automatic layout, discarding your dragged arrangement")
+                    .padding(6)
+                }
+            }
             .overlay(alignment: .topLeading) {
                 if let onChangePhotos {
                     Button(action: onChangePhotos) {
