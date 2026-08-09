@@ -18,19 +18,66 @@ worth it, and the strings below are the exact ones that were wrong.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 
-WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 SWIFT = WORKFLOWS / "swift.yml"
 TESTS = WORKFLOWS / "tests.yml"
+SWIFT_TESTS = REPO_ROOT / "PostRollApp" / "Tests"
 
 
 @pytest.fixture
 def swift() -> str:
     return SWIFT.read_text()
+
+
+# ── deriving the trigger paths from what the tests actually read ──────────────
+
+def _outside_inputs() -> set[str]:
+    """Repo-relative files the Swift tests read from outside `PostRollApp/`.
+
+    Read out of the sources rather than listed by hand, because a list
+    maintained beside the tests drifts the moment someone adds a fixture and
+    does not think of this file, which is the exact failure #246 is about.
+    """
+    found: set[str] = set()
+    for source in sorted(SWIFT_TESTS.rglob("*.swift")):
+        text = source.read_text()
+        for literal in re.findall(r'appendingPathComponent\(\s*"([^"]+)"', text):
+            if literal.startswith("/") or ".." in literal:
+                continue
+            # Only literals that name a real committed file are inputs; the
+            # rest are paths built at runtime inside a temp directory.
+            if (REPO_ROOT / literal).is_file():
+                found.add(literal)
+    return found
+
+
+def _trigger_paths(swift: str) -> list[str]:
+    """The `paths:` entries on the pull_request trigger, in order."""
+    after = swift.split("paths:", 1)[1]
+    entries = []
+    for line in after.splitlines()[1:]:
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            break
+        entries.append(stripped[2:].strip().strip('"').strip("'"))
+    return entries
+
+
+def _is_covered(path: str, patterns: list[str]) -> bool:
+    for pattern in patterns:
+        if pattern.endswith("/**"):
+            if path.startswith(pattern[:-2]):
+                return True
+        elif pattern == path:
+            return True
+    return False
 
 
 # ── the hole that let a red main through ──────────────────────────────────────
@@ -60,6 +107,26 @@ def test_pull_requests_only_pay_when_they_touch_the_app(swift):
     # a PR can break the Swift build.
     assert "paths:" in swift
     assert "PostRollApp/**" in swift
+
+
+def test_every_file_the_swift_tests_read_from_outside_the_app_triggers_the_job(swift):
+    # #246: two Swift tests read cross-language fixtures under `tests/`, so a
+    # PR that regenerates one of them can turn the Swift suite red while the
+    # job that would have said so never runs. A skipped job looks exactly like
+    # a passing one, which is the same shape of hole #245 was written to close.
+    #
+    # Derived from the sources so a fixture added later is covered without
+    # anyone remembering this file exists.
+    inputs = _outside_inputs()
+    assert inputs, (
+        "found no cross-language inputs at all; the regex has stopped matching "
+        "how the Swift tests locate fixtures, so this test now proves nothing")
+
+    patterns = _trigger_paths(swift)
+    uncovered = sorted(p for p in inputs if not _is_covered(p, patterns))
+    assert not uncovered, (
+        f"the Swift tests read {uncovered} but no trigger path covers them, so "
+        f"a PR changing those files would skip the job that they can break")
 
 
 def test_a_change_to_this_workflow_runs_it(swift):
