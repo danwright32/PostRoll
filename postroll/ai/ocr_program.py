@@ -28,8 +28,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.request
-from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 

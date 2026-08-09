@@ -6,3 +6,6 @@ anthropic==0.96.0
 
 # Test-only, pinned for the same reason: CI installed pytest unpinned.
 pytest==8.4.2
+
+# Static checks, run in CI before the suite (#113).
+ruff>=0.6

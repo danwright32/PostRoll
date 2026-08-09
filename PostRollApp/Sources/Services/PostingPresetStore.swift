@@ -55,8 +55,17 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
 
     /// The currently persisted app wide preset, readable from any thread.
     /// Defaults to `.balanced` when nothing is stored yet.
-    static var current: PostingPreset {
-        guard let raw = UserDefaults.standard.string(forKey: storageKey),
+    static var current: PostingPreset { current(in: .standard) }
+
+    /// Where the preset is read from, injectable so a test never touches the
+    /// real preference (#116).
+    ///
+    /// The tests saved and restored the live value around themselves, which is
+    /// careful but not safe: a crash between the two leaves Dan's actual
+    /// posting layout changed, and two suites running at once clobber each
+    /// other. A seam removes the possibility rather than managing it.
+    static func current(in defaults: UserDefaults) -> PostingPreset {
+        guard let raw = defaults.string(forKey: storageKey),
               let preset = PostingPreset(rawValue: raw) else { return .balanced }
         return preset
     }
@@ -157,9 +166,16 @@ enum CollagePhotoSelection {
 final class PostingPresetStore {
     var selected: PostingPreset = .balanced
 
-    init() { selected = PostingPreset.current }
+    /// Defaults to the real store; a test passes its own scratch suite so the
+    /// live preference is never written (#116).
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        selected = PostingPreset.current(in: defaults)
+    }
 
     func save() {
-        UserDefaults.standard.set(selected.rawValue, forKey: PostingPreset.storageKey)
+        defaults.set(selected.rawValue, forKey: PostingPreset.storageKey)
     }
 }

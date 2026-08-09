@@ -21,7 +21,7 @@ all, so WebSearch has never worked there.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 #: Tools only the Claude Code CLI provides. The SDK path takes no tools

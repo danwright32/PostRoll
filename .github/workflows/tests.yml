@@ -21,6 +21,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Static checks before the suite: a syntax error or an undefined name is
+      # cheaper to hear about in seconds than after a five minute test run
+      # (#113). The rule set is deliberately narrow, real defects rather than
+      # style opinions, so it can be enforced rather than ignored.
+      - name: Lint
+        run: ruff check .
+
       # Installed explicitly rather than inherited from whatever the runner
       # image happens to ship (#106). The end-to-end audio and reel tests skip
       # without it, and a silent skip in CI is indistinguishable from a pass.
@@ -36,7 +43,10 @@ jobs:
       - name: Run tests
         env:
           POSTROLL_REQUIRE_FFMPEG: "1"
-        run: PYTHONPATH=. pytest tests/ -v -ra
+        # No PYTHONPATH prefix: pyproject.toml puts the repo root on the path
+        # and points pytest at tests/, so a local run and a CI run are the same
+        # command (#114).
+        run: pytest -v
 
   # The Swift suites (data safety, crop parity, media path integrity, stored
   # error policy) were never executed by CI, so every one of them was unenforced

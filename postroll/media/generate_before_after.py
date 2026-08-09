@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 # Reuse the title-fitting helper from the story template so single-line
 # shrink + two-line wrap behavior stays consistent across both layouts.
@@ -259,9 +259,6 @@ def generate_before_after(
         bbox = draw_tmp.textbbox((0, 0), line, font=title_font)
         title_h_single = max(title_h_single, bbox[3] - bbox[1])
     title_line_gap = int(title_h_single * 0.85)
-    title_block_bottom = (
-        TITLE_TOP_PADDING + (len(title_lines) - 1) * title_line_gap + title_h_single
-    )
     detail_lines = header_detail_lines(event_name, org, venue)
     info_y = TITLE_TOP_PADDING + (len(title_lines) - 1) * title_line_gap + 110
     info_block_bottom = info_y + max(0, len(detail_lines) - 1) * 42 + 36
