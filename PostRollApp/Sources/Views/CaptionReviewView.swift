@@ -603,12 +603,12 @@ struct CaptionReviewView: View {
     }
 
     private func swapReelAudio(day: DayName) {
-        // Clear any uploaded audio so regeneration fetches fresh Jamendo
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
-        pd.audioPath = nil
-        ev.days[day.rawValue] = pd
-        appState.updateEvent(ev)
+        // Clear any uploaded audio so regeneration fetches fresh Jamendo, and
+        // hold on to what was cleared: this is persisted BEFORE the fetch that
+        // justifies it, so a failed fetch has to put it back (#118).
+        let live = appState.events.first(where: { $0.id == event.id }) ?? event
+        let (cleared, previousAudio) = ReelAudioSwap.clearingAudio(in: live, day: day)
+        appState.updateEvent(cleared)
 
         graphics.beginDayRegen(day, for: event.id)
         regenerateError = nil
@@ -627,6 +627,16 @@ struct CaptionReviewView: View {
             } catch {
                 await MainActor.run {
                     graphics.endDayRegen(day, for: event.id)
+                    // Put back the uploaded track this swap cleared. Without
+                    // it a failed fetch left the event worse than it found it:
+                    // the next retry fetched Jamendo instead of using Dan's own
+                    // file, and the file became an orphan-sweep candidate on
+                    // the next launch (#118). Applied to the LIVE event so an
+                    // edit made while the swap ran survives the rollback.
+                    if let liveNow = appState.events.first(where: { $0.id == event.id }) {
+                        appState.updateEvent(
+                            ReelAudioSwap.restoringAudio(previousAudio, in: liveNow, day: day))
+                    }
                     regenerateError = "\(day.displayName) audio swap failed: \(error.localizedDescription)"
                 }
             }

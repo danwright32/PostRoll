@@ -360,7 +360,7 @@ def generate_reel_morph(
             # Fit the audio to the reel length: short tracks loop with
             # crossfaded seams (no jarring restart) instead of cutting the reel
             # short via -shortest. Fall back to the raw track if the fit fails.
-            from .audio_fit import fit_audio_to_duration
+            from .audio_fit import fit_audio_to_duration, fallback_audio_opts
             fade = f"afade=t=out:st={TOTAL_DURATION - AUDIO_FADE_DURATION}:d={AUDIO_FADE_DURATION}"
             try:
                 audio_in = fit_audio_to_duration(
@@ -371,7 +371,10 @@ def generate_reel_morph(
                 print(f"[generate_reel_morph] audio fit failed, using raw track: {e}",
                       file=sys.stderr)
                 audio_in = audio_path
-                audio_opts = ["-af", fade, "-shortest"]
+                # Padded and capped, never -shortest: a track shorter than the
+                # reel used to cut the video to the music (#117).
+                audio_opts = fallback_audio_opts(
+                    duration=TOTAL_DURATION, fade_duration=AUDIO_FADE_DURATION)
             cmd = [
                 "ffmpeg", "-y",
                 "-framerate", str(FPS),

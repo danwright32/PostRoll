@@ -70,6 +70,7 @@ targets:
       - path: Sources/Services/ScrollEdgeFade.swift
       - path: Sources/Services/ExportReadiness.swift
       - path: Sources/Services/ExportManifest.swift
+      - path: Sources/Services/ReelAudioSwap.swift
       - path: Sources/Services/CollageLayoutReset.swift
       - path: Sources/Services/AnalyticsStore.swift
       - path: Sources/Services/PipelineProgress.swift

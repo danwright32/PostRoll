@@ -140,3 +140,34 @@ def fit_audio_to_duration(
 
     Path(out_path).unlink(missing_ok=True)
     raise RuntimeError(f"Could not fit audio to {duration:.1f}s: {src}")
+
+
+#: Default seconds of fade at the end of a reel's music bed.
+DEFAULT_FADE_DURATION = 2.0
+
+
+def fallback_audio_opts(*, duration: float,
+                        fade_duration: float = DEFAULT_FADE_DURATION) -> list[str]:
+    """ffmpeg audio options for the RAW track, when fitting it failed (#117).
+
+    Never `-shortest`. That ends the OUTPUT when the shortest INPUT ends, and
+    on this path the raw track is routinely shorter than the reel, so the video
+    was cut to the length of the music: a 36 second reel with a 20 second track
+    became a 20 second reel, silently, with the last third of the photographs
+    simply absent.
+
+    Instead the audio is padded with silence (`apad`) so it can never be the
+    thing that ends the video, and the output is capped at the video's own
+    length (`-t`) so a track LONGER than the reel cannot run past the last
+    frame. Either way the reel is exactly as long as it was meant to be.
+
+    Silence at the tail is the right trade here. It is visible in the preview
+    and fixable by picking another track, whereas a reel missing its ending
+    looks finished. The primary path still loops properly with crossfaded
+    seams; this is only what happens when that has already failed.
+    """
+    # A fade longer than the reel would give a negative start, which ffmpeg
+    # rejects outright and would fail the render rather than the audio.
+    fade = min(fade_duration, max(duration / 2, 0.0))
+    start = max(duration - fade, 0.0)
+    return ["-af", f"afade=t=out:st={start}:d={fade},apad", "-t", str(duration)]
