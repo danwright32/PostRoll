@@ -2326,6 +2326,9 @@ private struct BlogSection: View {
     @State private var isSwappingPhotos = false
     @State private var photoSwapError: String?
     @State private var undoBlog: BlogOutput? = nil
+    /// Confirms the copy landed. Reset whenever the text changes, so it never
+    /// claims the clipboard holds something it no longer does.
+    @State private var copiedDraft = false
 
     /// The deterministic checks from #201. They report rather than rewrite,
     /// so this panel IS the feature: the quoted text is what lets Dan fix each
@@ -2439,6 +2442,26 @@ private struct BlogSection: View {
                                 .tracking(0.8)
                                 .foregroundStyle(Color.warmMid)
                             Spacer()
+                            // One thing to copy, title included (#205). The
+                            // title was generated, stored and shown, and Dan
+                            // still typed it by hand every time because the
+                            // surface he copies from carried the body alone.
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(
+                                    BlogDraftText.copyText(title: blog.title, body: blog.body),
+                                    forType: .string)
+                                copiedDraft = true
+                            } label: {
+                                Label(copiedDraft ? "Copied" : "Copy title + body",
+                                      systemImage: copiedDraft ? "checkmark" : "doc.on.doc")
+                                    .labelStyle(.titleAndIcon)
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.roseGold)
+                            .help("Copy the post with its title, ready to paste")
+
                             Button(showingPreview ? "Edit" : "Preview") {
                                 showingPreview.toggle()
                             }
@@ -2534,6 +2557,10 @@ private struct BlogSection: View {
 
             RoseGoldDivider(opacity: 0.3)
         }
+        // A stale "Copied" would claim the clipboard holds text that has since
+        // changed (#205).
+        .onChange(of: blog.body) { copiedDraft = false }
+        .onChange(of: blog.title) { copiedDraft = false }
     }
 
     private func pickAndSwapPhotos() {
