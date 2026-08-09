@@ -35,6 +35,7 @@ from typing import Any
 
 from .claude_client import run_json_prompt, ClaudeError
 from ..media.page_regions import image_budget_for, split_page
+from .stitch_notes import stitch_notes
 from .ocr_batching import batch_images, merge_program_data
 from .ocr_batching import _dedupe as _dedupe_dicts
 
@@ -517,6 +518,11 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
                 break
         else:
             data = merge_program_data(per_batch) if per_batch else {}
+            # A split means no single call saw the work listing and the notes
+            # section together, so the cross-page instruction in the prompt
+            # could not be followed. One text-only pass puts them back (#219).
+            if isinstance(data, dict):
+                data = stitch_notes(data, batch_count=len(batches))
 
         image_list = "\n".join(f"- {p}" for p in resolved)
         base_prompt = PROMPT_TEMPLATE.format(image_list=image_list)
