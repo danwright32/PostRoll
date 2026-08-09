@@ -506,7 +506,9 @@ Story template generator, before/after image generator, masonry collage generato
 Caption writing via Claude Code with brand voice skill. Blog post drafting. Program OCR pipeline. Multi-pass generation (draft, voice review, diversity review, humanizer). Batch week caption generation.
 
 ### Phase 3 — Export Pipeline ✅ Complete (April 12, 2026)
-`export.py` + `audio.py`. Jamendo auto-fetch for licensed audio. 143 tests passing.
+`audio.py` with Jamendo auto-fetch for licensed audio. The export itself is
+native Swift (`EventExporter` and `ExportManager`); the original Python
+`export.py` was retired in August 2026 after the app stopped calling it.
 
 ### Phase 4 — GUI ✅ Complete (April 12, 2026)
 **Framework:** SwiftUI (native macOS). **App icon:** rose-gold P over camera aperture.
