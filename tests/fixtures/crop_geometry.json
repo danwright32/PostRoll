@@ -1,0 +1,263 @@
+{
+  "_comment": [
+    "The crop and pan contract shared by crop_to_fill in",
+    "postroll/media/generate_collage.py and CollageGeometry.placement in",
+    "PostRollApp/Sources/Services/CollageGeometry.swift (#168). The geometry",
+    "is implemented twice, in two languages, and nothing but this file forces",
+    "the two to agree. When they disagree Dan sees one framing in the editor",
+    "and gets another in the exported file, which makes the preview a liar.",
+    "",
+    "The rule:",
+    "  photo_ratio = photo_w / photo_h, cell_ratio = cell_w / cell_h",
+    "  fill_scale  = cell_h / photo_h  when photo_ratio > cell_ratio,",
+    "                cell_w / photo_w  otherwise",
+    "  effective   = fill_scale * max(zoom, zoom_floor)",
+    "  rendered    = photo dimensions * effective",
+    "  overflow    = rendered - cell, per axis",
+    "  draw offset = -overflow * (0.5 + offset * 0.5)   where overflow > 0",
+    "                (cell - rendered) / 2              where the photo has slack",
+    "",
+    "draw_x and draw_y are the rendered photo's top-left corner relative to",
+    "the cell's top-left, so they are Swift's `committed` size directly and",
+    "the negation of Python's crop rect origin.",
+    "",
+    "An offset only chooses which slice of an overflowing photo is kept. On an",
+    "axis where the photo is SMALLER than its cell there is nothing to discard,",
+    "so it is centred no matter what the offset says. The editor enforces this",
+    "already by refusing to commit a pan on an axis without overflow.",
+    "",
+    "These numbers are computed from the rule above, never recorded from",
+    "either implementation, so a side that disagrees fails rather than",
+    "redefining the contract to match itself."
+  ],
+  "zoom_floor": 0.25,
+  "top_anchored_y": -1.0,
+  "tolerance_px": 1.0,
+  "_tolerance_comment": "Python truncates its pixel geometry with int() while Swift keeps CGFloat, so the two can land one pixel apart on the same case. A tolerance of 1px absorbs that and still catches every real drift: the 0.4-vs-0.5 vertical bias bug this file exists to prevent moved the crop by tens of pixels.",
+  "cases": [
+    {
+      "name": "landscape photo in a portrait cell, centred horizontally",
+      "photo_w": 3000,
+      "photo_h": 2000,
+      "cell_w": 340,
+      "cell_h": 500,
+      "offset_x": 0.0,
+      "offset_y": -1.0,
+      "zoom": 1.0,
+      "expected": {
+        "rendered_w": 750.0,
+        "rendered_h": 500.0,
+        "draw_x": -205.0,
+        "draw_y": 0.0
+      }
+    },
+    {
+      "name": "landscape photo in a portrait cell, keeping the left edge",
+      "photo_w": 3000,
+      "photo_h": 2000,
+      "cell_w": 340,
+      "cell_h": 500,
+      "offset_x": -1.0,
+      "offset_y": -1.0,
+      "zoom": 1.0,
+      "expected": {
+        "rendered_w": 750.0,
+        "rendered_h": 500.0,
+        "draw_x": -0.0,
+        "draw_y": 0.0
+      }
+    },
+    {
+      "name": "landscape photo in a portrait cell, keeping the right edge",
+      "photo_w": 3000,
+      "photo_h": 2000,
+      "cell_w": 340,
+      "cell_h": 500,
+      "offset_x": 1.0,
+      "offset_y": -1.0,
+      "zoom": 1.0,
+      "expected": {
+        "rendered_w": 750.0,
+        "rendered_h": 500.0,
+        "draw_x": -410.0,
+        "draw_y": 0.0
+      }
+    },
+    {
+      "name": "portrait photo in a landscape cell, top-anchored default keeps the heads",
+      "photo_w": 2000,
+      "photo_h": 3000,
+      "cell_w": 500,
+      "cell_h": 340,
+      "offset_x": 0.0,
+      "offset_y": -1.0,
+      "zoom": 1.0,
+      "expected": {
+        "rendered_w": 500.0,
+        "rendered_h": 750.0,
+        "draw_x": 0.0,
+        "draw_y": -0.0
+      }
+    },
+    {
+      "name": "portrait photo in a landscape cell, centred vertically",
+      "photo_w": 2000,
+      "photo_h": 3000,
+      "cell_w": 500,
+      "cell_h": 340,
+      "offset_x": 0.0,
+      "offset_y": 0.0,
+      "zoom": 1.0,
+      "expected": {
+        "rendered_w": 500.0,
+        "rendered_h": 750.0,
+        "draw_x": 0.0,
+        "draw_y": -205.0
+      }
+    },
+    {
+      "name": "portrait photo in a landscape cell, keeping the bottom edge",
+      "photo_w": 2000,
+      "photo_h": 3000,
+      "cell_w": 500,
+      "cell_h": 340,
+      "offset_x": 0.0,
+      "offset_y": 1.0,
+      "zoom": 1.0,
+      "expected": {
+        "rendered_w": 500.0,
+        "rendered_h": 750.0,
+        "draw_x": 0.0,
+        "draw_y": -410.0
+      }
+    },
+    {
+      "name": "landscape photo in a portrait cell, zoomed in, both axes overflow",
+      "photo_w": 3000,
+      "photo_h": 2000,
+      "cell_w": 340,
+      "cell_h": 500,
+      "offset_x": 0.0,
+      "offset_y": -1.0,
+      "zoom": 1.5,
+      "expected": {
+        "rendered_w": 1125.0,
+        "rendered_h": 750.0,
+        "draw_x": -392.5,
+        "draw_y": -0.0
+      }
+    },
+    {
+      "name": "landscape photo in a portrait cell, zoomed in to the bottom-left corner",
+      "photo_w": 3000,
+      "photo_h": 2000,
+      "cell_w": 340,
+      "cell_h": 500,
+      "offset_x": -1.0,
+      "offset_y": 1.0,
+      "zoom": 2.0,
+      "expected": {
+        "rendered_w": 1500.0,
+        "rendered_h": 1000.0,
+        "draw_x": -0.0,
+        "draw_y": -500.0
+      }
+    },
+    {
+      "name": "square photo in a square cell, exact fit with no overflow on either axis",
+      "photo_w": 2400,
+      "photo_h": 2400,
+      "cell_w": 400,
+      "cell_h": 400,
+      "offset_x": 0.0,
+      "offset_y": -1.0,
+      "zoom": 1.0,
+      "expected": {
+        "rendered_w": 400.0,
+        "rendered_h": 400.0,
+        "draw_x": 0.0,
+        "draw_y": 0.0
+      }
+    },
+    {
+      "name": "square photo in a portrait cell, horizontal overflow only",
+      "photo_w": 2400,
+      "photo_h": 2400,
+      "cell_w": 340,
+      "cell_h": 500,
+      "offset_x": 0.0,
+      "offset_y": -1.0,
+      "zoom": 1.0,
+      "expected": {
+        "rendered_w": 500.0,
+        "rendered_h": 500.0,
+        "draw_x": -80.0,
+        "draw_y": 0.0
+      }
+    },
+    {
+      "name": "zoomed out, vertical slack, top-anchored offset must not pin it up",
+      "photo_w": 3000,
+      "photo_h": 2000,
+      "cell_w": 340,
+      "cell_h": 500,
+      "offset_x": 0.0,
+      "offset_y": -1.0,
+      "zoom": 0.8,
+      "expected": {
+        "rendered_w": 600.0,
+        "rendered_h": 400.0,
+        "draw_x": -130.0,
+        "draw_y": 50.0
+      }
+    },
+    {
+      "name": "zoomed out, slack on both axes, offsets ignored entirely",
+      "photo_w": 3000,
+      "photo_h": 2000,
+      "cell_w": 500,
+      "cell_h": 340,
+      "offset_x": 0.0,
+      "offset_y": -1.0,
+      "zoom": 0.5,
+      "expected": {
+        "rendered_w": 255.0,
+        "rendered_h": 170.0,
+        "draw_x": 122.5,
+        "draw_y": 85.0
+      }
+    },
+    {
+      "name": "zoomed out, horizontal slack with a full-left offset, vertical still overflows",
+      "photo_w": 2000,
+      "photo_h": 3000,
+      "cell_w": 500,
+      "cell_h": 340,
+      "offset_x": -1.0,
+      "offset_y": 0.0,
+      "zoom": 0.6,
+      "expected": {
+        "rendered_w": 300.0,
+        "rendered_h": 450.0,
+        "draw_x": 100.0,
+        "draw_y": -55.0
+      }
+    },
+    {
+      "name": "zoom below the editor's floor clamps to the floor",
+      "photo_w": 3000,
+      "photo_h": 2000,
+      "cell_w": 340,
+      "cell_h": 500,
+      "offset_x": 0.0,
+      "offset_y": -1.0,
+      "zoom": 0.1,
+      "expected": {
+        "rendered_w": 187.5,
+        "rendered_h": 125.0,
+        "draw_x": 76.25,
+        "draw_y": 187.5
+      }
+    }
+  ]
+}
