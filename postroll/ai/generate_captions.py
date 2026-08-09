@@ -56,7 +56,8 @@ from .ai_tells import (
     load_humanizer_rules,
     strip_em_dashes,
 )
-from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
+from .claude_client import (run_json_prompt, run_review_pass, load_brand_voice,
+                            ClaudeError, partition_uploadable)
 from .performer_hashtags import strip_performer_hashtags
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -701,6 +702,25 @@ def generate_caption(
                 shutil.copy2(photo, staged)
             staged_paths.append(str(staged))
 
+        # A photo that cannot be opened is dropped rather than failing the
+        # whole day (#228). Done HERE, before the prompt below is formatted:
+        # the prompt states the photo count and lists the filenames, so a photo
+        # dropped after that point would leave the model reading about a
+        # photograph it never received. Refuses outright when nothing survives.
+        kept_indices, skipped_photos = partition_uploadable(staged_paths, model="sonnet")
+        if skipped_photos:
+            for s in skipped_photos:
+                print(f"[generate_captions] skipping unreadable photo "
+                      f"{Path(photo_paths[s.index]).name}: {s.reason}",
+                      flush=True, file=sys.stderr)
+            # Everything the prompt and the request are built from now describes
+            # only the photos that survived, so all three agree.
+            original_paths = list(photo_paths)
+            photo_paths = [photo_paths[i] for i in kept_indices]
+            staged_paths = [staged_paths[i] for i in kept_indices]
+        else:
+            original_paths = list(photo_paths)
+
         brand_voice_text = load_brand_voice()
         photo_count = len(staged_paths)
         # Each filename is also passed as image_labels so the model gets a
@@ -823,6 +843,14 @@ def generate_caption(
     if post_type in SINGLE_ALT_POST_TYPES:
         alt_texts = alt_texts[:1]
         scene_labels = scene_labels[:1]
+    elif skipped_photos:
+        # Per-photo output came back one entry per photo that was SENT, while
+        # everything downstream (CAPTIONS.txt, the review screen) indexes into
+        # the day's full photo list. Left as-is, every photo after the skipped
+        # one would carry its neighbour's alt text, which is the invented-alt-
+        # text failure this feature exists to avoid. Put the holes back.
+        alt_texts = _reinsert_skipped(alt_texts, kept_indices, len(original_paths))
+        scene_labels = _reinsert_skipped(scene_labels, kept_indices, len(original_paths))
 
     return {
         "caption": strip_em_dashes(data.get("caption", "").strip()),
@@ -839,7 +867,29 @@ def generate_caption(
         ),
         "alt_texts": [strip_em_dashes(str(a).strip()) for a in alt_texts],
         "scene_labels": scene_labels,
+        # Named so the review screen can say which file was left out. Always
+        # present, so a consumer reading it cannot mistake "no key" for "no
+        # skips" (#228).
+        "skipped_photos": [
+            {"file": Path(original_paths[s.index]).name, "reason": s.reason}
+            for s in skipped_photos
+        ],
     }
+
+
+def _reinsert_skipped(values: list, kept_indices: list[int], total: int) -> list:
+    """Put per-photo values back at their original positions.
+
+    `values` has one entry per photo that was sent; the result has one per
+    photo the caller started with, with an empty string where a photo was
+    skipped. Alignment is the whole point: an off-by-one here attaches a real
+    alt text to the wrong photograph, which reads as correct and is not.
+    """
+    out: list = [""] * total
+    for slot, original_index in enumerate(kept_indices):
+        if slot < len(values) and original_index < total:
+            out[original_index] = values[slot]
+    return out
 
 
 def format_for_post(result: dict[str, Any]) -> str:

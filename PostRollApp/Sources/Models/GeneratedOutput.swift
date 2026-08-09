@@ -110,6 +110,11 @@ struct WeekGenerationResult: Codable, Hashable {
     var friday: DayCaption?
     var blog: BlogOutput?
     var errors: [String: String] = [:]
+    /// Days that generated but have something worth saying, keyed by day name
+    /// (#228). Separate from `errors`: these days produced usable captions, and
+    /// putting them in the same field as a failure would either make a good day
+    /// look broken or hide a real error behind a warning.
+    var warnings: [String: [SkippedPhoto]] = [:]
 
     subscript(day: DayName) -> DayCaption? {
         get {
@@ -147,6 +152,19 @@ struct WeekGenerationResult: Codable, Hashable {
     }
 
     var errorCount: Int { errors.count }
+
+    /// One line naming the photos this day left out, or nil when there were
+    /// none. Nil rather than an empty string so a caller cannot render an empty
+    /// banner on every ordinary day, which is how a real warning gets ignored.
+    func warningMessage(for day: DayName) -> String? {
+        let skipped = warnings[day.rawValue] ?? []
+        guard !skipped.isEmpty else { return nil }
+        let names = skipped.map(\.file).joined(separator: ", ")
+        let subject = skipped.count == 1 ? "photo" : "photos"
+        return "Skipped \(skipped.count) unreadable \(subject) (\(names)). "
+             + "This day's caption and alt text were written from the rest, so "
+             + "check whether those files open."
+    }
 
     /// Copy `caption` → `generatedCaption` and `body` → `generatedBody` for any
     /// day/blog that hasn't been stamped yet. Call once after decoding from Python output.
@@ -199,6 +217,27 @@ extension WeekGenerationResult {
         friday    = try c.decodeIfPresent(DayCaption.self, forKey: .friday)
         blog      = try c.decodeIfPresent(BlogOutput.self,            forKey: .blog)
         errors    = try c.decodeIfPresent([String: String].self,      forKey: .errors)    ?? [:]
+        warnings  = try c.decodeIfPresent([String: [SkippedPhoto]].self, forKey: .warnings) ?? [:]
+    }
+}
+
+/// A photo left out of a day's caption call because the file could not be read
+/// (#228). Carries the filename so the warning is actionable.
+struct SkippedPhoto: Codable, Hashable {
+    var file: String = ""
+    var reason: String = ""
+
+    enum CodingKeys: String, CodingKey { case file, reason }
+
+    init(file: String, reason: String) {
+        self.file = file
+        self.reason = reason
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        file   = try c.decodeIfPresent(String.self, forKey: .file)   ?? ""
+        reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
     }
 }
 
