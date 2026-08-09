@@ -705,3 +705,38 @@ def test_fix_second_person_no_call_when_clean():
         out = generate_blog._fix_second_person(body)
     m.assert_not_called()
     assert out == body
+
+
+# ── #166: Thursday is the scroll reel, and Dan posts no story that day ────────
+
+
+def test_thursday_produces_no_story_when_the_reel_is_skipped(tmp_path, monkeypatch):
+    """A skipped Thursday reel used to silently substitute a story.png.
+
+    Dan does not post a story on Thursday, so the substitute is an asset he
+    will never use, and putting it in the day result made a skipped reel look
+    like a finished day."""
+    from PIL import Image
+    from postroll.ai import generate_media as gm  # noqa: F401
+
+
+    src = tmp_path / "grid"
+    src.mkdir()
+    photos = []
+    for i in range(3):
+        p = src / f"p{i}.jpg"
+        Image.new("RGB", (1200, 800), (60, 70, 80)).save(p)
+        photos.append(str(p))
+
+    manifest = {
+        "event": "Show", "org": "Org", "venue": "Hall", "date": "2026-04-04",
+        "days": {"thursday": {"photos": photos}},
+    }
+    out = tmp_path / "out"
+    result = gm.generate_media(manifest, out, static_only=True)
+
+    thursday = result.get("days", {}).get("thursday", {})
+    assert "story" not in thursday, f"Thursday must not carry a story: {thursday}"
+    # And no reel either, since the reel is what was skipped. The day is
+    # honestly incomplete rather than padded with a substitute.
+    assert "reel" not in thursday, thursday

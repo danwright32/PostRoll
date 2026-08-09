@@ -605,20 +605,11 @@ def generate_media(
                     _record_error(errors, "thursday", msg)
             else:
                 if static_only:
-                    print("[generate_media] thursday: reel skipped (static-only preview), generating story", flush=True)
-                    try:
-                        story_path = str(day_dir / "story.png")
-                        generate_story(
-                            photo_path=photos[0],
-                            event_name=event,
-                            org=org,
-                            venue=venue,
-                            output_path=story_path,
-                            logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
-                        )
-                        day_result["story"] = story_path
-                    except Exception as e:
-                        _record_error(errors, "thursday", f"story fallback failed: {e}")
+                    # No story substitute (#166). Thursday IS the scroll reel
+                    # and Dan posts no story that day, so a story.png here is
+                    # an asset he will never use, and putting it in the day
+                    # result made a skipped reel look like a finished day.
+                    print("[generate_media] thursday: reel skipped (static-only preview)", flush=True)
                 else:
                     print(f"[generate_media] thursday: ERROR: {tools.message}", flush=True, file=sys.stderr)
                     _record_error(errors, "thursday", tools.message)

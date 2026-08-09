@@ -180,7 +180,11 @@ def test_cover_render_failure_is_reported_not_silent(tmp_path):
     }
     result = gm_mod.generate_media(manifest, tmp_path / "out", static_only=True)
 
-    thursday_result = result["thursday"]
+    # None once #166 removed the Thursday story fallback: with the reel skipped
+    # and the cover failed, the day genuinely produced nothing, and `day_result
+    # or None` is this module's existing way of saying so. The fallback used to
+    # fill the dict, which is exactly the "looks finished" problem #166 fixed.
+    thursday_result = result["thursday"] or {}
     assert "cover" not in thursday_result
     assert result["errors"]["thursday"].startswith("cover failed:")
 
