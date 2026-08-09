@@ -56,8 +56,9 @@ from .ai_tells import (
     load_humanizer_rules,
     strip_em_dashes,
 )
-from .claude_client import (run_json_prompt, run_review_pass, load_brand_voice,
-                            ClaudeError, partition_uploadable)
+from .claude_client import (run_json_prompt, run_prompt, run_review_pass,
+                            load_brand_voice, ClaudeError, partition_uploadable)
+from .caption_quality import problems_in, REWRITE_PROMPT
 from .performer_hashtags import strip_performer_hashtags
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -853,7 +854,8 @@ def generate_caption(
         scene_labels = _reinsert_skipped(scene_labels, kept_indices, len(original_paths))
 
     return {
-        "caption": strip_em_dashes(data.get("caption", "").strip()),
+        "caption": _enforce_caption_bans(
+            strip_em_dashes(data.get("caption", "").strip())),
         # Deterministic backstop, not a second ask of the model: the prompt
         # above states the fame gate, and this enforces it against the program
         # data. A rule that lives only in a prompt is a hope (#199).
@@ -875,6 +877,42 @@ def generate_caption(
             for s in skipped_photos
         ],
     }
+
+
+def _enforce_caption_bans(caption: str) -> str:
+    """Remove engagement bait and the generic second person, in code (#110).
+
+    The prompt already bans both, and the blog already enforces its equivalent
+    after the model has answered. These are hard checkable strings, so whether
+    they are present is settled by a regex rather than by asking the model
+    whether it obeyed.
+
+    One focused rewrite, and only when something was actually found, so an
+    ordinary caption costs no extra call. A rewrite that still carries the
+    problem is refused and the original kept: the backstop must never make a
+    caption worse, nor claim a fix it did not make.
+    """
+    problems = problems_in(caption)
+    if not problems:
+        return caption
+
+    try:
+        raw = run_prompt(
+            REWRITE_PROMPT.format(problems=" and ".join(problems), caption=caption),
+            timeout=120,
+            step="caption:bans",
+        )
+    except ClaudeError as e:
+        print(f"warning: caption ban rewrite failed, keeping the original: {e}",
+              file=sys.stderr, flush=True)
+        return caption
+
+    reworded = strip_em_dashes((raw or "").strip())
+    if not reworded or problems_in(reworded):
+        print(f"warning: caption still contains {'; '.join(problems)} after a "
+              "rewrite, keeping the original", file=sys.stderr, flush=True)
+        return caption
+    return reworded
 
 
 def _reinsert_skipped(values: list, kept_indices: list[int], total: int) -> list:
