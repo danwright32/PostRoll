@@ -1078,7 +1078,6 @@ private struct CroppablePhotoThumb: View {
 
     @State private var image: NSImage?
     @State private var loadFailed = false
-    @State private var showingCropPopover = false
     @State private var isHovered = false
 
     var offset: CropOffset { cropOffset?.wrappedValue ?? CropOffset() }
@@ -1133,24 +1132,11 @@ private struct CroppablePhotoThumb: View {
             VStack {
                 Spacer()
                 HStack {
-                    if let cropBinding = cropOffset {
-                        Button {
-                            showingCropPopover = true
-                        } label: {
-                            Image(systemName: hasCrop ? "crop.rotate" : "crop")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(hasCrop ? Color.roseGold : .white.opacity(0.85))
-                                .padding(3)
-                                .background(Color.black.opacity(0.35))
-                                .clipShape(RoundedRectangle(cornerRadius: 3))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Adjust crop position")
-                        .popover(isPresented: $showingCropPopover, arrowEdge: .bottom) {
-                            CropOffsetPopover(image: image, cropOffset: cropBinding)
-                        }
-                        .opacity(isHovered || hasCrop ? 1 : 0)
-                    }
+                    // The upload page offers no crop control (#189): one editor
+                    // per setting, on the surface where its effect is visible.
+                    // The cropOffsets BINDING is still passed in, because
+                    // deleting a photo clears its crop entry through it, and
+                    // existing values stay untouched for both renderers.
 
                     if let tagBinding = photoTags, let onTag {
                         Button(action: onTag) {
@@ -1657,87 +1643,6 @@ private struct TagSuggestionFlow: View {
                 .buttonStyle(.plain)
                 .help(suggestion.display)
             }
-        }
-    }
-}
-
-// MARK: - Crop Offset Popover
-
-struct CropOffsetPopover: View {
-    let image: NSImage?
-    @Binding var cropOffset: CropOffset
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            Text("ADJUST CROP")
-                .font(.system(size: 9, weight: .medium))
-                .tracking(1.0)
-                .foregroundStyle(Color.warmMid)
-
-            // Preview
-            if let image {
-                let (ox, oy) = shift(image: image, frameW: 160, frameH: 160)
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .offset(x: cropOffset.x * ox, y: cropOffset.y * oy)
-                    .frame(width: 160, height: 160)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-            } else {
-                Color.creamDeep
-                    .frame(width: 160, height: 160)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-            }
-
-            // Horizontal
-            VStack(alignment: .leading, spacing: 3) {
-                Text("HORIZONTAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(Color.warmMid)
-                HStack(spacing: 4) {
-                    Text("◄").font(.system(size: 9)).foregroundStyle(Color.warmMid)
-                    Slider(value: $cropOffset.x, in: -1...1)
-                        .tint(Color.roseGold)
-                    Text("►").font(.system(size: 9)).foregroundStyle(Color.warmMid)
-                }
-            }
-
-            // Vertical
-            VStack(alignment: .leading, spacing: 3) {
-                Text("VERTICAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(Color.warmMid)
-                HStack(spacing: 4) {
-                    Text("▲").font(.system(size: 9)).foregroundStyle(Color.warmMid)
-                    Slider(value: $cropOffset.y, in: -1...1)
-                        .tint(Color.roseGold)
-                    Text("▼").font(.system(size: 9)).foregroundStyle(Color.warmMid)
-                }
-            }
-
-            if hasCrop {
-                Button("Reset to default") { cropOffset = CropOffset() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
-            }
-        }
-        .padding(Spacing.md)
-        .frame(width: 210)
-        .background(Color.cream)
-    }
-
-    private var hasCrop: Bool { cropOffset.x != 0 || cropOffset.y != 0 }
-
-    private func shift(image: NSImage, frameW: Double, frameH: Double) -> (Double, Double) {
-        let iw = image.size.width
-        let ih = image.size.height
-        guard iw > 0, ih > 0 else { return (0, 0) }
-        let imageRatio = iw / ih
-        let frameRatio = frameW / frameH
-        if imageRatio > frameRatio {
-            let scaledW = frameH * imageRatio
-            return ((scaledW - frameW) / 2, 0)
-        } else {
-            let scaledH = frameW / imageRatio
-            return (0, (scaledH - frameH) / 2)
         }
     }
 }

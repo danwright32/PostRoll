@@ -7,6 +7,32 @@ import Foundation
 /// balanced preset). Expressing one through the other hid tagging on Sunday
 /// and Monday entirely, so each control answers only to its own feature.
 enum PhotoThumbControls {
+
+    /// Where a photo thumbnail is being shown.
+    enum Surface {
+        /// The upload page, before anything has been generated.
+        case upload
+        /// The review page, over the rendered collage.
+        case review
+    }
+
+    /// Whether this surface offers a crop control (#189).
+    ///
+    /// One editor per setting, on the surface where its effect is visible. The
+    /// upload page used to offer a crop popover against an 80pt thumbnail,
+    /// before anything was generated and with no view of the collage cell the
+    /// crop applies to, while writing the same `cropOffsets` storage the review
+    /// page edits. Two editors for one value, and that one the worse.
+    ///
+    /// Named rather than left implicit in deleted code, so re-adding the button
+    /// means arguing with this rule instead of quietly reintroducing it.
+    static func offersCropControl(on surface: Surface) -> Bool {
+        switch surface {
+        case .upload: return false
+        case .review: return true
+        }
+    }
+
     static func showsCrop(cropEnabled: Bool, taggingEnabled: Bool) -> Bool {
         cropEnabled
     }
