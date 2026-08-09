@@ -183,6 +183,34 @@ def _record_usage(message: Any, model: str, step: str) -> None:
               file=sys.stderr, flush=True)
 
 
+def _text_from_blocks(message: Any) -> str:
+    """Return the text of the first text block in the reply.
+
+    Never `content[0]`: current models put a thinking block before the text
+    block, so the first block is not reliably the answer, and reaching for
+    `.text` on it raises AttributeError before any output is read (#214).
+
+    A block that declares no type at all is treated as text. The SDK always
+    declares one, so that only covers hand-built stand-ins.
+    """
+    blocks = list(getattr(message, "content", None) or [])
+    for block in blocks:
+        if getattr(block, "type", "text") != "text":
+            continue
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            return text
+    if not blocks:
+        return ""
+    kinds = ", ".join(
+        str(getattr(block, "type", None) or type(block).__name__)
+        for block in blocks
+    )
+    raise ClaudeError(
+        "Anthropic API returned no text block. Blocks received: " + kinds
+    )
+
+
 def _run_sdk(
     prompt: str,
     *,
@@ -228,6 +256,15 @@ def _run_sdk(
     # burned every one of those tokens and still appears on the bill.
     _record_usage(message, _resolve_model(model), step)
 
+    if message.stop_reason == "refusal":
+        # A distinct cause gets a distinct message: this is not an empty
+        # response and not a truncated one, and retrying it unchanged will
+        # refuse again.
+        raise ClaudeError(
+            "Anthropic declined to answer this request (stop_reason=refusal). "
+            "Retrying the same prompt will refuse again; change the input."
+        )
+
     if message.stop_reason == "max_tokens":
         # A truncated response would otherwise surface as a confusing JSON
         # parse failure (or silently clipped text for plain prompts).
@@ -237,7 +274,7 @@ def _run_sdk(
             "input, then retry."
         )
 
-    text = message.content[0].text.strip() if message.content else ""
+    text = _text_from_blocks(message).strip()
     if not text:
         raise ClaudeError("Anthropic API returned empty response")
     return text

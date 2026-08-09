@@ -326,6 +326,69 @@ def test_sdk_normal_response_passes_through(monkeypatch):
         assert run_prompt("hi") == '{"caption": "complete"}'
 
 
+# === Content-block selection (SDK path) ===
+#
+# Real SDK blocks always declare a `type`. Current models emit a thinking
+# block before the text block, so "the first block" is not the answer.
+
+
+class _ThinkingBlock:
+    """Shape of anthropic.types.ThinkingBlock: no `.text` at all."""
+
+    type = "thinking"
+
+    def __init__(self, thinking: str) -> None:
+        self.thinking = thinking
+        self.signature = "sig"
+
+
+class _TextBlock:
+    type = "text"
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+def _sdk_reply(monkeypatch, blocks, stop_reason="end_turn"):
+    """Run run_prompt against a hand-built message with these content blocks."""
+    from types import SimpleNamespace
+    from postroll.ai import claude_client as cc
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    fake_message = SimpleNamespace(stop_reason=stop_reason, content=blocks)
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            return fake_message
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.messages = FakeMessages()
+
+    with patch.object(cc.anthropic, "Anthropic", FakeClient):
+        return run_prompt("hi")
+
+
+def test_sdk_skips_a_leading_thinking_block(monkeypatch):
+    """The failure that blocks every newer model: a thinking block first."""
+    blocks = [_ThinkingBlock("let me consider"), _TextBlock("the answer")]
+    assert _sdk_reply(monkeypatch, blocks) == "the answer"
+
+
+def test_sdk_no_text_block_names_what_came_back(monkeypatch):
+    """No text at all is a ClaudeError naming the block types, never an
+    AttributeError from reaching for `.text` on something that lacks it."""
+    with pytest.raises(ClaudeError, match="thinking"):
+        _sdk_reply(monkeypatch, [_ThinkingBlock("only thought about it")])
+
+
+def test_sdk_refusal_stop_reason_is_its_own_error(monkeypatch):
+    """A refusal is a distinct cause and gets a distinct message, rather than
+    surfacing as an empty response."""
+    with pytest.raises(ClaudeError, match="declined"):
+        _sdk_reply(monkeypatch, [], stop_reason="refusal")
+
+
 def test_run_review_pass_validator_keeps_prior_on_broken_invariant():
     """A review pass that drops a hard invariant (e.g. a PHOTO marker)
     must be discarded in favor of the prior draft."""
