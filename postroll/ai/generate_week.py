@@ -60,6 +60,7 @@ from typing import Any
 from . import cap_signals
 from .generate_captions import generate_caption
 from .generate_blog import generate_blog
+from .progress import ProgressWriter
 from .select_reel_photos import select_reel_photos, DEFAULT_MAX_REEL_PHOTOS
 from ..posting_preset import DEFAULT_PRESET, is_collage_carousel
 
@@ -165,7 +166,9 @@ def _auto_post_type(day: str, photo_count: int, preset: str = DEFAULT_PRESET) ->
     return "feed_photo"
 
 
-def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path | None = None) -> None:
+def generate_week(manifest: dict[str, Any], output_path: Path,
+                  timing_path: Path | None = None,
+                  progress_path: Path | None = None) -> None:
     """Run caption + blog generation for one event week."""
     event         = manifest["event"]
     org           = manifest["org"]
@@ -184,6 +187,12 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
     # the label is set once here rather than threaded through every call site.
     os.environ["POSTROLL_EVENT"] = f"{event} {date}".strip()
 
+    # Says which day is being written as it starts. Between days this process
+    # is silent for minutes at a time, so without it the app cannot tell a run
+    # that is working from one that has died (#95, #96).
+    say = ProgressWriter(progress_path)
+    step_total = len(DAY_ORDER) + 1  # every day, plus the blog
+
     results: dict[str, Any] = {}
     errors:  dict[str, str] = {}
     # Separate from `errors` on purpose: a warning means the day GENERATED and
@@ -199,6 +208,8 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
     t_blog_end: float | None = None
 
     for day_name in DAY_ORDER:
+        say.step(f"Writing the {day_name.capitalize()} caption",
+                 index=DAY_ORDER.index(day_name) + 1, total=step_total)
         if day_name == "friday":
             day_info = days_data.get("friday", {})
             selections = ((day_info.get("clips_plan") or {}).get("selections")) or []
@@ -360,6 +371,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
     # Blog post
     if blog_photos:
         t_blog_start = time.time()
+        say.step("Writing the blog post", index=step_total, total=step_total)
         print(f"[generate_week] blog: generating with {len(blog_photos)} photo(s)", flush=True)
         try:
             blog_result = generate_blog(
@@ -372,6 +384,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
                 photo_paths=blog_photos,
                 shoot_type=shoot_type,
                 event_url=event_url,
+                progress=say,
             )
             results["blog"] = blog_result
             t_blog_end = time.time()
@@ -396,6 +409,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
     results["warnings"] = warnings
 
     _write_results(output_path, results, complete=True)
+    say.finish()
 
     # Said on the way out, every run, while the file has anything in it (#217).
     if (report := cap_signals.report_unrecognised()):
@@ -424,6 +438,9 @@ if __name__ == "__main__":
     parser.add_argument("--manifest", required=True, help="Path to manifest JSON")
     parser.add_argument("--output",   required=True, help="Path to write output JSON")
     parser.add_argument("--timing",   default=None,  help="Optional path to write per-phase timing JSON")
+    parser.add_argument("--progress", default=None,
+                        help="Optional path to write the current step, so a caller "
+                             "can tell a working run from a hung one (#95, #96)")
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -432,4 +449,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    generate_week(manifest_data, Path(args.output), Path(args.timing) if args.timing else None)
+    generate_week(manifest_data, Path(args.output),
+                  Path(args.timing) if args.timing else None,
+                  Path(args.progress) if args.progress else None)

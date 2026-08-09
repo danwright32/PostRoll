@@ -83,6 +83,16 @@ enum AppPaths {
     /// Generation logs. Under the data root (not the Documents checkout) so the
     /// Python subprocess never writes to the TCC-protected folder during a run.
     static var logsDir: URL { root.appendingPathComponent("logs") }
+
+    /// Where a running generation reports the step it is on, per event (#95,
+    /// #96). One known path per event rather than a value threaded through
+    /// every call, so any screen showing that event's progress can read it
+    /// without the path being handed down to it.
+    static var progressDir: URL { root.appendingPathComponent("progress") }
+
+    static func progressFile(forEventID id: UUID) -> URL {
+        progressDir.appendingPathComponent("\(id.uuidString).json")
+    }
     static var logFile: URL { logsDir.appendingPathComponent("postroll.log") }
 
     /// The logs folder as it should appear in a message to Dan.

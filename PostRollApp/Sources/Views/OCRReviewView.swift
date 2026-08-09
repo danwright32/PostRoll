@@ -483,8 +483,12 @@ private struct PerformersEditor: View {
     var onReplacedFromWeb: (([Performer]) -> Void)?
 
     @State private var isFetchingFromWeb = false
+    /// Set and cleared with the flag beside it, so a web lookup that hangs is
+    /// distinguishable from one that is simply slow (#95).
+    @State private var fetchFromWebStartedAt: Date? = nil
     @State private var fetchError: String?
     @State private var isLookingUpHandles = false
+    @State private var handleLookupStartedAt: Date? = nil
     @State private var handleSuggestions: [PythonBridge.HandleSuggestion] = []
     @State private var handleLookupError: String?
     @Environment(AppState.self) private var appState
@@ -540,13 +544,9 @@ private struct PerformersEditor: View {
 
             // Look up handles button
             if isLookingUpHandles {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small).tint(Color.roseGold)
-                    Text("Searching for Instagram handles…")
-                        .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
-                }
-                .padding(.top, 2)
+                LongRunIndicator(label: "Searching for Instagram handles…",
+                                 startedAt: handleLookupStartedAt)
+                    .padding(.top, 2)
             } else if performersWithoutHandles {
                 VStack(alignment: .leading, spacing: 4) {
                     Button {
@@ -573,13 +573,9 @@ private struct PerformersEditor: View {
 
             if let url = eventURL {
                 if isFetchingFromWeb {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small).tint(Color.roseGold)
-                        Text("Fetching from website…")
-                            .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
-                    }
-                    .padding(.top, 2)
+                    LongRunIndicator(label: "Fetching from website…",
+                                     startedAt: fetchFromWebStartedAt)
+                        .padding(.top, 2)
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
                         Button {
@@ -611,7 +607,8 @@ private struct PerformersEditor: View {
     private func fetchFromWeb(url: String) async {
         fetchError = nil
         isFetchingFromWeb = true
-        defer { isFetchingFromWeb = false }
+        fetchFromWebStartedAt = Date()
+        defer { isFetchingFromWeb = false; fetchFromWebStartedAt = nil }
         do {
             let fetched = try await PythonBridge.shared.fetchWebPerformers(eventURL: url)
             let old = performers
@@ -630,7 +627,8 @@ private struct PerformersEditor: View {
     private func lookUpHandles() async {
         handleLookupError = nil
         isLookingUpHandles = true
-        defer { isLookingUpHandles = false }
+        handleLookupStartedAt = Date()
+        defer { isLookingUpHandles = false; handleLookupStartedAt = nil }
 
         // First pass: fill from the handle book (instant, no web search)
         var bookFilled = 0
@@ -829,6 +827,7 @@ private struct PiecesEditor: View {
     let onDeleted: (Piece, Int) -> Void
 
     @State private var isFetchingNotes = false
+    @State private var fetchNotesStartedAt: Date? = nil
     @State private var fetchError: String?
     @State private var reorderTargetID: UUID?
 
@@ -883,12 +882,8 @@ private struct PiecesEditor: View {
             if missingNotesCount > 0 {
                 VStack(alignment: .leading, spacing: 4) {
                     if isFetchingNotes {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small).tint(Color.roseGold)
-                            Text("Searching the web…")
-                                .font(.light(11))
-                                .foregroundStyle(Color.warmMid)
-                        }
+                        LongRunIndicator(label: "Searching the web…",
+                                         startedAt: fetchNotesStartedAt)
                     } else {
                         Button {
                             Task { await fetchMissingNotes() }
@@ -923,7 +918,8 @@ private struct PiecesEditor: View {
     private func fetchMissingNotes() async {
         fetchError = nil
         isFetchingNotes = true
-        defer { isFetchingNotes = false }
+        fetchNotesStartedAt = Date()
+        defer { isFetchingNotes = false; fetchNotesStartedAt = nil }
 
         let missing = pieces.filter {
             $0.notes.trimmingCharacters(in: .whitespaces).isEmpty

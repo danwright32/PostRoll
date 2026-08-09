@@ -51,6 +51,7 @@ from .ai_tells import (
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_prompt, run_review_pass, load_brand_voice, ClaudeError
+from .progress import ProgressWriter
 from .blog_quality import check_blog
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -1598,6 +1599,7 @@ def generate_blog(
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
+    progress: ProgressWriter | None = None,
 ) -> dict[str, Any]:
     """Generate a blog post draft for one event.
 
@@ -1662,7 +1664,14 @@ def generate_blog(
             if venue_context and venue_context.strip() else ""
         )
 
+        # Each pass is a separate Claude call with its own multi-minute
+        # timeout, and the run says nothing in between. Naming the pass as it
+        # starts is what lets the app show still-alive rather than one spinner
+        # that looks the same whether this is working or dead (#96).
+        say = (progress or ProgressWriter(None))
+
         # === Pass 1: generate the draft ===
+        say.step("Blog: writing the draft")
         prompt = PROMPT_TEMPLATE.format(
             brand_voice=brand_voice_text,
             blog_structure=BLOG_STRUCTURE,
@@ -1703,6 +1712,7 @@ def generate_blog(
 
         # === Pass 2: voice review (does this actually sound like Dan?) ===
         if not skip_voice_pass:
+            say.step("Blog: checking it sounds like you")
             voice_prompt = build_voice_review_prompt(
                 draft_json=json.dumps(data, ensure_ascii=False, indent=2),
                 brand_voice=brand_voice_text,
@@ -1718,6 +1728,7 @@ def generate_blog(
         # Runs after the voice pass so it catches any AI tells the voice pass
         # introduced. skip_humanizer exists for tests only.
         if not skip_humanizer and is_humanizer_available(humanizer_path):
+            say.step("Blog: removing AI tells")
             humanizer_rules = load_humanizer_rules(humanizer_path)
             review_prompt = build_review_prompt(
                 draft_json=json.dumps(data, ensure_ascii=False, indent=2),

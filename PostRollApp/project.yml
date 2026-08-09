@@ -72,6 +72,7 @@ targets:
       - path: Sources/Services/CollageLayoutReset.swift
       - path: Sources/Services/AnalyticsStore.swift
       - path: Sources/Services/PipelineProgress.swift
+      - path: Sources/Services/LongRunStatus.swift
       - path: Sources/Services/ProgramPDFBuilder.swift
       - path: Sources/Services/ProgramScanRetention.swift
       - path: Sources/Services/DataMigration.swift

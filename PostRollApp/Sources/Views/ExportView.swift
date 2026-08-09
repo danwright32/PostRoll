@@ -285,6 +285,17 @@ struct ExportView: View {
             Text(label)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.warmDark)
+            // An elapsed clock even on the fast phase: without one this screen
+            // is a spinner that reads the same at two seconds and at two
+            // minutes, so a stuck text export looks exactly like a quick one
+            // (#95). The tracker already counts it.
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: "timer")
+                    .font(.system(size: 11))
+                Text(mediaElapsedFormatted)
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+            }
+            .foregroundStyle(Color.warmMid)
             Spacer()
         }
         .frame(maxWidth: .infinity)

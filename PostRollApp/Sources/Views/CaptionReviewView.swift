@@ -11,6 +11,10 @@ struct CaptionReviewView: View {
     @State private var result: WeekGenerationResult
     @State private var expanded: ReviewSection? = nil
     @State private var isRegenerating = false
+    /// When the current whole-week regeneration started. Set and cleared with
+    /// `isRegenerating` so the indicator can show elapsed time and, past the
+    /// silence threshold, a stalled state instead of an endless spinner (#95).
+    @State private var regenerateStartedAt: Date? = nil
     @State private var showRegenerateConfirm = false
     @State private var regenerateError: String?
 
@@ -79,6 +83,7 @@ struct CaptionReviewView: View {
 
     // Learning flow
     @State private var isAnalyzingEdits = false
+    @State private var analyzeStartedAt: Date? = nil
     @State private var learningSuggestion: String? = nil
     @State private var showLearnSheet = false
 
@@ -311,27 +316,19 @@ struct CaptionReviewView: View {
                 }
 
                 if isRegenerating {
-                    HStack(spacing: Spacing.sm) {
-                        ProgressView().controlSize(.small).tint(Color.roseGold)
-                        Text("Regenerating captions…")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color.warmDark)
-                        Text("~3 to 6 min")
-                            .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
-                    }
-                    .padding(Spacing.xl)
+                    // Names the day or blog pass the run is actually on, so a
+                    // process that died is distinguishable from one that is
+                    // three minutes into a Claude call (#95, #96).
+                    LongRunIndicator(label: "Regenerating captions…",
+                                     startedAt: regenerateStartedAt,
+                                     eventID: event.id,
+                                     estimate: "~3 to 6 min")
+                        .padding(Spacing.xl)
                 } else if isGeneratingGraphics {
-                    HStack(spacing: Spacing.sm) {
-                        ProgressView().controlSize(.small).tint(Color.roseGold)
-                        Text("Generating story graphics…")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color.warmDark)
-                        Text("~1 min")
-                            .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
-                    }
-                    .padding(Spacing.xl)
+                    LongRunIndicator(label: "Generating story graphics…",
+                                     startedAt: graphics.startedAt(event.id),
+                                     estimate: "~1 min")
+                        .padding(Spacing.xl)
                 } else if let waiting = ExportReadiness.blockedReason(
                             regeneratingDays: regeneratingDays) {
                     // A per-day rebuild is the longest running of these and was
@@ -348,13 +345,9 @@ struct CaptionReviewView: View {
                     }
                     .padding(Spacing.xl)
                 } else if isAnalyzingEdits {
-                    HStack(spacing: Spacing.sm) {
-                        ProgressView().controlSize(.small).tint(Color.roseGold)
-                        Text("Reviewing your edits…")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color.warmDark)
-                    }
-                    .padding(Spacing.xl)
+                    LongRunIndicator(label: "Reviewing your edits…",
+                                     startedAt: analyzeStartedAt)
+                        .padding(Spacing.xl)
                 } else {
                     VStack(spacing: 0) {
                         // A preview run that died used to be indistinguishable
@@ -527,6 +520,7 @@ struct CaptionReviewView: View {
 
     private func regenerateAll() async {
         isRegenerating = true
+        regenerateStartedAt = Date()
         regenerateError = nil
         do {
             let live = liveEvent
@@ -545,6 +539,7 @@ struct CaptionReviewView: View {
             regenerateError = error.localizedDescription
         }
         isRegenerating = false
+        regenerateStartedAt = nil
     }
 
     // MARK: - Global hashtag merge
@@ -1266,10 +1261,12 @@ struct CaptionReviewView: View {
             return
         }
         isAnalyzingEdits = true
+        analyzeStartedAt = Date()
         Task {
             let suggestion = try? await PythonBridge.shared.runLearnFromEdits(result: result)
             await MainActor.run {
                 isAnalyzingEdits = false
+                analyzeStartedAt = nil
                 if let s = suggestion, !s.isEmpty {
                     learningSuggestion = s
                     showLearnSheet = true
