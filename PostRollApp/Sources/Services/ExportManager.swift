@@ -111,6 +111,12 @@ final class ExportManager {
                           for id: Event.ID) {
         tracker.begin(Run(phase: phase, isFullExport: isFullExport), for: id)
     }
+
+    /// Test seam: mark a run no longer in flight, as the pipeline does when it
+    /// reaches a terminal phase.
+    func deactivateForTesting(_ id: Event.ID) {
+        tracker.deactivate(id)
+    }
     #endif
 
     /// Dismiss a finished (done/failed) export so the screen returns to ready.

@@ -138,4 +138,46 @@ final class ExportCompletionTests: XCTestCase {
         XCTAssertFalse(manager.isExporting(UUID()))
         XCTAssertFalse(manager.isFinishingMedia(UUID()))
     }
+
+    // MARK: - #182: the done screen's way back into the event
+
+    func testTheBackRouteReturnsAnExportedEventToCaptionReview() {
+        // The detail pane routes purely on the stage, so an exported event had
+        // exactly one reachable screen and no way off it. This is the
+        // transition the done screen's back button performs.
+        var event = makeEvent()
+        event.stage = .exported
+
+        let moved = EventStageTransition.applying(
+            .captionsReviewed, toEventWithID: event.id, in: [event])
+
+        XCTAssertEqual(moved?.stage, .captionsReviewed)
+    }
+
+    func testTheBackRouteReadsTheLiveEventRatherThanASnapshot() {
+        // The screen holds a copy from when it was built, and going back must
+        // not revert anything saved since.
+        var stored = makeEvent()
+        stored.stage = .exported
+        stored.name = "Renamed after the screen was built"
+
+        let moved = EventStageTransition.applying(
+            .captionsReviewed, toEventWithID: stored.id, in: [stored])
+
+        XCTAssertEqual(moved?.name, "Renamed after the screen was built")
+    }
+
+    func testGoingBackAlsoDismissesTheFinishedRun() {
+        // Otherwise the export run record outlives the screen showing it, and
+        // returning to Export shows a stale done screen for an export that is
+        // over.
+        let manager = ExportManager()
+        let id = UUID()
+        manager.setRunForTesting(phase: .done(destination, mediaError: nil), for: id)
+        manager.deactivateForTesting(id)
+
+        manager.clear(eventID: id)
+
+        XCTAssertNil(manager.run(for: id))
+    }
 }
