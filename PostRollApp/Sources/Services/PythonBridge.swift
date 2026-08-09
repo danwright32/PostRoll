@@ -1196,7 +1196,7 @@ actor PythonBridge {
         } catch {
             // runProcess stderr is empty (redirected to log file) — provide a useful message
             throw PythonBridgeError.invalidOutput(
-                "Handle lookup failed. The web search may have timed out — try again with fewer performers, or check \(AppPaths.logsDirDisplayPath)."
+                "Handle lookup failed. The web search may have timed out. Try again with fewer performers, or check \(AppPaths.logsDirDisplayPath)."
             )
         }
 

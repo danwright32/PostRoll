@@ -21,11 +21,27 @@ from PIL import Image
 # so a runner without ffmpeg fails loudly instead of reporting green having run
 # none of them.
 
+def ffmpeg_required(env: dict[str, str] | None = None) -> bool:
+    """Whether a missing ffmpeg should fail rather than skip."""
+    raw = (env if env is not None else os.environ).get("POSTROLL_REQUIRE_FFMPEG", "")
+    return raw.strip().lower() not in ("", "0", "false", "no")
+
+
+def should_skip_ffmpeg_tests(*, have_ffmpeg: bool, require_ffmpeg: bool) -> bool:
+    """Skip only when ffmpeg is genuinely absent AND nobody demanded it.
+
+    Pure so the three states can be asserted directly: present (run), absent on
+    a dev machine (skip), absent where it was required (do not skip, so the run
+    fails and the absence is visible).
+    """
+    return not have_ffmpeg and not require_ffmpeg
+
+
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
-REQUIRE_FFMPEG = os.environ.get("POSTROLL_REQUIRE_FFMPEG", "").strip() not in ("", "0", "false")
+REQUIRE_FFMPEG = ffmpeg_required()
 
 needs_ffmpeg = pytest.mark.skipif(
-    not HAVE_FFMPEG and not REQUIRE_FFMPEG,
+    should_skip_ffmpeg_tests(have_ffmpeg=HAVE_FFMPEG, require_ffmpeg=REQUIRE_FFMPEG),
     reason="ffmpeg/ffprobe not installed",
 )
 
