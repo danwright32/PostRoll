@@ -47,35 +47,3 @@ jobs:
         # and points pytest at tests/, so a local run and a CI run are the same
         # command (#114).
         run: pytest -v
-
-  # The Swift suites (data safety, crop parity, media path integrity, stored
-  # error policy) were never executed by CI, so every one of them was unenforced
-  # (#82). Runs the PostRollTests scheme, not the PostRoll scheme, so the
-  # GUI-driving PostRollUITests target is excluded: a headless runner cannot
-  # reliably drive XCUIApplication.
-  #
-  # This repo is private, where macOS runner minutes bill at a 10x multiplier,
-  # so the job is scoped to pushes on main and manual runs rather than every
-  # push to every branch. Pull requests skip it deliberately.
-  swift:
-    if: github.event_name != 'pull_request'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      # The .xcodeproj is generated from project.yml, so CI regenerates it
-      # rather than trusting a checked-in copy that may be behind the manifest.
-      - name: Generate the Xcode project
-        working-directory: PostRollApp
-        run: xcodegen generate
-
-      - name: Run the Swift unit tests
-        run: |
-          xcodebuild \
-            -project PostRollApp/PostRoll.xcodeproj \
-            -scheme PostRollTests \
-            -destination 'platform=macOS' \
-            test

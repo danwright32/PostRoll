@@ -1,0 +1,53 @@
+name: Swift
+
+# Split out of tests.yml so it can carry its own trigger rules (#233).
+#
+# The swift job used to live there behind `if: github.event_name !=
+# 'pull_request'`, a deliberate cost decision: this repo is private, where
+# macOS runner minutes bill at a 10x multiplier.
+#
+# The cost of that decision showed up on 2026-08-09. A compile error in test
+# setup, which only the older Xcode in CI rejects, sat red on main across eight
+# merges. Both signals available at merge time were structurally unable to show
+# it: PRs skipped this job entirely, and running the suite locally passes
+# because the local Xcode is the one that ACCEPTS the code CI rejects.
+#
+# So the trade is narrowed rather than reversed. A pull request runs this only
+# when it touches the app, which is the only way it can break the Swift build,
+# and a Python-only PR still costs nothing. Pushes to main run it regardless of
+# what changed, so main is always fully verified.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "PostRollApp/**"
+      - ".github/workflows/swift.yml"
+  workflow_dispatch:
+
+jobs:
+  # Runs the PostRollTests scheme, not the PostRoll scheme, so the GUI-driving
+  # PostRollUITests target is excluded: a headless runner cannot reliably drive
+  # XCUIApplication.
+  swift:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # The .xcodeproj is generated from project.yml, so CI regenerates it
+      # rather than trusting a checked-in copy that may be behind the manifest.
+      - name: Generate the Xcode project
+        working-directory: PostRollApp
+        run: xcodegen generate
+
+      - name: Run the Swift unit tests
+        run: |
+          xcodebuild \
+            -project PostRollApp/PostRoll.xcodeproj \
+            -scheme PostRollTests \
+            -destination 'platform=macOS' \
+            test
