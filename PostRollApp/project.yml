@@ -68,6 +68,7 @@ targets:
       - path: Sources/Services/InsightsDisplay.swift
       - path: Sources/Services/CaptionBlocks.swift
       - path: Sources/Services/ScrollEdgeFade.swift
+      - path: Sources/Services/ExportReadiness.swift
       - path: Sources/Services/AnalyticsStore.swift
       - path: Sources/Services/PipelineProgress.swift
       - path: Sources/Services/ProgramPDFBuilder.swift

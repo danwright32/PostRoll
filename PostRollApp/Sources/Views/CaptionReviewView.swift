@@ -312,6 +312,21 @@ struct CaptionReviewView: View {
                             .foregroundStyle(Color.warmMid)
                     }
                     .padding(Spacing.xl)
+                } else if let waiting = ExportReadiness.blockedReason(
+                            regeneratingDays: regeneratingDays) {
+                    // A per-day rebuild is the longest running of these and was
+                    // the one the bar did not consult, so Approve and Export
+                    // stayed live and copied the pre-rebuild file (#89).
+                    HStack(spacing: Spacing.sm) {
+                        ProgressView().controlSize(.small).tint(Color.roseGold)
+                        Text("\(waiting)…")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.warmDark)
+                        Text("Exporting now would copy the previous version.")
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
+                    }
+                    .padding(Spacing.xl)
                 } else if isAnalyzingEdits {
                     HStack(spacing: Spacing.sm) {
                         ProgressView().controlSize(.small).tint(Color.roseGold)
@@ -1220,6 +1235,10 @@ struct CaptionReviewView: View {
     }
 
     private func advance() {
+        // Belt and braces with the bar above: a rebuild that starts between
+        // the button rendering and the press must not let a stale export
+        // through (#89).
+        guard ExportReadiness.canExport(regeneratingDays: regeneratingDays) else { return }
         save()
         let hasEdits = DayName.allCases.contains { result[$0]?.wasEdited == true }
         guard hasEdits else {
