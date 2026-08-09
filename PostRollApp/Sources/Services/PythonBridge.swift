@@ -82,13 +82,25 @@ actor PythonBridge {
         )
         try manifestData.write(to: manifestFile)
 
-        // Run Python
+        // Run Python. The progress file is per event and lives at a known path
+        // rather than in the temp dir with the others, because the screens that
+        // show this run's status read it directly (#95, #96). Cleared first so
+        // a previous run's last step cannot be shown as this one's.
+        let progressFile = AppPaths.progressFile(forEventID: event.id)
+        try? FileManager.default.createDirectory(
+            at: AppPaths.progressDir, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: progressFile)
+
         let args = [
             "-m", "postroll.ai.generate_week",
             "--manifest", manifestFile.path,
             "--output",   outputFile.path,
             "--timing",   timingFile.path,
+            "--progress", progressFile.path,
         ]
+        // Left in place on the way out: the last step of a finished run is
+        // marked done, and a run that DIED leaves the step it died in, which is
+        // the most useful thing anyone can be told about it.
         try await runProcess(args: args)
 
         guard FileManager.default.fileExists(atPath: outputFile.path) else {

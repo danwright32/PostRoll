@@ -22,6 +22,7 @@ final class PreviewGraphicsManager {
     private(set) var failures: [UUID: String] = [:]
 
     func isGenerating(_ eventID: UUID) -> Bool { state.isRunningFull(eventID) }
+    func startedAt(_ eventID: UUID) -> Date? { state.fullRunStartedAt(eventID) }
     func regeneratingDays(_ eventID: UUID) -> Set<DayName> { state.regeneratingDays(for: eventID) }
     func failure(for eventID: UUID) -> String? { failures[eventID] }
     func clearFailure(for eventID: UUID) { failures.removeValue(forKey: eventID) }

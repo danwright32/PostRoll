@@ -10,18 +10,28 @@ import Observation
 struct PreviewRunState: Equatable {
     private var fullRuns: Set<UUID> = []
     private var dayRuns: [UUID: Set<DayName>] = [:]
+    /// When each run started, so the UI can show elapsed time and a stalled
+    /// state rather than a spinner that looks the same whether the work is
+    /// progressing, hung or dead (#95).
+    private var fullRunStarts: [UUID: Date] = [:]
 
     init() {}
 
     /// Registers a full preview run. Returns false when one is already in
     /// flight for this event, in which case the caller must not start another.
-    mutating func beginFullRun(_ eventID: UUID) -> Bool {
-        fullRuns.insert(eventID).inserted
+    mutating func beginFullRun(_ eventID: UUID, at now: Date = Date()) -> Bool {
+        guard fullRuns.insert(eventID).inserted else { return false }
+        fullRunStarts[eventID] = now
+        return true
     }
 
     mutating func endFullRun(_ eventID: UUID) {
         fullRuns.remove(eventID)
+        fullRunStarts.removeValue(forKey: eventID)
     }
+
+    /// When this event's full run started, or nil when none is in flight.
+    func fullRunStartedAt(_ eventID: UUID) -> Date? { fullRunStarts[eventID] }
 
     func isRunningFull(_ eventID: UUID) -> Bool { fullRuns.contains(eventID) }
 
