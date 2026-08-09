@@ -379,8 +379,67 @@ TOP_ANCHORED_CROP_Y = -1.0
 
 # What an unset per-photo offset means, shared by every call site so the rule
 # can't be applied to some surfaces and not others. `None` for y is "unset",
-# which resolves differently in the two branches below.
+# which resolves to the top-anchored default.
 DEFAULT_CROP_OFFSET: tuple[float, float | None, float] = (0.0, None, 1.0)
+
+# The smallest zoom the geometry honours. It is the floor of the editor's SIZE
+# slider (0.25 to 2.5), so nothing below it can be produced by hand; a smaller
+# value can only arrive from stored data, and both languages must clamp it the
+# same way or one saved value renders at two different sizes.
+ZOOM_FLOOR = 0.25
+
+
+def crop_placement(
+    photo_w: int,
+    photo_h: int,
+    target_w: int,
+    target_h: int,
+    crop_offset_x: float = 0.0,
+    crop_offset_y: float | None = None,
+    zoom: float = 1.0,
+) -> tuple[float, float, float, float]:
+    """The crop/pan contract: where a photo lands inside its cell.
+
+    Returns (rendered_w, rendered_h, draw_x, draw_y), where draw_x/draw_y are
+    the rendered photo's top-left corner relative to the cell's top-left. A
+    negative value means the photo overflows and that much is cropped away on
+    that side; a positive one means it has slack and is inset.
+
+    This is the geometry `CollageGeometry.placement` computes on the Swift side,
+    and `tests/fixtures/crop_geometry.json` is the contract both must satisfy
+    (#168). The two are separate implementations in separate languages, so
+    nothing but that fixture stops them drifting, and when they drift Dan sees
+    one framing in the editor and gets another in the exported file.
+
+    An offset only chooses which slice of an OVERFLOWING photo is kept. On an
+    axis where the photo is smaller than its cell there is nothing to discard,
+    so it is centred whatever the offset says, matching what the editor draws
+    (it refuses to commit a pan on an axis without overflow).
+    """
+    if crop_offset_y is None:
+        crop_offset_y = TOP_ANCHORED_CROP_Y
+
+    photo_ratio = photo_w / photo_h
+    target_ratio = target_w / target_h
+
+    if photo_ratio > target_ratio:
+        fill_scale = target_h / photo_h
+    else:
+        fill_scale = target_w / photo_w
+
+    effective_scale = fill_scale * max(zoom, ZOOM_FLOOR)
+    rendered_w = photo_w * effective_scale
+    rendered_h = photo_h * effective_scale
+
+    overflow_w = rendered_w - target_w
+    overflow_h = rendered_h - target_h
+
+    draw_x = (-overflow_w * (0.5 + crop_offset_x * 0.5)) if overflow_w > 0 \
+        else (target_w - rendered_w) / 2
+    draw_y = (-overflow_h * (0.5 + crop_offset_y * 0.5)) if overflow_h > 0 \
+        else (target_h - rendered_h) / 2
+
+    return rendered_w, rendered_h, draw_x, draw_y
 
 
 def crop_to_fill(
@@ -394,41 +453,26 @@ def crop_to_fill(
     """Scale photo to fill target dimensions, then pan/zoom.
 
     zoom >= 1.0  photo fills (or overfills) the cell; cropped to fit.
-    zoom < 1.0   photo is smaller than fill; placed on a blurred bg with pan offset.
+    zoom < 1.0   photo is smaller than fill; placed on a blurred bg.
     crop_offset_x / crop_offset_y in [-1, 1]: 0 = centred, ±1 = edge.
 
-    An unset (None) crop_offset_y is top-anchored in the crop branch and centred
-    in the zoomed-out branch: below fill there is nothing to discard, so pinning
-    the photo to the top edge of its cell is not what "crop from the bottom"
-    means. An offset the user actually set always wins.
+    All the geometry comes from `crop_placement`; this only rasterises it.
     """
-    photo_ratio = photo.width / photo.height
-    target_ratio = target_w / target_h
+    rendered_w, rendered_h, draw_x, draw_y = crop_placement(
+        photo.width, photo.height, target_w, target_h,
+        crop_offset_x, crop_offset_y, zoom)
 
-    if photo_ratio > target_ratio:
-        fill_scale = target_h / photo.height
-    else:
-        fill_scale = target_w / photo.width
-
-    effective_scale = fill_scale * max(zoom, 0.05)
-    new_w = int(photo.width * effective_scale)
-    new_h = int(photo.height * effective_scale)
+    new_w = int(rendered_w)
+    new_h = int(rendered_h)
 
     if zoom < 1.0:
         return _place_on_blur(photo, new_w, new_h, target_w, target_h,
-                              crop_offset_x,
-                              0.0 if crop_offset_y is None else crop_offset_y)
+                              int(draw_x), int(draw_y))
 
     # zoom >= 1.0 — photo fills/overfills; crop to cell
-    if crop_offset_y is None:
-        crop_offset_y = TOP_ANCHORED_CROP_Y
     resized = photo.resize((new_w, new_h), Image.LANCZOS)
-    overflow_x = max(0, new_w - target_w)
-    overflow_y = max(0, new_h - target_h)
-    left = int(overflow_x * (0.5 + crop_offset_x * 0.5))
-    left = max(0, min(overflow_x, left))
-    top  = int(overflow_y * (0.5 + crop_offset_y * 0.5))
-    top  = max(0, min(overflow_y, top))
+    left = max(0, min(max(0, new_w - target_w), int(-draw_x)))
+    top  = max(0, min(max(0, new_h - target_h), int(-draw_y)))
     return resized.crop((left, top, left + target_w, top + target_h))
 
 
@@ -438,10 +482,12 @@ def _place_on_blur(
     fit_h: int,
     target_w: int,
     target_h: int,
-    crop_offset_x: float,
-    crop_offset_y: float,
+    paste_x: int,
+    paste_y: int,
 ) -> Image.Image:
-    """Place a pre-sized photo (fit_w × fit_h) on a blurred-fill background."""
+    """Paint a pre-sized photo (fit_w × fit_h) at (paste_x, paste_y) on a
+    blurred-fill background. The position comes from `crop_placement`, so this
+    holds no framing rule of its own."""
     # Blurred background: scale photo to fill cell
     bg_ratio = photo.width / photo.height
     cell_ratio = target_w / target_h
@@ -460,23 +506,6 @@ def _place_on_blur(
     bg = Image.alpha_composite(bg.convert("RGBA"), darken).convert("RGB")
 
     resized = photo.resize((fit_w, fit_h), Image.LANCZOS)
-
-    # Pan within available slack (or overflow) for each axis
-    slack_x = target_w - fit_w
-    slack_y = target_h - fit_h
-    if slack_x >= 0:
-        paste_x = int(slack_x * (0.5 + crop_offset_x * 0.5))
-        paste_x = max(0, min(slack_x, paste_x))
-    else:  # photo still wider than cell
-        ox = -slack_x
-        paste_x = -int(ox * (0.5 + crop_offset_x * 0.5))
-    if slack_y >= 0:
-        paste_y = int(slack_y * (0.5 + crop_offset_y * 0.5))
-        paste_y = max(0, min(slack_y, paste_y))
-    else:
-        oy = -slack_y
-        paste_y = -int(oy * (0.5 + crop_offset_y * 0.5))
-
     bg.paste(resized, (paste_x, paste_y))
     return bg
 
