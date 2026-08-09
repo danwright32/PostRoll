@@ -558,6 +558,50 @@ def run_review_pass(
     return merged
 
 
+def _balanced_span(text: str, start: int, opener: str, closer: str) -> str | None:
+    """The substring from `start` to its matching close, or None.
+
+    Braces and brackets INSIDE a JSON string are literal text, not structure.
+    Counting them (#121) made a caption containing a stray `}` close the object
+    early, which is the worst shape of failure available here: the result still
+    parses, so nothing raises and the caption simply comes back with fields
+    missing. Captions and blog bodies are prose Claude wrote about a programme,
+    so a stray bracket is an ordinary thing for them to contain.
+
+    Escapes are tracked as well, because a caption quoting a work title carries
+    `\\"`, and treating that as the end of the string drops the walker back
+    into counting mode in the middle of prose.
+    """
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for i in range(start, len(text)):
+        ch = text[i]
+
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+
+        if ch == '"':
+            in_string = True
+        elif ch == opener:
+            depth += 1
+        elif ch == closer:
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+
+    # Ran out of text with the structure still open: truncated or malformed,
+    # and a partial object is not worth guessing at.
+    return None
+
+
 def _extract_json(text: str) -> Any:
     """Pull the first JSON object or array out of a response string."""
     fenced = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
@@ -569,21 +613,17 @@ def _extract_json(text: str) -> Any:
     except json.JSONDecodeError:
         pass
 
-    for opener, closer in (("{", "}"), ("[", "]")):
-        start = text.find(opener)
-        if start == -1:
+    # Whichever structure opens FIRST, rather than always trying objects
+    # before arrays: an array of objects starts with "[", and going for "{"
+    # first returned its first element and silently dropped the rest.
+    candidates = [(text.find(o), o, c) for o, c in (("{", "}"), ("[", "]"))]
+    for start, opener, closer in sorted(p for p in candidates if p[0] != -1):
+        candidate = _balanced_span(text, start, opener, closer)
+        if candidate is None:
             continue
-        depth = 0
-        for i in range(start, len(text)):
-            if text[i] == opener:
-                depth += 1
-            elif text[i] == closer:
-                depth -= 1
-                if depth == 0:
-                    candidate = text[start : i + 1]
-                    try:
-                        return json.loads(candidate)
-                    except json.JSONDecodeError:
-                        break
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
 
     raise ClaudeError(f"Could not parse JSON from Claude response:\n{text[:500]}")

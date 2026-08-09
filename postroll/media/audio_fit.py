@@ -25,21 +25,17 @@ from pathlib import Path
 # itself sounds like two takes at once); just long enough to avoid a click.
 DEFAULT_CROSSFADE = 0.5
 
+from .probe import probe_duration  # noqa: E402
+
 
 def audio_duration(path: str | Path) -> float | None:
-    """Length of `path` in seconds via ffprobe, or None if it can't be read."""
-    proc = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-        capture_output=True, text=True,
-    )
-    if proc.returncode != 0:
-        return None
-    try:
-        seconds = float(proc.stdout.strip())
-    except ValueError:
-        return None
-    return seconds if seconds > 0 else None
+    """Length of `path` in seconds, or None if it can't be read.
+
+    Kept as a name because callers read as audio code, but the behaviour is
+    the shared probe: this file had the only safe version of it, and the other
+    four sites are now folded onto the same one (#123).
+    """
+    return probe_duration(path)
 
 
 def _loop_copies(audio_len: float, duration: float, crossfade: float) -> int:
