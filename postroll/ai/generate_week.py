@@ -139,6 +139,10 @@ def _write_results(output_path: Path, results: dict, *, complete: bool,
     payload = dict(results)
     payload["complete"] = complete
     payload["stopped_reason"] = stopped_reason
+    # Carried on the result so the app can show it, not only stderr (#217). A
+    # file nothing reads is how the one cheap chance to capture a real cap's
+    # wording gets missed.
+    payload["unrecognised_failures"] = cap_signals.unrecognised()
     tmp = output_path.with_suffix(output_path.suffix + ".part")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(output_path)
@@ -374,6 +378,10 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
     results["errors"] = errors
 
     _write_results(output_path, results, complete=True)
+
+    # Said on the way out, every run, while the file has anything in it (#217).
+    if (report := cap_signals.report_unrecognised()):
+        print(f"[generate_week] {report}", file=sys.stderr, flush=True)
     print(f"[generate_week] output written to {output_path}", flush=True)
 
     # Write per-phase timing data for the Swift layer to consume

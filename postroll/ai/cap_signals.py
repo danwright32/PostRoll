@@ -95,6 +95,66 @@ def default_record_path() -> Path:
     return default_log_path().parent / "unrecognised-failures.jsonl"
 
 
+def unrecognised(path: Path | str | None = None) -> list[str]:
+    """Failures recorded because nothing could classify them (#217).
+
+    The file was write-only: `_record` appended to it so the first real
+    subscription cap would leave its exact wording behind for calibration, and
+    then nothing read it, surfaced it, or prompted anyone to look. A cap cannot
+    be triggered on demand, so there is one cheap chance to capture the real
+    text, and a write-only file is precisely how that chance gets missed.
+
+    Never raises: this is read on the way out of a run that may already have
+    gone wrong.
+    """
+    target = Path(path) if path is not None else default_record_path()
+    try:
+        lines = target.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out: list[str] = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            # A half-written line is still evidence something happened.
+            out.append(line)
+            continue
+        text = entry.get("text")
+        out.append(text if isinstance(text, str) else line)
+    return out
+
+
+def report_unrecognised(path: Path | str | None = None) -> str | None:
+    """A message naming what was recorded, or None when there is nothing.
+
+    Deliberately repeats on every run while the file has contents. This is the
+    one artifact that turns CALIBRATED from a hypothesis into a fact, so being
+    mildly annoying until somebody deals with it is the point.
+    """
+    entries = unrecognised(path)
+    if not entries:
+        return None
+    target = Path(path) if path is not None else default_record_path()
+    header = (
+        f"{len(entries)} failure(s) could not be classified as a usage cap or as "
+        f"ordinary trouble, and were recorded at {target}."
+    )
+    if not CALIBRATED:
+        header += (
+            " The cap patterns are still uncalibrated, so if any of these IS a "
+            "real cap, its wording is what calibrates them. Check it, update "
+            "_CAP_PATTERNS, then set CALIBRATED = True and clear the file."
+        )
+    quoted = "\n".join(f"  - {e[:200]}" for e in entries[:5])
+    if len(entries) > 5:
+        quoted += f"\n  ... and {len(entries) - 5} more"
+    return header + "\n" + quoted
+
+
 def classify(text: str, *, record_to: Path | str | None = None,
              announce: bool = False) -> Signal:
     """What kind of failure this is, as far as we can currently tell."""

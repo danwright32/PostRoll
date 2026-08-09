@@ -217,3 +217,139 @@ def test_the_stopped_reason_tells_dan_when_it_resets(tmp_path, monkeypatch):
     saved = json.loads(out.read_text())
     assert "3pm" in (saved.get("stopped_reason") or ""), \
         "the run stopped without telling him how long the wait is"
+
+
+# ── #217: the recorded failures must be readable, and must be said out loud ──
+#
+# `_record` appended unclassifiable failures so the first real subscription cap
+# would leave its exact wording behind for calibration, and then nothing read
+# the file, surfaced it, or prompted anyone to look. A cap cannot be triggered
+# on demand, so there is one cheap chance to capture the real text, and a
+# write-only file is exactly how that chance gets missed.
+
+
+def test_nothing_recorded_reads_as_nothing(tmp_path):
+    assert cs.unrecognised(tmp_path / "absent.jsonl") == []
+    assert cs.report_unrecognised(tmp_path / "absent.jsonl") is None
+
+
+def test_a_recorded_failure_can_be_read_back(tmp_path):
+    path = tmp_path / "unrecognised.jsonl"
+    cs.classify("something nobody has seen before", record_to=path)
+
+    assert cs.unrecognised(path) == ["something nobody has seen before"]
+
+
+def test_several_failures_are_all_read_back(tmp_path):
+    path = tmp_path / "unrecognised.jsonl"
+    cs.classify("first odd thing", record_to=path)
+    cs.classify("second odd thing", record_to=path)
+
+    assert cs.unrecognised(path) == ["first odd thing", "second odd thing"]
+
+
+def test_a_half_written_line_is_still_reported(tmp_path):
+    """A truncated record is still evidence something happened, so it must not
+    be silently dropped by the reader."""
+    path = tmp_path / "unrecognised.jsonl"
+    path.write_text('{"text": "good one"}\n{"text": "cut off mid\n', encoding="utf-8")
+
+    entries = cs.unrecognised(path)
+    assert len(entries) == 2
+    assert "good one" in entries
+
+
+def test_the_report_names_the_file_and_quotes_the_text(tmp_path):
+    path = tmp_path / "unrecognised.jsonl"
+    cs.classify("Claude usage cap hit, resets at 3pm", record_to=path)
+
+    report = cs.report_unrecognised(path)
+    assert str(path) in report
+    assert "resets at 3pm" in report
+
+
+def test_the_report_says_the_patterns_are_still_uncalibrated(tmp_path):
+    """While CALIBRATED is False this text is the only thing that can make it
+    True, so the report has to say what to do with it."""
+    assert cs.CALIBRATED is False, "update this test when calibrating"
+    path = tmp_path / "unrecognised.jsonl"
+    cs.classify("odd", record_to=path)
+
+    report = cs.report_unrecognised(path)
+    assert "uncalibrated" in report
+    assert "CALIBRATED" in report
+
+
+def test_the_report_does_not_dump_hundreds_of_entries(tmp_path):
+    path = tmp_path / "unrecognised.jsonl"
+    for i in range(20):
+        cs.classify(f"odd thing {i}", record_to=path)
+
+    report = cs.report_unrecognised(path)
+    assert "20 failure(s)" in report
+    assert "and 15 more" in report
+
+
+def test_an_unreadable_file_does_not_raise_on_the_way_out(tmp_path):
+    """This is read at the end of a run that may already have gone wrong; it
+    must not add a second failure."""
+    d = tmp_path / "a-directory-not-a-file.jsonl"
+    d.mkdir()
+    assert cs.unrecognised(d) == []
+    assert cs.report_unrecognised(d) is None
+
+
+# ── the wiring, not just the reader (#217) ───────────────────────────────────
+
+
+def test_the_week_result_carries_the_unrecognised_failures(tmp_path, monkeypatch):
+    """Built is not wired: a reader nothing calls leaves the file as invisible
+    as it was before."""
+    from postroll.ai import generate_week as gw
+
+    monkeypatch.setattr(gw.cap_signals, "unrecognised",
+                        lambda *a, **k: ["Claude usage cap hit, resets at 3pm"])
+    out = tmp_path / "week.json"
+    gw._write_results(out, {"sunday": {"caption": "s"}}, complete=True)
+
+    payload = json.loads(out.read_text())
+    assert payload["unrecognised_failures"] == ["Claude usage cap hit, resets at 3pm"]
+
+
+def test_a_clean_run_carries_an_empty_list_rather_than_omitting_the_key(tmp_path, monkeypatch):
+    # A missing key and "nothing recorded" must not be the same shape, or the
+    # app cannot tell "checked, nothing there" from "never checked".
+    from postroll.ai import generate_week as gw
+
+    monkeypatch.setattr(gw.cap_signals, "unrecognised", lambda *a, **k: [])
+    out = tmp_path / "week.json"
+    gw._write_results(out, {}, complete=True)
+
+    payload = json.loads(out.read_text())
+    assert payload["unrecognised_failures"] == []
+
+
+def test_a_partial_run_carries_them_too(tmp_path, monkeypatch):
+    """A run stopped by a cap is exactly when the recorded text matters most,
+    so the stopped path must not be the one that drops it."""
+    from postroll.ai import generate_week as gw
+
+    monkeypatch.setattr(gw.cap_signals, "unrecognised", lambda *a, **k: ["odd"])
+    out = tmp_path / "week.json"
+    gw._write_results(out, {}, complete=False, stopped_reason="usage limit reached")
+
+    payload = json.loads(out.read_text())
+    assert payload["complete"] is False
+    assert payload["unrecognised_failures"] == ["odd"]
+
+
+def test_the_run_reports_the_file_on_stderr_at_the_end():
+    """The report has to be reached from the run, not merely exist."""
+    import inspect
+    from postroll.ai import generate_week as gw
+
+    source = inspect.getsource(gw)
+    assert "report_unrecognised()" in source, (
+        "nothing in generate_week calls the report, so the file stays as "
+        "invisible as it was"
+    )
