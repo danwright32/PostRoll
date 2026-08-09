@@ -21,6 +21,21 @@ struct ExportView: View {
 
     private var result: WeekGenerationResult? { event.weekResult }
 
+    /// Per-day rebuilds in flight for this event. The review screen already
+    /// consulted these before offering Approve & Export (#89); this screen's own
+    /// buttons did not, which left a second route to an export holding the
+    /// pre-rebuild file (#225).
+    private var regeneratingDays: Set<DayName> {
+        PreviewGraphicsManager.shared.regeneratingDays(event.id)
+    }
+
+    /// What the export is waiting for, or nil when it can run. Shown rather than
+    /// just disabling the button, because a control that greys out with no
+    /// explanation reads as broken.
+    private var exportBlockedReason: String? {
+        ExportReadiness.blockedReason(regeneratingDays: regeneratingDays)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -61,7 +76,8 @@ struct ExportView: View {
                 let scopedDay = pendingSingleDay
                 pendingSingleDay = nil
                 lastExportFolder = dest
-                exportManager.start(eventID: event.id, to: dest, onlyDay: scopedDay, appState: appState)
+                exportManager.start(eventID: event.id, to: dest, onlyDay: scopedDay,
+                                    appState: appState, regeneratingDays: regeneratingDays)
             } else {
                 pendingSingleDay = nil
             }
@@ -112,20 +128,25 @@ struct ExportView: View {
 
             ExportSummaryCard(event: event, result: result) { day in
                 if let dest = lastExportFolder {
-                    exportManager.start(eventID: event.id, to: dest, onlyDay: day, appState: appState)
+                    exportManager.start(eventID: event.id, to: dest, onlyDay: day,
+                                        appState: appState, regeneratingDays: regeneratingDays)
                 } else {
                     pendingSingleDay = day
                     showingFolderPicker = true
                 }
             }
             .padding(.horizontal, Spacing.xl)
+            // A per-day re-export is the same copy step, so it is stale for the
+            // same reason while that day is rebuilding (#225).
+            .disabled(exportBlockedReason != nil)
 
             VStack(alignment: .trailing, spacing: Spacing.sm) {
                 if let last = lastExportFolder {
                     HStack {
                         Spacer()
                         Button("Export to \"\(last.lastPathComponent)\"") {
-                            exportManager.start(eventID: event.id, to: last, appState: appState)
+                            exportManager.start(eventID: event.id, to: last,
+                                                appState: appState, regeneratingDays: regeneratingDays)
                         }
                             .buttonStyle(BrandButtonStyle())
                     }
@@ -153,9 +174,18 @@ struct ExportView: View {
                             .buttonStyle(BrandButtonStyle())
                     }
                 }
+                if let exportBlockedReason {
+                    HStack(spacing: Spacing.xs) {
+                        Spacer()
+                        ProgressView().controlSize(.small).tint(Color.roseGold)
+                        Text("\(exportBlockedReason) before exporting, so the folder gets the new files rather than the previous ones.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.warmDark.opacity(0.8))
+                    }
+                }
             }
             .padding(Spacing.xl)
-            .disabled(isRegenerating)
+            .disabled(isRegenerating || exportBlockedReason != nil)
         }
     }
 

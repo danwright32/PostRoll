@@ -87,6 +87,9 @@ targets:
       - path: Sources/Services/PythonBridge.swift
       - path: Sources/Services/TimingStore.swift
       - path: Sources/Services/KeychainStore.swift
+      - path: Sources/Services/ExportManager.swift
+      - path: Sources/Services/NotificationService.swift
+      - path: Sources/AppState.swift
       - path: Sources/Views/SpellCheckingTextEditor.swift
       - path: Sources/DesignTokens.swift
     settings:
