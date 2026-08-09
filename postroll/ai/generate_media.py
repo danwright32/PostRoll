@@ -466,7 +466,14 @@ def generate_media(
                             org=org,
                             venue=venue,
                             output_path=reel_path,
-                            logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                            # The DARK mark (#169). The screen reel's footer is
+                            # cream at CREAM_OPACITY over the video, so it
+                            # composites light whatever the footage is doing, and
+                            # the white mark washed out on it, worst over a
+                            # bright stage. Fourth time white-on-cream has
+                            # shipped invisibly here, so the contrast is pinned
+                            # by a measured pixel test.
+                            logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
                             target_duration=target_duration,
                         )
                         day_result["reel"] = reel_path
