@@ -484,3 +484,63 @@ def test_a_small_valid_image_still_goes_through_untouched(tmp_path):
 
     block = _image_block(src)
     assert base64.standard_b64decode(block["source"]["data"]) == src.read_bytes()
+
+
+# === A review pass must not drop fields it was never asked about (#202) ===
+
+
+def test_a_review_pass_keeps_fields_the_reviewer_did_not_return():
+    """#202: writing a caption is three model calls. The draft produces
+    `famous_people`; the two review passes are asked only for the caption
+    shape, so they do not echo it back, and returning the reviewer's object
+    wholesale deleted it. The fame gate then read an always-empty field, so a
+    genuinely famous performer's hashtag was stripped like everyone else's."""
+    from postroll.ai.claude_client import run_review_pass
+
+    prior = {"caption": "draft", "hashtags": ["#a"], "famous_people": ["Yo-Yo Ma"]}
+    revised = {"caption": "polished", "hashtags": ["#a"]}
+
+    result = run_review_pass("review", prior, label="voice",
+                             runner=lambda p, timeout=300, **kw: revised)
+
+    assert result["caption"] == "polished", "the review must still apply"
+    assert result["famous_people"] == ["Yo-Yo Ma"], "the marker must survive the pass"
+
+
+def test_a_reviewer_may_still_change_a_field_it_does_return():
+    from postroll.ai.claude_client import run_review_pass
+
+    prior = {"caption": "draft", "hashtags": ["#old"], "famous_people": ["X"]}
+    revised = {"caption": "new", "hashtags": ["#new"]}
+
+    result = run_review_pass("review", prior, label="voice",
+                             runner=lambda p, timeout=300, **kw: revised)
+
+    assert result["hashtags"] == ["#new"]
+
+
+def test_a_reviewer_may_deliberately_empty_a_field_it_returns():
+    """Merging must not resurrect a value the reviewer explicitly cleared."""
+    from postroll.ai.claude_client import run_review_pass
+
+    prior = {"caption": "d", "famous_people": ["X"]}
+    revised = {"caption": "d", "famous_people": []}
+
+    result = run_review_pass("review", prior, label="voice",
+                             runner=lambda p, timeout=300, **kw: revised)
+
+    assert result["famous_people"] == []
+
+
+def test_two_review_passes_in_a_row_still_carry_the_marker():
+    """The real shape: voice then humanizer. One pass surviving is not enough."""
+    from postroll.ai.claude_client import run_review_pass
+
+    prior = {"caption": "draft", "famous_people": ["Yo-Yo Ma"]}
+    after_voice = run_review_pass("v", prior, label="voice",
+                                  runner=lambda p, timeout=300, **kw: {"caption": "v"})
+    after_human = run_review_pass("h", after_voice, label="humanizer",
+                                  runner=lambda p, timeout=300, **kw: {"caption": "h"})
+
+    assert after_human["caption"] == "h"
+    assert after_human["famous_people"] == ["Yo-Yo Ma"]

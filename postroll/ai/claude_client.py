@@ -484,7 +484,18 @@ def run_review_pass(
                 file=sys.stderr, flush=True,
             )
             return prior
-    return data
+    # Merge onto the prior draft rather than replacing it (#202). A review
+    # prompt asks for the caption shape, so a reviewer never echoes back the
+    # fields it was not asked about, and returning its object wholesale deleted
+    # them. That is how `famous_people` disappeared between the draft and the
+    # fame gate, leaving the gate reading an always-empty field and stripping a
+    # genuinely famous performer's hashtag like everyone else's.
+    #
+    # A field the reviewer DID return wins, including one it deliberately
+    # emptied, so this preserves rather than resurrects.
+    merged = dict(prior)
+    merged.update(data)
+    return merged
 
 
 def _extract_json(text: str) -> Any:

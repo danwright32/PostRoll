@@ -93,12 +93,12 @@ def test_organization_and_venue_handles_still_become_hashtags():
 
 
 def test_a_person_the_model_marked_famous_keeps_their_tag():
-    program = _program([{"name": "Yo-Yo Ma", "role": "soloist"}])
+    program = _program([{"name": "Renee Fleming", "role": "soloist"}])
 
     kept = strip_performer_hashtags(
-        ["#yoyoma", "#dwphotony"], program=program, famous=["Yo-Yo Ma"])
+        ["#reneefleming", "#dwphotony"], program=program, famous=["Renee Fleming"])
 
-    assert kept == ["#yoyoma", "#dwphotony"]
+    assert kept == ["#reneefleming", "#dwphotony"]
 
 
 # ── the role subtlety ─────────────────────────────────────────────────────────
@@ -226,3 +226,85 @@ def test_generate_caption_strips_it_even_when_the_model_returns_it(monkeypatch, 
     assert "#bradballiett" not in result["hashtags"]
     assert "#decoda" in result["hashtags"], "the organization tag must survive"
     assert "@bradballiett" in result["caption"], "the credit belongs in the body"
+
+
+# ── the exemption, through the real caption path (#202) ───────────────────────
+#
+# Every test above calls `strip_performer_hashtags` directly, passing `famous`
+# in by hand. That is why they all passed while the exemption never fired in
+# the app: writing a caption is three model calls, and the two review passes
+# dropped the `famous_people` marker before the gate ever saw it. A test that
+# supplies the marker itself cannot notice it going missing upstream.
+
+def _photo(tmp_path):
+    from PIL import Image
+    p = tmp_path / "shot.jpg"
+    Image.new("RGB", (400, 300), (60, 60, 60)).save(p)
+    return p
+
+
+def test_a_famous_performer_keeps_their_hashtag_through_the_review_passes(monkeypatch, tmp_path):
+    from postroll.ai import generate_captions as gc
+
+    program = {"performers": [{"name": "Renee Fleming", "role": "soloist"}]}
+    calls = {"n": 0}
+
+    def fake_run_json_prompt(prompt, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # The draft: the only call that produces the marker.
+            return {
+                "caption": "A night at the hall.",
+                "hashtags": ["#dwphotony", "#reneefleming"],
+                "alt_texts": ["Renee Fleming centre stage at the hall, one arm raised, warm light from the side."],
+                "scene_labels": ["Act I"],
+                "famous_people": ["Renee Fleming"],
+            }
+        # The voice and humanizer passes are asked for the caption shape only,
+        # so they never echo famous_people back.
+        return {
+            "caption": "A night at the hall.",
+            "hashtags": ["#dwphotony", "#reneefleming"],
+            "alt_texts": ["Renee Fleming centre stage at the hall, one arm raised, warm light from the side."],
+            "scene_labels": ["Act I"],
+        }
+
+    monkeypatch.setattr(gc, "run_json_prompt", fake_run_json_prompt)
+    monkeypatch.setattr(gc, "load_brand_voice", lambda: "voice")
+
+    result = gc.generate_caption(
+        event="Recital", org="Org", venue="Hall", date="2026-04-04",
+        day="sunday", photo_paths=[_photo(tmp_path)], program=program,
+    )
+
+    assert calls["n"] >= 2, "the review passes must actually have run"
+    assert "#reneefleming" in result["hashtags"], (
+        "a performer the model marked famous must keep their tag; the marker "
+        "has to survive the review passes to reach the gate"
+    )
+
+
+def test_an_ordinary_performer_is_still_stripped_through_the_same_path(monkeypatch, tmp_path):
+    """The gate must not have been loosened into uselessness by the fix."""
+    from postroll.ai import generate_captions as gc
+
+    program = {"performers": [{"name": "Brad Balliett", "role": "ensemble"}]}
+
+    def fake_run_json_prompt(prompt, **kwargs):
+        return {
+            "caption": "A night at the hall.",
+            "hashtags": ["#dwphotony", "#bradballiett"],
+            "alt_texts": ["Brad Balliett with a bassoon at the hall, mid-phrase."],
+            "scene_labels": ["Act I"],
+            "famous_people": [],
+        }
+
+    monkeypatch.setattr(gc, "run_json_prompt", fake_run_json_prompt)
+    monkeypatch.setattr(gc, "load_brand_voice", lambda: "voice")
+
+    result = gc.generate_caption(
+        event="Recital", org="Org", venue="Hall", date="2026-04-04",
+        day="sunday", photo_paths=[_photo(tmp_path)], program=program,
+    )
+
+    assert "#bradballiett" not in result["hashtags"]
