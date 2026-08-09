@@ -1889,8 +1889,12 @@ private struct WednesdayCollageSection: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    if photoCount < 10 {
-                        Text("Need 10 photos to generate the collage. \(10 - photoCount) more required.")
+                    // The 10 here was a Classic-preset literal, so a Balanced
+                    // Wednesday with its full 4 photos was told it needed 6
+                    // more and the reroll behind this check was unreachable
+                    // for the whole default preset (#195).
+                    if let shortfall = CollagePhotoSelection.shortfallMessage(photoCount: photoCount) {
+                        Text(shortfall)
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
                     } else {

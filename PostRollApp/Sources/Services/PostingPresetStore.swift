@@ -73,6 +73,29 @@ enum CollagePhotoSelection {
         preset.format(for: day)?.count ?? 10
     }
 
+    /// Whether a day has enough photos for the collage generator to lay out.
+    ///
+    /// The gate is `minimum`, NOT the preset target (#195). The upload page
+    /// hardcoded 10, a literal left over from the Classic preset, so under the
+    /// default Balanced preset a Wednesday with its full 4 photos was told it
+    /// needed 6 more, and the reroll button behind the same check was
+    /// unreachable for the entire default preset. The generator has a
+    /// dedicated four-photo layout table and adapts below the target.
+    static func canGenerate(photoCount: Int) -> Bool {
+        photoCount >= minimum
+    }
+
+    /// What to say when a day cannot generate its collage yet.
+    ///
+    /// Counts against the floor, not the target, so it never asks for photos
+    /// that are not actually required.
+    static func shortfallMessage(photoCount: Int) -> String? {
+        guard !canGenerate(photoCount: photoCount) else { return nil }
+        let needed = minimum - photoCount
+        return "Need at least \(minimum) photos to generate the collage. "
+            + "\(needed) more required."
+    }
+
     /// An error message when the selection is below the floor, else nil. The
     /// floor is `minimum`, NOT the preset target — the generator adapts to
     /// fewer than the target, so picking 3 for a 4-photo day is allowed.
