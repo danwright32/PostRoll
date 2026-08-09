@@ -13,9 +13,18 @@ name: Swift
 # because the local Xcode is the one that ACCEPTS the code CI rejects.
 #
 # So the trade is narrowed rather than reversed. A pull request runs this only
-# when it touches the app, which is the only way it can break the Swift build,
-# and a Python-only PR still costs nothing. Pushes to main run it regardless of
-# what changed, so main is always fully verified.
+# when it touches something that can break the Swift build, and a PR that
+# cannot still costs nothing. Pushes to main run it regardless of what changed,
+# so main is always fully verified.
+#
+# Touching the app is not the only way (#246). Swift tests also read shared
+# cross-language fixtures under `tests/fixtures/`, so a PR that regenerates one
+# from the Python side can turn the Swift suite red. The whole directory is
+# listed rather than the two files those tests read today: more shared fixtures
+# are coming (#168, #124), and the failure mode of naming files one at a time
+# is that the next one is added by someone not thinking about this file. Some
+# fixtures there are Python-only, so this occasionally runs the job for nothing,
+# which is the cheap side of the trade against missing a break entirely.
 on:
   push:
     branches: [main]
@@ -23,6 +32,7 @@ on:
     branches: [main]
     paths:
       - "PostRollApp/**"
+      - "tests/fixtures/**"
       - ".github/workflows/swift.yml"
   workflow_dispatch:
 
