@@ -40,8 +40,30 @@ final class ExportManager {
 
     /// Kick off an export. No-op if one is already running for this event, so a
     /// double-click or a view remount can't launch a second concurrent export.
-    func start(eventID: Event.ID, to destinationRoot: URL, onlyDay: DayName? = nil, appState: AppState) {
+    ///
+    /// `regeneratingDays` has no default on purpose. Every route into an export
+    /// has to state what is rebuilding, because the defect in #225 was exactly
+    /// a route that never asked: a caller that could omit the argument would
+    /// ship the stale copy again, and the omission would look like ordinary
+    /// code (L72: the default must be the safe state, so there isn't one).
+    func start(eventID: Event.ID, to destinationRoot: URL, onlyDay: DayName? = nil,
+               appState: AppState, regeneratingDays: Set<DayName>) {
         guard !isExporting(eventID) else { return }
+
+        // Refuse while any day is still rebuilding: the asset copy step would
+        // take the previous mp4 or collage, because the new one lands in
+        // previews after the export has already read them (#225). Recorded as a
+        // visible failure rather than a silent return, using the same
+        // deactivated-run shape as the folder-access refusal below, so the
+        // button says what it is waiting for instead of doing nothing (#182).
+        if let waiting = ExportReadiness.blockedReason(regeneratingDays: regeneratingDays) {
+            tracker.begin(Run(phase: .failed(
+                "\(waiting) before exporting, so the folder gets the new files rather than the previous ones."),
+                              isFullExport: onlyDay == nil), for: eventID)
+            tracker.deactivate(eventID)
+            return
+        }
+
         guard let ev = appState.events.first(where: { $0.id == eventID }) else { return }
 
         guard destinationRoot.startAccessingSecurityScopedResource() else {

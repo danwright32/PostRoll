@@ -33,7 +33,10 @@ struct PhotoAssignmentView: View {
     @State private var thursdayReelSeed: Int? = nil
 
     // Wednesday: collage
-    @State private var wednesdayCollageSeed: Int? = nil
+    /// Collage layout seed per day. Sunday, Monday and Wednesday are all
+    /// collage days under the Balanced preset, and each needs its own seed so
+    /// rerolling one does not silently relayout another (#195).
+    @State private var dayCollageSeeds: [DayName: Int] = [:]
 
     // Crop offsets for Wednesday + Thursday photos (keyed by photo URL absoluteString)
     @State private var dayCropOffsets: [DayName: [String: CropOffset]] = [:]
@@ -55,6 +58,9 @@ struct PhotoAssignmentView: View {
     private func isCollageDay(_ day: DayName) -> Bool {
         event.effectivePostingPreset.isCollageCarousel(day)
     }
+
+    /// This event's layout (its override, or the app wide default).
+    private var effectivePreset: PostingPreset { event.effectivePostingPreset }
 
     /// Suggestions for a day's per-photo tag popover, drawn from the event's
     /// performers. Inserts the @handle when there is a real one, otherwise the
@@ -128,8 +134,9 @@ struct PhotoAssignmentView: View {
         _thursdayScrollDuration = State(initialValue: thu?.scrollDuration ?? 40.0)
         _thursdayReelSeed       = State(initialValue: thu?.reelSeed)
 
-        let wed = event.days[DayName.wednesday.rawValue]
-        _wednesdayCollageSeed = State(initialValue: wed?.collageSeed)
+        _dayCollageSeeds = State(initialValue: DayName.allCases.reduce(into: [:]) { acc, d in
+            if let seed = event.days[d.rawValue]?.collageSeed { acc[d] = seed }
+        })
 
         // Load crop offsets for all days
         var offsets: [DayName: [String: CropOffset]] = [:]
@@ -251,10 +258,13 @@ struct PhotoAssignmentView: View {
 
                 ForEach(DayName.allCases, id: \.self) { day in
                     let enableCrop = (day == .wednesday || day == .thursday)
-                    let wednesdayCount = day == .wednesday ? (dayPhotos[.wednesday]?.count ?? 0) : 0
-                    let note: String? = day == .wednesday && wednesdayCount > 10
-                        ? "Collage uses the first 10 photos (\(wednesdayCount) assigned). Drag to reorder."
-                        : nil
+                    // Counted against the preset's target for THIS day, not a
+                    // literal 10, and on every collage day rather than
+                    // Wednesday alone (#195, #119).
+                    let note: String? = CollagePhotoSelection.extraPhotosNote(
+                        photoCount: dayPhotos[day]?.count ?? 0,
+                        preset: effectivePreset,
+                        day: day)
 
                     // Friday is the before/after story — it reuses Tuesday's RAW + Edited
                     // photos, so there's no separate upload area for it.
@@ -269,6 +279,19 @@ struct PhotoAssignmentView: View {
                             notes: noteBinding(day),
                             onPreview: { previewURL = $0 },
                             onAddPhotos: { presentPicker(.day(day)) }
+                        )
+                    }
+
+                    // Every collage day gets the layout section, not Wednesday
+                    // alone: under Balanced, Sunday and Monday are collage days
+                    // too and had no count guidance, crop hint or reroll at all
+                    // (#195). Each day keeps its own seed, so rerolling one does
+                    // not disturb another.
+                    if isCollageDay(day) {
+                        CollageLayoutSection(
+                            day: day,
+                            photoCount: dayPhotos[day]?.count ?? 0,
+                            collageSeed: collageSeedBinding(day)
                         )
                     }
 
@@ -293,13 +316,6 @@ struct PhotoAssignmentView: View {
                         .onChange(of: tuesdayEditedPhoto)     { _, _ in save() }
                         .onChange(of: tuesdayBWPhoto)         { _, _ in save() }
                         .onChange(of: tuesdayTargetDuration)  { _, _ in save() }
-
-                    case .wednesday:
-                        WednesdayCollageSection(
-                            photoCount:  dayPhotos[.wednesday]?.count ?? 0,
-                            collageSeed: $wednesdayCollageSeed
-                        )
-                        .onChange(of: wednesdayCollageSeed) { _, _ in save() }
 
                     case .thursday:
                         ThursdayReelSection(
@@ -425,6 +441,13 @@ struct PhotoAssignmentView: View {
         Binding(
             get: { dayPhotos[day] ?? [] },
             set: { dayPhotos[day] = $0; save() }
+        )
+    }
+
+    private func collageSeedBinding(_ day: DayName) -> Binding<Int?> {
+        Binding(
+            get: { dayCollageSeeds[day] },
+            set: { dayCollageSeeds[day] = $0; save() }
         )
     }
 
@@ -824,8 +847,6 @@ struct PhotoAssignmentView: View {
                 pd.audioPath      = thursdayAudio
                 pd.scrollDuration = thursdayScrollDuration
                 pd.reelSeed       = thursdayReelSeed
-            case .wednesday:
-                pd.collageSeed = wednesdayCollageSeed
             case .friday:
                 // Before/after story uses Tuesday's RAW and edited photos (and
                 // the optional B&W). Friday has no separate photo grid, so wipe
@@ -836,6 +857,8 @@ struct PhotoAssignmentView: View {
                 pd.photoPaths      = []
             default: break
             }
+            // Written for every collage day, not Wednesday alone.
+            pd.collageSeed = dayCollageSeeds[day]
             ev.days[day.rawValue] = pd
         }
         // Blog photos auto-derived from Sunday + Monday + Wednesday
@@ -1852,9 +1875,13 @@ private struct TuesdayReelSection: View {
     }
 }
 
-// MARK: - Wednesday Collage Section
+// MARK: - Collage Layout Section
 
-private struct WednesdayCollageSection: View {
+/// The collage controls for one collage day. Day-agnostic: under the Balanced
+/// preset Sunday, Monday and Wednesday all carry a collage, and only Wednesday
+/// used to get this section (#195).
+private struct CollageLayoutSection: View {
+    let day: DayName
     let photoCount: Int
     @Binding var collageSeed: Int?
 
@@ -1897,7 +1924,7 @@ private struct WednesdayCollageSection: View {
                         Text(shortfall)
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
-                    } else {
+                    } else if CollagePhotoSelection.offersAlternativeLayouts(photoCount: photoCount) {
                         Text("Tap photos above to adjust crop. Tap below to try a different layout arrangement.")
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
@@ -1908,6 +1935,15 @@ private struct WednesdayCollageSection: View {
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.roseGold)
+                    } else {
+                        // Exactly one arrangement fits this many photos, so a
+                        // reroll would redraw the identical collage. Offering
+                        // the button anyway is a control that visibly does
+                        // nothing, so say why instead (#195).
+                        Text("Tap photos above to adjust crop. There is only one "
+                             + "layout for \(photoCount) photos, so there is nothing to reroll.")
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmMid)
                     }
                 }
                 .padding(.horizontal, Spacing.xl)

@@ -96,6 +96,53 @@ enum CollagePhotoSelection {
             + "\(needed) more required."
     }
 
+    /// Photo counts at which the generator has more than one arrangement to
+    /// choose from, so rerolling produces a visibly different collage.
+    ///
+    /// Measured from `distinct_collage_splits` filtered by `split_fits_photos`,
+    /// for Dan's 3:2 frames, and recorded in
+    /// `tests/fixtures/collage_arrangements.json`. Both languages read that one
+    /// file; `CollageLayoutSectionTests` fails if this range and the recorded
+    /// counts disagree, so the enumeration cannot change underneath this.
+    ///
+    /// Below 4 there is exactly one arrangement, so a reroll redraws the same
+    /// collage. Above 10 nothing fits the crop budget and the renderer falls
+    /// back to a single forced layout, so there is nothing to reroll there
+    /// either. Offering the button anyway is a control that visibly does
+    /// nothing (#195).
+    static let alternativeLayoutRange = 4...10
+
+    static func offersAlternativeLayouts(photoCount: Int) -> Bool {
+        alternativeLayoutRange.contains(photoCount)
+    }
+
+    /// Told to Dan when a day has more photos than its collage will use, so he
+    /// knows which ones are in and can drag to reorder.
+    ///
+    /// Counts against the PRESET's target rather than a literal. The literal
+    /// was 10, left over from Classic, so under Balanced this stayed silent
+    /// from 5 to 10 photos, which is exactly the range where it was needed
+    /// (#195, #119).
+    static func extraPhotosNote(photoCount: Int, preset: PostingPreset,
+                                day: DayName) -> String? {
+        guard preset.isCollageCarousel(day) else { return nil }
+        let target = target(preset: preset, day: day)
+        guard photoCount > target else { return nil }
+        return "Collage uses the first \(target) photos (\(photoCount) assigned). "
+            + "Drag to reorder."
+    }
+
+    /// What to tell Dan when a day's collage was skipped for want of photos.
+    ///
+    /// Names the real floor and the day that actually failed. The old copy said
+    /// 10 for Wednesday only, so under Balanced it asked for six photos more
+    /// than the generator needs and contradicted the same screen's own advice
+    /// (#119).
+    static func generationShortfallHint(day: DayName) -> String {
+        "Collage needs at least \(minimum) photos. "
+            + "Add more photos to \(day.displayName) and retry."
+    }
+
     /// An error message when the selection is below the floor, else nil. The
     /// floor is `minimum`, NOT the preset target — the generator adapts to
     /// fewer than the target, so picking 3 for a 4-photo day is allowed.

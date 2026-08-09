@@ -31,6 +31,14 @@ final class AppState {
     var sidebarMode: SidebarMode = .events
     var insightsSection: InsightsSection = .overview
 
+    /// Test seam: an AppState holding exactly these events, with no read of the
+    /// on-disk store and none of the launch sweeps. Tests must be structurally
+    /// unable to see or rewrite the real events.json, and every sweep below
+    /// deletes media based on which events exist.
+    init(events: [Event]) {
+        self.events = events
+    }
+
     init() {
         // Data lives under AppPaths.root, which is ~/Library/Application Support
         // /PostRoll once the `.migrated` marker is present (the move was done

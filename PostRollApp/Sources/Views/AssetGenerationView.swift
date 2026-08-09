@@ -463,8 +463,14 @@ struct AssetGenerationView: View {
         }
 
         // Common input-missing patterns — fixable on the photo-assignment screen
-        if day == "wednesday" && (lower.contains("collage skipped") || lower.contains("collage_min")) {
-            return ("Collage needs at least 10 photos. Add more photos to Wednesday and retry.", true)
+        // Any collage day, and the real floor rather than a Classic-preset
+        // literal. Under Balanced a day with its full 4 photos was told it
+        // needed 10, which is a message that contradicts the app's own
+        // generator (#119, #195).
+        if let collageDay = DayName(rawValue: day),
+           PostingPreset.current.isCollageCarousel(collageDay),
+           lower.contains("collage skipped") || lower.contains("collage_min") {
+            return (CollagePhotoSelection.generationShortfallHint(day: collageDay), true)
         }
         if day == "tuesday" && (lower.contains("raw") || lower.contains("edited")) {
             return ("Tuesday's before/after reel needs a RAW + edited photo. Assign them and retry.", true)

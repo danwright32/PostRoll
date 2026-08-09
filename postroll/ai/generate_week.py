@@ -33,7 +33,10 @@ Output JSON (written to --output file):
   "thursday": {...},
   "friday": {...},
   "blog": {"title": "...", "body": "...", "photo_count": 5},
-  "errors": {}             ← keyed by day name if any individual day failed
+  "errors": {},            ← keyed by day name if any individual day failed
+  "warnings": {}           ← keyed by day name; the day still generated, but
+                              something about it needs saying (an unreadable
+                              photo skipped, #228)
 }
 
 Usage:
@@ -183,6 +186,10 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
 
     results: dict[str, Any] = {}
     errors:  dict[str, str] = {}
+    # Separate from `errors` on purpose: a warning means the day GENERATED and
+    # is usable, and filing it as an error would either hide a real failure or
+    # make a good day look broken (L53: two checks must not share one field).
+    warnings: dict[str, list[dict[str, str]]] = {}
     existing_captions: list[str] = []
 
     t_start = time.time()
@@ -296,6 +303,12 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
                 event_url=event_url,
             )
             results[day_name] = result
+            if result.get("skipped_photos"):
+                warnings[day_name] = result["skipped_photos"]
+                for s_ in result["skipped_photos"]:
+                    print(f"[generate_week] {day_name}: skipped {s_['file']} "
+                          f"(could not be read); the day generated from the rest",
+                          flush=True, file=sys.stderr)
             if result.get("caption"):
                 existing_captions.append(result["caption"])
             t_captions_end = time.time()
@@ -307,6 +320,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
             t_captions_end = time.time()
             print(f"[generate_week] {day_name}: STOPPING: {e}", flush=True, file=sys.stderr)
             results["errors"] = errors
+            results["warnings"] = warnings
             _write_results(output_path, results, complete=False, stopped_reason=str(e))
             raise
         except Exception as e:
@@ -330,6 +344,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
                 print(f"[generate_week] {day_name}: STOPPING: {reason}",
                       flush=True, file=sys.stderr)
                 results["errors"] = errors
+                results["warnings"] = warnings
                 _write_results(output_path, results, complete=False,
                                stopped_reason=reason)
                 raise FatalGenerationError(reason) from e
@@ -339,6 +354,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
 
         # Persist after every day, so a kill at any point keeps what finished.
         results["errors"] = errors
+        results["warnings"] = warnings
         _write_results(output_path, results, complete=False)
 
     # Blog post
@@ -364,6 +380,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
             t_blog_end = time.time()
             print(f"[generate_week] blog: STOPPING: {e}", flush=True, file=sys.stderr)
             results["errors"] = errors
+            results["warnings"] = warnings
             _write_results(output_path, results, complete=False, stopped_reason=str(e))
             raise
         except Exception as e:
@@ -376,6 +393,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path, timing_path: Path
 
     t_total = time.time()
     results["errors"] = errors
+    results["warnings"] = warnings
 
     _write_results(output_path, results, complete=True)
 

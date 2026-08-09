@@ -83,6 +83,17 @@ _NUMBER_WORDS = (
 #: Numbers that are idiom rather than measurement, so they are not claims.
 _NUMBER_ALLOWED = {"one", "two", "second", "first"}
 
+#: A numeral immediately after one of these is part of a NAME, not a count:
+#: "Matchbook Spark Vol. 2", "Book 2 of Homer's Odyssey", "Symphony No. 4".
+#: There is no quantity being claimed, so there is nothing to be wrong about,
+#: and flagging them is what taught Dan to ignore this check (#226).
+_TITLE_LABEL = re.compile(
+    r"\b(?:vol|volume|book|part|no|op|act|scene|chapter|movement|"
+    r"symphony|concerto|suite|sonata|nocturne|etude|prelude|"
+    r"canto|episode|session|series)\.?\s+(\d+)\b",
+    re.IGNORECASE,
+)
+
 _CONSTRUCTION = re.compile(r"something between .+? and ", re.IGNORECASE)
 
 
@@ -124,6 +135,55 @@ def _program_numbers(program: dict[str, Any] | None, venue: str) -> set[str]:
     found = set(re.findall(r"\d+", text))
     found |= {w for w in _NUMBER_WORDS if re.search(rf"\b{w}\b", text)}
     return found
+
+
+#: Digit form for each counting word, so "Eight" and "8" are one fact.
+_WORD_FOR_COUNT = {
+    1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six",
+    7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve",
+}
+
+
+def _counts_supported_by_names(paragraphs: list[str],
+                               program: dict[str, Any] | None) -> set[str]:
+    """Counts the prose itself accounts for, per paragraph.
+
+    "Eight people at mic stands" is not invented when the same paragraph names
+    eight people. Measured on the real bludline correction (#204, #226), where
+    the paragraph names exactly eight of the programme's TEN performers.
+
+    That ten is why this counts names in the paragraph rather than the size of
+    the cast: blessing a number for matching the cast size would have accepted
+    this one for a reason that is not true, and would then accept a genuinely
+    wrong count in any post whose cast happens to be that size.
+
+    Only performers the programme actually lists are counted, so a paragraph
+    cannot talk its own number up with ordinary capitalised words.
+    """
+    performers = [str(p.get("name", "")).strip()
+                  for p in (program or {}).get("performers") or []
+                  if str(p.get("name", "")).strip()]
+    if not performers:
+        return set()
+
+    # Match on any single part of a name: the prose routinely uses a surname
+    # alone ("Suero and White"), a stage name, or a fuller form than the
+    # programme carries ("Alexander Manuel" for "Alex Manuel").
+    parts_by_performer = [
+        {part.lower().strip(".,") for part in name.replace(",", " ").split()
+         if len(part.strip(".,")) > 2}
+        for name in performers
+    ]
+
+    allowed: set[str] = set()
+    for para in paragraphs:
+        words = {w.lower().strip(".,;:!?()") for w in para.split()}
+        named = sum(1 for parts in parts_by_performer if parts & words)
+        if named:
+            allowed.add(str(named))
+            if (word := _WORD_FOR_COUNT.get(named)):
+                allowed.add(word)
+    return allowed
 
 
 def check_blog(body: str, *, program: dict[str, Any] | None = None,
@@ -196,7 +256,12 @@ def check_blog(body: str, *, program: dict[str, Any] | None = None,
 
     # 8. never invent numbers
     known = _program_numbers(program, venue)
-    prose = " ".join(_prose_paragraphs(body))
+    paragraphs = _prose_paragraphs(body)
+    prose = " ".join(paragraphs)
+    # A count the surrounding prose supports is derivable, not invented (#226).
+    known |= _counts_supported_by_names(paragraphs, program)
+    # Numerals that are part of a title carry no quantity at all.
+    known |= {m.group(1) for m in _TITLE_LABEL.finditer(prose)}
     seen: set[str] = set()
     for token in re.findall(r"\b\d+\b", prose):
         if token not in known and token not in seen:

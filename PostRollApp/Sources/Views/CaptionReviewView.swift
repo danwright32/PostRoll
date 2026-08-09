@@ -90,6 +90,13 @@ struct CaptionReviewView: View {
     private var graphics: PreviewGraphicsManager { PreviewGraphicsManager.shared }
     private var isGeneratingGraphics: Bool { graphics.isGenerating(event.id) }
     private var regeneratingDays: Set<DayName> { graphics.regeneratingDays(event.id) }
+
+    /// Days whose caption run skipped an unreadable photo (#228), in week order
+    /// so the banners do not reshuffle between renders.
+    private var daysWithSkippedPhotos: [DayName] {
+        guard let result = event.weekResult else { return [] }
+        return DayName.allCases.filter { result.warningMessage(for: $0) != nil }
+    }
     /// When each day's current regen started, so the UI can show elapsed
     /// time instead of a bare spinner (#135's Friday pipeline in particular:
     /// import copy + Stage 1 scoring + Stage 2 Claude + ffmpeg render can
@@ -288,6 +295,19 @@ struct CaptionReviewView: View {
                 if let error = regenerateError {
                     BrandBanner(icon: "exclamationmark.triangle", message: error, style: .error)
                         .padding(.horizontal, Spacing.xl)
+                }
+
+                // Days that generated but left a photo out because the file
+                // would not open (#228). Not an error style: these captions are
+                // usable, and the day is finished. Without this the skip is
+                // invisible, because a short alt text list looks like an
+                // ordinary one.
+                ForEach(daysWithSkippedPhotos, id: \.self) { day in
+                    if let message = event.weekResult?.warningMessage(for: day) {
+                        BrandBanner(icon: "photo.badge.exclamationmark",
+                                    message: "\(day.displayName): \(message)")
+                            .padding(.horizontal, Spacing.xl)
+                    }
                 }
 
                 if isRegenerating {

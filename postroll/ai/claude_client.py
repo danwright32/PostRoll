@@ -22,6 +22,7 @@ import os
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -156,6 +157,65 @@ def _image_block(path: Path, *, model: str = "") -> dict:
         "type": "image",
         "source": {"type": "base64", "media_type": mime, "data": data},
     }
+
+
+@dataclass(frozen=True)
+class SkippedPhoto:
+    """A photo left out of a call because it could not be prepared for upload."""
+
+    index: int   # position in the list the caller passed
+    name: str    # filename, so Dan can go and look at it
+    reason: str
+
+
+def partition_uploadable(
+    paths: list[str | Path], *, model: str = "",
+) -> tuple[list[int], list[SkippedPhoto]]:
+    """Split photos into the ones that can be sent and the ones that cannot.
+
+    For ORDINARY CONCERT PHOTOS only (#228). A file that will not open fails
+    the whole call otherwise, which costs that day's caption and alt text
+    entirely, where the honest alternative is slightly less context and a named
+    warning. Program pages and OCR must not use this: character fidelity is the
+    point of those calls, and a page quietly missing is a cast list read from
+    fewer pages than the programme has (#200, #215).
+
+    Callers must preflight BEFORE building their prompt. The caption prompt
+    states the photo count and lists the filenames, so a photo dropped after
+    the prompt was written would leave the model reading about a photograph it
+    never received, which is exactly how invented alt text gets in.
+
+    Readability is decided by running the real `_image_block`, not a cheaper
+    stand-in: the question is whether the operation that runs at send time
+    succeeds, and anything else can disagree with it. That does mean the kept
+    photos are encoded twice, once here and once when the request is built;
+    #220 removes the duplicate for this caller and for the OCR batcher at the
+    same time, by sharing one prepared block.
+
+    Raises ClaudeError when nothing survives: a caption written from zero
+    photographs is invented rather than degraded.
+    """
+    kept: list[int] = []
+    skipped: list[SkippedPhoto] = []
+
+    for i, p in enumerate(paths):
+        try:
+            _image_block(Path(p), model=model)
+        except Exception as e:
+            skipped.append(SkippedPhoto(index=i, name=Path(p).name, reason=str(e)))
+            continue
+        kept.append(i)
+
+    if paths and not kept:
+        names = ", ".join(s.name for s in skipped)
+        raise ClaudeError(
+            f"None of the {len(paths)} photo(s) for this post could be read "
+            f"({names}). There is nothing left to write from, and a caption or "
+            "alt text produced from zero photographs is invented rather than "
+            "degraded, so this is refused rather than guessed."
+        )
+
+    return kept, skipped
 
 
 def _needs_cli(allowed_tools: list[str] | None) -> bool:
