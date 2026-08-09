@@ -24,8 +24,23 @@ import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
+from .design_tokens import (
+    CREAM,
+    CREAM_EDGE,
+    DIVIDER_WHITE as DIVIDER_COLOR,
+    FONT_DETAIL,
+    FONT_DETAIL_BOLD,
+    FONT_DETAIL_LIGHT,
+    FONT_DETAIL_MEDIUM,
+    FONT_SCRIPT,
+    MAT_PRINT as MAT,
+    ROSE_GOLD,
+    TEXT_DARK,
+    WARM_MID,
+)
 
-# === Design Tokens ===
+
+# === Layout, specific to this template ===
 
 CANVAS_W = 1080
 CANVAS_H = 1920
@@ -51,25 +66,12 @@ ZOOM_END = 1.0
 
 # Split divider (drawn only within the print)
 DIVIDER_WIDTH = 4
-DIVIDER_COLOR = (255, 255, 255)
-
-# Fonts
-FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
-FONT_DETAIL_LIGHT = 7
-FONT_DETAIL_BOLD = 1
-FONT_DETAIL_MEDIUM = 10
 
 # === Program-plate composition (the approved Tuesday reel look) ===
 # A printed-program page: masthead top-left, the photo matted and hung as a print,
 # a two-line caption placard below it, and a footer colophon closing the bottom.
-CREAM = (252, 250, 247)
-CREAM_EDGE = (212, 201, 192)   # the print's hairline
-TEXT_DARK = (60, 55, 50)
-WARM_MID = (122, 104, 96)      # the quiet placard subtitle
-ROSE_GOLD = (160, 105, 95)     # the one accent: rules + the live state word
+# ROSE_GOLD is the one accent here: rules plus the live state word.
 
-MAT = 72
 PRINT_W = CANVAS_W - 2 * MAT
 MASTHEAD_Y = 176               # SignPainter title
 VENUE_Y = 285

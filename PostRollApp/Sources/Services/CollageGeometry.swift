@@ -24,11 +24,15 @@ enum CollageGeometry {
     static let scrimDarkness: Double = 0.3
 
     /// Hairline framing each print: the 1px ring immediately OUTSIDE the cell, so
-    /// the line never eats a row of the photograph. Must stay in lockstep with
-    /// `HAIRLINE` and `draw_hairlines` in generate_collage.py. Python bakes the
-    /// ring into the base PNG, but the gap repaint below would paint over it, so
-    /// both draw paths stroke it again on top.
-    static let hairlineColor = Color(red: 214 / 255, green: 208 / 255, blue: 200 / 255)
+    /// the line never eats a row of the photograph. Python bakes the ring into
+    /// the base PNG, but the gap repaint below would paint over it, so both draw
+    /// paths stroke it again on top.
+    ///
+    /// The value lives in `Color.hairline` rather than here, so the test that
+    /// checks Swift against `HAIRLINE` in `postroll/media/design_tokens.py` has
+    /// one place to look (#162). Declaring it privately here is how the app came
+    /// to hold a hairline two units off the one the other templates use.
+    static let hairlineColor = Color.hairline
     static let hairlineWidth: CGFloat = 1
 
     /// Stroking this rect with `hairlineWidth` lands the line on the pixel ring

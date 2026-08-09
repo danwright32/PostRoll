@@ -28,8 +28,22 @@ import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
+from .design_tokens import (
+    CREAM,
+    DIVIDER_WHITE as DIVIDER_COLOR,
+    FONT_DETAIL,
+    FONT_DETAIL_BOLD,
+    FONT_DETAIL_LIGHT,
+    FONT_SCRIPT,
+    # ROSE_GOLD is read by the chrome tests through this module's
+    # namespace rather than by the template itself, so the linter
+    # cannot see the use.
+    ROSE_GOLD,  # noqa: F401
+    TEXT_DARK,
+)
 
-# === Design Tokens ===
+
+# === Layout, specific to this template ===
 
 CANVAS_W = 1080
 CANVAS_H = 1920
@@ -45,7 +59,6 @@ TOTAL_DURATION = HOLD_RAW + REVEAL_DURATION + HOLD_EDIT_DURATION + TRANSITION_DU
 
 # Divider line
 DIVIDER_WIDTH = 3
-DIVIDER_COLOR = (255, 255, 255)
 GAP = 6  # thin gap between triptych strips
 
 # Ken Burns zoom — disabled (was causing visible shaking)
@@ -53,23 +66,16 @@ ZOOM_START = 1.0
 ZOOM_END = 1.0
 
 # Branded chrome (matching before/after template)
-CREAM = (252, 250, 247)
 CREAM_OPACITY = 210
-TEXT_DARK = (60, 55, 50)
-ROSE_GOLD = (160, 105, 95)
 HEADER_H = 340  # cream header with event info — tall enough to push title clear of the iPhone notch / Dynamic Island
 TITLE_TOP_Y = 170  # clears notch (~120px) + Dynamic Island with breathing room
 FOOTER_H = 100  # cream footer with logo
-FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
 
 # RAW desaturation — disabled (photos should be shown unaltered)
 RAW_DESATURATION = 0.0  # 0 = full color, 1 = grayscale
 
-# Labels
-FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-# Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
-FONT_DETAIL_LIGHT = 7
-FONT_DETAIL_BOLD = 1  # RAW/Edit labels need to read at Instagram phone size; Thin disappears
+# Labels. FONT_DETAIL_BOLD, not Light: RAW/Edit labels need to read at Instagram
+# phone size and Thin disappears.
 # RAW/Edit labels sit on the cream mat now, so they are dark. They used to be white,
 # which only worked against the old blurred, darkened photo background.
 LABEL_COLOR = TEXT_DARK

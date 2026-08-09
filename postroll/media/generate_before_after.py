@@ -26,25 +26,34 @@ from PIL import Image, ImageDraw, ImageFont
 from .generate_story import _fit_script_title
 from .missing_media import require_present
 
+from .design_tokens import (
+    CREAM,
+    CREAM_EDGE,
+    FONT_DETAIL,
+    FONT_DETAIL_LIGHT,
+    FONT_DETAIL_MEDIUM,
+    FONT_SCRIPT,
+    MAT_PRINT as MAT,
+    ROSE_GOLD,
+    TEXT_DARK,
+    WARM_MID,
+)
 
-# === Design Tokens (shared with story template) ===
+# MAT is the even side mat; the photos are hung as matted prints inside it, and
+# CREAM_EDGE is the print's hairline.
+
+
+# === Layout, specific to this template ===
 
 CANVAS_W = 1080
 CANVAS_H = 1920
 
-# Colors — matching story template palette
-CREAM = (252, 250, 247)  # same as story template lower section
 CREAM_OPACITY = 185  # lower opacity lets blurred photo warmth show through
-TEXT_DARK = (60, 55, 50)  # same as story template org/venue text
-WARM_MID = (122, 104, 96)  # quiet secondary text (the placard subtitle)
-ROSE_GOLD = (160, 105, 95)  # divider — same as story template
 
 # Layout: left-aligned program plate (matches the Tuesday reel body)
 DIVIDER_H = 2
 LABEL_LETTER_SPACING = 8
 LABEL_MARGIN = 40
-MAT = 72                 # even side mat; the photos are hung as matted prints
-CREAM_EDGE = (212, 201, 192)  # the print's hairline
 # Caption placard ABOVE each photo, centred like a museum wall card: a state word
 # over a quiet subtitle. Centred to share the title's axis so it reads composed,
 # not stuck in a corner.
@@ -59,13 +68,6 @@ BOTTOM_CREAM_H = 130  # taller bottom to balance the top
 HEADER_MIN_H = 400  # min header height to accommodate notch-safe title + org + venue
 TITLE_TOP_PADDING = 170  # clears iPhone notch/Dynamic Island (~120px) with breathing room
 
-# Fonts (same as story template)
-FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
-FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-# Light, not Thin: the detail line rendered spindly in Thin (the .ttc Thin face).
-FONT_DETAIL_LIGHT = 7
-FONT_DETAIL_BOLD = 1
-FONT_DETAIL_MEDIUM = 10  # the placard state word
 # The placard subtitle in Light read too thin at phone size; Medium holds up.
 SUBTITLE_WEIGHT = FONT_DETAIL_MEDIUM
 

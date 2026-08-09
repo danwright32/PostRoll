@@ -23,40 +23,41 @@ import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+# The brand palette, type and mat scale live in one module (#162). Aliased to
+# the names this template has always used where the local name reads better in
+# context; the value is the shared one either way.
+from .design_tokens import (
+    CREAM as STRIP_CREAM,
+    FONT_DETAIL,
+    FONT_DETAIL_LIGHT as PLATE_DETAIL_WEIGHT,
+    FONT_SCRIPT,
+    GUTTER as GAP,
+    HAIRLINE,
+    MAT_GALLERY as MAT,
+    TEXT_DARK,
+)
 
-# === Design Tokens (shared with brand system) ===
+# MAT is the gallery mat: an even cream border on all four sides with the photos
+# hung inside it. The photos used to bleed off the top and bottom of the canvas
+# with a 40px side border only, so nothing read as matted.
+#
+# HAIRLINE is the 1px ring immediately OUTSIDE each cell, so a print is framed
+# without the line eating a row of the photograph. Swift strokes the same ring
+# (CollageGeometry.hairlineRect) after it repaints the gutters, because a
+# hairline baked only into this PNG would be painted over on export.
+
+
+# === Layout, specific to this template ===
 
 CANVAS_W = 1080
 CANVAS_H = 1920
 
-# Gallery mat: an even cream border on all four sides, with the photos hung
-# inside it. The photos used to bleed off the top and bottom of the canvas with a
-# 40px side border only, so nothing read as matted.
-MAT = 48
-GAP = 16  # gutter between prints
-
 # Branded center strip: a caption plate inset to the mat, not an edge-to-edge band.
 STRIP_H = 90
-STRIP_CREAM = (252, 250, 247)  # matches story/before-after cream
-TEXT_DARK = (60, 55, 50)
-
-# Hairline: the 1px ring immediately OUTSIDE each cell, so a print is framed
-# without the line eating a row of the photograph. Swift strokes the same ring
-# (CollageGeometry.hairlineRect) after it repaints the gutters, because a
-# hairline baked only into this PNG would be painted over on export.
-HAIRLINE = (214, 208, 200)
 
 # Logo
 LOGO_WIDTH = 240
 PLATE_PADDING = 24  # inset of the plate's text and logo from its own edges
-
-# Fonts (shared with brand system)
-FONT_SCRIPT = "/System/Library/Fonts/Supplemental/SignPainter.ttc"
-FONT_DETAIL = "/System/Library/Fonts/HelveticaNeue.ttc"
-FONT_DETAIL_THIN = 12   # Helvetica Neue Thin (the .ttc face index)
-# The plate's detail line rendered spindly in Thin. Light (index 7) is one step
-# heavier and reads cleanly at plate size without looking bold.
-PLATE_DETAIL_WEIGHT = 7
 
 # Layout patterns: (top_half, bottom_half) — photos split around center strip
 # Top gets 5, bottom gets 5

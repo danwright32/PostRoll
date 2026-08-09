@@ -1,15 +1,28 @@
 import SwiftUI
 
 // MARK: - Colors
-// Mirrors the brand palette used in the Python asset generators.
+//
+// Mirrors the brand palette in `postroll/media/design_tokens.py`, which is the
+// source: Swift cannot import it, so the values are restated here and
+// `tests/test_design_tokens.py` asserts the two agree. Nothing else keeps this
+// seam honest, and an app that draws a different cream from the asset it
+// exports is exactly the kind of mismatch that reads as a rendering bug.
+//
+// The colours below with no Python counterpart (creamDeep, roseDeep, warmFaint,
+// the stage pills) are app chrome that no generator paints, and stay Swift-only.
 
 extension Color {
     /// Main window / detail background — warm off-white
     static let cream     = Color(red: 252/255, green: 250/255, blue: 247/255)
     /// Sidebar / secondary surface — slightly deeper cream
     static let creamDeep = Color(red: 237/255, green: 232/255, blue: 224/255)
-    /// Dividers, subtle borders
+    /// Dividers, subtle borders, and the hairline around a matted print in the
+    /// before/after and morph templates
     static let creamEdge = Color(red: 212/255, green: 201/255, blue: 192/255)
+    /// Hairline around a collage cell and a scroll-reel print. Two units off
+    /// `creamEdge` above, which is historical drift rather than intent; both
+    /// are preserved so no rendered pixel moves. See #162.
+    static let hairline  = Color(red: 214/255, green: 208/255, blue: 200/255)
 
     /// Primary accent — rose gold
     static let roseGold  = Color(red: 160/255, green: 105/255, blue:  95/255)
