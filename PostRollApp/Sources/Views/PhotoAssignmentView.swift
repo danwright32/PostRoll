@@ -1367,6 +1367,9 @@ private struct PhotoTaggingSheet: View {
     /// What the last add-to-all actually did. Held until the next one so the
     /// confirmation doesn't vanish before it's read.
     @State private var applyResult: String?
+    /// The tags as they were before the last apply-to-all, so it can be
+    /// reversed in one click rather than photo by photo (#187).
+    @State private var tagUndo = PhotoTagUndo()
 
     private var safeIndex: Int {
         PhotoTagSheetNavigation.clamped(index: index, count: photos.count)
@@ -1431,6 +1434,16 @@ private struct PhotoTaggingSheet: View {
                                     .font(.system(size: 10))
                                     .foregroundStyle(Color.warmMid)
                                     .fixedSize(horizontal: false, vertical: true)
+                                // One click to apply had to be ten popovers to
+                                // reverse, which is the slowness batch tagging
+                                // exists to remove (#187).
+                                if tagUndo.isAvailable {
+                                    Button("Undo", action: undoApplyToAll)
+                                        .buttonStyle(.plain)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(Color.roseGold)
+                                        .help("Put the tags back as they were before this was applied")
+                                }
                             }
                             .transition(.opacity)
                         }
@@ -1556,10 +1569,24 @@ private struct PhotoTaggingSheet: View {
 
         // Report what actually changed, not what was asked for.
         let changed = PhotoTagBatch.photosChanged(from: before, to: after, in: keys)
+        tagUndo.record(before: before, photosChanged: changed)
         withAnimation(.easeOut(duration: 0.15)) {
             applyResult = changed == 0
                 ? "Everyone here was already on all \(photos.count) photos."
                 : "Added to \(changed) other photo\(changed == 1 ? "" : "s")."
+        }
+    }
+
+    /// Puts the tags back exactly as they were before the last apply-to-all.
+    ///
+    /// A restore of the whole snapshot rather than a removal of the tags just
+    /// added: if a photo already carried one of them, removing it would take
+    /// away a tag the batch did not put there.
+    private func undoApplyToAll() {
+        guard let snapshot = tagUndo.take() else { return }
+        photoTags = snapshot
+        withAnimation(.easeOut(duration: 0.15)) {
+            applyResult = "Undone."
         }
     }
 
@@ -1568,8 +1595,11 @@ private struct PhotoTaggingSheet: View {
         image = nil
         loadFailed = false
         // The confirmation described the photo we just left, so it must not
-        // sit under the next one as though it applied to that.
+        // sit under the next one as though it applied to that. The undo goes
+        // with it: an Undo button under a different photo would be a promise
+        // about work the person can no longer see.
         applyResult = nil
+        tagUndo.clear()
         let loaded = await Task.detached { NSImage(contentsOf: url) }.value
         image = loaded
         loadFailed = (loaded == nil)
