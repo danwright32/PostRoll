@@ -190,14 +190,14 @@ enum EventStore {
                 withIntermediateDirectories: true
             )
             let data = try JSONEncoder().encode(events)
-            // Keep the previous generation as .bak before overwriting:
+            // Keep several verified-good generations before overwriting.
             // events.json is the single copy of every caption, blog, OCR
-            // result, and crop edit. On APFS this copy is a clone, so the
-            // cost is negligible even though save runs on every edit.
-            if FileManager.default.fileExists(atPath: url.path) {
-                let backup = url.appendingPathExtension("bak")
-                try? FileManager.default.removeItem(at: backup)
-                try? FileManager.default.copyItem(at: url, to: backup)
+            // result and crop edit. One slot, copied blind, was erased by
+            // ordinary editing and could capture an already-degraded file,
+            // so the safety net could be destroyed by the failure it was for
+            // (#102). Only a file that decodes is ever captured.
+            StoreBackups.rotate(store: url) { candidate in
+                (try? JSONDecoder().decode([Event].self, from: candidate)) != nil
             }
             try data.write(to: url, options: .atomic)
             return .saved

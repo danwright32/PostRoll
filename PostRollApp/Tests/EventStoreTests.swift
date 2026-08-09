@@ -79,17 +79,44 @@ final class EventStoreTests: XCTestCase {
     }
 
     func testSaveRotatesBackupGeneration() throws {
+        // The single events.json.bak became a bounded ring of timestamped,
+        // verified-good copies (#102). One slot was erased by ordinary editing
+        // and could capture an already-corrupt file.
         let first = Event(name: "First", org: "Org", venue: "Hall", date: Date(), shootType: .fullShow)
         let second = Event(name: "Second", org: "Org", venue: "Hall", date: Date(), shootType: .fullShow)
         EventStore.save([first], to: store)
         EventStore.save([second], to: store)
 
-        let backup = store.appendingPathExtension("bak")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: backup.path))
+        let backup = try XCTUnwrap(StoreBackups.newest(for: store),
+                                   "the previous generation must still be recoverable")
         let previous = try JSONDecoder().decode([Event].self, from: Data(contentsOf: backup))
         XCTAssertEqual(previous.map(\.name), ["First"])
         let current = EventStore.load(from: store)
         XCTAssertEqual(current.events.map(\.name), ["Second"])
+    }
+
+    func testSeveralGenerationsSurviveRepeatedSaves() throws {
+        // The point of the change: a single slot cannot survive the editing
+        // that happens between a problem starting and Dan noticing it.
+        for name in ["A", "B", "C", "D"] {
+            EventStore.save([Event(name: name, org: "Org", venue: "Hall",
+                                   date: Date(), shootType: .fullShow)], to: store)
+        }
+        XCTAssertGreaterThan(StoreBackups.existing(for: store).count, 1)
+    }
+
+    func testACorruptStoreIsNotCapturedAsABackup() throws {
+        EventStore.save([Event(name: "Good", org: "Org", venue: "Hall",
+                               date: Date(), shootType: .fullShow)], to: store)
+        let goodCount = StoreBackups.existing(for: store).count
+
+        // Something outside the app leaves a bad file where the store was.
+        try "not json at all".write(to: store, atomically: true, encoding: .utf8)
+        EventStore.save([Event(name: "Next", org: "Org", venue: "Hall",
+                               date: Date(), shootType: .fullShow)], to: store)
+
+        XCTAssertEqual(StoreBackups.existing(for: store).count, goodCount,
+                       "a corrupt file must never displace a good backup")
     }
 
     // MARK: - Read failure is not corruption (issue #74)
