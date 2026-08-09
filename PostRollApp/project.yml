@@ -101,6 +101,10 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
         CODE_SIGN_IDENTITY: "-"
         SWIFT_STRICT_CONCURRENCY: targeted
+        # Set ONLY here, so test-only seams compiled behind it cannot be
+        # reached from the shipping app. A seam guarded by a comment is a
+        # convention; this makes it a build error.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: POSTROLL_TESTS
 
   # UI smoke tests drive the real app against a sandboxed data directory
   # (POSTROLL_DATA_DIR), so they can never touch live data.

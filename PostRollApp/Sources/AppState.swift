@@ -31,13 +31,19 @@ final class AppState {
     var sidebarMode: SidebarMode = .events
     var insightsSection: InsightsSection = .overview
 
+    #if POSTROLL_TESTS
     /// Test seam: an AppState holding exactly these events, with no read of the
     /// on-disk store and none of the launch sweeps. Tests must be structurally
     /// unable to see or rewrite the real events.json, and every sweep below
     /// deletes media based on which events exist.
+    ///
+    /// Compiled only into the test bundle. The shipping app cannot call this
+    /// even by accident, and an accident here would not look like one: it would
+    /// open showing an empty library while the real events sat on disk.
     init(events: [Event]) {
         self.events = events
     }
+    #endif
 
     init() {
         // Data lives under AppPaths.root, which is ~/Library/Application Support

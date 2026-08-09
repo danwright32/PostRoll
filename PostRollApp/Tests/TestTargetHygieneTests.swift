@@ -71,4 +71,61 @@ final class TestTargetHygieneTests: XCTestCase {
             + "\(orphans.joined(separator: ", ")). Run `xcodegen generate` after adding a test file."
         )
     }
+
+    /// `AppState(events:)` builds an event list without reading the store, so a
+    /// test can never see or rewrite the real events.json. It must stay out of
+    /// the shipping app: an accidental call there would not look like an
+    /// accident, it would open the app on an empty library while the real
+    /// events sat untouched on disk.
+    ///
+    /// The build enforces this (the initialiser is compiled behind
+    /// POSTROLL_TESTS, which only the test target sets), and this test guards
+    /// the enforcement itself, because deleting the `#if` would silently hand
+    /// the seam back to the app and nothing else would go red.
+    func testTheAppStateTestSeamStaysOutOfTheShippingApp() throws {
+        let appDir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()    // Tests
+            .deletingLastPathComponent()    // PostRollApp
+        let source = try String(
+            contentsOf: appDir.appendingPathComponent("Sources/AppState.swift"),
+            encoding: .utf8)
+
+        let seam = "init(events: [Event])"
+        guard let seamRange = source.range(of: seam) else {
+            // Gone entirely is fine: the thing being guarded is that it is
+            // never reachable from the app, not that it exists.
+            return
+        }
+
+        let before = source[source.startIndex..<seamRange.lowerBound]
+        let opens = before.components(separatedBy: "#if POSTROLL_TESTS").count - 1
+        let closes = before.components(separatedBy: "#endif").count - 1
+
+        XCTAssertGreaterThan(
+            opens, closes,
+            "AppState's `\(seam)` seam is not inside a `#if POSTROLL_TESTS` block, so the "
+            + "shipping app can call it. That would start the app on an empty event list "
+            + "while the real events.json sat untouched on disk. Put it back behind the flag."
+        )
+    }
+
+    /// The flag the guard above depends on is set in exactly one place. If the
+    /// test target stops defining it, every test using the seam fails to
+    /// compile, which is loud; if the APP target ever starts defining it, the
+    /// seam quietly becomes reachable again, which is not.
+    func testOnlyTheTestTargetDefinesTheTestOnlyFlag() throws {
+        let appDir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let manifest = try String(
+            contentsOf: appDir.appendingPathComponent("project.yml"), encoding: .utf8)
+
+        let definitions = manifest.components(separatedBy: "POSTROLL_TESTS").count - 1
+        XCTAssertEqual(
+            definitions, 1,
+            "POSTROLL_TESTS must be defined once, on the PostRollTests target only. "
+            + "Found \(definitions) mentions in project.yml. Defining it on the app target "
+            + "would make every test-only seam reachable from the shipping app."
+        )
+    }
 }
