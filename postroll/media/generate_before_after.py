@@ -64,6 +64,13 @@ SUBTITLE_FONT_SIZE = 15
 SUBTITLE_LETTER_SPACING = 4
 EDITED_PHOTO_SCALE = 1.12  # in 3-photo mode, edits render slightly larger than the RAW
 LOGO_WIDTH = 460  # readable at phone size, including the small PHOTOGRAPHY.COM line
+# The closing colophon: a rose-gold rule, a gap, then the mark centred beneath.
+# The footer has to reserve all three or the mark runs off the bottom of the
+# page, which is what BOTTOM_CREAM_H alone did: 130px of footer for a block
+# needing 170, so the PHOTOGRAPHY.COM line and half the wordmark were cut off
+# the canvas (found by the reference frame in #163).
+LOGO_TOP_GAP = 32
+LOGO_BOTTOM_MARGIN = 24
 BOTTOM_CREAM_H = 130  # taller bottom to balance the top
 HEADER_MIN_H = 400  # min header height to accommodate notch-safe title + org + venue
 TITLE_TOP_PADDING = 170  # clears iPhone notch/Dynamic Island (~120px) with breathing room
@@ -266,6 +273,21 @@ def generate_before_after(
     info_block_bottom = info_y + max(0, len(detail_lines) - 1) * 42 + 36
     header_min_needed = max(HEADER_MIN_H, info_block_bottom + 30)  # 30px breathing room
 
+    # The logo is loaded HERE, before the space budget, because the footer has
+    # to be tall enough to hold it. Sizing the footer from a constant and then
+    # discovering the mark is taller is how it came to be cut off the page.
+    logo = None
+    if logo_path and Path(logo_path).exists():
+        logo = Image.open(logo_path).convert("RGBA")
+        logo_scale = LOGO_WIDTH / logo.width
+        logo = logo.resize(
+            (int(logo.width * logo_scale), int(logo.height * logo_scale)),
+            Image.LANCZOS,
+        )
+    footer_min_needed = max(
+        BOTTOM_CREAM_H,
+        20 + LOGO_TOP_GAP + (logo.height if logo else 0) + LOGO_BOTTOM_MARGIN)
+
     # Photos to stack: RAW + color edit, plus the B&W after when supplied.
     source_photos = [raw_photo, edit_photo]
     if bw_photo is not None:
@@ -277,7 +299,7 @@ def generate_before_after(
     # cream label strip ABOVE it (RAW / Edit / B&W), so the label is always dark
     # ink on cream and legible over any photo, never overlaid on a busy frame.
     fixed_chrome = DIVIDER_H * 2 + LABEL_STRIP_H * photo_count
-    photos_budget = CANVAS_H - header_min_needed - BOTTOM_CREAM_H - fixed_chrome
+    photos_budget = CANVAS_H - header_min_needed - footer_min_needed - fixed_chrome
 
     # Height budget per photo. In 3-photo mode the edits (color + B&W) get a
     # slightly larger share than the RAW so the "after" reads as the hero; the
@@ -297,7 +319,7 @@ def generate_before_after(
     # Any leftover space (when photos are shorter than their cap) is split
     # between header and footer so the layout stays centered.
     remaining = CANVAS_H - total_photo_h - fixed_chrome
-    extra = remaining - header_min_needed - BOTTOM_CREAM_H
+    extra = remaining - header_min_needed - footer_min_needed
     header_cream_h = header_min_needed + max(0, extra) // 2
     footer_cream_h = remaining - header_cream_h
 
@@ -349,20 +371,20 @@ def generate_before_after(
     canvas = apply_cream_strip(canvas, y, footer_cream_h)
     draw = ImageDraw.Draw(canvas)
 
-    logo = None
-    if logo_path and Path(logo_path).exists():
-        logo = Image.open(logo_path).convert("RGBA")
-        logo_scale = LOGO_WIDTH / logo.width
-        logo = logo.resize(
-            (int(logo.width * logo_scale), int(logo.height * logo_scale)),
-            Image.LANCZOS,
-        )
-
+    # The logo was loaded with the space budget above, so the footer is already
+    # tall enough for the whole block: rule, gap, mark, bottom margin.
     logo_h = logo.height if logo else 0
-    rule_y = y + max(20, (footer_cream_h - logo_h) // 2 - 20)
+    block_h = LOGO_TOP_GAP + logo_h + LOGO_BOTTOM_MARGIN if logo else 0
+    rule_y = y + max(20, (footer_cream_h - block_h) // 2)
+    if logo:
+        # Last line of defence. Whatever the budget above worked out, the mark
+        # does not leave the page: a clipped wordmark is worse than a footer
+        # that sits a little high, and it shipped once because nothing checked.
+        rule_y = min(rule_y, CANVAS_H - LOGO_BOTTOM_MARGIN - logo_h - LOGO_TOP_GAP)
+        rule_y = max(rule_y, y)
     draw.line([(MAT, rule_y), (CANVAS_W - MAT, rule_y)], fill=ROSE_GOLD, width=1)
     if logo:
-        canvas.paste(logo, ((CANVAS_W - logo.width) // 2, rule_y + 32), logo)
+        canvas.paste(logo, ((CANVAS_W - logo.width) // 2, rule_y + LOGO_TOP_GAP), logo)
 
     # Save
     output = Path(output_path)
