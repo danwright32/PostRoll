@@ -167,6 +167,68 @@ final class EventExporterTests: XCTestCase {
         XCTAssertTrue(captions.contains("44: frame d"))
     }
 
+    /// #281: the handles Instagram will not accept are named in the file.
+    ///
+    /// The cap and the dropped list are unit tested on both sides. This is the
+    /// half that matters to Dan: that the block actually reaches CAPTIONS.txt,
+    /// which is the file he pastes from. Built is not wired, and the two
+    /// defects this closes (#221, #222) were both a correct rule that never
+    /// made it into the deliverable.
+    func testCaptionsNamesTheTagsThatDidNotFit() throws {
+        var event = Event(name: "Music From Inside", org: "Decoda",
+                          venue: "Hall", date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        // More taggable accounts than one post can carry.
+        let overflow = CaptionBlocks.maxTagsPerPost + 3
+        var sunday = PostingDay(day: .sunday)
+        sunday.tagHandles = (0..<overflow).map { String(format: "handle%03d", $0) }
+        event.days = [DayName.sunday.rawValue: sunday,
+                      DayName.thursday.rawValue: PostingDay(day: .thursday)]
+
+        var result = WeekGenerationResult()
+        result.sunday = caption("Sunday opener")
+        // The tag list rides on the reel days, so Thursday is the block to read.
+        result.thursday = caption("Thursday reel")
+        event.weekResult = result
+
+        let folder = try EventExporter.export(event: event, to: root, preset: .classic).folder
+        let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"),
+                                  encoding: .utf8)
+
+        XCTAssertTrue(captions.contains(CaptionBlocks.tagsDroppedHeader), captions)
+        // The three past the limit are named, and the ones that fit are not in
+        // the dropped block.
+        let dropped = captions.components(separatedBy: CaptionBlocks.tagsDroppedHeader)[1]
+        for index in CaptionBlocks.maxTagsPerPost..<overflow {
+            XCTAssertTrue(dropped.contains(String(format: "handle%03d", index)),
+                          "handle \(index) fell off and was not named")
+        }
+        XCTAssertFalse(dropped.contains("handle000"),
+                       "a handle that fits must not be reported as dropped")
+    }
+
+    func testCaptionsSaysNothingAboutDroppedTagsWhenTheyAllFit() throws {
+        // A heading on every export is how a real one stops being read.
+        var event = Event(name: "Music From Inside", org: "Decoda",
+                          venue: "Hall", date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        var sunday = PostingDay(day: .sunday)
+        sunday.tagHandles = ["decoda", "thehall"]
+        event.days = [DayName.sunday.rawValue: sunday,
+                      DayName.thursday.rawValue: PostingDay(day: .thursday)]
+        var result = WeekGenerationResult()
+        result.sunday = caption("Sunday opener")
+        result.thursday = caption("Thursday reel")
+        event.weekResult = result
+
+        let folder = try EventExporter.export(event: event, to: root, preset: .classic).folder
+        let captions = try String(contentsOf: folder.appendingPathComponent("CAPTIONS.txt"),
+                                  encoding: .utf8)
+
+        XCTAssertTrue(captions.contains("TAG LIST:"), captions)
+        XCTAssertFalse(captions.contains(CaptionBlocks.tagsDroppedHeader), captions)
+    }
+
     func testBalancedSundayCarouselEmitsPerPhotoTags() throws {
         let photos = [makeFile("sun-11.jpg"), makeFile("sun-22.jpg"),
                       makeFile("sun-33.jpg"), makeFile("sun-44.jpg")]

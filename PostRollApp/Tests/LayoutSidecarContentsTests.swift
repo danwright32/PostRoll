@@ -78,4 +78,43 @@ final class LayoutSidecarContentsTests: XCTestCase {
         let preview = dir.appendingPathComponent("collage.png")
         XCTAssertEqual(LayoutSidecar.read(forPreview: preview).version, 9)
     }
+
+    /// The stale badge must not re-read the file on every redraw.
+    ///
+    /// The first version of it checked the sidecar inside the view body, so it
+    /// opened and parsed a file every time that row redrew, for an answer that
+    /// only changes when the day is regenerated. The export screen had taken
+    /// the cached shape an hour earlier for exactly this reason (#247).
+    ///
+    /// Checked structurally because the view is private to its file and cannot
+    /// be built in a test: what is guarded is that the answer comes from stored
+    /// state and the read happens in a named refresh, not in `body`.
+    func testTheReviewScreenReadsTheStampOnceRatherThanEveryRedraw() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/Views/CaptionReviewView.swift"),
+            encoding: .utf8)
+
+        XCTAssertTrue(source.contains("@State private var collageIsStale"),
+                      "the staleness answer is not held in state, so it is being "
+                      + "recomputed rather than remembered")
+        XCTAssertTrue(source.contains("if collageIsStale,"),
+                      "the badge is not reading the cached answer")
+        // The defect's exact shape: the read used as the branch condition, so
+        // it runs whenever SwiftUI evaluates the view. The file's other reads
+        // are legitimate; they load the cells on a background task keyed on the
+        // preview, which is off the redraw path.
+        XCTAssertFalse(source.contains("if LayoutSidecar.read("),
+                       "the sidecar is being read to decide whether to draw the "
+                       + "badge, which puts a file read back on every redraw")
+        XCTAssertTrue(source.contains("private func refreshCollageStaleness()"),
+                      "the read has no named home to be called from")
+        // And it is actually called back when the answer can have changed.
+        XCTAssertTrue(source.contains(".onAppear { refreshCollageStaleness() }"))
+        XCTAssertTrue(source.contains("onChange(of: graphicVersion)"),
+                      "a finished regeneration rewrites the sidecar, so the badge "
+                      + "must clear without leaving the screen")
+    }
 }
