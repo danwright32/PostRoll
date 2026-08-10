@@ -353,3 +353,23 @@ def test_the_run_reports_the_file_on_stderr_at_the_end():
         "nothing in generate_week calls the report, so the file stays as "
         "invisible as it was"
     )
+
+
+def test_the_inactive_guard_names_a_live_issue_that_would_activate_it():
+    """An observe-only guard is indistinguishable from no guard once the reason
+    for it is forgotten, so it has to point at the issue that turns it on.
+
+    #211 was split, and the half that waits on observing a real cap is #258.
+    This fails if CALIBRATED is still False while the docstring points at an
+    issue that has been closed out from under it, which is exactly how a
+    temporary state becomes permanent.
+    """
+    import postroll.ai.cap_signals as cs
+
+    if cs.CALIBRATED:
+        return  # calibrated, so there is nothing left to activate
+
+    doc = cs.__doc__ or ""
+    assert "#258" in doc, (
+        "the guard is still observe-only but no longer names the open issue "
+        "that would activate it. Repoint it, or nothing will ever turn it on")
