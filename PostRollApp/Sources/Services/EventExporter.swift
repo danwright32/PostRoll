@@ -109,7 +109,12 @@ struct EventExporter {
             if let blog = result?.blog {
                 let blogDir = folder.appendingPathComponent("0. Blog")
                 try FileManager.default.createDirectory(at: blogDir, withIntermediateDirectories: true)
-                let md = "# \(blog.title)\n\n\(blog.body)\n"
+                // One renderer, shared with the CLI writer and the review
+                // screen's copy button, so a change to the draft's shape
+                // reaches all three (#282). This copy used to concatenate
+                // unconditionally, so a body already carrying its heading got
+                // a second one.
+                let md = BlogDraftText.copyText(title: blog.title, body: blog.body) + "\n"
                 try md.write(to: blogDir.appendingPathComponent("draft.md"),
                              atomically: true, encoding: .utf8)
 

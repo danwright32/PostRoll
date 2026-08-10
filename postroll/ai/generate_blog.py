@@ -53,6 +53,7 @@ from .ai_tells import (
 from .claude_client import run_json_prompt, run_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .progress import ProgressWriter
 from .blog_quality import check_blog, finding_entry
+from ..blog_draft import blog_draft_text
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
@@ -1907,8 +1908,11 @@ def main() -> int:
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         # Write the markdown body to .md and the metadata alongside
+        # One renderer, shared with the exporter and the review screen's copy
+        # button, so a change to the draft's shape reaches all three (#282).
         args.output.write_text(
-            f"# {result['title']}\n\n{result['body']}\n", encoding="utf-8"
+            blog_draft_text(result["title"], result["body"]) + "\n",
+            encoding="utf-8",
         )
         meta_path = args.output.with_suffix(".json")
         meta_path.write_text(

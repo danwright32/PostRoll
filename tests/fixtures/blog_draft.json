@@ -1,0 +1,66 @@
+{
+  "_comment": [
+    "How the blog draft's markdown is assembled, shared by blog_draft_text in",
+    "postroll/blog_draft.py and BlogDraftText.copyText in",
+    "PostRollApp/Sources/Services/BlogFindingsDisplay.swift (#282).",
+    "",
+    "It was assembled by hand in three places, all producing '# title\\n\\nbody':",
+    "the Swift exporter writing 0. Blog/draft.md, the Python CLI writing the",
+    "same file, and the clipboard text on the review screen. That is the",
+    "dual-CAPTIONS.txt parity hazard with an extra copy, and two of the three",
+    "are invisible to anyone editing the first.",
+    "",
+    "The careful one was the clipboard's, and its rules are the contract:",
+    "  1. Heading plus a blank line plus body.",
+    "  2. Title and body are trimmed first, so stray whitespace does not",
+    "     produce a heading with nothing under it or a leading blank line.",
+    "  3. A body that ALREADY opens with the heading is left alone, so copying",
+    "     a post that was pasted back in does not grow a second title.",
+    "  4. An empty title yields the body alone rather than an empty heading,",
+    "     and an empty body yields the heading alone."
+  ],
+  "cases": [
+    {
+      "_what": "the ordinary case",
+      "title": "The hall wasn't open yet",
+      "body": "Singers in black were already out on 57th Street.",
+      "expected": "# The hall wasn't open yet\n\nSingers in black were already out on 57th Street."
+    },
+    {
+      "_what": "surrounding whitespace is trimmed off both",
+      "title": "  A Title  ",
+      "body": "\n\nSome prose.\n\n",
+      "expected": "# A Title\n\nSome prose."
+    },
+    {
+      "_what": "a body that already opens with the heading is left alone",
+      "title": "A Title",
+      "body": "# A Title\n\nSome prose.",
+      "expected": "# A Title\n\nSome prose."
+    },
+    {
+      "_what": "no title yields the body alone, not an empty heading",
+      "title": "",
+      "body": "Some prose.",
+      "expected": "Some prose."
+    },
+    {
+      "_what": "no body yields the heading alone",
+      "title": "A Title",
+      "body": "",
+      "expected": "# A Title"
+    },
+    {
+      "_what": "neither yields nothing",
+      "title": "   ",
+      "body": "   ",
+      "expected": ""
+    },
+    {
+      "_what": "a title containing a hash is not mistaken for a heading",
+      "title": "Program #3",
+      "body": "Some prose.",
+      "expected": "# Program #3\n\nSome prose."
+    }
+  ]
+}
