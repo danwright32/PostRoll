@@ -198,7 +198,12 @@ final class EventExporterTests: XCTestCase {
         XCTAssertTrue(captions.contains(CaptionBlocks.tagsDroppedHeader), captions)
         // The three past the limit are named, and the ones that fit are not in
         // the dropped block.
+        // Just this section, not everything to the end of the file: the day's
+        // block carries further sections after it (the collaborator suggestion,
+        // #278), and a slice that ran to the end would read their names as
+        // dropped handles.
         let dropped = captions.components(separatedBy: CaptionBlocks.tagsDroppedHeader)[1]
+            .components(separatedBy: "\n\n")[0]
         for index in CaptionBlocks.maxTagsPerPost..<overflow {
             XCTAssertTrue(dropped.contains(String(format: "handle%03d", index)),
                           "handle \(index) fell off and was not named")

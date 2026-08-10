@@ -1,0 +1,198 @@
+import SwiftUI
+
+/// The collaborator suggestion for one day, on the screen where Dan reviews
+/// that day's tags (#278).
+///
+/// A tag puts someone in the "tagged people" list, which almost nobody sees. A
+/// collaborator invite puts the post on that account's own grid and in front of
+/// their followers, so it is the single biggest reach lever in the week's
+/// output, and Instagram allows only five per post.
+///
+/// Every name carries the reason it is there: the figures it was ranked on and
+/// whether it is in the first photo. An ordered list with no reasons is not
+/// something anyone can disagree with, and disagreeing is the point, since the
+/// swap is Dan's call.
+struct CollaboratorPanel: View {
+    let result: CollaboratorPick.Result
+    /// Open the numbers form for one account. The whole ranking runs on figures
+    /// Dan enters, so the way to enter them is beside the names being ranked.
+    let onEditNumbers: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("COLLABORATORS TO INVITE")
+                .font(.system(size: 9, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.warmMid)
+            Text("Instagram allows \(CollaboratorPick.maxPerPost) per post. "
+                 + "A collaborator invite puts this post on their own grid.")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmMid)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(Array(result.suggested.enumerated()), id: \.element.handle) { index, candidate in
+                row(rank: "\(index + 1).", candidate: candidate)
+            }
+
+            if let excluded = result.strongestExcluded {
+                // Without this line the exclusion is invisible: an account with
+                // ten times anyone's reach would silently never be offered, and
+                // nothing on screen would say why.
+                divider
+                Text("LEFT OUT ONLY FOR NOT BEING IN THE FIRST PHOTO")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.warmMid)
+                Text("Swap in by hand if the reach is worth it.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.warmMid)
+                row(rank: "", candidate: excluded)
+            }
+
+            if !result.unranked.isEmpty {
+                divider
+                Text("NOT COUNTED YET, SO NOT RANKED")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.warmMid)
+                ForEach(result.unranked, id: \.handle) { candidate in
+                    row(rank: "", candidate: candidate)
+                }
+            }
+
+            ForEach(result.notes, id: \.self) { note in
+                Label(note, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.warmMid)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.sm)
+                .fill(Color.creamDeep)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.sm)
+                        .strokeBorder(Color.creamEdge, lineWidth: 1)
+                )
+        )
+    }
+
+    private var divider: some View {
+        RoseGoldDivider(opacity: 0.3).padding(.vertical, 2)
+    }
+
+    private func row(rank: String, candidate: CollaboratorPick.Candidate) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if !rank.isEmpty {
+                Text(rank)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.warmMid)
+                    .frame(width: 16, alignment: .trailing)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(candidate.handle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.warmDark)
+                    .textSelection(.enabled)
+                Text(candidate.reason)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.warmMid)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            // The one step way to fix a number in place (#280). Beside the
+            // figure it corrects, so a stale count is fixed where it is read
+            // rather than on some other screen.
+            Button(candidate.stats?.hasEngagementData == true ? "Update" : "Add numbers") {
+                onEditNumbers(candidate.handle)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 11))
+            .foregroundStyle(Color.roseGold)
+            .accessibilityLabel("Edit numbers for \(candidate.handle)")
+        }
+    }
+}
+
+/// Enter or correct one account's follower and engagement numbers (#279, #280).
+///
+/// The only source that works without a platform API is Dan entering them, and
+/// that is only worth doing if the app keeps them: a performer tagged in March
+/// should already be scored the next time they turn up.
+struct AccountNumbersSheet: View {
+    let handle: String
+    let stats: AccountStats?
+    /// Followers, likes, comments. Any of them may be nil, which stores as
+    /// "not counted" rather than zero.
+    let onSave: (Int?, Int?, Int?) -> Void
+    let onCancel: () -> Void
+
+    @State private var followers: String = ""
+    @State private var likes: String = ""
+    @State private var comments: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text(handle)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.warmDark)
+
+            Text("Open their profile and read these off a few recent posts. "
+                 + "Leave a field empty if you do not know it: empty means not counted, "
+                 + "which is different from zero.")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmMid)
+                .fixedSize(horizontal: false, vertical: true)
+
+            field("Followers", text: $followers)
+            field("Likes on a typical post", text: $likes)
+            field("Comments on a typical post", text: $comments)
+
+            // The date is shown wherever the numbers are (#280), so a figure
+            // driving a ranking cannot look equally confident whether it was
+            // entered last week or two years ago.
+            if let stats, stats.recordedOn != nil {
+                Text(stats.freshnessLabel(asOf: Date()))
+                    .font(.system(size: 11))
+                    .foregroundStyle(stats.freshness(asOf: Date()).isStale
+                                     ? Color.roseDeep : Color.warmMid)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.warmMid)
+                Button("Save") {
+                    onSave(AccountNumbersEntry.parse(followers),
+                           AccountNumbersEntry.parse(likes),
+                           AccountNumbersEntry.parse(comments))
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(Spacing.xl)
+        .frame(width: 360)
+        .onAppear {
+            // Prefilled from what is stored, so saving without touching a field
+            // cannot silently clear it.
+            followers = AccountNumbersEntry.text(stats?.followers)
+            likes = AccountNumbersEntry.text(stats?.likes)
+            comments = AccountNumbersEntry.text(stats?.comments)
+        }
+    }
+
+    private func field(_ label: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.warmMid)
+            TextField("Not counted", text: text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+        }
+    }
+}

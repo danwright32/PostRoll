@@ -10,6 +10,12 @@ struct CaptionReviewView: View {
 
     @State private var result: WeekGenerationResult
     @State private var expanded: ReviewSection? = nil
+    /// Which account's numbers form is open (#279, #280).
+    @State private var editingAccount: EditingAccount? = nil
+    /// The instant the collaborator suggestions are judged fresh or stale
+    /// against. Held rather than read from `Date()` in the body, so the panel
+    /// does not recompute on every redraw.
+    @State private var suggestionsAsOf = Date()
     @State private var isRegenerating = false
     /// When the current whole-week regeneration started. Set and cleared with
     /// `isRegenerating` so the indicator can show elapsed time and, past the
@@ -68,6 +74,12 @@ struct CaptionReviewView: View {
     struct GalleryTarget: Identifiable {
         let day: DayName
         var id: String { day.rawValue }
+    }
+
+    /// Identifiable wrapper so the numbers form can drive `.sheet(item:)`.
+    struct EditingAccount: Identifiable {
+        let handle: String
+        var id: String { AccountBook.key(handle) }
     }
 
     // Upload-your-own reel audio
@@ -283,6 +295,18 @@ struct CaptionReviewView: View {
                             } : nil
                         )
                         .disabled(isRegenerating)
+
+                        // Beside the day's section rather than inside it: that
+                        // initializer is already at the view builder's
+                        // type-check limit, and two more arguments tip it over.
+                        // Shown only while the day is open, so a week of
+                        // collapsed days is not a wall of rankings (#278).
+                        if expanded == section, let picks = collaborators(for: day, in: live) {
+                            CollaboratorPanel(result: picks, onEditNumbers: beginEditingNumbers)
+                                .padding(.horizontal, Spacing.xl)
+                                .padding(.bottom, Spacing.md)
+                                .disabled(isRegenerating)
+                        }
                     }
 
                     if result.blog != nil {
@@ -437,6 +461,22 @@ struct CaptionReviewView: View {
                     applyCollageLayout(day: target.day, seed: seed)
                 },
                 onCancel: { layoutGalleryTarget = nil }
+            )
+        }
+        .sheet(item: $editingAccount) { target in
+            AccountNumbersSheet(
+                handle: target.handle,
+                stats: AccountBook.shared.stats(for: target.handle),
+                onSave: { followers, likes, comments in
+                    AccountBook.shared.record(handle: target.handle, followers: followers,
+                                              likes: likes, comments: comments, on: Date())
+                    // The suggestions are judged against this instant, so
+                    // moving it is what makes the panel re-rank on the numbers
+                    // just entered rather than keep showing the old order.
+                    suggestionsAsOf = Date()
+                    editingAccount = nil
+                },
+                onCancel: { editingAccount = nil }
             )
         }
         .sheet(isPresented: $showLearnSheet) {
@@ -1043,6 +1083,29 @@ struct CaptionReviewView: View {
     /// collage seed, drop any per-cell override (tied to the old layout), and
     /// regenerate. `regenerateGraphic` keeps a non-nil seed when newLayout is
     /// false, so the rendered collage reproduces the picked layout.
+
+    /// Open the numbers form for one account (#279).
+    ///
+    /// A method rather than a closure literal at the call site: that
+    /// initializer is large enough that one more closure to infer pushes the
+    /// view builder past its type-check budget.
+    private func beginEditingNumbers(_ handle: String) {
+        editingAccount = EditingAccount(handle: handle)
+    }
+
+    /// Which of a day's tagged accounts to invite as collaborators (#278).
+    ///
+    /// A named function rather than an inline call in the body: the view
+    /// builder could not type-check the expression inside it.
+    private func collaborators(for day: DayName, in live: Event) -> CollaboratorPick.Result? {
+        CollaboratorPick.suggest(event: live, day: day,
+                                 preset: live.effectivePostingPreset,
+                                 stats: { AccountBook.shared.stats(for: $0) },
+                                 asOf: suggestionsAsOf,
+                                 notes: AccountBook.shared.loadStatus == .unreadable
+                                        ? [AccountBook.unreadableNote] : [])
+    }
+
     private func applyCollageLayout(day: DayName, seed: Int) {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         var pd = ev.days[day.rawValue] ?? PostingDay(day: day)

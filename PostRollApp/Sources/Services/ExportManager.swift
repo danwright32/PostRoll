@@ -154,13 +154,32 @@ final class ExportManager {
                            destinationRoot: URL, onlyDay: DayName?, appState: AppState) async {
         let scopedDays: Set<DayName>? = onlyDay.map { [$0] }
 
+        // Every account this week tags is remembered, so the book doubles as a
+        // browsable list of everyone ever tagged and a performer shot in March
+        // is already there the next time they turn up (#279). Numbers are never
+        // invented here: an account seen but not counted stays uncounted.
+        let exportedAt = Date()
+        AccountBook.shared.noteTagged(handles: CaptionBlocks.weekTagList(event: capturedEvent),
+                                      on: exportedAt)
+        // Copied once rather than reached into from the detached task below:
+        // the book is main-actor state (#278).
+        let accountStats = AccountBook.shared.snapshot()
+        // An unreadable book looks exactly like an empty one from the export's
+        // side: every account comes back not counted. Carried so CAPTIONS.txt
+        // says which of the two it is.
+        let accountNotes = AccountBook.shared.loadStatus == .unreadable
+            ? [AccountBook.unreadableNote] : []
+
         do {
             // Step 1: text export (fast, on background thread). The security
             // scope is released once the synchronous export returns.
             let textExport = try await Task.detached {
                 defer { destinationRoot.stopAccessingSecurityScopedResource() }
                 return try EventExporter.export(event: capturedEvent, to: destinationRoot, days: scopedDays,
-                                                preset: capturedEvent.effectivePostingPreset)
+                                                preset: capturedEvent.effectivePostingPreset,
+                                                collaboratorStats: { accountStats[AccountBook.key($0)] },
+                                                asOf: exportedAt,
+                                                collaboratorNotes: accountNotes)
             }.value
             let folder = textExport.folder
             // Files the export meant to copy and couldn't. Carried all the way

@@ -38,8 +38,17 @@ struct EventExporter {
     /// last full export. (No CHECKLIST.md is written by this exporter or by
     /// anything else in the app: an earlier version of this doc comment
     /// claimed one was, which was never true.)
+    /// - Parameters:
+    ///   - collaboratorStats: what is known about one tagged account (#278).
+    ///     Injected rather than read from `AccountBook.shared` so a test can
+    ///     never touch the real book, and so this stays callable off the main
+    ///     actor. Returning nil for everything is the honest first-run state:
+    ///     the accounts are still named, just not ranked.
     static func export(event: Event, to root: URL, days: Set<DayName>? = nil,
-                       preset: PostingPreset = .balanced) throws -> Outcome {
+                       preset: PostingPreset = .balanced,
+                       collaboratorStats: (String) -> AccountStats? = { _ in nil },
+                       asOf now: Date = Date(),
+                       collaboratorNotes: [String] = []) throws -> Outcome {
         // Every intended copy is accounted for: a source that isn't there, or a
         // copy that fails, is recorded rather than skipped, because an export
         // folder short a photo gets uploaded looking complete (#79).
@@ -133,7 +142,9 @@ struct EventExporter {
                 }
             }
 
-            let masterCaptions = masterCaptionText(event: event, result: result, preset: preset)
+            let masterCaptions = masterCaptionText(event: event, result: result, preset: preset,
+                                                   collaboratorStats: collaboratorStats, asOf: now,
+                                                   collaboratorNotes: collaboratorNotes)
             try masterCaptions.write(to: folder.appendingPathComponent("CAPTIONS.txt"),
                                       atomically: true, encoding: .utf8)
         }
@@ -144,7 +155,10 @@ struct EventExporter {
     // MARK: - Text generators
 
     private static func masterCaptionText(event: Event, result: WeekGenerationResult?,
-                                          preset: PostingPreset) -> String {
+                                          preset: PostingPreset,
+                                          collaboratorStats: (String) -> AccountStats?,
+                                          asOf now: Date,
+                                          collaboratorNotes: [String]) -> String {
         var sections: [String] = []
         let (weekTags, droppedTags) = CaptionBlocks.weekTags(event: event)
         for day in DayName.allCases {
@@ -196,6 +210,16 @@ struct EventExporter {
                           + "per post, so these did not fit: "
                           + droppedTags.joined(separator: ", ")
                 }
+            }
+            // Which of this day's tags to invite as collaborators (#278).
+            // A tag puts someone in a list almost nobody sees; a
+            // collaborator invite puts the post on their own grid. Built
+            // from the same `suggest` the review screen renders, so the
+            // file and the screen cannot name a different five.
+            if let picks = CollaboratorPick.suggest(event: event, day: day, preset: preset,
+                                                    stats: collaboratorStats, asOf: now,
+                                                    notes: collaboratorNotes) {
+                block += "\n\n" + CollaboratorPick.captionBlock(picks)
             }
             sections.append(block)
         }

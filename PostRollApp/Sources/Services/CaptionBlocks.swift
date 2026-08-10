@@ -103,6 +103,54 @@ enum CaptionBlocks {
         return (Array(ordered.prefix(limit)), Array(ordered.dropFirst(limit)))
     }
 
+    /// The accounts one day's post actually tags, in the order it lists them.
+    ///
+    /// One predicate, shared by the export's own block and by the collaborator
+    /// suggestion (#278), because a suggestion built from a different rule than
+    /// the post would rank people the post does not tag, or miss people it
+    /// does, and nothing on either surface would say so.
+    ///
+    /// A collage carousel day tags the people in its photos, per photo. The
+    /// reel days carry the whole week's list, which is what their TAG LIST
+    /// block prints: they are shot at the same event, and they have no
+    /// per-photo tag data of their own (#222). Every other day prints no tag
+    /// block at all, so it has no candidates.
+    static func dayTagCandidates(event: Event, day: DayName,
+                                 preset: PostingPreset) -> [String] {
+        if preset.isCollageCarousel(day) {
+            guard let posting = event.days[day.rawValue] else { return [] }
+            var seen = Set<String>()
+            var handles: [String] = []
+            for url in posting.photoPaths {
+                for tag in photoTags(posting, for: url) {
+                    let name = bareUsername(tag)
+                    guard !name.isEmpty, seen.insert(name.lowercased()).inserted else { continue }
+                    handles.append(name)
+                }
+            }
+            return handles
+        }
+        if day == .tuesday || day == .thursday { return weekTagList(event: event) }
+        return []
+    }
+
+    /// One photo's tags, matched by filename when the stored key is an older
+    /// path.
+    ///
+    /// `photoTags` is keyed on the URL as it stood when the tag was entered,
+    /// and `MediaReclaim` later copies originals into app storage and rewrites
+    /// the day's `photoPaths`. An exact-key-only lookup silently returns
+    /// nobody, which reads identically to a photo with nobody in it.
+    static func photoTags(_ posting: PostingDay, for url: URL) -> [String] {
+        if let exact = posting.photoTags[url.absoluteString] { return exact }
+        let name = url.lastPathComponent
+        for (key, tags) in posting.photoTags
+        where URL(string: key)?.lastPathComponent == name {
+            return tags
+        }
+        return []
+    }
+
     /// Which blocks a day is expected to emit (#223).
     ///
     /// Declared once, here, rather than inferred from whichever builder ran:
