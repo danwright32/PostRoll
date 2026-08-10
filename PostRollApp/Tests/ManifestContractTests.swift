@@ -197,7 +197,135 @@ final class ManifestContractTests: XCTestCase {
         XCTAssertNil(manifest["audio"])
     }
 
+    // MARK: - The eight smaller manifests (#270)
+
+    func testTheReelPreviewManifestSendsEveryRequiredKey() throws {
+        let pd = try XCTUnwrap(fullEvent().days[DayName.thursday.rawValue])
+        let manifest = PythonBridge.buildReelPreviewManifest(
+            day: pd, cropOffsets: [[0, -1, 1.0]])
+        try assertSends(manifest, "reel_preview")
+    }
+
+    func testAnUntouchedDaySendsNoCropOffsets() throws {
+        // All-default offsets are not crops. Sending them would ask Python to
+        // apply a pan of zero to every photo, which is not the same request as
+        // "this day was never adjusted".
+        let pd = try XCTUnwrap(fullEvent().days[DayName.thursday.rawValue])
+        let manifest = PythonBridge.buildReelPreviewManifest(
+            day: pd, cropOffsets: [[0, 0, 1.0], [0, 0, 1.0]])
+        XCTAssertNil(manifest["crop_offsets"])
+    }
+
+    func testTheAudioSwapManifestSendsEveryRequiredKey() throws {
+        try assertSends(PythonBridge.buildSwapReelAudioManifest(event: fullEvent()),
+                        "swap_reel_audio")
+    }
+
+    func testTheAudioSwapStillSendsPiecesWhenTheProgrammeHasNone() throws {
+        // `pieces` is what the music is matched on. An event with no programme
+        // still has to send the key, or the match silently changes shape.
+        var event = fullEvent()
+        event.ocrResult?.pieces = []
+        let manifest = PythonBridge.buildSwapReelAudioManifest(event: event)
+        try assertSends(manifest, "swap_reel_audio")
+        XCTAssertEqual((manifest["pieces"] as? [[String: String]])?.count, 0)
+    }
+
+    func testTheCaptionRevisionManifestSendsEveryRequiredKey() throws {
+        try assertSends(
+            PythonBridge.buildCaptionRevisionManifest(
+                event: fullEvent(), day: .wednesday, program: ["performers": []],
+                existing: ["caption": "before"], feedback: "make it shorter"),
+            "caption_revision")
+    }
+
+    func testTheBlogRevisionManifestSendsEveryRequiredKey() throws {
+        try assertSends(
+            PythonBridge.buildBlogRevisionManifest(
+                event: fullEvent(), program: ["performers": []],
+                existing: ["body": "before"], feedback: "make it shorter"),
+            "blog_revision")
+    }
+
+    func testTheBlogPhotoSwapManifestSendsEveryRequiredKey() throws {
+        try assertSends(
+            PythonBridge.buildBlogPhotoSwapManifest(
+                currentBody: "a post", photoPaths: [URL(fileURLWithPath: "/p/a.jpg")],
+                event: fullEvent()),
+            "blog_photo_swap")
+    }
+
+    func testABlogPhotoSwapWithNoEventStillSendsWhatItHas() {
+        // One caller has no event. Python defaults the venue and copes without
+        // the programme, so this is a real conditional rather than a lost key.
+        let manifest = PythonBridge.buildBlogPhotoSwapManifest(
+            currentBody: "a post", photoPaths: [URL(fileURLWithPath: "/p/a.jpg")], event: nil)
+        XCTAssertNotNil(manifest["body"])
+        XCTAssertNotNil(manifest["photo_paths"])
+        XCTAssertNil(manifest["venue"])
+        XCTAssertNil(manifest["program"])
+    }
+
+    func testAnEventWithNoProgrammeStillSwapsBlogPhotos() {
+        // The programme is the optional half; the venue is not.
+        var event = fullEvent()
+        event.ocrResult = nil
+        let manifest = PythonBridge.buildBlogPhotoSwapManifest(
+            currentBody: "a post", photoPaths: [URL(fileURLWithPath: "/p/a.jpg")], event: event)
+        XCTAssertEqual(manifest["venue"] as? String, "Carnegie Hall")
+        XCTAssertNil(manifest["program"])
+    }
+
+    func testTheAnalyticsManifestSendsEveryRequiredKey() throws {
+        try assertSends(
+            PythonBridge.buildAnalyticsManifest(
+                posts: [["id": "1"]], orgBands: ["Org": "small"], globalHashtags: ["#nyc"]),
+            "analytics")
+    }
+
+    func testTheLearnFromEditsManifestSendsEveryRequiredKey() throws {
+        try assertSends(
+            PythonBridge.buildLearnFromEditsManifest(
+                brandVoice: "the voice", edits: [["day": "sunday"]]),
+            "learn_suggestion")
+    }
+
+    func testTheBrandVoiceIsSentEvenWhenEmpty() throws {
+        // Python loads the file itself when the key is absent. Two copies of
+        // the voice that can disagree is worse than one that is briefly blank,
+        // so the key goes either way.
+        let manifest = PythonBridge.buildLearnFromEditsManifest(brandVoice: "", edits: [])
+        try assertSends(manifest, "learn_suggestion")
+        XCTAssertEqual(manifest["brand_voice"] as? String, "")
+    }
+
     // MARK: - The guard on the guard
+
+    /// Every manifest with a proof above. Without this check, adding a manifest
+    /// to the contract silently gets no Swift coverage at all, and the file
+    /// looks enforced while a whole manifest goes unchecked.
+    private static let provenManifests = [
+        "week", "week_day", "media", "media_day", "cover", "friday_override",
+        "reel_preview", "swap_reel_audio", "caption_revision", "blog_revision",
+        "blog_photo_swap", "analytics", "learn_suggestion",
+    ]
+
+    func testEveryManifestInTheContractHasAProofHere() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let url = root.appendingPathComponent("tests/fixtures/bridge_payload_contract.json")
+        let doc = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let manifests = try XCTUnwrap(doc["manifests"] as? [String: Any])
+        let declared = Set(manifests.keys.filter { !$0.hasPrefix("_") })
+        XCTAssertFalse(declared.isEmpty)
+
+        let unproven = declared.subtracting(Self.provenManifests)
+        XCTAssertTrue(unproven.isEmpty,
+                      "no Swift proof for \(unproven.sorted()). Add one, or the app is free to "
+                      + "stop sending those keys and nothing here would notice.")
+    }
+
 
     func testAMissingRequiredKeyIsReported() throws {
         // Proves the assertion can fail. A contract check that only ever passes
