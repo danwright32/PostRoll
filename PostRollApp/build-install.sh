@@ -30,7 +30,10 @@ else
   # reads as broken tests. A gate that fails for reasons unrelated to the code
   # teaches the operator to bypass it every time, and a gate that is always
   # bypassed is the same as no gate.
-  SWIFT_LOG="$(mktemp -t postroll-swift-tests)"
+  # An explicit XXXXXX template. The short `-t NAME` form of mktemp is
+  # BSD-only, GNU mktemp refuses it, and it broke every Linux CI run while
+  # working perfectly on this Mac.
+  SWIFT_LOG="$(mktemp "${TMPDIR:-/tmp}/postroll-swift-tests.XXXXXX")"
   if xcodebuild -project "${PROJECT}" -scheme PostRollTests -destination 'platform=macOS' test \
        > "${SWIFT_LOG}" 2>&1; then
     (command -v xcbeautify >/dev/null && xcbeautify < "${SWIFT_LOG}" || cat "${SWIFT_LOG}")

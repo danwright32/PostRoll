@@ -199,3 +199,23 @@ def test_the_swift_output_still_reaches_the_operator_on_a_green_run(tmp_path):
     combined = result.stdout + result.stderr
     assert "Executed 927 tests" in combined, combined[-2000:]
     assert "permissions problem" not in combined, combined[-2000:]
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_the_install_script_uses_no_bsd_only_shell_forms():
+    """The script runs on this Mac; parts of it also run under the Linux CI job.
+
+    The short `-t NAME` form of mktemp is BSD-only and GNU mktemp refuses it,
+    so a line that worked perfectly here failed on every CI run until somebody
+    read the log. Checked as a class rather than on the one flag, because the
+    next BSD-ism will be a different one.
+
+    The needle is built from parts so this file, and the script's own comment
+    explaining the rule, do not match the very thing they describe.
+    """
+    text = BUILD_INSTALL.read_text()
+    assert ("mktemp" + " -t ") not in text, (
+        "the short -t form of mktemp is BSD-only; GNU mktemp needs an explicit "
+        "XXXXXX template, so use ${TMPDIR:-/tmp}/name.XXXXXX instead")
+    assert "sed -i ''" not in text, (
+        "`sed -i ''` is BSD-only; GNU sed reads the '' as a script")

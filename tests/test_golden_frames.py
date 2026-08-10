@@ -196,14 +196,23 @@ def screen_recording(tmp_path) -> str:
     somebody's actual screen, and what the template does with it (speed it up,
     scale it, put chrome round it) does not depend on what it shows. It does
     depend on the shape, so this is a real 16:9 desktop aspect at the frame
-    rate the template expects, with moving structure rather than a flat colour
-    so a scaling or placement regression has something to move.
+    rate the template expects, carrying structure rather than a flat colour so
+    a scaling or placement regression has something to move.
+
+    Deliberately a STILL held for six seconds rather than moving footage. The
+    reel speeds the recording up, so the exact frame a sample lands on shifts
+    with any difference in the encoder's timing, and the first version of this
+    used ffmpeg's testsrc2, whose burnt-in timecode and moving diagonals made
+    the reference frame different on CI from the one recorded here. A recording
+    whose every frame is identical cannot do that.
     """
+    still = _patterned_photo(tmp_path / "screen-still.jpg", seed=163)
     path = tmp_path / "recording.mov"
     subprocess.run(
-        ["ffmpeg", "-y", "-f", "lavfi",
-         "-i", f"testsrc2=size=1920x1080:rate={screen_mod.FPS}:duration=6",
-         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)],
+        ["ffmpeg", "-y", "-loop", "1", "-i", still,
+         "-t", "6", "-r", str(screen_mod.FPS),
+         "-vf", "scale=1920:1080", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+         str(path)],
         check=True, capture_output=True)
     return str(path)
 
