@@ -42,8 +42,13 @@ final class BridgePayloadContractTests: XCTestCase {
         let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
         let dict = try XCTUnwrap(raw as? [String: Any], "the contract is not a JSON object")
 
+        // `manifests` is a section of the file, not a payload. Named rather
+        // than inferred, so adding a section cannot silently become a payload
+        // that every consumer then fails to parse.
+        let reserved: Set<String> = ["manifests"]
+
         var payloads: [String: Contract.Payload] = [:]
-        for (name, value) in dict where !name.hasPrefix("_") {
+        for (name, value) in dict where !name.hasPrefix("_") && !reserved.contains(name) {
             let entry = try XCTUnwrap(value as? [String: Any], "\(name) is malformed")
             let keys = try XCTUnwrap(entry["keys"] as? [String: Any], "\(name) has no keys")
             let swiftKeys = keys.compactMap { key, disposition -> String? in

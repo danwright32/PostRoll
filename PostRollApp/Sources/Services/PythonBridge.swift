@@ -655,15 +655,7 @@ actor PythonBridge {
         let manifestFile = tmp.appendingPathComponent("postroll_friday_override_manifest_\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: manifestFile) }
 
-        var manifest = Self.buildFridayOverrideManifest(override: override, originalPlan: fri.fridayClipPlan)
-        manifest["duck_gain_db"] = fri.fridayAudioDuckDB
-        manifest["mute_clip_audio"] = fri.fridayAudioMuted
-        manifest["title_card_muted"] = fri.titleCardMuted
-        manifest["event_name"] = event.name
-        manifest["shoot_type"] = event.shootType.pythonValue
-        manifest["pieces"] = (event.ocrResult?.pieces ?? []).map {
-            ["title": $0.title, "composer": $0.composer]
-        }
+        let manifest = Self.buildFridayOverrideManifest(event: event, override: override)
         let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
         try manifestData.write(to: manifestFile)
 
@@ -685,7 +677,36 @@ actor PythonBridge {
     /// A pure function (no actor-isolated state), so nonisolated: callable
     /// directly, and internal (not private) so PostRollTests can pin the
     /// exact wire format render_friday_override.py expects.
+    /// The whole manifest render_friday_override.py reads, assembled in one
+    /// place (#266).
+    ///
+    /// Half of it used to be added by the caller after the fact, which is how
+    /// `audio` came to be missing: Python reads it to keep a track Dan uploaded,
+    /// and nothing here sent it, so every re-render of a hand-edited Friday
+    /// threw his own music away and fetched a stranger's. A key the app does not
+    /// send does not fail; Python's default just quietly wins.
     nonisolated static func buildFridayOverrideManifest(
+        event: Event, override: [ReelClipOverride]
+    ) -> [String: Any] {
+        let fri = event.days[DayName.friday.rawValue]
+        var manifest = buildFridayOverrideSelections(
+            override: override, originalPlan: fri?.fridayClipPlan)
+
+        manifest["event_name"] = event.name
+        manifest["shoot_type"] = event.shootType.pythonValue
+        manifest["pieces"] = (event.ocrResult?.pieces ?? []).map {
+            ["title": $0.title, "composer": $0.composer]
+        }
+        manifest["duck_gain_db"]     = fri?.fridayAudioDuckDB ?? -15.0
+        manifest["mute_clip_audio"]  = fri?.fridayAudioMuted ?? false
+        manifest["title_card_muted"] = fri?.titleCardMuted ?? false
+        // Only when there is one: its absence is what tells Python to fetch a
+        // fresh track, so sending an empty string would be a different request.
+        if let audio = fri?.audioPath { manifest["audio"] = audio.path }
+        return manifest
+    }
+
+    nonisolated static func buildFridayOverrideSelections(
         override: [ReelClipOverride], originalPlan: FridayClipPlan?
     ) -> [String: Any] {
         let transitionByPath = Dictionary(

@@ -29,7 +29,6 @@
     "(parsePreviewDayEntry keeps any string that is an existing file) satisfies",
     "this by behaviour without naming a single key, which is the point."
   ],
-
   "week_result": {
     "_what": "One event week's captions and blog, written after every day so a kill keeps what finished.",
     "python": [
@@ -37,7 +36,11 @@
         "module": "postroll/ai/generate_week.py",
         "function": "generate_week",
         "variable": "results",
-        "dynamic": {"day_name": {"from": "postroll.ai.generate_week:DAY_ORDER"}}
+        "dynamic": {
+          "day_name": {
+            "from": "postroll.ai.generate_week:DAY_ORDER"
+          }
+        }
       },
       {
         "module": "postroll/ai/generate_week.py",
@@ -45,155 +48,208 @@
         "variable": "payload"
       }
     ],
-    "swift": {"kind": "model", "type": "WeekGenerationResult"},
+    "swift": {
+      "kind": "model",
+      "type": "WeekGenerationResult"
+    },
     "keys": {
-      "sunday":                "swift",
-      "monday":                "swift",
-      "tuesday":               "swift",
-      "wednesday":             "swift",
-      "thursday":              "swift",
-      "friday":                "swift",
-      "blog":                  "swift",
-      "errors":                "swift",
-      "warnings":              "swift",
-      "stopped_reason":        "swift",
-      "complete":              "swift",
+      "sunday": "swift",
+      "monday": "swift",
+      "tuesday": "swift",
+      "wednesday": "swift",
+      "thursday": "swift",
+      "friday": "swift",
+      "blog": "swift",
+      "errors": "swift",
+      "warnings": "swift",
+      "stopped_reason": "swift",
+      "complete": "swift",
       "unrecognised_failures": "swift"
     }
   },
-
   "week_timing": {
     "_what": "Per-phase durations, feeding the rolling-mean estimate on the generation screen.",
     "python": [
-      {"module": "postroll/ai/generate_week.py", "function": "generate_week", "variable": "timing"}
+      {
+        "module": "postroll/ai/generate_week.py",
+        "function": "generate_week",
+        "variable": "timing"
+      }
     ],
-    "swift": {"kind": "reader", "file": "PostRollApp/Sources/Services/PythonBridge.swift", "function": "runWeekGeneration"},
+    "swift": {
+      "kind": "reader",
+      "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+      "function": "runWeekGeneration"
+    },
     "keys": {
-      "captions":  "swift",
-      "blog":      "swift",
+      "captions": "swift",
+      "blog": "swift",
       "packaging": "swift"
     }
   },
-
   "run_progress": {
     "_what": "Which step a long run is on, polled by the app so a working run is distinguishable from a dead one.",
     "python": [
-      {"module": "postroll/ai/progress.py", "function": "_snapshot"},
-      {"module": "postroll/ai/progress.py", "function": "_write", "variable": "payload"}
+      {
+        "module": "postroll/ai/progress.py",
+        "function": "_snapshot"
+      },
+      {
+        "module": "postroll/ai/progress.py",
+        "function": "_write",
+        "variable": "payload"
+      }
     ],
-    "swift": {"kind": "model", "type": "GenerationStep"},
+    "swift": {
+      "kind": "model",
+      "type": "GenerationStep"
+    },
     "keys": {
-      "label":      "swift",
-      "index":      "swift",
-      "total":      "swift",
-      "done":       "swift",
+      "label": "swift",
+      "index": "swift",
+      "total": "swift",
+      "done": "swift",
       "updated_at": "swift"
     }
   },
-
   "day_caption": {
     "_what": "One day's caption, hashtags and alt text.",
     "python": [
-      {"module": "postroll/ai/generate_captions.py", "function": "generate_caption"}
+      {
+        "module": "postroll/ai/generate_captions.py",
+        "function": "generate_caption"
+      }
     ],
-    "swift": {"kind": "model", "type": "DayCaption"},
+    "swift": {
+      "kind": "model",
+      "type": "DayCaption"
+    },
     "keys": {
-      "caption":      "swift",
-      "hashtags":     "swift",
-      "alt_texts":    "swift",
+      "caption": "swift",
+      "hashtags": "swift",
+      "alt_texts": "swift",
       "scene_labels": "swift",
       "skipped_photos": {
         "python_only": "generate_week hoists this onto the week payload's `warnings`, which is where the app reads it and where it can be shown per day. DayCaption deliberately does not carry a second copy: two homes for one fact is how it goes missing in exactly one direction (L83)."
       }
     }
   },
-
   "blog_output": {
     "_what": "The blog post, plus what the deterministic checks caught.",
     "python": [
-      {"module": "postroll/ai/generate_blog.py", "function": "generate_blog"}
+      {
+        "module": "postroll/ai/generate_blog.py",
+        "function": "generate_blog"
+      }
     ],
-    "swift": {"kind": "model", "type": "BlogOutput"},
+    "swift": {
+      "kind": "model",
+      "type": "BlogOutput"
+    },
     "keys": {
-      "title":       "swift",
-      "body":        "swift",
+      "title": "swift",
+      "body": "swift",
       "photo_count": "swift",
-      "findings":    "swift"
+      "findings": "swift"
     }
   },
-
   "revised_caption": {
     "_what": "A caption after a plain-English revision request.",
     "python": [
-      {"module": "postroll/ai/revise_caption.py", "function": "revise_caption"}
+      {
+        "module": "postroll/ai/revise_caption.py",
+        "function": "revise_caption"
+      }
     ],
-    "swift": {"kind": "model", "type": "DayCaption"},
+    "swift": {
+      "kind": "model",
+      "type": "DayCaption"
+    },
     "keys": {
-      "caption":      "swift",
-      "hashtags":     "swift",
-      "alt_texts":    "swift",
+      "caption": "swift",
+      "hashtags": "swift",
+      "alt_texts": "swift",
       "scene_labels": "swift"
     }
   },
-
   "revised_blog": {
     "_what": "A blog post after a plain-English revision request.",
     "python": [
-      {"module": "postroll/ai/revise_blog.py", "function": "revise_blog"}
+      {
+        "module": "postroll/ai/revise_blog.py",
+        "function": "revise_blog"
+      }
     ],
-    "swift": {"kind": "model", "type": "BlogOutput"},
+    "swift": {
+      "kind": "model",
+      "type": "BlogOutput"
+    },
     "keys": {
-      "title":       "swift",
-      "body":        "swift",
+      "title": "swift",
+      "body": "swift",
       "photo_count": "swift",
-      "findings":    "swift"
+      "findings": "swift"
     }
   },
-
   "swapped_blog": {
     "_what": "A blog post rewritten around a different set of photos.",
     "python": [
-      {"module": "postroll/ai/swap_blog_photos.py", "function": "swap_blog_photos"}
+      {
+        "module": "postroll/ai/swap_blog_photos.py",
+        "function": "swap_blog_photos"
+      }
     ],
-    "swift": {"kind": "model", "type": "BlogOutput"},
+    "swift": {
+      "kind": "model",
+      "type": "BlogOutput"
+    },
     "keys": {
-      "body":        "swift",
+      "body": "swift",
       "photo_count": "swift",
-      "findings":    "swift"
+      "findings": "swift"
     }
   },
-
   "ocr_result": {
     "_what": "Structured program data read off the scanned pages.",
     "python": [
-      {"module": "postroll/ai/ocr_program.py", "function": "extract_program"}
+      {
+        "module": "postroll/ai/ocr_program.py",
+        "function": "extract_program"
+      }
     ],
-    "swift": {"kind": "model", "type": "OCRResult"},
+    "swift": {
+      "kind": "model",
+      "type": "OCRResult"
+    },
     "keys": {
-      "performers":         "swift",
-      "pieces":             "swift",
-      "scenes":             "swift",
+      "performers": "swift",
+      "pieces": "swift",
+      "scenes": "swift",
       "organization_notes": "swift",
-      "program_notes":      "swift",
-      "venue_notes":        "swift",
+      "program_notes": "swift",
+      "venue_notes": "swift",
       "production_details": "swift",
-      "other":              "swift"
+      "other": "swift"
     }
   },
-
   "flag_review": {
     "_what": "Claude's reply in the OCR correction conversation, plus any patch to apply.",
     "python": [
-      {"module": "postroll/ai/review_flag.py", "function": "respond_to_flag"}
+      {
+        "module": "postroll/ai/review_flag.py",
+        "function": "respond_to_flag"
+      }
     ],
-    "swift": {"kind": "model", "type": "FlagReviewResponse"},
+    "swift": {
+      "kind": "model",
+      "type": "FlagReviewResponse"
+    },
     "keys": {
       "assistant_reply": "swift",
-      "patch":           "swift",
-      "resolved":        "swift"
+      "patch": "swift",
+      "resolved": "swift"
     }
   },
-
   "media_result": {
     "_what": "The week's rendered graphics, keyed by day, plus per-day failures.",
     "python": [
@@ -201,115 +257,402 @@
         "module": "postroll/ai/generate_media.py",
         "function": "generate_media",
         "variable": "results",
-        "dynamic": {"day_name": {"from": "postroll.ai.generate_media:DAY_ORDER"}}
+        "dynamic": {
+          "day_name": {
+            "from": "postroll.ai.generate_media:DAY_ORDER"
+          }
+        }
       }
     ],
-    "swift": {"kind": "reader", "file": "PostRollApp/Sources/Services/PythonBridge.swift", "function": "runPreviewGeneration"},
+    "swift": {
+      "kind": "reader",
+      "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+      "function": "runPreviewGeneration"
+    },
     "keys": {
-      "sunday":    "swift",
-      "monday":    "swift",
-      "tuesday":   "swift",
+      "sunday": "swift",
+      "monday": "swift",
+      "tuesday": "swift",
       "wednesday": "swift",
-      "thursday":  "swift",
-      "friday":    "swift",
-      "errors":    "swift"
+      "thursday": "swift",
+      "friday": "swift",
+      "errors": "swift"
     }
   },
-
   "media_day": {
     "_what": "One day's rendered assets. A mix of plain path strings and nested objects.",
     "python": [
-      {"module": "postroll/ai/generate_media.py", "function": "generate_media", "variable": "day_result"},
-      {"module": "postroll/ai/generate_media.py", "function": "_render_cover", "variable": "day_result"}
+      {
+        "module": "postroll/ai/generate_media.py",
+        "function": "generate_media",
+        "variable": "day_result"
+      },
+      {
+        "module": "postroll/ai/generate_media.py",
+        "function": "_render_cover",
+        "variable": "day_result"
+      }
     ],
-    "swift": {"kind": "reader", "file": "PostRollApp/Sources/Services/PythonBridge.swift", "function": "parsePreviewDayEntry"},
+    "swift": {
+      "kind": "reader",
+      "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+      "function": "parsePreviewDayEntry"
+    },
     "keys": {
-      "story":            "swift",
-      "collage":          "swift",
-      "story_cover":      "swift",
-      "reel":             "swift",
-      "reel_preview":     "swift",
-      "before_after":     "swift",
-      "cover":            "swift",
+      "story": "swift",
+      "collage": "swift",
+      "story_cover": "swift",
+      "reel": "swift",
+      "reel_preview": "swift",
+      "before_after": "swift",
+      "cover": "swift",
       "friday_clip_plan": "swift",
-      "cover_pick":       "swift"
-    }
-  },
-
-  "friday_clip_plan": {
-    "_what": "Friday's clip selection: which clips, in what order, trimmed where.",
-    "python": [
-      {"module": "postroll/ai/generate_media.py", "function": "generate_media", "variable": "friday_clip_plan_payload"}
-    ],
-    "swift": {"kind": "model", "type": "FridayClipPlan"},
-    "keys": {
-      "selections": "swift",
-      "rationale":  "swift"
-    }
-  },
-
-  "friday_clip_selection": {
-    "_what": "One clip inside the Friday plan, already renamed into Swift's field names.",
-    "python": [
-      {"module": "postroll/ai/generate_media.py", "function": "_friday_clip_selection"}
-    ],
-    "swift": {"kind": "model", "type": "FridayClipSelection"},
-    "keys": {
-      "clip_path":       "swift",
-      "trim_in":         "swift",
-      "trim_out":        "swift",
-      "transition":      "swift",
-      "crop_x":          "swift",
-      "crop_y":          "swift",
-      "crop_confidence": "swift"
-    }
-  },
-
-  "cover_result": {
-    "_what": "A single day's regenerated cover image.",
-    "python": [
-      {"module": "postroll/ai/generate_cover.py", "function": "generate_cover", "variable": "result"}
-    ],
-    "swift": {"kind": "reader", "file": "PostRollApp/Sources/Services/PythonBridge.swift", "function": "parseCoverRegenerationOutput"},
-    "keys": {
-      "cover":      "swift",
       "cover_pick": "swift"
     }
   },
-
+  "friday_clip_plan": {
+    "_what": "Friday's clip selection: which clips, in what order, trimmed where.",
+    "python": [
+      {
+        "module": "postroll/ai/generate_media.py",
+        "function": "generate_media",
+        "variable": "friday_clip_plan_payload"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "FridayClipPlan"
+    },
+    "keys": {
+      "selections": "swift",
+      "rationale": "swift"
+    }
+  },
+  "friday_clip_selection": {
+    "_what": "One clip inside the Friday plan, already renamed into Swift's field names.",
+    "python": [
+      {
+        "module": "postroll/ai/generate_media.py",
+        "function": "_friday_clip_selection"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "FridayClipSelection"
+    },
+    "keys": {
+      "clip_path": "swift",
+      "trim_in": "swift",
+      "trim_out": "swift",
+      "transition": "swift",
+      "crop_x": "swift",
+      "crop_y": "swift",
+      "crop_confidence": "swift"
+    }
+  },
+  "cover_result": {
+    "_what": "A single day's regenerated cover image.",
+    "python": [
+      {
+        "module": "postroll/ai/generate_cover.py",
+        "function": "generate_cover",
+        "variable": "result"
+      }
+    ],
+    "swift": {
+      "kind": "reader",
+      "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+      "function": "parseCoverRegenerationOutput"
+    },
+    "keys": {
+      "cover": "swift",
+      "cover_pick": "swift"
+    }
+  },
   "swap_reel_audio": {
     "_what": "The result of swapping a reel's audio track without re-encoding video.",
     "python": [
-      {"module": "postroll/ai/swap_reel_audio.py", "function": "swap_reel_audio"}
+      {
+        "module": "postroll/ai/swap_reel_audio.py",
+        "function": "swap_reel_audio"
+      }
     ],
-    "swift": {"kind": "reader", "file": "PostRollApp/Sources/Services/PythonBridge.swift", "function": "parseSwapReelAudioOutput"},
+    "swift": {
+      "kind": "reader",
+      "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+      "function": "parseSwapReelAudioOutput"
+    },
     "keys": {
       "audio_source": "swift",
-      "reel":         "swift",
-      "tags":         "swift"
+      "reel": "swift",
+      "tags": "swift"
     }
   },
-
   "meta_import": {
     "_what": "Instagram posts parsed out of Meta's CSV export.",
     "python": [
-      {"module": "postroll/ai/import_meta_csv.py", "function": "main", "variable": "output"}
+      {
+        "module": "postroll/ai/import_meta_csv.py",
+        "function": "main",
+        "variable": "output"
+      }
     ],
-    "swift": {"kind": "model", "type": "MetaImportResult"},
+    "swift": {
+      "kind": "model",
+      "type": "MetaImportResult"
+    },
     "keys": {
-      "posts":    "swift",
+      "posts": "swift",
       "warnings": "swift"
     }
   },
-
   "learn_suggestion": {
     "_what": "One brand-voice rule inferred from the edits Dan made to generated text.",
     "python": [
-      {"module": "postroll/ai/learn_from_edits.py", "function": "learn_from_edits"}
+      {
+        "module": "postroll/ai/learn_from_edits.py",
+        "function": "learn_from_edits"
+      }
     ],
-    "swift": {"kind": "reader", "file": "PostRollApp/Sources/Services/PythonBridge.swift", "function": "runLearnFromEdits"},
+    "swift": {
+      "kind": "reader",
+      "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+      "function": "runLearnFromEdits"
+    },
     "keys": {
       "suggestion": "swift"
+    }
+  },
+  "_manifests_comment": [
+    "The other direction (#266). Above: keys Python WRITES and Swift reads.",
+    "Below: keys Python READS out of a manifest Swift built.",
+    "",
+    "This direction is the more dangerous one. A result key Swift stops decoding",
+    "shows the wrong thing on screen. A manifest key Swift stops SENDING is",
+    "silently replaced by Python's own default, and generation carries on making",
+    "something subtly different: the wrong photos, the wrong crop, the wrong",
+    "posting preset, with nothing anywhere reporting a problem.",
+    "",
+    "Each key says whether Swift always sends it or sends it conditionally.",
+    "`always` is asserted against a fully populated Event on the Swift side, so",
+    "dropping one fails. `conditional` states WHEN it is sent, and is not",
+    "asserted, because its absence is a legitimate state: what the entry buys is",
+    "that the condition is written down rather than inferred from a nil check."
+  ],
+  "manifests": {
+    "week": {
+      "_what": "Everything generate_week needs for one event's captions and blog.",
+      "swift": "PythonBridge.buildManifest",
+      "python": [
+        {
+          "module": "postroll/ai/generate_week.py",
+          "function": "generate_week",
+          "variable": "manifest"
+        }
+      ],
+      "keys": {
+        "event": "always",
+        "org": "always",
+        "venue": "always",
+        "date": "always",
+        "program": "always",
+        "days": "always",
+        "shoot_type": "always",
+        "preset": "always",
+        "venue_context": "always",
+        "event_url": "always",
+        "blog_photos": "always",
+        "caption_context_photos": {
+          "conditional": "Sent whenever Wednesday has photos. Thursday's caption falls back to representative selection without it, which costs a Claude call and picks differently."
+        }
+      }
+    },
+    "week_day": {
+      "_what": "One day's entry inside the week manifest's `days` dict.",
+      "swift": "PythonBridge.buildManifest",
+      "python": [
+        {
+          "module": "postroll/ai/generate_week.py",
+          "function": "generate_week",
+          "variable": "day_info"
+        }
+      ],
+      "keys": {
+        "photos": "always",
+        "post_type": {
+          "conditional": "Sent when the day has one set; Python infers it from the preset and photo count otherwise."
+        },
+        "tag_handles": {
+          "conditional": "Sent when anyone is credited on the day, by handle."
+        },
+        "name_mentions": {
+          "conditional": "Sent when anyone is credited by name rather than handle."
+        },
+        "notes": {
+          "conditional": "Sent when Dan wrote observations for the day."
+        },
+        "photo_tags": {
+          "conditional": "Sent for collage-carousel days where individual photos carry people tags."
+        },
+        "clips_plan": {
+          "conditional": "Friday only, and only once a clip reel has been cut."
+        }
+      }
+    },
+    "media": {
+      "_what": "Everything generate_media needs to render the week's graphics.",
+      "swift": "PythonBridge.buildMediaManifest",
+      "python": [
+        {
+          "module": "postroll/ai/generate_media.py",
+          "function": "generate_media",
+          "variable": "manifest"
+        }
+      ],
+      "keys": {
+        "event": "always",
+        "org": "always",
+        "venue": "always",
+        "date": "always",
+        "days": "always",
+        "shoot_type": "always",
+        "preset": "always",
+        "pieces": {
+          "conditional": "Sent when the programme has works on it; drives the reel's audio mood tags."
+        }
+      }
+    },
+    "media_day": {
+      "_what": "One day's entry inside the media manifest's `days` dict.",
+      "swift": "PythonBridge.buildMediaManifest",
+      "python": [
+        {
+          "module": "postroll/ai/generate_media.py",
+          "function": "generate_media",
+          "variable": "day_info"
+        },
+        {
+          "module": "postroll/ai/generate_media.py",
+          "function": "_render_cover",
+          "variable": "day_info"
+        }
+      ],
+      "keys": {
+        "photos": "always",
+        "raw_photo": {
+          "conditional": "Tuesday and Friday, when a before shot has been assigned."
+        },
+        "edited_photo": {
+          "conditional": "Tuesday and Friday, when an after shot has been assigned."
+        },
+        "bw_photo": {
+          "conditional": "Optional third treatment; its absence is a deliberate choice, not a failure."
+        },
+        "screen_recording": {
+          "conditional": "Tuesday only, when a screen recording has been imported."
+        },
+        "clips": {
+          "conditional": "Friday only, when video clips have been imported."
+        },
+        "audio": {
+          "conditional": "Sent when Dan uploaded his own track for the day."
+        },
+        "cover_source": {
+          "conditional": "Sent when a cover has already been picked, so the sticky gate reuses it instead of paying Claude again."
+        },
+        "cell_layout": {
+          "conditional": "Wednesday only, when the collage frames have been adjusted by hand."
+        },
+        "crop_offsets": {
+          "conditional": "Sent when any photo on the day has been panned or zoomed."
+        },
+        "collage_seed": {
+          "conditional": "Sent when a specific collage layout has been chosen; random each run otherwise."
+        },
+        "reel_seed": {
+          "conditional": "Sent when a specific reel layout has been chosen; random each run otherwise."
+        },
+        "reel_style": {
+          "conditional": "Sent when the day overrides the default reel style."
+        },
+        "scroll_duration": {
+          "conditional": "Thursday only; Python has its own default."
+        },
+        "target_duration": {
+          "conditional": "Tuesday only; Python has its own default."
+        },
+        "clip_duck_db": {
+          "conditional": "Friday only, how far clip audio sits under the music."
+        },
+        "clip_audio_muted": {
+          "conditional": "Friday only, when clip audio is muted outright."
+        },
+        "title_card_muted": {
+          "conditional": "Friday only, when the title card's audio is muted."
+        }
+      }
+    },
+    "cover": {
+      "_what": "A single day's cover-image regeneration.",
+      "swift": "PythonBridge.buildCoverManifest",
+      "python": [
+        {
+          "module": "postroll/ai/generate_cover.py",
+          "function": "main",
+          "variable": "m"
+        },
+        {
+          "module": "postroll/ai/generate_cover.py",
+          "function": "generate_cover",
+          "variable": "day_info"
+        }
+      ],
+      "keys": {
+        "day": "always",
+        "event": "always",
+        "org": "always",
+        "venue": "always",
+        "output_path": "always",
+        "day_info": "always",
+        "photos": "always",
+        "override_source": {
+          "conditional": "Sent only when Dan picked the cover by hand, which skips the Claude call entirely."
+        },
+        "clips_plan": {
+          "conditional": "Friday only, so frames can be re-extracted without recutting the reel."
+        }
+      }
+    },
+    "friday_override": {
+      "_what": "Re-rendering Friday's reel from Dan's manual clip edits.",
+      "swift": "PythonBridge.buildFridayOverrideManifest",
+      "python": [
+        {
+          "module": "postroll/ai/render_friday_override.py",
+          "function": "render_friday_override",
+          "variable": "manifest"
+        }
+      ],
+      "keys": {
+        "selections": "always",
+        "event_name": "always",
+        "shoot_type": "always",
+        "pieces": {
+          "conditional": "Sent when the programme has works on it; drives the audio mood tags."
+        },
+        "audio": {
+          "conditional": "Sent when Dan uploaded his own track."
+        },
+        "duck_gain_db": {
+          "conditional": "Sent when the day overrides how far clip audio is ducked."
+        },
+        "mute_clip_audio": {
+          "conditional": "Sent when clip audio is muted outright."
+        },
+        "title_card_muted": {
+          "conditional": "Sent when the title card's audio is muted."
+        }
+      }
     }
   }
 }
