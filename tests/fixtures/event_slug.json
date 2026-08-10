@@ -1,0 +1,111 @@
+{
+  "_comment": [
+    "The per-event folder slug, shared by _slug in",
+    "postroll/ai/generate_media.py and ArchiveCleanup.slugify in",
+    "PostRollApp/Sources/Services/ArchiveCleanup.swift (#108).",
+    "",
+    "Python creates the preview folder named by this slug. Swift re-derives",
+    "the same name months later to DELETE that folder, and nothing but this",
+    "file forces the two implementations to agree. Drift in either direction",
+    "is bad: a slug Swift builds differently misses the folder and leaks it,",
+    "and a slug that happens to collide with another event's deletes files",
+    "that event is still using.",
+    "",
+    "The rule: lowercase, replace every run of characters outside a-z0-9",
+    "with a single underscore, strip leading and trailing underscores. The",
+    "slug is then '<org>_<name>_<ISO date>'.",
+    "",
+    "Every `slug` below was MEASURED by running Python's _slug, not written",
+    "by hand, so the file cannot record a shape the real function does not",
+    "produce.",
+    "",
+    "Sing\\u2014Play carries an em dash as an escape rather than the literal",
+    "character, so the repo's own style hook has nothing to catch."
+  ],
+  "vectors": [
+    {
+      "_what": "an ordinary name",
+      "org": "DCINY",
+      "name": "Perpetual Light",
+      "date": "2026-04-04",
+      "slug": "dciny_perpetual_light_2026-04-04"
+    },
+    {
+      "_what": "punctuation the org and name share",
+      "org": "Home'r Bust!",
+      "name": "Home'r Bust!",
+      "date": "2026-05-01",
+      "slug": "home_r_bust_home_r_bust_2026-05-01"
+    },
+    {
+      "_what": "an accented letter, which is not a-z",
+      "org": "Café Wha?",
+      "name": "Vocal Colors",
+      "date": "2026-06-12",
+      "slug": "caf_wha_vocal_colors_2026-06-12"
+    },
+    {
+      "_what": "runs of separators collapse to one underscore",
+      "org": "A  &  B",
+      "name": "Sing / Play",
+      "date": "2026-01-31",
+      "slug": "a_b_sing_play_2026-01-31"
+    },
+    {
+      "_what": "leading and trailing separators are stripped",
+      "org": "  Leading",
+      "name": "Trailing  ",
+      "date": "2026-02-02",
+      "slug": "leading_trailing_2026-02-02"
+    },
+    {
+      "_what": "a colon",
+      "org": "DCINY",
+      "name": "Bach: St Matthew Passion",
+      "date": "2026-03-03",
+      "slug": "dciny_bach_st_matthew_passion_2026-03-03"
+    },
+    {
+      "_what": "German sharp s and umlauts",
+      "org": "Grüße",
+      "name": "Straße",
+      "date": "2026-07-07",
+      "slug": "gr_e_stra_e_2026-07-07"
+    },
+    {
+      "_what": "a name with no latin letters at all, so the org slugs away to nothing",
+      "org": "東京フィル",
+      "name": "Symphony No 5",
+      "date": "2026-08-08",
+      "slug": "_symphony_no_5_2026-08-08"
+    },
+    {
+      "_what": "digits survive",
+      "org": "The 5th",
+      "name": "Beethoven 9",
+      "date": "2026-09-09",
+      "slug": "the_5th_beethoven_9_2026-09-09"
+    },
+    {
+      "_what": "an org made only of separators",
+      "org": "---",
+      "name": "Untitled",
+      "date": "2026-10-10",
+      "slug": "_untitled_2026-10-10"
+    },
+    {
+      "_what": "an em dash inside the name",
+      "org": "O'Brien & Sons",
+      "name": "Sing\u2014Play",
+      "date": "2026-11-11",
+      "slug": "o_brien_sons_sing_play_2026-11-11"
+    },
+    {
+      "_what": "whitespace other than spaces",
+      "org": "Tab\tSeparated",
+      "name": "New\nLine",
+      "date": "2026-12-12",
+      "slug": "tab_separated_new_line_2026-12-12"
+    }
+  ]
+}

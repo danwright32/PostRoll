@@ -7,8 +7,55 @@ import Foundation
 ///
 /// Safety: every delete path is constrained to subfolders inside the data
 /// root so a misconfigured event URL can't escape and remove user data.
+///
+/// Correctness ALSO depends on `slugify` producing byte-for-byte what Python's
+/// `_slug` produced when it created the folder, because that is how the folder
+/// to delete is identified. Two implementations in two languages with nothing
+/// forcing them to agree: drift one way leaks a folder forever, drift the other
+/// way deletes a folder some other event is still using.
+/// `tests/fixtures/event_slug.json` is the contract, and
+/// `EventSlugParityTests` holds this side to it (#108).
+///
+/// Every reclaim is written to an audit log, because a mistargeted delete was
+/// otherwise completely silent: the folder is simply gone, months after the
+/// export, with nothing anywhere saying what took it.
 enum ArchiveCleanup {
     static let archiveAgeDays: Int = 60
+
+    /// One reclaim, as recorded.
+    struct Reclaim: Equatable {
+        let eventName: String
+        let eventID: UUID
+        let slug: String
+        /// Absolute paths actually removed from disk.
+        let removed: [String]
+    }
+
+    /// Where reclaims are recorded, beside the generation logs.
+    static func auditLog(dataRoot: URL) -> URL {
+        dataRoot.appendingPathComponent("logs").appendingPathComponent("archive-cleanup.log")
+    }
+
+    /// Append one reclaim to the audit log. Never raises: failing to record a
+    /// tidy-up must not fail the launch that triggered it, and a reclaim that
+    /// could not be written is still better than one that was never attempted.
+    static func appendToAuditLog(_ reclaim: Reclaim, dataRoot: URL) {
+        guard !reclaim.removed.isEmpty else { return }
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let line = "\(stamp) reclaimed for \"\(reclaim.eventName)\" "
+                 + "(\(reclaim.eventID.uuidString), slug \(reclaim.slug)): "
+                 + reclaim.removed.joined(separator: ", ") + "\n"
+        let url = auditLog(dataRoot: dataRoot)
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data(line.utf8))
+        } else {
+            try? Data(line.utf8).write(to: url)
+        }
+    }
 
     /// Runs the cleanup sweep against the provided events array.
     /// Returns `true` if any event was mutated (caller should persist).
@@ -16,7 +63,13 @@ enum ArchiveCleanup {
     /// preview graphics (`preview/`); both sit under the data root so this never
     /// reads the TCC-protected Documents folder at launch.
     @discardableResult
-    static func sweep(events: inout [Event], dataRoot: URL) -> Bool {
+    static func sweep(events: inout [Event], dataRoot: URL,
+                      audit: ((Reclaim) -> Void)? = nil) -> Bool {
+        // The default sink writes under the dataRoot this sweep was given, not
+        // under AppPaths.root. A default reaching the real data root would make
+        // a test of a temporary directory append to the live audit log, which
+        // is the shape of mistake that log exists to catch.
+        let record = audit ?? { appendToAuditLog($0, dataRoot: dataRoot) }
         let now = Date()
         let threshold = TimeInterval(archiveAgeDays) * 86_400
         var dirty = false
@@ -51,6 +104,8 @@ enum ArchiveCleanup {
                 skipPreviewFolder: slugShared,
                 sharedProgramPaths: sharedProgramPaths
             )
+            record(Reclaim(eventName: event.name, eventID: event.id,
+                           slug: slug(event: event), removed: result.removedPaths))
             if result.previewRemoved {
                 events[i].previewMediaPaths = [:]
                 dirty = true
@@ -71,10 +126,11 @@ enum ArchiveCleanup {
         dataRoot: URL,
         skipPreviewFolder: Bool,
         sharedProgramPaths: Set<String>
-    ) -> (previewRemoved: Bool, programsRemoved: Bool) {
+    ) -> (previewRemoved: Bool, programsRemoved: Bool, removedPaths: [String]) {
         let fm = FileManager.default
         var previewRemoved = false
         var programsRemoved = false
+        var removedPaths: [String] = []
 
         if !skipPreviewFolder {
             let previewParent = dataRoot.appendingPathComponent("preview")
@@ -83,6 +139,7 @@ enum ArchiveCleanup {
                isInside(previewDir, parent: previewParent) {
                 try? fm.removeItem(at: previewDir)
                 previewRemoved = true
+                removedPaths.append(previewDir.path)
             }
         }
 
@@ -94,19 +151,27 @@ enum ArchiveCleanup {
             if fm.fileExists(atPath: path) {
                 try? fm.removeItem(atPath: path)
                 programsRemoved = true
+                removedPaths.append(path)
             }
         }
 
-        return (previewRemoved, programsRemoved)
+        return (previewRemoved, programsRemoved, removedPaths)
     }
 
     /// Matches the Python slug in postroll/ai/generate_media.py so we hit the
-    /// exact folder generate_media created.
-    private static func slug(event: Event) -> String {
-        "\(slugify(event.org))_\(slugify(event.name))_\(event.isoDate)"
+    /// exact folder generate_media created. Held to that by the shared fixture
+    /// rather than by this comment (#108).
+    static func slug(event: Event) -> String {
+        slug(org: event.org, name: event.name, isoDate: event.isoDate)
     }
 
-    private static func slugify(_ text: String) -> String {
+    /// The same rule from raw strings, so the parity fixture can exercise it
+    /// without building an Event around every vector.
+    static func slug(org: String, name: String, isoDate: String) -> String {
+        "\(slugify(org))_\(slugify(name))_\(isoDate)"
+    }
+
+    static func slugify(_ text: String) -> String {
         var out: [Character] = []
         var lastWasUnderscore = false
         for scalar in text.lowercased().unicodeScalars {
