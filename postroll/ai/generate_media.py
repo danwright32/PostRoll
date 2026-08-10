@@ -276,6 +276,7 @@ def _render_cover(
     errors: dict,
     persist_pick_to: Path | None = None,
     working_on=None,
+    exclude_paths: list[str] | None = None,
 ) -> None:
     """Sticky-gate cover render, generic across days: reuses a persisted
     cover_source without touching Claude (or the representative-sampling
@@ -296,7 +297,7 @@ def _render_cover(
             candidates = build_candidates()
             if not candidates:
                 return
-            pick = select_cover_photo(candidates)
+            pick = select_cover_photo(candidates, exclude_paths=exclude_paths)
             source_path = pick["path"]
             if persist_pick_to is not None:
                 # The winning candidate may live in a temp dir (Friday's
@@ -373,6 +374,22 @@ def generate_media(
     # generate_week already did this; the media run is the LONGER of the two on
     # a heavy week, and it is the one where a slow reel and a hung encode look
     # identical from outside, so an elapsed clock alone cannot tell them apart.
+    # Photos already showing elsewhere in the week's Instagram grid, so a
+    # cover reads as its own picture rather than a repeat of the day before
+    # (#144). Collage photos are deliberately NOT in here: they appear small in
+    # a grid of ten, reusing one as a cover is barely noticeable, and excluding
+    # them all would routinely empty Thursday's candidate list, whose photos are
+    # the same set.
+    shown_elsewhere: list[str] = []
+    for other in days_data.values():
+        for slot in ("raw_photo", "edited_photo", "bw_photo"):
+            path = other.get(slot)
+            if path:
+                shown_elsewhere.append(str(path))
+        source = other.get("cover_source")
+        if source:
+            shown_elsewhere.append(str(source))
+
     say = ProgressWriter(progress_path)
     planned_days = [d for d in DAY_ORDER
                     if only_days is None or d in only_days]
@@ -714,6 +731,7 @@ def generate_media(
 
             _render_cover(
                 working_on=working_on,
+                exclude_paths=shown_elsewhere,
                 day_name="thursday",
                 day_dir=day_dir,
                 day_info=day_info,
@@ -821,6 +839,7 @@ def generate_media(
                 with tempfile.TemporaryDirectory(prefix="postroll-coverframes-") as cover_tmp:
                     _render_cover(
                         working_on=working_on,
+                        exclude_paths=shown_elsewhere,
                         day_name="friday",
                         day_dir=day_dir,
                         day_info=day_info,

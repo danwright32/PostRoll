@@ -24,6 +24,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
@@ -126,13 +127,36 @@ def _fallback_pick(candidates: list[dict], reason: str) -> dict:
     }
 
 
+def _without(candidates: list[dict], exclude_paths) -> list[dict]:
+    """Candidates minus anything already showing elsewhere in the week (#144).
+
+    Normalised before comparing, because the used-elsewhere set and the
+    candidate list are assembled from different parts of the manifest and one
+    may carry a redundant `./` or a symlinked prefix.
+    """
+    if not exclude_paths:
+        return candidates
+    used = {os.path.realpath(os.path.normpath(str(p))) for p in exclude_paths}
+    return [
+        c for c in candidates
+        if os.path.realpath(os.path.normpath(str(c["path"]))) not in used
+    ]
+
+
 def select_cover_photo(
     candidates: list[dict],
     *,
     timeout: int = 300,
     tmp_dir: str | Path | None = None,
+    exclude_paths: list[str] | tuple[str, ...] | None = None,
 ) -> dict:
     """Top-level entry: candidate photos/frames -> Claude's cover pick.
+
+    `exclude_paths` are photos already showing elsewhere in the week's grid, so
+    each day's cover reads as its own picture rather than a repeat (#144). They
+    are removed from the list before Claude sees it rather than described to it
+    in the prompt, because this rule is checkable in code and a rule that lives
+    only in a prompt is a hope (L27).
 
     Never raises once at least one candidate is given: an unusable response
     or a Claude API failure falls back to a deterministic first-candidate
@@ -140,6 +164,22 @@ def select_cover_photo(
     """
     if not candidates:
         raise ClaudeError("no candidate images for cover selection")
+
+    remaining = _without(candidates, exclude_paths)
+    if not remaining:
+        # Every candidate is already used somewhere. A repeated cover is a much
+        # smaller problem than a day with no cover, so the day takes its pick
+        # from the full list. Said out loud because this ships a known defect
+        # rather than avoiding one, and a fallback nobody can see firing is how
+        # the rare case quietly becomes the common one (L93).
+        print(
+            "[select_cover_photo] every candidate is already used elsewhere in "
+            "the week, so this cover will repeat one of them",
+            file=sys.stderr, flush=True,
+        )
+        remaining = candidates
+    candidates = remaining
+
     if len(candidates) == 1:
         return {"index": 0, "path": candidates[0]["path"], "rationale": "Only one candidate available."}
 
