@@ -197,7 +197,12 @@ def test_run_prompt_omits_permission_flags_when_unspecified():
     cmd = captured["cmd"]
     assert "--add-dir" not in cmd
     assert "--allowedTools" not in cmd
-    assert cmd == [cmd[0], "-p", "--model", "sonnet"]
+    # --settings is NOT a permission flag and is always present: it isolates the
+    # call from the user's own Claude Code hooks, which otherwise write into the
+    # output this app parses (#212).
+    assert cmd[:4] == [cmd[0], "-p", "--model", "sonnet"]
+    assert cmd[4] == "--settings"
+    assert len(cmd) == 6, f"unexpected extra flags: {cmd[6:]}"
     assert captured["input"] == "the prompt"
 
 
