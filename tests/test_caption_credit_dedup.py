@@ -107,3 +107,29 @@ def test_hashtags_are_left_alone():
     result = dedupe_credit_stack(caption)
     assert "#livemusic #nyc" in result
     assert result.count("@safa.wav") == 1
+
+
+# ── a closing sentence is not a credit stack ──────────────────────────────────
+
+def test_a_short_closing_sentence_keeps_its_words():
+    # Found after shipping: a caption whose last block was ordinary prose was
+    # treated as the credit list, so a name used earlier was deleted out of the
+    # middle of it and the sentence shipped starting mid-phrase.
+    caption = ("Marguerite Dubois took the second movement.\n\n"
+               "Marguerite Dubois played it twice.")
+    assert dedupe_credit_stack(caption) == caption
+
+
+def test_a_closing_sentence_with_a_handle_in_it_is_still_prose():
+    caption = ("Safa opened the second set.\n\n"
+               "@safa.wav closed it out on her own.")
+    assert dedupe_credit_stack(caption).endswith("closed it out on her own.")
+
+
+def test_a_bare_list_of_names_with_no_handles_is_still_a_stack():
+    # The other side of the line: a credit stack does not need an @ in it.
+    caption = ("Marguerite Dubois took the second movement.\n\n"
+               "Marguerite Dubois Jordan Langworthy")
+    assert dedupe_credit_stack(caption) == (
+        "Marguerite Dubois took the second movement.\n\n"
+        "Jordan Langworthy")

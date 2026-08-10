@@ -120,6 +120,29 @@ Rules:
 """
 
 
+def vision_flags_or_reason(
+    ocr_data: dict[str, Any],
+    vision_text: str | None,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Cross-check spelling against the Vision text, or say why it could not.
+
+    Returns the flags plus, when the check stood down, the reason in words.
+
+    The reason is returned rather than raised so it can be reported WITHOUT
+    taking the rest of the review with it. A program that is a one-page flyer
+    has a real text layer holding a handful of words: too thin to be a spelling
+    authority, but no reason at all to abandon the ordinary review, which does
+    not depend on it. Standing down and cancelling everything else is not
+    failing loudly, it is failing wide.
+    """
+    if vision_text is None:
+        return [], None
+    try:
+        return cross_check_against_vision(ocr_data, vision_text), None
+    except VisionTextUnavailable as e:
+        return [], str(e)
+
+
 def flag_issues(
     ocr_data: dict[str, Any],
     image_paths: list[str | Path],
@@ -138,12 +161,13 @@ def flag_issues(
     if not image_paths:
         raise ValueError("At least one image path is required")
 
-    # Deliberately NOT wrapped in a try/except. A missing or half-baked text
-    # layer raises, because a cross-check that silently produced nothing would
-    # be indistinguishable from a program with nothing wrong in it.
-    vision_flags = (
-        cross_check_against_vision(ocr_data, vision_text) if vision_text is not None else []
-    )
+    vision_flags, vision_stood_down = vision_flags_or_reason(ocr_data, vision_text)
+    if vision_stood_down:
+        # Reported, not swallowed. It stands down alone: the model review below
+        # has nothing to do with spelling, and taking it down too would leave
+        # Dan with no flags at all on a program that is merely sparse.
+        print(f"warning: the spelling cross-check did not run: {vision_stood_down}",
+              file=sys.stderr, flush=True)
 
     with tempfile.TemporaryDirectory(prefix="postroll-flags-") as tmp:
         tmp_path = Path(tmp)
@@ -228,7 +252,7 @@ def main() -> int:
 
     try:
         flags = flag_issues(ocr_data, args.image, vision_text=vision_text)
-    except (ClaudeError, FileNotFoundError, ValueError, VisionTextUnavailable) as e:
+    except (ClaudeError, FileNotFoundError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
 

@@ -33,7 +33,17 @@ enum VisionTextLayer {
         /// The PDF is there and current, but carries no recognised text. Either
         /// the bake is still running or Vision found nothing on the pages.
         case noTextRecognised
+        /// There is text, but too little of it to be a program page: a poster or
+        /// a one-page flyer. Treating that as a spelling authority would flag
+        /// every correct name in the program.
+        case tooThinToBeAProgram
     }
+
+    /// Mirrors `MIN_VISION_WORDS` in `postroll/ai/vision_cross_check.py`.
+    /// Judged here as well as there so the reason reaches Dan on screen rather
+    /// than only a log line: Python standing down alone is correct, but silent
+    /// from the app's point of view.
+    static let minimumWords = 8
 
     enum Availability: Equatable {
         case ready(String)
@@ -59,6 +69,12 @@ enum VisionTextLayer {
         guard let text = extractedText,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .unavailable(.noTextRecognised)
+        }
+        let words = Set(text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty })
+        guard words.count >= minimumWords else {
+            return .unavailable(.tooThinToBeAProgram)
         }
         return .ready(text)
     }
@@ -104,6 +120,9 @@ extension VisionTextLayer.Unavailable {
         case .noTextRecognised:
             return "The searchable program PDF carries no recognised text, so names could not "
                  + "be checked against it. Its text layer may still be building."
+        case .tooThinToBeAProgram:
+            return "The program has too little text in it to check spelling against, so names "
+                 + "were not checked. Everything else about this program was still reviewed."
         }
     }
 }

@@ -923,13 +923,26 @@ def _norm_handle(token: str) -> str:
 def _stack_looks_like_credits(block: str) -> bool:
     """A trailing credit stack is handles and bare names, not prose.
 
-    Checked so a one-paragraph caption is never mistaken for its own stack and
-    pruned into nothing.
+    Getting this wrong in the permissive direction is the dangerous one: a
+    closing sentence mistaken for the credit list has a name deleted out of the
+    middle of it, and the caption ships starting mid-phrase. Counting words was
+    too permissive exactly that way, because the brand voice favours short
+    sentences.
+
+    A block with an @ handle in it is a stack. Without one, only a bare list of
+    names counts, and prose gives itself away with sentence punctuation or a
+    lowercase word.
     """
     stripped = block.strip()
     if not stripped or stripped.startswith("#"):
         return False
-    return bool(_STACK_HANDLE.search(stripped)) or stripped.count(" ") <= 6
+    if _STACK_HANDLE.search(stripped):
+        # A handle can still sit inside a sentence, and a sentence is prose.
+        return not stripped.endswith((".", "!", "?"))
+    if stripped.endswith((".", "!", "?")):
+        return False
+    tokens = stripped.split()
+    return bool(tokens) and all(token[:1].isupper() for token in tokens)
 
 
 def dedupe_credit_stack(caption: str) -> str:
@@ -962,11 +975,23 @@ def dedupe_credit_stack(caption: str) -> str:
             kept.append(token)
 
     # Plain-name credits are whole names, so they are removed by name rather
-    # than word by word, which would leave a dangling surname behind.
+    # than word by word, which would leave a dangling surname behind. A stack of
+    # several handle-less names reads as ONE long run of capitals, so each run
+    # is searched for the longest sub-run the body already credits instead of
+    # being matched whole, or a stack of two names would never match either.
     stack = " ".join(kept)
-    for name in _plain_name_runs(stack):
-        if name.casefold() in body_low:
-            stack = stack.replace(name, "", 1)
+    for run in _plain_name_runs(stack):
+        tokens = run.split()
+        start = 0
+        while start < len(tokens):
+            for size in range(len(tokens) - start, 1, -1):
+                candidate = " ".join(tokens[start:start + size])
+                if candidate.casefold() in body_low:
+                    stack = stack.replace(candidate, "", 1)
+                    start += size
+                    break
+            else:
+                start += 1
     stack = " ".join(stack.split())
 
     remaining = blocks[:index] + ([stack] if stack else []) + blocks[index + 1:]
