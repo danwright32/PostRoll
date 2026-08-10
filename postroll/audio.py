@@ -9,7 +9,10 @@ same result track skips the download.
 Requires JAMENDO_CLIENT_ID environment variable.
 Get a free key at https://devportal.jamendo.com
 
-Cache location: ~/.postroll/audio_cache/<track_id>.mp3
+Cache location: <data root>/audio_cache/<track_id>.mp3, where the data root is
+POSTROLL_DATA_DIR when the app exports it and ~/Library/Application Support/
+PostRoll otherwise. The cache is bounded by age and total size (`prune_cache`),
+because it used to grow without limit in a hidden home directory (#111).
 
 Usage:
     python -m postroll.audio --tags ambient,atmospheric --output /tmp/track.mp3
@@ -28,8 +31,27 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from .data_root import data_root, running_under_test
+
 JAMENDO_TRACKS_URL = "https://api.jamendo.com/v3.0/tracks"
-DEFAULT_CACHE_DIR = Path.home() / ".postroll" / "audio_cache"
+
+#: Where the cache lived before #111: a hidden directory in the home folder,
+#: outside the data root everything else had already moved to. Tracks left
+#: there are still valid cache entries, so `prune_cache` ages them out under
+#: the same policy rather than deleting them outright, and removes the
+#: directory once it has emptied.
+LEGACY_CACHE_DIR = Path.home() / ".postroll" / "audio_cache"
+
+#: Tracks untouched for this long are re-downloadable in a second and are not
+#: worth keeping. Chosen well clear of a normal editing cycle: a reel's music
+#: is muxed into the .mp4 at render time, so a pruned track costs a re-download
+#: rather than an asset.
+CACHE_MAX_AGE_DAYS = 30
+
+#: Total size ceiling. Jamendo tracks run a few megabytes, so this is hundreds
+#: of them; it exists to bound a runaway, not to run tight.
+CACHE_MAX_BYTES = 1_000_000_000
+
 _SEARCH_LIMIT = 20  # tracks fetched per search; picks randomly from top 10
 # Jamendo's search is flaky: it returns zero downloadable tracks for tags that work
 # on the next call. Retry before treating an empty result as the real answer.
@@ -41,6 +63,120 @@ _HTTP_RETRY_DELAY = 1.0
 
 _SEARCH_ATTEMPTS = 3
 _SEARCH_RETRY_DELAY = 1.0  # seconds between attempts
+
+
+def default_cache_dir() -> Path:
+    """Where downloaded tracks are cached. Not created here."""
+    return data_root() / "audio_cache"
+
+
+def _cached_tracks(directory: Path) -> list[Path]:
+    """The .mp3 files this module downloaded, and nothing else.
+
+    Scoped deliberately: the cache directory is ours, but a prune that walks
+    whatever it finds there would one day reach a file somebody put beside it.
+    """
+    try:
+        return sorted(p for p in directory.glob("*.mp3") if p.is_file())
+    except OSError:
+        return []
+
+
+def prune_cache(
+    cache_dir: Path | str | None = None,
+    *,
+    max_age_days: float = CACHE_MAX_AGE_DAYS,
+    max_bytes: int = CACHE_MAX_BYTES,
+    now: float | None = None,
+    legacy_dir: Path | str | None = None,
+) -> dict[str, Any]:
+    """Reclaim cached tracks that are too old, then the oldest until under size.
+
+    Returns what it removed, so a sweep that reaches the wrong thing leaves a
+    record rather than happening silently.
+
+    Never raises: a track that cannot be deleted (locked, permissions) is left
+    where it is. Failing to tidy up must not fail the generation that triggered
+    it.
+    """
+    at = time.time() if now is None else now
+    target = Path(cache_dir) if cache_dir is not None else default_cache_dir()
+
+    # The legacy home-folder directory is swept only when this call is the
+    # app's own (no cache_dir named) or when a caller names it outright. A
+    # caller that points the prune at its own directory is not asking for the
+    # home folder to be swept as well, and the first version of this did
+    # exactly that: running the tests deleted the real cache. A test run never
+    # reaches the real path even by the default route.
+    if legacy_dir is not None:
+        legacy = Path(legacy_dir)
+    elif cache_dir is None and not running_under_test():
+        legacy = LEGACY_CACHE_DIR
+    else:
+        legacy = None
+
+    removed: list[str] = []
+    reclaimed = 0
+
+    def drop(path: Path) -> None:
+        nonlocal reclaimed
+        try:
+            size = path.stat().st_size
+            path.unlink()
+        except OSError:
+            return
+        removed.append(path.name)
+        reclaimed += size
+
+    directories = [target]
+    if legacy is not None and legacy.exists() and legacy.resolve() != target.resolve():
+        directories.append(legacy)
+
+    # Age, in every directory holding cached tracks.
+    cutoff = at - max_age_days * 86400
+    survivors: list[Path] = []
+    for directory in directories:
+        for path in _cached_tracks(directory):
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            if mtime < cutoff:
+                drop(path)
+            else:
+                survivors.append(path)
+
+    # Then size, oldest first, until the total fits.
+    def size_of(p: Path) -> int:
+        try:
+            return p.stat().st_size
+        except OSError:
+            return 0
+
+    total = sum(size_of(p) for p in survivors)
+    if total > max_bytes:
+        survivors.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0)
+        for path in survivors:
+            if total <= max_bytes:
+                break
+            size = size_of(path)
+            before = len(removed)
+            drop(path)
+            if len(removed) > before:
+                total -= size
+
+    # The old home-folder cache goes away entirely once it has emptied, so the
+    # app stops owning a directory outside its data root.
+    if legacy is not None and legacy.exists() and not any(legacy.iterdir()):
+        try:
+            legacy.rmdir()
+            parent = legacy.parent
+            if parent.name == ".postroll" and not any(parent.iterdir()):
+                parent.rmdir()
+        except OSError:
+            pass
+
+    return {"removed": removed, "bytes": reclaimed}
 
 
 def fetch_audio_candidates(
@@ -75,8 +211,9 @@ def fetch_audio_candidates(
             "Get a free key at https://devportal.jamendo.com"
         )
 
-    cache = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+    cache = Path(cache_dir) if cache_dir else default_cache_dir()
     cache.mkdir(parents=True, exist_ok=True)
+    prune_cache(cache)
 
     tracks = _search_tracks(tags, client_id)
     excluded = set(exclude_ids)
@@ -145,8 +282,9 @@ def fetch_audio(
             "Get a free key at https://devportal.jamendo.com"
         )
 
-    cache = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+    cache = Path(cache_dir) if cache_dir else default_cache_dir()
     cache.mkdir(parents=True, exist_ok=True)
+    prune_cache(cache)
 
     # Jamendo intermittently answers with zero downloadable tracks for tags that
     # work on the very next call, so a single empty search is not a real answer.
@@ -453,8 +591,9 @@ def fetch_program_audio_candidates(
             "Get a free key at https://devportal.jamendo.com"
         )
 
-    cache = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+    cache = Path(cache_dir) if cache_dir else default_cache_dir()
     cache.mkdir(parents=True, exist_ok=True)
+    prune_cache(cache)
 
     matched = search_program_pieces(
         pieces, client_id, exclude_ids=exclude_ids, max_results=count * 2

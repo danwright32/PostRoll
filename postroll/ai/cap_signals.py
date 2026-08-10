@@ -94,14 +94,13 @@ def _record(text: str, path: Path) -> None:
 def _running_under_test() -> bool:
     """Whether this process is a test run.
 
-    `PYTEST_CURRENT_TEST` is set by pytest for the duration of each test, so it
-    is true exactly while a test is executing and false in the app's own
-    subprocess, which is the distinction that matters. Its own function so the
-    behaviour on both sides of it can be asserted.
+    The rule itself lives in `postroll.data_root`, shared with the audio
+    cache's prune, which needs the same refusal for the same reason: both would
+    otherwise reach a real home-folder path from a test.
     """
-    import os
+    from ..data_root import running_under_test
 
-    return "PYTEST_CURRENT_TEST" in os.environ
+    return running_under_test()
 
 
 def default_record_path() -> Path:
