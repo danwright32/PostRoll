@@ -190,13 +190,8 @@ final class PostingPresetSharedFixtureTests: XCTestCase {
     /// resource phase, and a copied fixture would be a second copy able to
     /// drift from the one Python reads, which is the whole thing being fixed.
     private func loadFixture() throws -> Fixture {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // PostRollApp
-            .deletingLastPathComponent()   // repo root
-        let url = repoRoot
-            .appendingPathComponent("tests/fixtures/posting_presets.json")
-        return try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
+        return try JSONDecoder().decode(
+            Fixture.self, from: try RepoFixture.data("tests/fixtures/posting_presets.json"))
     }
 
     private func day(named name: String) -> DayName? {

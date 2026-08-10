@@ -23,8 +23,33 @@ if [[ "${SKIP_INSTALL_TESTS:-0}" == "1" ]]; then
   echo "==> Skipping tests (SKIP_INSTALL_TESTS=1)"
 else
   echo "==> Running the Swift tests before installing"
-  xcodebuild -project "${PROJECT}" -scheme PostRollTests -destination 'platform=macOS' test \
-    | (command -v xcbeautify >/dev/null && xcbeautify || cat)
+  # The output is kept so a permissions refusal can be told apart from a real
+  # red suite (#271). The repo lives under ~/Documents, which macOS protects,
+  # so the test process needs Documents access to read its own fixtures; when
+  # that is refused, several fixture-reading suites fail at once and the output
+  # reads as broken tests. A gate that fails for reasons unrelated to the code
+  # teaches the operator to bypass it every time, and a gate that is always
+  # bypassed is the same as no gate.
+  SWIFT_LOG="$(mktemp -t postroll-swift-tests)"
+  if xcodebuild -project "${PROJECT}" -scheme PostRollTests -destination 'platform=macOS' test \
+       > "${SWIFT_LOG}" 2>&1; then
+    (command -v xcbeautify >/dev/null && xcbeautify < "${SWIFT_LOG}" || cat "${SWIFT_LOG}")
+    rm -f "${SWIFT_LOG}"
+  else
+    (command -v xcbeautify >/dev/null && xcbeautify < "${SWIFT_LOG}" || cat "${SWIFT_LOG}")
+    if grep -qE "PERMISSIONS, not a test failure|Operation not permitted" "${SWIFT_LOG}"; then
+      echo >&2
+      echo "Error: the Swift suite could not READ ITS OWN FIXTURES. This is a macOS" >&2
+      echo "       permissions problem, not a code failure: the repo is under" >&2
+      echo "       ~/Documents, which is protected, and the test runner was refused" >&2
+      echo "       access. Grant Xcode and the test runner access under System" >&2
+      echo "       Settings > Privacy & Security > Files and Folders, then re-run." >&2
+      echo "       Nothing about the code was exercised either way, so bypassing" >&2
+      echo "       once with SKIP_INSTALL_TESTS=1 is safe FOR THIS CAUSE ONLY." >&2
+    fi
+    rm -f "${SWIFT_LOG}"
+    exit 1
+  fi
 
   echo "==> Running the Python tests before installing"
   REPO_ROOT="$(cd .. && pwd)"

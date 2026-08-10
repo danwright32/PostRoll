@@ -104,13 +104,7 @@ final class CollageLayoutSectionTests: XCTestCase {
     /// one committed fixture rather than each carrying their own copy of the
     /// answer. A change in the split enumeration turns this red.
     func testTheRerollRuleAgreesWithTheGeneratorsOwnCounts() throws {
-        let fixture = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // PostRollApp
-            .deletingLastPathComponent()   // repo root
-            .appendingPathComponent("tests/fixtures/collage_arrangements.json")
-
-        let data = try Data(contentsOf: fixture)
+        let data = try RepoFixture.data("tests/fixtures/collage_arrangements.json")
         let doc = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let counts = try XCTUnwrap(doc?["arrangements_by_photo_count"] as? [String: Int],
                                    "fixture missing arrangements_by_photo_count")

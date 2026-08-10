@@ -28,12 +28,8 @@ final class EventSlugParityTests: XCTestCase {
     }
 
     private func loadFixture() throws -> Fixture {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // PostRollApp
-            .deletingLastPathComponent()   // repo root
-        let url = repoRoot.appendingPathComponent("tests/fixtures/event_slug.json")
-        return try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
+        return try JSONDecoder().decode(
+            Fixture.self, from: try RepoFixture.data("tests/fixtures/event_slug.json"))
     }
 
     func testSwiftBuildsTheSlugPythonRecorded() throws {

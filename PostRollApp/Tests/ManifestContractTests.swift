@@ -21,10 +21,8 @@ final class ManifestContractTests: XCTestCase {
     // MARK: - The contract
 
     private func manifestKeys(_ name: String) throws -> Set<String> {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let url = root.appendingPathComponent("tests/fixtures/bridge_payload_contract.json")
-        let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
+        let raw = try JSONSerialization.jsonObject(
+            with: try RepoFixture.data("tests/fixtures/bridge_payload_contract.json"))
         let doc = try XCTUnwrap(raw as? [String: Any])
         let manifests = try XCTUnwrap(doc["manifests"] as? [String: Any],
                                       "the contract has no manifests section")
@@ -311,11 +309,9 @@ final class ManifestContractTests: XCTestCase {
     ]
 
     func testEveryManifestInTheContractHasAProofHere() throws {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let url = root.appendingPathComponent("tests/fixtures/bridge_payload_contract.json")
-        let doc = try XCTUnwrap(
-            try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let doc = try XCTUnwrap(try JSONSerialization.jsonObject(
+            with: try RepoFixture.data("tests/fixtures/bridge_payload_contract.json"))
+            as? [String: Any])
         let manifests = try XCTUnwrap(doc["manifests"] as? [String: Any])
         let declared = Set(manifests.keys.filter { !$0.hasPrefix("_") })
         XCTAssertFalse(declared.isEmpty)

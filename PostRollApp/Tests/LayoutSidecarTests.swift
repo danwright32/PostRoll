@@ -21,12 +21,8 @@ final class LayoutSidecarTests: XCTestCase {
     }
 
     private func loadFixture() throws -> Fixture {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // PostRollApp
-            .deletingLastPathComponent()   // repo root
-        let url = repoRoot.appendingPathComponent("tests/fixtures/layout_sidecar.json")
-        return try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
+        return try JSONDecoder().decode(
+            Fixture.self, from: try RepoFixture.data("tests/fixtures/layout_sidecar.json"))
     }
 
     func testSwiftSatisfiesTheSharedNamingContract() throws {

@@ -38,8 +38,8 @@ final class BridgePayloadContractTests: XCTestCase {
     }
 
     private func loadContract() throws -> Contract {
-        let url = Self.repoRoot().appendingPathComponent("tests/fixtures/bridge_payload_contract.json")
-        let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
+        let raw = try JSONSerialization.jsonObject(
+            with: try RepoFixture.data("tests/fixtures/bridge_payload_contract.json"))
         let dict = try XCTUnwrap(raw as? [String: Any], "the contract is not a JSON object")
 
         // `manifests` is a section of the file, not a payload. Named rather

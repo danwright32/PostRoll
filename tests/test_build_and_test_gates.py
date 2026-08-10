@@ -59,22 +59,26 @@ def test_an_unset_flag_does_not_require_ffmpeg():
 # and depend on the machine.
 
 
-def _stub_dir(tmp_path: Path, *, xcodebuild_exit: int) -> Path:
+def _stub_dir(tmp_path: Path, *, xcodebuild_exit: int, xcodebuild_output: str = "") -> Path:
     """A PATH entry whose xcodebuild exits with the given code."""
     d = tmp_path / "stubbin"
     d.mkdir()
     stub = d / "xcodebuild"
+    extra = f'echo "{xcodebuild_output}"\n' if xcodebuild_output else ""
     stub.write_text(
         "#!/bin/sh\n"
         "echo \"stub xcodebuild $*\"\n"
-        f"exit {xcodebuild_exit}\n"
+        + extra
+        + f"exit {xcodebuild_exit}\n"
     )
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return d
 
 
-def _run_install(tmp_path: Path, *, xcodebuild_exit: int, env_extra: dict | None = None):
-    stubs = _stub_dir(tmp_path, xcodebuild_exit=xcodebuild_exit)
+def _run_install(tmp_path: Path, *, xcodebuild_exit: int, env_extra: dict | None = None,
+                 xcodebuild_output: str = ""):
+    stubs = _stub_dir(tmp_path, xcodebuild_exit=xcodebuild_exit,
+                      xcodebuild_output=xcodebuild_output)
     env = dict(os.environ)
     env["PATH"] = f"{stubs}:{env['PATH']}"
     env.pop("SKIP_INSTALL_TESTS", None)
@@ -135,3 +139,63 @@ def test_a_missing_venv_is_refused_rather_than_counted_as_a_pass(tmp_path, monke
     combined = result.stdout + result.stderr
     assert "venv" in combined, combined[-2000:]
     assert "==> Building" not in combined, combined[-2000:]
+
+
+# ── #271: a refused folder is not a red suite ─────────────────────────────────
+#
+# The repo lives under ~/Documents, which macOS protects, so the test process
+# needs Documents access to read its own fixtures. On one run that was refused
+# and five fixture-reading suites failed at once, which read as five broken
+# suites. A gate that fails for reasons unrelated to the code teaches the
+# operator to bypass it every time, and a gate that is always bypassed is the
+# same as no gate.
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_a_permissions_refusal_is_named_as_one(tmp_path):
+    result = _run_install(tmp_path, xcodebuild_exit=65,
+                          xcodebuild_output="error: Operation not permitted")
+
+    assert result.returncode != 0, "it still refuses to install"
+    combined = result.stdout + result.stderr
+    assert "permissions problem" in combined, combined[-2000:]
+    assert "Privacy & Security" in combined, combined[-2000:]
+    assert "SKIP_INSTALL_TESTS=1 is safe FOR THIS CAUSE ONLY" in combined, combined[-2000:]
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_an_ordinary_red_suite_is_not_blamed_on_permissions(tmp_path):
+    # The two need opposite responses: one is a code failure to fix, the other
+    # is a machine setting. Telling the operator to grant folder access for a
+    # genuine test failure sends the diagnosis somewhere unrelated (L11).
+    result = _run_install(tmp_path, xcodebuild_exit=65,
+                          xcodebuild_output="error: XCTAssertEqual failed")
+
+    combined = result.stdout + result.stderr
+    assert "permissions problem" not in combined, combined[-2000:]
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_the_swift_output_still_reaches_the_operator_on_a_green_run(tmp_path):
+    """Capturing the output to classify it must not swallow it: the run's own
+    log is how anyone reads what happened.
+
+    Run from a copy with no venv, so it stops at the Python step rather than
+    going on to run the real suite (which is this one) inside itself.
+    """
+    stubs = _stub_dir(tmp_path, xcodebuild_exit=0, xcodebuild_output="Executed 927 tests")
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "PostRollApp").mkdir(parents=True)
+    shutil.copy2(BUILD_INSTALL, fake_repo / "PostRollApp" / "build-install.sh")
+
+    env = dict(os.environ)
+    env["PATH"] = f"{stubs}:{env['PATH']}"
+    env.pop("SKIP_INSTALL_TESTS", None)
+    result = subprocess.run(
+        ["/bin/bash", str(fake_repo / "PostRollApp" / "build-install.sh")],
+        capture_output=True, text=True, env=env, timeout=600,
+    )
+
+    combined = result.stdout + result.stderr
+    assert "Executed 927 tests" in combined, combined[-2000:]
+    assert "permissions problem" not in combined, combined[-2000:]
