@@ -27,4 +27,45 @@ enum LayoutSidecar {
             .deletingLastPathComponent()
             .appendingPathComponent(preview.deletingPathExtension().lastPathComponent + suffix)
     }
+
+    /// What a sidecar holds: the cells, and which collage design made them.
+    ///
+    /// `version` is nil for a sidecar written before the stamp existed (#160),
+    /// which is a bare array. Nil rather than 0: not knowing which design made
+    /// something is a different fact from knowing it was the first one.
+    struct Contents: Equatable {
+        var version: Int?
+        var cells: [CollageCell]
+
+        /// Whether this collage predates the design this build renders.
+        var isStale: Bool { (version ?? 0) < CollageDesign.collageDesignVersion }
+    }
+
+    /// Read a sidecar in either shape, tolerating everything already on disk.
+    ///
+    /// Every collage rendered before the stamp existed has the old bare-array
+    /// shape, and treating those as unreadable would blank a day's crop
+    /// editing rather than badge it.
+    ///
+    /// Never throws: a missing or corrupt sidecar means the editor falls back
+    /// to the automatic layout, which is what it did before any of this.
+    static func read(at url: URL) -> Contents {
+        guard let data = try? Data(contentsOf: url) else { return Contents(version: nil, cells: []) }
+        if let cells = try? JSONDecoder().decode([CollageCell].self, from: data) {
+            return Contents(version: nil, cells: cells)
+        }
+        struct Envelope: Decodable {
+            var version: Int?
+            var cells: [CollageCell]?
+        }
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else {
+            return Contents(version: nil, cells: [])
+        }
+        return Contents(version: envelope.version, cells: envelope.cells ?? [])
+    }
+
+    /// The contents of the sidecar belonging to a rendered preview.
+    static func read(forPreview preview: URL) -> Contents {
+        read(at: url(for: preview))
+    }
 }

@@ -38,6 +38,9 @@ from .design_tokens import (
 )
 from .brand_text import detail_lines
 from .layout_sidecar import layout_sidecar_path
+# Aliased: `write_layout_sidecar` is already the name of this module's
+# boolean parameter for whether to write one at all.
+from .layout_sidecar import write_layout_sidecar as _write_sidecar
 
 # MAT is the gallery mat: an even cream border on all four sides with the photos
 # hung inside it. The photos used to bleed off the top and bottom of the canvas
@@ -795,9 +798,7 @@ def generate_collage(
     # crop controls. Suppressed on final export since nothing in the
     # export folder consumes it.
     if write_layout_sidecar:
-        layout_path = layout_sidecar_path(output)
-        with open(layout_path, "w") as lf:
-            json.dump(cells, lf)
+        _write_sidecar(layout_sidecar_path(output), cells)
 
     print(f"Collage generated: {output} ({CANVAS_W}x{CANVAS_H}, {mode_desc})")
     return str(output)

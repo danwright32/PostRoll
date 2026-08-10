@@ -362,9 +362,8 @@ final class ExportManager {
         let photos = pd?.photoPaths ?? []
         let cells: [CollageCell]? = {
             if let override = CollageCell.usable(pd?.collageCellOverride, forPhotos: photos) { return override }
-            guard let data = try? Data(contentsOf: LayoutSidecar.url(for: baseURL)),
-                  let decoded = try? JSONDecoder().decode([CollageCell].self, from: data)
-            else { return nil }
+            let decoded = LayoutSidecar.read(forPreview: baseURL).cells
+            guard !decoded.isEmpty else { return nil }
             return CollageCell.usable(decoded, forPhotos: photos)
         }()
         guard let cells else { return nil }

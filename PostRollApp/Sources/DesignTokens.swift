@@ -11,6 +11,17 @@ import SwiftUI
 // The colours below with no Python counterpart (creamDeep, roseDeep, warmFaint,
 // the stage pills) are app chrome that no generator paints, and stay Swift-only.
 
+/// Which generation of the collage design this build renders (#160).
+///
+/// Mirrors `design_tokens.COLLAGE_DESIGN_VERSION`; nothing but the parity test
+/// in tests/test_collage_design_version.py keeps the two in step. A cached
+/// collage stamped with less than this, or with nothing at all, was made by an
+/// older design, and is badged rather than left to render the old look
+/// indefinitely until somebody happens to regenerate that day.
+enum CollageDesign {
+    static let collageDesignVersion = 1
+}
+
 extension Color {
     /// Main window / detail background — warm off-white
     static let cream     = Color(red: 252/255, green: 250/255, blue: 247/255)

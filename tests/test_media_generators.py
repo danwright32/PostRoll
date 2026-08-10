@@ -22,6 +22,7 @@ from postroll.media import generate_reel_morph as morph_mod
 from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
+from postroll.media.layout_sidecar import read_layout_sidecar
 from postroll.media.generate_collage import (
     CANVAS_H,
     CANVAS_W,
@@ -323,7 +324,9 @@ def test_default_layout_is_full_width_pair_full_width(tmp_path):
     for i in range(5):
         out = tmp_path / f"c{i}.png"
         generate_collage(photo_paths=photos, output_path=str(out), event_name="Test")
-        cells = json.loads((tmp_path / f"c{i}_layout.json").read_text())
+        # Read through the helper: the sidecar carries a design version
+        # alongside its cells now, so its shape is not a bare array (#160).
+        _, cells = read_layout_sidecar(tmp_path / f"c{i}_layout.json")
         layouts.add(tuple((c["w"], c["h"]) for c in cells))
     assert len(layouts) == 1, "an unseeded collage must be deterministic"
 

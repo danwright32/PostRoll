@@ -22,6 +22,21 @@ from __future__ import annotations
 
 # ── Colour ────────────────────────────────────────────────────────────────────
 
+#: Which generation of the collage design a rendered PNG came from (#160).
+#:
+#: Bumped whenever the collage's tokens or geometry change enough that an
+#: already-rendered PNG no longer looks like a fresh one. Cached collages carry
+#: this in their layout sidecar, so the app can badge a day whose collage
+#: predates the current design instead of it silently rendering the old look
+#: forever. `DesignTokens.collageDesignVersion` mirrors it; nothing but the
+#: parity test keeps the two in step.
+#:
+#: 1 is the gallery redesign (c65a0d6: gallery mat, caption plate, shape-aware
+#: layout). Anything rendered before that is unstamped, which reads as older
+#: rather than as version 0.
+COLLAGE_DESIGN_VERSION = 1
+
+
 #: The gallery mat and every cream surface. The one background colour.
 CREAM = (252, 250, 247)
 
