@@ -35,6 +35,11 @@ struct Event: Identifiable, Codable, Hashable {
     /// too large, rate limit). OCR data is still usable; the user just won't
     /// have an auto-flagged review list. Cleared on confirm.
     var pendingFlagsError: String? = nil
+    /// Why the Vision spelling cross-check did not run, when it did not (#209).
+    /// Its own field rather than sharing `pendingFlagsError`: they are
+    /// independent checks, and a pass from one must not erase the other's
+    /// failure, or a skipped cross-check reads as a program with nothing wrong.
+    var visionCheckSkipped: String? = nil
 
     // Event-wide handles applied to every day's caption (org, venue, recurring tags)
     var eventHandles: String = ""
@@ -138,6 +143,7 @@ extension Event {
         ocrReviewDone     = try c.decodeIfPresent(Bool.self,                       forKey: .ocrReviewDone)     ?? false
         pendingFlags      = try c.decodeIfPresent([OCRFlag].self,                  forKey: .pendingFlags)      ?? []
         pendingFlagsError = try c.decodeIfPresent(String.self,                     forKey: .pendingFlagsError)
+        visionCheckSkipped = try c.decodeIfPresent(String.self,                     forKey: .visionCheckSkipped)
         eventURL          = try c.decodeIfPresent(String.self,                     forKey: .eventURL)          ?? ""
         eventHandles      = try c.decodeIfPresent(String.self,                     forKey: .eventHandles)      ?? ""
         postingPresetOverride = try c.decodeIfPresent(PostingPreset.self,          forKey: .postingPresetOverride)

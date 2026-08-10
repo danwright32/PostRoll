@@ -92,10 +92,24 @@ final class OCRManager {
             // Second pass: ask Claude to flag suspicious OCR items. Non-blocking —
             // if it fails, the user can still review manually; capture the reason.
             tracker.update(eventID) { $0.phaseOverride = "Checking for issues…" }
+            // The program PDF's Vision text layer is the spelling authority for
+            // names and handles (#209). When it cannot be trusted the review
+            // still runs, but the reason is recorded rather than swallowed: a
+            // cross-check that silently did not happen looks exactly like a
+            // program with nothing wrong in it.
+            let live = appState.events.first(where: { $0.id == eventID }) ?? ev
+            var visionText: String? = nil
+            var visionSkipped: String? = nil
+            switch VisionTextLayer.availability(for: live) {
+            case .ready(let text):     visionText = text
+            case .unavailable(let why): visionSkipped = why.explanation
+            }
+
             var flags: [OCRFlag] = []
             var flagError: String? = nil
             do {
-                flags = try await PythonBridge.shared.runFlagIssues(ocr: result, imagePaths: livePaths)
+                flags = try await PythonBridge.shared.runFlagIssues(
+                    ocr: result, imagePaths: livePaths, visionText: visionText)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -103,7 +117,8 @@ final class OCRManager {
             }
 
             finishSuccess(eventID: eventID, snapshot: ev, result: result,
-                          flags: flags, flagError: flagError, appState: appState)
+                          flags: flags, flagError: flagError,
+                          visionSkipped: visionSkipped, appState: appState)
         } catch is CancellationError {
             // User cancelled — cancel() already cleaned up state and navigation.
         } catch {
@@ -112,7 +127,8 @@ final class OCRManager {
     }
 
     private func finishSuccess(eventID: Event.ID, snapshot ev: Event, result: OCRResult,
-                               flags: [OCRFlag], flagError: String?, appState: AppState) {
+                               flags: [OCRFlag], flagError: String?,
+                               visionSkipped: String?, appState: AppState) {
         tracker.remove(eventID)
 
         // Base the write-back on the live event: OCR takes minutes and a snapshot
@@ -121,6 +137,7 @@ final class OCRManager {
         updated.ocrResult = result
         updated.pendingFlags = flags
         updated.pendingFlagsError = flagError
+        updated.visionCheckSkipped = visionSkipped
         updated.stage = .ocrDone
         appState.updateEvent(updated)
         NotificationService.shared.notifyOCRComplete(eventName: ev.name)

@@ -28,6 +28,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from .vision_cross_check import VisionTextUnavailable, cross_check_against_vision
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -122,10 +123,27 @@ Rules:
 def flag_issues(
     ocr_data: dict[str, Any],
     image_paths: list[str | Path],
+    vision_text: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Review OCR data + original images and return a list of flags."""
+    """Review OCR data + original images and return a list of flags.
+
+    When `vision_text` is supplied it is the text layer Apple Vision baked into
+    the program PDF at upload time, and every performer name and handle is
+    cross-checked against it first (#209). Those flags are produced in code
+    rather than asked of the model, because "does this string appear in that
+    text" is exactly checkable and a rule that lives only in a prompt is a hope.
+    They come first in the list: a misspelling Vision can disprove outright is
+    more certain than anything the review pass infers from the pixels.
+    """
     if not image_paths:
         raise ValueError("At least one image path is required")
+
+    # Deliberately NOT wrapped in a try/except. A missing or half-baked text
+    # layer raises, because a cross-check that silently produced nothing would
+    # be indistinguishable from a program with nothing wrong in it.
+    vision_flags = (
+        cross_check_against_vision(ocr_data, vision_text) if vision_text is not None else []
+    )
 
     with tempfile.TemporaryDirectory(prefix="postroll-flags-") as tmp:
         tmp_path = Path(tmp)
@@ -158,7 +176,7 @@ def flag_issues(
         raise ClaudeError(f"Expected JSON array of flags, got {type(data).__name__}")
 
     # Normalize — fill defaults if model omitted any field
-    flags: list[dict[str, Any]] = []
+    flags: list[dict[str, Any]] = list(vision_flags)
     for i, raw in enumerate(data):
         if not isinstance(raw, dict):
             continue
@@ -190,6 +208,13 @@ def main() -> int:
         help="Path to a program photo (repeat for multi-page programs)",
     )
     parser.add_argument(
+        "--vision-text",
+        type=Path,
+        help="Path to the Vision text layer extracted from the program PDF. "
+             "When given, every performer name and handle is cross-checked "
+             "against it for spelling before the model review runs (#209).",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         help="Where to write the flags JSON (defaults to stdout)",
@@ -197,10 +222,13 @@ def main() -> int:
     args = parser.parse_args()
 
     ocr_data = json.loads(args.program.read_text(encoding="utf-8"))
+    vision_text = (
+        args.vision_text.read_text(encoding="utf-8") if args.vision_text else None
+    )
 
     try:
-        flags = flag_issues(ocr_data, args.image)
-    except (ClaudeError, FileNotFoundError, ValueError) as e:
+        flags = flag_issues(ocr_data, args.image, vision_text=vision_text)
+    except (ClaudeError, FileNotFoundError, ValueError, VisionTextUnavailable) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
 
