@@ -339,6 +339,8 @@ struct CaptionReviewView: View {
                 } else if isGeneratingGraphics {
                     LongRunIndicator(label: "Generating story graphics…",
                                      startedAt: graphics.startedAt(event.id),
+                                     eventID: event.id,
+                                     run: .media,
                                      estimate: "~1 min")
                         .padding(Spacing.xl)
                 } else if let waiting = ExportReadiness.blockedReason(

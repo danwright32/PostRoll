@@ -249,11 +249,20 @@ actor PythonBridge {
         )
         try manifestData.write(to: manifestFile)
 
+        // Its own progress file, separate from the caption run's, because the
+        // two run at the same time and would otherwise overwrite each other's
+        // label (#234).
+        let progressFile = AppPaths.mediaProgressFile(forEventID: event.id)
+        try? FileManager.default.createDirectory(
+            at: AppPaths.progressDir, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: progressFile)
+
         var args = [
             "-m", "postroll.ai.generate_media",
             "--manifest",   manifestFile.path,
             "--output-dir", outputDir.path,
             "--output",     outputFile.path,
+            "--progress",   progressFile.path,
             "--final-export",
         ]
         if let days, !days.isEmpty {
@@ -464,11 +473,19 @@ actor PythonBridge {
         )
         try manifestData.write(to: manifestFile)
 
+        // Same reason as runMediaGeneration: its own file, since captions and
+        // graphics run in parallel (#234).
+        let progressFile = AppPaths.mediaProgressFile(forEventID: event.id)
+        try? FileManager.default.createDirectory(
+            at: AppPaths.progressDir, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: progressFile)
+
         var args = [
             "-m", "postroll.ai.generate_media",
             "--manifest",   manifestFile.path,
             "--output-dir", previewRoot.path,
             "--output",     outputFile.path,
+            "--progress",   progressFile.path,
             // No --static-only: reels (Tuesday + Thursday) are generated so the
             // user can preview them in the caption review step before exporting.
         ]

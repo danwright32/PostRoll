@@ -45,16 +45,26 @@ def _outside_inputs() -> set[str]:
     maintained beside the tests drifts the moment someone adds a fixture and
     does not think of this file, which is the exact failure #246 is about.
     """
+    # Two ways the tests name a repo file: appendingPathComponent on a URL they
+    # built themselves, and RepoFixture, which takes the repo-relative path
+    # directly (#271). Both are matched, because a scan that knew only the
+    # first went blind the moment the suites moved to the helper, and this test
+    # correctly refused rather than reporting a confident empty set.
+    patterns = (
+        r'appendingPathComponent\(\s*"([^"]+)"',
+        r'RepoFixture\.(?:data|text)\(\s*"([^"]+)"',
+    )
     found: set[str] = set()
     for source in sorted(SWIFT_TESTS.rglob("*.swift")):
         text = source.read_text()
-        for literal in re.findall(r'appendingPathComponent\(\s*"([^"]+)"', text):
-            if literal.startswith("/") or ".." in literal:
-                continue
-            # Only literals that name a real committed file are inputs; the
-            # rest are paths built at runtime inside a temp directory.
-            if (REPO_ROOT / literal).is_file():
-                found.add(literal)
+        for pattern in patterns:
+            for literal in re.findall(pattern, text):
+                if literal.startswith("/") or ".." in literal:
+                    continue
+                # Only literals that name a real committed file are inputs; the
+                # rest are paths built at runtime inside a temp directory.
+                if (REPO_ROOT / literal).is_file():
+                    found.add(literal)
     return found
 
 

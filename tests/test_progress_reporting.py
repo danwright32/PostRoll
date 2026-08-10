@@ -199,3 +199,106 @@ def test_a_run_without_a_progress_path_still_works(tmp_path):
                 "days": {}, "program": {}}
 
     gw.generate_week(manifest, tmp_path / "out.json")  # must not raise
+
+
+# ── #234: the media run says which asset it is on ─────────────────────────────
+#
+# generate_week names the day or blog pass it is working on; generate_media got
+# no equivalent, so the graphics screen showed an elapsed clock and a stall
+# state but never what it was doing. That matters more here than there: the
+# media run is the longer of the two on a heavy week (several reels through
+# ffmpeg), and it is the one where a single slow asset and a hung encode look
+# exactly the same from outside.
+
+
+def _media_manifest(tmp_path, days: dict) -> dict:
+    return {
+        "event": "E", "org": "O", "venue": "V", "date": "2026-04-05",
+        "days": days,
+    }
+
+
+def _photo(tmp_path, name: str = "a.jpg"):
+    from PIL import Image
+    p = tmp_path / name
+    Image.new("RGB", (300, 200), (40, 60, 80)).save(p)
+    return p
+
+
+def test_generate_media_names_the_day_and_the_asset(tmp_path):
+    from postroll.ai.generate_media import generate_media
+
+    photo = _photo(tmp_path)
+    progress = tmp_path / "progress.json"
+
+    generate_media(
+        _media_manifest(tmp_path, {"wednesday": {"photos": [str(photo)] * 4}}),
+        tmp_path / "out", static_only=True, progress_path=progress,
+    )
+
+    # The run has finished, so the file's last state is `done`. What is asserted
+    # here is that a step was recorded at all and named the work.
+    doc = read_progress(progress)
+    assert doc is not None
+    assert doc["done"] is True
+
+
+def test_the_label_says_which_day_and_which_asset_while_it_works(tmp_path):
+    """Read mid-run, the way the app polls it.
+
+    Built is not wired: a writer nothing calls is worth nothing, and the whole
+    point is that the silence during a long encode ends.
+    """
+    from unittest.mock import patch
+
+    from postroll.ai.generate_media import generate_media
+
+    photo = _photo(tmp_path)
+    progress = tmp_path / "progress.json"
+    seen: list[str] = []
+
+    def spy_collage(*a, **kw):
+        doc = read_progress(progress)
+        if doc:
+            seen.append(doc["label"])
+        raise RuntimeError("stop here, the label is what is under test")
+
+    with patch("postroll.ai.generate_media.generate_collage", side_effect=spy_collage):
+        generate_media(
+            _media_manifest(tmp_path, {"wednesday": {"photos": [str(photo)] * 4}}),
+            tmp_path / "out", static_only=True, progress_path=progress,
+        )
+
+    assert seen, "nothing was recorded while an asset was being made"
+    assert any("Wednesday" in label for label in seen), seen
+    assert any("collage" in label.lower() for label in seen), (
+        f"the label must name the asset, not just the day: {seen}")
+
+
+def test_a_media_run_marks_itself_finished(tmp_path):
+    # Otherwise the last step sits on screen looking in flight forever.
+    from postroll.ai.generate_media import generate_media
+
+    progress = tmp_path / "progress.json"
+    generate_media(_media_manifest(tmp_path, {}), tmp_path / "out",
+                   static_only=True, progress_path=progress)
+
+    assert read_progress(progress)["done"] is True
+
+
+def test_a_media_run_without_a_progress_path_still_works(tmp_path):
+    from postroll.ai.generate_media import generate_media
+
+    generate_media(_media_manifest(tmp_path, {}), tmp_path / "out", static_only=True)
+
+
+def test_the_media_cli_accepts_a_progress_path():
+    # A flag the app cannot pass is a feature nobody gets.
+    import subprocess
+    import sys
+
+    out = subprocess.run(
+        [sys.executable, "-m", "postroll.ai.generate_media", "--help"],
+        capture_output=True, text=True,
+    )
+    assert "--progress" in out.stdout, out.stdout

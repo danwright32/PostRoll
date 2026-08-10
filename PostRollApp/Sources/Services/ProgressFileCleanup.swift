@@ -38,12 +38,23 @@ enum ProgressFileCleanup {
         for entry in entries {
             guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory != true,
                   entry.pathExtension == "json",
-                  let id = UUID(uuidString: entry.deletingPathExtension().lastPathComponent),
+                  let id = eventID(fromFileNamed: entry.deletingPathExtension().lastPathComponent),
                   !live.contains(id)
             else { continue }
             guard (try? fm.removeItem(at: entry)) != nil else { continue }
             removed.append(entry.lastPathComponent)
         }
         return removed.sorted()
+    }
+
+    /// The event a progress file belongs to, or nil when the name is not ours.
+    ///
+    /// Two names, because the caption run and the media run report separately
+    /// (#234): `<uuid>.json` and `<uuid>-media.json`. A sweep that knew only
+    /// the first would leave every media file behind forever, which is the
+    /// defect this whole file exists to fix.
+    static func eventID(fromFileNamed stem: String) -> UUID? {
+        UUID(uuidString: stem)
+            ?? (stem.hasSuffix("-media") ? UUID(uuidString: String(stem.dropLast(6))) : nil)
     }
 }

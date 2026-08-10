@@ -24,6 +24,20 @@ struct LongRunIndicator: View {
     /// nil gives elapsed time only, which is still three states better than a
     /// bare spinner.
     var eventID: UUID? = nil
+    /// Which of that event's two runs to read. Captions and graphics report to
+    /// separate files because they run at the same time (#234).
+    var run: Run = .captions
+
+    enum Run {
+        case captions, media
+
+        func file(forEventID id: UUID) -> URL {
+            switch self {
+            case .captions: return AppPaths.progressFile(forEventID: id)
+            case .media:    return AppPaths.mediaProgressFile(forEventID: id)
+            }
+        }
+    }
     /// A rough duration, shown as context next to the elapsed time.
     var estimate: String? = nil
     /// Set when the run has already failed; always wins over the rest.
@@ -32,7 +46,7 @@ struct LongRunIndicator: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let step = eventID.flatMap {
-                LongRunState.readStep(at: AppPaths.progressFile(forEventID: $0))
+                LongRunState.readStep(at: run.file(forEventID: $0))
             }
             let status = LongRunState.status(
                 startedAt: startedAt, step: step, now: context.date,

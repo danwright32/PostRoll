@@ -77,6 +77,7 @@ from ..media.clip_scorer import score_clips, InsufficientClipsError
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
 from ..media.generate_title_card import apply_title_card, TitleCardError
 from .audio_tags import resolve_reel_audio
+from .progress import ProgressWriter
 from .select_reel_clips import select_reel_clips
 from .select_cover_photo import (
     select_cover_photo,
@@ -274,6 +275,7 @@ def _render_cover(
     day_result: dict,
     errors: dict,
     persist_pick_to: Path | None = None,
+    working_on=None,
 ) -> None:
     """Sticky-gate cover render, generic across days: reuses a persisted
     cover_source without touching Claude (or the representative-sampling
@@ -283,6 +285,10 @@ def _render_cover(
     template, reusing the same design rather than forking a second one.
     """
     cover_source = day_info.get("cover_source")
+    # Named because picking a cover fresh is a Claude call, so this is one of
+    # the steps that can sit for a while looking like nothing (#234).
+    if working_on is not None:
+        working_on(day_name, "cover image")
     try:
         if cover_source:
             source_path = cover_source
@@ -325,6 +331,7 @@ def generate_media(
     static_only: bool = False,
     only_days: set[str] | None = None,
     final_export: bool = False,
+    progress_path: Path | None = None,
 ) -> dict[str, Any]:
     """Generate all visual assets for one event week.
 
@@ -361,6 +368,25 @@ def generate_media(
     results: dict[str, Any] = {}
     errors: dict[str, str] = {}
     warnings: dict[str, str] = {}
+
+    # Which asset this run is on, written where the app can read it (#234).
+    # generate_week already did this; the media run is the LONGER of the two on
+    # a heavy week, and it is the one where a slow reel and a hung encode look
+    # identical from outside, so an elapsed clock alone cannot tell them apart.
+    say = ProgressWriter(progress_path)
+    planned_days = [d for d in DAY_ORDER
+                    if only_days is None or d in only_days]
+    step_total = len(planned_days) or None
+
+    def working_on(day: str, asset: str) -> None:
+        """Name the day and the asset, because either alone is not enough.
+
+        The day says how far through the week it is; the asset says whether the
+        thing taking minutes is an ffmpeg encode or a Claude call.
+        """
+        index = planned_days.index(day) + 1 if day in planned_days else None
+        say.step(f"{day.capitalize()}: {asset}", index=index, total=step_total)
+
     tools = ffmpeg_status()
     ffmpeg_available = tools.available
 
@@ -403,6 +429,7 @@ def generate_media(
             kind, count = day_fmt
             if kind == SINGLE:
                 try:
+                    working_on(day_name, "story graphic")
                     story_path = str(day_dir / "story.png")
                     generate_story(
                         photo_path=photos[0],
@@ -431,6 +458,7 @@ def generate_media(
                     seed = day_info.get("collage_seed")
                     # cell_layout: user-dragged frame positions — skips masonry if present
                     cell_layout = day_info.get("cell_layout")
+                    working_on(day_name, "collage")
                     generate_collage(
                         photo_paths=selected,
                         output_path=collage_path,
@@ -491,6 +519,7 @@ def generate_media(
                 ba_path = str(day_dir / "before_after.png")
             if raw and edit and not missing_inputs:
                 try:
+                    working_on("tuesday", "before and after graphic")
                     generate_before_after(
                         raw_path=raw,
                         edit_path=edit,
@@ -514,6 +543,7 @@ def generate_media(
                 if rec and not bw:
                     try:
                         from ..media.generate_reel_screen import generate_reel_screen
+                        working_on("tuesday", "screen recording reel")
                         reel_path = str(day_dir / "reel_screen.mp4")
                         generate_reel_screen(
                             recording_path=rec,
@@ -545,6 +575,7 @@ def generate_media(
                     try:
                         if reel_style == "morph":
                             from ..media.generate_reel_morph import generate_reel_morph
+                            working_on("tuesday", "before and after reel")
                             reel_path = str(day_dir / "reel_morph.mp4")
                             generate_reel_morph(
                                 raw_path=raw,
@@ -559,6 +590,7 @@ def generate_media(
                             )
                         else:  # slider (default)
                             from ..media.generate_reel_slider import generate_reel_slider
+                            working_on("tuesday", "three photo reveal reel")
                             reel_path = str(day_dir / "reel_slider.mp4")
                             generate_reel_slider(
                                 raw_path=raw,
@@ -631,6 +663,7 @@ def generate_media(
                     print(f"  [{i}] {Path(p).name}", flush=True)
                 try:
                     from ..media.generate_reel_scroll import generate_reel_scroll, build_reel_preview
+                    working_on("thursday", "photo scroll reel")
                     reel_path = str(day_dir / "reel_scroll.mp4")
                     generate_reel_scroll(
                         photo_paths=photos,
@@ -680,6 +713,7 @@ def generate_media(
                     _record_error(errors, "thursday", tools.message)
 
             _render_cover(
+                working_on=working_on,
                 day_name="thursday",
                 day_dir=day_dir,
                 day_info=day_info,
@@ -786,6 +820,7 @@ def generate_media(
             if reel_rendered:
                 with tempfile.TemporaryDirectory(prefix="postroll-coverframes-") as cover_tmp:
                     _render_cover(
+                        working_on=working_on,
                         day_name="friday",
                         day_dir=day_dir,
                         day_info=day_info,
@@ -801,6 +836,7 @@ def generate_media(
 
             if not reel_rendered and raw and edit and not missing_inputs:
                 try:
+                    working_on("friday", "before and after graphic")
                     ba_path = str(day_dir / "before_after.png")
                     generate_before_after(
                         raw_path=raw,
@@ -843,6 +879,8 @@ def generate_media(
 
     results["errors"] = errors
     results["warnings"] = warnings
+    # Otherwise the last step sits on screen looking in flight forever.
+    say.finish()
     print(f"[generate_media] done — output in {base_dir}", flush=True)
     return results
 
@@ -866,6 +904,13 @@ if __name__ == "__main__":
         metavar="DAY",
         help="Regenerate only these days (e.g. --only-days sunday wednesday). "
              "Other days are skipped entirely.",
+    )
+    parser.add_argument(
+        "--progress",
+        default=None,
+        help="Path to write this run's current step to, so the app can show "
+             "which asset is being generated rather than an elapsed clock "
+             "alone. Optional: without it the run reports nothing.",
     )
     parser.add_argument(
         "--final-export",
@@ -892,6 +937,7 @@ if __name__ == "__main__":
         static_only=args.static_only,
         only_days=set(args.only_days) if args.only_days else None,
         final_export=args.final_export,
+        progress_path=Path(args.progress) if args.progress else None,
     )
 
     output_path = Path(args.output)

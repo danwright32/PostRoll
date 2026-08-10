@@ -93,6 +93,18 @@ enum AppPaths {
     static func progressFile(forEventID id: UUID) -> URL {
         progressDir.appendingPathComponent("\(id.uuidString).json")
     }
+
+    /// Where the MEDIA run reports its step, separate from the caption run's
+    /// file above (#234).
+    ///
+    /// Its own file because the two runs happen at the same time: a full
+    /// generation fires captions and graphics in parallel. Sharing one file
+    /// would have each overwrite the other's label, so the screen would flip
+    /// between "Writing the Sunday caption" and "Wednesday: collage" and
+    /// neither surface could trust what it read (L8).
+    static func mediaProgressFile(forEventID id: UUID) -> URL {
+        progressDir.appendingPathComponent("\(id.uuidString)-media.json")
+    }
     static var logFile: URL { logsDir.appendingPathComponent("postroll.log") }
 
     /// The logs folder as it should appear in a message to Dan.
