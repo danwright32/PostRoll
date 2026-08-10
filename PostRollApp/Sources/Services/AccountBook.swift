@@ -196,6 +196,17 @@ final class AccountBook {
         case unreadable
     }
 
+    /// Said out loud when the store could not be read.
+    ///
+    /// From every reader's point of view an unreadable book looks exactly like
+    /// an empty one: every account comes back "not counted yet", the ranking
+    /// goes entirely unranked, and nothing on screen distinguishes a file
+    /// nobody has filled in from one that failed to load. An error state and an
+    /// empty state are different screens.
+    nonisolated static let unreadableNote =
+        "Could not read the saved account numbers, so everything reads as not counted. "
+        + "The file has been left alone rather than overwritten."
+
     static let shared = AccountBook(fileURL: AppPaths.root.appendingPathComponent("accounts.json"))
 
     private let fileURL: URL

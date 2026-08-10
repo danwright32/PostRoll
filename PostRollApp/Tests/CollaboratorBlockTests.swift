@@ -183,4 +183,22 @@ final class CollaboratorBlockTests: XCTestCase {
         XCTAssertTrue(captions.contains(CollaboratorPick.captionHeader), captions)
         XCTAssertTrue(captions.lowercased().contains("not counted"), captions)
     }
+
+    func testAnUnreadableAccountBookIsSaidInTheFileNotJustOnScreen() throws {
+        // Built is not wired. Every account reading as "not counted" is exactly
+        // what an unreadable store looks like from here, so the file has to
+        // carry which of the two it is, not only the review screen.
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("collab-unreadable-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let exported = try EventExporter.export(
+            event: event(), to: folder, preset: .balanced,
+            collaboratorStats: { _ in nil }, asOf: now,
+            collaboratorNotes: [AccountBook.unreadableNote])
+        let captions = try String(
+            contentsOf: exported.folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+
+        XCTAssertTrue(captions.contains(AccountBook.unreadableNote), captions)
+    }
 }

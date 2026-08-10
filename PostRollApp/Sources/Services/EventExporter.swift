@@ -47,7 +47,8 @@ struct EventExporter {
     static func export(event: Event, to root: URL, days: Set<DayName>? = nil,
                        preset: PostingPreset = .balanced,
                        collaboratorStats: (String) -> AccountStats? = { _ in nil },
-                       asOf now: Date = Date()) throws -> Outcome {
+                       asOf now: Date = Date(),
+                       collaboratorNotes: [String] = []) throws -> Outcome {
         // Every intended copy is accounted for: a source that isn't there, or a
         // copy that fails, is recorded rather than skipped, because an export
         // folder short a photo gets uploaded looking complete (#79).
@@ -142,7 +143,8 @@ struct EventExporter {
             }
 
             let masterCaptions = masterCaptionText(event: event, result: result, preset: preset,
-                                                   collaboratorStats: collaboratorStats, asOf: now)
+                                                   collaboratorStats: collaboratorStats, asOf: now,
+                                                   collaboratorNotes: collaboratorNotes)
             try masterCaptions.write(to: folder.appendingPathComponent("CAPTIONS.txt"),
                                       atomically: true, encoding: .utf8)
         }
@@ -155,7 +157,8 @@ struct EventExporter {
     private static func masterCaptionText(event: Event, result: WeekGenerationResult?,
                                           preset: PostingPreset,
                                           collaboratorStats: (String) -> AccountStats?,
-                                          asOf now: Date) -> String {
+                                          asOf now: Date,
+                                          collaboratorNotes: [String]) -> String {
         var sections: [String] = []
         let (weekTags, droppedTags) = CaptionBlocks.weekTags(event: event)
         for day in DayName.allCases {
@@ -214,7 +217,8 @@ struct EventExporter {
             // from the same `suggest` the review screen renders, so the
             // file and the screen cannot name a different five.
             if let picks = CollaboratorPick.suggest(event: event, day: day, preset: preset,
-                                                    stats: collaboratorStats, asOf: now) {
+                                                    stats: collaboratorStats, asOf: now,
+                                                    notes: collaboratorNotes) {
                 block += "\n\n" + CollaboratorPick.captionBlock(picks)
             }
             sections.append(block)

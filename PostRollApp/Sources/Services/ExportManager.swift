@@ -164,6 +164,11 @@ final class ExportManager {
         // Copied once rather than reached into from the detached task below:
         // the book is main-actor state (#278).
         let accountStats = AccountBook.shared.snapshot()
+        // An unreadable book looks exactly like an empty one from the export's
+        // side: every account comes back not counted. Carried so CAPTIONS.txt
+        // says which of the two it is.
+        let accountNotes = AccountBook.shared.loadStatus == .unreadable
+            ? [AccountBook.unreadableNote] : []
 
         do {
             // Step 1: text export (fast, on background thread). The security
@@ -173,7 +178,8 @@ final class ExportManager {
                 return try EventExporter.export(event: capturedEvent, to: destinationRoot, days: scopedDays,
                                                 preset: capturedEvent.effectivePostingPreset,
                                                 collaboratorStats: { accountStats[AccountBook.key($0)] },
-                                                asOf: exportedAt)
+                                                asOf: exportedAt,
+                                                collaboratorNotes: accountNotes)
             }.value
             let folder = textExport.folder
             // Files the export meant to copy and couldn't. Carried all the way

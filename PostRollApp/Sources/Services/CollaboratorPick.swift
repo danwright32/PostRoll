@@ -122,11 +122,16 @@ enum CollaboratorPick {
                                                 asOf: now))
         }
 
-        let rankable = candidates.filter { $0.rate != nil }
+        // Split by whether the account can be ranked at all, and carry the
+        // values into the sort rather than the optionals. A rate or a follower
+        // count coalesced to zero at the comparison would compare as a real
+        // measurement, land on one side of the follower floor, and sort as
+        // though the account had been counted and found wanting.
+        let rankable = candidates.compactMap(Rankable.init)
         let unranked = candidates.filter { $0.rate == nil }
 
         let ranked = rankable.sorted { better($0, than: $1, respectingFirstPhoto: true) }
-        let suggested = Array(ranked.prefix(maxPerPost))
+        let suggested = ranked.prefix(maxPerPost).map(\.candidate)
 
         // Only meaningful where a first-photo distinction exists. Without one
         // nothing is a fallback, because nothing fell through anything.
@@ -149,14 +154,35 @@ enum CollaboratorPick {
     /// would have missed the cut anyway must not be offered as a swap, or the
     /// line stops meaning anything and becomes noise on every post.
     private static func excludedPurelyByFirstPhotoRule(
-        ranked: [Candidate], suggested: [Candidate], applies: Bool) -> Candidate? {
+        ranked: [Rankable], suggested: [Candidate], applies: Bool) -> Candidate? {
         guard applies else { return nil }
         let suggestedHandles = Set(suggested.map(\.handle))
         let onMeritAlone = ranked
             .sorted { better($0, than: $1, respectingFirstPhoto: false) }
             .prefix(maxPerPost)
         return onMeritAlone.first {
-            !$0.inFirstPhoto && !suggestedHandles.contains($0.handle)
+            !$0.candidate.inFirstPhoto && !suggestedHandles.contains($0.candidate.handle)
+        }?.candidate
+    }
+
+    /// A candidate that can actually be ranked: its rate and follower count are
+    /// values, not optionals waiting to be defaulted at a comparison.
+    ///
+    /// The type is the guard. An unmeasured account cannot be constructed here,
+    /// so it cannot reach the sort, so there is no place left for a `?? 0` to
+    /// turn "nobody counted this" into "this scored zero".
+    private struct Rankable {
+        let candidate: Candidate
+        let rate: Double
+        let followers: Int
+
+        init?(_ candidate: Candidate) {
+            guard let rate = candidate.rate,
+                  let followers = candidate.stats?.followers, followers > 0
+            else { return nil }
+            self.candidate = candidate
+            self.rate = rate
+            self.followers = followers
         }
     }
 
@@ -220,13 +246,17 @@ enum CollaboratorPick {
     ///
     /// The entry point both the review screen and the export use, so the names
     /// Dan reads on screen are the names the file tells him to invite.
+    /// - Parameter notes: anything the caller knows that the figures cannot
+    ///   show, such as the account book having failed to load, which otherwise
+    ///   reads identically to nobody having entered any numbers.
     static func suggest(event: Event, day: DayName, preset: PostingPreset,
-                        stats: (String) -> AccountStats?, asOf now: Date) -> Result? {
+                        stats: (String) -> AccountStats?, asOf now: Date,
+                        notes: [String] = []) -> Result? {
         let membership = firstPhotoHandles(event: event, day: day, preset: preset)
         return suggest(handles: CaptionBlocks.dayTagCandidates(event: event, day: day,
                                                                preset: preset),
                        firstPhoto: membership.handles.map(Set.init),
-                       stats: stats, asOf: now, notes: membership.notes)
+                       stats: stats, asOf: now, notes: notes + membership.notes)
     }
 
     // MARK: - The block in CAPTIONS.txt (#278)
@@ -291,17 +321,17 @@ enum CollaboratorPick {
     /// the handle. The last one is not cosmetic: without a total order the five
     /// names reshuffle every time the panel redraws, and a suggestion that
     /// changes with no input changing cannot be trusted.
-    private static func better(_ a: Candidate, than b: Candidate,
+    private static func better(_ a: Rankable, than b: Rankable,
                                respectingFirstPhoto: Bool) -> Bool {
-        if respectingFirstPhoto, a.inFirstPhoto != b.inFirstPhoto { return a.inFirstPhoto }
-        let aOverFloor = (a.stats?.followers ?? 0) >= followerFloor
-        let bOverFloor = (b.stats?.followers ?? 0) >= followerFloor
+        if respectingFirstPhoto, a.candidate.inFirstPhoto != b.candidate.inFirstPhoto {
+            return a.candidate.inFirstPhoto
+        }
+        let aOverFloor = a.followers >= followerFloor
+        let bOverFloor = b.followers >= followerFloor
         if aOverFloor != bOverFloor { return aOverFloor }
-        let aRate = a.rate ?? 0, bRate = b.rate ?? 0
-        if aRate != bRate { return aRate > bRate }
-        let aFollowers = a.stats?.followers ?? 0, bFollowers = b.stats?.followers ?? 0
-        if aFollowers != bFollowers { return aFollowers > bFollowers }
-        return a.handle < b.handle
+        if a.rate != b.rate { return a.rate > b.rate }
+        if a.followers != b.followers { return a.followers > b.followers }
+        return a.candidate.handle < b.candidate.handle
     }
 
     // MARK: - Saying why

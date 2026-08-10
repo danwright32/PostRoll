@@ -1101,7 +1101,9 @@ struct CaptionReviewView: View {
         CollaboratorPick.suggest(event: live, day: day,
                                  preset: live.effectivePostingPreset,
                                  stats: { AccountBook.shared.stats(for: $0) },
-                                 asOf: suggestionsAsOf)
+                                 asOf: suggestionsAsOf,
+                                 notes: AccountBook.shared.loadStatus == .unreadable
+                                        ? [AccountBook.unreadableNote] : [])
     }
 
     private func applyCollageLayout(day: DayName, seed: Int) {

@@ -362,4 +362,71 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertEqual(result?.suggested.count, CollaboratorPick.maxPerPost)
         XCTAssertEqual(CollaboratorPick.maxPerPost, 5, "Instagram, confirmed 2026-08-10")
     }
+
+    // MARK: - Nothing reaches the sort as a defaulted zero (L50)
+
+    func testAnUnrankableAccountCannotReachTheSortAtAll() {
+        // The lesson: a value that failed to parse or was never measured must
+        // never feed a comparison. Coalesced to zero it compares as a real
+        // measurement, lands on one side of the follower floor, and sorts as
+        // though it had been counted. So the sort only ever sees candidates
+        // whose rate and follower count are values.
+        let table = [
+            "counted": stats(1_000, 50, 5),
+            "nofollowers": AccountStats(followers: nil, likes: 50, comments: 5, recordedOn: now),
+            "zerofollowers": AccountStats(followers: 0, likes: 50, comments: 5, recordedOn: now),
+            "nointeractions": AccountStats(followers: 5_000, likes: nil, comments: nil,
+                                           recordedOn: now),
+        ]
+        let result = CollaboratorPick.suggest(
+            handles: ["counted", "nofollowers", "zerofollowers", "nointeractions", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result?.suggested.map(\.handle), ["counted"])
+        XCTAssertEqual(result?.unranked.map(\.handle).sorted(),
+                       ["e", "f", "nofollowers", "nointeractions", "zerofollowers"])
+        // None of them carries a score, not even a zero one.
+        for candidate in result?.unranked ?? [] { XCTAssertNil(candidate.rate) }
+    }
+
+    // MARK: - A book that could not be read is not an empty book (L10)
+
+    func testANoteAboutAnUnreadableBookReachesTheSuggestion() {
+        // Every account reading as "not counted yet" is what an unreadable
+        // store looks like from here, and it is indistinguishable from a book
+        // nobody has filled in. So the reason is carried rather than inferred.
+        let result = CollaboratorPick.suggest(
+            handles: ["a", "b", "c", "d", "e", "f"], firstPhoto: nil,
+            stats: lookup([:]), asOf: now, notes: [AccountBook.unreadableNote])
+        XCTAssertTrue(result?.notes.contains(AccountBook.unreadableNote) ?? false)
+    }
+
+    func testTheUnreadableNoteSaysWhatIsWrongRatherThanThatSomethingIs() {
+        // "The suggestion is wrong" is not an actionable message.
+        XCTAssertTrue(AccountBook.unreadableNote.lowercased().contains("could not"),
+                      AccountBook.unreadableNote)
+        XCTAssertTrue(AccountBook.unreadableNote.lowercased().contains("not counted"),
+                      AccountBook.unreadableNote)
+    }
+
+    func testTheSortCannotDefaultAMissingFigureToZero() {
+        // Derived from the source, not from behaviour: the two tests above pass
+        // whether or not a `?? 0` exists, because the caller filters first. This
+        // is the one that catches the pattern coming back, on the day it lands.
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()      // Tests
+            .deletingLastPathComponent()      // PostRollApp
+            .appendingPathComponent("Sources/Services/CollaboratorPick.swift")
+        let text = (try? String(contentsOf: source, encoding: .utf8)) ?? ""
+        XCTAssertFalse(text.isEmpty, "could not read the source to check it")
+
+        // The scoring function legitimately treats absent likes or comments as
+        // none of them, which is a different thing: interactions add up, so a
+        // missing half is zero of that half. What must never happen is a
+        // FOLLOWER count or a RATE reaching a comparison as a defaulted zero.
+        for banned in ["followers ?? 0", "rate ?? 0"] {
+            XCTAssertFalse(text.contains(banned),
+                           "\(banned) turns 'nobody counted this' into 'this scored zero'")
+        }
+    }
 }
