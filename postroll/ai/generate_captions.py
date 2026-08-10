@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -468,6 +469,16 @@ Handle the required @ mentions and name credits like this:
    trailing stack. But credits for people not in the frame belong in
    the stack, not woven into prose about moments they weren't part of.
 
+   EXACTLY ONCE. Body OR stack, never both. If you name @greenwich_house
+   in the body, it does NOT go in the stack as well. This is enforced in
+   code after you answer, so a repeat is deleted rather than shipped.
+
+   WHEN THE LIST IS LONG (five or more credits, which a carousel with a
+   different person tagged per photo will produce), do NOT try to name
+   them all in the body. Weave in the two or three the photos are
+   actually about, and let the trailing stack carry the rest. A body
+   that lists ten people is a credit dump, not a caption.
+
 3. If the body already mentions a handle naturally, don't repeat it in
    the trailing stack. The stack is for what's left over.
 
@@ -853,8 +864,13 @@ def generate_caption(
         scene_labels = _reinsert_skipped(scene_labels, kept_indices, len(original_paths))
 
     return {
-        "caption": _enforce_caption_bans(
-            strip_em_dashes(data.get("caption", "").strip())),
+        # A credit appears exactly once (#188, #191). The prompt asks for a few
+        # woven into the body and the rest left for the trailing stack; this
+        # removes from that stack anything the body already credits, because
+        # whether a handle appears twice is checkable and a rule that lives only
+        # in a prompt is a hope.
+        "caption": dedupe_credit_stack(_enforce_caption_bans(
+            strip_em_dashes(data.get("caption", "").strip()))),
         # Deterministic backstop, not a second ask of the model: the prompt
         # above states the fame gate, and this enforces it against the program
         # data. A rule that lives only in a prompt is a hope (#199).
@@ -876,6 +892,90 @@ def generate_caption(
             for s in skipped_photos
         ],
     }
+
+
+# #188 / #191: a credit appears exactly ONCE in a caption.
+#
+# The organisation and venue handles go on every caption automatically and are
+# also offered as per-photo tags, so an event account could be credited twice by
+# two routes. On a 10-photo carousel with a different person tagged per photo,
+# ten credits arrive at once and the same doubling multiplies.
+#
+# Dan's rule: if it is already mentioned in the caption, it does not need to be
+# mentioned again in the trailing credit stack.
+#
+# Which credits read naturally in the body is a judgement, so the prompt asks
+# for that. Whether a handle appears twice is exactly checkable, so it is
+# settled here rather than by asking the model whether it obeyed.
+_STACK_HANDLE = re.compile(r"@[A-Za-z0-9._]+")
+
+
+def _norm_handle(token: str) -> str:
+    """A handle without the punctuation that ends the sentence it sits in.
+
+    A dot is legal INSIDE a handle (@safa.wav) but never at the end, so a
+    handle written mid-sentence comes back as "@safa.wav." and would otherwise
+    never match the same handle standing alone in the stack.
+    """
+    return token.casefold().rstrip(".,;:!?)\u2026")
+
+
+def _stack_looks_like_credits(block: str) -> bool:
+    """A trailing credit stack is handles and bare names, not prose.
+
+    Checked so a one-paragraph caption is never mistaken for its own stack and
+    pruned into nothing.
+    """
+    stripped = block.strip()
+    if not stripped or stripped.startswith("#"):
+        return False
+    return bool(_STACK_HANDLE.search(stripped)) or stripped.count(" ") <= 6
+
+
+def dedupe_credit_stack(caption: str) -> str:
+    """Drop from the trailing credit stack anything the body already credits."""
+    blocks = caption.split("\n\n")
+    if len(blocks) < 2:
+        return caption
+
+    # The stack is the last block that is not the hashtag block, which has its
+    # own rules and is not a credit list.
+    index = len(blocks) - 1
+    if blocks[index].strip().startswith("#") and len(blocks) >= 3:
+        index -= 1
+    if index == 0 or not _stack_looks_like_credits(blocks[index]):
+        return caption
+
+    body = "\n\n".join(blocks[:index])
+    body_handles = {_norm_handle(h) for h in _STACK_HANDLE.findall(body)}
+    body_low = body.casefold()
+
+    kept: list[str] = []
+    for token in blocks[index].split():
+        if token.startswith("@"):
+            # Exact handle match only. @safa is a different account from
+            # @safa.wav, and dropping one for the other removes a real credit.
+            if _norm_handle(token) in body_handles:
+                continue
+            kept.append(token)
+        else:
+            kept.append(token)
+
+    # Plain-name credits are whole names, so they are removed by name rather
+    # than word by word, which would leave a dangling surname behind.
+    stack = " ".join(kept)
+    for name in _plain_name_runs(stack):
+        if name.casefold() in body_low:
+            stack = stack.replace(name, "", 1)
+    stack = " ".join(stack.split())
+
+    remaining = blocks[:index] + ([stack] if stack else []) + blocks[index + 1:]
+    return "\n\n".join(b for b in remaining if b.strip())
+
+
+def _plain_name_runs(stack: str) -> list[str]:
+    """Runs of capitalised words in a credit stack: the names without handles."""
+    return re.findall(r"\b(?:[A-Z][\w'\-.]*)(?:\s+[A-Z][\w'\-.]*)+", stack)
 
 
 def _enforce_caption_bans(caption: str) -> str:

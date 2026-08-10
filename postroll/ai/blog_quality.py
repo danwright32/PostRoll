@@ -186,6 +186,38 @@ def _counts_supported_by_names(paragraphs: list[str],
     return allowed
 
 
+# #227: a group too big to name gets a count and the ensemble name.
+#
+# Rule 29 (name people, never appearance) and rule 18 (15 to 25 words) are in
+# genuine tension on a frame holding eight performers: naming everyone cannot
+# fit. Dan's decision is the form his own corrected BLUDLINE post reached for,
+# "Four BLUDLINE performers at mic stands".
+#
+# The count must be a real one. A vague quantifier ("several women in black") is
+# the same failure to look at the photograph that "a male performer" is, so it
+# buys no exemption. The ensemble name is required too: "Four performers at mic
+# stands" credits nobody, and crediting is the point.
+_COUNT_WORDS = (
+    r"\d{1,3}|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty"
+)
+_GROUP_NOUNS = (
+    r"performers|singers|dancers|musicians|players|members|choristers|actors|"
+    r"vocalists|instrumentalists|soloists"
+)
+# The count is matched case-insensitively ("Four" opens the sentence) while the
+# ensemble stays case-SENSITIVE: requiring a capital is what separates "Four
+# BLUDLINE performers" from "Four performers", which credits nobody.
+GROUP_CREDIT = re.compile(
+    rf"\b(?i:{_COUNT_WORDS})\s+((?:[A-Z][\w'&.\-]*\s+){{1,3}})(?i:{_GROUP_NOUNS})\b"
+)
+
+
+def names_a_group(alt: str) -> bool:
+    """Whether the alt text credits an ensemble by count and name (#227)."""
+    return GROUP_CREDIT.search(alt) is not None
+
+
 def check_blog(body: str, *, program: dict[str, Any] | None = None,
                venue: str = "") -> list[Finding]:
     """Every objectively checkable rule the corrected draft broke."""
@@ -212,10 +244,12 @@ def check_blog(body: str, *, program: dict[str, Any] | None = None,
                 "alt_text_missing_venue",
                 "Every alt text names the venue.",
                 f"{name}: {alt[:90]}"))
-        if performers and not any(p.lower() in low for p in performers):
+        named = any(p.lower() in low for p in performers)
+        if performers and not named and not names_a_group(alt):
             findings.append(Finding(
                 "alt_text_missing_performer",
-                "Every alt text names the performer rather than 'a male performer'.",
+                "Every alt text names the performer, or credits the group by "
+                "count and ensemble name when there are too many to name.",
                 f"{name}: {alt[:90]}"))
 
     # 20. vary the opening

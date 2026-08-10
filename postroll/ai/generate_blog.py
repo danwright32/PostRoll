@@ -1306,6 +1306,14 @@ Photo placement rules:
   striped top" becomes "Safa"; "A bearded performer in a white shirt"
   becomes "Fermin Suero, Jr.". This is checked in code after
   generation.
+  A GROUP TOO BIG TO NAME GETS A COUNT AND THE ENSEMBLE NAME. Once
+  naming everyone in the frame would not fit the word band, write the
+  number of people and who they are as a group: "Four BLUDLINE
+  performers at mic stands", "Eight Greenwich House singers on the
+  risers". Count them, do not guess. Never fall back to appearance or
+  gender for a group either: "several women in black" is the same
+  defect at a larger scale. Name individuals whenever they DO fit,
+  which for two or three people they normally will.
   VARY THE OPENING. Do not start more than two markers the same way.
   NO INFERRED INNER STATES. Describe what the camera recorded, not
   what somebody felt or who an expression was aimed at. BANNED: "in
