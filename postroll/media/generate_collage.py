@@ -37,6 +37,7 @@ from .design_tokens import (
     TEXT_DARK,
 )
 from .brand_text import detail_lines
+from .layout_sidecar import layout_sidecar_path
 
 # MAT is the gallery mat: an even cream border on all four sides with the photos
 # hung inside it. The photos used to bleed off the top and bottom of the canvas
@@ -794,7 +795,7 @@ def generate_collage(
     # crop controls. Suppressed on final export since nothing in the
     # export folder consumes it.
     if write_layout_sidecar:
-        layout_path = output.parent / (output.stem + "_layout.json")
+        layout_path = layout_sidecar_path(output)
         with open(layout_path, "w") as lf:
             json.dump(cells, lf)
 

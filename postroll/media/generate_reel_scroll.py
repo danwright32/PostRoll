@@ -44,6 +44,7 @@ from .design_tokens import (
     TEXT_DARK,
 )
 from .brand_text import detail_lines
+from .layout_sidecar import layout_sidecar_path
 
 # HAIRLINE frames each print, matching the collage.
 #
@@ -342,7 +343,7 @@ def build_reel_preview(
     output.parent.mkdir(parents=True, exist_ok=True)
     strip.save(str(output), "PNG", quality=95)
 
-    layout_path = output.parent / (output.stem + "_layout.json")
+    layout_path = layout_sidecar_path(output)
     with open(layout_path, "w") as lf:
         json.dump({
             "strip_width":  strip.width,

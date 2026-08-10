@@ -1536,9 +1536,7 @@ private struct CaptionSection: View {
     }
 
     private var thursdayReelLayoutURL: URL? {
-        thursdayReelPreviewURL?
-            .deletingLastPathComponent()
-            .appendingPathComponent("reel_preview_layout.json")
+        thursdayReelPreviewURL.map(LayoutSidecar.url(for:))
     }
 
     private var splitPreviewIsCollage: Bool { isCollageCarouselDay }
@@ -2009,9 +2007,7 @@ private struct CaptionSection: View {
                                     .padding(.top, Spacing.sm)
 
                                 if splitPreviewIsCollage, let offsets = collageCropOffsets {
-                                    let layoutURL = previewURL.deletingLastPathComponent()
-                                        .appendingPathComponent(
-                                            previewURL.deletingPathExtension().lastPathComponent + "_layout.json")
+                                    let layoutURL = LayoutSidecar.url(for: previewURL)
                                     CollagePreviewThumbnail(
                                         url: previewURL,
                                         layoutURL: layoutURL,
@@ -2987,9 +2983,7 @@ private struct ReviewMediaStrip: View {
         guard let p = previewPaths?["collage"],
               FileManager.default.fileExists(atPath: p) else { return nil }
         let url = URL(fileURLWithPath: p)
-        let layoutURL = url.deletingLastPathComponent()
-            .appendingPathComponent(url.deletingPathExtension().lastPathComponent + "_layout.json")
-        return (url, layoutURL)
+        return (url, LayoutSidecar.url(for: url))
     }
 
     /// Best still preview graphic path for non-collage days, in priority order.

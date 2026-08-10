@@ -1,0 +1,44 @@
+{
+  "_comment": [
+    "The name of the layout sidecar that sits beside a rendered preview PNG,",
+    "shared by postroll/media/layout_sidecar.py and",
+    "PostRollApp/Sources/Services/LayoutSidecar.swift (#267).",
+    "",
+    "The rule: take the PNG's name without its extension and append",
+    "'_layout.json', in the same directory.",
+    "",
+    "Python writes the file (generate_collage and generate_reel_scroll) and",
+    "Swift reads it, from the crop editor, the collage thumbnail and the",
+    "export compositor. Swift used to rebuild the name in five places, one of",
+    "them a hardcoded literal, with nothing forcing them to agree. The first",
+    "one changed would break the editor or the export on one screen only,",
+    "while the others kept working, which is the hardest version of this to",
+    "spot.",
+    "",
+    "Changing the naming rule means changing this file once, and whichever",
+    "side was not updated fails loudly."
+  ],
+  "suffix": "_layout.json",
+  "vectors": [
+    {
+      "_what": "Thursday's reel strip preview, the case the hardcoded literal covered",
+      "preview": "reel_preview.png",
+      "sidecar": "reel_preview_layout.json"
+    },
+    {
+      "_what": "Wednesday's collage, and Sunday/Monday under the balanced preset",
+      "preview": "collage.png",
+      "sidecar": "collage_layout.json"
+    },
+    {
+      "_what": "A name carrying dots of its own: only the final extension is dropped",
+      "preview": "reel_preview.v2.png",
+      "sidecar": "reel_preview.v2_layout.json"
+    },
+    {
+      "_what": "A name with no extension at all still gets the suffix",
+      "preview": "collage",
+      "sidecar": "collage_layout.json"
+    }
+  ]
+}
