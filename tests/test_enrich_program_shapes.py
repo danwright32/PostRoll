@@ -107,6 +107,50 @@ class TestPieceNotes:
         assert ep._normalise_piece_notes([{"title": "A Work"}])[0]["notes"] is None
 
 
+class TestDiscardsAreVisible:
+    """A filter that throws data away has to say so.
+
+    These drop entries that cannot be used, which is right, but a lookup that
+    quietly returns half-formed results then looks exactly like a thin
+    programme. Dan would have no way to tell "this event has three performers"
+    from "seven came back and four were unusable", and the second is worth
+    knowing before he pays for the lookup again.
+    """
+
+    def test_dropped_performers_are_counted_and_named(self, capsys):
+        ep._normalise_performers([{"name": "Real"}, {"role": "soloist"}, {"bad": 1}])
+        err = capsys.readouterr().err
+        assert "2" in err
+        assert "performer" in err.lower()
+
+    def test_dropped_handle_suggestions_are_counted(self, capsys):
+        ep._normalise_handle_suggestions([{"name": "Real"}, {"handle": "@orphan"}])
+        assert "1" in capsys.readouterr().err
+
+    def test_dropped_piece_notes_are_counted(self, capsys):
+        ep._normalise_piece_notes([{"title": "A Work"}, {"notes": "orphaned"}])
+        assert "1" in capsys.readouterr().err
+
+    def test_a_clean_response_says_nothing(self, capsys):
+        # A line on every run is a line nobody reads by the time it matters.
+        ep._normalise_performers([{"name": "A"}, {"name": "B"}])
+        ep._normalise_piece_notes([{"title": "A Work"}])
+        assert capsys.readouterr().err == ""
+
+    def test_an_empty_response_says_nothing(self, capsys):
+        # Nothing came back, so nothing was discarded. Reporting a drop here
+        # would point at the wrong problem.
+        ep._normalise_performers([])
+        assert capsys.readouterr().err == ""
+
+    def test_it_reports_rather_than_raising(self, capsys):
+        # A partly usable answer is still an answer. Refusing it would throw
+        # away the entries that were fine.
+        out = ep._normalise_performers([{"name": "Real"}, {"role": "soloist"}])
+        assert len(out) == 1
+        assert capsys.readouterr().err != ""
+
+
 def test_the_two_lookups_keep_distinct_shapes():
     # Named explicitly because they were once the same function by mistake.
     same = [{"name": "X", "role": "soloist", "handle": "@x"}]

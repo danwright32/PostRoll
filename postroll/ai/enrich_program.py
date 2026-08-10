@@ -344,6 +344,25 @@ Rules:
 # Each also gives the key contract something to read, which is why the shapes
 # are dict literals rather than a passthrough.
 
+def _report_discards(kind: str, dropped: int, kept: int) -> None:
+    """Say what was thrown away, or say nothing.
+
+    A filter that discards silently makes a lookup returning half-formed
+    results look identical to a thin programme, and the difference matters:
+    one is the event, the other is worth re-running. Silent on a clean
+    response, because a line on every run is a line nobody reads by the time
+    it counts.
+    """
+    if dropped <= 0:
+        return
+    print(
+        f"warning: discarded {dropped} {kind} entr{'y' if dropped == 1 else 'ies'} "
+        f"with no {'title' if kind == 'piece note' else 'name'}, kept {kept}. "
+        f"If that is most of them, the lookup is worth running again.",
+        file=sys.stderr, flush=True,
+    )
+
+
 def _clean(value: object) -> str | None:
     """A trimmed string, or None when there is nothing there.
 
@@ -367,7 +386,9 @@ def _normalise_performers(data: list) -> list[dict]:
     front of Dan.
     """
     out = []
+    seen = 0
     for raw in data:
+        seen += 1
         if not isinstance(raw, dict):
             continue
         name = _clean(raw.get("name"))
@@ -381,6 +402,7 @@ def _normalise_performers(data: list) -> list[dict]:
             "role":                _clean(raw.get("role")) or "other",
             "voice_or_instrument": _clean(raw.get("voice_or_instrument")),
         })
+    _report_discards("performer", seen - len(out), len(out))
     return out
 
 
@@ -391,7 +413,9 @@ def _normalise_handle_suggestions(data: list) -> list[dict]:
     without one has nothing to attach to.
     """
     out = []
+    seen = 0
     for raw in data:
+        seen += 1
         if not isinstance(raw, dict):
             continue
         name = _clean(raw.get("name"))
@@ -406,6 +430,7 @@ def _normalise_handle_suggestions(data: list) -> list[dict]:
             "confidence":  _clean(raw.get("confidence")) or "low",
             "note":        _clean(raw.get("note")),
         })
+    _report_discards("handle suggestion", seen - len(out), len(out))
     return out
 
 
@@ -416,7 +441,9 @@ def _normalise_piece_notes(data: list) -> list[dict]:
     that the lookup happened, which is what stops it being paid for again.
     """
     out = []
+    seen = 0
     for raw in data:
+        seen += 1
         if not isinstance(raw, dict):
             continue
         title = _clean(raw.get("title"))
@@ -427,6 +454,7 @@ def _normalise_piece_notes(data: list) -> list[dict]:
             "composer": _clean(raw.get("composer")) or "",
             "notes":    _clean(raw.get("notes")),
         })
+    _report_discards("piece note", seen - len(out), len(out))
     return out
 
 
