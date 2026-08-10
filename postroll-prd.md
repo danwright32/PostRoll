@@ -2,7 +2,15 @@
 
 **Author:** Dan Wright
 **Date:** April 12, 2026
-**Status:** In Development — Phase 4 (GUI) complete, Phase 5 (publishing) not started
+**Status:** In Development. Phase 4 (GUI) complete. Phase 5 (automated publishing,
+scheduling, collaborator invites) not started and not currently planned.
+
+**How posting actually works today:** PostRoll generates every asset and exports a
+per-event folder with copy-paste-ready captions and a manual-task checklist. Dan
+uploads that to Metricool by hand. No platform API is called anywhere in the app.
+Section 7 below describes an automation path that was scoped and then deliberately
+not taken; Section 9 lists the research it would need. Both are kept as a record of
+the decision, not as work in flight. Tracked in #99.
 
 ---
 
@@ -309,6 +317,20 @@ Process:
 
 ### 7.1 Decision: Metricool API vs. Direct APIs
 
+**Superseded (April 2026): neither.** The app exports a folder and Dan uploads it
+to Metricool manually, which takes about five minutes a day.
+
+Both automated options carried a real cost and neither removed the manual work.
+Direct APIs need Meta App Review (two to six weeks of paperwork) plus TikTok
+approval, and Instagram Stories cannot be published by any API. The Metricool API
+needs the Advanced tier on top of the existing $216/year, and collaborator invites
+were the only gap it actually closed.
+
+The rest of this section and Section 9 record what that decision was weighed
+against. They become live again only if automated publishing is revisited.
+
+The original framing follows.
+
 This is a binary decision, not a fallback chain:
 
 **Option A — Metricool API:** Use Metricool's API for all scheduling across all platforms. Keep $216/year subscription. App creates all content and pushes it to Metricool programmatically.
@@ -388,6 +410,12 @@ The app generates a checklist of actions that cannot be automated, including:
 ---
 
 ## 9. Open Questions — API Research Required
+
+**Not currently being researched.** These were the questions the Section 7.1
+decision would have needed answering. That decision was made the other way (see
+7.1), so none of this is in flight. Kept because they are the questions to pick
+up if Phase 5 is ever started, and tracked as a single backlog item rather than
+left implied by this document alone (#99).
 
 ### 9.1 Instagram Graph API
 
