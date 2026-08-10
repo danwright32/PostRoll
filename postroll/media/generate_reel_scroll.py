@@ -43,6 +43,7 @@ from .design_tokens import (
     ROSE_GOLD,  # noqa: F401
     TEXT_DARK,
 )
+from .brand_text import detail_lines
 
 # HAIRLINE frames each print, matching the collage.
 #
@@ -290,7 +291,7 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
 
     title_h = bbox[3] - bbox[1]
     info_y = 35 + title_h + 20
-    for j, line in enumerate([org, venue]):
+    for j, line in enumerate(detail_lines(event_name, org, venue)):
         if line:
             total_w = sum(draw.textbbox((0, 0), ch, font=detail_font)[2] -
                          draw.textbbox((0, 0), ch, font=detail_font)[0] + 6

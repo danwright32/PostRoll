@@ -38,6 +38,7 @@ from .design_tokens import (
     TEXT_DARK,
     WARM_MID,
 )
+from .brand_text import detail_lines
 
 
 # === Layout, specific to this template ===
@@ -181,11 +182,9 @@ def draw_branded_chrome(frame, event_name, org, venue, logo):
 
     # Masthead, top-left, shifted down so it isn't jammed at the very edge.
     d.text((MAT, MASTHEAD_Y), event_name, font=load_font(FONT_SCRIPT, 74), fill=TEXT_DARK)
-    detail_lines = [s for s in (org, venue) if s]
-    if org and venue and org.strip().casefold() == event_name.strip().casefold():
-        detail_lines = [venue]  # org duplicates the title; drop it, keep the venue
-    if detail_lines:
-        _tracked(d, detail_lines[0].upper(),
+    lines = detail_lines(event_name, org, venue)
+    if lines:
+        _tracked(d, lines[0].upper(),
                  load_font(FONT_DETAIL, 19, index=FONT_DETAIL_LIGHT), WARM_MID, MAT, VENUE_Y, 5)
     d.line([(MAT, RULE_Y), (CANVAS_W - MAT, RULE_Y)], fill=ROSE_GOLD, width=1)
 

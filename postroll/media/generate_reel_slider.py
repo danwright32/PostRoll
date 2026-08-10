@@ -41,6 +41,7 @@ from .design_tokens import (
     ROSE_GOLD,  # noqa: F401
     TEXT_DARK,
 )
+from .brand_text import detail_lines
 
 
 # === Layout, specific to this template ===
@@ -198,7 +199,7 @@ def draw_branded_chrome(
     # Org + Venue
     title_h = bbox[3] - bbox[1]
     info_y = TITLE_TOP_Y + title_h + 20
-    for j, line in enumerate([org, venue]):
+    for j, line in enumerate(detail_lines(event_name, org, venue)):
         if line:
             # Centered with letter spacing
             total_w = 0

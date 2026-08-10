@@ -25,6 +25,7 @@ from PIL import Image, ImageDraw, ImageFont
 # shrink + two-line wrap behavior stays consistent across both layouts.
 from .generate_story import _fit_script_title
 from .missing_media import require_present
+from .brand_text import detail_lines
 
 from .design_tokens import (
     CREAM,
@@ -32,7 +33,6 @@ from .design_tokens import (
     FONT_DETAIL,
     FONT_DETAIL_LIGHT,
     FONT_DETAIL_MEDIUM,
-    FONT_SCRIPT,
     MAT_PRINT as MAT,
     ROSE_GOLD,
     TEXT_DARK,
@@ -103,17 +103,10 @@ def _tracked(draw, text, font, fill, x, y, spacing):
 def header_detail_lines(event_name: str, org: str, venue: str) -> list[str]:
     """The letterspaced lines under the script title.
 
-    When the org matches the event name it is already the big script title, so it
-    is dropped and the venue moves up into its place.
+    Kept as this template's own name for the shared rule in `brand_text`, since
+    the layout code below reads better talking about header lines.
     """
-    org = (org or "").strip()
-    venue = (venue or "").strip()
-    lines = []
-    if org and org.casefold() != (event_name or "").strip().casefold():
-        lines.append(org)
-    if venue:
-        lines.append(venue)
-    return lines
+    return detail_lines(event_name, org, venue)
 
 
 def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
@@ -165,46 +158,6 @@ def fit_photo(photo: Image.Image, avail_w: int, max_h: int) -> Image.Image:
         new_w = int(max_h * ratio)
 
     return photo.resize((new_w, new_h), Image.LANCZOS)
-
-
-def draw_header(
-    canvas: Image.Image,
-    event_name: str,
-    org: str,
-    venue: str,
-    header_h: int,
-) -> Image.Image:
-    """Draw cream header area with event name, org, and venue.
-    Matches the story template's lower section design vocabulary.
-    """
-    # Apply cream overlay to header area
-    canvas = apply_cream_strip(canvas, 0, header_h)
-    draw = ImageDraw.Draw(canvas)
-
-    # Event name — SignPainter script, dark text on cream
-    title_font = load_font(FONT_SCRIPT, 90)
-    bbox = draw.textbbox((0, 0), event_name, font=title_font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    tx = (CANVAS_W - text_w) // 2
-
-    # Vertical layout: title centered in upper portion, org/venue below
-    content_h = text_h + 50 + 30 + 30  # title + gap + org line + venue line
-    start_y = (header_h - content_h) // 2
-
-    draw.text((tx, start_y), event_name, font=title_font, fill=TEXT_DARK)
-
-    # Org and venue — Helvetica Neue Thin with spacing
-    detail_font = load_font(FONT_DETAIL, 30, index=FONT_DETAIL_LIGHT)
-    org_venue_y = start_y + text_h + 45
-
-    for i, line in enumerate([org, venue]):
-        y = org_venue_y + i * 42
-        draw_spaced_text_centered(draw, line, detail_font, TEXT_DARK, CANVAS_W // 2, y)
-
-    # No rule line at the header bottom (gallery style).
-
-    return canvas
 
 
 def generate_before_after(

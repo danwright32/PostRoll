@@ -26,6 +26,7 @@ from .design_tokens import (
     ROSE_GOLD_LIGHT,
     TEXT_DARK,
 )
+from .brand_text import detail_lines
 
 
 # === Layout, specific to this template ===
@@ -308,15 +309,20 @@ def draw_title(canvas: Image.Image, event_name: str, photo_top_y: int):
     return canvas_rgba
 
 
-def draw_text(draw: ImageDraw.ImageDraw, org: str, venue: str):
-    """Draw org/venue text."""
+def draw_text(draw: ImageDraw.ImageDraw, org: str, venue: str, event_name: str = ""):
+    """Draw org/venue text.
+
+    event_name is needed to drop an org that only repeats the title drawn above
+    it (`brand_text.detail_lines`). It defaults to empty so an existing caller
+    passing two arguments still renders both lines rather than failing.
+    """
 
     # Org and Venue — Helvetica Neue Thin, wide spacing, on separate lines
     venue_font = load_font(FONT_DETAIL, 38, index=FONT_DETAIL_INDEX)
     line_spacing = ORG_VENUE_LINE_SPACING
     spacing = 8  # extra pixels between characters for tracking
 
-    for i, line_text in enumerate([org, venue]):
+    for i, line_text in enumerate(detail_lines(event_name, org, venue)):
         y = ORG_VENUE_Y + (i * line_spacing)
 
         # Calculate total width with letter spacing
@@ -400,7 +406,7 @@ def generate_story(
 
     # 4. Draw org/venue text (no rule line, gallery style)
     draw = ImageDraw.Draw(canvas)
-    draw_text(draw, org, venue)
+    draw_text(draw, org, venue, event_name)
 
     # 5. Place logo
     canvas = place_logo(canvas, logo_path)

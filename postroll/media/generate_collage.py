@@ -36,6 +36,7 @@ from .design_tokens import (
     MAT_GALLERY as MAT,
     TEXT_DARK,
 )
+from .brand_text import detail_lines
 
 # MAT is the gallery mat: an even cream border on all four sides with the photos
 # hung inside it. The photos used to bleed off the top and bottom of the canvas
@@ -568,16 +569,11 @@ def draw_hairlines(canvas: Image.Image, cells: list[dict]) -> None:
 def plate_detail_line(event_name: str, org: str, venue: str) -> str:
     """The text under the script title on the caption plate.
 
-    When the org and the event name are the same, the org is already the big
-    script title, so it is dropped from the detail line and only the venue shows.
+    Which lines there are is `brand_text.detail_lines`, shared with every other
+    template. The middle dot joining them is this plate's own layout: the
+    collage puts them on one line where the reels stack them.
     """
-    org = (org or "").strip()
-    venue = (venue or "").strip()
-    if org and org.casefold() == (event_name or "").strip().casefold():
-        return venue
-    if org and venue:
-        return f"{org}  ·  {venue}"
-    return org or venue
+    return "  ·  ".join(detail_lines(event_name, org, venue))
 
 
 def draw_branded_strip(
