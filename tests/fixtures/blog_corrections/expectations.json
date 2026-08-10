@@ -44,9 +44,7 @@
         "alt_text_appearance_descriptor",
         "demographic_grouping"
       ],
-      "accepted_on_corrected": {
-        "alt_text_missing_performer": "Three group shots whose alt text is 'Four BLUDLINE performers at mic stands' and similar. Naming eight people in a 25 word alt text is not possible, so the rule and the format are in genuine tension here. Worth Dan's decision rather than a silent exemption."
-      }
+      "accepted_on_corrected": {}
     }
   ]
 }
