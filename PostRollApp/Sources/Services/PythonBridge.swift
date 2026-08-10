@@ -63,7 +63,8 @@ actor PythonBridge {
 
     /// Run week generation. Pass `onlyDays` to regenerate a subset of days/blog
     /// without touching days that already succeeded.
-    func runWeekGeneration(event: Event, onlyDays: Set<String>? = nil) async throws -> WeekGenerationResult {
+    func runWeekGeneration(event: Event, onlyDays: Set<String>? = nil,
+                           forcePaidPath: Bool = false) async throws -> WeekGenerationResult {
         let tmp = FileManager.default.temporaryDirectory
         let manifestFile = tmp.appendingPathComponent("postroll_manifest_\(UUID().uuidString).json")
         let outputFile   = tmp.appendingPathComponent("postroll_week_\(UUID().uuidString).json")
@@ -101,7 +102,7 @@ actor PythonBridge {
         // Left in place on the way out: the last step of a finished run is
         // marked done, and a run that DIED leaves the step it died in, which is
         // the most useful thing anyone can be told about it.
-        try await runProcess(args: args)
+        try await runProcess(args: args, forcePaidPath: forcePaidPath)
 
         guard FileManager.default.fileExists(atPath: outputFile.path) else {
             throw PythonBridgeError.outputMissing
@@ -1738,7 +1739,8 @@ actor PythonBridge {
     ///
     /// Supports Swift task cancellation: when the calling task is cancelled,
     /// the subprocess is terminated immediately via SIGTERM.
-    private func runProcess(args: [String], timeout: TimeInterval = 1800) async throws {
+    private func runProcess(args: [String], timeout: TimeInterval = 1800,
+                            forcePaidPath: Bool = false) async throws {
         let python = python3
         let root = projectRoot
         // Logs go under the data root (Application Support), NOT the Documents
@@ -1788,6 +1790,7 @@ actor PythonBridge {
             export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
             [ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc"
             \(apiKey.scriptLines)
+            \(Transport.overrideExport(forcePaidPath: forcePaidPath))
             \(brandVoiceExport)
             \(dataDirExport)
             cd '\(root.path)'

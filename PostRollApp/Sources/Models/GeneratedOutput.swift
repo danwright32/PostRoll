@@ -115,6 +115,23 @@ struct WeekGenerationResult: Codable, Hashable {
     /// putting them in the same field as a failure would either make a good day
     /// look broken or hide a real error behind a warning.
     var warnings: [String: [SkippedPhoto]] = [:]
+    /// Why the run stopped before finishing, when it did (#257).
+    ///
+    /// Written by `generate_week` on every halt, alongside everything that had
+    /// finished. A halted week is not a failed one: the days below are real.
+    /// Read through `HaltedWeek`, which turns it into the state and the two
+    /// ways forward.
+    var stoppedReason: String? = nil
+
+    /// Declared rather than synthesised: Python writes snake_case, and a
+    /// synthesised `stoppedReason` key would decode to nil against a file that
+    /// really does carry the halt. That mismatch is silent, which would put the
+    /// field straight back to being written and never read.
+    enum CodingKeys: String, CodingKey {
+        case sunday, monday, tuesday, wednesday, thursday, friday
+        case blog, errors, warnings
+        case stoppedReason = "stopped_reason"
+    }
 
     subscript(day: DayName) -> DayCaption? {
         get {
@@ -218,6 +235,7 @@ extension WeekGenerationResult {
         blog      = try c.decodeIfPresent(BlogOutput.self,            forKey: .blog)
         errors    = try c.decodeIfPresent([String: String].self,      forKey: .errors)    ?? [:]
         warnings  = try c.decodeIfPresent([String: [SkippedPhoto]].self, forKey: .warnings) ?? [:]
+        stoppedReason = try c.decodeIfPresent(String.self, forKey: .stoppedReason)
     }
 }
 

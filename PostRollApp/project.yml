@@ -77,6 +77,7 @@ targets:
       - path: Sources/Services/LongRunStatus.swift
       - path: Sources/Services/ProgramPDFBuilder.swift
       - path: Sources/Services/VisionTextLayer.swift
+      - path: Sources/Services/HaltedWeek.swift
       - path: Sources/Services/ProgramScanRetention.swift
       - path: Sources/Services/DataMigration.swift
       - path: Sources/Services/CollageRenderer.swift
