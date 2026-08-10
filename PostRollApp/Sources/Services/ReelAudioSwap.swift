@@ -39,4 +39,41 @@ enum ReelAudioSwap {
         updated.days[day.rawValue] = pd
         return updated
     }
+
+    /// Record which track the swap actually put in the reel (#262).
+    ///
+    /// Python reported this on every swap and the app read none of it, so a
+    /// fetched track was anonymous: Dan could hear the music and had nowhere on
+    /// screen to see what it was. Written to the LIVE event for the same reason
+    /// as `restoringAudio`.
+    static func recording(_ result: PythonBridge.ReelAudioSwapResult,
+                          in event: Event, day: DayName) -> Event {
+        var updated = event
+        var pd = updated.days[day.rawValue] ?? PostingDay(day: day)
+        pd.reelAudioSource = URL(fileURLWithPath: result.audioSource)
+        pd.reelAudioTags = result.tags
+        updated.days[day.rawValue] = pd
+        return updated
+    }
+
+    /// Forget the recorded track for any day whose reel was just re-rendered.
+    ///
+    /// A fresh render fetches its own music, so the label written by an earlier
+    /// manual swap now names a track that is not in the file. Left in place it
+    /// is worse than absent: it names something specific, which is exactly what
+    /// makes it believable, and clicking it plays audio Dan will not hear when
+    /// he posts.
+    static func clearingStaleAudioLabels(in event: Event,
+                                         freshMedia: [String: [String: String]]?) -> Event {
+        guard let freshMedia else { return event }
+        var updated = event
+        for (dayKey, assets) in freshMedia where assets["reel"] != nil {
+            guard var pd = updated.days[dayKey],
+                  pd.reelAudioSource != nil || !pd.reelAudioTags.isEmpty else { continue }
+            pd.reelAudioSource = nil
+            pd.reelAudioTags = ""
+            updated.days[dayKey] = pd
+        }
+        return updated
+    }
 }

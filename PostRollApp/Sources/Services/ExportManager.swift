@@ -225,11 +225,26 @@ final class ExportManager {
             if !daysNeedingPython.isEmpty {
                 // Run Python only for the days without complete previews.
                 do {
-                    _ = try await PythonBridge.shared.runMediaGeneration(
+                    let media = try await PythonBridge.shared.runMediaGeneration(
                         event: capturedEvent,
                         outputDir: folder.deletingLastPathComponent(),
                         days: daysNeedingPython
                     )
+                    // Per-day failures were dropped here while the preview path
+                    // read the same field, so an export could finish "clean"
+                    // with a day's asset quietly missing from the folder (#262).
+                    // A zero exit is not a promise every day rendered.
+                    //
+                    // Only days that produced NOTHING count. Python also files a
+                    // note under `errors` for a day that rendered fine with an
+                    // optional input missing, and treating that as a failure
+                    // would claim files are missing that are in the folder and
+                    // stop a good export ever being marked done.
+                    let failures = MediaErrorSummary.failures(
+                        errors: media.errors, paths: media.paths)
+                    if !failures.isEmpty {
+                        mediaError = MediaErrorSummary.sentence(failures)
+                    }
                     // For the Python-regenerated days, overwrite fresh PNGs with any
                     // approved previews that do exist (partial-preview edge case).
                     for day in daysToProcess where daysNeedingPython.contains(day.rawValue) {

@@ -31,6 +31,24 @@ from pathlib import Path
 from typing import Any
 
 
+def _snapshot(*, label: str, index: int | None,
+              total: int | None, done: bool) -> dict[str, Any]:
+    """One progress record, as the app's GenerationStep reads it.
+
+    Its own function so the key contract can see this payload (#262): a dict
+    built inline as a call argument is invisible to it, and a payload nothing
+    can inspect is one that drifts from its reader unnoticed. `updated_at` is
+    added by the writer, which is the only thing that knows when the write
+    happened.
+    """
+    return {
+        "label": label,
+        "index": index,
+        "total": total,
+        "done":  done,
+    }
+
+
 class ProgressWriter:
     """Records the current step of a run, or does nothing without a path.
 
@@ -50,21 +68,22 @@ class ProgressWriter:
     def step(self, label: str, *, index: int | None = None,
              total: int | None = None) -> None:
         """Record what the run is doing now."""
-        self._write({
-            "label": label,
-            "index": index,
-            "total": total,
-            "done": False,
-        })
+        payload = _snapshot(label=label, index=index, total=total, done=False)
+        self._write(payload)
 
     def finish(self) -> None:
         """Mark the run over, so the last step stops reading as in flight."""
-        self._write({"label": "", "index": None, "total": None, "done": True})
+        payload = _snapshot(label="", index=None, total=None, done=True)
+        self._write(payload)
 
-    def _write(self, payload: dict[str, Any]) -> None:
+    def _write(self, snapshot: dict[str, Any]) -> None:
         if self._path is None:
             return
-        payload = {**payload, "updated_at": time.time()}
+        # Copy-then-set rather than `{**snapshot, "updated_at": ...}`: a splat
+        # hides the resulting key set from the contract that keeps this payload
+        # and the app's GenerationStep in step (#262).
+        payload = dict(snapshot)
+        payload["updated_at"] = time.time()
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             # Temp file in the same directory, then rename: rename is atomic

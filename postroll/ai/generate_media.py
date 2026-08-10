@@ -143,6 +143,30 @@ from .audio_tags import thursday_tags as _derive_audio_tags  # noqa: E402
 from ..media.missing_media import MissingMediaError, require_present  # noqa: E402
 
 
+def _friday_clip_selection(sel: dict) -> dict:
+    """One clip's entry in the Friday plan, in Swift's field names.
+
+    Its own function so the key contract can read what crosses the bridge
+    (#262). `transition_after` is renamed to `transition` here, which is the
+    kind of rename that goes missing silently when it lives inside a
+    comprehension nobody can point a guard at.
+
+    crop_x / crop_y / crop_confidence are always present: apply_selection
+    returns 0/0/"low" when the crop gate denied or Claude proposed none, and
+    they must survive to Swift's FridayClipSelection or the per-shot crop
+    feature never surfaces (plan #148 phase 2).
+    """
+    return {
+        "clip_path":       sel["clip_path"],
+        "trim_in":         sel["trim_in"],
+        "trim_out":        sel["trim_out"],
+        "transition":      sel["transition_after"],
+        "crop_x":          sel["crop_x"],
+        "crop_y":          sel["crop_y"],
+        "crop_confidence": sel["crop_confidence"],
+    }
+
+
 def _record_error(errors: dict, day: str, message: str) -> None:
     """Add a failure to a day's report without erasing what's already there.
 
@@ -698,26 +722,16 @@ def generate_media(
                     # Translated to Swift's FridayClipPlan field names
                     # (transition_after -> transition) so PythonBridge.swift
                     # can decode this straight into event.days["friday"].fridayClipPlan.
-                    day_result["friday_clip_plan"] = {
+                    # Bound to a name rather than built inline in the subscript
+                    # so the key contract can see what this payload carries
+                    # (#262).
+                    friday_clip_plan_payload = {
                         "selections": [
-                            {
-                                "clip_path": sel["clip_path"],
-                                "trim_in": sel["trim_in"],
-                                "trim_out": sel["trim_out"],
-                                "transition": sel["transition_after"],
-                                # Plan #148 Phase 2: apply_selection always
-                                # returns these (0/0/"low" when the crop gate
-                                # denied or Claude proposed none), and they
-                                # must survive to Swift's FridayClipSelection
-                                # or the per-shot crop feature never surfaces.
-                                "crop_x": sel["crop_x"],
-                                "crop_y": sel["crop_y"],
-                                "crop_confidence": sel["crop_confidence"],
-                            }
-                            for sel in plan["selections"]
+                            _friday_clip_selection(sel) for sel in plan["selections"]
                         ],
                         "rationale": plan.get("rationale", ""),
                     }
+                    day_result["friday_clip_plan"] = friday_clip_plan_payload
                     print(
                         f"[generate_media] friday: clip reel "
                         f"({len(plan['selections'])} clips) → {reel_path}", flush=True,

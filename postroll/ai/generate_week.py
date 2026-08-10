@@ -422,8 +422,13 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
         captions = (t_captions_end - t_captions_start) if (t_captions_start and t_captions_end) else None
         blog     = (t_blog_end - t_blog_start)         if (t_blog_start and t_blog_end)         else None
         packaging = elapsed - (captions or 0) - (blog or 0) - (t_captions_start - t_start if t_captions_start else 0)
+        # No "total". It was reported and read by nothing, because the app runs
+        # its own stopwatch over the same span (the only difference being the
+        # few seconds spent launching this process). Two measurements of one
+        # thing is how two numbers that must agree start disagreeing, so the
+        # duplicate goes rather than gaining a reader (#262, L53). `elapsed` is
+        # still what `packaging` is derived from below.
         timing = {
-            "total":      elapsed,
             "captions":   captions,
             "blog":       blog,
             "packaging":  max(packaging, 0.0),

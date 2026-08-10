@@ -9,8 +9,7 @@ pan/zoom per cell before committing a full regeneration.
 Usage:
     python -m postroll.ai.build_reel_preview \
         --manifest /path/to/manifest.json \
-        --output   /path/to/reel_preview.png \
-        --result   /path/to/result.json
+        --output   /path/to/reel_preview.png
 
 Manifest shape:
     {
@@ -34,7 +33,6 @@ def _main() -> int:
     parser = argparse.ArgumentParser(description="Build the Thursday reel preview PNG")
     parser.add_argument("--manifest", required=True, help="JSON with photos + optional seed/crop_offsets")
     parser.add_argument("--output",   required=True, help="Where to write the preview PNG")
-    parser.add_argument("--result",   required=True, help="Where to write the result JSON")
     args = parser.parse_args()
 
     try:
@@ -71,11 +69,11 @@ def _main() -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
 
-    layout_path = str(Path(png_path).with_name(Path(png_path).stem + "_layout.json"))
-    Path(args.result).write_text(json.dumps({
-        "png":    png_path,
-        "layout": layout_path,
-    }, indent=2))
+    # No result JSON. This used to write {"png": ..., "layout": ...} and
+    # nothing ever read it: the app passes the PNG path in via --output and
+    # derives the layout sidecar's name from it, so a reader would only be
+    # handed back what it already sent (#262). Deleted rather than wired,
+    # because a write with no reader looks alive to any is-this-used check.
     print(f"[build_reel_preview] png={png_path}", flush=True)
     return 0
 

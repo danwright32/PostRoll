@@ -123,14 +123,40 @@ struct WeekGenerationResult: Codable, Hashable {
     /// ways forward.
     var stoppedReason: String? = nil
 
+    /// Whether the generator reached the end of the week (#262).
+    ///
+    /// The only signal separating a run the app's 1800s watchdog killed from one
+    /// that finished. A kill raises nothing, so it writes no `stoppedReason`,
+    /// and until this was decoded a week cut off mid-run presented as done with
+    /// days quietly missing.
+    ///
+    /// Defaults to `true`, not `false`: a week saved before this field existed
+    /// really did finish, and the safe default here is the one that does not
+    /// relabel Dan's whole history as cut off.
+    var complete: Bool = true
+
+    /// Failures this run could not recognise, recorded verbatim (#217, #262).
+    ///
+    /// `cap_signals` ships deliberately observe-only, and #258 (calibrating it)
+    /// cannot start until a real cap's exact wording has been seen. The wording
+    /// was written into every result file and read by nothing, so the one cheap
+    /// chance to capture it depended on somebody reading stderr.
+    var unrecognisedFailures: [String] = []
+
+    /// Whether there is anything worth telling Dan about an unfamiliar failure.
+    /// Empty means silent: a notice on every ordinary run is a notice nobody
+    /// reads by the time it matters.
+    var hasUnrecognisedFailures: Bool { !unrecognisedFailures.isEmpty }
+
     /// Declared rather than synthesised: Python writes snake_case, and a
     /// synthesised `stoppedReason` key would decode to nil against a file that
     /// really does carry the halt. That mismatch is silent, which would put the
     /// field straight back to being written and never read.
     enum CodingKeys: String, CodingKey {
         case sunday, monday, tuesday, wednesday, thursday, friday
-        case blog, errors, warnings
-        case stoppedReason = "stopped_reason"
+        case blog, errors, warnings, complete
+        case stoppedReason        = "stopped_reason"
+        case unrecognisedFailures = "unrecognised_failures"
     }
 
     subscript(day: DayName) -> DayCaption? {
@@ -236,6 +262,9 @@ extension WeekGenerationResult {
         errors    = try c.decodeIfPresent([String: String].self,      forKey: .errors)    ?? [:]
         warnings  = try c.decodeIfPresent([String: [SkippedPhoto]].self, forKey: .warnings) ?? [:]
         stoppedReason = try c.decodeIfPresent(String.self, forKey: .stoppedReason)
+        complete      = try c.decodeIfPresent(Bool.self,   forKey: .complete) ?? true
+        unrecognisedFailures = try c.decodeIfPresent([String].self,
+                                                     forKey: .unrecognisedFailures) ?? []
     }
 }
 
