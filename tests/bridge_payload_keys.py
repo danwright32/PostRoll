@@ -208,6 +208,103 @@ def payload_keys_from_file(path: str | Path, **kwargs) -> set[str]:
     )
 
 
+# ── the read side: what Python takes OUT of a manifest the app sent ───────────
+#
+# The mirror of everything above. A key the app stops sending does not fail
+# anywhere: `.get(key, default)` substitutes the default and generation carries
+# on producing subtly different output, which is worse than the result-payload
+# case because it changes what gets MADE rather than what gets shown (#266).
+
+
+class _ReadVisitor(ast.NodeVisitor):
+    """Collects the keys read off one variable inside one function."""
+
+    def __init__(self, variable: str, dynamic: dict[str, list[str]], where: str):
+        self.variable = variable
+        self.dynamic = dynamic
+        self.where = where
+        self.keys: set[str] = set()
+        self._depth = 0
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):  # noqa: N802
+        if self._depth == 0:
+            self._depth += 1
+            self.generic_visit(node)
+            self._depth -= 1
+
+    visit_AsyncFunctionDef = visit_FunctionDef  # noqa: N815
+
+    def visit_Call(self, node: ast.Call):  # noqa: N802
+        # `variable.get("key")` / `variable.get("key", default)`
+        if (isinstance(node.func, ast.Attribute) and node.func.attr == "get"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == self.variable and node.args):
+            self._record(node.args[0], f'{self.variable}.get(...)')
+        self.generic_visit(node)
+
+    def visit_Subscript(self, node: ast.Subscript):  # noqa: N802
+        # A subscript in a LOAD context is a read; a STORE is a write and is not
+        # part of what the app has to send.
+        if (isinstance(node.value, ast.Name) and node.value.id == self.variable
+                and isinstance(node.ctx, ast.Load)):
+            self._record(node.slice, f'{self.variable}[...]')
+        self.generic_visit(node)
+
+    def _record(self, node: ast.expr, shape: str) -> None:
+        name = _const_key(node)
+        if name is not None:
+            self.keys.add(name)
+            return
+        if isinstance(node, ast.Name) and node.id in self.dynamic:
+            self.keys |= set(self.dynamic[node.id])
+            return
+        raise UndeterminedKey(
+            f"{self.where}: `{shape}` is read with a key this cannot resolve "
+            f"({ast.unparse(node)}). Declare it in the contract's `dynamic` "
+            f"block with the values it takes."
+        )
+
+
+def manifest_reads_from_source(source: str, *, function: str, variable: str,
+                               dynamic: dict[str, list[str]] | None = None,
+                               where: str | None = None) -> set[str]:
+    """Keys the named function reads off `variable`."""
+    where = where or function
+    tree = ast.parse(source)
+
+    target = None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function:
+            target = node
+            break
+    if target is None:
+        raise LookupError(
+            f"{where}: the function `{function}` is absent, so the contract "
+            f"points at something that can no longer be checking anything."
+        )
+
+    visitor = _ReadVisitor(variable, dynamic or {}, where)
+    visitor._depth = 1
+    visitor.generic_visit(target)
+
+    if not visitor.keys:
+        raise LookupError(
+            f"{where}: `{function}` reads no keys off `{variable}`, which cannot "
+            f"be right for a manifest and would agree with any sender. The usual "
+            f"cause is a renamed variable."
+        )
+    return visitor.keys
+
+
+def manifest_reads_from_file(path: str | Path, **kwargs) -> set[str]:
+    resolved = REPO_ROOT / path if not Path(path).is_absolute() else Path(path)
+    if not resolved.exists():
+        raise LookupError(f"{path}: the module the contract names does not exist.")
+    return manifest_reads_from_source(
+        resolved.read_text(encoding="utf-8"), where=str(path), **kwargs
+    )
+
+
 # ── the contract ──────────────────────────────────────────────────────────────
 
 def load_contract() -> dict:
@@ -221,5 +318,12 @@ def load_contract() -> dict:
     return json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
 
 
+#: Top-level keys that are sections of the file rather than payloads. Named
+#: rather than inferred, so adding a section cannot silently become a payload
+#: that every consumer then fails to understand.
+RESERVED_SECTIONS = frozenset({"manifests"})
+
+
 def contract_payloads() -> dict[str, dict]:
-    return {k: v for k, v in load_contract().items() if not k.startswith("_")}
+    return {k: v for k, v in load_contract().items()
+            if not k.startswith("_") and k not in RESERVED_SECTIONS}

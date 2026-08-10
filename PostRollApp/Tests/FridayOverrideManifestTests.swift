@@ -15,7 +15,7 @@ final class FridayOverrideManifestTests: XCTestCase {
             ReelClipOverride(clipPath: "/c.mov", order: 2, included: false, trimIn: 0, trimOut: 2),
         ]
 
-        let manifest = PythonBridge.buildFridayOverrideManifest(override: override, originalPlan: nil)
+        let manifest = PythonBridge.buildFridayOverrideSelections(override: override, originalPlan: nil)
         let selections = manifest["selections"] as? [[String: Any]]
 
         XCTAssertEqual(selections?.count, 2, "excluded entry dropped")
@@ -32,7 +32,7 @@ final class FridayOverrideManifestTests: XCTestCase {
             rationale: "x"
         )
 
-        let manifest = PythonBridge.buildFridayOverrideManifest(override: override, originalPlan: originalPlan)
+        let manifest = PythonBridge.buildFridayOverrideSelections(override: override, originalPlan: originalPlan)
         let selections = manifest["selections"] as? [[String: Any]]
 
         XCTAssertEqual(selections?.first?["transition"] as? String, "crossfade")
@@ -47,7 +47,7 @@ final class FridayOverrideManifestTests: XCTestCase {
             rationale: "x"
         )
 
-        let manifest = PythonBridge.buildFridayOverrideManifest(override: override, originalPlan: originalPlan)
+        let manifest = PythonBridge.buildFridayOverrideSelections(override: override, originalPlan: originalPlan)
         let selections = manifest["selections"] as? [[String: Any]]
 
         XCTAssertEqual(selections?.first?["transition"] as? String, "cut")
@@ -58,7 +58,7 @@ final class FridayOverrideManifestTests: XCTestCase {
             ReelClipOverride(clipPath: "/a.mov", order: 0, included: true, trimIn: 1.5, trimOut: 4.25),
         ]
 
-        let manifest = PythonBridge.buildFridayOverrideManifest(override: override, originalPlan: nil)
+        let manifest = PythonBridge.buildFridayOverrideSelections(override: override, originalPlan: nil)
         let selections = manifest["selections"] as? [[String: Any]]
 
         XCTAssertEqual(selections?.first?["trim_in"] as? Double, 1.5)
@@ -74,7 +74,7 @@ final class FridayOverrideManifestTests: XCTestCase {
                              cropX: 0.4, cropY: -0.2),
         ]
 
-        let manifest = PythonBridge.buildFridayOverrideManifest(override: override, originalPlan: nil)
+        let manifest = PythonBridge.buildFridayOverrideSelections(override: override, originalPlan: nil)
         let selections = manifest["selections"] as? [[String: Any]]
 
         XCTAssertEqual(selections?.first?["crop_x"] as? Double, 0.4)
