@@ -1069,6 +1069,10 @@ private struct NotesEditor: View {
             BrandTextArea(label: "Program Notes",      text: $ocr.programNotes)
             BrandTextArea(label: "Venue Notes",        text: $ocr.venueNotes)
             BrandTextArea(label: "Production Details", text: $ocr.productionDetails)
+            // Sponsor notes, dedications, audience instructions. Editable like
+            // the rest because it reaches the blog prompt, and anything that
+            // reaches the prompt has to be something Dan can correct (#262).
+            BrandTextArea(label: "Other Program Text",  text: $ocr.other)
         }
     }
 }

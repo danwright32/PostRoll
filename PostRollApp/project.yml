@@ -78,6 +78,9 @@ targets:
       - path: Sources/Services/ProgramPDFBuilder.swift
       - path: Sources/Services/VisionTextLayer.swift
       - path: Sources/Services/HaltedWeek.swift
+      - path: Sources/Services/PartialWeekMerge.swift
+      - path: Sources/Services/MediaErrorSummary.swift
+      - path: Sources/Services/RunOutcomeNotice.swift
       - path: Sources/Services/ProgramScanRetention.swift
       - path: Sources/Services/DataMigration.swift
       - path: Sources/Services/CollageRenderer.swift

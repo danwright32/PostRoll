@@ -47,7 +47,13 @@ def swap_reel_audio(
         audio_file: If provided, use this audio file instead of fetching from Jamendo.
 
     Returns:
-        {"reel": <path>, "audio_source": <cached track path>, "tags": <tags>}
+        {"reel": <path actually written>,
+         "audio_source": <track that ended up in the reel>,
+         "tags": <what the track was matched on, "" for a user's own file>}
+
+        All three are read by the app (#262): the reel player follows the path
+        this reports rather than assuming, and the source and tags are shown so
+        the fetched track is visible instead of anonymous.
     """
     reel = Path(reel_path).resolve()
     if not reel.exists():
@@ -57,7 +63,12 @@ def swap_reel_audio(
         audio_path = str(Path(audio_file).resolve())
         if not Path(audio_path).exists():
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
-        tags = "user-provided"
+        # No tags: `tags` says what the track was MATCHED ON, and Dan's own
+        # file was not matched on anything. A "user-provided" sentinel here
+        # reads as a tag list to anything that just displays the field, and it
+        # makes the app depend on knowing this side's magic word to tell the
+        # two cases apart (#262).
+        tags = ""
     else:
         tags = _derive_audio_tags(shoot_type, pieces)
         effective_seed = seed if seed is not None else random.randint(1, 10_000_000)

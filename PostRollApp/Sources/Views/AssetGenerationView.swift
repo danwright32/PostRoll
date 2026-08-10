@@ -613,17 +613,38 @@ struct AssetGenerationView: View {
                 .font(.signPainter(28))
                 .foregroundStyle(Color.warmDark)
 
-            Image(systemName: errorCount > 0 ? "checkmark.circle" : "checkmark.circle.fill")
+            // A run that never reached the end of the week gets the same hollow
+            // mark as one with failures. Python said so on every run and nothing
+            // read it, so a week the watchdog cut off looked finished (#262).
+            Image(systemName: RunOutcomeNotice.isUnqualifiedSuccess(
+                week: liveWeekResult, failedDayCount: errorCount)
+                    ? "checkmark.circle.fill" : "checkmark.circle")
                 .font(.system(size: 44))
                 .foregroundStyle(Color.roseGold.opacity(0.7))
                 .scaleEffect(showCheckmark ? 1 : 0.1)
                 .opacity(showCheckmark ? 1 : 0)
 
-            Text(errorCount > 0 ? "Partially generated" : "Content generated")
+            Text(RunOutcomeNotice.headline(week: liveWeekResult, failedDayCount: errorCount))
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.warmDark)
                 .opacity(showCheckmark ? 1 : 0)
                 .offset(y: showCheckmark ? 0 : 8)
+
+            // The verbatim text of a failure the cap detector did not recognise.
+            // #258 cannot start until a real cap's wording has been seen, and
+            // before this the only place it appeared was stderr (#217, #262).
+            if let note = RunOutcomeNotice.unfamiliarFailureNote(week: liveWeekResult) {
+                Text(note)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.warmDark.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: 460, alignment: .leading)
+                    .padding(Spacing.sm)
+                    .background(Color.roseGold.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
+                    .opacity(showCheckmark ? 1 : 0)
+            }
 
             if errorCount > 0 {
                 VStack(alignment: .leading, spacing: Spacing.sm) {

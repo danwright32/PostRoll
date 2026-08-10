@@ -29,6 +29,27 @@ final class HaltedWeekTests: XCTestCase {
         XCTAssertNil(HaltedWeek.from(result(stoppedReason: "   ")))
     }
 
+    func testTheReviewBannerSaysWhatSurvivedAndWhereToGo() {
+        // #262: the caption review screen has no room for the two buttons, and
+        // rendering the halt as a bare red error there reads as a crash, whose
+        // obvious answer is to run the whole week again, which is the one thing
+        // that costs money it need not.
+        let halted = HaltedWeek.from(result(
+            stoppedReason: "Claude usage limit reached",
+            days: [.sunday, .monday]))
+        let banner = halted?.reviewBanner ?? ""
+        XCTAssertTrue(banner.contains("Claude usage limit reached"), banner)
+        XCTAssertTrue(banner.contains("Sunday"), banner)
+        XCTAssertTrue(banner.contains("saved"), banner)
+        XCTAssertTrue(banner.lowercased().contains("generate screen"), banner)
+    }
+
+    func testTheReviewBannerDoesNotClaimWorkSurvivedWhenNoneDid() {
+        let halted = HaltedWeek.from(result(stoppedReason: "capped", days: []))
+        XCTAssertTrue(halted?.reviewBanner.contains("Nothing had finished") ?? false,
+                      halted?.reviewBanner ?? "nil")
+    }
+
     func testAHaltedWeekReportsWhyItStopped() {
         let halted = HaltedWeek.from(result(
             stoppedReason: "Claude usage limit reached, resets at 3pm. Everything generated so far is saved."))

@@ -278,6 +278,8 @@ extension PostingDay {
         bwPhotoPath         = try  c.decodeIfPresent(URL.self,                        forKey: .bwPhotoPath)
         reelTargetDuration  = try  c.decodeIfPresent(Double.self,                     forKey: .reelTargetDuration)  ?? 20.0
         audioPath           = try  c.decodeIfPresent(URL.self,                        forKey: .audioPath)
+        reelAudioSource     = try  c.decodeIfPresent(URL.self,                        forKey: .reelAudioSource)
+        reelAudioTags       = try  c.decodeIfPresent(String.self,                     forKey: .reelAudioTags)       ?? ""
         scrollDuration      = try  c.decodeIfPresent(Double.self,                     forKey: .scrollDuration)      ?? 40.0
         reelSeed            = try  c.decodeIfPresent(Int.self,                        forKey: .reelSeed)
         collageSeed         = try  c.decodeIfPresent(Int.self,                        forKey: .collageSeed)
@@ -737,6 +739,13 @@ struct PostingDay: Codable, Hashable {
     var reelTargetDuration: Double = 20.0  // Tuesday: timelapse target (seconds, 10–30)
     // Thursday scroll reel
     var audioPath: URL? = nil
+    // The track that actually ended up in the rendered reel, and what it was
+    // matched on. Distinct from `audioPath`, which only ever holds a file Dan
+    // uploaded himself: a Jamendo fetch left no trace in the app at all, so the
+    // music in the reel had no name anywhere on screen (#262). Tags are empty
+    // for an uploaded file, which was not matched on anything.
+    var reelAudioSource: URL? = nil
+    var reelAudioTags: String = ""
     var scrollDuration: Double = 40.0  // Thursday: scroll animation duration (seconds, 15–60)
     var reelSeed: Int? = nil           // Thursday: layout seed (nil = random each time)
     // Wednesday collage

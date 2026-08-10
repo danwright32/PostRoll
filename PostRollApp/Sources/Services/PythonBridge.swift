@@ -61,8 +61,83 @@ actor PythonBridge {
 
     // MARK: - Week generation
 
+    /// What a week run that exited non-zero actually left behind.
+    ///
+    /// A halt is not a crash. `generate_week` stops the whole week when it
+    /// recognises a usage cap, saves everything finished so far, records why in
+    /// `stopped_reason`, and then raises, which exits non-zero. Before #262 that
+    /// non-zero exit was the end of it: the results file was never opened, so
+    /// the reason and every finished day went with the temp directory, and the
+    /// halt screen #257 built could never appear.
+    enum WeekRunOutcome {
+        /// The run stopped at a cap. The days inside are real.
+        case halted(WeekGenerationResult)
+        /// An ordinary failure, carrying the original error rather than a
+        /// summary of it, plus anything worth keeping.
+        ///
+        /// `salvaged` is the reason this is not just an error. `generate_week`
+        /// persists after every day precisely so a kill at any point keeps what
+        /// finished (#206), and the case that motivated it is the app's own
+        /// 1800s watchdog: a SIGTERM raises nothing in Python, so the file is
+        /// left with `complete: false` and no stop reason. Nothing read it, so
+        /// every caption that had generated in those thirty minutes was thrown
+        /// away with the temp directory, which is the outcome #206 was written
+        /// to prevent (#262).
+        case failed(Error, salvaged: WeekGenerationResult?)
+    }
+
+    /// Decide what a failed run left behind, from its output file's bytes.
+    ///
+    /// Pure and separate from the subprocess call so the shapes it must refuse
+    /// can be enumerated. Refusing matters more than accepting here: unreadable
+    /// leftovers must surface the original error rather than decode to a blank
+    /// week, because a blank week that reads as finished is worse than a visible
+    /// failure (L10).
+    nonisolated static func weekOutcome(forFailedRun data: Data?,
+                                        underlying: Error) -> WeekRunOutcome {
+        guard let data,
+              var week = try? JSONDecoder().decode(WeekGenerationResult.self, from: data)
+        else { return .failed(underlying, salvaged: nil) }
+
+        week.stampOriginals()
+
+        // A blank reason is not a halt: the key is written on every save, so
+        // treating "present" as "halted" would offer the paid re-run after every
+        // ordinary crash.
+        let reason = week.stoppedReason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !reason.isEmpty { return .halted(week) }
+
+        // Not a halt, but the run may still have finished days before it died.
+        // Nothing to salvage from an empty week, and offering one would replace
+        // a good saved week with a blank.
+        return .failed(underlying, salvaged: week.hasAnyContent ? week : nil)
+    }
+
+    /// How long each phase of a week run took, as generate_week reports it.
+    ///
+    /// A phase that did not run stays nil rather than becoming zero: a week with
+    /// no blog photos never timed a blog, and scoring that as zero seconds pulls
+    /// the rolling-mean estimate down with a measurement nobody took.
+    struct WeekTiming: Equatable {
+        var captions: Double?
+        var blog: Double?
+        var packaging: Double?
+    }
+
+    /// Parses the timing sidecar. A pure seam so the nil-not-zero rule is
+    /// testable without running a generation.
+    nonisolated static func parseWeekTiming(_ raw: [String: Double?]) -> WeekTiming {
+        WeekTiming(captions:  raw["captions"]  ?? nil,
+                   blog:      raw["blog"]      ?? nil,
+                   packaging: raw["packaging"] ?? nil)
+    }
+
     /// Run week generation. Pass `onlyDays` to regenerate a subset of days/blog
     /// without touching days that already succeeded.
+    ///
+    /// Throws `WeekGenerationHalted` when the run stopped at a usage cap, so the
+    /// caller can save what finished and offer the two ways forward rather than
+    /// showing a crash.
     func runWeekGeneration(event: Event, onlyDays: Set<String>? = nil,
                            forcePaidPath: Bool = false) async throws -> WeekGenerationResult {
         let tmp = FileManager.default.temporaryDirectory
@@ -102,7 +177,21 @@ actor PythonBridge {
         // Left in place on the way out: the last step of a finished run is
         // marked done, and a run that DIED leaves the step it died in, which is
         // the most useful thing anyone can be told about it.
-        try await runProcess(args: args, forcePaidPath: forcePaidPath)
+        do {
+            try await runProcess(args: args, forcePaidPath: forcePaidPath)
+        } catch {
+            // The results file outlives a non-zero exit, and on a halt it holds
+            // the reason plus every day that finished. Reading it here is what
+            // makes #257's halt screen reachable at all (#262).
+            switch Self.weekOutcome(forFailedRun: try? Data(contentsOf: outputFile),
+                                    underlying: error) {
+            case .halted(let week):
+                throw WeekGenerationHalted(week: week)
+            case .failed(let real, let salvaged):
+                guard let salvaged else { throw real }
+                throw WeekGenerationFailedWithPartial(underlying: real, week: salvaged)
+            }
+        }
 
         guard FileManager.default.fileExists(atPath: outputFile.path) else {
             throw PythonBridgeError.outputMissing
@@ -118,11 +207,12 @@ actor PythonBridge {
             // pull the rolling-mean estimate down toward zero.
             if result.hasAnyContent,
                let timingData = try? Data(contentsOf: timingFile),
-               let timing = try? JSONDecoder().decode([String: Double?].self, from: timingData) {
+               let raw = try? JSONDecoder().decode([String: Double?].self, from: timingData) {
+                let timing = Self.parseWeekTiming(raw)
                 TimingStore.shared.recordGenerationPhases(
-                    captions:  timing["captions"]  ?? nil,
-                    blog:      timing["blog"]      ?? nil,
-                    packaging: timing["packaging"] ?? nil
+                    captions:  timing.captions,
+                    blog:      timing.blog,
+                    packaging: timing.packaging
                 )
             }
 
@@ -138,8 +228,13 @@ actor PythonBridge {
     /// Throws on Python error; individual day failures are logged but non-fatal.
     /// Pass `days = nil` (the default) to render the whole week or a specific
     /// set to scope generation to just those days.
-    /// Returns URLs of all static images (PNG) that were successfully written.
-    func runMediaGeneration(event: Event, outputDir: URL, days: [String]? = nil) async throws -> [URL] {
+    /// Returns the images written AND the per-day failures Python reported.
+    ///
+    /// The errors used to be dropped here while the preview path read them, so
+    /// a day that failed during a real export left a folder quietly missing an
+    /// asset and said nothing (#262).
+    func runMediaGeneration(event: Event, outputDir: URL,
+                            days: [String]? = nil) async throws -> PreviewGenerationResult {
         let tmp = FileManager.default.temporaryDirectory
         let manifestFile = tmp.appendingPathComponent("postroll_media_manifest_\(UUID().uuidString).json")
         let outputFile   = tmp.appendingPathComponent("postroll_media_\(UUID().uuidString).json")
@@ -172,19 +267,10 @@ actor PythonBridge {
 
         let data = try Data(contentsOf: outputFile)
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return []
+            throw PythonBridgeError.invalidOutput(
+                "The media run's result file could not be read.")
         }
-        var imagePaths: [URL] = []
-        for dayKey in ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"] {
-            guard let dayDict = json[dayKey] as? [String: Any] else { continue }
-            for (_, assetPath) in dayDict {
-                guard let pathStr = assetPath as? String,
-                      pathStr.hasSuffix(".png"),
-                      FileManager.default.fileExists(atPath: pathStr) else { continue }
-                imagePaths.append(URL(fileURLWithPath: pathStr))
-            }
-        }
-        return imagePaths
+        return Self.parseMediaOutput(json)
     }
 
     /// Render `count` candidate collage layouts for `day` (each a distinct seed)
@@ -266,6 +352,50 @@ actor PythonBridge {
         /// for a day when a fresh pick was made this run (the sticky gate
         /// reusing a persisted pick emits no cover_pick at all).
         var coverPicks: [String: CoverPick] = [:]
+
+        /// Every PNG this run produced, across all days. What the export path
+        /// wants: it does not care which day an image belongs to, only that the
+        /// file is there to copy.
+        var imagePaths: [URL] {
+            Self.dayOrder
+                .compactMap { paths[$0] }
+                .flatMap { $0.values }
+                .filter { $0.hasSuffix(".png") }
+                .map { URL(fileURLWithPath: $0) }
+        }
+
+        static let dayOrder = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]
+    }
+
+    /// Parses generate_media.py's whole output: per-day assets, per-day
+    /// failures, and the two nested objects.
+    ///
+    /// One parse for both callers. The export path used to have its own copy
+    /// that read the day entries and ignored `errors` entirely, so a day that
+    /// failed during a real export was silent while the same failure during a
+    /// preview run was reported. An error surfaced on one path only is an error
+    /// nobody sees on the path that matters (#262).
+    nonisolated static func parseMediaOutput(
+        _ json: [String: Any],
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> PreviewGenerationResult {
+        var paths: [String: [String: String]] = [:]
+        var fridayClipPlan: FridayClipPlan? = nil
+        var coverPicks: [String: CoverPick] = [:]
+
+        for dayKey in PreviewGenerationResult.dayOrder {
+            guard let dayDict = json[dayKey] as? [String: Any] else { continue }
+            let parsed = parsePreviewDayEntry(dayDict, fileExists: fileExists)
+            if !parsed.paths.isEmpty { paths[dayKey] = parsed.paths }
+            if dayKey == "friday" { fridayClipPlan = parsed.fridayClipPlan }
+            if let pick = parsed.coverPick { coverPicks[dayKey] = pick }
+        }
+
+        return PreviewGenerationResult(
+            paths: paths,
+            errors: (json["errors"] as? [String: String]) ?? [:],
+            fridayClipPlan: fridayClipPlan,
+            coverPicks: coverPicks)
     }
 
     /// Parses one day's entry from generate_media.py's output JSON. Values
@@ -349,18 +479,7 @@ actor PythonBridge {
             return PreviewGenerationResult(paths: [:], errors: [:])
         }
 
-        var paths: [String: [String: String]] = [:]
-        var fridayClipPlan: FridayClipPlan? = nil
-        var coverPicks: [String: CoverPick] = [:]
-        for dayKey in ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"] {
-            guard let dayDict = json[dayKey] as? [String: Any] else { continue }
-            let parsed = Self.parsePreviewDayEntry(dayDict)
-            if !parsed.paths.isEmpty { paths[dayKey] = parsed.paths }
-            if dayKey == "friday" { fridayClipPlan = parsed.fridayClipPlan }
-            if let pick = parsed.coverPick { coverPicks[dayKey] = pick }
-        }
-        let errors = (json["errors"] as? [String: String]) ?? [:]
-        return PreviewGenerationResult(paths: paths, errors: errors, fridayClipPlan: fridayClipPlan, coverPicks: coverPicks)
+        return Self.parseMediaOutput(json)
     }
 
     /// Builds the Thursday reel's still preview PNG + layout sidecar (no ffmpeg encode).
@@ -382,10 +501,8 @@ actor PythonBridge {
 
         let tmp = FileManager.default.temporaryDirectory
         let manifestFile = tmp.appendingPathComponent("postroll_reel_preview_manifest_\(UUID().uuidString).json")
-        let resultFile   = tmp.appendingPathComponent("postroll_reel_preview_result_\(UUID().uuidString).json")
         defer {
             try? FileManager.default.removeItem(at: manifestFile)
-            try? FileManager.default.removeItem(at: resultFile)
         }
 
         let offsets: [[Double]] = pd.photoPaths.map { url in
@@ -406,60 +523,77 @@ actor PythonBridge {
             "-m", "postroll.ai.build_reel_preview",
             "--manifest", manifestFile.path,
             "--output",   previewPNG.path,
-            "--result",   resultFile.path,
         ])
 
         guard FileManager.default.fileExists(atPath: previewPNG.path) else { return nil }
         return previewPNG
     }
 
+    /// What an audio swap actually did, as reported by swap_reel_audio.py.
+    ///
+    /// All three fields are read (#262). `reelPath` is the file the swap
+    /// verifiably wrote, so the player reloads what exists rather than what was
+    /// asked for. `tags` says what the track was matched on, and is empty for a
+    /// file Dan supplied himself, because that was not matched on anything.
+    struct ReelAudioSwapResult: Sendable, Equatable {
+        let reelPath: String
+        let audioSource: String
+        let tags: String
+
+        /// Whether there is anything to tell Dan about how this track was
+        /// chosen. False for his own upload, so the app does not claim to have
+        /// matched a file he picked by hand.
+        var wasMatchedOnTags: Bool { !tags.isEmpty }
+    }
+
+    /// Parses swap_reel_audio.py's result. Pure, so the shapes it must refuse
+    /// are testable without a subprocess.
+    ///
+    /// Refuses a payload missing either path rather than filling one in: the
+    /// reel path is what the player reloads and the audio source is what gets
+    /// recorded on the day, and a guessed value for either points the app at a
+    /// file this run may never have written (L75).
+    nonisolated static func parseSwapReelAudioOutput(_ json: [String: Any]) -> ReelAudioSwapResult? {
+        guard let reelPath = json["reel"] as? String,
+              let audioSource = json["audio_source"] as? String else { return nil }
+        // Tolerated when absent: a result from an older build carries no tags,
+        // and that is a swap that worked, not one that failed.
+        let tags = (json["tags"] as? String) ?? ""
+        return ReelAudioSwapResult(reelPath: reelPath, audioSource: audioSource, tags: tags)
+    }
+
     /// Swap the audio track on an existing reel without re-rendering video.
     /// Uses ffmpeg stream-copy on the video + a fresh Jamendo track. ~3-5s, no API calls.
-    /// Returns the new audio source path on success, nil on failure.
+    ///
+    /// Throws rather than returning nil when there is nothing to swap. The
+    /// caller clears Dan's uploaded track BEFORE calling, so that it fetches
+    /// fresh, and only the failure path puts it back (#118). A silent nil meant
+    /// the success branch ran instead: the app announced the swap had worked,
+    /// no audio had changed, and his own file was left referenced by nothing,
+    /// which makes it a candidate for the next launch's orphan sweep.
     @discardableResult
-    func runSwapReelAudio(event: Event, day: DayName) async throws -> String? {
-        guard let reelPath = event.previewMediaPaths[day.rawValue]?["reel"],
-              FileManager.default.fileExists(atPath: reelPath) else {
-            return nil
-        }
-
-        let tmp = FileManager.default.temporaryDirectory
-        let manifestFile = tmp.appendingPathComponent("postroll_swap_manifest_\(UUID().uuidString).json")
-        let outputFile   = tmp.appendingPathComponent("postroll_swap_result_\(UUID().uuidString).json")
-        defer {
-            try? FileManager.default.removeItem(at: manifestFile)
-            try? FileManager.default.removeItem(at: outputFile)
-        }
-
-        let pieces: [[String: String]] = (event.ocrResult?.pieces ?? []).map {
-            ["title": $0.title, "composer": $0.composer]
-        }
-        let manifest: [String: Any] = [
-            "shoot_type": event.shootType.pythonValue,
-            "pieces": pieces,
-        ]
-        let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
-        try manifestData.write(to: manifestFile)
-
-        try await runProcess(args: [
-            "-m", "postroll.ai.swap_reel_audio",
-            "--reel", reelPath,
-            "--manifest", manifestFile.path,
-            "--output", outputFile.path,
-        ])
-
-        guard FileManager.default.fileExists(atPath: outputFile.path) else { return nil }
-        let data = try Data(contentsOf: outputFile)
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return json["audio_source"] as? String
+    func runSwapReelAudio(event: Event, day: DayName) async throws -> ReelAudioSwapResult {
+        try await swapReelAudio(event: event, day: day, audioPath: nil)
     }
 
     /// Like `runSwapReelAudio` but uses a user-provided audio file instead of
     /// fetching from Jamendo.
-    func runSwapReelAudioWithFile(event: Event, day: DayName, audioPath: String) async throws -> String? {
+    @discardableResult
+    func runSwapReelAudioWithFile(event: Event, day: DayName,
+                                  audioPath: String) async throws -> ReelAudioSwapResult {
+        try await swapReelAudio(event: event, day: day, audioPath: audioPath)
+    }
+
+    /// One implementation for both entry points. They differed only in a single
+    /// argument, and keeping two copies meant every fix to the result handling
+    /// had to be made twice or land in one of them.
+    private func swapReelAudio(event: Event, day: DayName,
+                               audioPath: String?) async throws -> ReelAudioSwapResult {
         guard let reelPath = event.previewMediaPaths[day.rawValue]?["reel"],
               FileManager.default.fileExists(atPath: reelPath) else {
-            return nil
+            throw PythonBridgeError.invalidOutput(
+                "There is no rendered \(day.displayName) reel to swap the audio on. "
+                + "Generate the graphics for that day first.")
         }
 
         let tmp = FileManager.default.temporaryDirectory
@@ -480,18 +614,26 @@ actor PythonBridge {
         let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
         try manifestData.write(to: manifestFile)
 
-        try await runProcess(args: [
+        var args = [
             "-m", "postroll.ai.swap_reel_audio",
             "--reel", reelPath,
             "--manifest", manifestFile.path,
             "--output", outputFile.path,
-            "--audio", audioPath,
-        ])
+        ]
+        if let audioPath { args += ["--audio", audioPath] }
+        try await runProcess(args: args)
 
-        guard FileManager.default.fileExists(atPath: outputFile.path) else { return nil }
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
         let data = try Data(contentsOf: outputFile)
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return json["audio_source"] as? String
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let parsed = Self.parseSwapReelAudioOutput(json) else {
+            throw PythonBridgeError.invalidOutput(
+                "The audio swap finished but did not report what it did, so the "
+                + "reel cannot be trusted to have the right track.")
+        }
+        return parsed
     }
 
     /// Re-renders the Friday reel from the user's manual override
@@ -1646,7 +1788,16 @@ actor PythonBridge {
 
         let data = try Data(contentsOf: outputFile)
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return json["suggestion"] as? String
+        return Self.parseLearnSuggestion(json)
+    }
+
+    /// The brand-voice rule learn_from_edits inferred, or nil when it produced
+    /// none. A pure seam so the payload's one key is provably read (#262).
+    nonisolated static func parseLearnSuggestion(_ json: [String: Any]) -> String? {
+        guard let suggestion = (json["suggestion"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !suggestion.isEmpty
+        else { return nil }
+        return suggestion
     }
 
     // MARK: - Brand voice

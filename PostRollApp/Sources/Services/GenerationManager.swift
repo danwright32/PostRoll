@@ -73,18 +73,7 @@ final class GenerationManager {
             do {
                 let result = try await PythonBridge.shared.runWeekGeneration(
                     event: ev, onlyDays: onlyDays, forcePaidPath: forcePaidPath)
-                let graphicsOutcome = await graphicsTask?.value
-                var mediaResult: PythonBridge.PreviewGenerationResult?
-                var mediaErrors: [String: String] = [:]
-                switch graphicsOutcome {
-                case .success(let r):
-                    mediaResult = r
-                    mediaErrors = r.errors
-                case .failure(let error):
-                    mediaErrors = [PreviewMergePolicy.graphicsRunKey: error.localizedDescription]
-                case nil:
-                    break   // graphics didn't run this time
-                }
+                let (mediaResult, mediaErrors) = await Self.graphicsOutcome(of: graphicsTask)
                 self?.finishSuccess(eventID: eventID, snapshot: ev, onlyDays: onlyDays,
                                     result: result, mediaPaths: mediaResult?.paths,
                                     mediaErrors: mediaErrors,
@@ -95,6 +84,54 @@ final class GenerationManager {
                                     coverPicks: mediaResult?.coverPicks ?? [:], appState: appState)
             } catch is CancellationError {
                 graphicsTask?.cancel()
+            } catch _ where Task.isCancelled {
+                // Dan pressed Cancel. Killing the subprocess surfaces as an
+                // ordinary script failure rather than a CancellationError, so
+                // without this the salvage path below would merge a half
+                // finished run over captions he had already edited and stamp
+                // the week incomplete, having been asked to stop and do
+                // nothing. A cancelled run writes nothing, as it always did.
+                graphicsTask?.cancel()
+            } catch let halt as WeekGenerationHalted {
+                // A halt is not a crash. Everything that finished is real and
+                // already paid for, so it is saved exactly as a successful run's
+                // days are, and only then is the halt screen shown (#262).
+                // Dropping it here is what made #257's whole feature unreachable.
+                //
+                // The graphics are awaited rather than cancelled: they run in a
+                // separate process that a caption cap has no bearing on, and
+                // throwing away a finished collage because the captions ran out
+                // of allowance means rendering it again for nothing.
+                let (mediaResult, mediaErrors) = await Self.graphicsOutcome(of: graphicsTask)
+                self?.finishSuccess(eventID: eventID, snapshot: ev, onlyDays: onlyDays,
+                                    result: halt.week, mediaPaths: mediaResult?.paths,
+                                    mediaErrors: mediaErrors,
+                                    renderedDays: doGraphics ? onlyDays : [],
+                                    fridayClipPlan: mediaResult?.fridayClipPlan,
+                                    coverPicks: mediaResult?.coverPicks ?? [:],
+                                    appState: appState,
+                                    haltedReason: halt.reason)
+            } catch let partial as WeekGenerationFailedWithPartial {
+                // The run died with days already generated, most often because
+                // the watchdog killed it at 1800s. Python saved them for exactly
+                // this reason (#206) and nothing read the file, so they were
+                // thrown away with the temp directory (#262). Saved first, then
+                // the failure is shown: this is still the error screen, because
+                // there is no cap and no choice to offer.
+                //
+                // The graphics are awaited for the same reason as the halt
+                // above: they render in a separate process that a dead caption
+                // run has no bearing on, and cancelling them throws away
+                // collages and reels that had already finished.
+                let (mediaResult, mediaErrors) = await Self.graphicsOutcome(of: graphicsTask)
+                self?.saveSalvagedDays(eventID: eventID, snapshot: ev,
+                                       week: partial.week,
+                                       mediaPaths: mediaResult?.paths,
+                                       mediaErrors: mediaErrors,
+                                       renderedDays: doGraphics ? onlyDays : [],
+                                       appState: appState)
+                self?.finishFailure(eventID: eventID,
+                                    message: partial.localizedDescription)
             } catch {
                 graphicsTask?.cancel()
                 self?.finishFailure(eventID: eventID, message: error.localizedDescription)
@@ -117,20 +154,43 @@ final class GenerationManager {
 
     // MARK: - Completion
 
+    /// Fold the parallel graphics run's outcome into the two things every
+    /// completion path needs. One implementation, because three copies of it is
+    /// three places for a fix to land in only one.
+    private static func graphicsOutcome(
+        of task: Task<Result<PythonBridge.PreviewGenerationResult, Error>?, Never>?
+    ) async -> (PythonBridge.PreviewGenerationResult?, [String: String]) {
+        switch await task?.value {
+        case .success(let r):
+            return (r, r.errors)
+        case .failure(let error):
+            return (nil, [PreviewMergePolicy.graphicsRunKey: error.localizedDescription])
+        case nil:
+            return (nil, [:])   // graphics didn't run this time
+        }
+    }
+
     private func finishSuccess(eventID: Event.ID, snapshot ev: Event, onlyDays: Set<String>?,
                                result: WeekGenerationResult, mediaPaths: [String: [String: String]]?,
                                mediaErrors: [String: String] = [:],
                                renderedDays: Set<String>? = nil,
                                fridayClipPlan: FridayClipPlan? = nil,
-                               coverPicks: [String: CoverPick] = [:], appState: AppState) {
+                               coverPicks: [String: CoverPick] = [:], appState: AppState,
+                               haltedReason: String? = nil) {
         let elapsed = tracker.job(for: eventID)?.elapsedSeconds ?? 0
-        tracker.remove(eventID)
+        // A halted run keeps its job so the halt screen has something to render
+        // from; an ordinary success is done and the job goes.
+        if haltedReason == nil { tracker.remove(eventID) }
 
         // Only record the run's duration when something actually generated
         // (caption OR media). Otherwise an immediate failure pulls the
         // rolling-mean estimate toward zero.
+        //
+        // A halted run is excluded for the same reason: it stopped after two
+        // days in ninety seconds, and feeding that to the mean that estimates a
+        // full week makes every later run's estimate expire before it finishes.
         let producedSomething = result.hasAnyContent || !(mediaPaths?.isEmpty ?? true)
-        if producedSomething {
+        if producedSomething && haltedReason == nil {
             TimingStore.shared.recordGeneration(seconds: Double(elapsed))
         }
 
@@ -139,23 +199,14 @@ final class GenerationManager {
         // must not be reverted.
         var saved = appState.events.first(where: { $0.id == eventID }) ?? ev
 
-        if let only = onlyDays,
-           var existing = appState.events.first(where: { $0.id == eventID })?.weekResult ?? ev.weekResult {
-            // Partial retry: merge new results into the existing weekResult
-            for key in only {
-                if key == "blog" {
-                    existing.blog = result.blog
-                } else if let day = DayName(rawValue: key) {
-                    existing[day] = result[day]
-                }
-            }
-            // Clear retried errors; carry over any new ones
-            for key in only { existing.errors.removeValue(forKey: key) }
-            existing.errors.merge(result.errors) { _, new in new }
-            saved.weekResult = existing
-        } else {
-            saved.weekResult = result
-        }
+        // One decision, made in one place. Ordering these branches by hand here
+        // is what let a halted partial retry take the ordinary merge path and
+        // nil out days it had never reached.
+        saved.weekResult = PartialWeekMerge.merged(
+            existing: saved.weekResult ?? ev.weekResult,
+            incoming: result,
+            onlyDays: onlyDays,
+            ending: haltedReason == nil ? .finished : .stoppedEarly)
 
         // A full run replaces all previews; a partial retry merges only the
         // regenerated days so other days' approved previews survive.
@@ -167,11 +218,51 @@ final class GenerationManager {
         saved.mediaErrors = PreviewMergePolicy.mergeMediaErrors(
             existing: saved.mediaErrors, fresh: mediaErrors, renderedDays: renderedDays)
 
+        // A re-rendered reel carries music this run fetched, so a label written
+        // by an earlier manual swap now names a track the file does not contain.
+        saved = ReelAudioSwap.clearingStaleAudioLabels(in: saved, freshMedia: mediaPaths)
+
         saved.applyFridayClipPlan(fridayClipPlan)
         for (day, pick) in coverPicks { saved.applyCoverPick(pick, forDay: day) }
 
         appState.updateEvent(saved)
+
+        // A halted week is saved but NOT announced as complete, and the run goes
+        // to the failed state so FailureScreen routes it to the halt screen with
+        // its two ways forward. Telling Dan a capped week "finished" would be
+        // the app claiming more than it measured (L12).
+        if let haltedReason {
+            finishFailure(eventID: eventID, message: haltedReason)
+            return
+        }
         NotificationService.shared.notifyGenerationComplete(eventName: ev.name)
+    }
+
+    /// Keep the days a dead run had already produced, without any of the
+    /// success bookkeeping (#262).
+    ///
+    /// Deliberately not `finishSuccess`: nothing here should record a duration,
+    /// send a completion notification, or replace the saved previews. The run
+    /// failed. The only claim being made is that these particular days exist,
+    /// which is a claim the results file supports.
+    private func saveSalvagedDays(eventID: Event.ID, snapshot ev: Event,
+                                  week: WeekGenerationResult,
+                                  mediaPaths: [String: [String: String]]?,
+                                  mediaErrors: [String: String],
+                                  renderedDays: Set<String>?,
+                                  appState: AppState) {
+        var saved = appState.events.first(where: { $0.id == eventID }) ?? ev
+        // The same merge as a halt, and for the same reason: days this run never
+        // reached must not erase days an earlier run generated (L5).
+        saved.weekResult = PartialWeekMerge.applying(week, onto: saved.weekResult)
+        // The graphics finished in their own process and are on disk. Not
+        // keeping them means re-rendering work that is already done.
+        saved.previewMediaPaths = PreviewMergePolicy.merge(
+            existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: false)
+        saved.mediaErrors = PreviewMergePolicy.mergeMediaErrors(
+            existing: saved.mediaErrors, fresh: mediaErrors, renderedDays: renderedDays)
+        saved = ReelAudioSwap.clearingStaleAudioLabels(in: saved, freshMedia: mediaPaths)
+        appState.updateEvent(saved)
     }
 
     private func finishFailure(eventID: Event.ID, message: String) {

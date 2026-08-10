@@ -535,11 +535,36 @@ struct CaptionReviewView: View {
             result = newResult
             mergeGlobalTags()
             NotificationService.shared.notifyRegenerationComplete(eventName: live.name, what: "Captions")
+        } catch let halt as WeekGenerationHalted {
+            // The run stopped at a usage cap. What it finished is real and paid
+            // for, so it is saved over the existing week rather than discarded
+            // with the error (#262). The banner says which days survived and
+            // where the two ways forward are: a halt shown as a bare red error
+            // reads as a crash, and Dan re-runs work he already has.
+            regenerateError = keepPartial(halt.week, banner: HaltedWeek.from(halt.week)?.reviewBanner
+                                          ?? halt.reason)
+        } catch let partial as WeekGenerationFailedWithPartial {
+            // The run died with days already generated, usually the 1800s
+            // watchdog. Saved for the same reason as a halt: they exist and are
+            // paid for. Without this branch the same run started from this
+            // screen threw them away while the generation screen kept them.
+            regenerateError = keepPartial(partial.week, banner: partial.localizedDescription)
         } catch {
             regenerateError = error.localizedDescription
         }
         isRegenerating = false
         regenerateStartedAt = nil
+    }
+
+    /// Save what a run produced before it stopped, and hand back the banner to
+    /// show. Shared by the two ways a run can end early (#262).
+    @discardableResult
+    private func keepPartial(_ week: WeekGenerationResult, banner: String) -> String {
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? liveEvent
+        ev.weekResult = PartialWeekMerge.applying(week, onto: ev.weekResult)
+        appState.updateEvent(ev)
+        if let saved = ev.weekResult { result = saved }
+        return banner
     }
 
     // MARK: - Global hashtag merge
@@ -614,8 +639,13 @@ struct CaptionReviewView: View {
         regenerateError = nil
         Task {
             do {
-                _ = try await PythonBridge.shared.runSwapReelAudio(event: liveEvent, day: day)
+                let swapped = try await PythonBridge.shared.runSwapReelAudio(event: liveEvent, day: day)
                 await MainActor.run {
+                    // Record which track landed in the reel. Without this the
+                    // fetched music has no name anywhere in the app (#262).
+                    if let liveNow = appState.events.first(where: { $0.id == event.id }) {
+                        appState.updateEvent(ReelAudioSwap.recording(swapped, in: liveNow, day: day))
+                    }
                     // Bump the version so SwiftUI rebuilds AVPlayer with the updated file.
                     graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
                     graphics.endDayRegen(day, for: event.id)
@@ -703,10 +733,13 @@ struct CaptionReviewView: View {
         regenerateError = nil
         Task {
             do {
-                _ = try await PythonBridge.shared.runSwapReelAudioWithFile(
+                let swapped = try await PythonBridge.shared.runSwapReelAudioWithFile(
                     event: liveEvent, day: day, audioPath: dest.path
                 )
                 await MainActor.run {
+                    if let liveNow = appState.events.first(where: { $0.id == event.id }) {
+                        appState.updateEvent(ReelAudioSwap.recording(swapped, in: liveNow, day: day))
+                    }
                     graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
                     graphics.endDayRegen(day, for: event.id)
                     NotificationService.shared.notifyRegenerationComplete(
@@ -3134,6 +3167,18 @@ private struct ReviewMediaStrip: View {
             if let audio = postingDay.audioPath {
                 ReviewMediaFileRow(url: audio, icon: "waveform", label: "Audio")
                     .padding(.horizontal, Spacing.xl)
+            } else if let fetched = postingDay.reelAudioSource {
+                // The track a swap fetched, which is not `audioPath` (that only
+                // ever holds a file Dan uploaded). Before #262 this was written
+                // by Python, read by nobody, and the music in the reel had no
+                // name anywhere on screen.
+                ReviewMediaFileRow(
+                    url: fetched, icon: "waveform",
+                    label: postingDay.reelAudioTags.isEmpty
+                        ? "Audio"
+                        : "Audio (matched on \(postingDay.reelAudioTags))"
+                )
+                .padding(.horizontal, Spacing.xl)
             }
         }
         .padding(.bottom, Spacing.xs)

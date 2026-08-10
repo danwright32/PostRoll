@@ -11,9 +11,18 @@ struct OCRResult: Codable, Hashable, Sendable {
     var programNotes: String = ""
     var venueNotes: String = ""
     var productionDetails: String = ""
+    /// Anything else printed in the programme worth a blog post: sponsor notes,
+    /// dedications, audience instructions.
+    ///
+    /// OCR asked Claude for this on every programme and Python returned it, and
+    /// there was no field here to hold it, so it was dropped at this boundary.
+    /// `generate_blog.py` has had a prompt slot for `other` the whole time,
+    /// which therefore always rendered "(none)": paid for on every event, used
+    /// on none of them (#262).
+    var other: String = ""
 
     enum CodingKeys: String, CodingKey {
-        case performers, pieces, scenes
+        case performers, pieces, scenes, other
         case organizationNotes = "organization_notes"
         case programNotes      = "program_notes"
         case venueNotes        = "venue_notes"
@@ -33,6 +42,7 @@ extension OCRResult {
         programNotes      = try c.decodeIfPresent(String.self,         forKey: .programNotes)      ?? ""
         venueNotes        = try c.decodeIfPresent(String.self,         forKey: .venueNotes)        ?? ""
         productionDetails = try c.decodeIfPresent(String.self,         forKey: .productionDetails) ?? ""
+        other             = try c.decodeIfPresent(String.self,         forKey: .other)             ?? ""
     }
 }
 
