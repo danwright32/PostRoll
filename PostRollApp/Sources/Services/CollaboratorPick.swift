@@ -305,6 +305,13 @@ enum CollaboratorPick {
     static func engagementRate(_ stats: AccountStats?) -> Double? {
         guard let stats, stats.hasEngagementData, let followers = stats.followers,
               followers > 0 else { return nil }
+        // These two defaults are additive terms in a sum, not values reaching a
+        // comparison: a half nobody counted contributes none of that half. The
+        // account is already known to have at least one of them
+        // (`hasEngagementData`), the bias is downward rather than up, so partial
+        // data can never promote an account over a fully counted one, and the
+        // reason line names exactly which figures were used, so the score never
+        // claims more than was measured.
         let interactions = Double(stats.likes ?? 0) + Double(stats.comments ?? 0) * Double(commentWeight)
         return interactions / Double(followers)
     }
