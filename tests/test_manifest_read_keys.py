@@ -90,6 +90,55 @@ class TestFindingReads:
         ) == {"friday", "clips", "photos"}
 
 
+class TestModuleLevelReads:
+    """Several scripts read their manifest in the `if __name__` block.
+
+    That is where those modules really take their input, so the extractor has to
+    see it. Refactoring three shipping files to move the code into a function
+    purely so a test tool can read them would be changing production code to
+    suit the tool.
+    """
+
+    def test_it_reads_the_main_block_when_no_function_is_named(self):
+        assert _reads(
+            '''
+            def helper(x):
+                return x
+
+            if __name__ == "__main__":
+                m = json.loads(Path(args.manifest).read_text())
+                a = m["event"]
+                b = m.get("venue_context", "")
+            ''',
+            function=None, variable="m",
+        ) == {"event", "venue_context"}
+
+    def test_it_ignores_reads_inside_functions_when_reading_module_level(self):
+        # A same-named local inside a helper is a different dict; counting it
+        # would put keys in the contract that never come from the manifest.
+        assert _reads(
+            '''
+            def helper():
+                m = something_else()
+                return m["not_from_the_manifest"]
+
+            if __name__ == "__main__":
+                a = m["real"]
+            ''',
+            function=None, variable="m",
+        ) == {"real"}
+
+    def test_module_level_with_no_reads_still_raises(self):
+        with pytest.raises(LookupError, match="no keys"):
+            _reads(
+                '''
+                if __name__ == "__main__":
+                    print("hi")
+                ''',
+                function=None, variable="m",
+            )
+
+
 class TestItRefusesToGuess:
 
     def test_a_computed_key_raises(self):

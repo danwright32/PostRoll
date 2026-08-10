@@ -653,6 +653,138 @@
           "conditional": "Sent when the title card's audio is muted."
         }
       }
+    },
+    "reel_preview": {
+      "_what": "The fast Thursday strip the per-photo crop editor opens, with no video encode.",
+      "swift": "PythonBridge.runBuildReelPreview",
+      "python": [
+        {
+          "module": "postroll/ai/build_reel_preview.py",
+          "function": "_main",
+          "variable": "manifest"
+        }
+      ],
+      "keys": {
+        "photos": "always",
+        "seed": {
+          "conditional": "Sent when a specific reel layout has been chosen, so the editor shows the same arrangement the reel will use; random otherwise."
+        },
+        "crop_offsets": {
+          "conditional": "Sent only when at least one photo has been panned or zoomed, so an untouched day sends nothing."
+        }
+      }
+    },
+    "swap_reel_audio": {
+      "_what": "Replacing a rendered reel's music without re-encoding the video.",
+      "swift": "PythonBridge.swapReelAudio",
+      "python": [
+        {
+          "module": "postroll/ai/swap_reel_audio.py",
+          "function": "_main",
+          "variable": "manifest"
+        }
+      ],
+      "keys": {
+        "shoot_type": "always",
+        "pieces": "always"
+      }
+    },
+    "caption_revision": {
+      "_what": "Rewriting one day's caption from a plain-English instruction.",
+      "swift": "PythonBridge.runCaptionRevision",
+      "python": [
+        {
+          "module": "postroll/ai/revise_caption.py",
+          "function": null,
+          "variable": "m"
+        }
+      ],
+      "keys": {
+        "event": "always",
+        "org": "always",
+        "venue": "always",
+        "date": "always",
+        "day": "always",
+        "program": "always",
+        "existing": "always",
+        "feedback": "always",
+        "shoot_type": "always",
+        "venue_context": "always"
+      }
+    },
+    "blog_revision": {
+      "_what": "Rewriting the blog post from a plain-English instruction.",
+      "swift": "PythonBridge.runBlogRevision",
+      "python": [
+        {
+          "module": "postroll/ai/revise_blog.py",
+          "function": null,
+          "variable": "m"
+        }
+      ],
+      "keys": {
+        "event": "always",
+        "org": "always",
+        "venue": "always",
+        "date": "always",
+        "program": "always",
+        "existing": "always",
+        "feedback": "always",
+        "shoot_type": "always",
+        "venue_context": "always"
+      }
+    },
+    "blog_photo_swap": {
+      "_what": "Rewriting the blog around a different set of photos.",
+      "swift": "PythonBridge.runBlogPhotoSwap",
+      "python": [
+        {
+          "module": "postroll/ai/swap_blog_photos.py",
+          "function": "main",
+          "variable": "m"
+        }
+      ],
+      "keys": {
+        "body": "always",
+        "photo_paths": "always",
+        "venue": {
+          "conditional": "Sent only when the swap knows its event, which the caption review screen always does; the standalone path passes no event and Python defaults the venue to an empty string."
+        },
+        "program": {
+          "conditional": "Sent when the swap knows its event AND that event has OCR data, so a blog written for an event whose programme was never scanned still swaps photos."
+        }
+      }
+    },
+    "analytics": {
+      "_what": "Reading the Instagram export to find what performed.",
+      "swift": "PythonBridge.runAnalytics",
+      "python": [
+        {
+          "module": "postroll/ai/analyze_posts.py",
+          "function": "main",
+          "variable": "manifest"
+        }
+      ],
+      "keys": {
+        "posts": "always",
+        "org_bands": "always",
+        "global_hashtags_to_exclude": "always"
+      }
+    },
+    "learn_suggestion": {
+      "_what": "Inferring a brand-voice rule from the edits Dan made to generated text.",
+      "swift": "PythonBridge.runLearnFromEdits",
+      "python": [
+        {
+          "module": "postroll/ai/learn_from_edits.py",
+          "function": null,
+          "variable": "m"
+        }
+      ],
+      "keys": {
+        "edits": "always",
+        "brand_voice": "always"
+      }
     }
   }
 }

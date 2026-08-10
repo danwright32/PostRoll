@@ -509,13 +509,7 @@ actor PythonBridge {
             let o = pd.reelCropOffsets[url.absoluteString] ?? CropOffset()
             return [o.x, o.y, o.scale]
         }
-        var manifest: [String: Any] = [
-            "photos": pd.photoPaths.map { $0.path },
-        ]
-        if let seed = pd.reelSeed { manifest["seed"] = seed }
-        if offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }) {
-            manifest["crop_offsets"] = offsets
-        }
+        let manifest = Self.buildReelPreviewManifest(day: pd, cropOffsets: offsets)
         let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
         try manifestData.write(to: manifestFile)
 
@@ -604,13 +598,7 @@ actor PythonBridge {
             try? FileManager.default.removeItem(at: outputFile)
         }
 
-        let pieces: [[String: String]] = (event.ocrResult?.pieces ?? []).map {
-            ["title": $0.title, "composer": $0.composer]
-        }
-        let manifest: [String: Any] = [
-            "shoot_type": event.shootType.pythonValue,
-            "pieces": pieces,
-        ]
+        let manifest = Self.buildSwapReelAudioManifest(event: event)
         let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
         try manifestData.write(to: manifestFile)
 
@@ -677,6 +665,122 @@ actor PythonBridge {
     /// A pure function (no actor-isolated state), so nonisolated: callable
     /// directly, and internal (not private) so PostRollTests can pin the
     /// exact wire format render_friday_override.py expects.
+    // MARK: - Manifest builders
+    //
+    // Every manifest is assembled in exactly one pure function (#266, #270).
+    // Not a tidying exercise: the Friday manifest used to be half built by a
+    // helper and half by its caller, which is how the key that keeps Dan's own
+    // music came to be in neither, and a manifest with no single home has
+    // nowhere its completeness can be seen or asserted. Each of these is
+    // covered by `manifests` in tests/fixtures/bridge_payload_contract.json.
+
+    /// The Thursday strip preview the per-photo crop editor opens.
+    nonisolated static func buildReelPreviewManifest(day pd: PostingDay,
+                                                     cropOffsets: [[Double]]) -> [String: Any] {
+        var manifest: [String: Any] = [
+            "photos": pd.photoPaths.map { $0.path },
+        ]
+        if let seed = pd.reelSeed { manifest["seed"] = seed }
+        // Only when something was actually moved: an all-default set would ask
+        // Python to apply crops that are not crops.
+        if cropOffsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }) {
+            manifest["crop_offsets"] = cropOffsets
+        }
+        return manifest
+    }
+
+    /// Replacing a rendered reel's music without re-encoding the video.
+    nonisolated static func buildSwapReelAudioManifest(event: Event) -> [String: Any] {
+        [
+            "shoot_type": event.shootType.pythonValue,
+            // What the Jamendo mood tags are derived from. Empty when the
+            // programme has no works, which matches on shoot type alone.
+            "pieces": (event.ocrResult?.pieces ?? []).map {
+                ["title": $0.title, "composer": $0.composer]
+            },
+        ]
+    }
+
+    /// Rewriting one day's caption from a plain-English instruction.
+    nonisolated static func buildCaptionRevisionManifest(
+        event: Event, day: DayName, program: Any, existing: Any, feedback: String
+    ) -> [String: Any] {
+        [
+            "event":         event.name,
+            "org":           event.org,
+            "venue":         event.venue,
+            "venue_context": event.venueContext,
+            "date":          event.isoDate,
+            "shoot_type":    event.shootType.pythonValue,
+            "day":           day.rawValue,
+            "program":       program,
+            "existing":      existing,
+            "feedback":      feedback,
+        ]
+    }
+
+    /// Rewriting the blog post from a plain-English instruction.
+    nonisolated static func buildBlogRevisionManifest(
+        event: Event, program: Any, existing: Any, feedback: String
+    ) -> [String: Any] {
+        [
+            "event":         event.name,
+            "org":           event.org,
+            "venue":         event.venue,
+            "venue_context": event.venueContext,
+            "date":          event.isoDate,
+            "shoot_type":    event.shootType.pythonValue,
+            "program":       program,
+            "existing":      existing,
+            "feedback":      feedback,
+        ]
+    }
+
+    /// Rewriting the blog around a different set of photos.
+    ///
+    /// `event` is optional because one caller has no event to hand. Python
+    /// tolerates both absences, so this is a real conditional rather than a
+    /// forgotten key, and the contract records the condition.
+    nonisolated static func buildBlogPhotoSwapManifest(
+        currentBody: String, photoPaths: [URL], event: Event?
+    ) -> [String: Any] {
+        var manifest: [String: Any] = [
+            "body":        currentBody,
+            "photo_paths": photoPaths.map { $0.path },
+        ]
+        guard let event else { return manifest }
+        manifest["venue"] = event.venue
+        if let ocr = event.ocrResult,
+           let program = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(ocr)) {
+            manifest["program"] = program
+        }
+        return manifest
+    }
+
+    /// Reading the Instagram export to find what performed.
+    nonisolated static func buildAnalyticsManifest(
+        posts: Any, orgBands: [String: String], globalHashtags: [String]
+    ) -> [String: Any] {
+        [
+            "posts":                      posts,
+            "org_bands":                  orgBands,
+            "global_hashtags_to_exclude": globalHashtags,
+        ]
+    }
+
+    /// Inferring a brand-voice rule from the edits Dan made to generated text.
+    nonisolated static func buildLearnFromEditsManifest(
+        brandVoice: String, edits: [[String: String]]
+    ) -> [String: Any] {
+        [
+            // Always sent, even when empty: Python loads the file itself when
+            // this is missing, and two copies of the voice that can disagree is
+            // worse than one that is occasionally blank.
+            "brand_voice": brandVoice,
+            "edits":       edits,
+        ]
+    }
+
     /// The whole manifest render_friday_override.py reads, assembled in one
     /// place (#266).
     ///
@@ -855,18 +959,9 @@ actor PythonBridge {
             throw PythonBridgeError.invalidOutput("Could not serialise current caption.")
         }
 
-        let manifest: [String: Any] = [
-            "event":         event.name,
-            "org":           event.org,
-            "venue":         event.venue,
-            "venue_context": event.venueContext,
-            "date":          event.isoDate,
-            "shoot_type":    event.shootType.pythonValue,
-            "day":           day.rawValue,
-            "program":       programDict,
-            "existing":      captionDict,
-            "feedback":      feedback,
-        ]
+        let manifest = Self.buildCaptionRevisionManifest(
+            event: event, day: day, program: programDict,
+            existing: captionDict, feedback: feedback)
 
         let manifestData = try JSONSerialization.data(
             withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
@@ -928,17 +1023,8 @@ actor PythonBridge {
             throw PythonBridgeError.invalidOutput("Could not serialise current blog.")
         }
 
-        let manifest: [String: Any] = [
-            "event":         event.name,
-            "org":           event.org,
-            "venue":         event.venue,
-            "venue_context": event.venueContext,
-            "date":          event.isoDate,
-            "shoot_type":    event.shootType.pythonValue,
-            "program":       programDict,
-            "existing":      blogDict,
-            "feedback":      feedback,
-        ]
+        let manifest = Self.buildBlogRevisionManifest(
+            event: event, program: programDict, existing: blogDict, feedback: feedback)
 
         let manifestData = try JSONSerialization.data(
             withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
@@ -988,18 +1074,8 @@ actor PythonBridge {
             try? FileManager.default.removeItem(at: outputFile)
         }
 
-        var manifest: [String: Any] = [
-            "body":        currentBody,
-            "photo_paths": photoPaths.map { $0.path },
-        ]
-        if let event {
-            manifest["venue"] = event.venue
-            if let ocr = event.ocrResult,
-               let program = try? JSONSerialization.jsonObject(
-                   with: JSONEncoder().encode(ocr)) {
-                manifest["program"] = program
-            }
-        }
+        let manifest = Self.buildBlogPhotoSwapManifest(
+            currentBody: currentBody, photoPaths: photoPaths, event: event)
         let manifestData = try JSONSerialization.data(
             withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
         )
@@ -1726,11 +1802,8 @@ actor PythonBridge {
         // Encode org bands as [String: String]
         let orgBandsDict = Dictionary(uniqueKeysWithValues: orgBands.map { ($0.key, $0.value.rawValue) })
 
-        let manifest: [String: Any] = [
-            "posts":                      postsJSON,
-            "org_bands":                  orgBandsDict,
-            "global_hashtags_to_exclude": globalHashtags,
-        ]
+        let manifest = Self.buildAnalyticsManifest(
+            posts: postsJSON, orgBands: orgBandsDict, globalHashtags: globalHashtags)
 
         let manifestData = try JSONSerialization.data(
             withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
@@ -1789,10 +1862,7 @@ actor PythonBridge {
         AppPaths.ensureBrandVoiceSeeded()
         let brandVoice = (try? String(contentsOf: AppPaths.brandVoiceFile, encoding: .utf8)) ?? ""
 
-        let manifest: [String: Any] = [
-            "brand_voice": brandVoice,
-            "edits":       edits,
-        ]
+        let manifest = Self.buildLearnFromEditsManifest(brandVoice: brandVoice, edits: edits)
         let manifestData = try JSONSerialization.data(
             withJSONObject: manifest, options: [.prettyPrinted]
         )

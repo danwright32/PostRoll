@@ -265,27 +265,41 @@ class _ReadVisitor(ast.NodeVisitor):
         )
 
 
-def manifest_reads_from_source(source: str, *, function: str, variable: str,
+def manifest_reads_from_source(source: str, *, function: str | None, variable: str,
                                dynamic: dict[str, list[str]] | None = None,
                                where: str | None = None) -> set[str]:
-    """Keys the named function reads off `variable`."""
-    where = where or function
+    """Keys read off `variable`, inside `function` or at module level.
+
+    `function=None` reads the module body, including the `if __name__` block.
+    Several scripts take their manifest there rather than in a function, and
+    that is genuinely where those modules read their input: moving shipping
+    code into a function so this tool can see it would be changing production
+    to suit the tool.
+    """
+    where = where or function or "<module>"
     tree = ast.parse(source)
 
-    target = None
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function:
-            target = node
-            break
-    if target is None:
-        raise LookupError(
-            f"{where}: the function `{function}` is absent, so the contract "
-            f"points at something that can no longer be checking anything."
-        )
-
     visitor = _ReadVisitor(variable, dynamic or {}, where)
-    visitor._depth = 1
-    visitor.generic_visit(target)
+
+    if function is None:
+        # Depth 1 so `visit_FunctionDef` declines to descend: a same-named local
+        # inside a helper is a different dict, and counting it would put keys in
+        # the contract that never came from the manifest.
+        visitor._depth = 1
+        visitor.generic_visit(tree)
+    else:
+        target = None
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function:
+                target = node
+                break
+        if target is None:
+            raise LookupError(
+                f"{where}: the function `{function}` is absent, so the contract "
+                f"points at something that can no longer be checking anything."
+            )
+        visitor._depth = 1
+        visitor.generic_visit(target)
 
     if not visitor.keys:
         raise LookupError(
