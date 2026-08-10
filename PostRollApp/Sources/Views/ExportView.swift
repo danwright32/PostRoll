@@ -12,6 +12,11 @@ struct ExportView: View {
     /// A layout the user picked that needs confirmation before it rebuilds posts (#71).
     @State private var pendingPreset: PostingPreset? = nil
 
+    /// What the last export left in its folder (#247). Held in state and read
+    /// on appear rather than computed in `body`, because it touches the disk
+    /// and `body` runs on every redraw.
+    @State private var exportFolderStatus: ExportFolderStatus = .neverExported
+
     /// Export progress is owned app-scoped by ExportManager so it survives this
     /// view being torn down on an event switch (`.id(event.id)` remount) and
     /// drives the sidebar "Exporting…" pill. `nil` run = the ready screen.
@@ -66,6 +71,15 @@ struct ExportView: View {
                     lastExportFolder = candidate
                 }
             }
+            exportFolderStatus = ExportFolderStatus.of(event)
+        }
+        // Re-read when this export finishes, and when the recorded folder
+        // changes, so the banner is never a claim about a previous run.
+        .onChange(of: run?.phase) { _, _ in
+            exportFolderStatus = ExportFolderStatus.of(event)
+        }
+        .onChange(of: event.exportPath) { _, _ in
+            exportFolderStatus = ExportFolderStatus.of(event)
         }
         .fileImporter(
             isPresented: $showingFolderPicker,
@@ -122,6 +136,17 @@ struct ExportView: View {
                 message: "Exports captions and blog draft, then generates story images, Wednesday collage, Thursday scroll reel, Friday before/after, and Tuesday speed edit reel (where inputs are provided). Requires ffmpeg for reels."
             )
             .padding(.horizontal, Spacing.xl)
+
+            // What the LAST export left behind, read from its manifest (#247).
+            // The moment an unfinished folder is worth knowing about is here,
+            // coming back to the event, not when Dan is already in Finder
+            // wondering why a day is empty. Shown only when there is something
+            // wrong: a banner on every visit to a good export is how a real
+            // warning stops being read.
+            if let message = exportFolderStatus.message, exportFolderStatus.needsAttention {
+                BrandBanner(icon: "exclamationmark.triangle", message: message, style: .warning)
+                    .padding(.horizontal, Spacing.xl)
+            }
 
             presetPicker
                 .padding(.horizontal, Spacing.xl)
