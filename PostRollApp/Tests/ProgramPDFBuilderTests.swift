@@ -1,4 +1,9 @@
 import XCTest
+
+/// Raised when a test fixture could not be built. Its own error so the
+/// failure above reads as "the fixture broke" rather than as the behaviour
+/// under test being wrong (#224).
+enum ProgramFixtureError: Error { case couldNotEncodePNG }
 import PDFKit
 import AppKit
 import CoreGraphics
@@ -32,7 +37,11 @@ final class ProgramPDFBuilderTests: XCTestCase {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let png = rep.representation(using: .png, properties: [:]) else {
-            throw XCTSkip("Couldn't encode test PNG")
+            // A failure, not a skip: encoding a bitmap in process has no
+            // reason to fail, and a skip here would report the whole suite
+            // green while the test it feeds never ran (#224).
+            XCTFail("could not encode the test PNG, so nothing below was exercised")
+            throw ProgramFixtureError.couldNotEncodePNG
         }
         let url = dir.appendingPathComponent(name)
         try png.write(to: url)
@@ -59,7 +68,11 @@ final class ProgramPDFBuilderTests: XCTestCase {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let png = rep.representation(using: .png, properties: [:]) else {
-            throw XCTSkip("Couldn't encode test PNG")
+            // A failure, not a skip: encoding a bitmap in process has no
+            // reason to fail, and a skip here would report the whole suite
+            // green while the test it feeds never ran (#224).
+            XCTFail("could not encode the test PNG, so nothing below was exercised")
+            throw ProgramFixtureError.couldNotEncodePNG
         }
         let url = dir.appendingPathComponent(name)
         try png.write(to: url)

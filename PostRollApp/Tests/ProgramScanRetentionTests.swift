@@ -139,7 +139,11 @@ final class VerifiedProgramPDFWriteTests: XCTestCase {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let png = rep.representation(using: .png, properties: [:]) else {
-            throw XCTSkip("couldn't build a test PNG")
+            // A failure, not a skip: encoding a bitmap in process has no
+            // reason to fail, and a skip here would report the whole suite
+            // green while the test it feeds never ran (#224).
+            XCTFail("could not encode the test PNG, so nothing below was exercised")
+            throw ProgramFixtureError.couldNotEncodePNG
         }
         return png
     }
