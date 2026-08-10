@@ -40,8 +40,12 @@ final class GenerationManager {
     /// graphics-only-on-full-run: pass `true` to also re-render previews for a
     /// partial retry (used when switching the posting preset, which changes the
     /// media for the affected days, not just their captions).
+    /// - Parameter forcePaidPath: pin this run to the metered API whatever the
+    ///   subscription switch says (#257). Set when Dan chooses to finish a
+    ///   capped week by paying, so the choice holds for the run he made it on
+    ///   rather than depending on a setting he did not touch.
     func start(eventID: Event.ID, retryDays: Set<String>?, appState: AppState,
-               regenerateGraphics: Bool? = nil) {
+               regenerateGraphics: Bool? = nil, forcePaidPath: Bool = false) {
         // Snapshot the event for its input paths. The write-back later re-reads
         // the live event so edits made during the run aren't clobbered.
         guard let ev = appState.events.first(where: { $0.id == eventID }) else { return }
@@ -67,7 +71,8 @@ final class GenerationManager {
                 : nil
 
             do {
-                let result = try await PythonBridge.shared.runWeekGeneration(event: ev, onlyDays: onlyDays)
+                let result = try await PythonBridge.shared.runWeekGeneration(
+                    event: ev, onlyDays: onlyDays, forcePaidPath: forcePaidPath)
                 let graphicsOutcome = await graphicsTask?.value
                 var mediaResult: PythonBridge.PreviewGenerationResult?
                 var mediaErrors: [String: String] = [:]

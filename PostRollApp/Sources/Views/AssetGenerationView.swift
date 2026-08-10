@@ -167,8 +167,18 @@ struct AssetGenerationView: View {
                         removal: .opacity
                     ))
             case .failed(let message):
-                errorView(message: message)
-                    .transition(.asymmetric(insertion: .opacity, removal: .opacity))
+                // A week stopped by a usage cap is not a failed week: the days
+                // that finished are real, and there are two ways forward rather
+                // than only "try again" (#257). An error state and this state
+                // are different screens.
+                switch FailureScreen.resolve(message: message, week: liveWeekResult) {
+                case .halted(let halted):
+                    haltedView(halted)
+                        .transition(.asymmetric(insertion: .opacity, removal: .opacity))
+                case .error(let text):
+                    errorView(message: text)
+                        .transition(.asymmetric(insertion: .opacity, removal: .opacity))
+                }
             case .done:
                 doneView
                     .transition(.asymmetric(
@@ -299,6 +309,78 @@ struct AssetGenerationView: View {
         let m = elapsedSeconds / 60
         let s = elapsedSeconds % 60
         return String(format: "%d:%02d", m, s)
+    }
+
+    // MARK: - Halted by a usage cap (#257)
+
+    /// Read from the live event rather than the captured prop, so a re-run that
+    /// clears the halt stops showing this screen immediately.
+    private var liveWeekResult: WeekGenerationResult? {
+        (appState.events.first(where: { $0.id == event.id }) ?? event).weekResult
+    }
+
+    private func haltedView(_ halted: HaltedWeek) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
+                EventHeader(event: event, subtitle: "Stopped at the usage limit")
+                    .padding([.horizontal, .top], Spacing.xl)
+
+                BrandBanner(icon: "hourglass", message: halted.reason, style: .warning)
+                    .padding(.horizontal, Spacing.xl)
+
+                // What survived, said plainly. Without this the screen reads as
+                // a total loss and Dan re-runs work he already has.
+                Text(halted.finishedDays.isEmpty
+                     ? "The run stopped before any day finished, so there is nothing to keep yet."
+                     : "Finished and saved: "
+                       + halted.finishedDays.map { $0.rawValue.capitalized }
+                                            .joined(separator: ", ") + ".")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.warmMid)
+                    .padding(.horizontal, Spacing.xl)
+
+                VStack(alignment: .leading, spacing: Spacing.md) {
+                    ForEach(halted.choices, id: \.self) { choice in
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            // The paid route carries the emphasised style so the
+                            // two are not offered as if equivalent. Spending
+                            // money should look like the deliberate one.
+                            if choice.spendsMoney {
+                                Button(choice.label) { take(choice) }
+                                    .buttonStyle(BrandButtonStyle())
+                            } else {
+                                Button(choice.label) { take(choice) }
+                                    .buttonStyle(.plain)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color.warmMid)
+                            }
+                            Text(choice.explanation)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.warmMid)
+                        }
+                    }
+                }
+                .padding(.horizontal, Spacing.xl)
+                .padding(.bottom, Spacing.xl)
+            }
+        }
+    }
+
+    private func take(_ choice: HaltedWeek.Choice) {
+        switch choice {
+        case .waitForReset:
+            // Keep everything and go back to the results, which is what the
+            // partial week is for.
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                genManager.clearOutcome(eventID: event.id)
+            }
+        case .finishOnPaidPath:
+            // Pinned for THIS run rather than by changing a setting, so paying
+            // is the deliberate act it was presented as.
+            genManager.clearOutcome(eventID: event.id)
+            genManager.start(eventID: event.id, retryDays: nil,
+                             appState: appState, forcePaidPath: true)
+        }
     }
 
     // MARK: - Error

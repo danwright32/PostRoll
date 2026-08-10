@@ -182,3 +182,20 @@ def test_the_settings_file_does_not_outlive_the_call(monkeypatch):
 
     import os
     assert not os.path.exists(captured["path"])
+
+
+def test_the_swift_mirror_of_the_switch_name_agrees():
+    """Swift exports this variable to force one run onto the paid path (#257).
+
+    It cannot import the Python constant, so the name is restated there. A
+    mismatch is silent in the worst way: the override would export a variable
+    nothing reads, and a run Dan paid for on purpose would quietly go back to
+    the subscription.
+    """
+    from pathlib import Path
+
+    swift = (Path(__file__).resolve().parent.parent
+             / "PostRollApp" / "Sources" / "Services" / "HaltedWeek.swift").read_text()
+    assert f'static let subscriptionEnv = "{transport.SUBSCRIPTION_ENV}"' in swift, (
+        f"Swift no longer mirrors {transport.SUBSCRIPTION_ENV}; the paid-path "
+        f"override would export a name Python does not read")

@@ -18,8 +18,10 @@ ships in the only honest shape available.
   blip than a cap.
 
 `CALIBRATED` stays False until a real cap has been seen and the patterns are
-checked against it. Activation is tracked on #211 so the observe-only state
-cannot quietly become permanent.
+checked against it. Activation is tracked on #258 so the observe-only state
+cannot quietly become permanent. (#211 was split; #258 is the half that waits
+on observing a real cap, and it is also where the "warn before the wall"
+threshold gets chosen, since there is no honest basis for one until then.)
 """
 
 from __future__ import annotations

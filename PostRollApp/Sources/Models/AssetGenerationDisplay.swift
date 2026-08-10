@@ -39,3 +39,19 @@ enum AssetGenerationDisplay: Equatable {
         return hasWeekResult ? .done : .configuring
     }
 }
+
+/// Which screen a run that did not finish shows (#257).
+///
+/// A week stopped by a usage cap is not a failed week: the days that finished
+/// are real, and there are two ways forward rather than only "try again". An
+/// error state and a halt are different screens, so the choice between them is
+/// made here rather than inside the view, where nothing could test it.
+enum FailureScreen: Equatable {
+    case halted(HaltedWeek)
+    case error(String)
+
+    static func resolve(message: String, week: WeekGenerationResult?) -> FailureScreen {
+        if let week, let halted = HaltedWeek.from(week) { return .halted(halted) }
+        return .error(message)
+    }
+}
