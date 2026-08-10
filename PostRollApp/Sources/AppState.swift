@@ -110,6 +110,11 @@ final class AppState {
         // empty or partial events array this would orphan, and delete, every
         // media file on disk.
         OrphanedMediaCleanup.sweep(events: events)
+
+        // Same guard, same reason: the per-event progress files a deleted event
+        // leaves behind. Housekeeping rather than space, so that the app has one
+        // answer to who clears up per-event scratch files (#235).
+        ProgressFileCleanup.sweep(events: events)
     }
 
     /// Coalesces per-keystroke saves. Owned here rather than by the review
