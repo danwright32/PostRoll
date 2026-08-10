@@ -91,6 +91,19 @@ def _record(text: str, path: Path) -> None:
               file=sys.stderr, flush=True)
 
 
+def _running_under_test() -> bool:
+    """Whether this process is a test run.
+
+    `PYTEST_CURRENT_TEST` is set by pytest for the duration of each test, so it
+    is true exactly while a test is executing and false in the app's own
+    subprocess, which is the distinction that matters. Its own function so the
+    behaviour on both sides of it can be asserted.
+    """
+    import os
+
+    return "PYTEST_CURRENT_TEST" in os.environ
+
+
 def default_record_path() -> Path:
     from .usage_log import default_log_path
 
@@ -173,8 +186,27 @@ def classify(text: str, *, record_to: Path | str | None = None,
         if m:
             return Signal("transient", f"matched '{m.group(0)}' in: {text[:300]}")
 
-    target = Path(record_to) if record_to is not None else default_record_path()
-    _record(text, target)
+    if record_to is not None:
+        _record(text, Path(record_to))
+    elif _running_under_test():
+        # Structural refusal, not a convention. Three tests called this without
+        # a path, so every local run appended to the app's real data file, and
+        # 269 lines of "something new" and "ordinary failure" built up in it.
+        # That was invisible while nothing read the file; once the app started
+        # showing these to Dan (#262) it would have reported hundreds of
+        # unrecognised failures that were all fixtures.
+        #
+        # Living here rather than in the tests is the point: "remember to pass a
+        # temp path" is a thing to forget, and the next person to forget it gets
+        # no warning at all (L2).
+        print(
+            "refusing to record an unrecognised failure to the live data "
+            f"directory during a test run ({default_record_path()}). Pass "
+            "record_to= a temp path if this test means to check recording.",
+            file=sys.stderr, flush=True,
+        )
+    else:
+        _record(text, default_record_path())
     if announce:
         print(
             "warning: did not recognise this failure as either a usage cap or "
