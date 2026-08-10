@@ -45,6 +45,7 @@ from postroll.media import design_tokens as tokens
 from postroll.media import generate_before_after as ba_mod
 from postroll.media import generate_collage as collage_mod
 from postroll.media import generate_reel_morph as morph_mod
+from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
 from postroll.media import generate_story as story_mod
@@ -188,6 +189,26 @@ def photos(tmp_path) -> list[str]:
 
 
 @pytest.fixture
+def screen_recording(tmp_path) -> str:
+    """A stand-in for a Lightroom screen capture (#263).
+
+    Synthesised rather than committed: a real capture is tens of megabytes of
+    somebody's actual screen, and what the template does with it (speed it up,
+    scale it, put chrome round it) does not depend on what it shows. It does
+    depend on the shape, so this is a real 16:9 desktop aspect at the frame
+    rate the template expects, with moving structure rather than a flat colour
+    so a scaling or placement regression has something to move.
+    """
+    path = tmp_path / "recording.mov"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi",
+         "-i", f"testsrc2=size=1920x1080:rate={screen_mod.FPS}:duration=6",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)],
+        check=True, capture_output=True)
+    return str(path)
+
+
+@pytest.fixture
 def silent_audio(tmp_path) -> str:
     """A local silent track.
 
@@ -325,11 +346,49 @@ def test_scroll_reel_matches_its_reference_frame(photos, silent_audio, tmp_path)
     assert_matches_golden(frame, "scroll_reel", tmp_path)
 
 
+@needs_ffmpeg
+@requires_mac_fonts
+def test_screen_reel_matches_its_reference_frame(photos, silent_audio, screen_recording, tmp_path):
+    """#263: the last template without a reference frame.
+
+    It was left out because it takes a screen recording as an input and the
+    harness had none. That made it the only template where a contrast or
+    legibility regression could still ship unseen, which is exactly the failure
+    #163 was written for: the last two of those passed a fully green suite.
+
+    The recording is synthesised by ffmpeg rather than checked in: a real
+    Lightroom capture would be tens of megabytes of somebody's actual screen,
+    and what the template does with it (speed it up, scale it, put chrome
+    round it) does not depend on what it shows.
+    """
+    # A short edit rather than the shipping 20 seconds. `target_duration` is a
+    # real parameter of the generator, not a seam opened for the test, and the
+    # frame under test is the chrome, which the duration does not change.
+    video = screen_mod.generate_reel_screen(
+        recording_path=screen_recording,
+        raw_path=photos[0], edit_path=photos[1], audio_path=silent_audio,
+        output_path=str(tmp_path / "screen.mp4"),
+        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
+        logo_path=LOGO, target_duration=2.0)
+
+    frame = _frame_from_encoded_video(video, 0.6, tmp_path / "screen.png")
+    assert_shows_real_content(frame, "screen_reel")
+    # The title band on the cream header. This template draws dark text on
+    # cream with no rule lines, so the header is where an invisible-ink
+    # regression would land, the same one the slider reel shipped.
+    assert_ink_reads_against_its_background(
+        frame,
+        (0, screen_mod.TITLE_TOP_Y,
+         screen_mod.CANVAS_W, screen_mod.TITLE_TOP_Y + 90),
+        "screen_reel")
+    assert_matches_golden(frame, "screen_reel", tmp_path)
+
+
 # ── the guards on the guards ──────────────────────────────────────────────────
 
 GOLDEN_NAMES = {
     "collage", "story", "before_after",
-    "slider_reel", "morph_reel", "scroll_reel",
+    "slider_reel", "morph_reel", "scroll_reel", "screen_reel",
 }
 
 
@@ -348,7 +407,7 @@ def test_the_reel_references_come_from_an_encoded_video():
     # the template's own helpers is what hid the last regression, so the reel
     # tests must go through ffmpeg rather than through PIL.
     source = Path(__file__).read_text()
-    for reel in ("slider_reel", "morph_reel", "scroll_reel"):
+    for reel in ("slider_reel", "morph_reel", "scroll_reel", "screen_reel"):
         block = source.split(f'"{reel}", tmp_path)')[0].rsplit("def test_", 1)[1]
         assert "_frame_from_encoded_video" in block, (
             f"{reel} builds its frame without decoding the encoded file")
