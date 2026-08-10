@@ -161,3 +161,56 @@ def test_ids_are_unique_so_two_flags_cannot_collapse_into_one():
     data = {"performers": [{"name": "5afa"}, {"name": "Marguerite Dubwah"}]}
     flags = cross_check_against_vision(data, BLUDLINE_VISION_TEXT)
     assert len({f["id"] for f in flags}) == len(flags) == 2
+
+
+# ── standing down without taking the review with it ───────────────────────────
+
+def test_a_program_too_thin_to_check_does_not_stop_the_rest_of_the_review():
+    """Found after shipping: a sparse program killed ALL flagging.
+
+    A one-page flyer or a poster has a real text layer with very few words in
+    it. Treating that as an authority would flag every correct name, so the
+    spelling check stands down. But it was standing down by raising out of the
+    whole flagging step, so Dan lost the ordinary review too, which has nothing
+    to do with spelling, and got no flags at all.
+
+    Standing down and taking everything else with it is not failing loudly, it
+    is failing wide.
+    """
+    from postroll.ai.flag_issues import vision_flags_or_reason
+
+    flags, reason = vision_flags_or_reason(_ocr("Safa"), "BLUDLINE Greenwich House")
+    assert flags == []
+    assert reason and "authority" in reason.lower(), (
+        f"the reason must survive so it can be shown, got {reason!r}")
+
+
+def test_a_usable_layer_reports_no_reason_to_stand_down():
+    from postroll.ai.flag_issues import vision_flags_or_reason
+
+    flags, reason = vision_flags_or_reason(_ocr("5afa"), BLUDLINE_VISION_TEXT)
+    assert reason is None
+    assert len(flags) == 1
+
+
+def test_no_layer_at_all_is_not_a_stand_down_reason():
+    # Nothing was asked of it, so there is nothing to report.
+    from postroll.ai.flag_issues import vision_flags_or_reason
+
+    assert vision_flags_or_reason(_ocr("Safa"), None) == ([], None)
+
+
+def test_the_swift_mirror_of_the_thinness_rule_agrees():
+    """Swift judges thinness too, so the reason reaches Dan on screen (#209).
+
+    A drift here is silent and one-sided: Swift would hand over a layer Python
+    then refuses, and the only trace would be a log line nobody reads.
+    """
+    from pathlib import Path
+
+    from postroll.ai.vision_cross_check import MIN_VISION_WORDS
+
+    swift = (Path(__file__).resolve().parent.parent / "PostRollApp" / "Sources"
+             / "Services" / "VisionTextLayer.swift").read_text()
+    assert f"static let minimumWords = {MIN_VISION_WORDS}" in swift, (
+        f"Swift no longer mirrors MIN_VISION_WORDS ({MIN_VISION_WORDS})")

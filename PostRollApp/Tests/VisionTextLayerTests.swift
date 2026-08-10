@@ -20,9 +20,9 @@ final class VisionTextLayerTests: XCTestCase {
             pdfExists: true,
             currentPages: pages,
             bakedFingerprint: currentFingerprint,
-            extractedText: "Safa @safa.wav")
+            extractedText: "BLUDLINE Safa @safa.wav vocals Marguerite Dubois violin Presented by Greenwich House Yefim Kolodkin conductor")
 
-        XCTAssertEqual(result, .ready("Safa @safa.wav"))
+        XCTAssertEqual(result, .ready("BLUDLINE Safa @safa.wav vocals Marguerite Dubois violin Presented by Greenwich House Yefim Kolodkin conductor"))
     }
 
     func testNoPdfYetIsItsOwnAnswer() {
@@ -52,7 +52,7 @@ final class VisionTextLayerTests: XCTestCase {
                 pdfPath: URL(fileURLWithPath: "/tmp/program.pdf"), pdfExists: true,
                 currentPages: pages + [URL(fileURLWithPath: "/tmp/p3.png")],
                 bakedFingerprint: currentFingerprint,
-                extractedText: "Safa @safa.wav"),
+                extractedText: "BLUDLINE Safa @safa.wav vocals Marguerite Dubois violin Presented by Greenwich House Yefim Kolodkin conductor"),
             .unavailable(.stale))
     }
 
@@ -81,11 +81,40 @@ final class VisionTextLayerTests: XCTestCase {
         }
     }
 
+    func testAProgramTooThinToCheckAgainstIsItsOwnAnswer() {
+        // A poster or a one-page flyer has a real text layer holding a handful
+        // of words. Treating that as an authority would flag every correct name.
+        XCTAssertEqual(
+            VisionTextLayer.availability(
+                pdfPath: URL(fileURLWithPath: "/tmp/program.pdf"), pdfExists: true,
+                currentPages: pages, bakedFingerprint: currentFingerprint,
+                extractedText: "BLUDLINE Greenwich House"),
+            .unavailable(.tooThinToBeAProgram))
+    }
+
+    func testARealProgramPageIsNotMistakenForATooThinOne() {
+        let page = (1...12).map { "word\($0)" }.joined(separator: " ")
+        guard case .ready = VisionTextLayer.availability(
+            pdfPath: URL(fileURLWithPath: "/tmp/program.pdf"), pdfExists: true,
+            currentPages: pages, bakedFingerprint: currentFingerprint,
+            extractedText: page) else {
+            return XCTFail("a real page was refused, so no program would ever be checked")
+        }
+    }
+
+    func testTheThinProgramMessageSaysTheRestWasStillReviewed() {
+        // The whole point of the fix: the spelling check stands down alone. A
+        // message that only says it did not run reads as though nothing ran.
+        XCTAssertTrue(VisionTextLayer.Unavailable.tooThinToBeAProgram
+            .explanation.lowercased().contains("still reviewed"))
+    }
+
     func testEveryFailureSaysWhatItMeansForTheSpellingCheck() {
         // A message naming only a state ("PDF stale") leaves Dan to work out
         // whether it mattered. Each has to say the check did not run.
         let all: [VisionTextLayer.Unavailable] = [
             .notBuiltYet, .missingOnDisk, .stale, .noTextRecognised,
+            .tooThinToBeAProgram,
         ]
         var seen = Set<String>()
         for reason in all {
