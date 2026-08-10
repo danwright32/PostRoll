@@ -257,6 +257,10 @@ struct EventHeader: View {
                 .font(.system(size: 10, weight: .medium))
                 .tracking(1.4)
                 .foregroundStyle(Color.roseGold)
+
+            StageStepBar(event: event)
+                .padding(.top, 8)
+
             RoseGoldDivider()
                 .padding(.top, 6)
         }
@@ -535,5 +539,80 @@ private struct ProgramThumbnail: View {
             }.value
             state = result
         }
+    }
+}
+
+
+// MARK: - Stage step bar
+
+/// The event's screens, reachable directly (#183).
+///
+/// Before this, `EventDetailView` routed purely on `event.stage`, so exactly
+/// one screen was open at a time and moving between them meant walking the back
+/// button one screen at a time, each click writing a new stage as a side
+/// effect. Getting from Export back to the Thursday reel was two clicks and two
+/// stage writes, with nothing saying where you were in the sequence.
+///
+/// `event.stage` is still the router: this sets it directly instead of stepping
+/// through it. What can be opened, and why not when it cannot, is
+/// `StageNavigation`, which is pure and tested on its own.
+struct StageStepBar: View {
+    let event: Event
+    @Environment(AppState.self) private var appState
+
+    private var here: EventStage { StageNavigation.step(containing: event.stage) }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(StageNavigation.steps.enumerated()), id: \.element) { index, stage in
+                if index > 0 {
+                    Rectangle()
+                        .fill(Color.creamEdge)
+                        .frame(width: 12, height: 1)
+                }
+                step(stage)
+            }
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private func step(_ stage: EventStage) -> some View {
+        let isHere = stage == here
+        let blocked = StageNavigation.blockedReason(for: stage, in: event)
+        let done = StageNavigation.isBehind(stage, current: event.stage)
+
+        Button {
+            guard blocked == nil, !isHere else { return }
+            // The LIVE record, never the captured prop: a stage change applied
+            // to this screen's snapshot writes back over everything saved
+            // since it opened (#103).
+            if let ev = EventStageTransition.applying(stage, toEventWithID: event.id,
+                                                     in: appState.events) {
+                appState.updateEvent(ev)
+            }
+        } label: {
+            Text(StageNavigation.title(stage))
+                .font(.system(size: 9, weight: isHere ? .semibold : .regular))
+                .tracking(0.6)
+                .foregroundStyle(colour(isHere: isHere, done: done, blocked: blocked != nil))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.xs)
+                        .fill(isHere ? Color.roseGold.opacity(0.10) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(blocked != nil || isHere)
+        // The refusal says which work is missing rather than leaving a control
+        // that greys out and explains nothing.
+        .help(blocked ?? (isHere ? "You are here" : "Go to \(StageNavigation.title(stage))"))
+    }
+
+    private func colour(isHere: Bool, done: Bool, blocked: Bool) -> Color {
+        if isHere { return Color.roseGold }
+        if blocked { return Color.warmMid.opacity(0.35) }
+        return done ? Color.warmMid : Color.warmMid.opacity(0.7)
     }
 }
