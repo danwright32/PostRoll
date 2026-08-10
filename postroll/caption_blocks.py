@@ -18,6 +18,19 @@ from typing import Any, Iterable
 ALT_TEXT = "ALT TEXT:"
 PHOTO_TAGS = "PHOTO TAGS:"
 TAG_LIST = "TAG LIST:"
+TAGS_DROPPED = "TAGS THAT DID NOT FIT:"
+
+#: How many accounts Instagram will tag on one post (#281).
+#:
+#: 20, confirmed by Dan on 2026-08-10. Named here with that date rather than
+#: typed inline at each use, because Instagram has changed limits of this kind
+#: before and a number nobody can find the provenance of gets copied forward
+#: long after it stopped being true.
+#:
+#: Past this the extra handles are simply not tagged when the list is pasted
+#: in, and nothing said which ones fell off, so the export read as complete
+#: either way.
+MAX_TAGS_PER_POST = 20
 
 #: The days that carry a reel and therefore the whole week's tag list.
 REEL_DAYS = ("tuesday", "thursday")
@@ -49,10 +62,33 @@ def week_tag_list(days: Iterable[tuple[dict[str, Any] | None,
     anyone taggable on any other day is taggable on the reel, and there is no
     per-photo tag data for a reel day to draw on (#222).
     """
-    seen: set[str] = set()
-    out: list[str] = []
+    return week_tags(days)[0]
 
-    def add(raw: str) -> None:
+
+def week_tags(days: Iterable[tuple[dict[str, Any] | None,
+                                   dict[str, list[str]] | None,
+                                   list[Any] | None]],
+              limit: int = MAX_TAGS_PER_POST) -> tuple[list[str], list[str]]:
+    """The handles that fit on a post, and the ones that do not (#281).
+
+    Returns (kept, dropped). Both, because the whole defect was that the
+    overflow went nowhere: Instagram silently ignores handles past its limit,
+    so a week at a multi-ensemble venue tagged twenty people and lost the rest
+    with the export reading as complete either way.
+
+    Handles that appear in a photo's own tags come FIRST, ahead of ones that
+    only appear as a day-level tag, so the people actually in the pictures keep
+    their slots by construction. Within each group the original traversal order
+    holds, so the list is stable rather than dictionary order.
+
+    `tests/fixtures/caption_blocks.json` is the contract this and
+    `CaptionBlocks.weekTags` both satisfy.
+    """
+    seen: set[str] = set()
+    in_photos: list[str] = []
+    day_level: list[str] = []
+
+    def add(raw: str, into: list[str]) -> None:
         name = bare_username(raw)
         if not name:
             return
@@ -62,16 +98,22 @@ def week_tag_list(days: Iterable[tuple[dict[str, Any] | None,
         if key in seen:
             return
         seen.add(key)
-        out.append(name)
+        into.append(name)
 
-    for caption, photo_tags, photos in days:
-        for handle in (caption or {}).get("tag_handles") or []:
-            add(str(handle))
+    # Photos first, so somebody in a picture is never the one cut for somebody
+    # who is only on the day. Both passes run over the whole week before
+    # anything is trimmed.
+    for _caption, photo_tags, photos in days:
         # Photo order, so the list is stable rather than dict order.
         for photo in photos or []:
             for tag in (photo_tags or {}).get(str(photo)) or []:
-                add(str(tag))
-    return out
+                add(str(tag), in_photos)
+    for caption, _photo_tags, _photos in days:
+        for handle in (caption or {}).get("tag_handles") or []:
+            add(str(handle), day_level)
+
+    ordered = in_photos + day_level
+    return ordered[:limit], ordered[limit:]
 
 
 def expected_blocks(*, day: str, is_collage_carousel: bool, has_alt_text: bool,

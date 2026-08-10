@@ -17,6 +17,19 @@ enum CaptionBlocks {
         case tagList   = "TAG LIST:"
     }
 
+    /// The heading the handles that did not fit are printed under (#281).
+    static let tagsDroppedHeader = "TAGS THAT DID NOT FIT:"
+
+    /// How many accounts Instagram will tag on one post (#281).
+    ///
+    /// 20, confirmed by Dan on 2026-08-10. Named here with that date rather
+    /// than typed inline at each use, because Instagram has changed limits of
+    /// this kind before and a number nobody can find the provenance of gets
+    /// copied forward long after it stopped being true. Mirrors
+    /// `caption_blocks.MAX_TAGS_PER_POST`; the shared fixture holds them
+    /// together.
+    static let maxTagsPerPost = 20
+
     /// Instagram's "Tag people" field takes a bare username, so the export
     /// must not carry the @ (#221). Also tolerates a pasted profile URL.
     static func bareUsername(_ raw: String) -> String {
@@ -37,28 +50,57 @@ enum CaptionBlocks {
     /// taggable on the reel, and there is no per-photo tag data for a reel day
     /// to draw on because the tagging control is only offered on collage days.
     static func weekTagList(event: Event) -> [String] {
-        var seen = Set<String>()
-        var out: [String] = []
+        weekTags(event: event).kept
+    }
 
-        func add(_ raw: String) {
+    /// The handles that fit on a post, and the ones that do not (#281).
+    ///
+    /// Both, because the whole defect was that the overflow went nowhere:
+    /// Instagram silently ignores handles past its limit, so a week at a
+    /// multi-ensemble venue tagged twenty people and lost the rest with the
+    /// export reading as complete either way.
+    ///
+    /// Handles that appear in a photo's own tags come FIRST, ahead of ones
+    /// that only appear as a day-level tag, so the people actually in the
+    /// pictures keep their slots by construction.
+    ///
+    /// `tests/fixtures/caption_blocks.json` is the contract this and Python's
+    /// `week_tags` both satisfy.
+    static func weekTags(event: Event,
+                         limit: Int = maxTagsPerPost) -> (kept: [String], dropped: [String]) {
+        var seen = Set<String>()
+        var inPhotos: [String] = []
+        var dayLevel: [String] = []
+
+        func add(_ raw: String, into list: inout [String]) {
             let name = bareUsername(raw)
             guard !name.isEmpty else { return }
             // Case-insensitively deduplicated: Instagram handles are not
             // case sensitive, so two spellings are one person.
             let key = name.lowercased()
             guard seen.insert(key).inserted else { return }
-            out.append(name)
+            list.append(name)
         }
 
+        // Photos across the whole week first, so somebody in a picture is
+        // never the one cut for somebody who is only on the day.
         for day in DayName.allCases {
             guard let posting = event.days[day.rawValue] else { continue }
-            posting.tagHandles.forEach(add)
             // Photo order, so the list is stable rather than dictionary order.
             for url in posting.photoPaths {
-                (posting.photoTags[url.absoluteString] ?? []).forEach(add)
+                for tag in posting.photoTags[url.absoluteString] ?? [] {
+                    add(tag, into: &inPhotos)
+                }
             }
         }
-        return out
+        for day in DayName.allCases {
+            guard let posting = event.days[day.rawValue] else { continue }
+            for handle in posting.tagHandles { add(handle, into: &dayLevel) }
+        }
+
+        let ordered = inPhotos + dayLevel
+        guard ordered.count > limit else { return (ordered, []) }
+        return (Array(ordered.prefix(limit)), Array(ordered.dropFirst(limit)))
     }
 
     /// Which blocks a day is expected to emit (#223).

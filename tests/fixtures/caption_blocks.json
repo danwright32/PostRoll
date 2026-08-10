@@ -1,0 +1,108 @@
+{
+  "_comment": [
+    "The week tag list's cap and ordering, shared by week_tags in",
+    "postroll/caption_blocks.py and CaptionBlocks.weekTags in",
+    "PostRollApp/Sources/Services/CaptionBlocks.swift (#281).",
+    "",
+    "The two are separate implementations in separate languages and CAPTIONS.txt",
+    "is the deliverable, so a rule applied on one side only produces a file that",
+    "reads as complete either way. That is how #221 and #222 were both found.",
+    "",
+    "The rules:",
+    "  1. Instagram tags at most max_tags_per_post accounts on one post. Past",
+    "     that the extra handles are simply not tagged when the list is pasted",
+    "     in, and nothing said which ones fell off.",
+    "  2. Handles that appear in a photo's own tags come before handles that",
+    "     only appear as a day-level tag. The people actually in the pictures",
+    "     are the ones worth the slots, so they survive the cut by construction.",
+    "  3. Within each of those two groups the original traversal order holds, so",
+    "     the list is stable rather than dictionary order.",
+    "  4. Handles are deduplicated case-insensitively, since Instagram handles",
+    "     are not case sensitive and tagging both spellings tags one person",
+    "     twice."
+  ],
+  "max_tags_per_post": 20,
+  "_provenance": "20 tags and 5 collaborators per post, confirmed by Dan on 2026-08-10. Instagram has changed limits of this kind before, so the number lives in code with this date rather than typed inline at each use.",
+  "dropped_header": "TAGS THAT DID NOT FIT:",
+  "cases": [
+    {
+      "_what": "under the cap: everything survives, photo tags still lead",
+      "days": [
+        {"tag_handles": ["dciny"], "photos": ["a.jpg"], "photo_tags": {"a.jpg": ["asinger"]}}
+      ],
+      "kept": ["asinger", "dciny"],
+      "dropped": []
+    },
+    {
+      "_what": "a handle tagged on a photo outranks one only tagged on the day",
+      "days": [
+        {"tag_handles": ["venue", "org"], "photos": ["a.jpg", "b.jpg"],
+         "photo_tags": {"b.jpg": ["performer"]}}
+      ],
+      "kept": ["performer", "venue", "org"],
+      "dropped": []
+    },
+    {
+      "_what": "photo order decides the order within the photo group",
+      "days": [
+        {"tag_handles": [], "photos": ["a.jpg", "b.jpg"],
+         "photo_tags": {"b.jpg": ["second"], "a.jpg": ["first"]}}
+      ],
+      "kept": ["first", "second"],
+      "dropped": []
+    },
+    {
+      "_what": "one handle spelled three ways is one person",
+      "days": [
+        {"tag_handles": ["@Singer", "https://instagram.com/singer/", "singer"],
+         "photos": [], "photo_tags": {}}
+      ],
+      "kept": ["Singer"],
+      "dropped": []
+    },
+    {
+      "_what": "exactly at the cap, nothing is dropped",
+      "days": [
+        {"tag_handles": ["h01", "h02", "h03", "h04", "h05", "h06", "h07", "h08", "h09", "h10",
+                         "h11", "h12", "h13", "h14", "h15", "h16", "h17", "h18", "h19", "h20"],
+         "photos": [], "photo_tags": {}}
+      ],
+      "kept": ["h01", "h02", "h03", "h04", "h05", "h06", "h07", "h08", "h09", "h10",
+               "h11", "h12", "h13", "h14", "h15", "h16", "h17", "h18", "h19", "h20"],
+      "dropped": []
+    },
+    {
+      "_what": "one past the cap: the last day-level handle is the one that goes",
+      "days": [
+        {"tag_handles": ["h01", "h02", "h03", "h04", "h05", "h06", "h07", "h08", "h09", "h10",
+                         "h11", "h12", "h13", "h14", "h15", "h16", "h17", "h18", "h19", "h20",
+                         "h21"],
+         "photos": [], "photo_tags": {}}
+      ],
+      "kept": ["h01", "h02", "h03", "h04", "h05", "h06", "h07", "h08", "h09", "h10",
+               "h11", "h12", "h13", "h14", "h15", "h16", "h17", "h18", "h19", "h20"],
+      "dropped": ["h21"]
+    },
+    {
+      "_what": "over the cap, somebody in a photo keeps their slot and a day-level handle loses one",
+      "days": [
+        {"tag_handles": ["d01", "d02", "d03", "d04", "d05", "d06", "d07", "d08", "d09", "d10",
+                         "d11", "d12", "d13", "d14", "d15", "d16", "d17", "d18", "d19", "d20"],
+         "photos": ["a.jpg"], "photo_tags": {"a.jpg": ["inthephoto"]}}
+      ],
+      "kept": ["inthephoto",
+               "d01", "d02", "d03", "d04", "d05", "d06", "d07", "d08", "d09", "d10",
+               "d11", "d12", "d13", "d14", "d15", "d16", "d17", "d18", "d19"],
+      "dropped": ["d20"]
+    },
+    {
+      "_what": "the whole week counts as one list, not one per day",
+      "days": [
+        {"tag_handles": ["sun"], "photos": [], "photo_tags": {}},
+        {"tag_handles": ["mon"], "photos": [], "photo_tags": {}}
+      ],
+      "kept": ["sun", "mon"],
+      "dropped": []
+    }
+  ]
+}

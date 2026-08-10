@@ -133,7 +133,7 @@ struct EventExporter {
     private static func masterCaptionText(event: Event, result: WeekGenerationResult?,
                                           preset: PostingPreset) -> String {
         var sections: [String] = []
-        let weekTags = CaptionBlocks.weekTagList(event: event)
+        let (weekTags, droppedTags) = CaptionBlocks.weekTags(event: event)
         for day in DayName.allCases {
             guard let cap = result?[day] else { continue }
             var block = "=== \(day.displayName.uppercased()) ===\n\(cap.formatted)"
@@ -174,6 +174,15 @@ struct EventExporter {
                 // they carry the whole week's list: same shoot, same people
                 // (#222).
                 block += "\n\nTAG LIST:\n\(weekTags.joined(separator: ", "))"
+                // What Instagram will not accept, named rather than lost.
+                // Past its limit the extra handles are simply not tagged when
+                // this is pasted in, and nothing said which ones (#281).
+                if !droppedTags.isEmpty {
+                    block += "\n\n\(CaptionBlocks.tagsDroppedHeader)\n"
+                          + "Instagram tags at most \(CaptionBlocks.maxTagsPerPost) accounts "
+                          + "per post, so these did not fit: "
+                          + droppedTags.joined(separator: ", ")
+                }
             }
             sections.append(block)
         }
