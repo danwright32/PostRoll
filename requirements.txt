@@ -8,4 +8,24 @@ anthropic==0.96.0
 pytest==8.4.2
 
 # Static checks, run in CI before the suite (#113).
-ruff>=0.6
+ruff==0.16.2
+
+# Deliberately NOT here: mypy (#243).
+#
+# Measured rather than assumed, on 2026-08-10. Run against the five newest and
+# best annotated modules (ai/transport.py, ai/claude_client.py, ai/progress.py,
+# ai/caption_quality.py, media/probe.py) it reports four findings, all in
+# claude_client, and none of them is a defect:
+#
+#   * two say the token counts passed to the usage log might be None, which the
+#     isinstance guard three lines above already rules out and mypy cannot
+#     narrow through;
+#   * one says Image.LANCZOS is not an attribute, which it is at the Pillow
+#     version pinned above;
+#   * one objects to the shape of a message content list the SDK accepts.
+#
+# So turning it on today would mean shipping four suppressions and no fixes,
+# which is a check that passes by being told to. The pipeline is guarded by
+# 1200+ tests and ruff instead. Revisit if the annotations spread far enough
+# that mypy has something to reason about, and start from these numbers rather
+# than from scratch.

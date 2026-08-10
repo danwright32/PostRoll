@@ -203,3 +203,38 @@ def test_a_missing_font_or_encoder_fails_the_job_rather_than_skipping(swift):
     # nothing, which is the exact failure mode it exists to close.
     assert "POSTROLL_REQUIRE_GOLDENS" in swift
     assert "POSTROLL_REQUIRE_FFMPEG" in swift
+
+
+# ── #105: nothing floats ──────────────────────────────────────────────────────
+
+REQUIREMENTS = REPO_ROOT / "requirements.txt"
+
+
+def test_every_dependency_is_pinned_exactly():
+    """requirements.txt states this rule at the top and then had to keep it.
+
+    A ">=" line means every CI run installs whatever shipped that morning, so
+    an upstream release breaks the build with no change on our side, which has
+    already happened once (#105). `ruff>=0.6` sat one line below the comment
+    saying not to do that, which is how a stated rule quietly stops being one.
+
+    Derived from the file rather than a list here, so the next floored line is
+    caught on the day it lands.
+    """
+    floated = []
+    for line in REQUIREMENTS.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "==" not in stripped:
+            floated.append(stripped)
+    assert not floated, (
+        "these dependencies are not pinned exactly, so CI installs whatever "
+        f"shipped that morning: {floated}")
+
+
+def test_the_requirements_file_is_not_empty():
+    # A gutted file would make the check above pass by having nothing to check.
+    lines = [ln for ln in REQUIREMENTS.read_text().splitlines()
+             if ln.strip() and not ln.strip().startswith("#")]
+    assert len(lines) >= 4, f"only {len(lines)} dependencies listed, so the scan proves little"
