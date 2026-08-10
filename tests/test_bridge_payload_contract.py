@@ -61,6 +61,9 @@ def emitted_keys(payload: dict) -> set[str]:
             function=source["function"],
             variable=source.get("variable"),
             dynamic=dynamic,
+            # Several payloads are LISTS the app decodes as arrays, so the keys
+            # that matter are the entry's, not a wrapper's.
+            element=source.get("element", False),
         )
     return keys
 

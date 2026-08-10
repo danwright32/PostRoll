@@ -232,6 +232,145 @@
       "other": "swift"
     }
   },
+  "web_performers": {
+    "_what": "Who was on stage, read off the event's own web page. A separate lookup from where to find them online.",
+    "python": [
+      {
+        "module": "postroll/ai/enrich_program.py",
+        "function": "_normalise_performers",
+        "variable": "out",
+        "element": true
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "Performer"
+    },
+    "keys": {
+      "name": "swift",
+      "role": "swift",
+      "voice_or_instrument": "swift"
+    }
+  },
+  "handle_suggestions": {
+    "_what": "Suggested social handles for named performers, searched for on the web.",
+    "python": [
+      {
+        "module": "postroll/ai/enrich_program.py",
+        "function": "_normalise_handle_suggestions",
+        "variable": "out",
+        "element": true
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "HandleSuggestion"
+    },
+    "keys": {
+      "name": "swift",
+      "handle": "swift",
+      "profile_url": "swift",
+      "confidence": "swift",
+      "note": "swift"
+    }
+  },
+  "piece_notes": {
+    "_what": "A short programme note per work, looked up once so it is not paid for twice.",
+    "python": [
+      {
+        "module": "postroll/ai/enrich_program.py",
+        "function": "_normalise_piece_notes",
+        "variable": "out",
+        "element": true
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "PieceNoteResult"
+    },
+    "keys": {
+      "title": "swift",
+      "composer": "swift",
+      "notes": "swift"
+    }
+  },
+  "ocr_flags": {
+    "_what": "Fields the OCR review flags as probably wrong, with where each one came from.",
+    "python": [
+      {
+        "module": "postroll/ai/flag_issues.py",
+        "function": "flag_issues",
+        "variable": "flags",
+        "element": true
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "OCRFlag"
+    },
+    "keys": {
+      "id": "swift",
+      "field_path": "swift",
+      "current_value": "swift",
+      "suggested_value": "swift",
+      "concern": "swift",
+      "program_context": "swift"
+    }
+  },
+  "collage_candidates": {
+    "_what": "Alternative collage layouts offered in the gallery, each reproducible from its seed.",
+    "python": [
+      {
+        "module": "postroll/media/generate_collage.py",
+        "function": "generate_collage_candidates",
+        "variable": "results",
+        "element": true
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "CollageCandidate"
+    },
+    "keys": {
+      "seed": "swift",
+      "path": "swift"
+    }
+  },
+  "insight_report": {
+    "_what": "What the Instagram export says performed, and what to change about the voice.",
+    "python": [
+      {
+        "module": "postroll/ai/analyze_posts.py",
+        "function": "_finalize",
+        "variable": "result",
+        "dynamic": {
+          "key": {
+            "from": "postroll.ai.analyze_posts:_EMPTY_REPORT_SHELL"
+          },
+          "track": {
+            "from": "postroll.ai.analyze_posts:_EMPTY_REPORT_SHELL"
+          }
+        }
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "InsightReport"
+    },
+    "keys": {
+      "generated_at": "swift",
+      "date_range_start": "swift",
+      "date_range_end": "swift",
+      "post_count": "swift",
+      "story_count": "swift",
+      "feed_count": "swift",
+      "summary": "swift",
+      "feed_findings": "swift",
+      "story_findings": "swift",
+      "brand_voice_suggestions": "swift",
+      "caveats": "swift"
+    }
+  },
   "flag_review": {
     "_what": "Claude's reply in the OCR correction conversation, plus any patch to apply.",
     "python": [

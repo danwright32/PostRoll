@@ -92,6 +92,68 @@ class TestSubscriptAssignment:
         ) == {"posts", "warnings"}
 
 
+class TestListPayloads:
+    """Several payloads are a LIST of dicts, not one dict.
+
+    The app decodes them as arrays, so the keys that matter are the element's,
+    and the element is usually built inside an append or a comprehension rather
+    than returned on its own.
+    """
+
+    def test_it_reads_dicts_appended_to_the_payload_list(self):
+        assert _keys(
+            '''
+            def build():
+                results = []
+                for x in xs:
+                    results.append({"seed": x, "path": str(x)})
+                return results
+            ''',
+            function="build", variable="results", element=True,
+        ) == {"seed", "path"}
+
+    def test_it_reads_the_elements_of_a_returned_comprehension(self):
+        assert _keys(
+            '''
+            def build():
+                return [{"name": p.name, "handle": p.handle} for p in people]
+            ''',
+            function="build", element=True,
+        ) == {"name", "handle"}
+
+    def test_it_reads_the_elements_of_a_returned_list_literal(self):
+        assert _keys(
+            '''
+            def build():
+                return [{"a": 1}, {"b": 2}]
+            ''',
+            function="build", element=True,
+        ) == {"a", "b"}
+
+    def test_it_ignores_the_outer_dict_when_reading_elements(self):
+        # A wrapper around the list is not the element, and mixing the two
+        # would put keys in the contract that no element carries.
+        assert _keys(
+            '''
+            def build():
+                items = []
+                items.append({"inner": 1})
+                return {"items": items, "count": 1}
+            ''',
+            function="build", variable="items", element=True,
+        ) == {"inner"}
+
+    def test_an_element_payload_that_yields_nothing_still_raises(self):
+        with pytest.raises(LookupError, match="no keys"):
+            _keys(
+                '''
+                def build():
+                    return [x for x in xs]
+                ''',
+                function="build", element=True,
+            )
+
+
 class TestItRefusesToGuess:
     """The failure mode that matters most.
 
