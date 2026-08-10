@@ -176,7 +176,7 @@ final class ExportCompletionTests: XCTestCase {
         // over.
         let manager = ExportManager()
         let id = UUID()
-        manager.setRunForTesting(phase: .done(destination, mediaError: nil), for: id)
+        manager.setRunForTesting(phase: .done(destination, mediaError: nil, mediaWarning: nil), for: id)
         manager.deactivateForTesting(id)
 
         manager.clear(eventID: id)

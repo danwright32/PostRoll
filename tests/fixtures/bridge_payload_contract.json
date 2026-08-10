@@ -390,7 +390,7 @@
     }
   },
   "media_result": {
-    "_what": "The week's rendered graphics, keyed by day, plus per-day failures.",
+    "_what": "The week's rendered graphics, keyed by day, plus per-day failures (errors, which block the export) and per-day notes (warnings, which do not) (#265).",
     "python": [
       {
         "module": "postroll/ai/generate_media.py",
@@ -415,7 +415,8 @@
       "wednesday": "swift",
       "thursday": "swift",
       "friday": "swift",
-      "errors": "swift"
+      "errors": "swift",
+      "warnings": "swift"
     }
   },
   "media_day": {

@@ -19,7 +19,11 @@ final class ExportManager {
     enum Phase: Equatable {
         case exportingText
         case generatingMedia(URL)            // folder where text export landed
-        case done(URL, mediaError: String?)  // export finished (asset gen may have warned)
+        /// Export finished. `mediaError` means the folder is missing
+        /// something and the event is NOT archived; `mediaWarning` means an
+        /// input was missing and the folder is complete anyway. Two fields
+        /// because they need opposite responses (#265).
+        case done(URL, mediaError: String?, mediaWarning: String?)
         case failed(String)
     }
 
@@ -134,7 +138,7 @@ final class ExportManager {
     func skipMedia(eventID: Event.ID) {
         guard let run = tracker.job(for: eventID), case .generatingMedia(let folder) = run.phase else { return }
         tracker.update(eventID) {
-            $0.phase = .done(folder, mediaError: nil)
+            $0.phase = .done(folder, mediaError: nil, mediaWarning: nil)
             $0.finishingMedia = true
         }
         // Deactivated so the sidebar stops claiming "Exporting…" while the
@@ -222,6 +226,7 @@ final class ExportManager {
             tracker.update(eventID) { $0.estimatedMediaSeconds = refinedEstimate }
 
             var mediaError: String? = nil
+            var mediaWarning: String? = nil
             if !daysNeedingPython.isEmpty {
                 // Run Python only for the days without complete previews.
                 do {
@@ -235,16 +240,14 @@ final class ExportManager {
                     // with a day's asset quietly missing from the folder (#262).
                     // A zero exit is not a promise every day rendered.
                     //
-                    // Only days that produced NOTHING count. Python also files a
-                    // note under `errors` for a day that rendered fine with an
-                    // optional input missing, and treating that as a failure
-                    // would claim files are missing that are in the folder and
-                    // stop a good export ever being marked done.
-                    let failures = MediaErrorSummary.failures(
-                        errors: media.errors, paths: media.paths)
-                    if !failures.isEmpty {
-                        mediaError = MediaErrorSummary.sentence(failures)
-                    }
+                    // Every entry in `errors` is a failure now. It used to also
+                    // carry notes about days that rendered fine with an optional
+                    // input missing, which had to be guessed apart by checking
+                    // whether the day produced any files; Python separates them
+                    // at the source (#265), so a warning blocks nothing and is
+                    // still said out loud.
+                    mediaError = MediaErrorSummary.sentence(media.errors)
+                    mediaWarning = MediaErrorSummary.warningSentence(media.warnings)
                     // For the Python-regenerated days, overwrite fresh PNGs with any
                     // approved previews that do exist (partial-preview edge case).
                     for day in daysToProcess where daysNeedingPython.contains(day.rawValue) {
@@ -277,6 +280,7 @@ final class ExportManager {
             finishSuccess(eventID: eventID, folder: folder, onlyDay: onlyDay,
                           daysNeedingPython: daysNeedingPython,
                           mediaError: combinedError.isEmpty ? nil : combinedError,
+                          mediaWarning: mediaWarning,
                           appState: appState)
         } catch is CancellationError {
             // Cancelled (skipMedia handles its own terminal state).
@@ -292,6 +296,7 @@ final class ExportManager {
 
     private func finishSuccess(eventID: Event.ID, folder: URL, onlyDay: DayName?,
                                daysNeedingPython: [String], mediaError: String?,
+                               mediaWarning: String? = nil,
                                appState: AppState) {
         // Only learn from full copy-only runs so the mean stays a clean signal
         // for the common fast path.
@@ -301,7 +306,7 @@ final class ExportManager {
 
         tracker.update(eventID) {
             $0.task = nil
-            $0.phase = .done(folder, mediaError: mediaError)
+            $0.phase = .done(folder, mediaError: mediaError, mediaWarning: mediaWarning)
             // The media step is genuinely over now, whether or not Skip was
             // pressed earlier, so the sidebar stops saying assets are still
             // being written (#182).

@@ -356,7 +356,10 @@ final class BridgePayloadContractTests: XCTestCase {
     // MARK: - Reader payloads
 
     func testMediaResultReadsEveryDeclaredKey() throws {
-        var json: [String: Any] = ["errors": ["tuesday": "ffmpeg died"]]
+        var json: [String: Any] = [
+            "errors": ["tuesday": "ffmpeg died"],
+            "warnings": ["friday": "B&W photo not found: /photos/bw.jpg"],
+        ]
         for day in PythonBridge.PreviewGenerationResult.dayOrder {
             json[day] = ["story": "/p/\(day)/story.png"]
         }
@@ -368,11 +371,15 @@ final class BridgePayloadContractTests: XCTestCase {
             proved.insert(day)
         }
         if !parsed.errors.isEmpty { proved.insert("errors") }
+        if !parsed.warnings.isEmpty { proved.insert("warnings") }
         try assertCovers("media_result", proved)
 
         XCTAssertEqual(parsed.errors["tuesday"], "ffmpeg died",
                        "per-day failures are the difference between an export that "
                        + "is missing a day and one that says so")
+        XCTAssertEqual(parsed.warnings["friday"], "B&W photo not found: /photos/bw.jpg",
+                       "a day that rendered with an optional input missing is a "
+                       + "different fact from a day that produced nothing (#265)")
     }
 
     func testMediaDayReadsEveryDeclaredKey() throws {

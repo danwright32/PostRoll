@@ -12,36 +12,36 @@ import Foundation
 /// on. The reasons stay available in the log.
 enum MediaErrorSummary {
 
-    /// The days whose graphics genuinely did not render.
+    /// The keys of a per-day report, in week order, with any non-day key last.
     ///
-    /// `errors` is not a list of failures. `generate_media` records a note there
-    /// for a day that rendered perfectly well with an OPTIONAL input missing (a
-    /// removed B&W photo), so treating every entry as a failure claims files are
-    /// missing that are sitting in the folder, and blocks the export from ever
-    /// being marked done. A day is only failed here if it produced nothing.
-    ///
-    /// Two different facts sharing one field is the underlying problem and it
-    /// lives on the Python side; this is the honest reading of it until then.
-    static func failures(errors: [String: String],
-                         paths: [String: [String: String]]) -> [String: String] {
-        errors.filter { key, _ in (paths[key]?.isEmpty ?? true) }
+    /// A dictionary has no order, so without this the same trouble reads
+    /// differently on each run and looks like a different problem. A key that
+    /// is not a day name (Python can report a run-level failure) still has to
+    /// appear, or the message claims fewer problems than there are.
+    private static func orderedKeys(_ report: [String: String]) -> [String] {
+        let days = report.keys
+            .compactMap { DayName(rawValue: $0) }
+            .sorted { DayName.allCases.firstIndex(of: $0)! < DayName.allCases.firstIndex(of: $1)! }
+            .map(\.rawValue)
+        return days + report.keys.filter { DayName(rawValue: $0) == nil }.sorted()
+    }
+
+    private static func displayName(_ key: String) -> String {
+        DayName(rawValue: key)?.displayName ?? key
     }
 
     /// One sentence naming which days failed, or nil when none did.
     ///
+    /// Every entry counts. Before #265 this was not true: Python filed a note
+    /// here for a day that rendered perfectly well with an OPTIONAL input
+    /// missing, so the caller had to guess which entries were real failures by
+    /// checking whether the day had produced any files. Warnings now have their
+    /// own field, so `errors` means failed and nothing else.
+    ///
     /// Nil rather than an empty string, so a caller cannot put an empty banner
     /// on every successful export, which is how a real warning stops being read.
     static func sentence(_ errors: [String: String]) -> String? {
-        let days = errors.keys
-            .compactMap { DayName(rawValue: $0) }
-            .sorted { DayName.allCases.firstIndex(of: $0)! < DayName.allCases.firstIndex(of: $1)! }
-            .map(\.displayName)
-
-        // A key that is not a day name (Python can report a run-level failure)
-        // still has to be counted, or the sentence claims fewer problems than
-        // there are.
-        let other = errors.keys.filter { DayName(rawValue: $0) == nil }.sorted()
-        let named = days + other
+        let named = orderedKeys(errors).map(displayName)
         guard !named.isEmpty else { return nil }
 
         let list = named.count == 1
@@ -50,5 +50,23 @@ enum MediaErrorSummary {
         let subject = named.count == 1 ? "day's graphics" : "days' graphics"
         return "\(list): the \(subject) could not be generated, so the export "
              + "folder is missing them. Check the log for why, then regenerate."
+    }
+
+    /// What a day was missing when it rendered anyway, or nil when nothing was.
+    ///
+    /// Unlike a failure's reason (ffmpeg stderr, which tells Dan nothing he can
+    /// act on) a warning's reason is written by our own code and names the file
+    /// that has moved, which is the actionable part. So it is quoted, and it
+    /// says plainly that the folder is complete: a warning that reads like a
+    /// loss is the defect this split exists to fix.
+    static func warningSentence(_ warnings: [String: String]) -> String? {
+        let keys = orderedKeys(warnings)
+        guard !keys.isEmpty else { return nil }
+
+        let lines = keys.map { "\(displayName($0)): \(warnings[$0] ?? "")" }
+        let subject = keys.count == 1 ? "That day was" : "Those days were"
+        return lines.joined(separator: "\n")
+             + "\n\n\(subject) exported without the missing input, so nothing is "
+             + "missing from the folder."
     }
 }

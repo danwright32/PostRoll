@@ -51,8 +51,8 @@ struct ExportView: View {
                     progressContent(label: "Exporting captions & blog…")
                 case .generatingMedia(let folder):
                     mediaProgressContent(folder: folder)
-                case .done(let folder, let mediaError):
-                    doneContent(folder: folder, mediaError: mediaError)
+                case .done(let folder, let mediaError, let mediaWarning):
+                    doneContent(folder: folder, mediaError: mediaError, mediaWarning: mediaWarning)
                 case .failed(let msg):
                     errorContent(msg)
                 }
@@ -350,7 +350,7 @@ struct ExportView: View {
         String(format: "%d:%02d", mediaElapsed / 60, mediaElapsed % 60)
     }
 
-    private func doneContent(folder: URL, mediaError: String?) -> some View {
+    private func doneContent(folder: URL, mediaError: String?, mediaWarning: String?) -> some View {
         VStack(spacing: Spacing.lg) {
             // A route back into the event, matching the ready screen. Without
             // it a finished export trapped the event: the detail pane routes on
@@ -400,6 +400,19 @@ struct ExportView: View {
                     icon: "exclamationmark.triangle",
                     message: "The captions and blog were exported. \(mediaErr)",
                     style: .error
+                )
+                .frame(maxWidth: 400)
+            }
+
+            // An input that was missing while the day rendered anyway. Said out
+            // loud, because a file that has moved is worth knowing about, and
+            // deliberately NOT as an error: the folder is complete and the
+            // event is archived (#265).
+            if let mediaWarn = mediaWarning {
+                BrandBanner(
+                    icon: "info.circle",
+                    message: mediaWarn,
+                    style: .warning
                 )
                 .frame(maxWidth: 400)
             }

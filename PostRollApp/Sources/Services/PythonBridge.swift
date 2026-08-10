@@ -343,6 +343,12 @@ actor PythonBridge {
     struct PreviewGenerationResult {
         let paths: [String: [String: String]]
         let errors: [String: String]
+        /// Per-day notes about a day that DID render: a chosen optional photo
+        /// that has moved, say. Deliberately not `errors`: the two need
+        /// opposite responses, and while they shared one field a day whose
+        /// only complaint was a missing optional input read as a day with no
+        /// graphics at all (#265).
+        var warnings: [String: String] = [:]
         /// Friday's Stage 2 selection plan, decoded straight from
         /// generate_media.py's friday_clip_plan when a clip reel was
         /// rendered. nil when no reel was attempted this run.
@@ -394,6 +400,7 @@ actor PythonBridge {
         return PreviewGenerationResult(
             paths: paths,
             errors: (json["errors"] as? [String: String]) ?? [:],
+            warnings: (json["warnings"] as? [String: String]) ?? [:],
             fridayClipPlan: fridayClipPlan,
             coverPicks: coverPicks)
     }

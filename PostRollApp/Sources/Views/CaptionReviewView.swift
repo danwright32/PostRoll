@@ -315,6 +315,18 @@ struct CaptionReviewView: View {
                     }
                 }
 
+                // The same shape for the graphics step: a day whose assets are
+                // finished and whose OPTIONAL input had moved. Not an error
+                // style, because the day rendered; before #265 this arrived as
+                // "regeneration failed", which it had not.
+                ForEach(DayName.allCases, id: \.self) { day in
+                    if let message = event.mediaWarnings[day.rawValue] {
+                        BrandBanner(icon: "photo.badge.exclamationmark",
+                                    message: "\(day.displayName): \(message)")
+                            .padding(.horizontal, Spacing.xl)
+                    }
+                }
+
                 if isRegenerating {
                     // Names the day or blog pass the run is actually on, so a
                     // process that died is distinguishable from one that is
@@ -1138,7 +1150,8 @@ struct CaptionReviewView: View {
         // Keep the asset screen's failure list in step with what happened here, so
         // a day fixed (or broken again) from the review screen doesn't leave a
         // contradictory message behind on the previous screen.
-        recordMediaOutcome(day: day, error: result.errors[day.rawValue])
+        recordMediaOutcome(day: day, error: result.errors[day.rawValue],
+                           warning: result.warnings[day.rawValue])
 
         if let pyError = result.errors[day.rawValue] {
             regenerateError = "\(day.displayName) regeneration failed: \(pyError)"
@@ -1163,12 +1176,18 @@ struct CaptionReviewView: View {
     /// Record (or clear) a day's graphics failure on the live event, so the asset
     /// screen's failure list reflects the latest attempt from either screen.
     @MainActor
-    private func recordMediaOutcome(day: DayName, error: String?) {
+    private func recordMediaOutcome(day: DayName, error: String?, warning: String? = nil) {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        let existing = ev.mediaErrors[day.rawValue]
-        guard existing != error else { return }
+        let existingError = ev.mediaErrors[day.rawValue]
+        let existingWarning = ev.mediaWarnings[day.rawValue]
+        guard existingError != error || existingWarning != warning else { return }
         if let error { ev.mediaErrors[day.rawValue] = error }
         else { ev.mediaErrors.removeValue(forKey: day.rawValue) }
+        // Recorded alongside the error rather than folded into it: a day that
+        // rendered without an optional photo used to report as a failed
+        // regeneration, which was simply untrue (#265).
+        if let warning { ev.mediaWarnings[day.rawValue] = warning }
+        else { ev.mediaWarnings.removeValue(forKey: day.rawValue) }
         appState.updateEvent(ev)
     }
 

@@ -47,6 +47,9 @@ enum StoredErrorPolicy {
         guard !days.isEmpty else { return event }
         var ev = event
         for key in days { ev.mediaErrors.removeValue(forKey: key) }
+        // A warning is a record of the same run against the same inputs, so it
+        // goes stale for exactly the same reason the error does.
+        for key in days { ev.mediaWarnings.removeValue(forKey: key) }
         if var week = ev.weekResult {
             for key in days { week.errors.removeValue(forKey: key) }
             ev.weekResult = week

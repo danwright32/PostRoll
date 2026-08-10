@@ -73,10 +73,11 @@ final class GenerationManager {
             do {
                 let result = try await PythonBridge.shared.runWeekGeneration(
                     event: ev, onlyDays: onlyDays, forcePaidPath: forcePaidPath)
-                let (mediaResult, mediaErrors) = await Self.graphicsOutcome(of: graphicsTask)
+                let (mediaResult, mediaErrors, mediaWarnings) = await Self.graphicsOutcome(of: graphicsTask)
                 self?.finishSuccess(eventID: eventID, snapshot: ev, onlyDays: onlyDays,
                                     result: result, mediaPaths: mediaResult?.paths,
                                     mediaErrors: mediaErrors,
+                                    mediaWarnings: mediaWarnings,
                                     // A full graphics run owns every day's errors (nil);
                                     // a partial owns only its days; skipped owns none.
                                     renderedDays: doGraphics ? onlyDays : [],
@@ -102,10 +103,11 @@ final class GenerationManager {
                 // separate process that a caption cap has no bearing on, and
                 // throwing away a finished collage because the captions ran out
                 // of allowance means rendering it again for nothing.
-                let (mediaResult, mediaErrors) = await Self.graphicsOutcome(of: graphicsTask)
+                let (mediaResult, mediaErrors, mediaWarnings) = await Self.graphicsOutcome(of: graphicsTask)
                 self?.finishSuccess(eventID: eventID, snapshot: ev, onlyDays: onlyDays,
                                     result: halt.week, mediaPaths: mediaResult?.paths,
                                     mediaErrors: mediaErrors,
+                                    mediaWarnings: mediaWarnings,
                                     renderedDays: doGraphics ? onlyDays : [],
                                     fridayClipPlan: mediaResult?.fridayClipPlan,
                                     coverPicks: mediaResult?.coverPicks ?? [:],
@@ -123,11 +125,12 @@ final class GenerationManager {
                 // above: they render in a separate process that a dead caption
                 // run has no bearing on, and cancelling them throws away
                 // collages and reels that had already finished.
-                let (mediaResult, mediaErrors) = await Self.graphicsOutcome(of: graphicsTask)
+                let (mediaResult, mediaErrors, mediaWarnings) = await Self.graphicsOutcome(of: graphicsTask)
                 self?.saveSalvagedDays(eventID: eventID, snapshot: ev,
                                        week: partial.week,
                                        mediaPaths: mediaResult?.paths,
                                        mediaErrors: mediaErrors,
+                                       mediaWarnings: mediaWarnings,
                                        renderedDays: doGraphics ? onlyDays : [],
                                        appState: appState)
                 self?.finishFailure(eventID: eventID,
@@ -159,20 +162,21 @@ final class GenerationManager {
     /// three places for a fix to land in only one.
     private static func graphicsOutcome(
         of task: Task<Result<PythonBridge.PreviewGenerationResult, Error>?, Never>?
-    ) async -> (PythonBridge.PreviewGenerationResult?, [String: String]) {
+    ) async -> (PythonBridge.PreviewGenerationResult?, [String: String], [String: String]) {
         switch await task?.value {
         case .success(let r):
-            return (r, r.errors)
+            return (r, r.errors, r.warnings)
         case .failure(let error):
-            return (nil, [PreviewMergePolicy.graphicsRunKey: error.localizedDescription])
+            return (nil, [PreviewMergePolicy.graphicsRunKey: error.localizedDescription], [:])
         case nil:
-            return (nil, [:])   // graphics didn't run this time
+            return (nil, [:], [:])   // graphics didn't run this time
         }
     }
 
     private func finishSuccess(eventID: Event.ID, snapshot ev: Event, onlyDays: Set<String>?,
                                result: WeekGenerationResult, mediaPaths: [String: [String: String]]?,
                                mediaErrors: [String: String] = [:],
+                               mediaWarnings: [String: String] = [:],
                                renderedDays: Set<String>? = nil,
                                fridayClipPlan: FridayClipPlan? = nil,
                                coverPicks: [String: CoverPick] = [:], appState: AppState,
@@ -217,6 +221,10 @@ final class GenerationManager {
         // died has to say so on the asset screen instead of just showing nothing.
         saved.mediaErrors = PreviewMergePolicy.mergeMediaErrors(
             existing: saved.mediaErrors, fresh: mediaErrors, renderedDays: renderedDays)
+        // Same merge rule, its own store: a warning about a day this run never
+        // re-rendered must not be erased either (#265).
+        saved.mediaWarnings = PreviewMergePolicy.mergeMediaErrors(
+            existing: saved.mediaWarnings, fresh: mediaWarnings, renderedDays: renderedDays)
 
         // A re-rendered reel carries music this run fetched, so a label written
         // by an earlier manual swap now names a track the file does not contain.
@@ -249,6 +257,7 @@ final class GenerationManager {
                                   week: WeekGenerationResult,
                                   mediaPaths: [String: [String: String]]?,
                                   mediaErrors: [String: String],
+                                  mediaWarnings: [String: String],
                                   renderedDays: Set<String>?,
                                   appState: AppState) {
         var saved = appState.events.first(where: { $0.id == eventID }) ?? ev
@@ -261,6 +270,8 @@ final class GenerationManager {
             existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: false)
         saved.mediaErrors = PreviewMergePolicy.mergeMediaErrors(
             existing: saved.mediaErrors, fresh: mediaErrors, renderedDays: renderedDays)
+        saved.mediaWarnings = PreviewMergePolicy.mergeMediaErrors(
+            existing: saved.mediaWarnings, fresh: mediaWarnings, renderedDays: renderedDays)
         saved = ReelAudioSwap.clearingStaleAudioLabels(in: saved, freshMedia: mediaPaths)
         appState.updateEvent(saved)
     }

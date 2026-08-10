@@ -110,7 +110,8 @@ def test_generate_media_reports_the_missing_bw_on_both_days(
         static_only=True,
     )
 
-    message = results["errors"].get(day)
+    # A missing OPTIONAL photo is a warning, not a failure: the day rendered.
+    message = results["warnings"].get(day)
     assert message, f"{day} reported nothing about a chosen file that is not there"
     assert "B&W photo" in message
     assert str(gone) in message
@@ -135,7 +136,7 @@ def test_a_missing_optional_bw_still_produces_the_days_graphics(
         static_only=True,
     )
 
-    assert "B&W photo" in results["errors"].get(day, ""), "the missing file is still named"
+    assert "B&W photo" in results["warnings"].get(day, ""), "the missing file is still named"
     produced = results.get(day) or {}
     assert produced, f"{day} produced nothing because an OPTIONAL photo was missing"
     key = "story_cover" if day == "tuesday" else "before_after"
@@ -174,7 +175,7 @@ def test_the_style_falls_back_to_two_photo_when_the_bw_is_gone(tmp_path, sample_
         tmp_output, static_only=True,
     )
 
-    assert "B&W photo" in results["errors"].get("tuesday", "")
+    assert "B&W photo" in results["warnings"].get("tuesday", "")
     assert results.get("tuesday"), "the day still renders, in its two-photo form"
 
 
@@ -204,6 +205,9 @@ def test_two_independent_failures_on_one_day_both_survive(
         static_only=False,
     )
 
-    message = results["errors"].get("tuesday", "")
-    assert "B&W photo" in message, f"the missing photo was erased by the other failure: {message}"
-    assert "ffmpeg" in message, f"the missing toolchain was erased by the other failure: {message}"
+    # The two now land in different fields, which is the point of #265: one
+    # blocks the day and one does not. Each must still survive the other.
+    failure = results["errors"].get("tuesday", "")
+    warning = results["warnings"].get("tuesday", "")
+    assert "ffmpeg" in failure, f"the missing toolchain was erased by the other note: {failure}"
+    assert "B&W photo" in warning, f"the missing photo was erased by the other note: {warning}"

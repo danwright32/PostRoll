@@ -84,6 +84,13 @@ struct Event: Identifiable, Codable, Hashable {
     /// caption-only retry must not clear a collage failure it never re-attempted.
     var mediaErrors: [String: String] = [:]
 
+    /// Per-day notes from the graphics step about a day that DID render: a
+    /// chosen optional photo that has moved, say. Its own store rather than a
+    /// second meaning for `mediaErrors`, because the two need opposite
+    /// responses and while they shared one field a day whose only complaint was
+    /// a missing optional input read as a day with no graphics at all (#265).
+    var mediaWarnings: [String: String] = [:]
+
     // Export
     var exportPath: URL?
 
@@ -152,6 +159,7 @@ extension Event {
         weekResult        = try c.decodeIfPresent(WeekGenerationResult.self,       forKey: .weekResult)
         previewMediaPaths = try c.decodeIfPresent([String: [String: String]].self, forKey: .previewMediaPaths) ?? [:]
         mediaErrors       = try c.decodeIfPresent([String: String].self,           forKey: .mediaErrors)       ?? [:]
+        mediaWarnings     = try c.decodeIfPresent([String: String].self,           forKey: .mediaWarnings)     ?? [:]
         exportPath        = try c.decodeIfPresent(URL.self,                        forKey: .exportPath)
         archivedAt        = try c.decodeIfPresent(Date.self,                       forKey: .archivedAt)
     }

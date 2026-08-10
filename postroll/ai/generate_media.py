@@ -51,7 +51,11 @@ Output JSON (written to --output file):
   "wednesday": { "collage": "/path/to/wednesday/collage.png" }, # no story key — collage IS the story
   "thursday":  { "reel": "/path/to/thursday/reel_scroll.mp4" },
   "friday":    { "before_after": "/path/to/friday/before_after.png" }, # or "story" if no raw/edit
-  "errors": {}   <- keyed by day name if a day failed
+  "errors":   {}, <- keyed by day name when a day could NOT be rendered
+  "warnings": {}  <- keyed by day name when a day rendered and something
+                     about it is worth saying (a chosen optional photo that
+                     has moved). Never blocks; the two are separate because
+                     they need opposite responses (#265).
 }
 """
 
@@ -167,21 +171,38 @@ def _friday_clip_selection(sel: dict) -> dict:
     }
 
 
-def _record_error(errors: dict, day: str, message: str) -> None:
-    """Add a failure to a day's report without erasing what's already there.
+def _append_note(notes: dict, day: str, message: str) -> None:
+    """Add a note to a day's report without erasing what's already there.
 
-    A day can fail for more than one reason at once (a missing B&W photo AND no
-    ffmpeg installed). Each write used to replace the last, so whichever check
-    ran second silently erased the first and the report claimed one cause when
-    there were two. Identical messages are not repeated.
+    A day can have more than one thing to say at once (a missing B&W photo AND
+    no ffmpeg installed). Each write used to replace the last, so whichever
+    check ran second silently erased the first and the report claimed one cause
+    when there were two. Identical messages are not repeated.
     """
-    existing = errors.get(day)
+    existing = notes.get(day)
     if not existing:
-        errors[day] = message
+        notes[day] = message
         return
     if message in existing:
         return
-    errors[day] = f"{existing}; {message}"
+    notes[day] = f"{existing}; {message}"
+
+
+def _record_error(errors: dict, day: str, message: str) -> None:
+    """This day could not render. A consumer must treat it as missing output."""
+    _append_note(errors, day, message)
+
+
+def _record_warning(warnings: dict, day: str, message: str) -> None:
+    """This day rendered, and something about it is worth saying (#265).
+
+    Kept apart from `errors` because the two need opposite responses: a failure
+    blocks the export and suppresses the Exported milestone, a warning is worth
+    telling Dan and blocks nothing. They shared one field, so a day whose only
+    complaint was a missing OPTIONAL photo read as a day with no graphics, and
+    the export screen said files were missing that were sitting in the folder.
+    """
+    _append_note(warnings, day, message)
 
 
 #: Photos a before/after or a speed-edit reel cannot be made without. Their
@@ -211,19 +232,29 @@ def _missing_photos(day_info: dict, slots) -> str | None:
     return "; ".join(problems) if problems else None
 
 
-def _resolve_photo_inputs(day_info: dict, day_name: str, errors: dict) -> tuple[str | None, bool]:
+def _resolve_photo_inputs(
+    day_info: dict, day_name: str, errors: dict, warnings: dict
+) -> tuple[str | None, bool]:
     """Report every chosen-but-missing photo, and say whether to render.
 
     Returns the B&W path to actually use (None when it is unset OR missing) and
     whether the day's required inputs are intact. A missing OPTIONAL photo is
-    named in the day's errors and the day still renders, in the form it would
-    have taken without that photo. A missing REQUIRED photo stops the render.
+    a WARNING and the day still renders, in the form it would have taken
+    without that photo. A missing REQUIRED photo is an error and stops the
+    render. The two go to different places because they need opposite
+    responses downstream (#265).
     """
-    for message in (_missing_photos(day_info, OPTIONAL_PHOTO_SLOTS),
-                    _missing_photos(day_info, REQUIRED_PHOTO_SLOTS)):
-        if message:
-            print(f"[generate_media] {day_name}: ERROR: {message}", flush=True, file=sys.stderr)
-            _record_error(errors, day_name, message)
+    optional_missing = _missing_photos(day_info, OPTIONAL_PHOTO_SLOTS)
+    if optional_missing:
+        print(f"[generate_media] {day_name}: WARNING: {optional_missing}",
+              flush=True, file=sys.stderr)
+        _record_warning(warnings, day_name, optional_missing)
+
+    required_missing = _missing_photos(day_info, REQUIRED_PHOTO_SLOTS)
+    if required_missing:
+        print(f"[generate_media] {day_name}: ERROR: {required_missing}",
+              flush=True, file=sys.stderr)
+        _record_error(errors, day_name, required_missing)
 
     bw = day_info.get("bw_photo")
     bw_usable = bool(bw) and Path(bw).exists()
@@ -312,7 +343,8 @@ def generate_media(
             doesn't end up in the final export folder.
 
     Returns a dict mapping day names → generated file paths, plus an
-    'errors' dict for any days that failed.
+    'errors' dict for any days that failed and a 'warnings' dict for days
+    that rendered with something worth saying (#265).
     """
     event      = manifest["event"]
     org        = manifest["org"]
@@ -328,6 +360,7 @@ def generate_media(
 
     results: dict[str, Any] = {}
     errors: dict[str, str] = {}
+    warnings: dict[str, str] = {}
     tools = ffmpeg_status()
     ffmpeg_available = tools.available
 
@@ -434,7 +467,7 @@ def generate_media(
             # named in this day's errors. A missing OPTIONAL photo still lets
             # the day render in its without-that-photo form; a missing REQUIRED
             # one stops it, because there is no before/after without a before.
-            bw, inputs_ok = _resolve_photo_inputs(day_info, "tuesday", errors)
+            bw, inputs_ok = _resolve_photo_inputs(day_info, "tuesday", errors, warnings)
             missing_inputs = not inputs_ok
 
             # Resolved AFTER the check: the 3-photo style is picked from the
@@ -671,7 +704,7 @@ def generate_media(
             # Same named condition as Tuesday, resolved the same way: the two
             # days share these photos, so they must not disagree about what a
             # missing one means (#180).
-            bw, inputs_ok = _resolve_photo_inputs(day_info, "friday", errors)
+            bw, inputs_ok = _resolve_photo_inputs(day_info, "friday", errors, warnings)
             missing_inputs = not inputs_ok
 
             # Auto-cut clip reel: only attempted when clips were imported.
@@ -809,6 +842,7 @@ def generate_media(
         results[day_name] = day_result or None
 
     results["errors"] = errors
+    results["warnings"] = warnings
     print(f"[generate_media] done — output in {base_dir}", flush=True)
     return results
 
