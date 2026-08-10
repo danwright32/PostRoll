@@ -59,6 +59,7 @@ targets:
       - path: Sources/Services/ManifestDay.swift
       - path: Sources/Services/StageNavigation.swift
       - path: Sources/Services/LayoutSidecar.swift
+      - path: Sources/Services/DesignStamp.swift
       - path: Sources/Services/PreviewMergePolicy.swift
       - path: Sources/Services/PreviewRunState.swift
       - path: Sources/Services/PerformerPanelDisplay.swift

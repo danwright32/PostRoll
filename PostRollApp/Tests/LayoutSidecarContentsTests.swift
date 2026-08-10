@@ -97,11 +97,12 @@ final class LayoutSidecarContentsTests: XCTestCase {
                 .appendingPathComponent("Sources/Views/CaptionReviewView.swift"),
             encoding: .utf8)
 
-        XCTAssertTrue(source.contains("@State private var collageIsStale"),
+        // #286 widened this from the collage to every template the day cached,
+        // so the state holds a list rather than a flag, but the shape it is
+        // guarding is unchanged.
+        XCTAssertTrue(source.contains("@State private var staleTemplates"),
                       "the staleness answer is not held in state, so it is being "
                       + "recomputed rather than remembered")
-        XCTAssertTrue(source.contains("if collageIsStale,"),
-                      "the badge is not reading the cached answer")
         // The defect's exact shape: the read used as the branch condition, so
         // it runs whenever SwiftUI evaluates the view. The file's other reads
         // are legitimate; they load the cells on a background task keyed on the
@@ -109,12 +110,15 @@ final class LayoutSidecarContentsTests: XCTestCase {
         XCTAssertFalse(source.contains("if LayoutSidecar.read("),
                        "the sidecar is being read to decide whether to draw the "
                        + "badge, which puts a file read back on every redraw")
-        XCTAssertTrue(source.contains("private func refreshCollageStaleness()"),
+        XCTAssertFalse(source.contains("if DesignStamp.staleTemplates("),
+                       "the day folder is being scanned to decide whether to draw "
+                       + "the badge, which puts a directory listing on every redraw")
+        XCTAssertTrue(source.contains("private func refreshDesignStaleness()"),
                       "the read has no named home to be called from")
         // And it is actually called back when the answer can have changed.
-        XCTAssertTrue(source.contains(".onAppear { refreshCollageStaleness() }"))
+        XCTAssertTrue(source.contains(".onAppear { refreshDesignStaleness() }"))
         XCTAssertTrue(source.contains("onChange(of: graphicVersion)"),
-                      "a finished regeneration rewrites the sidecar, so the badge "
+                      "a finished regeneration rewrites the stamp, so the badge "
                       + "must clear without leaving the screen")
     }
 }

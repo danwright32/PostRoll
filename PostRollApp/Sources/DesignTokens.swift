@@ -22,6 +22,40 @@ enum CollageDesign {
     static let collageDesignVersion = 1
 }
 
+/// Which generation of each template's design this build renders (#286).
+///
+/// Mirrors `design_tokens.MEDIA_DESIGN_VERSIONS`; nothing but the parity test in
+/// tests/test_media_design_version.py keeps the two in step. #160 stamped the
+/// collage only, so a cached scroll reel, Tuesday reel, before/after or story
+/// rendered before the same gallery redesign kept rendering the old look
+/// indefinitely with nothing saying so. The reels are the worst of it, because
+/// re-rendering one is expensive enough that nobody does it speculatively.
+///
+/// Keyed by the filename stem the generator writes into a day folder, which is
+/// what the stamp records and what a day folder is scanned for.
+enum MediaDesign {
+    static let mediaDesignVersions: [String: Int] = [
+        "collage": 1,
+        "story": 1,
+        "cover": 1,
+        "before_after": 1,
+        "reel_screen": 1,
+        "reel_morph": 1,
+        "reel_slider": 1,
+        "reel_scroll": 1,
+        "reel_preview": 1,
+        "reel_clip": 1,
+    ]
+
+    /// Every template this build knows how to judge.
+    static var allTemplates: [String] { mediaDesignVersions.keys.sorted() }
+
+    /// The design generation this build renders `template` at, or nil for one it
+    /// does not know (an asset from a newer build, which regenerating here could
+    /// only make worse).
+    static func version(of template: String) -> Int? { mediaDesignVersions[template] }
+}
+
 extension Color {
     /// Main window / detail background — warm off-white
     static let cream     = Color(red: 252/255, green: 250/255, blue: 247/255)
