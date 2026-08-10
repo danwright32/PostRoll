@@ -2446,8 +2446,12 @@ private struct AudioFilePicker: View {
     let onPick: () -> Void
     var onLocate: () -> Void = {}
 
-    @State private var player: AVAudioPlayer? = nil
-    @State private var isPlaying = false
+    // Owns the player and the delegate that keeps the icon honest (#127).
+    // A StateObject, not a plain @State AVAudioPlayer, because the object has
+    // to outlive a body re-evaluation for the delegate callback to land
+    // anywhere.
+    @StateObject private var preview = AudioPreviewPlayer()
+    @State private var playbackError: String? = nil
 
     var body: some View {
         HStack(spacing: Spacing.sm) {
@@ -2487,15 +2491,22 @@ private struct AudioFilePicker: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
+                if let problem = playbackError {
+                    // A control that does nothing when pressed reads as broken.
+                    Text(problem)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.roseDeep)
+                }
                 Button {
-                    togglePlayback(url: url)
+                    playbackError = preview.toggle(url: url)
+                        ? nil : "can't be played"
                 } label: {
-                    Image(systemName: isPlaying ? "pause.circle" : "play.circle")
+                    Image(systemName: preview.isPlaying ? "pause.circle" : "play.circle")
                         .font(.system(size: 16))
                         .foregroundStyle(Color.roseGold)
                 }
                 .buttonStyle(.plain)
-                .help(isPlaying ? "Pause" : "Play")
+                .help(preview.isPlaying ? "Pause" : "Play")
                 Button(action: { audio = nil; stopPlayback() }) {
                     Image(systemName: "xmark.circle.fill")
                         .symbolRenderingMode(.palette)
@@ -2515,23 +2526,9 @@ private struct AudioFilePicker: View {
         .onChange(of: audio) { _, _ in stopPlayback() }
     }
 
-    private func togglePlayback(url: URL) {
-        if isPlaying {
-            player?.pause()
-            isPlaying = false
-        } else {
-            if player?.url != url {
-                player = try? AVAudioPlayer(contentsOf: url)
-            }
-            player?.play()
-            isPlaying = true
-        }
-    }
-
     private func stopPlayback() {
-        player?.stop()
-        player = nil
-        isPlaying = false
+        preview.stop()
+        playbackError = nil
     }
 }
 

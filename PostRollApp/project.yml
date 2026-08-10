@@ -52,6 +52,7 @@ targets:
       - path: Sources/Services/PostingPresetStore.swift
       - path: Sources/Services/CollageCandidate.swift
       - path: Sources/Services/CollageCandidateCache.swift
+      - path: Sources/Services/AudioPreviewPlayer.swift
       - path: Sources/Services/LayoutSidecar.swift
       - path: Sources/Services/PreviewMergePolicy.swift
       - path: Sources/Services/PreviewRunState.swift
