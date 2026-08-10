@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "A day folder's design stamp, as postroll/media/design_stamp.py actually",
+    "writes it, read by PostRollApp/Sources/Services/DesignStamp.swift (#286).",
+    "",
+    "The 'templates' object below is NOT hand-written. tests/",
+    "test_media_design_version.py asserts it is exactly what write_design_stamp",
+    "produces today, so it cannot be shaped to make either side's test pass and",
+    "cannot drift when a design version is bumped: the bump fails that",
+    "assertion until this file is regenerated.",
+    "",
+    "That matters because the Swift side's other tests build their own JSON,",
+    "and a fake you wrote can only ever confirm your own assumption about the",
+    "real format. This is the one case where Swift reads a file Python made.",
+    "",
+    "Keyed by the filename stem the generator writes into a day folder. A",
+    "missing entry means that asset was rendered before the stamp existed, and",
+    "reads as older rather than as current."
+  ],
+  "templates": {
+    "before_after": 1,
+    "collage": 1,
+    "cover": 1,
+    "reel_clip": 1,
+    "reel_morph": 1,
+    "reel_preview": 1,
+    "reel_screen": 1,
+    "reel_scroll": 1,
+    "reel_slider": 1,
+    "story": 1
+  }
+}

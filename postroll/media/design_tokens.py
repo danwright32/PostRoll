@@ -37,6 +37,64 @@ from __future__ import annotations
 COLLAGE_DESIGN_VERSION = 1
 
 
+#: Which generation of each template's design this build renders (#286).
+#:
+#: #160 gave only the collage a version, so a cached Thursday scroll reel,
+#: Tuesday reel, before/after or story rendered before the same gallery
+#: redesign kept rendering the old look indefinitely with nothing saying so.
+#: The reels are the worst of it: re-rendering one is expensive enough that
+#: nobody does it speculatively, so a stale one survives longest.
+#:
+#: Keyed by the filename stem the generator writes into a day folder, because
+#: that is what `tests/test_media_design_version.py` reads back out of
+#: generate_media.py to check nothing new escaped the table. Bump an entry
+#: whenever that template's tokens or geometry change enough that an
+#: already-rendered asset no longer looks like a fresh one; bumping one does
+#: not badge the others, which is the point of a table rather than one number.
+#:
+#: 1 is the gallery redesign (c65a0d6) throughout. Anything rendered before it
+#: is unstamped, which reads as older rather than as version 0.
+#:
+#: `DesignTokens.mediaDesignVersions` mirrors this; nothing but the parity test
+#: keeps the two in step.
+MEDIA_DESIGN_VERSIONS: dict[str, int] = {
+    # Derived, not restated: the layout sidecar #160 shipped still carries the
+    # collage's number, and two copies maintained by hand drift the moment one
+    # is bumped.
+    "collage": COLLAGE_DESIGN_VERSION,
+    "story": 1,
+    # Rendered through generate_story's exact template, so it moves with the
+    # story rather than carrying a number of its own.
+    "cover": 1,
+    "before_after": 1,
+    "reel_screen": 1,
+    "reel_morph": 1,
+    "reel_slider": 1,
+    "reel_scroll": 1,
+    # The still the Thursday crop editor draws over. Same layout maths as the
+    # reel it previews, so a redesign of one dates the other.
+    "reel_preview": 1,
+    # Friday's auto-cut clip reel. The feature is retired (2026-07-09) but the
+    # renderer is still reachable, and an asset that can still be produced
+    # still needs to say which design produced it.
+    "reel_clip": 1,
+}
+
+
+#: Files a day folder can hold that carry no design of their own (#286).
+#:
+#: Declared rather than silently skipped, so that adding a new file to a day
+#: folder is a decision between "this is a design surface" and "this is not"
+#: instead of an omission nobody sees. The parity test refuses anything in
+#: neither table.
+UNVERSIONED_DAY_FILES: frozenset[str] = frozenset({
+    # Friday's winning cover candidate, copied out of the temp dir the frame
+    # extraction wrote it to. A source photograph, not a rendered template:
+    # regenerating the day cannot make it look newer.
+    "cover_frame",
+})
+
+
 #: The gallery mat and every cream surface. The one background colour.
 CREAM = (252, 250, 247)
 

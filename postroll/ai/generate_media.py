@@ -76,6 +76,7 @@ from ..media.generate_before_after import generate_before_after
 from ..media.clip_scorer import score_clips, InsufficientClipsError
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
 from ..media.generate_title_card import apply_title_card, TitleCardError
+from ..media.design_stamp import rendered_templates, write_design_stamp
 from .audio_tags import resolve_reel_audio
 from .progress import ProgressWriter
 from .select_reel_clips import select_reel_clips
@@ -893,6 +894,26 @@ def generate_media(
                     except Exception as e:
                         msg = f"story fallback failed: {e}"
                         _record_error(errors, "friday", msg)
+
+        # Which design rendered this day, recorded once for the whole day (#286).
+        # #160 stamped the collage only, so a cached reel, story or before/after
+        # from before the gallery redesign kept rendering the old look with
+        # nothing saying so. Skipped on a final export for the same reason the
+        # collage's layout sidecar is: that folder is what Dan uploads, and
+        # staleness is a question about the cached preview, which is the copy
+        # that survives to be rendered again.
+        if day_result and not final_export:
+            try:
+                stamped = rendered_templates(day_result, day_dir)
+                if stamped:
+                    write_design_stamp(day_dir, stamped)
+            except Exception as e:
+                # Not fatal: the day's assets are all rendered by this point and
+                # losing the stamp costs a badge, not the work. Said out loud
+                # rather than swallowed, because a day that silently stops being
+                # stampable reads exactly like one that is up to date.
+                print(f"[generate_media] {day_name}: design stamp not written: {e}",
+                      flush=True, file=sys.stderr)
 
         results[day_name] = day_result or None
 
