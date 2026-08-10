@@ -331,6 +331,133 @@ Rules:
 """
 
 
+
+# ── shaping what Claude returns (#273) ────────────────────────────────────────
+#
+# These three payloads used to be handed to the app exactly as Claude produced
+# them, so their field names lived only in the prompt text above. The app reads
+# by key and its decoders tolerate anything missing, so a renamed field would
+# have arrived as a silent blank on the one path whose whole job is filling in
+# facts about real people. A rule that lives only in a prompt is a hope (L27),
+# and this is the deterministic check at the boundary.
+#
+# Each also gives the key contract something to read, which is why the shapes
+# are dict literals rather than a passthrough.
+
+def _report_discards(kind: str, dropped: int, kept: int) -> None:
+    """Say what was thrown away, or say nothing.
+
+    A filter that discards silently makes a lookup returning half-formed
+    results look identical to a thin programme, and the difference matters:
+    one is the event, the other is worth re-running. Silent on a clean
+    response, because a line on every run is a line nobody reads by the time
+    it counts.
+    """
+    if dropped <= 0:
+        return
+    print(
+        f"warning: discarded {dropped} {kind} entr{'y' if dropped == 1 else 'ies'} "
+        f"with no {'title' if kind == 'piece note' else 'name'}, kept {kept}. "
+        f"If that is most of them, the lookup is worth running again.",
+        file=sys.stderr, flush=True,
+    )
+
+
+def _clean(value: object) -> str | None:
+    """A trimmed string, or None when there is nothing there.
+
+    None rather than "" so the app can tell "no account exists" from "we never
+    looked", which are different answers to Dan.
+    """
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
+def _normalise_performers(data: list) -> list[dict]:
+    """The performer list the app decodes, with every key present.
+
+    A different shape from a handle suggestion, which is a separate lookup: this
+    is who was on stage, that is where to find them online.
+
+    An entry with no name is dropped: it cannot be credited, matched to a photo
+    or tagged, so it is not a performer, and keeping it puts a blank row in
+    front of Dan.
+    """
+    out = []
+    seen = 0
+    for raw in data:
+        seen += 1
+        if not isinstance(raw, dict):
+            continue
+        name = _clean(raw.get("name"))
+        if not name:
+            continue
+        out.append({
+            "name":                name,
+            # "other" rather than a guess: the role drives how someone is
+            # credited, and inventing "soloist" for an unstated role would put
+            # a claim in a caption that nothing supports.
+            "role":                _clean(raw.get("role")) or "other",
+            "voice_or_instrument": _clean(raw.get("voice_or_instrument")),
+        })
+    _report_discards("performer", seen - len(out), len(out))
+    return out
+
+
+def _normalise_handle_suggestions(data: list) -> list[dict]:
+    """Suggested social handles, keyed by the name they were searched for.
+
+    The name is what the suggestion is applied back against, so an entry
+    without one has nothing to attach to.
+    """
+    out = []
+    seen = 0
+    for raw in data:
+        seen += 1
+        if not isinstance(raw, dict):
+            continue
+        name = _clean(raw.get("name"))
+        if not name:
+            continue
+        out.append({
+            "name":        name,
+            "handle":      _clean(raw.get("handle")),
+            "profile_url": _clean(raw.get("profile_url")),
+            # Low, not high: an unstated confidence is not a confident answer,
+            # and defaulting the other way presents a guess as verified.
+            "confidence":  _clean(raw.get("confidence")) or "low",
+            "note":        _clean(raw.get("note")),
+        })
+    _report_discards("handle suggestion", seen - len(out), len(out))
+    return out
+
+
+def _normalise_piece_notes(data: list) -> list[dict]:
+    """Programme notes per work, with every key present.
+
+    A piece whose lookup found nothing is KEPT, with `notes` None: that records
+    that the lookup happened, which is what stops it being paid for again.
+    """
+    out = []
+    seen = 0
+    for raw in data:
+        seen += 1
+        if not isinstance(raw, dict):
+            continue
+        title = _clean(raw.get("title"))
+        if not title:
+            continue
+        out.append({
+            "title":    title,
+            "composer": _clean(raw.get("composer")) or "",
+            "notes":    _clean(raw.get("notes")),
+        })
+    _report_discards("piece note", seen - len(out), len(out))
+    return out
+
+
 def fetch_performers_from_url(url: str) -> list[dict]:
     """Fetch an event page and extract the curated performer list.
 
@@ -348,7 +475,7 @@ def fetch_performers_from_url(url: str) -> list[dict]:
     )
     if not isinstance(data, list):
         raise ClaudeError(f"Expected JSON array, got {type(data).__name__}")
-    return data
+    return _normalise_performers(data)
 
 
 SUGGEST_HANDLES_PROMPT = """\
@@ -463,7 +590,7 @@ def suggest_handles(
         raise ClaudeError(
             f"Expected JSON array, got {type(data).__name__} with keys {keys}"
         )
-    return data
+    return _normalise_handle_suggestions(data)
 
 
 FETCH_PIECE_NOTES_PROMPT = """\
@@ -555,7 +682,7 @@ def fetch_piece_notes(
                 data = lists[0]
     if not isinstance(data, list):
         raise ClaudeError(f"Expected JSON array, got {type(data).__name__}")
-    return data
+    return _normalise_piece_notes(data)
 
 
 def main() -> int:

@@ -81,12 +81,20 @@ def _dict_literal_keys(node: ast.Dict, where: str) -> set[str]:
 
 
 class _PayloadVisitor(ast.NodeVisitor):
-    """Collects payload keys inside one function, not its nested functions."""
+    """Collects payload keys inside one function, not its nested functions.
 
-    def __init__(self, variable: str | None, dynamic: dict[str, DynamicKey], where: str):
+    With `element=True` the payload is a LIST and the keys wanted are its
+    entries'. Several payloads are arrays the app decodes as such, and their
+    entries are built inside an append or a comprehension rather than returned
+    on their own, so the outer-dict reading finds nothing.
+    """
+
+    def __init__(self, variable: str | None, dynamic: dict[str, DynamicKey], where: str,
+                 element: bool = False):
         self.variable = variable
         self.dynamic = dynamic
         self.where = where
+        self.element = element
         self.keys: set[str] = set()
         self.saw_variable = False
         self.used_dynamic: set[str] = set()
@@ -102,8 +110,28 @@ class _PayloadVisitor(ast.NodeVisitor):
     visit_AsyncFunctionDef = visit_FunctionDef  # noqa: N815
 
     def visit_Return(self, node: ast.Return):  # noqa: N802
-        if self.variable is None and isinstance(node.value, ast.Dict):
+        if self.element:
+            # `return [{...} for x in xs]` and `return [{...}, {...}]`
+            if isinstance(node.value, (ast.ListComp, ast.GeneratorExp)):
+                if isinstance(node.value.elt, ast.Dict):
+                    self.keys |= _dict_literal_keys(node.value.elt, self.where)
+            elif isinstance(node.value, ast.List):
+                for item in node.value.elts:
+                    if isinstance(item, ast.Dict):
+                        self.keys |= _dict_literal_keys(item, self.where)
+        elif self.variable is None and isinstance(node.value, ast.Dict):
             self.keys |= _dict_literal_keys(node.value, self.where)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call):  # noqa: N802
+        # `payload.append({...})`, the usual way a list payload is built.
+        if (self.element and self.variable is not None
+                and isinstance(node.func, ast.Attribute) and node.func.attr == "append"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == self.variable and node.args):
+            self.saw_variable = True
+            if isinstance(node.args[0], ast.Dict):
+                self.keys |= _dict_literal_keys(node.args[0], self.where)
         self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign):  # noqa: N802
@@ -117,7 +145,10 @@ class _PayloadVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _record_target(self, target: ast.expr, value: ast.expr) -> None:
-        if self.variable is None:
+        # In element mode the payload is the list itself; `results = []` says
+        # nothing about what goes in it, and the dict assigned to a scratch
+        # local is not necessarily an entry. Appends and returns carry it.
+        if self.variable is None or self.element:
             return
         # `payload = {...}` / `payload: dict = {...}`
         if isinstance(target, ast.Name) and target.id == self.variable:
@@ -149,11 +180,15 @@ class _PayloadVisitor(ast.NodeVisitor):
 def payload_keys_from_source(source: str, *, function: str,
                              variable: str | None = None,
                              dynamic: dict[str, DynamicKey] | None = None,
+                             element: bool = False,
                              where: str | None = None) -> set[str]:
     """Keys the named function can put into its payload.
 
     With `variable`, reads what is assigned onto that name. Without it, reads
     the dict literals the function returns.
+
+    With `element=True` the payload is a LIST and these are its entries' keys,
+    read from appends onto `variable` or from a returned list or comprehension.
     """
     dynamic = dynamic or {}
     where = where or function
@@ -171,11 +206,11 @@ def payload_keys_from_source(source: str, *, function: str,
             f"checking anything."
         )
 
-    visitor = _PayloadVisitor(variable, dynamic, where)
+    visitor = _PayloadVisitor(variable, dynamic, where, element=element)
     visitor._depth = 1
     visitor.generic_visit(target)
 
-    if variable is not None and not visitor.saw_variable:
+    if variable is not None and not element and not visitor.saw_variable:
         raise LookupError(
             f"{where}: nothing is ever written to `{variable}` in `{function}`. "
             f"Either the payload was renamed or the contract is pointing at the "

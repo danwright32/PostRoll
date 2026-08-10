@@ -118,6 +118,8 @@ final class BridgePayloadContractTests: XCTestCase {
         "revised_caption", "revised_blog", "swapped_blog", "ocr_result", "flag_review",
         "media_result", "media_day", "friday_clip_plan", "friday_clip_selection",
         "cover_result", "swap_reel_audio", "meta_import", "learn_suggestion",
+        "web_performers", "handle_suggestions", "piece_notes", "ocr_flags",
+        "collage_candidates", "insight_report",
     ]
 
     // MARK: - Model payloads
@@ -250,6 +252,105 @@ final class BridgePayloadContractTests: XCTestCase {
         XCTAssertEqual(parsed.patch?.count, 1)
         XCTAssertTrue(parsed.resolved)
         try assertCovers("flag_review", ["assistant_reply", "patch", "resolved"])
+    }
+
+    // MARK: - The results the first sweep missed (#273)
+
+    func testWebPerformersReadEveryDeclaredKey() throws {
+        // Who was on stage. A different shape from a handle suggestion, and
+        // decoded into a different model: swapping the two would drop every
+        // field silently, since both decoders tolerate anything missing.
+        let json = #"[{"name": "A Singer", "role": "soloist", "voice_or_instrument": "Soprano"}]"#
+        let people = try JSONDecoder().decode([Performer].self, from: Data(json.utf8))
+        let p = try XCTUnwrap(people.first)
+        XCTAssertEqual(p.name, "A Singer")
+        XCTAssertEqual(p.role, "soloist")
+        XCTAssertEqual(p.voiceOrInstrument, "Soprano")
+        try assertCovers("web_performers", ["name", "role", "voice_or_instrument"])
+    }
+
+    func testAFetchedPerformerGetsAnIdentityAndAnEmptyHandle() throws {
+        // Python sends neither: the identity is this side's, and the handle is
+        // what the separate suggestion lookup is for.
+        let json = #"[{"name": "A Singer", "role": "ensemble"}]"#
+        let people = try JSONDecoder().decode([Performer].self, from: Data(json.utf8))
+        XCTAssertEqual(people.first?.handle, "")
+        XCTAssertNotNil(people.first?.id)
+    }
+
+    func testHandleSuggestionsReadEveryDeclaredKey() throws {
+        let json = """
+        [{"name": "A Singer", "handle": "@singer",
+          "profile_url": "https://instagram.com/singer",
+          "confidence": "medium", "note": "bio matches"}]
+        """
+        let out = try JSONDecoder().decode(
+            [PythonBridge.HandleSuggestion].self, from: Data(json.utf8))
+        let s = try XCTUnwrap(out.first)
+        XCTAssertEqual(s.name, "A Singer")
+        XCTAssertEqual(s.handle, "@singer")
+        XCTAssertEqual(s.confidence, "medium")
+        try assertCovers("handle_suggestions",
+                         ["name", "handle", "profile_url", "confidence", "note"])
+    }
+
+    func testPieceNotesReadEveryDeclaredKey() throws {
+        let json = #"[{"title": "A Work", "composer": "A Composer", "notes": "written in 1899"}]"#
+        let out = try JSONDecoder().decode(
+            [PythonBridge.PieceNoteResult].self, from: Data(json.utf8))
+        let n = try XCTUnwrap(out.first)
+        XCTAssertEqual(n.title, "A Work")
+        XCTAssertEqual(n.composer, "A Composer")
+        XCTAssertEqual(n.notes, "written in 1899")
+        try assertCovers("piece_notes", ["title", "composer", "notes"])
+    }
+
+    func testAPieceWithNoNoteFoundStillDecodes() throws {
+        // Kept rather than dropped, because it records that the lookup happened
+        // and is what stops the same piece being paid for again.
+        let json = #"[{"title": "A Work", "composer": "A Composer", "notes": null}]"#
+        let out = try JSONDecoder().decode(
+            [PythonBridge.PieceNoteResult].self, from: Data(json.utf8))
+        XCTAssertEqual(out.first?.title, "A Work")
+        XCTAssertNil(out.first?.notes)
+    }
+
+    func testOCRFlagsReadEveryDeclaredKey() throws {
+        var flag = OCRFlag(id: "flag_0", fieldPath: [], currentValue: "Smth",
+                           concern: "looks misread")
+        flag.suggestedValue = "Smith"
+        flag.programContext = "cast list, page 2"
+
+        // `resolved` is this side's own bookkeeping (whether Dan has dealt with
+        // the flag), never sent by Python, so it is excluded from the contract.
+        try assertCovers("ocr_flags", try encodedKeys(flag).subtracting(["resolved"]))
+        XCTAssertEqual(try JSONDecoder().decode(
+            OCRFlag.self, from: try JSONEncoder().encode(flag)), flag)
+    }
+
+    func testCollageCandidatesReadEveryDeclaredKey() throws {
+        let candidate = CollageCandidate(seed: 42, path: "/previews/cand_42.png")
+        try assertCovers("collage_candidates", try encodedKeys(candidate))
+        XCTAssertEqual(try JSONDecoder().decode(
+            CollageCandidate.self, from: try JSONEncoder().encode(candidate)), candidate)
+    }
+
+    func testTheInsightReportReadsEveryDeclaredKey() throws {
+        let findings = InsightFindings(captionPatterns: [], hashtagPatterns: [],
+                                       contentTypePatterns: [], timingPatterns: [])
+        let report = InsightReport(
+            id: UUID(), generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            dateRangeStart: Date(timeIntervalSince1970: 1_600_000_000),
+            dateRangeEnd: Date(timeIntervalSince1970: 1_700_000_000),
+            postCount: 10, storyCount: 4, feedCount: 6, summary: "what worked",
+            feedFindings: findings, storyFindings: findings,
+            brandVoiceSuggestions: ["shorter openings"], caveats: ["small sample"])
+
+        // `id` is stamped by Python's own uuid pass rather than named in the
+        // report shell, so it is not part of the declared key set.
+        try assertCovers("insight_report", try encodedKeys(report).subtracting(["id"]))
+        XCTAssertEqual(try JSONDecoder().decode(
+            InsightReport.self, from: try JSONEncoder().encode(report)), report)
     }
 
     // MARK: - Reader payloads
