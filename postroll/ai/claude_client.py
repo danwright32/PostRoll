@@ -22,6 +22,7 @@ import mimetypes
 import os
 import re
 import subprocess
+import tempfile
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -432,29 +433,43 @@ def _run_cli(
     allowed_tools: list[str] | None,
     model: str,
 ) -> str:
-    cmd: list[str] = [_cli_binary(), "-p", "--model", model]
-    if allowed_dirs:
-        cmd.append("--add-dir")
-        cmd.extend(str(Path(d).resolve()) for d in allowed_dirs)
-    if allowed_tools:
-        cmd.append("--allowedTools")
-        cmd.extend(allowed_tools)
+    # Session isolation, not optional (#212). `claude -p` inherits the user's own
+    # Claude Code configuration, and Dan's personal hooks wrote a banner into the
+    # middle of the JSON this function's callers parse. The settings file
+    # disables hooks while leaving the config DIRECTORY alone, because auth lives
+    # there too and a clean directory loses the subscription login.
+    #
+    # Written per call into a temp file rather than kept on disk: nothing then
+    # persists to go stale or be edited by hand into something that stops
+    # isolating.
+    with tempfile.TemporaryDirectory(prefix="postroll-cli-") as tmp:
+        settings_path = Path(tmp) / "settings.json"
+        settings_path.write_text(transport.isolated_settings_json(), encoding="utf-8")
 
-    try:
-        result = subprocess.run(
-            cmd,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
+        cmd = transport.cli_command(
+            binary=_cli_binary(),
+            model=model,
+            settings_path=settings_path,
+            allowed_dirs=list(allowed_dirs) if allowed_dirs else None,
+            allowed_tools=list(allowed_tools) if allowed_tools else None,
         )
-    except FileNotFoundError as e:
-        raise ClaudeError(
-            "`claude` binary not found. Set POSTROLL_CLAUDE_BIN or install Claude Code."
-        ) from e
-    except subprocess.TimeoutExpired as e:
-        raise ClaudeError(f"Claude CLI timed out after {timeout}s") from e
+
+        try:
+            result = subprocess.run(
+                cmd,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except FileNotFoundError as e:
+            raise ClaudeError(
+                "`claude` binary not found. Set POSTROLL_CLAUDE_BIN or install "
+                "Claude Code."
+            ) from e
+        except subprocess.TimeoutExpired as e:
+            raise ClaudeError(f"Claude CLI timed out after {timeout}s") from e
 
     if result.returncode != 0:
         raise ClaudeError(

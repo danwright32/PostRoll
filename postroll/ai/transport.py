@@ -20,6 +20,7 @@ all, so WebSearch has never worked there.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -121,6 +122,15 @@ def choose_transport(req: Request) -> Choice:
             carries_images=False,
         )
 
+    if subscription_enabled():
+        return Choice(
+            "cli",
+            "the subscription transport is switched on, so every request runs "
+            f"on Dan's Claude Code allowance rather than the metered API. "
+            f"Unset {SUBSCRIPTION_ENV} to go straight back to the paid path.",
+            carries_images=False,
+        )
+
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return Choice(
             "cli",
@@ -129,3 +139,59 @@ def choose_transport(req: Request) -> Choice:
         )
 
     return Choice("sdk", "the metered Anthropic API is the default path.")
+
+
+# ── the subscription transport (#212) ─────────────────────────────────────────
+
+#: The one switch. OFF is the stored default, so forgetting to set it produces
+#: the paid path rather than quietly spending Dan's own Claude Code allowance,
+#: and setting it back to anything else takes it straight off again. The app
+#: draws on the same allowance he uses for his own work, so this has to revert
+#: instantly rather than through a rebuild.
+SUBSCRIPTION_ENV = "POSTROLL_USE_SUBSCRIPTION"
+
+
+def subscription_enabled() -> bool:
+    """Whether the app should run on Dan's Claude Code subscription."""
+    return os.environ.get(SUBSCRIPTION_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def isolated_settings_json() -> str:
+    """The settings a subscription call runs under, as JSON for `--settings`.
+
+    `claude -p` inherits the user's own Claude Code configuration. Dan's
+    personal hooks wrote an issue-review banner into the middle of the JSON this
+    app parses, and the first spike failed outright on it.
+
+    Hooks are therefore disabled for the app's own calls. The config DIRECTORY
+    is deliberately left alone: auth and config share it, so pointing at a clean
+    one loses the subscription login and the whole point with it.
+
+    This breaks only on a machine that has hooks, so it works perfectly in
+    ordinary testing and fails on Dan's. `tests/test_subscription_transport.py`
+    asserts the isolation is requested rather than waiting for a live run to
+    show its absence.
+    """
+    return json.dumps({"hooks": {}})
+
+
+def cli_command(
+    *,
+    binary: str,
+    model: str,
+    settings_path: str | Path,
+    allowed_dirs: list[str | Path] | None = None,
+    allowed_tools: list[str] | None = None,
+) -> list[str]:
+    """The argv for one non-interactive CLI call, isolated from user config."""
+    # -p first: it is what makes the call non-interactive, and an interactive
+    # call inside the app would hang with nobody to answer it.
+    cmd: list[str] = [binary, "-p", "--model", model,
+                      "--settings", str(settings_path)]
+    if allowed_dirs:
+        cmd.append("--add-dir")
+        cmd.extend(str(Path(d).resolve()) for d in allowed_dirs)
+    if allowed_tools:
+        cmd.append("--allowedTools")
+        cmd.extend(allowed_tools)
+    return cmd
