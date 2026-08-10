@@ -74,6 +74,7 @@ targets:
       - path: Sources/Services/StoreBackups.swift
       - path: Sources/Services/InsightsDisplay.swift
       - path: Sources/Services/CaptionBlocks.swift
+      - path: Sources/Services/BlogMeta.swift
       - path: Sources/Services/ScrollEdgeFade.swift
       - path: Sources/Services/ExportReadiness.swift
       - path: Sources/Services/ExportManifest.swift

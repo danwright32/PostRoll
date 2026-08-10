@@ -1,0 +1,207 @@
+{
+  "_comment": [
+    "The post metadata that is NOT the post: the SEO description and the",
+    "details block, shared by postroll/blog_meta.py and",
+    "PostRollApp/Sources/Services/BlogMeta.swift (#283).",
+    "",
+    "Why it exists at all: every generated post ships",
+    "<meta name=\"description\" content=\"\">, so Squarespace falls back to",
+    "og:description, which takes the opening prose. The summary search engines",
+    "and AI crawlers see for the Whitacre post is 'The hall wasn't open yet.",
+    "Singers in black were already out on 57th Street...'. Good writing,",
+    "useless as a summary.",
+    "",
+    "Why deterministic rather than model written: neither string may live",
+    "inside the post body, because _fix_missing_contractions would send the",
+    "details block to Claude to be reworded (it has no contraction), the",
+    "second-person guard exempts only the LAST prose paragraph so a block after",
+    "the CTA makes the guard start rewriting the closing line, and",
+    "blog_quality counts any non-[PHOTO: block as prose so its invented-number",
+    "check flags the date. Separate fields, rendered at copy and export time,",
+    "never entering the AI round trip.",
+    "",
+    "The rules both implementations satisfy:",
+    "  1. The description opens with what was photographed, which follows the",
+    "     shoot type, because the prose has to match what Dan actually",
+    "     witnessed.",
+    "  2. An org with the same name as the event is dropped, the same rule",
+    "     media/brand_text.detail_lines already applies: it is already the",
+    "     title, so repeating it is noise.",
+    "     An org with the same name as the VENUE is dropped too, which is every",
+    "     resident company at its own theater.",
+    "  3. A missing org, venue, room or name drops its clause rather than",
+    "     leaving a string with a hole in it.",
+    "  4. The description is always inside Squarespace's 50 to 300 band. An",
+    "     over-long one sheds the room, then the org, then truncates the event",
+    "     name at a word boundary. It never ships out of band.",
+    "  5. Em and en dashes are stripped: spaced ones become a comma, tight ones",
+    "     become a space. Written here as escapes so the repo's own style hook",
+    "     has nothing to catch.",
+    "  6. The details block omits a line it has no value for, never printing a",
+    "     label with nothing after it.",
+    "",
+    "Dates arrive as ISO strings and render through a hardcoded month table in",
+    "both languages rather than a locale formatter, because a locale-dependent",
+    "month name is exactly the kind of drift this file exists to prevent.",
+    "",
+    "The over-long vector's description was MEASURED by running seo_description, not written by hand, so this file cannot record a trim the real function does not produce."
+  ],
+  "description_max": 300,
+  "description_min": 50,
+  "vectors": [
+    {
+      "_what": "the ordinary case: everything present",
+      "event": {
+        "name": "Perpetual Light",
+        "org": "DCINY",
+        "venue": "Carnegie Hall",
+        "venue_context": "Stern Auditorium",
+        "date": "2026-04-04",
+        "shoot_type": "performance",
+        "event_url": "https://dciny.org/perpetual-light"
+      },
+      "description": "Performance photographs of Perpetual Light, presented by DCINY at Stern Auditorium, Carnegie Hall, April 4, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: Perpetual Light\nPresented by: DCINY\nVenue: Stern Auditorium, Carnegie Hall\nDate: April 4, 2026\nPhotographed: Performance\nProgram: https://dciny.org/perpetual-light\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "no room, so the venue stands alone",
+      "event": {
+        "name": "A Streetcar Named Desire",
+        "org": "The Chain Theatre",
+        "venue": "The Chain Theatre",
+        "venue_context": "",
+        "date": "2026-05-01",
+        "shoot_type": "photo_call",
+        "event_url": ""
+      },
+      "description": "Photo call photographs of A Streetcar Named Desire at The Chain Theatre, May 1, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: A Streetcar Named Desire\nVenue: The Chain Theatre\nDate: May 1, 2026\nPhotographed: Photo call\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "an org matching the event name is dropped, the brand_text rule",
+      "event": {
+        "name": "Ensemble Companio",
+        "org": "ensemble companio",
+        "venue": "Weill Recital Hall",
+        "venue_context": "",
+        "date": "2026-06-12",
+        "shoot_type": "rehearsal",
+        "event_url": ""
+      },
+      "description": "Rehearsal photographs of Ensemble Companio at Weill Recital Hall, June 12, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: Ensemble Companio\nVenue: Weill Recital Hall\nDate: June 12, 2026\nPhotographed: Rehearsal\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "a combo shoot names both halves, because the prose has to match what was witnessed",
+      "event": {
+        "name": "Next to Normal",
+        "org": "Gallery Players",
+        "venue": "Gallery Players",
+        "venue_context": "",
+        "date": "2026-01-09",
+        "shoot_type": "rehearsal_and_performance",
+        "event_url": "https://example.org/next-to-normal"
+      },
+      "description": "Rehearsal and performance photographs of Next to Normal at Gallery Players, January 9, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: Next to Normal\nVenue: Gallery Players\nDate: January 9, 2026\nPhotographed: Rehearsal and performance\nProgram: https://example.org/next-to-normal\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "no venue at all: the clause goes, it does not leave 'at ,'",
+      "event": {
+        "name": "Winter Concert",
+        "org": "Riverside Choral Society",
+        "venue": "",
+        "venue_context": "",
+        "date": "2026-12-20",
+        "shoot_type": "performance",
+        "event_url": ""
+      },
+      "description": "Performance photographs of Winter Concert, presented by Riverside Choral Society, December 20, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: Winter Concert\nPresented by: Riverside Choral Society\nDate: December 20, 2026\nPhotographed: Performance\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "neither org nor venue: still a correct sentence, still over the 50 floor",
+      "event": {
+        "name": "Open Rehearsal",
+        "org": "",
+        "venue": "",
+        "venue_context": "",
+        "date": "2026-02-28",
+        "shoot_type": "rehearsal",
+        "event_url": ""
+      },
+      "description": "Rehearsal photographs of Open Rehearsal, February 28, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: Open Rehearsal\nDate: February 28, 2026\nPhotographed: Rehearsal\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "no event name: the sentence is about the venue instead, never 'photographs of ,'",
+      "event": {
+        "name": "",
+        "org": "DCINY",
+        "venue": "Carnegie Hall",
+        "venue_context": "",
+        "date": "2026-03-15",
+        "shoot_type": "performance",
+        "event_url": ""
+      },
+      "description": "Performance photographs presented by DCINY at Carnegie Hall, March 15, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Presented by: DCINY\nVenue: Carnegie Hall\nDate: March 15, 2026\nPhotographed: Performance\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "a spaced em dash in the name becomes a comma, a tight one becomes a space",
+      "event": {
+        "name": "Sing\u2014Play \u2014 A Winter Program",
+        "org": "",
+        "venue": "Merkin Hall",
+        "venue_context": "",
+        "date": "2026-11-07",
+        "shoot_type": "performance",
+        "event_url": ""
+      },
+      "description": "Performance photographs of Sing Play, A Winter Program at Merkin Hall, November 7, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: Sing Play, A Winter Program\nVenue: Merkin Hall\nDate: November 7, 2026\nPhotographed: Performance\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "an en dash is stripped the same way, since the style rule covers both",
+      "event": {
+        "name": "Bach \u2013 The Cantatas",
+        "org": "",
+        "venue": "Zankel Hall",
+        "venue_context": "",
+        "date": "2026-09-03",
+        "shoot_type": "performance",
+        "event_url": ""
+      },
+      "description": "Performance photographs of Bach, The Cantatas at Zankel Hall, September 3, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: Bach, The Cantatas\nVenue: Zankel Hall\nDate: September 3, 2026\nPhotographed: Performance\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "a name long enough to breach 300 sheds the room, then the org, then truncates at a word boundary",
+      "event": {
+        "name": "A Very Long Winter Program Of Choral Music Sung By Several Visiting Ensembles From Around The Country And Beyond Including Works Composed Especially For This Occasion And Several Older Pieces Nobody Has Heard In Some Considerable Time",
+        "org": "Distinguished Concerts International New York",
+        "venue": "Carnegie Hall",
+        "venue_context": "Stern Auditorium",
+        "date": "2026-10-18",
+        "shoot_type": "performance",
+        "event_url": ""
+      },
+      "description": "Performance photographs of A Very Long Winter Program Of Choral Music Sung By Several Visiting Ensembles From Around The Country And Beyond Including Works Composed Especially For This Occasion And at Carnegie Hall, October 18, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: A Very Long Winter Program Of Choral Music Sung By Several Visiting Ensembles From Around The Country And Beyond Including Works Composed Especially For This Occasion And Several Older Pieces Nobody Has Heard In Some Considerable Time\nPresented by: Distinguished Concerts International New York\nVenue: Stern Auditorium, Carnegie Hall\nDate: October 18, 2026\nPhotographed: Performance\nPhotographer: Dan Wright"
+    },
+    {
+      "_what": "surrounding whitespace is trimmed off every field",
+      "event": {
+        "name": "  Perpetual Light  ",
+        "org": "  DCINY  ",
+        "venue": " Carnegie Hall ",
+        "venue_context": "   ",
+        "date": "2026-04-04",
+        "shoot_type": "performance",
+        "event_url": "  https://dciny.org/perpetual-light  "
+      },
+      "description": "Performance photographs of Perpetual Light, presented by DCINY at Carnegie Hall, April 4, 2026. Concert and theater photography in New York by Dan Wright.",
+      "details": "Event: Perpetual Light\nPresented by: DCINY\nVenue: Carnegie Hall\nDate: April 4, 2026\nPhotographed: Performance\nProgram: https://dciny.org/perpetual-light\nPhotographer: Dan Wright"
+    }
+  ]
+}

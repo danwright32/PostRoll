@@ -118,6 +118,14 @@ struct EventExporter {
                 try md.write(to: blogDir.appendingPathComponent("draft.md"),
                              atomically: true, encoding: .utf8)
 
+                // The SEO description and details block, in their own file
+                // rather than appended to the draft (#284). Appended, they
+                // would be pasted into the post along with everything else,
+                // which is the exact hazard they exist to avoid (#283).
+                try BlogMeta.exportFileText(event: event)
+                    .write(to: blogDir.appendingPathComponent(BlogMeta.exportFileName),
+                           atomically: true, encoding: .utf8)
+
                 for (i, photo) in event.blogPhotoPaths.enumerated() {
                     let ext = photo.pathExtension
                     let dest = blogDir.appendingPathComponent("photo_\(String(format: "%02d", i + 1)).\(ext)")

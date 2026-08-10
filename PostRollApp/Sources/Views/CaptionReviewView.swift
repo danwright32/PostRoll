@@ -289,6 +289,9 @@ struct CaptionReviewView: View {
                         BlogSection(
                             blog: blogBinding,
                             photoCount: event.blogPhotoPaths.count,
+                            // Facts about the event, not about the draft, so
+                            // they are computed here rather than from `blog`.
+                            metadataFields: BlogMeta.copyFields(event: event),
                             isExpanded: expanded == .blog,
                             onToggle: { expanded = expanded == .blog ? nil : .blog },
                             onRevise: { feedback in try await reviseBlog(feedback: feedback) },
@@ -2409,6 +2412,10 @@ private struct RevisionPanel: View {
 private struct BlogSection: View {
     @Binding var blog: BlogOutput
     var photoCount: Int = 0
+    /// The SEO description and details block (#284). Passed in rather than
+    /// derived from `blog`: they are facts about the event, and they must never
+    /// be part of the post body.
+    var metadataFields: [BlogMeta.CopyField] = []
     let isExpanded: Bool
     let onToggle: () -> Void
     let onRevise: (String) async throws -> Void
@@ -2425,6 +2432,77 @@ private struct BlogSection: View {
     /// Confirms the copy landed. Reset whenever the text changes, so it never
     /// claims the clipboard holds something it no longer does.
     @State private var copiedDraft = false
+    /// Which metadata field was last copied, by label. One value rather than
+    /// one flag per field, so copying the second cannot leave the first still
+    /// claiming the clipboard (#284).
+    @State private var copiedMetadata: String? = nil
+
+    /// The SEO description and details block, each with its own copy control
+    /// (#284).
+    ///
+    /// Deliberately below the body and inside its own bordered card, because
+    /// the risk runs both ways: leaving these only in the export folder repeats
+    /// #205 (the title was generated, stored and shown, and Dan still typed it
+    /// by hand, because the surface he copies from carried the body alone), and
+    /// pasting them INTO the body is a new way to ship the wrong thing, since a
+    /// fact block inside the post reaches the AI round trip (#283).
+    @ViewBuilder
+    private var metadataPanel: some View {
+        if !metadataFields.isEmpty {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text("POST METADATA")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.warmMid)
+                Text("Not part of the post. Paste these into the page's own fields, not into the body.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.warmMid)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(metadataFields, id: \.label) { field in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(field.label)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Color.warmDark)
+                            Spacer()
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(field.text, forType: .string)
+                                copiedMetadata = field.label
+                            } label: {
+                                Label(copiedMetadata == field.label ? "Copied" : "Copy",
+                                      systemImage: copiedMetadata == field.label
+                                                   ? "checkmark" : "doc.on.doc")
+                                    .labelStyle(.titleAndIcon)
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.roseGold)
+                            .help(field.help)
+                            .accessibilityLabel("Copy \(field.label)")
+                        }
+                        Text(field.text)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.warmMid)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm)
+                    .fill(Color.creamDeep)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.sm)
+                            .strokeBorder(Color.creamEdge, lineWidth: 1)
+                    )
+            )
+        }
+    }
 
     /// The deterministic checks from #201. They report rather than rewrite,
     /// so this panel IS the feature: the quoted text is what lets Dan fix each
@@ -2593,6 +2671,8 @@ private struct BlogSection: View {
                         }
                     }
 
+                    metadataPanel
+
                     if showingRevision {
                         RevisionPanel(
                             feedbackText: $feedbackText,
@@ -2657,6 +2737,9 @@ private struct BlogSection: View {
         // changed (#205).
         .onChange(of: blog.body) { copiedDraft = false }
         .onChange(of: blog.title) { copiedDraft = false }
+        // Same rule for the metadata: these change when the event's own facts
+        // do, not when the draft does, so they watch their own text.
+        .onChange(of: metadataFields) { copiedMetadata = nil }
     }
 
     private func pickAndSwapPhotos() {
