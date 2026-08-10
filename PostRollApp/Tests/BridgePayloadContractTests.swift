@@ -120,6 +120,13 @@ final class BridgePayloadContractTests: XCTestCase {
         "cover_result", "swap_reel_audio", "meta_import", "learn_suggestion",
         "web_performers", "handle_suggestions", "piece_notes", "ocr_flags",
         "collage_candidates", "insight_report",
+        // The shapes one level DOWN (#274). The contract used to confirm that
+        // `performers`, `pieces` and `scenes` arrived and check nothing inside
+        // them, so a field renamed a level down went missing exactly the way
+        // OCR's `other` did for years: the outer key still arrives, so nothing
+        // looks broken.
+        "ocr_performer", "program_piece", "program_scene", "ig_post",
+        "insight_findings", "insight_finding", "blog_finding",
     ]
 
     // MARK: - Model payloads
@@ -351,6 +358,102 @@ final class BridgePayloadContractTests: XCTestCase {
         try assertCovers("insight_report", try encodedKeys(report).subtracting(["id"]))
         XCTAssertEqual(try JSONDecoder().decode(
             InsightReport.self, from: try JSONEncoder().encode(report)), report)
+    }
+
+    // MARK: - Nested shapes (#274)
+
+    func testAnOCRPerformerReadsEveryDeclaredKey() throws {
+        let json = #"{"name": "A Singer", "role": "soloist", "voice_or_instrument": "Soprano"}"#
+        let p = try JSONDecoder().decode(Performer.self, from: Data(json.utf8))
+        XCTAssertEqual(p.name, "A Singer")
+        XCTAssertEqual(p.role, "soloist")
+        XCTAssertEqual(p.voiceOrInstrument, "Soprano")
+        try assertCovers("ocr_performer", ["name", "role", "voice_or_instrument"])
+    }
+
+    func testAProgramPieceReadsEveryDeclaredKey() throws {
+        let json = #"""
+        {"composer": "Bach", "title": "St Matthew Passion",
+         "movements": ["Part I", "Part II"], "notes": "premiered 1727"}
+        """#
+        let piece = try JSONDecoder().decode(Piece.self, from: Data(json.utf8))
+        XCTAssertEqual(piece.composer, "Bach")
+        XCTAssertEqual(piece.title, "St Matthew Passion")
+        XCTAssertEqual(piece.movements, ["Part I", "Part II"])
+        XCTAssertEqual(piece.notes, "premiered 1727")
+        try assertCovers("program_piece", ["composer", "title", "movements", "notes"])
+    }
+
+    func testAProgramSceneReadsEveryDeclaredKey() throws {
+        // visual_cues is the one that matters most and the one a rename would
+        // hide: it is what the caption pipeline matches photos against.
+        let json = #"""
+        {"name": "spa scene", "location": "New Mexico",
+         "visual_cues": "two actors at a small table", "description": "what happens"}
+        """#
+        let scene = try JSONDecoder().decode(ProgramScene.self, from: Data(json.utf8))
+        XCTAssertEqual(scene.name, "spa scene")
+        XCTAssertEqual(scene.location, "New Mexico")
+        XCTAssertEqual(scene.visualCues, "two actors at a small table")
+        XCTAssertEqual(scene.description, "what happens")
+        try assertCovers("program_scene",
+                         ["name", "location", "visual_cues", "description"])
+    }
+
+    func testAnIGPostReadsEveryDeclaredKey() throws {
+        let post = IGPost(
+            igPostID: "1", igPermalink: "https://example.com/p/1",
+            publishedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            mediaType: .reel, rawPostType: "IG reel", caption: "a caption",
+            hashtags: ["#one"], views: 1, reach: 2, likes: 3, shares: 4, follows: 5,
+            comments: 6, saves: 7, replies: 8, navigation: 9, profileVisits: 10,
+            stickerTaps: 11, durationSec: 12.5, org: "@dciny", isPersonal: false)
+
+        let keys = try encodedKeys(post)
+        try assertCovers("ig_post", keys)
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let back = try decoder.decode(IGPost.self, from: try encoder.encode(post))
+        XCTAssertEqual(back, post)
+    }
+
+    func testAFindingsTrackReadsEveryDeclaredKey() throws {
+        let one = InsightFinding(id: UUID(), headline: "h", evidence: "e", confidence: .high)
+        let findings = InsightFindings(captionPatterns: [one], hashtagPatterns: [one],
+                                       contentTypePatterns: [one], timingPatterns: [one])
+
+        let keys = try encodedKeys(findings)
+        try assertCovers("insight_findings", keys)
+
+        let back = try JSONDecoder().decode(
+            InsightFindings.self, from: try JSONEncoder().encode(findings))
+        XCTAssertEqual(back, findings)
+    }
+
+    func testAnInsightFindingReadsEveryDeclaredKey() throws {
+        // `id` is stamped by Python's _assign_ids after the entry is shaped, so
+        // it is not part of the declared shape and is subtracted here.
+        let finding = InsightFinding(id: UUID(), headline: "h", evidence: "e",
+                                     confidence: .medium)
+        try assertCovers("insight_finding", try encodedKeys(finding).subtracting(["id"]))
+
+        let json = #"{"headline": "h", "evidence": "e", "confidence": "medium"}"#
+        let back = try JSONDecoder().decode(InsightFinding.self, from: Data(json.utf8))
+        XCTAssertEqual(back.headline, "h")
+        XCTAssertEqual(back.evidence, "e")
+        XCTAssertEqual(back.confidence, .medium)
+    }
+
+    func testABlogFindingReadsEveryDeclaredKey() throws {
+        let finding = BlogFinding(code: "c", message: "m", detail: "d")
+        try assertCovers("blog_finding", try encodedKeys(finding))
+
+        let back = try JSONDecoder().decode(
+            BlogFinding.self, from: try JSONEncoder().encode(finding))
+        XCTAssertEqual(back, finding)
     }
 
     // MARK: - Reader payloads

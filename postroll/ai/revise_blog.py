@@ -52,7 +52,7 @@ from .ai_tells import (
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
-from .blog_quality import check_blog
+from .blog_quality import check_blog, finding_entry
 from .generate_blog import (
     _fix_missing_contractions,
     _fix_second_person,
@@ -219,8 +219,7 @@ def revise_blog(
         "title":       data.get("title", title).strip(),
         "body":        final_body,
         "photo_count": photo_count,
-        "findings": [{"code": f.code, "message": f.message, "detail": f.detail}
-                     for f in findings],
+        "findings": [finding_entry(f) for f in findings],
     }
 
 

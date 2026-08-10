@@ -490,6 +490,159 @@
       "crop_confidence": "swift"
     }
   },
+  "ocr_performer": {
+    "_what": "One performer inside ocr_result.performers. Its own entry because the contract used to check only that `performers` arrived, so a field renamed one level down went missing the way `other` did for years (#274).",
+    "python": [
+      {
+        "module": "postroll/ai/ocr_program.py",
+        "function": "_performer_entry"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "Performer"
+    },
+    "keys": {
+      "name": "swift",
+      "role": "swift",
+      "voice_or_instrument": "swift"
+    }
+  },
+  "program_piece": {
+    "_what": "One piece inside ocr_result.pieces.",
+    "python": [
+      {
+        "module": "postroll/ai/ocr_program.py",
+        "function": "_piece_entry"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "Piece"
+    },
+    "keys": {
+      "composer": "swift",
+      "title": "swift",
+      "movements": "swift",
+      "notes": "swift"
+    }
+  },
+  "program_scene": {
+    "_what": "One scene inside ocr_result.scenes.",
+    "python": [
+      {
+        "module": "postroll/ai/ocr_program.py",
+        "function": "_scene_entry"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "ProgramScene"
+    },
+    "keys": {
+      "name": "swift",
+      "location": "swift",
+      "visual_cues": "swift",
+      "description": "swift"
+    }
+  },
+  "ig_post": {
+    "_what": "One post read out of the Meta export CSV.",
+    "python": [
+      {
+        "module": "postroll/ai/import_meta_csv.py",
+        "function": "parse_csv",
+        "variable": "post",
+        "dynamic": {
+          "field": {
+            "from": "postroll.ai.import_meta_csv:OPTIONAL_METRIC_FIELDS"
+          }
+        }
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "IGPost"
+    },
+    "keys": {
+      "ig_post_id": "swift",
+      "ig_permalink": "swift",
+      "published_at": "swift",
+      "media_type": "swift",
+      "raw_post_type": "swift",
+      "caption": "swift",
+      "hashtags": "swift",
+      "org": "swift",
+      "is_personal": "swift",
+      "views": "swift",
+      "reach": "swift",
+      "likes": "swift",
+      "shares": "swift",
+      "follows": "swift",
+      "comments": "swift",
+      "saves": "swift",
+      "replies": "swift",
+      "navigation": "swift",
+      "profile_visits": "swift",
+      "sticker_taps": "swift",
+      "duration_sec": "swift"
+    }
+  },
+  "insight_findings": {
+    "_what": "The four pattern lists inside a findings track (feed_findings, story_findings).",
+    "python": [
+      {
+        "module": "postroll/ai/analyze_posts.py",
+        "function": "findings_shell"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "InsightFindings"
+    },
+    "keys": {
+      "caption_patterns": "swift",
+      "hashtag_patterns": "swift",
+      "content_type_patterns": "swift",
+      "timing_patterns": "swift"
+    }
+  },
+  "insight_finding": {
+    "_what": "One finding inside a pattern list. `id` is stamped by _assign_ids after this, so it is not part of the declared shape.",
+    "python": [
+      {
+        "module": "postroll/ai/analyze_posts.py",
+        "function": "finding_entry"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "InsightFinding"
+    },
+    "keys": {
+      "headline": "swift",
+      "evidence": "swift",
+      "confidence": "swift"
+    }
+  },
+  "blog_finding": {
+    "_what": "One deterministic blog check result inside blog_output.findings.",
+    "python": [
+      {
+        "module": "postroll/ai/blog_quality.py",
+        "function": "finding_entry"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "BlogFinding"
+    },
+    "keys": {
+      "code": "swift",
+      "message": "swift",
+      "detail": "swift"
+    }
+  },
   "cover_result": {
     "_what": "A single day's regenerated cover image.",
     "python": [

@@ -52,7 +52,7 @@ from .ai_tells import (
 )
 from .claude_client import run_json_prompt, run_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .progress import ProgressWriter
-from .blog_quality import check_blog
+from .blog_quality import check_blog, finding_entry
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
@@ -1826,8 +1826,7 @@ def generate_blog(
         "title": deterministic_title or data.get("title", "").strip(),
         "body": final_body,
         "photo_count": len(resolved),
-        "findings": [{"code": f.code, "message": f.message, "detail": f.detail}
-                     for f in findings],
+        "findings": [finding_entry(f) for f in findings],
     }
 
 

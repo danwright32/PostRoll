@@ -35,12 +35,37 @@ from postroll.ai.claude_client import load_brand_voice, run_json_prompt
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
-_EMPTY_FINDINGS = {
-    "caption_patterns":      [],
-    "hashtag_patterns":      [],
-    "content_type_patterns": [],
-    "timing_patterns":       [],
-}
+def findings_shell() -> dict[str, list]:
+    """The four lists a findings track always carries.
+
+    A function rather than only a constant so the payload contract can read the
+    key set off a dict literal in the source, instead of a copy written beside
+    it that stops matching (#274).
+    """
+    return {
+        "caption_patterns":      [],
+        "hashtag_patterns":      [],
+        "content_type_patterns": [],
+        "timing_patterns":       [],
+    }
+
+
+def finding_entry(raw: dict[str, Any]) -> dict[str, Any]:
+    """One finding, in exactly the fields the app decodes (#274).
+
+    Claude writes these, so what is inside one was whatever came back. Shaping
+    them here makes the boundary a deterministic check rather than a hope about
+    a prompt (L27). `id` is stamped by `_assign_ids` afterwards.
+    """
+    confidence = str(raw.get("confidence") or "low").lower()
+    return {
+        "headline": str(raw.get("headline") or ""),
+        "evidence": str(raw.get("evidence") or ""),
+        "confidence": confidence if confidence in {"low", "medium", "high"} else "low",
+    }
+
+
+_EMPTY_FINDINGS = findings_shell()
 
 _EMPTY_REPORT_SHELL: dict[str, Any] = {
     "summary":               "",
@@ -280,12 +305,17 @@ def _finalize(result: dict[str, Any], date_start: str, date_end: str) -> dict[st
 
     for track in ("feed_findings", "story_findings"):
         if not isinstance(result.get(track), dict):
-            result[track] = _EMPTY_FINDINGS.copy()
+            result[track] = findings_shell()
         else:
-            for sub in ("caption_patterns", "hashtag_patterns",
-                         "content_type_patterns", "timing_patterns"):
-                if sub not in result[track]:
-                    result[track][sub] = []
+            shell = findings_shell()
+            for sub in shell:
+                entries = result[track].get(sub)
+                # Shaped rather than passed through: a renamed field inside a
+                # finding is otherwise invisible, because the list still
+                # arrives (#274).
+                result[track][sub] = [
+                    finding_entry(e) for e in entries if isinstance(e, dict)
+                ] if isinstance(entries, list) else []
 
     result["generated_at"]    = now
     result["date_range_start"] = date_start or now[:10]

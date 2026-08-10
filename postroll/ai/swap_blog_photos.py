@@ -31,7 +31,7 @@ import tempfile
 from pathlib import Path
 
 from .ai_tells import strip_em_dashes
-from .blog_quality import check_blog
+from .blog_quality import check_blog, finding_entry
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -158,8 +158,7 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
     return {
         "body":        final_body,
         "photo_count": len(photo_paths),
-        "findings": [{"code": f.code, "message": f.message, "detail": f.detail}
-                     for f in findings],
+        "findings": [finding_entry(f) for f in findings],
     }
 
 

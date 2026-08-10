@@ -51,6 +51,15 @@ FIELD_ALIASES: dict[str, list[str]] = {
     "sticker_taps":     ["Sticker taps", "Sticker Taps"],
 }
 
+#: The metric columns that may or may not appear on a post, named here rather
+#: than inline so the payload contract can expand them from the real symbol
+#: instead of a hand-copied list that stops matching (#274, L41).
+OPTIONAL_METRIC_FIELDS = (
+    "views", "reach", "likes", "shares", "follows",
+    "comments", "saves", "replies", "navigation",
+    "profile_visits", "sticker_taps",
+)
+
 # Meta post type → normalized IGMediaType value
 MEDIA_TYPE_MAP: dict[str, str] = {
     "ig story":   "story",
@@ -222,9 +231,7 @@ def parse_csv(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
             }
 
             # Metrics (all optional)
-            for field in ("views", "reach", "likes", "shares", "follows",
-                          "comments", "saves", "replies", "navigation",
-                          "profile_visits", "sticker_taps"):
+            for field in OPTIONAL_METRIC_FIELDS:
                 v = _parse_int(get(row, field))
                 if v is not None:
                     post[field] = v

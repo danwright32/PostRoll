@@ -104,6 +104,16 @@ class Finding:
     detail: str
 
 
+def finding_entry(finding: Finding) -> dict[str, str]:
+    """One finding, in exactly the fields the app decodes (#274).
+
+    Three modules built this dict by hand, so a field added to Finding reached
+    the app from whichever of them was remembered. One derivation, and the
+    payload contract has one place to read.
+    """
+    return {"code": finding.code, "message": finding.message, "detail": finding.detail}
+
+
 def _markers(body: str) -> list[tuple[str, str]]:
     return [(m.group(1).strip(), m.group(2).strip()) for m in _PHOTO_MARKER.finditer(body)]
 

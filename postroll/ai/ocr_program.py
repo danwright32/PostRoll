@@ -365,6 +365,65 @@ def _normalize_image_paths(
     return resolved
 
 
+def _performer_entry(raw: dict[str, Any]) -> dict[str, Any]:
+    """One performer, in exactly the fields the app decodes (#274).
+
+    The outer keys of the OCR result were normalised; what was INSIDE a
+    performer, a piece or a scene was whatever Claude happened to return, so a
+    field renamed one level down went missing exactly the way `other` did for
+    years: the outer key still arrives, so nothing looks broken (L27, L46).
+
+    Shaping the entry here makes the boundary a deterministic code check rather
+    than a hope about a prompt, and gives the payload contract something real
+    to read.
+    """
+    return {
+        "name": _text(raw.get("name")),
+        "role": _text(raw.get("role")),
+        "voice_or_instrument": _text(raw.get("voice_or_instrument")),
+    }
+
+
+def _piece_entry(raw: dict[str, Any]) -> dict[str, Any]:
+    """One piece, in exactly the fields the app decodes (#274)."""
+    movements = raw.get("movements")
+    return {
+        "composer": _text(raw.get("composer")),
+        "title": _text(raw.get("title")),
+        "movements": [_text(m) for m in movements] if isinstance(movements, list) else [],
+        "notes": _text(raw.get("notes")),
+    }
+
+
+def _scene_entry(raw: dict[str, Any]) -> dict[str, Any]:
+    """One scene, in exactly the fields the app decodes (#274)."""
+    return {
+        "name": _text(raw.get("name")),
+        "location": _text(raw.get("location")),
+        "visual_cues": _text(raw.get("visual_cues")),
+        "description": _text(raw.get("description")),
+    }
+
+
+def _text(value: Any) -> str:
+    """A field Claude may return as null, a number, or a string.
+
+    Empty string rather than None, because the app decodes these as
+    non-optional strings and a null would fall back to the same empty value
+    anyway; doing it here means the payload says what it means.
+    """
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else str(value)
+
+
+def _entries(raw: Any, shape) -> list[dict[str, Any]]:
+    """Apply `shape` to every dict in `raw`, skipping anything that is not one."""
+    if not isinstance(raw, list):
+        return []
+    return [shape(item) for item in raw if isinstance(item, dict)]
+
+
 def _extract_pieces_only(resolved_paths: list[str]) -> list[dict[str, Any]]:
     """Run a focused Claude call that asks ONLY for the pieces array.
 
@@ -619,9 +678,12 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
 
     # Fill in any missing keys with empty defaults so downstream code is safe
     return {
-        "performers": data.get("performers", []),
-        "pieces": data.get("pieces", []),
-        "scenes": data.get("scenes", []),
+        # The nested entries are shaped explicitly, not passed through: a field
+        # renamed inside a performer, piece or scene is otherwise invisible,
+        # because the outer key still arrives (#274).
+        "performers": _entries(data.get("performers"), _performer_entry),
+        "pieces": _entries(data.get("pieces"), _piece_entry),
+        "scenes": _entries(data.get("scenes"), _scene_entry),
         "organization_notes": data.get("organization_notes", ""),
         "program_notes": data.get("program_notes", ""),
         "venue_notes": data.get("venue_notes", ""),
