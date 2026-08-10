@@ -131,6 +131,12 @@ private struct WelcomeDetailView: View {
 
 // MARK: - Window configurator (transparent titlebar, opaque content)
 
+/// Lifetime, audited against #196 (#198): this hands nothing to anything that
+/// outlives it. It MUTATES the shared window (appearance, background, minimum
+/// size, opening frame) and never undoes that, which is correct rather than an
+/// oversight: it is the app's only window, it dies with the app, and every
+/// change here is idempotent. The async block captures the view rather than
+/// the reverse, so there is nothing to dangle either.
 private struct WindowConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()

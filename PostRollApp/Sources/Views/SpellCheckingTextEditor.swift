@@ -11,6 +11,13 @@ import AppKit
 ///       .frame(minHeight: 80)
 ///       .padding(8)
 ///       .background(...)
+///
+/// Lifetime, audited against #196 (#198): this is the wrapper the defect was
+/// found in. Its undo operations used to go to the WINDOW's undo manager,
+/// which holds them unowned and outlives the text view, so a destroyed editor
+/// left live entries pointing at freed memory and holding Cmd+Z killed the
+/// app. The coordinator now owns an `UndoManager` of its own, so the stack
+/// dies with the editor and nothing dangles. See `Coordinator.undoManager(for:)`.
 struct SpellCheckingTextEditor: NSViewRepresentable {
     @Binding var text: String
     private var font: NSFont = .systemFont(ofSize: 12)

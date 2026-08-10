@@ -5329,61 +5329,6 @@ private struct ReviewMediaFileRow: View {
     }
 }
 
-// MARK: - Reel video preview
-
-private struct ReelPreviewPlayer: NSViewRepresentable {
-    let url: URL
-    var version: Int = 0
-    var onRegenerate: (() -> Void)?
-    var isRegenerating: Bool
-    var videoGravity: AVLayerVideoGravity = .resizeAspect
-
-    func makeNSView(context: Context) -> NSView {
-        let container = NSView()
-        let playerView = AVPlayerView()
-        playerView.player = AVPlayer(playerItem: AVPlayerItem(asset: AVURLAsset(url: url)))
-        playerView.controlsStyle = .inline
-        playerView.videoGravity = videoGravity
-        playerView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(playerView)
-        context.coordinator.lastVersion = version
-        context.coordinator.lastURL = url
-        NSLayoutConstraint.activate([
-            playerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            playerView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            playerView.topAnchor.constraint(equalTo: container.topAnchor),
-            playerView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
-        return container
-    }
-
-    // Replace the AVPlayer when the URL changes OR the version bumps. Same
-    // URL with new bytes (Python may overwrite the MP4 in place after a
-    // regen) needs a fresh AVPlayer because AVFoundation caches by URL.
-    func updateNSView(_ nsView: NSView, context: Context) {
-        guard let playerView = nsView.subviews.first as? AVPlayerView else { return }
-        if context.coordinator.lastURL != url || context.coordinator.lastVersion != version {
-            // Tear down the old player explicitly so the underlying AVAsset
-            // is released before the new one memory-maps the (now overwritten)
-            // file. Without this, AVFoundation can keep serving stale frames
-            // even though we replaced the player object.
-            playerView.player?.pause()
-            playerView.player?.replaceCurrentItem(with: nil)
-            playerView.player = AVPlayer(playerItem: AVPlayerItem(asset: AVURLAsset(url: url)))
-            context.coordinator.lastURL = url
-            context.coordinator.lastVersion = version
-        }
-        playerView.videoGravity = videoGravity
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    final class Coordinator {
-        var lastURL: URL?
-        var lastVersion: Int = -1
-    }
-}
-
 // MARK: - Learning suggestion sheet
 
 private struct LearningSuggestionSheet: View {
