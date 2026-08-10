@@ -847,15 +847,12 @@ actor PythonBridge {
     nonisolated func buildMediaManifest(event: Event) -> [String: Any] {
         var daysDict: [String: Any] = [:]
         for dayName in DayName.allCases {
-            guard let pd = event.days[dayName.rawValue],
-                  !pd.photoPaths.isEmpty || pd.rawPhotoPath != nil || pd.editedPhotoPath != nil
-                      || !pd.clipPaths.isEmpty
-            else { continue }
-            // photoPaths is the source of truth for reel/collage order. It's
-            // sorted once at import (changeReelPhotos) and any user-driven
-            // reorders (e.g. Thursday swap) live there. Don't re-sort here —
-            // doing so would silently revert manual swaps on every regen.
-            var entry: [String: Any] = ["photos": pd.photoPaths.map { $0.path }]
+            let pd = event.days[dayName.rawValue]
+            guard ManifestDay.isIncluded(pd), let pd else { continue }
+            // The inclusion rule and the fields both pipelines need live in
+            // ManifestDay, so a new shared field reaches the caption run too
+            // rather than only this one (#138).
+            var entry = ManifestDay.sharedEntry(pd, day: dayName)
             switch dayName {
             case .tuesday:
                 if let rec  = pd.screenRecordingPath { entry["screen_recording"]  = rec.path }
@@ -879,19 +876,11 @@ actor PythonBridge {
                 if let raw  = pd.rawPhotoPath        { entry["raw_photo"]         = raw.path }
                 if let edit = pd.editedPhotoPath     { entry["edited_photo"]      = edit.path }
                 if let bw   = pd.bwPhotoPath         { entry["bw_photo"]          = bw.path }
-                if !pd.clipPaths.isEmpty { entry["clips"] = pd.clipPaths.map { $0.path } }
                 entry["clip_duck_db"] = pd.fridayAudioDuckDB
                 entry["clip_audio_muted"] = pd.fridayAudioMuted
                 entry["title_card_muted"] = pd.titleCardMuted
             default:
                 break
-            }
-            // Instagram grid cover image (Thursday + Friday only): a manual
-            // override always wins over the AI pick, same nil-means-AI /
-            // non-nil-means-user semantics as collageCellOverride. Lets
-            // Phase 1's sticky gate skip its Claude call on regen.
-            if let source = pd.coverOverride ?? pd.coverPick?.sourcePath {
-                entry["cover_source"] = source
             }
             // Collage-carousel days (Wednesday always; Sunday/Monday under the
             // balanced preset) carry the collage seed, per-cell crop offsets, and
@@ -1236,20 +1225,15 @@ actor PythonBridge {
         var daysDict: [String: Any] = [:]
         for dayName in DayName.allCases {
             if let only = onlyDays, !only.contains(dayName.rawValue) { continue }
-            guard let pd = event.days[dayName.rawValue],
-                  !pd.photoPaths.isEmpty || pd.rawPhotoPath != nil || pd.editedPhotoPath != nil
-                      || !pd.clipPaths.isEmpty
-            else { continue }
-            var dayEntry: [String: Any] = [
-                "photos": pd.photoPaths.map { $0.path },
-            ]
+            let pd = event.days[dayName.rawValue]
+            guard ManifestDay.isIncluded(pd), let pd else { continue }
+            var dayEntry = ManifestDay.sharedEntry(pd, day: dayName)
             // Friday clip reel: the persisted Stage 2 plan (already selected/
             // ordered/trimmed by generate_media.py, decoded back into
             // fridayClipPlan) is sent along so generate_week.py can re-extract
             // representative frames for the caption call without redoing
             // Stage 1/2 selection.
             if dayName == .friday {
-                if !pd.clipPaths.isEmpty { dayEntry["clips"] = pd.clipPaths.map { $0.path } }
                 if let plan = pd.fridayClipPlan, !plan.selections.isEmpty {
                     dayEntry["clips_plan"] = [
                         "selections": plan.selections.map { sel -> [String: Any] in
@@ -1309,9 +1293,6 @@ actor PythonBridge {
             if !allHandles.isEmpty { dayEntry["tag_handles"]   = allHandles }
             if !allNames.isEmpty   { dayEntry["name_mentions"] = allNames }
             if !pd.notes.isEmpty   { dayEntry["notes"]         = pd.notes }
-            if let source = pd.coverOverride ?? pd.coverPick?.sourcePath {
-                dayEntry["cover_source"] = source
-            }
             // Per-photo people tags (Wednesday). Re-key from the URL
             // absoluteString the UI stores to the POSIX path used in `photos`,
             // so Python can line each tag up with its photo by path.
