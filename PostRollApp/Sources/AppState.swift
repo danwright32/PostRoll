@@ -13,6 +13,13 @@ final class AppState {
     /// The list of days whose cached assets predate the current design (#293).
     var showingOutdatedDesigns = false
 
+    /// Set at launch when the running app was built before the newest commit,
+    /// so a fix that has already shipped may simply not be in this copy.
+    ///
+    /// Checked once per launch: it reads the disk and runs git, and the answer
+    /// cannot change while the app is open.
+    var buildBehind: BuildBehind?
+
     /// Set when events.json existed but its contents could not be decoded.
     /// Shown once as a dismissible alert; the bad file was moved aside, so
     /// starting from an empty list is safe.

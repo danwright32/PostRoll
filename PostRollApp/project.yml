@@ -62,6 +62,7 @@ targets:
       - path: Sources/Services/DesignStamp.swift
       - path: Sources/Services/DesignStaleScan.swift
       - path: Sources/Services/OutdatedDesignsDisplay.swift
+      - path: Sources/Services/BuildFreshness.swift
       - path: Sources/Services/PreviewMergePolicy.swift
       - path: Sources/Services/PreviewRunState.swift
       - path: Sources/Services/PerformerPanelDisplay.swift
