@@ -304,6 +304,67 @@ def sample_frames(video_path: str | Path, count: int = 12) -> list[Image.Image]:
     return frames
 
 
+def sample_frames_between(video_path: str | Path, start: float, end: float,
+                          count: int = 5) -> list[Image.Image]:
+    """`count` frames spread across [start, end] of an encoded video.
+
+    For a window that matters more than its share of the running time (#335).
+    An even spread over the whole file gives a 1.5 second dissolve one or two
+    frames out of twelve, by luck rather than by intent, and a window nobody
+    aimed at is a window that stops being covered the moment the timings move.
+
+    Both ends are included, because the ends of a dissolve are where the
+    outgoing and incoming designs are each at full strength and therefore the
+    only moments at which either can be held to a contrast bar.
+    """
+    video_path = Path(video_path)
+    if count < 2:
+        raise ValueError("count must be at least 2: a window has two ends")
+    duration = probe_duration(video_path)
+    if not 0 <= start < end <= duration + 1e-6:
+        raise ValueError(
+            f"[{start}, {end}] is not inside {video_path.name}, which runs "
+            f"{duration:.3f}s")
+
+    stamps = [start + (end - start) * i / (count - 1) for i in range(count)]
+    # Never inside the last frame: seeking to a stamp at or past its
+    # presentation time decodes nothing and would raise as if the file were
+    # broken. A tenth of a second is three frames at 30fps, comfortably clear of
+    # the boundary without leaving the window being asked about.
+    last = max(0.0, duration - 0.1)
+    return [_frame_at(video_path, min(stamp, last)) for stamp in stamps]
+
+
+def _frame_at(video_path: Path, stamp: float) -> Image.Image:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "frame.png"
+        result = subprocess.run(
+            ["ffmpeg", "-nostdin", "-loglevel", "error", "-ss", f"{stamp:.3f}",
+             "-i", str(video_path), "-frames:v", "1", "-y", str(path)],
+            capture_output=True, text=True)
+        if result.returncode != 0 or not path.exists():
+            raise RuntimeError(
+                f"could not read a frame at {stamp:.3f}s from {video_path}: "
+                f"{result.stderr.strip()}")
+        with Image.open(path) as img:
+            return img.convert("RGB").copy()
+
+
+def mean_difference(a: Image.Image, b: Image.Image) -> float:
+    """Mean absolute per-channel difference between two frames, 0 to 255.
+
+    For telling WHICH design is on screen, which a band check cannot answer: the
+    reel's plate and the closing graphic both draw dark ink on cream near the
+    top of the canvas, so a band can read comfortably on either and a reel that
+    silently never reached its closing graphic would pass every band it has.
+    """
+    if a.size != b.size:
+        b = b.resize(a.size, Image.LANCZOS)
+    pairs = zip(a.convert("RGB").getdata(), b.convert("RGB").getdata())
+    total = sum(abs(p - q) for pa, pb in pairs for p, q in zip(pa, pb))
+    return total / (a.size[0] * a.size[1] * 3)
+
+
 def probe_duration(video_path: str | Path) -> float:
     """How long an encoded file runs, in seconds."""
     result = subprocess.run(
