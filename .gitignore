@@ -43,3 +43,16 @@ scripts/
 # here is needed to build (#120).
 **/xcuserdata/
 *.xcuserstate
+
+# iCloud conflict copies. This repo lives under ~/Documents, which has Desktop
+# and Documents sync switched on, so iCloud resolves a sync race by writing a
+# second copy beside the original with a number appended ("DesignStamp 2.swift",
+# "PostRoll 2.xcodeproj"). Six of them accumulated in the working tree, two of
+# which were copies of the very files an open issue was about, so a search could
+# match a stale copy and an edit could land in a file nothing builds. They are
+# never wanted in the repo. Note this only hides them from git: the copies are
+# still written to disk, and iCloud also makes them inside .git itself, which
+# git never tracks and this cannot reach.
+*[ ][0-9]
+*[ ][0-9].*
+*.icloud
