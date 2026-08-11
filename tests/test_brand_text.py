@@ -21,6 +21,8 @@ template somebody adds, which is the one the guard exists for.
 
 from __future__ import annotations
 
+import ast
+
 import re
 from pathlib import Path
 
@@ -62,8 +64,52 @@ def test_strips_surrounding_space_from_what_it_returns():
     assert detail_lines("A", "  DCINY  ", "  Carnegie  ") == ["DCINY", "Carnegie"]
 
 
+def code_names(source: str) -> set[str]:
+    """Every identifier a module's CODE uses.
+
+    Parsed, so a docstring or a comment mentioning something is not the module
+    doing it. The scan below used to grep the raw text for the words org and
+    venue, which meant prose counted as code in both directions (#315): writing
+    a sentence about the detail lines in an unrelated module made the guard
+    demand that module import the helper, and the same match propped up the
+    vacuity floor, so prose could hold the floor while a real template quietly
+    stopped matching (L96).
+
+    String constants are excluded by construction: only names, arguments,
+    keyword argument names and attributes are collected.
+    """
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(node, ast.keyword) and node.arg:
+            names.add(node.arg)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+    return names
+
+
+def pairs_org_and_venue_by_hand(source: str) -> bool:
+    """Whether the code builds a bare [org, venue] list, bypassing the rule.
+
+    Read off the parsed list literal rather than matched as text, for the same
+    reason: a docstring showing the shape it forbids is documentation, not a
+    breach of it.
+    """
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.List) or len(node.elts) != 2:
+            continue
+        first, second = node.elts
+        if (isinstance(first, ast.Name) and first.id == "org"
+                and isinstance(second, ast.Name) and second.id == "venue"):
+            return True
+    return False
+
+
 def _templates_rendering_org_and_venue() -> list[Path]:
-    """Every media module that renders an org and a venue, read from the source.
+    """Every media module whose CODE handles an org and a venue.
 
     Derived rather than listed, so a template added tomorrow is covered by the
     guard below on the day it lands instead of on the day somebody remembers to
@@ -73,8 +119,7 @@ def _templates_rendering_org_and_venue() -> list[Path]:
     for path in sorted(MEDIA.glob("*.py")):
         if path.name in {"brand_text.py", "design_tokens.py", "__init__.py"}:
             continue
-        source = path.read_text()
-        if re.search(r"\borg\b", source) and re.search(r"\bvenue\b", source):
+        if {"org", "venue"} <= code_names(path.read_text()):
             found.append(path)
     assert len(found) >= 7, (
         f"only found {len(found)} templates rendering org and venue, which "
@@ -98,9 +143,55 @@ def test_every_template_routes_its_detail_lines_through_the_helper():
 def test_no_template_pairs_org_and_venue_by_hand():
     offenders = [
         p.name for p in _templates_rendering_org_and_venue()
-        if re.search(r"\[\s*org\s*,\s*venue\s*\]", p.read_text())
+        if pairs_org_and_venue_by_hand(p.read_text())
     ]
     assert not offenders, (
         "these templates build their detail lines from a raw [org, venue] "
         f"pair, bypassing the collapse rule: {offenders}"
     )
+
+
+# ── the scan reads code, not prose (#315) ────────────────────────────────────
+
+
+def test_a_module_that_only_talks_about_org_and_venue_is_not_counted():
+    # The case that actually happened: a docstring in design_stamp.py mentioning
+    # "the shared org and venue detail lines" made the guard demand that a
+    # bookkeeping module, which renders nothing, import the text helper. It was
+    # worked around by rewording, which leaves the next person to hit the same
+    # wall with no idea why.
+    source = '''
+"""A note about the org and venue detail lines, which this module does not draw."""
+# org and venue are decided elsewhere
+def unrelated():
+    return "org", "venue"
+'''
+    assert not {"org", "venue"} <= code_names(source)
+
+
+def test_a_module_that_handles_them_in_code_is_counted():
+    source = "def draw(org, venue):\n    return [org, venue]\n"
+
+    assert {"org", "venue"} <= code_names(source)
+
+
+def test_a_keyword_argument_counts_as_handling_them():
+    # How several of these templates actually receive the values.
+    source = "render(org=event.org, venue=event.venue)\n"
+
+    assert {"org", "venue"} <= code_names(source)
+
+
+def test_a_bare_pair_in_code_is_reported():
+    assert pairs_org_and_venue_by_hand("lines = [org, venue]\n")
+
+
+def test_a_bare_pair_shown_in_a_docstring_is_not_reported():
+    # Documentation describing the shape it forbids is documentation.
+    source = '"""The old templates rendered [org, venue] straight."""\n'
+
+    assert not pairs_org_and_venue_by_hand(source)
+
+
+def test_a_pair_routed_through_the_helper_is_not_reported():
+    assert not pairs_org_and_venue_by_hand("lines = detail_lines(name, org, venue)\n")
