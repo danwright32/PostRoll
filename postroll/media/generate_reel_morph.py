@@ -81,8 +81,51 @@ PRINT_Y = 430                  # the print is hung here
 FOOTER_RULE_Y = CANVAS_H - 214  # colophon rule; logo centred beneath
 LOGO_WIDTH = 340
 
-# Set once per reel from the photo's aspect (raw and edit share it).
-_PRINT_H = 624
+# The caption placard sits under the print: a gap, the state word, then the
+# subtitle. Named here because print_rect below has to reserve room for it and
+# the legibility bands have to find it, and three copies of "34" would drift.
+PLACARD_TOP_GAP = 34
+PLACARD_BLOCK_H = 66           # word at +0, subtitle at +32, descenders below
+
+#: The tallest a print may be before its caption would reach the colophon rule.
+#:
+#: Unbounded until #322. A 2:3 portrait produced a 1404px print and put the
+#: caption at y=1920, past the rule at 1706 and off the bottom of the canvas,
+#: and nothing refused it: the reel rendered broken and reported success.
+MAX_PRINT_H = FOOTER_RULE_Y - PRINT_Y - PLACARD_TOP_GAP - PLACARD_BLOCK_H
+
+
+def print_rect(photo_size: tuple[int, int]) -> tuple[int, int, int, int]:
+    """Where the print hangs for a photo of `photo_size`: (left, top, w, h).
+
+    A pure function of the photograph's shape (#323). It used to be a module
+    global that `prepare_photo` overwrote on every call, which the renderer read
+    to place the caption and the tests read back to work out where the caption
+    should be. Expected position and drawn position came from one value, so a
+    wrong height moved both together and every check passed hardest at exactly
+    the moment the layout was broken (L70). It also meant preparing two photos
+    kept only the second one's height, so a RAW and an edit of different shapes
+    put the caption under the wrong one.
+
+    Fills the plate's width for anything landscape or moderately tall. A photo
+    tall enough that its caption would reach the colophon is narrowed from the
+    height cap and re-centred, rather than cropped to a shape Dan did not
+    choose: he frames these, and silently changing the crop is a worse answer
+    than a smaller print.
+    """
+    width, height = photo_size
+    aspect = width / height
+    print_h = int(PRINT_W / aspect)
+    if print_h <= MAX_PRINT_H:
+        return ((CANVAS_W - PRINT_W) // 2, PRINT_Y, PRINT_W, print_h)
+    print_w = int(MAX_PRINT_H * aspect)
+    return ((CANVAS_W - print_w) // 2, PRINT_Y, print_w, MAX_PRINT_H)
+
+#: The print rectangle for the reel currently rendering, set once by
+#: `generate_reel_morph` from the EDIT photo. Declared rather than accidental:
+#: it used to be whatever `prepare_photo` was handed last, so a RAW and an edit
+#: of different shapes put the caption under the wrong one (#323).
+_PRINT_RECT = print_rect((3, 2))
 
 # The caption is a two-line placard matching the Friday before/after wording, and it
 # crossfades from BEFORE to AFTER on the wipe's curve. The wording map is imported so
@@ -118,20 +161,19 @@ def prepare_photo(photo: Image.Image, bg_photo: Image.Image) -> Image.Image:
     reveals the edit's centre strip) only shows where there is a print to divide;
     the surrounding mat is cream-over-cream and stays still. bg_photo is unused.
     """
-    global _PRINT_H
-    _PRINT_H = int(PRINT_W / (photo.width / photo.height))
+    left, top, width, height = print_rect(photo.size)
 
     canvas = Image.new("RGBA", (CANVAS_W, CANVAS_H), (*CREAM, 255))
     shadow = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
     ImageDraw.Draw(shadow).rectangle(
-        [MAT + 3, PRINT_Y + 6, MAT + PRINT_W + 3, PRINT_Y + _PRINT_H + 8],
+        [left + 3, top + 6, left + width + 3, top + height + 8],
         fill=(60, 55, 50, 44))
     canvas.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(14)))
 
-    canvas.paste(photo.resize((PRINT_W, _PRINT_H), Image.LANCZOS).convert("RGBA"),
-                 (MAT, PRINT_Y))
+    canvas.paste(photo.resize((width, height), Image.LANCZOS).convert("RGBA"),
+                 (left, top))
     ImageDraw.Draw(canvas).rectangle(
-        [MAT - 1, PRINT_Y - 1, MAT + PRINT_W, PRINT_Y + _PRINT_H],
+        [left - 1, top - 1, left + width, top + height],
         outline=CREAM_EDGE, width=1)
     return canvas.convert("RGB")
 
@@ -167,7 +209,7 @@ def _draw_placard(canvas_rgba, state, alpha):
     word, subtitle = placard_text(state)
     layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
-    y = PRINT_Y + _PRINT_H + 34
+    y = _PRINT_RECT[1] + _PRINT_RECT[3] + PLACARD_TOP_GAP
     _tracked(d, word, load_font(FONT_DETAIL, 20, index=FONT_DETAIL_BOLD), (*ROSE_GOLD, 255), MAT, y, 6)
     _tracked(d, subtitle, load_font(FONT_DETAIL, 14, index=FONT_DETAIL_MEDIUM), (*WARM_MID, 255), MAT, y + 32, 4)
     if alpha < 1.0:
@@ -235,9 +277,10 @@ def generate_split_frame(
         if b > a:
             frame.paste(edit_canvas.crop((a, 0, b, CANVAS_H)), (a, 0))
         draw = ImageDraw.Draw(frame)
+        left, top, width, height = _PRINT_RECT
         for x in (a, b):
-            if MAT < x < CANVAS_W - MAT:  # only where there is a print to divide
-                draw.line([(x, PRINT_Y), (x, PRINT_Y + _PRINT_H)],
+            if left < x < left + width:  # only where there is a print to divide
+                draw.line([(x, top), (x, top + height)],
                           fill=DIVIDER_COLOR, width=DIVIDER_WIDTH)
 
     return frame
@@ -276,6 +319,11 @@ def generate_reel_morph(
     # Passed through to generate_split_frame/draw_label for signature compatibility;
     # the caption is now the chrome's placard, so the font itself is unused there.
     font = load_font(FONT_DETAIL, 20, index=FONT_DETAIL_BOLD)
+
+    global _PRINT_RECT
+    # The EDIT is the declared source: it is the photograph the reel is about,
+    # and the caption hangs off the print the viewer ends on.
+    _PRINT_RECT = print_rect(edit_photo.size)
 
     raw_canvas = prepare_photo(raw_photo, edit_photo)
     edit_canvas = prepare_photo(edit_photo, edit_photo)

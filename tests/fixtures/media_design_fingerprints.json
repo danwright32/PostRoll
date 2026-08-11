@@ -1,42 +1,42 @@
 {
   "before_after": {
-    "version": 1,
-    "fingerprint": "e3af7481641477c856183cc5dfe1a6e99dafb170105b94b98d2417d39f8a84fa"
+    "fingerprint": "e3af7481641477c856183cc5dfe1a6e99dafb170105b94b98d2417d39f8a84fa",
+    "version": 1
   },
   "collage": {
-    "version": 1,
-    "fingerprint": "2be86721483f60b3cf370f63c0a460c58e4c49ba5938be65e6ccbd3cff90cb3a"
+    "fingerprint": "2be86721483f60b3cf370f63c0a460c58e4c49ba5938be65e6ccbd3cff90cb3a",
+    "version": 1
   },
   "cover": {
-    "version": 1,
-    "fingerprint": "42dbab133a12a8bad9c9b457e269649d8ac8278a463d82fef42df3b02d17a5de"
+    "fingerprint": "42dbab133a12a8bad9c9b457e269649d8ac8278a463d82fef42df3b02d17a5de",
+    "version": 1
   },
   "reel_clip": {
-    "version": 1,
-    "fingerprint": "6d17a7bce1eee0c0908d7ec7ae1067fcc9f055e2aa521fc9c2116941ed90fa73"
+    "fingerprint": "6d17a7bce1eee0c0908d7ec7ae1067fcc9f055e2aa521fc9c2116941ed90fa73",
+    "version": 1
   },
   "reel_morph": {
-    "version": 1,
-    "fingerprint": "048e5720011885a42321131fc7367f706e3daa6fce38e79fe44a357f5441b0c6"
+    "fingerprint": "bc8d64e0b2b0c2f6bf100219e82358295866c37a3775d1b7019a270704990f16",
+    "version": 2
   },
   "reel_preview": {
-    "version": 1,
-    "fingerprint": "e0f3e378701c360891d0e67e5e0d65b90c07eab7ac178024450fa6557a27d6bf"
+    "fingerprint": "e0f3e378701c360891d0e67e5e0d65b90c07eab7ac178024450fa6557a27d6bf",
+    "version": 1
   },
   "reel_screen": {
-    "version": 1,
-    "fingerprint": "94f604cf1bd56811b601f45eb9d1981908f6fc53a7edd88dca90b5f947248670"
+    "fingerprint": "94f604cf1bd56811b601f45eb9d1981908f6fc53a7edd88dca90b5f947248670",
+    "version": 1
   },
   "reel_scroll": {
-    "version": 1,
-    "fingerprint": "e0f3e378701c360891d0e67e5e0d65b90c07eab7ac178024450fa6557a27d6bf"
+    "fingerprint": "e0f3e378701c360891d0e67e5e0d65b90c07eab7ac178024450fa6557a27d6bf",
+    "version": 1
   },
   "reel_slider": {
-    "version": 1,
-    "fingerprint": "2d294d818f9cbcde239bb2ff238b3b97d1cc1a83762862b3774790de8a04fa00"
+    "fingerprint": "2d294d818f9cbcde239bb2ff238b3b97d1cc1a83762862b3774790de8a04fa00",
+    "version": 1
   },
   "story": {
-    "version": 1,
-    "fingerprint": "42dbab133a12a8bad9c9b457e269649d8ac8278a463d82fef42df3b02d17a5de"
+    "fingerprint": "42dbab133a12a8bad9c9b457e269649d8ac8278a463d82fef42df3b02d17a5de",
+    "version": 1
   }
 }

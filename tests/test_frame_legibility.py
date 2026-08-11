@@ -42,6 +42,11 @@ LOGO = str(REPO_ROOT / "postroll" / "assets" / "logo-black.png")
 #: halfway through is exactly what one frame cannot show.
 SAMPLES = 12
 
+#: The size every photo fixture here is built at. The morph's print rectangle
+#: is a function of it, so the bands are derived from this rather than read back
+#: off the module after a render (L70, #323).
+PHOTO_SIZE = (2000, 1332)
+
 
 # ── the measurement ──────────────────────────────────────────────────────────
 
@@ -159,19 +164,44 @@ def test_the_template_scan_actually_finds_the_reels():
     assert len(_video_templates()) >= 5, sorted(_video_templates())
 
 
+#: Photograph shapes the Tuesday reel's bands are checked against.
+#:
+#: A single hardcoded print height (624, the 3:2 case) used to stand here, and
+#: it made this guard structurally unable to see #322: a 2:3 portrait produced a
+#: 1404px print and put the caption at y=1920, off the bottom of the canvas,
+#: while this test went on measuring a landscape one. A fixture that only ever
+#: holds one shape takes the same branch forever (L101).
+PHOTO_SHAPES = [
+    (3000, 2000, "3:2 landscape"),
+    (2000, 2000, "square"),
+    (2000, 2500, "4:5 portrait"),
+    (2000, 3000, "2:3 portrait"),
+    # Beyond anything Dan shoots, and the only shape whose UNCLAMPED band would
+    # leave the canvas: at 2:3 the caption clears the canvas but overruns the
+    # colophon rule, which is a different guard (tests/test_print_rect.py).
+    (1000, 3000, "extreme portrait"),
+]
+
+
 def test_every_band_sits_inside_the_canvas_it_measures():
     # A band running off the canvas crops to nothing, and a region of no pixels
     # would be read as "the ink is not here" on every frame forever.
-    for regions, width, height in [
-        (text_regions.morph_regions(624, LOGO), morph_mod.CANVAS_W, morph_mod.CANVAS_H),
-        (text_regions.slider_regions(LOGO), slider_mod.CANVAS_W, slider_mod.CANVAS_H),
-        (text_regions.scroll_regions(), scroll_mod.CANVAS_W, scroll_mod.CANVAS_H),
-    ]:
-        assert regions
+    cases = [
+        (text_regions.morph_regions(morph_mod.print_rect((w, h))[3], LOGO),
+         morph_mod.CANVAS_W, morph_mod.CANVAS_H, name)
+        for w, h, name in PHOTO_SHAPES
+    ] + [
+        (text_regions.slider_regions(LOGO), slider_mod.CANVAS_W, slider_mod.CANVAS_H,
+         "slider"),
+        (text_regions.scroll_regions(), scroll_mod.CANVAS_W, scroll_mod.CANVAS_H,
+         "scroll"),
+    ]
+    for regions, width, height, name in cases:
+        assert regions, name
         for region in regions:
             left, top, right, bottom = region.box
-            assert 0 <= left < right <= width, region
-            assert 0 <= top < bottom <= height, region
+            assert 0 <= left < right <= width, (name, region)
+            assert 0 <= top < bottom <= height, (name, region)
 
 
 # ── ink that moves through the frame (#306) ──────────────────────────────────
@@ -323,10 +353,10 @@ def test_the_colophon_search_starts_below_the_header():
 def _structured_photo(path: Path, seed: int) -> str:
     """A structured stand-in, not flat colour: a flat photo makes every band it
     touches trivially uniform and hides a placement regression."""
-    img = Image.new("RGB", (2000, 1332))
+    img = Image.new("RGB", PHOTO_SIZE)
     pixels = img.load()
-    for y in range(0, 1332, 2):
-        for x in range(0, 2000, 4):
+    for y in range(0, PHOTO_SIZE[1], 2):
+        for x in range(0, PHOTO_SIZE[0], 4):
             shade = ((x // 40) + (y // 40) + seed) % 3
             colour = [(150, 96, 74), (66, 52, 48), (196, 158, 120)][shade]
             for dx in range(4):
@@ -381,7 +411,7 @@ def test_the_tuesday_reel_reads_all_the_way_through(photos, silent_audio, tmp_pa
     # The print's height is set from the photograph's aspect during the render,
     # and the placard hangs off the bottom of the print, so it is read back from
     # the module rather than guessed.
-    regions = text_regions.morph_regions(morph_mod._PRINT_H, LOGO)
+    regions = text_regions.morph_regions(morph_mod.print_rect(PHOTO_SIZE)[3], LOGO)
 
     assert legibility.illegible(frames, regions) == []
 
@@ -504,7 +534,7 @@ def test_a_white_masthead_on_the_cream_mat_fails_the_tuesday_reel(
 
     frames = legibility.sample_frames(video, SAMPLES)
     failures = legibility.illegible(frames, text_regions.morph_regions(
-        morph_mod._PRINT_H, LOGO))
+        morph_mod.print_rect(PHOTO_SIZE)[3], LOGO))
 
     assert any("masthead" in f for f in failures), failures
 

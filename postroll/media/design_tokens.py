@@ -73,7 +73,7 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     "cover": 1,
     "before_after": 1,
     "reel_screen": 1,
-    "reel_morph": 1,
+    "reel_morph": 2,
     "reel_slider": 1,
     "reel_scroll": 1,
     # The still the Thursday crop editor draws over. Same layout maths as the
