@@ -116,8 +116,24 @@ enum RecurringAccounts {
             parts.append("\(list(stale)) \(stale.count == 1 ? "has numbers" : "have numbers") "
                        + "more than six months old")
         }
-        return parts.joined(separator: ", and ") + ". Add them from the collaborator "
-             + "list on any day that tags them."
+        return parts.joined(separator: ", and ") + "."
+    }
+
+    /// How many of the named accounts the message itself carries a way in for.
+    static let namesShown = 3
+
+    /// The accounts a control has to be offered for, in the order named.
+    ///
+    /// Every account the message names must be reachable from where it is named.
+    /// The obvious place to send Dan, the collaborator list, is built from day
+    /// and per-photo tags only, so a venue or org handle can never appear in it,
+    /// and those are exactly the accounts this surfaces. Naming a target and
+    /// then pointing at a screen it cannot be on is half a message (L80).
+    ///
+    /// Capped at what the message names, so it cannot promise a control for an
+    /// account it did not mention.
+    static func actionable(_ items: [Attention]) -> [Attention] {
+        Array(items.prefix(namesShown))
     }
 
     // MARK: - How loudly to ask, per account
@@ -144,7 +160,7 @@ enum RecurringAccounts {
 
     /// At most three names, then how many more, so the line stays a line.
     private static func list(_ items: [Attention]) -> String {
-        let names = items.prefix(3).map { "@\($0.handle)" }
+        let names = items.prefix(namesShown).map { "@\($0.handle)" }
         let rest = items.count - names.count
         let joined: String
         switch names.count {
