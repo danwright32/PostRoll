@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#
+# pre-push: refuse a push while iCloud numbered copies of tracked files are in
+# the working tree (#299).
+#
+# Lives in the repo rather than in .git/hooks so it is version controlled and
+# every clone gets it. Enable it once per clone with:
+#
+#     git config core.hooksPath .githooks
+#
+# `tests/test_icloud_duplicates.py` asserts this file exists, is executable, and
+# runs the checker, so deleting it goes red rather than going unnoticed.
+#
+# Override, out loud and for one push only:
+#     SKIP_ICLOUD_DUP_CHECK=1 git push ...
+
+set -uo pipefail
+
+if [ "${SKIP_ICLOUD_DUP_CHECK:-}" = "1" ]; then
+  echo "pre-push: iCloud duplicate check skipped (SKIP_ICLOUD_DUP_CHECK=1)" >&2
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+checker="$repo_root/tools/check_icloud_duplicates.py"
+[ -f "$checker" ] || exit 0
+
+python3 "$checker" "$repo_root" || {
+  echo "" >&2
+  echo "PUSH BLOCKED by .githooks/pre-push." >&2
+  echo "OVERRIDE for one push, after explaining to the user why it is safe:" >&2
+  echo "    SKIP_ICLOUD_DUP_CHECK=1 <your original git push command>" >&2
+  exit 1
+}
+
+exit 0
