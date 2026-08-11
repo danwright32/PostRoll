@@ -79,7 +79,6 @@ HOLD_END = 1.0           # hold at bottom before closing
 CLOSING_FRAME_DURATION = 5.0
 
 # Branded chrome
-CREAM_OPACITY = 210
 HEADER_H = 220
 # The footer is only a cream mask now: it softens photos scrolling in at the bottom
 # edge. The colophon no longer lives here (it is baked into the strip right under

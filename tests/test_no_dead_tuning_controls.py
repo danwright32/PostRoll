@@ -33,13 +33,19 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: The renderers this guard covers. Both, in one pass, because a control deleted
-#: from one generator and left in its sibling is the shape #325 actually found
-#: (L30).
-SUBJECTS = (
-    REPO_ROOT / "postroll" / "media" / "generate_reel_morph.py",
-    REPO_ROOT / "postroll" / "media" / "generate_reel_slider.py",
-)
+#: Every renderer, DERIVED from what is on disk rather than listed (#342).
+#:
+#: This started as the two Tuesday reels, because that is where #325 was
+#: reported. A guard driven by a hand written list checks only what the list
+#: names, so the six generators nobody remembered to add were exempt from the
+#: very check meant to catch them, and the ones written down were the ones
+#: already being looked after (L96). The same glob
+#: `test_media_design_fingerprint` uses, for the same reason.
+MEDIA_DIR = REPO_ROOT / "postroll" / "media"
+SUBJECTS = tuple(sorted(
+    p for p in MEDIA_DIR.glob("*.py")
+    if p.stem.startswith(("generate_", "render_"))
+))
 
 #: Where a reference may come from. The Swift app reaches these modules through
 #: the CLI, never by name, so Python is the whole search space.
@@ -164,6 +170,9 @@ def test_the_search_actually_reaches_the_repo(parsed):
     # dead-control test pass on an empty reference set for the wrong reason,
     # and a search missing a SUBJECT would exempt it entirely (L98).
     assert len(parsed) >= 50, f"only found {len(parsed)} python files to search"
+    # A glob that matched nothing would make the whole guard vacuous while
+    # reporting green on an empty parametrize (L98).
+    assert len(SUBJECTS) >= 8, [p.name for p in SUBJECTS]
     for subject in SUBJECTS:
         assert subject in parsed, f"{subject.name} is not inside the search roots"
 

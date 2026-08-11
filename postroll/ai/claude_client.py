@@ -470,7 +470,20 @@ def _run_cli(
     allowed_dirs: list[str | Path] | None,
     allowed_tools: list[str] | None,
     model: str,
+    step: str = "unknown",
 ) -> str:
+    """One CLI call. `step` is carried so spend stays attributable (#343).
+
+    It is not read here: `claude -p` returns plain text with no token counts,
+    so unlike the SDK path there is nothing to record against it. What the step
+    IS for is everything watching this seam. The comparison harness reads it to
+    line each call up with its metered twin, and the subscription switch routes
+    every call through here, so without it per step attribution disappears at
+    exactly the point it is needed to judge that switch.
+
+    Token counts for this path are a separate matter, and would mean asking the
+    CLI for JSON output rather than text.
+    """
     # Session isolation, not optional (#212). `claude -p` inherits the user's own
     # Claude Code configuration, and Dan's personal hooks wrote a banner into the
     # middle of the JSON this function's callers parse. The settings file
@@ -568,6 +581,7 @@ def run_prompt(
             allowed_dirs=allowed_dirs,
             allowed_tools=allowed_tools,
             model=model,
+            step=step,
         )
     return _run_sdk(
         prompt,

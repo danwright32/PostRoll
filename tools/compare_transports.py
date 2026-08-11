@@ -151,9 +151,10 @@ SEAMS = ("_run_sdk", "_run_cli")
 def install_recorder(claude_client, clock: Callable[[], float] = time.monotonic):
     """Patch the seams, returning (records, restore).
 
-    The CLI seam takes no `step`, so a call that routes there is recorded
-    against the transport that ran it and an unknown step rather than being
-    given a step it did not carry.
+    Both seams carry the step (#343), so a call is recorded against the work it
+    was doing whichever transport ran it. That is what lets the report line a
+    subscription call up with its metered twin under the switch, which routes
+    everything through the CLI.
     """
     records: list[CallRecord] = []
     originals = {name: getattr(claude_client, name) for name in SEAMS}
