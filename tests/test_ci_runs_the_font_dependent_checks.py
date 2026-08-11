@@ -1,0 +1,107 @@
+"""Every check that needs macOS fonts is actually run by the macOS job.
+
+`@needs_mac_fonts` skips a test unless the runner has SignPainter and
+HelveticaNeue, which only the macOS job has. So a font-dependent check placed in
+a file that job does not invoke never executes anywhere: it passes locally on
+Dan's Mac, and on Linux it skips. A skipped check is indistinguishable from a
+passing one, which is the failure mode `swift.yml` was written to close.
+
+That is exactly what happened. `tests/test_frame_legibility.py` shipped in #298
+and grew the scrolling colophon check in #306, and the macOS job invoked only
+`tests/test_golden_frames.py` the whole time, so neither guard had ever run in
+CI. Both were real and both were proven on this Mac; neither was wired (L3).
+
+Derived from the files rather than from a list somebody maintains beside the
+workflow: a hand-kept registry checks only what it lists, so the file missing
+from it is exempt from the very check meant to catch it (L96). This walks
+`tests/` for the marker and asserts the workflow names every file that carries
+it.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+TESTS_DIR = REPO_ROOT / "tests"
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "swift.yml"
+
+#: This file talks ABOUT the marker without carrying it, so it excludes itself,
+#: the same way the Swift side's import guard does. Otherwise the guard reports
+#: itself as an uncovered file forever and says nothing about the real ones.
+SELF = Path(__file__).name
+
+
+def _workflow_text() -> str:
+    if not WORKFLOW.exists():
+        pytest.fail(
+            f"{WORKFLOW} is missing, so nothing here can say whether the "
+            "font-dependent checks run in CI. That is a failure rather than a "
+            "skip: a guard that cannot read its subject has measured nothing.")
+    return WORKFLOW.read_text(encoding="utf-8")
+
+
+def font_dependent_test_files() -> set[str]:
+    """Test files carrying `@needs_mac_fonts`, read off the directory."""
+    found = set()
+    for path in sorted(TESTS_DIR.glob("test_*.py")):
+        if path.name == SELF:
+            continue
+        if "needs_mac_fonts" in path.read_text(encoding="utf-8"):
+            found.add(path.name)
+    return found
+
+
+def test_the_scan_actually_finds_font_dependent_files():
+    # Guards the derivation: a scan matching nothing would make the assertion
+    # below pass with total confidence while checking no file at all (L98).
+    found = font_dependent_test_files()
+
+    assert len(found) >= 2, (
+        "the scan for font-dependent test files found almost nothing, so the "
+        f"check below is vacuous: {sorted(found)}")
+
+
+def test_the_macos_job_runs_every_font_dependent_test_file():
+    workflow = _workflow_text()
+    # The pytest invocation only, not the whole file: a filename appearing in a
+    # `paths` filter means the job TRIGGERS on it, which is a different claim
+    # from the job RUNNING it.
+    invocations = "\n".join(re.findall(r"run:.*pytest[^\n]*", workflow))
+
+    missing = sorted(f for f in font_dependent_test_files() if f not in invocations)
+
+    assert not missing, (
+        "these test files carry @needs_mac_fonts, so they skip everywhere "
+        "except the macOS job, and the macOS job does not run them: "
+        f"{missing}. They therefore execute nowhere in CI while reporting "
+        "green. Add them to the pytest command in .github/workflows/swift.yml.")
+
+
+def test_the_macos_job_triggers_on_every_font_dependent_test_file():
+    # The other half, and the one #246 was about: a job filtered to paths that
+    # do not include the test itself skips precisely the change that breaks it.
+    workflow = _workflow_text()
+
+    missing = sorted(f for f in font_dependent_test_files() if f not in workflow)
+
+    assert not missing, (
+        f"the macOS job does not trigger on changes to {missing}, so editing "
+        "one of them on a pull request runs nothing. Add it under `paths` in "
+        ".github/workflows/swift.yml.")
+
+
+def test_the_macos_job_triggers_on_the_assets_those_checks_draw_with():
+    # The reference frames and the legibility bands both read
+    # postroll/assets/logo-black.png, and the colophon check takes the mark's
+    # INK from that file. Swapping the asset changes what every one of them
+    # measures, so a filter that omits it skips the change most able to break
+    # them (L88).
+    assert "postroll/assets/" in _workflow_text(), (
+        "the macOS job does not trigger on postroll/assets/**, but the "
+        "reference-frame and legibility checks read the wordmark from there "
+        "and measure its ink. Replacing that file would go unchecked.")
