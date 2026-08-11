@@ -52,8 +52,6 @@ CREAM_OPACITY = 185  # lower opacity lets blurred photo warmth show through
 
 # Layout: left-aligned program plate (matches the Tuesday reel body)
 DIVIDER_H = 2
-LABEL_LETTER_SPACING = 8
-LABEL_MARGIN = 40
 # Caption placard ABOVE each photo, centred like a museum wall card: a state word
 # over a quiet subtitle. Centred to share the title's axis so it reads composed,
 # not stuck in a corner.
@@ -117,27 +115,6 @@ def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
         return ImageFont.load_default()
 
 
-def draw_spaced_text_centered(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.FreeTypeFont,
-    fill: tuple,
-    center_x: int,
-    y: int,
-    spacing: int = LABEL_LETTER_SPACING,
-):
-    """Draw text with wide letter spacing, centered horizontally."""
-    total_w = 0
-    for ch in text:
-        bbox = draw.textbbox((0, 0), ch, font=font)
-        total_w += (bbox[2] - bbox[0]) + spacing
-    total_w -= spacing
-
-    x = center_x - total_w // 2
-    for ch in text:
-        draw.text((x, y), ch, font=font, fill=fill)
-        bbox = draw.textbbox((0, 0), ch, font=font)
-        x += (bbox[2] - bbox[0]) + spacing
 
 
 def apply_cream_strip(canvas: Image.Image, y: int, h: int) -> Image.Image:

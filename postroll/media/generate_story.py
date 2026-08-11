@@ -23,7 +23,6 @@ from .design_tokens import (
     FONT_DETAIL_LIGHT,
     FONT_SCRIPT,
     ROSE_GOLD as ROSE_GOLD_ON_CREAM,
-    ROSE_GOLD_LIGHT,
     TEXT_DARK,
 )
 from .brand_text import detail_lines
@@ -36,13 +35,11 @@ CANVAS_H = 1920
 
 # Two rose golds, because this template paints on two backgrounds: the lighter
 # one over the blurred photograph, the on-cream accent below it.
-ROSE_GOLD = ROSE_GOLD_LIGHT
 ROSE_GOLD_DARK = ROSE_GOLD_ON_CREAM
 
 TEXT_WHITE = (255, 255, 255)  # title (on blurred background)
 
 # Layout — title above photo, generous spacing
-EVENT_NAME_Y = 130  # script title — breathing room from top
 PHOTO_TOP_Y = 260  # tighter to title (~50px gap after text)
 PHOTO_SIDE_MARGIN = 20
 PHOTO_BOTTOM_Y = 1450  # larger photo area (~1190px tall)

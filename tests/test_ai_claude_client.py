@@ -637,3 +637,43 @@ def test_two_review_passes_in_a_row_still_carry_the_marker():
 
     assert after_human["caption"] == "h"
     assert after_human["famous_people"] == ["Yo-Yo Ma"]
+
+
+# ── the step survives the CLI path too (#343) ────────────────────────────────
+
+
+def test_a_cli_routed_call_carries_its_step(monkeypatch):
+    """Spend and timing have to stay attributable on both transports.
+
+    Only `enrich_program` reaches the CLI today, but the subscription switch
+    (#213) routes EVERY call through it, so a step that goes missing here takes
+    per step attribution with it at exactly the point it is needed to judge
+    whether that switch was worth making.
+    """
+    from postroll.ai import claude_client
+
+    seen = {}
+
+    def fake_cli(prompt, **kwargs):
+        seen.update(kwargs)
+        return "answered"
+
+    monkeypatch.setattr(claude_client, "_run_cli", fake_cli)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)   # forces the CLI route
+
+    claude_client.run_prompt("write it", step="captions", model="sonnet")
+
+    assert seen.get("step") == "captions", (
+        f"the CLI path was handed {seen.get('step')!r} instead of the real step")
+
+
+def test_the_real_cli_function_accepts_the_step_it_is_handed():
+    """Guards the test above against agreeing with its own fake.
+
+    A fake taking **kwargs accepts anything, so it would keep passing after the
+    real function stopped taking a step and every caller started failing (L52).
+    """
+    import inspect
+    from postroll.ai import claude_client
+
+    assert "step" in inspect.signature(claude_client._run_cli).parameters

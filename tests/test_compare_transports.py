@@ -235,14 +235,12 @@ def install_recorder_under_test(claude_client):
     return ct.install_recorder(claude_client, clock=iter([0.0, 1.0] * 40).__next__)
 
 
-def test_a_cli_routed_call_is_recorded_with_its_step_unknown(monkeypatch):
-    """A stated limitation, asserted so it cannot be discovered by surprise.
+def test_a_cli_routed_call_is_recorded_against_its_real_step(monkeypatch):
+    """Both transports label their calls, so the report lines up (#343).
 
-    `_run_cli` takes no `step`, so a call routed there is recorded against an
-    unknown step. Only `enrich_program` asks for CLI-only tools today, and
-    `compare` matches rows positionally within a step name, so several unknowns
-    still line up in order rather than collapsing onto one. It costs the row its
-    label, not its correctness.
+    This matters most under the subscription switch, which routes EVERY call
+    through the CLI: a step lost here would collapse the whole comparison onto
+    one unnamed row at exactly the point per step attribution is needed.
     """
     from postroll.ai import claude_client
     from postroll.ai import generate_blog
@@ -256,7 +254,7 @@ def test_a_cli_routed_call_is_recorded_with_its_step_unknown(monkeypatch):
     finally:
         restore()
 
-    assert [(r.transport, r.step) for r in records] == [("cli", "unknown")]
+    assert [(r.transport, r.step) for r in records] == [("cli", "blog")]
 
 
 def test_every_seam_the_recorder_patches_is_a_real_function_on_the_client():

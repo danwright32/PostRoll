@@ -351,26 +351,6 @@ def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
         return ImageFont.load_default()
 
 
-def draw_spaced_text_centered(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.FreeTypeFont,
-    fill: tuple,
-    center_x: int,
-    y: int,
-    spacing: int = 8,
-):
-    """Draw text with wide letter spacing, centered horizontally."""
-    total_w = 0
-    for ch in text:
-        bbox = draw.textbbox((0, 0), ch, font=font)
-        total_w += (bbox[2] - bbox[0]) + spacing
-    total_w -= spacing
-    x = center_x - total_w // 2
-    for ch in text:
-        draw.text((x, y), ch, font=font, fill=fill)
-        bbox = draw.textbbox((0, 0), ch, font=font)
-        x += (bbox[2] - bbox[0]) + spacing
 
 
 # The vertical framing every crop starts from: the photo's top edge.
