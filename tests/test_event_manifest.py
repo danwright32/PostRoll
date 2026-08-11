@@ -173,6 +173,53 @@ def test_an_event_whose_media_is_present_reports_nothing_missing(tmp_path):
     assert em.missing_media(em.build(store, "BLUDLINE")) == []
 
 
+def test_the_files_counted_are_the_same_files_checked_for(tmp_path):
+    """One predicate behind the count and the rows it promises (L16).
+
+    The listing showed a day photo count beside a missing count that also
+    included blog photos, so an event with 39 day photos and 12 blog photos read
+    as "39 photos, 51 missing": more missing than it has. The number a person
+    uses to judge an event has to be the same population the verdict is about.
+    """
+    photo = tmp_path / "kept.jpg"
+    photo.write_bytes(b"x")
+    store = _store(tmp_path,
+                   days={"sunday": {"photoPaths": [str(photo), "/tmp/gone-1.jpg"]}},
+                   blogPhotoPaths=["/tmp/gone-2.jpg"])
+    manifest = em.build(store, "BLUDLINE")
+
+    assert em.referenced_media(manifest) == [str(photo), "/tmp/gone-1.jpg",
+                                             "/tmp/gone-2.jpg"]
+    assert len(em.missing_media(manifest)) <= len(em.referenced_media(manifest))
+
+
+def test_the_listing_never_reports_more_missing_than_it_counted(tmp_path):
+    photo = tmp_path / "kept.jpg"
+    photo.write_bytes(b"x")
+    store = _store(tmp_path,
+                   days={"sunday": {"photoPaths": [str(photo), "/tmp/gone-1.jpg"]}},
+                   blogPhotoPaths=["/tmp/gone-2.jpg"])
+
+    line = em.describe(em.build(store, "BLUDLINE"))
+
+    assert "3 files" in line, line
+    assert "2 missing" in line, line
+
+
+def test_an_event_with_everything_on_disk_says_so_plainly(tmp_path):
+    photo = tmp_path / "kept.jpg"
+    photo.write_bytes(b"x")
+    store = _store(tmp_path, days={"sunday": {"photoPaths": [str(photo)]}})
+
+    assert "all media present" in em.describe(em.build(store, "BLUDLINE"))
+
+
+def test_an_event_with_nothing_left_is_named_as_reclaimed(tmp_path):
+    store = _store(tmp_path, days={"sunday": {"photoPaths": ["/tmp/gone.jpg"]}})
+
+    assert "media reclaimed" in em.describe(em.build(store, "BLUDLINE"))
+
+
 def test_the_event_names_the_store_holds_can_be_listed(tmp_path):
     store = _store(tmp_path)
 

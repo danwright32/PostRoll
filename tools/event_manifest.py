@@ -128,17 +128,43 @@ def build(store: Path, name: str) -> dict[str, Any]:
     return manifest
 
 
+def referenced_media(manifest: dict[str, Any]) -> list[str]:
+    """Every file the manifest names, day photos and blog photos alike.
+
+    One shared predicate behind both the count and the verdict about it (L16).
+    The listing used to count day photos and report missing files out of a
+    larger population that also held the blog photos, so an event with 39 day
+    photos and 12 blog photos read as "39 photos, 51 missing": more missing than
+    it has.
+    """
+    referenced = [p for day in manifest.get("days", {}).values()
+                  for p in day.get("photos", [])]
+    return referenced + list(manifest.get("blog_photos", []))
+
+
 def missing_media(manifest: dict[str, Any]) -> list[str]:
-    """Every photo the manifest names that is not on disk.
+    """Every file the manifest names that is not on disk.
 
     Checked before a paid run rather than during one: most stored events have
     had their media reclaimed, and finding that out halfway through costs the
     calls already made.
     """
-    referenced = [p for day in manifest.get("days", {}).values()
-                  for p in day.get("photos", [])]
-    referenced += manifest.get("blog_photos", [])
-    return [p for p in referenced if not Path(p).exists()]
+    return [p for p in referenced_media(manifest) if not Path(p).exists()]
+
+
+def describe(manifest: dict[str, Any]) -> str:
+    """One line saying whether this event can still be run, and on what."""
+    total = len(referenced_media(manifest))
+    gone = len(missing_media(manifest))
+    if not total:
+        state = "no media referenced"
+    elif gone == total:
+        state = "media reclaimed"
+    elif gone:
+        state = f"{gone} missing"
+    else:
+        state = "all media present"
+    return f"{total:4d} files   {state}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -158,11 +184,7 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError as exc:
                 print(f"{name[:40]:42s} unreadable: {exc}")
                 continue
-            photos = sum(len(d["photos"]) for d in manifest["days"].values())
-            gone = len(missing_media(manifest))
-            state = "media reclaimed" if gone == photos and photos else \
-                    (f"{gone} missing" if gone else "all media present")
-            print(f"{name[:40]:42s} {photos:4d} photos   {state}")
+            print(f"{name[:40]:42s} {describe(manifest)}")
         return 0
 
     if not args.event or not args.out:
