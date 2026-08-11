@@ -421,6 +421,44 @@ def _run_sdk(
 
 # ── CLI fallback (web tools only) ─────────────────────────────────────────────
 
+def _failure_message(returncode: int, stdout: str | None, stderr: str | None) -> str:
+    """Everything the CLI said about a failure, reason first (#296).
+
+    The CLI splits its failures across both streams, measured against 2.1.227 on
+    2026-08-10:
+
+    * A runtime failure reports on STDOUT. `--model definitely-not-a-real-model`
+      exits 1 with "There's an issue with the selected model" on stdout, while
+      stderr carried an unrelated context-window warning.
+    * A startup or config failure reports on STDERR. `--settings /nonexistent`
+      exits 1 with "Error: Settings file not found" there.
+
+    Keeping stderr alone therefore threw the reason away for the whole runtime
+    category, and a usage cap is a runtime condition. `cap_signals` was handed
+    a line unrelated to the failure, so the halt could not fire and the
+    unrecognised-failures log would have recorded the wrong text, wasting the
+    one sample #258 needs to calibrate against.
+
+    Both streams are kept, labelled, with stdout FIRST. `cap_signals` matches
+    substrings over this text and stderr is known to carry warnings that have
+    nothing to do with the failure, so the stream holding the reason goes ahead
+    of the stream holding the noise.
+
+    An exit code with nothing on either stream says so rather than trailing off,
+    because a blank tail reads as a message that failed to load.
+    """
+    out = (stdout or "").strip()
+    err = (stderr or "").strip()
+    parts = [f"Claude CLI exited {returncode}"]
+    if out:
+        parts.append(f"stdout: {out}")
+    if err:
+        parts.append(f"stderr: {err}")
+    if not out and not err:
+        parts.append("no output on either stream")
+    return "; ".join(parts)
+
+
 def _cli_binary() -> str:
     return os.environ.get("POSTROLL_CLAUDE_BIN", "claude")
 
@@ -473,7 +511,7 @@ def _run_cli(
 
     if result.returncode != 0:
         raise ClaudeError(
-            f"Claude CLI exited {result.returncode}: {result.stderr.strip()}"
+            _failure_message(result.returncode, result.stdout, result.stderr)
         )
     text = result.stdout.strip()
     if not text:
