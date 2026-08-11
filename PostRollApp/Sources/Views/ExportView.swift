@@ -17,6 +17,19 @@ struct ExportView: View {
     /// and `body` runs on every redraw.
     @State private var exportFolderStatus: ExportFolderStatus = .neverExported
 
+    /// Accounts Dan keeps tagging whose audience figures are missing or old
+    /// (#289), or nil when there is nothing worth saying.
+    ///
+    /// Here because the export screen is somewhere he passes every week anyway.
+    /// The freshness flag already existed, but only on the collaborator panel of
+    /// a day that has been expanded, so an account could go stale in March and
+    /// nothing said so until he happened to scroll to a post that tagged them.
+    ///
+    /// Held in state rather than computed in `body`, which runs on every redraw:
+    /// this walks every event's tag list, and a derivation whose cost scales
+    /// with the whole collection does not belong on the redraw path (L91).
+    @State private var recurringAccountsNote: String? = nil
+
     /// Export progress is owned app-scoped by ExportManager so it survives this
     /// view being torn down on an event switch (`.id(event.id)` remount) and
     /// drives the sidebar "Exporting…" pill. `nil` run = the ready screen.
@@ -72,11 +85,15 @@ struct ExportView: View {
                 }
             }
             exportFolderStatus = ExportFolderStatus.of(event)
+            refreshRecurringAccounts()
         }
         // Re-read when this export finishes, and when the recorded folder
         // changes, so the banner is never a claim about a previous run.
         .onChange(of: run?.phase) { _, _ in
             exportFolderStatus = ExportFolderStatus.of(event)
+            // An export is what adds accounts to the book, so the answer can
+            // have changed by the time one finishes.
+            refreshRecurringAccounts()
         }
         .onChange(of: event.exportPath) { _, _ in
             exportFolderStatus = ExportFolderStatus.of(event)
@@ -118,6 +135,18 @@ struct ExportView: View {
 
     // MARK: - States
 
+    /// Recompute which returning accounts need numbers. Cheap enough at this
+    /// cadence (arriving at the screen, and an export finishing) and far too
+    /// expensive on every redraw.
+    private func refreshRecurringAccounts() {
+        let book = AccountBook.shared
+        recurringAccountsNote = RecurringAccounts.summary(
+            RecurringAccounts.needingAttention(
+                events: appState.events,
+                stats: { book.stats(for: $0) },
+                asOf: Date()))
+    }
+
     private var readyContent: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
             StageBackButton(label: "Back to caption review") {
@@ -145,6 +174,16 @@ struct ExportView: View {
             // warning stops being read.
             if let message = exportFolderStatus.message, exportFolderStatus.needsAttention {
                 BrandBanner(icon: "exclamationmark.triangle", message: message, style: .warning)
+                    .padding(.horizontal, Spacing.xl)
+            }
+
+            // Only accounts that keep coming back (#289). Dan tags most people
+            // once and never again, so asking for numbers on all of them would
+            // bury the few whose figures the ranking actually leans on. Not a
+            // warning: nothing here is broken, and an ordinary week must not
+            // arrive looking like a problem.
+            if let message = recurringAccountsNote {
+                BrandBanner(icon: "person.2", message: message)
                     .padding(.horizontal, Spacing.xl)
             }
 

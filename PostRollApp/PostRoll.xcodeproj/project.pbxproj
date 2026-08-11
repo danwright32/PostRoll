@@ -79,6 +79,7 @@
 		34B445E09C46AF9714855132 /* MissingMediaScan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB7862A6D2A0E45C2E8EB36 /* MissingMediaScan.swift */; };
 		35786B24DD695CCDF1F5AD7D /* ProgressFileCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E902A3B9582A686F51E7FA /* ProgressFileCleanup.swift */; };
 		3776CA341EDEF0FD3E79924F /* ProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FA8894B862D100AE40B3F28 /* ProcessRunner.swift */; };
+		37F175E8B681900E7700EEBB /* RecurringAccounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = D88A4510D24DC819083357DA /* RecurringAccounts.swift */; };
 		38407036659EC3A2CC4E2644 /* StoreBackups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33C41E40BFD78ED908297261 /* StoreBackups.swift */; };
 		395BD7CEFB32C63C5CA8A653 /* HaltedWeekRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF0FF7E5E172FFA53435515F /* HaltedWeekRecoveryTests.swift */; };
 		396AFBBE7E4EC1216E705A86 /* ProgramPDFBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E40B3AE76401EAAFF392BCB /* ProgramPDFBuilder.swift */; };
@@ -196,6 +197,7 @@
 		9DFBA9DB326309749128F012 /* PhotoTagsCodableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 677D6FC4AA7CD6673840AC38 /* PhotoTagsCodableTests.swift */; };
 		9E33AE4934951307E9F25FE1 /* LongRunIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73120F611C33857448A37B67 /* LongRunIndicator.swift */; };
 		A2A42C7E8ADB3D27CA453B67 /* EventJobTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B9BB61B6F46DB4923B3A2C6 /* EventJobTracker.swift */; };
+		A46E85EE5C78A3C72FE33409 /* RecurringAccounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = D88A4510D24DC819083357DA /* RecurringAccounts.swift */; };
 		A533DB7802C511D9476FD663 /* LegacyDataReclaimTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D26540356A73F27B16AB755 /* LegacyDataReclaimTests.swift */; };
 		A5872D130A9DFB832E27CF32 /* CoverReviewDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A48BAAC376D511DC5794DF5 /* CoverReviewDisplay.swift */; };
 		A5F369CC1176C0F5A2DB07F2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DEEDE6F9DD9D9B527BB6E897 /* Assets.xcassets */; };
@@ -250,6 +252,7 @@
 		DC0F2C1B8DBF14075C489E47 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131DFC672BC525BCA210EE58 /* Analytics.swift */; };
 		DC690D26F40BC6F3EDB7C5DA /* CollageCellSwapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B719FEAA2506A47B8A848B1D /* CollageCellSwapTests.swift */; };
 		DC9CC0DC2E06535AB2EAC5A5 /* BlogFindingsDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9166A67AF34145A453CC8707 /* BlogFindingsDisplay.swift */; };
+		DD49A798FA05EBBE45AF8674 /* RecurringAccountsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72D87AD478DFEB866A98624F /* RecurringAccountsTests.swift */; };
 		DFE78D15B3130FA807038784 /* PerformerPanelDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235CFB9149A7F51563FD49C9 /* PerformerPanelDisplayTests.swift */; };
 		E0251F8FE6E254839504E6E2 /* ProgressFileCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E902A3B9582A686F51E7FA /* ProgressFileCleanup.swift */; };
 		E0E0DCA023C646AC6F01E503 /* CoverManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0734077F9E41D6D4653FA829 /* CoverManifestTests.swift */; };
@@ -402,6 +405,7 @@
 		6F8748252378354FB3AF1CD0 /* CollaboratorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollaboratorPanel.swift; sourceTree = "<group>"; };
 		7146EADC3424B0FFEE416221 /* BridgePayloadContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgePayloadContractTests.swift; sourceTree = "<group>"; };
 		716DB949EC522F26C5BC2412 /* CollageRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollageRendererTests.swift; sourceTree = "<group>"; };
+		72D87AD478DFEB866A98624F /* RecurringAccountsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringAccountsTests.swift; sourceTree = "<group>"; };
 		730858B8E04BA904ACF263B1 /* LongRunStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongRunStatus.swift; sourceTree = "<group>"; };
 		73120F611C33857448A37B67 /* LongRunIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongRunIndicator.swift; sourceTree = "<group>"; };
 		740043AABC817F80BE3D3939 /* ProgramScanRetentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramScanRetentionTests.swift; sourceTree = "<group>"; };
@@ -505,6 +509,7 @@
 		D4B539E47E7035AFC9A3260F /* PerformerPanelDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformerPanelDisplay.swift; sourceTree = "<group>"; };
 		D5526CFCB99FC953F3946B1F /* StaleAudioLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaleAudioLabelTests.swift; sourceTree = "<group>"; };
 		D5F8E13FD8CD89C280ED6930 /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
+		D88A4510D24DC819083357DA /* RecurringAccounts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringAccounts.swift; sourceTree = "<group>"; };
 		D92CD520B46A8592B9C5493C /* OCRResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRResult.swift; sourceTree = "<group>"; };
 		DB9E4B9B7EC3C8B0195232E0 /* ArchiveCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveCleanup.swift; sourceTree = "<group>"; };
 		DBC11E0D1CF5CD589D36580D /* ManifestContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManifestContractTests.swift; sourceTree = "<group>"; };
@@ -667,6 +672,7 @@
 				A6E902A3B9582A686F51E7FA /* ProgressFileCleanup.swift */,
 				6E176B25F0D09B134F669698 /* PythonBridge.swift */,
 				AC9AD46BBA95562536DCC2DD /* PythonBridgeError.swift */,
+				D88A4510D24DC819083357DA /* RecurringAccounts.swift */,
 				A50594DC4887AD2FF2749FE8 /* ReelAudioSwap.swift */,
 				B524993A4030A56888BD84D3 /* RunOutcomeNotice.swift */,
 				3E7E9ACC974F574D7CFD1C5C /* ScrollEdgeFade.swift */,
@@ -796,6 +802,7 @@
 				740043AABC817F80BE3D3939 /* ProgramScanRetentionTests.swift */,
 				E807C54D20709D3564A27304 /* ProgressFileCleanupTests.swift */,
 				D45798045E0493885EC5FE5D /* PythonBridgeErrorTests.swift */,
+				72D87AD478DFEB866A98624F /* RecurringAccountsTests.swift */,
 				A5D8C53C9E822388088D6465 /* ReelAudioSwapResultTests.swift */,
 				B497A104F92B93E0BBECE23B /* ReelAudioSwapTests.swift */,
 				A392D1BDE07CFBFD3D818D4A /* RepoFixture.swift */,
@@ -1028,6 +1035,7 @@
 				E0251F8FE6E254839504E6E2 /* ProgressFileCleanup.swift in Sources */,
 				905F9249C97D77E98E224190 /* PythonBridge.swift in Sources */,
 				8FB71D5F5EB364204769B5A3 /* PythonBridgeError.swift in Sources */,
+				37F175E8B681900E7700EEBB /* RecurringAccounts.swift in Sources */,
 				07171BCE1AC27BA243E7E999 /* ReelAudioSwap.swift in Sources */,
 				BD76E8281A3B49DE71B37C32 /* ReelPreviewPlayer.swift in Sources */,
 				8F611D6B8804AEF3B772F58B /* RunOutcomeNotice.swift in Sources */,
@@ -1217,6 +1225,8 @@
 				F574621F63DFACE936FF04D4 /* PythonBridge.swift in Sources */,
 				C1F5D9E78FC6F6F58A8D1A13 /* PythonBridgeError.swift in Sources */,
 				F112C0F8355AE69288C12920 /* PythonBridgeErrorTests.swift in Sources */,
+				A46E85EE5C78A3C72FE33409 /* RecurringAccounts.swift in Sources */,
+				DD49A798FA05EBBE45AF8674 /* RecurringAccountsTests.swift in Sources */,
 				338ED97DD87C7D042D24C3E4 /* ReelAudioSwap.swift in Sources */,
 				C1D66F8A00916399B8071F3B /* ReelAudioSwapResultTests.swift in Sources */,
 				F990783E747CCFD9A6873E13 /* ReelAudioSwapTests.swift in Sources */,

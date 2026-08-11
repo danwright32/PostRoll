@@ -158,8 +158,15 @@ final class ExportManager {
         // browsable list of everyone ever tagged and a performer shot in March
         // is already there the next time they turn up (#279). Numbers are never
         // invented here: an account seen but not counted stays uncounted.
+        //
+        // accountsTagged rather than the caption's own tag list, because the org
+        // and venue handles reach every post by a separate route and were the
+        // only accounts the book could never remember (#289). They are also the
+        // only ones that recur: measured on the 19 events on disk, all 6
+        // returning accounts are venue or org handles, so the book was keeping
+        // exactly the one-offs and missing everyone who comes back.
         let exportedAt = Date()
-        AccountBook.shared.noteTagged(handles: CaptionBlocks.weekTagList(event: capturedEvent),
+        AccountBook.shared.noteTagged(handles: CaptionBlocks.accountsTagged(event: capturedEvent),
                                       on: exportedAt)
         // Copied once rather than reached into from the detached task below:
         // the book is main-actor state (#278).

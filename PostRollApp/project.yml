@@ -77,6 +77,8 @@ targets:
       - path: Sources/Services/CaptionBlocks.swift
       - path: Sources/Services/BlogMeta.swift
       - path: Sources/Services/AccountBook.swift
+      - path: Sources/Services/RecurringAccounts.swift
+      - path: Sources/Services/EventHandleSuggestions.swift
       - path: Sources/Services/CollaboratorPick.swift
       - path: Sources/Services/ScrollEdgeFade.swift
       - path: Sources/Services/ExportReadiness.swift

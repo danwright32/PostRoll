@@ -29,6 +29,39 @@ enum EventHandleSuggestions {
         return out
     }
 
+    /// Every event-wide account, however the field happens to be written (#289).
+    ///
+    /// The field holds two different shapes in practice. The OCR review writes
+    /// it as a comma separated list of bare names ("dciny, carnegiehall"), which
+    /// is what all 19 events on disk carry; a person typing it may write a
+    /// sentence with @ handles in it, which is what `tokens(from:)` is for.
+    /// Reading only the second shape found nothing in any real event, so the
+    /// accounts tagged on every post were invisible to everything downstream.
+    ///
+    /// A comma separated piece is only taken when it is a single word that
+    /// could be a handle. Prose is left to the @ matcher, so "presented by the
+    /// festival" cannot become an account.
+    static func accounts(in field: String) -> [String] {
+        var out: [String] = []
+        var seen = Set<String>()
+        for piece in field.split(separator: ",", omittingEmptySubsequences: true) {
+            let text = String(piece)
+            var found = tokens(from: text)
+            if found.isEmpty {
+                let bare = CaptionBlocks.bareUsername(text)
+                if !bare.isEmpty,
+                   !bare.contains(where: \.isWhitespace),
+                   PythonBridge.isRealHandle(bare) {
+                    found = [bare]
+                }
+            }
+            for token in found where seen.insert(token.lowercased()).inserted {
+                out.append(token)
+            }
+        }
+        return out
+    }
+
     /// Every event-wide account, in the order they appear in the field.
     static func tokens(fromAll fields: [String]) -> [String] {
         var out: [String] = []
