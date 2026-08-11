@@ -96,8 +96,16 @@ from ..posting_preset import (
 )
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
-LOGO_WHITE = str(ASSETS_DIR / "logo-white.png")
-LOGO_BLACK = str(ASSETS_DIR / "logo-black.png")
+
+# One owner for the mark and for what a missing one means (#334). These used to
+# be declared here and again in generate_cover, and every call site below made
+# the mark optional on whether its own file happened to exist, which turned a
+# broken install into a render with no signature and nothing to notice.
+from ..media.wordmark import (  # noqa: E402
+    BLACK as LOGO_BLACK,
+    WHITE as LOGO_WHITE,
+    required as required_wordmark,
+)
 
 # The scroll reel's footer is cream, not a photo, so the mark has to be the dark
 # one. It shipped as LOGO_WHITE and rendered white-on-cream: invisible.
@@ -316,7 +324,7 @@ def _render_cover(
             org=org,
             venue=venue,
             output_path=cover_path,
-            logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+            logo_path=required_wordmark(LOGO_BLACK),
         )
         day_result["cover"] = cover_path
         print(f"[generate_media] {day_name}: cover → {cover_path}", flush=True)
@@ -455,7 +463,7 @@ def generate_media(
                         org=org,
                         venue=venue,
                         output_path=story_path,
-                        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                        logo_path=required_wordmark(LOGO_BLACK),
                     )
                     day_result["story"] = story_path
                     print(f"[generate_media] {day_name}: story → {story_path}", flush=True)
@@ -483,7 +491,7 @@ def generate_media(
                         event_name=event,
                         org=org,
                         venue=venue,
-                        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                        logo_path=required_wordmark(LOGO_BLACK),
                         seed=seed,
                         crop_offsets=crop_offsets,
                         cell_layout=cell_layout,
@@ -545,7 +553,7 @@ def generate_media(
                         event_name=event,
                         org=org,
                         venue=venue,
-                        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                        logo_path=required_wordmark(LOGO_BLACK),
                         bw_path=bw,
                     )
                     if not final_export:
@@ -579,7 +587,7 @@ def generate_media(
                             # bright stage. Fourth time white-on-cream has
                             # shipped invisibly here, so the contrast is pinned
                             # by a measured pixel test.
-                            logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                            logo_path=required_wordmark(LOGO_BLACK),
                             target_duration=target_duration,
                         )
                         day_result["reel"] = reel_path
@@ -604,7 +612,7 @@ def generate_media(
                                 org=org,
                                 venue=venue,
                                 closing_frame_path=ba_path,
-                                logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                                logo_path=required_wordmark(LOGO_BLACK),
                             )
                         else:  # slider (default)
                             from ..media.generate_reel_slider import generate_reel_slider
@@ -619,7 +627,7 @@ def generate_media(
                                 org=org,
                                 venue=venue,
                                 closing_frame_path=ba_path,
-                                logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                                logo_path=required_wordmark(LOGO_BLACK),
                                 bw_path=bw,
                             )
                         day_result["reel"] = reel_path
@@ -650,7 +658,7 @@ def generate_media(
                         org=org,
                         venue=venue,
                         output_path=story_path,
-                        logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                        logo_path=required_wordmark(LOGO_WHITE),
                     )
                     day_result["story"] = story_path
                 except Exception as e:
@@ -692,7 +700,7 @@ def generate_media(
                         org=org,
                         venue=venue,
                         output_path=reel_path,
-                        logo_path=THURSDAY_REEL_LOGO,
+                        logo_path=required_wordmark(THURSDAY_REEL_LOGO),
                         scroll_duration=scroll_duration,
                         seed=seed,
                         crop_offsets=crop_offsets,
@@ -865,7 +873,7 @@ def generate_media(
                         event_name=event,
                         org=org,
                         venue=venue,
-                        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+                        logo_path=required_wordmark(LOGO_BLACK),
                         bw_path=bw,
                     )
                     day_result["before_after"] = ba_path
@@ -888,7 +896,7 @@ def generate_media(
                             org=org,
                             venue=venue,
                             output_path=story_path,
-                            logo_path=LOGO_WHITE if Path(LOGO_WHITE).exists() else None,
+                            logo_path=required_wordmark(LOGO_WHITE),
                         )
                         day_result["story"] = story_path
                     except Exception as e:

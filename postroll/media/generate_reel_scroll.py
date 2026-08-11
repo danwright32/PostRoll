@@ -111,14 +111,13 @@ def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
 
 
 def load_logo(logo_path: str | None) -> Image.Image | None:
-    """Load the wordmark and scale it to LOGO_WIDTH, or None if there isn't one."""
-    if not logo_path or not Path(logo_path).exists():
-        return None
-    logo = Image.open(logo_path).convert("RGBA")
-    scale = LOGO_WIDTH / logo.width
-    return logo.resize(
-        (int(logo.width * scale), int(logo.height * scale)), Image.LANCZOS
-    )
+    """The wordmark scaled to LOGO_WIDTH, or None if no mark was asked for.
+
+    A path that is set and not on disk raises rather than returning None: this
+    used to swallow it and scroll a strip with no signature (#334).
+    """
+    from .wordmark import load
+    return load(logo_path, LOGO_WIDTH)
 
 
 def ease_in_out(t: float) -> float:

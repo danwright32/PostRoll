@@ -215,14 +215,10 @@ def generate_reel_morph(
         closing_frame = Image.open(closing_frame_path).convert("RGB")
         closing_frame = closing_frame.resize((CANVAS_W, CANVAS_H), Image.LANCZOS)
 
-    logo = None
-    if logo_path and Path(logo_path).exists():
-        logo = Image.open(logo_path).convert("RGBA")
-        logo_scale = LOGO_WIDTH / logo.width
-        logo = logo.resize(
-            (int(logo.width * logo_scale), int(logo.height * logo_scale)),
-            Image.LANCZOS,
-        )
+    # Through the plate's shared loader, which refuses a mark that was asked for
+    # and is not on disk. This block used to be its own copy of the load, and it
+    # turned a missing file into no signature at all (#334).
+    logo = load_logo(logo_path)
 
     total_frames = int(TOTAL_DURATION * FPS)
     p1 = int(HOLD_RAW * FPS)
