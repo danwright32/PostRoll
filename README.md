@@ -14,7 +14,7 @@ Pillow or ffmpeg.
 
 ## Set up on a new Mac
 
-Five steps. Run them in order from the repo root.
+Six steps. Run them in order from the repo root.
 
 **1. Install the tools that aren't Python packages.**
 
@@ -61,6 +61,21 @@ make install
 That runs `PostRollApp/build-install.sh`, which is the only supported way to
 install: it clears extended attributes, signs with the stable identity, and
 refuses to finish if the installed bundle fails signature verification.
+
+**6. Point git at the repo's own hooks, once per clone.**
+
+```
+git config core.hooksPath .githooks
+```
+
+This turns on `.githooks/pre-push`, which refuses a push while iCloud numbered
+copies of tracked files (`DesignStamp 2.swift`) sit in the working tree (#299).
+This repo lives under `~/Documents` with iCloud sync on, so those copies appear
+on their own, are byte identical to the originals, and silently absorb edits
+meant for the real file. The check is `tools/check_icloud_duplicates.py`; the
+test suite runs it over the working tree too, so a copy fails the build even
+without the hook. Skip it for one push, out loud, with
+`SKIP_ICLOUD_DUP_CHECK=1 git push ...`.
 
 ## Configuration
 
