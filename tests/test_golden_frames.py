@@ -59,6 +59,11 @@ GOLDEN_DIR = Path(__file__).resolve().parent / "fixtures" / "goldens"
 #: that happen again.
 LOGO = str(Path(__file__).resolve().parent.parent / "postroll" / "assets" / "logo-black.png")
 
+#: The reference photographs' size. Named once: the print rectangle is a
+#: function of it, and a fixture that changed shape without the bands following
+#: would move the render out from under every band in this file.
+PHOTO_SIZE = (2000, 1332)
+
 UPDATING = os.environ.get("POSTROLL_UPDATE_GOLDENS") == "1"
 
 #: Per-channel difference treated as codec and resampling noise rather than a
@@ -167,7 +172,7 @@ def _patterned_photo(path: Path, seed: int) -> str:
     same single colour. The bright band near the top is what a top-anchored
     crop is supposed to keep.
     """
-    width, height = 2000, 1332
+    width, height = PHOTO_SIZE
     photo = Image.new("RGB", (width, height))
     pixels = photo.load()
     for y in range(height):
@@ -328,10 +333,17 @@ def test_morph_reel_matches_its_reference_frame(photos, silent_audio, tmp_path):
     frame = _frame_from_encoded_video(video, 0.6, tmp_path / "morph.png")
     assert_shows_real_content(frame, "morph_reel")
     # The placard under the print is the element that has to stay readable.
+    #
+    # Its band is derived from the FIXTURE's own dimensions through the same
+    # pure function the renderer uses, rather than read back off the module
+    # after the render. Reading it back made the expected position and the drawn
+    # position one value, so a wrong print height moved both together and this
+    # passed hardest exactly when the layout was wrong (L70, #323).
+    _, print_top, _, print_h = morph_mod.print_rect(PHOTO_SIZE)
     assert_ink_reads_against_its_background(
         frame,
-        (morph_mod.MAT, morph_mod.PRINT_Y + morph_mod._PRINT_H + 20,
-         morph_mod.CANVAS_W - morph_mod.MAT, morph_mod.PRINT_Y + morph_mod._PRINT_H + 80),
+        (morph_mod.MAT, print_top + print_h + 20,
+         morph_mod.CANVAS_W - morph_mod.MAT, print_top + print_h + 80),
         "morph_reel")
     assert_matches_golden(frame, "morph_reel", tmp_path)
 
