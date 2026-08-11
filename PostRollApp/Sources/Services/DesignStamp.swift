@@ -82,16 +82,42 @@ enum DesignStamp {
     /// That was measured rather than assumed (2026-08-10). Treating "no record"
     /// as stale badged all 66 day folders on Dan's machine at once, because none
     /// carried a stamp yet, and a badge on every day is one nobody reads (L36).
-    /// Those assets were not old either: the gallery redesign landed 2026-07-14
-    /// and the newest previews were rendered 2026-08-07, three weeks after. So
-    /// the silent case costs nothing on the real data and the loud one cost the
-    /// whole signal. Every render from here leaves a stamp, so a future design
-    /// change is caught by evidence rather than by absence.
+    ///
+    /// The second half of that reasoning was wrong, and re-measuring it is what
+    /// closed #311 (2026-08-11). It said those assets were not old either,
+    /// because the gallery redesign landed 2026-07-14 and the newest previews
+    /// were rendered 2026-08-07. That compared the redesign against the NEWEST
+    /// preview only. Read across the whole library instead: 38 of the 66 day
+    /// folders hold nothing rendered since 2026-07-14 at all, and two later
+    /// changes (the bottom-only crop on 2026-08-07 22:07, the shared detail
+    /// lines of #165 on 2026-08-10) both postdate the newest asset on disk.
+    /// So every cached asset predates the design this build renders, and the
+    /// silent case is currently hiding the entire library rather than costing
+    /// nothing.
+    ///
+    /// That cost is accepted deliberately, not overlooked. The alternative was
+    /// to write a version onto those folders, and a stamp is a RECORD:
+    /// asserting they were made by the current design would be a claim the file
+    /// dates contradict, and it would permanently destroy the ability to tell a
+    /// measured stamp from a guessed one. Saying nothing is the honest state
+    /// until a day is rendered again, and every render from here leaves a
+    /// stamp, so a future design change is caught by evidence rather than by
+    /// absence.
     ///
     /// An asset stamped NEWER than this build is not stale either: regenerating
     /// it here would replace a better asset with an older design.
+    /// Every design version recorded for a day, from both places one can live.
+    ///
+    /// The day's own stamp plus the collage's layout sidecar, which is a record
+    /// too. Empty means nothing about this day could be compared against
+    /// anything, which is a different answer from "compared and current" and is
+    /// the state every day folder on Dan's Mac is in (#311).
+    static func recorded(in dayDir: URL) -> [String: Int] {
+        withCollageFromItsSidecar(in: dayDir, read(in: dayDir))
+    }
+
     static func staleTemplates(in dayDir: URL) -> [String] {
-        let recorded = withCollageFromItsSidecar(in: dayDir, read(in: dayDir))
+        let recorded = recorded(in: dayDir)
         return cachedTemplates(in: dayDir).filter { name in
             guard let current = MediaDesign.version(of: name),
                   let stamped = recorded[name] else { return false }

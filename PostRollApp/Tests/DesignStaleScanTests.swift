@@ -48,7 +48,7 @@ final class DesignStaleScanTests: XCTestCase {
     func testADayStampedBehindTheCurrentDesignIsListed() {
         day("dciny_vocal_color_2026-03-30", "5. Thursday", version: currentScrollVersion - 1)
 
-        let found = DesignStaleScan.scan(previewRoot: root)
+        let found = DesignStaleScan.scan(previewRoot: root).stale
 
         XCTAssertEqual(found.count, 1)
         XCTAssertEqual(found[0].eventSlug, "dciny_vocal_color_2026-03-30")
@@ -59,7 +59,7 @@ final class DesignStaleScanTests: XCTestCase {
     func testADayStampedAtTheCurrentDesignIsNotListed() {
         day("event_a_2026-01-01", "5. Thursday", version: currentScrollVersion)
 
-        XCTAssertEqual(DesignStaleScan.scan(previewRoot: root).count, 0)
+        XCTAssertEqual(DesignStaleScan.scan(previewRoot: root).stale.count, 0)
     }
 
     func testADayWithNoStampAtAllIsNotListed() {
@@ -69,7 +69,7 @@ final class DesignStaleScanTests: XCTestCase {
         // every day on the machine the first time it is opened.
         day("event_a_2026-01-01", "5. Thursday", version: nil)
 
-        XCTAssertEqual(DesignStaleScan.scan(previewRoot: root).count, 0)
+        XCTAssertEqual(DesignStaleScan.scan(previewRoot: root).stale.count, 0)
     }
 
     func testEveryEventAndEveryDayIsWalked() {
@@ -78,7 +78,7 @@ final class DesignStaleScanTests: XCTestCase {
         day("event_a_2026-01-01", "5. Thursday", version: currentScrollVersion - 1)
         day("event_b_2026-02-02", "5. Thursday", version: currentScrollVersion - 1)
 
-        let found = DesignStaleScan.scan(previewRoot: root)
+        let found = DesignStaleScan.scan(previewRoot: root).stale
 
         XCTAssertEqual(found.count, 3)
         XCTAssertEqual(found.map(\.dayLabel), ["Tuesday", "Thursday", "Thursday"])
@@ -92,8 +92,8 @@ final class DesignStaleScanTests: XCTestCase {
         day("event_a_2026-01-01", "3. Tuesday", asset: "reel_morph.mp4",
             stamped: "reel_morph", version: 0)
 
-        let first = DesignStaleScan.scan(previewRoot: root).map(\.id)
-        let second = DesignStaleScan.scan(previewRoot: root).map(\.id)
+        let first = DesignStaleScan.scan(previewRoot: root).stale.map(\.id)
+        let second = DesignStaleScan.scan(previewRoot: root).stale.map(\.id)
 
         XCTAssertEqual(first, second)
         XCTAssertEqual(first.count, 3)
@@ -108,7 +108,7 @@ final class DesignStaleScanTests: XCTestCase {
         let missing = root.appendingPathComponent("never-rendered")
 
         XCTAssertFalse(DesignStaleScan.hasPreviewRoot(missing))
-        XCTAssertEqual(DesignStaleScan.scan(previewRoot: missing), [])
+        XCTAssertEqual(DesignStaleScan.scan(previewRoot: missing).stale, [])
     }
 
     func testAPreviewRootThatExistsIsReportedAsSuch() {
@@ -119,7 +119,92 @@ final class DesignStaleScanTests: XCTestCase {
         FileManager.default.createFile(atPath: root.appendingPathComponent("stray.txt").path,
                                        contents: Data("x".utf8))
 
-        XCTAssertEqual(DesignStaleScan.scan(previewRoot: root), [])
+        XCTAssertEqual(DesignStaleScan.scan(previewRoot: root).stale, [])
+    }
+
+    // MARK: - An empty list is not a clean bill of health (#311)
+
+    /// #311 measured the real library: all 66 day folders carry no record, and
+    /// every asset on disk predates two changes that alter what a template
+    /// renders (the bottom-only crop of 2026-08-07, the shared org and venue
+    /// detail lines of 2026-08-10). Backfilling a version onto them was
+    /// rejected, because a stamp is a record and that one would be a guess.
+    ///
+    /// So the permanent state of this surface on Dan's Mac is an empty list,
+    /// and an empty list that reads as "everything is current" is the exact
+    /// shape of L98: finding nothing to check is not the same as everything
+    /// passing. The scan has to report how many days it looked at and how many
+    /// of them could be compared at all.
+
+    func testItSaysHowManyDaysItLookedAtEvenWhenNoneAreStale() {
+        day("event_a_2026-01-01", "5. Thursday", version: nil)
+        day("event_a_2026-01-01", "3. Tuesday", asset: "reel_morph.mp4",
+            stamped: "reel_morph", version: nil)
+
+        let found = DesignStaleScan.scan(previewRoot: root)
+
+        XCTAssertEqual(found.stale, [])
+        XCTAssertEqual(found.daysWithAssets, 2)
+        XCTAssertEqual(found.daysWithARecord, 0,
+                       "neither day records which design made it, so neither was "
+                       + "compared against anything")
+    }
+
+    func testADayCarryingARecordCountsAsOneThatCouldBeChecked() {
+        day("event_a_2026-01-01", "5. Thursday", version: currentScrollVersion)
+
+        let found = DesignStaleScan.scan(previewRoot: root)
+
+        XCTAssertEqual(found.stale, [])
+        XCTAssertEqual(found.daysWithAssets, 1)
+        XCTAssertEqual(found.daysWithARecord, 1)
+    }
+
+    func testACollageWhoseSidecarRecordsItsVersionCountsAsChecked() {
+        // The sidecar #160 writes is a record too, and the reader already fills
+        // the collage in from it. A day counted as unrecorded because only its
+        // sidecar knows would understate what was actually compared.
+        let dir = root.appendingPathComponent("event_a_2026-01-01")
+            .appendingPathComponent("4. Wednesday")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: dir.appendingPathComponent("collage.png").path,
+                                       contents: Data("x".utf8))
+        let sidecar = ["version": MediaDesign.version(of: "collage") ?? 1, "cells": []] as [String: Any]
+        try! JSONSerialization.data(withJSONObject: sidecar)
+            .write(to: dir.appendingPathComponent("collage_layout.json"))
+
+        let found = DesignStaleScan.scan(previewRoot: root)
+
+        XCTAssertEqual(found.daysWithAssets, 1)
+        XCTAssertEqual(found.daysWithARecord, 1)
+    }
+
+    func testADayFolderHoldingNothingVersionedIsNotCountedAsADay() {
+        // An export leftover or a folder the run created and never filled. It
+        // has no assets to be old, so counting it would inflate the number the
+        // sentence quotes.
+        let dir = root.appendingPathComponent("event_a_2026-01-01")
+            .appendingPathComponent("7. Notes")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: dir.appendingPathComponent("captions.txt").path,
+                                       contents: Data("x".utf8))
+
+        let found = DesignStaleScan.scan(previewRoot: root)
+
+        XCTAssertEqual(found.daysWithAssets, 0)
+        XCTAssertEqual(found.daysWithARecord, 0)
+    }
+
+    func testAStaleDayIsAlsoADayThatCouldBeChecked() {
+        // The counts have to stay consistent with the list: a day that produced
+        // a row necessarily carried a record, or it could not have been judged.
+        day("event_a_2026-01-01", "5. Thursday", version: currentScrollVersion - 1)
+
+        let found = DesignStaleScan.scan(previewRoot: root)
+
+        XCTAssertEqual(found.stale.count, 1)
+        XCTAssertEqual(found.daysWithARecord, 1)
+        XCTAssertEqual(found.daysWithAssets, 1)
     }
 
     // MARK: - How a row reads

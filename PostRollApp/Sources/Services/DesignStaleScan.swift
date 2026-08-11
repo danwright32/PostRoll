@@ -25,6 +25,26 @@ struct StaleDay: Identifiable, Hashable {
     }
 }
 
+/// What one walk of the preview library found (#293, #311).
+///
+/// Three numbers rather than one list, because an empty list has two very
+/// different causes and the surface has to tell them apart. `stale` is what was
+/// judged and found behind; `daysWithARecord` is how many days could be judged
+/// at all; `daysWithAssets` is how many were there to judge.
+///
+/// #311 is why this is not just a list. Every day folder on Dan's Mac carries no
+/// record, so the list is empty and will stay empty until a day is rendered
+/// again. An empty list reported as "everything is current" is a clean bill of
+/// health nobody measured, which is precisely L98.
+struct DesignScanResult: Equatable {
+    /// Days judged against a recorded version and found behind.
+    var stale: [StaleDay]
+    /// Day folders holding at least one asset that carries a design version.
+    var daysWithAssets: Int
+    /// Of those, how many record which design made them, so could be compared.
+    var daysWithARecord: Int
+}
+
 /// Every day, across every event, whose cached assets are behind the current
 /// design (#293).
 ///
@@ -48,10 +68,19 @@ enum DesignStaleScan {
     /// found no folders at all is not the same claim as a clean bill of health
     /// (LESSONS.md L98).
     static func scan(previewRoot: URL,
-                     fileManager: FileManager = .default) -> [StaleDay] {
+                     fileManager: FileManager = .default) -> DesignScanResult {
         var found: [StaleDay] = []
+        var withAssets = 0
+        var withARecord = 0
         for eventDir in directories(in: previewRoot, fileManager: fileManager) {
             for dayDir in directories(in: eventDir, fileManager: fileManager) {
+                // A folder with nothing versioned in it is not a day that could
+                // be old, so counting it would inflate the number the sentence
+                // quotes.
+                guard !DesignStamp.cachedTemplates(in: dayDir).isEmpty else { continue }
+                withAssets += 1
+                if !DesignStamp.recorded(in: dayDir).isEmpty { withARecord += 1 }
+
                 let stale = DesignStamp.staleTemplates(in: dayDir)
                 guard !stale.isEmpty else { continue }
                 found.append(StaleDay(eventSlug: eventDir.lastPathComponent,
@@ -60,7 +89,9 @@ enum DesignStaleScan {
                                       templates: stale))
             }
         }
-        return found
+        return DesignScanResult(stale: found,
+                                daysWithAssets: withAssets,
+                                daysWithARecord: withARecord)
     }
 
     /// Whether there is a preview root to scan at all.

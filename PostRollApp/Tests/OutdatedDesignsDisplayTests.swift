@@ -65,28 +65,78 @@ final class OutdatedDesignsDisplayTests: XCTestCase {
         XCTAssertEqual(groups.map(\.title), ["B", "A"])
     }
 
-    // MARK: - Nothing found is not one answer but two
+    // MARK: - Nothing found is not one answer but four
+
+    private func survey(stale: Int = 0, days: Int, recorded: Int) -> DesignScanResult {
+        DesignScanResult(
+            stale: (0..<stale).map {
+                StaleDay(eventSlug: "e\($0)",
+                         dayFolder: URL(fileURLWithPath: "/tmp/e\($0)"),
+                         dayLabel: "Thursday", templates: ["reel_scroll"])
+            },
+            daysWithAssets: days,
+            daysWithARecord: recorded)
+    }
 
     func testAMachineWithNothingRenderedSaysSoRatherThanReportingItIsCurrent() {
         // The reassuring sentence over a folder nothing has looked at is a
         // clean bill of health nobody measured (LESSONS.md L98).
-        let text = OutdatedDesignsDisplay.summary(dayCount: 0, hasPreviewRoot: false)
+        let text = OutdatedDesignsDisplay.summary(survey(days: 0, recorded: 0),
+                                                  hasPreviewRoot: false)
 
         XCTAssertTrue(text.contains("no rendered assets"), text)
         XCTAssertFalse(text.contains("matches the current design"), text)
     }
 
-    func testAMachineWhoseDaysAreAllCurrentSaysThat() {
-        let text = OutdatedDesignsDisplay.summary(dayCount: 0, hasPreviewRoot: true)
+    /// #311: the state Dan's Mac is actually in, and will stay in until a day is
+    /// rendered again. 66 day folders, none carrying a record, so nothing could
+    /// be compared. Saying "every rendered day matches the current design" there
+    /// is the reassuring sentence over a library nothing has been able to check.
+    func testDaysThatRecordNoDesignAreReportedAsUncheckedNotAsCurrent() {
+        let text = OutdatedDesignsDisplay.summary(survey(days: 66, recorded: 0),
+                                                  hasPreviewRoot: true)
+
+        XCTAssertFalse(text.contains("matches the current design"), text)
+        XCTAssertTrue(text.contains("66"), text)
+        XCTAssertTrue(text.lowercased().contains("could not be checked")
+                      || text.lowercased().contains("do not record"), text)
+    }
+
+    func testAMachineWhoseCheckedDaysAreAllCurrentSaysSoAndOwnsWhatItSkipped() {
+        let text = OutdatedDesignsDisplay.summary(survey(days: 10, recorded: 4),
+                                                  hasPreviewRoot: true)
 
         XCTAssertTrue(text.contains("matches the current design"), text)
+        XCTAssertTrue(text.contains("6"), "the six days it could not check must be "
+                      + "owned in the same sentence, not left out: \(text)")
+    }
+
+    func testAMachineWhereEveryDayWasCheckedAndIsCurrentSaysJustThat() {
+        let text = OutdatedDesignsDisplay.summary(survey(days: 4, recorded: 4),
+                                                  hasPreviewRoot: true)
+
+        XCTAssertTrue(text.contains("matches the current design"), text)
+        XCTAssertFalse(text.lowercased().contains("could not be checked"),
+                       "there is nothing unchecked to mention here: \(text)")
     }
 
     func testTheCountIsWrittenOutForOneDayAndForSeveral() {
-        XCTAssertTrue(OutdatedDesignsDisplay.summary(dayCount: 1, hasPreviewRoot: true)
+        XCTAssertTrue(OutdatedDesignsDisplay
+            .summary(survey(stale: 1, days: 1, recorded: 1), hasPreviewRoot: true)
             .hasPrefix("One day"))
-        XCTAssertTrue(OutdatedDesignsDisplay.summary(dayCount: 7, hasPreviewRoot: true)
+        XCTAssertTrue(OutdatedDesignsDisplay
+            .summary(survey(stale: 7, days: 7, recorded: 7), hasPreviewRoot: true)
             .hasPrefix("7 days"))
+    }
+
+    func testStaleDaysAndUncheckedDaysAreBothNamed() {
+        // Two different facts about the same library, and reporting only the
+        // first makes the second invisible for as long as it lasts.
+        let text = OutdatedDesignsDisplay.summary(survey(stale: 2, days: 30, recorded: 5),
+                                                  hasPreviewRoot: true)
+
+        XCTAssertTrue(text.hasPrefix("2 days"), text)
+        XCTAssertTrue(text.contains("25"), text)
     }
 
     // MARK: - How a row reads

@@ -16,7 +16,7 @@ struct OutdatedDesignsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var groups: [OutdatedDesignsGroup] = []
-    @State private var dayCount = 0
+    @State private var result = DesignScanResult(stale: [], daysWithAssets: 0, daysWithARecord: 0)
     @State private var hasPreviewRoot = true
     /// Three states, told apart: never scanned, scanning, and a finished scan.
     /// A spinner that looks the same whether the work is running or dead is a
@@ -39,7 +39,7 @@ struct OutdatedDesignsSheet: View {
                             .foregroundStyle(Color.warmMid)
                     }
                 } else if groups.isEmpty {
-                    Text(OutdatedDesignsDisplay.summary(dayCount: 0,
+                    Text(OutdatedDesignsDisplay.summary(result,
                                                         hasPreviewRoot: hasPreviewRoot))
                         .font(.system(size: 13))
                         .foregroundStyle(Color.warmMid)
@@ -70,7 +70,7 @@ struct OutdatedDesignsSheet: View {
                 .foregroundStyle(Color.warmDark)
             RoseGoldDivider()
             if !isScanning {
-                Text(OutdatedDesignsDisplay.summary(dayCount: dayCount,
+                Text(OutdatedDesignsDisplay.summary(result,
                                                     hasPreviewRoot: hasPreviewRoot))
                     .font(.light(12))
                     .foregroundStyle(Color.warmMid)
@@ -144,12 +144,12 @@ struct OutdatedDesignsSheet: View {
     private func rescan() async {
         isScanning = true
         let root = AppPaths.previewDir
-        let found = await Task.detached { () -> ([StaleDay], Bool) in
+        let found = await Task.detached { () -> (DesignScanResult, Bool) in
             (DesignStaleScan.scan(previewRoot: root),
              DesignStaleScan.hasPreviewRoot(root))
         }.value
-        groups = OutdatedDesignsDisplay.groups(found.0, events: appState.events)
-        dayCount = found.0.count
+        groups = OutdatedDesignsDisplay.groups(found.0.stale, events: appState.events)
+        result = found.0
         hasPreviewRoot = found.1
         scannedAt = Date()
         isScanning = false
