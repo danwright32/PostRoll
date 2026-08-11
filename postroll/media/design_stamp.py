@@ -146,7 +146,7 @@ def stale_templates(day_dir: Path | str) -> list[str]:
     2026-08-07. That compared the redesign against the NEWEST preview only. Read
     across the whole library instead: 38 of the 66 day folders hold nothing
     rendered since 2026-07-14 at all, and two later changes (the bottom-only
-    crop on 2026-08-07 22:07, the shared detail lines of #165 on
+    crop on 2026-08-07 22:07, the shared org and venue detail lines on
     2026-08-10) both postdate the newest asset on disk. So every cached asset
     predates the design this build renders, and the silent case is currently
     hiding the entire library rather than costing nothing.
