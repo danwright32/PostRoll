@@ -31,7 +31,7 @@ from postroll.media import generate_reel_morph as morph_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
 from postroll.media import text_regions
-from postroll.media.frame_legibility import TextRegion
+from postroll.media.frame_legibility import MovingTextRegion, TextRegion
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -174,27 +174,186 @@ def test_every_band_sits_inside_the_canvas_it_measures():
             assert 0 <= top < bottom <= height, region
 
 
+# ── ink that moves through the frame (#306) ──────────────────────────────────
+
+# The Thursday reel's colophon is baked into the scrolling strip rather than
+# pinned to the frame, so it passes through a different band on every frame. A
+# fixed rectangle cannot address it, and a band big enough to catch it wherever
+# it lands would take its background reading from whatever photography was
+# passing at the time.
+
+
+def _moving_canvas(width=200, height=120) -> Image.Image:
+    """A frame of cream mat with a strip of photography across the middle."""
+    img = Image.new("RGB", (width, height), tokens.CREAM)
+    for y in range(40, 80):
+        for x in range(width):
+            img.putpixel((x, y), (66, 52, 48))
+    return img
+
+
+def _paint(img, box, colour):
+    for y in range(box[1], box[3]):
+        for x in range(box[0], box[2]):
+            img.putpixel((x, y), colour)
+
+
+def _paint_mark(img, box, colour):
+    """A stand-in wordmark: strokes with mat between them.
+
+    Not a solid bar. A wordmark leaves most of its own row as mat, which is
+    exactly what tells it apart from a passage of photography, so a solid block
+    would be testing a shape the check is right to reject.
+    """
+    for y in range(box[1], box[3]):
+        for x in range(box[0], box[2], 8):
+            img.putpixel((x, y), colour)
+            img.putpixel((x + 1, y), colour)
+
+
+def _moving_region(**overrides) -> MovingTextRegion:
+    fields = dict(name="mark", search=(0, 0, 200, 120), ink=(0, 0, 0),
+                  backdrop=tokens.CREAM)
+    fields.update(overrides)
+    return MovingTextRegion(**fields)
+
+
+def test_the_band_is_found_where_the_mark_actually_is():
+    frame = _moving_canvas()
+    _paint_mark(frame, (20, 95, 180, 105), (0, 0, 0))
+
+    assert legibility.find_ink_band(frame, _moving_region()) == (0, 95, 200, 105)
+
+
+def test_a_frame_the_mark_has_scrolled_out_of_has_no_band():
+    # Most frames of a scroll, and the reason a missing band cannot be a
+    # failure on its own.
+    assert legibility.find_ink_band(_moving_canvas(), _moving_region()) is None
+
+
+def test_dark_photography_is_not_mistaken_for_the_mark():
+    # The whole risk of searching for ink rather than declaring where it is.
+    # The band of photography here is darker than the mat and spans the search
+    # area, and it is not the wordmark.
+    frame = _moving_canvas()
+    _paint(frame, (0, 50, 200, 70), (0, 0, 0))
+
+    assert legibility.find_ink_band(frame, _moving_region()) is None, (
+        "a passage of dark photography answered the question the mark was "
+        "supposed to answer")
+
+
+def test_the_longest_run_wins_rather_than_the_span_between_two():
+    # Two separate marks would otherwise produce one band stretched across the
+    # clean mat between them, and the median of that band is mat, which reads
+    # as a comfortable ratio for text that is mostly not there.
+    frame = _moving_canvas()
+    _paint_mark(frame, (20, 10, 180, 13), (0, 0, 0))
+    _paint_mark(frame, (20, 95, 180, 110), (0, 0, 0))
+
+    assert legibility.find_ink_band(frame, _moving_region()) == (0, 95, 200, 110)
+
+
+def test_a_search_area_with_no_area_is_an_error():
+    with pytest.raises(ValueError):
+        legibility.find_ink_band(_moving_canvas(),
+                                 _moving_region(search=(50, 60, 50, 60)))
+
+
+def test_a_mark_no_frame_shows_is_reported():
+    # The wrong file (white on cream), and equally a colophon that never made
+    # it into the strip. Either way the check proved nothing, and reporting
+    # nothing would be a pass nobody measured (L98).
+    frames = [_moving_canvas() for _ in range(4)]
+
+    failures = legibility.illegible_moving(frames, [_moving_region()])
+
+    assert len(failures) == 1
+    assert "never shows it" in failures[0], failures
+
+
+def test_a_mark_only_some_frames_show_reads_fine():
+    on_screen = _moving_canvas()
+    _paint_mark(on_screen, (20, 95, 180, 105), (0, 0, 0))
+    frames = [_moving_canvas(), on_screen, _moving_canvas()]
+
+    assert legibility.illegible_moving(frames, [_moving_region()]) == []
+
+
+def test_a_mark_too_close_to_its_mat_is_reported_with_the_ratio():
+    # Light enough against the cream to fall under the bar, while still far
+    # enough from it that the two can be told apart at all. An ink closer than
+    # the tolerance is not a washed-out mark, it is an invisible one, and it is
+    # reported as absent instead, which is the case above.
+    frame = _moving_canvas()
+    washed = (150, 150, 150)
+    _paint_mark(frame, (20, 95, 180, 105), washed)
+
+    failures = legibility.illegible_moving(
+        frames=[frame], regions=[_moving_region(ink=washed)])
+
+    assert len(failures) == 1
+    assert "to 1" in failures[0], failures
+
+
+def test_no_frames_at_all_is_an_error_for_moving_ink_too():
+    with pytest.raises(ValueError):
+        legibility.illegible_moving([], [_moving_region()])
+
+
+def test_the_colophon_search_area_sits_inside_the_scroll_canvas():
+    for region in text_regions.scroll_moving_regions(LOGO):
+        left, top, right, bottom = region.search
+        assert 0 <= left < right <= scroll_mod.CANVAS_W, region
+        assert 0 <= top < bottom <= scroll_mod.CANVAS_H, region
+
+
+def test_the_colophon_search_starts_below_the_header():
+    # The header carries its own dark ink on the same cream. A search that
+    # found the title instead would report a comfortable reading on every
+    # frame while the colophon was missing entirely.
+    region = text_regions.scroll_moving_regions(LOGO)[0]
+
+    assert region.search[1] >= scroll_mod.HEADER_H
+
+
 # ── the reels themselves, read back out of the encoded file ──────────────────
+
+
+def _structured_photo(path: Path, seed: int) -> str:
+    """A structured stand-in, not flat colour: a flat photo makes every band it
+    touches trivially uniform and hides a placement regression."""
+    img = Image.new("RGB", (2000, 1332))
+    pixels = img.load()
+    for y in range(0, 1332, 2):
+        for x in range(0, 2000, 4):
+            shade = ((x // 40) + (y // 40) + seed) % 3
+            colour = [(150, 96, 74), (66, 52, 48), (196, 158, 120)][shade]
+            for dx in range(4):
+                pixels[x + dx, y] = colour
+                pixels[x + dx, y + 1] = colour
+    img.save(path, "JPEG", quality=92)
+    return str(path)
 
 
 @pytest.fixture
 def photos(tmp_path) -> list[str]:
-    """Structured stand-ins, not flat colour: a flat photo makes every band it
-    touches trivially uniform and hides a placement regression."""
-    out = []
-    for seed in range(10):
-        path = tmp_path / f"p{seed}.jpg"
-        img = Image.new("RGB", (2000, 1332))
-        pixels = img.load()
-        for y in range(1332):
-            for x in range(0, 2000, 4):
-                shade = ((x // 40) + (y // 40) + seed) % 3
-                colour = [(150, 96, 74), (66, 52, 48), (196, 158, 120)][shade]
-                for dx in range(4):
-                    pixels[x + dx, y] = colour
-        img.save(path, "JPEG", quality=92)
-        out.append(str(path))
-    return out
+    return [_structured_photo(tmp_path / f"p{seed}.jpg", seed) for seed in range(10)]
+
+
+#: Enough photographs that the strip is genuinely taller than the canvas.
+#:
+#: Measured rather than guessed: at ten the generator prints "strip shorter than
+#: canvas, scroll collapsed to a hold" and the colophon sits in one place for the
+#: whole file. A moving-band check recorded against that would be a check of a
+#: still, passing forever while the thing it exists to follow never moved (L84).
+SCROLLING_PHOTOS = 16
+
+
+@pytest.fixture
+def many_photos(tmp_path) -> list[str]:
+    return [_structured_photo(tmp_path / f"m{seed}.jpg", seed)
+            for seed in range(SCROLLING_PHOTOS)]
 
 
 @pytest.fixture
@@ -258,6 +417,73 @@ def test_the_thursday_reel_header_reads_all_the_way_through(
     frames = legibility.sample_frames(video, SAMPLES)
 
     assert legibility.illegible(frames, text_regions.scroll_regions()) == []
+
+
+@needs_ffmpeg
+@needs_mac_fonts
+def test_the_thursday_reel_colophon_reads_wherever_it_scrolls_to(
+        many_photos, silent_audio, tmp_path):
+    """#306: the mark is found in each frame rather than declared.
+
+    `tests/test_gallery_alignment.py` checks the colophon in the STRIP, before
+    any of it is animated or encoded. This is the same element read back out of
+    the file that gets uploaded, which is where the pixel format, the colour
+    range and the compression have had their say.
+
+    Also asserts the sample really did straddle the mark going off screen. Any
+    band the search could match on every single frame would be something other
+    than a colophon travelling with the strip, and the check would be following
+    the wrong thing while reporting a clean reading.
+    """
+    video = scroll_mod.generate_reel_scroll(
+        photo_paths=many_photos, audio_path=silent_audio,
+        output_path=str(tmp_path / "scroll-colophon.mp4"),
+        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
+        seed=306, scroll_duration=4.0, logo_path=LOGO)
+
+    frames = legibility.sample_frames(video, SAMPLES)
+    regions = text_regions.scroll_moving_regions(LOGO)
+    assert regions, "the colophon has to be checked, not skipped"
+
+    assert legibility.illegible_moving(frames, regions) == []
+
+    bands = [legibility.find_ink_band(frame, regions[0]) for frame in frames]
+    assert any(b is not None for b in bands), "the render never showed the mark"
+    assert any(b is None for b in bands), (
+        "the mark was found on every frame of a scrolling strip, so the search "
+        "is matching something that does not travel with it")
+
+
+@needs_ffmpeg
+@needs_mac_fonts
+def test_a_white_wordmark_on_the_cream_mat_fails_the_thursday_colophon(
+        many_photos, silent_audio, tmp_path):
+    """The guard seen refusing on a real encoded render (LESSONS.md L1).
+
+    The wrong mark file, which is the defect that has shipped on this element
+    more than once: white ink on the cream mat, invisible, with the render
+    otherwise completely normal.
+    """
+    white = tmp_path / "logo-white.png"
+    with Image.open(LOGO) as source:
+        rgba = source.convert("RGBA")
+    pixels = rgba.load()
+    for y in range(rgba.height):
+        for x in range(rgba.width):
+            pixels[x, y] = (255, 255, 255, pixels[x, y][3])
+    rgba.save(white)
+
+    video = scroll_mod.generate_reel_scroll(
+        photo_paths=many_photos, audio_path=silent_audio,
+        output_path=str(tmp_path / "scroll-white.mp4"),
+        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
+        seed=306, scroll_duration=4.0, logo_path=str(white))
+
+    frames = legibility.sample_frames(video, SAMPLES)
+    failures = legibility.illegible_moving(
+        frames, text_regions.scroll_moving_regions(str(white)))
+
+    assert any("colophon" in f for f in failures), failures
 
 
 @needs_ffmpeg

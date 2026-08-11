@@ -18,7 +18,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from .frame_legibility import TextRegion, logo_ink
+from .frame_legibility import MovingTextRegion, TextRegion, logo_ink
 
 
 def _band(x0: int, y0: int, x1: int, font_size: int, lines: int = 1,
@@ -97,13 +97,10 @@ def slider_regions(logo_path: str | Path | None) -> list[TextRegion]:
 
 
 def scroll_regions() -> list[TextRegion]:
-    """The scroll reel's cream header.
+    """The scroll reel's cream header, which is pinned to the frame.
 
-    Its colophon is baked into the scrolling strip rather than pinned to the
-    frame, so it passes through a different band on every frame and a fixed
-    rectangle cannot address it. Left uncovered deliberately and tracked, rather
-    than approximated by a band big enough to catch it, which would take its
-    background reading from whatever photography was passing at the time.
+    Its colophon moves, so it is `scroll_moving_regions` below rather than a
+    band here.
     """
     from . import generate_reel_scroll as s
 
@@ -112,6 +109,37 @@ def scroll_regions() -> list[TextRegion]:
         TextRegion("scroll detail lines",
                    (0, 35 + int(70 * 1.35), s.CANVAS_W, s.HEADER_H),
                    s.TEXT_DARK),
+    ]
+
+
+def scroll_moving_regions(logo_path: str | Path | None) -> list[MovingTextRegion]:
+    """The scroll reel's colophon, which travels with the strip (#306).
+
+    Baked into the scrolling strip under the last print rather than pinned to
+    the frame, so it passes through a different band on every frame. Found in
+    each frame rather than declared.
+
+    The search area comes from the generator's own numbers: the wordmark is
+    centred at `LOGO_WIDTH`, and the rows searched are the ones between the
+    chrome masks. Excluding the header matters rather than being tidiness: it
+    carries its own dark ink on the same cream, and a search that found the
+    title instead would report a comfortable reading on every frame while the
+    colophon was missing entirely.
+    """
+    from . import generate_reel_scroll as s
+
+    if not logo_path:
+        return []
+
+    logo_x = (s.CANVAS_W - s.LOGO_WIDTH) // 2
+    return [
+        MovingTextRegion(
+            name="scroll colophon wordmark",
+            search=(logo_x, s.HEADER_H, logo_x + s.LOGO_WIDTH,
+                    s.CANVAS_H - s.FOOTER_H),
+            ink=logo_ink(logo_path),
+            backdrop=s.CREAM,
+        )
     ]
 
 

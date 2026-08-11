@@ -156,6 +156,119 @@ def illegible(frames, regions, minimum: float = MIN_CONTRAST) -> list[str]:
     return failures
 
 
+@dataclass(frozen=True)
+class MovingTextRegion:
+    """Ink that travels through the frame, so its band is found, not declared (#306).
+
+    The Thursday reel's colophon is baked into the scrolling strip rather than
+    pinned to the frame, so it passes through a different band on every frame. A
+    fixed rectangle cannot address it, and a band big enough to catch it wherever
+    it lands would take its background reading from whatever photography was
+    passing at the time, which says nothing about the mat the mark actually sits
+    on.
+
+    `search` is where the mark can be, in canvas pixels: its horizontal extent
+    from the template's own centring, and the rows between the chrome masks,
+    because the header carries its own ink and finding that instead would be a
+    check that passes while the colophon is missing.
+
+    `backdrop` is the surface the mark is drawn on. It is what makes the search
+    honest: a row is only a candidate when most of it is that surface, so a row
+    of dark photography cannot be mistaken for the mark. Without it, any
+    sufficiently dark passage of a photograph would answer the question.
+    """
+    name: str
+    search: tuple[int, int, int, int]
+    ink: tuple[int, int, int]
+    backdrop: tuple[int, int, int]
+    #: How much of a row must be the backdrop before it can hold the mark.
+    #: Half, because the mark is ink on the mat with mat either side of it, and
+    #: no row of a photograph is half a flat cream.
+    min_backdrop_share: float = 0.5
+
+
+def find_ink_band(frame: Image.Image, region: MovingTextRegion,
+                  tolerance: int = INK_TOLERANCE) -> tuple[int, int, int, int] | None:
+    """Where `region`'s mark actually sits in this frame, or None if it is not here.
+
+    The longest run of consecutive candidate rows, so a stray qualifying row
+    somewhere else in the search area cannot stretch the band across the mat
+    between them and drag a clean reading out of it.
+    """
+    left, top, right, bottom = region.search
+    patch = frame.convert("RGB").crop(region.search)
+    width = right - left
+    if width <= 0 or bottom - top <= 0:
+        raise ValueError(f"search area for {region.name} is empty: {region.search}")
+
+    pixels = list(patch.getdata())
+    needed = int(width * region.min_backdrop_share)
+
+    qualifying: list[bool] = []
+    for row in range(bottom - top):
+        line = pixels[row * width:(row + 1) * width]
+        has_ink = any(_is_ink(p, region.ink, tolerance) for p in line)
+        mat = sum(1 for p in line if _is_ink(p, region.backdrop, tolerance))
+        qualifying.append(has_ink and mat >= needed)
+
+    best_start = best_length = 0
+    run_start = None
+    for index, ok in enumerate(qualifying + [False]):
+        if ok and run_start is None:
+            run_start = index
+        elif not ok and run_start is not None:
+            if index - run_start > best_length:
+                best_start, best_length = run_start, index - run_start
+            run_start = None
+
+    if best_length == 0:
+        return None
+    return (left, top + best_start, right, top + best_start + best_length)
+
+
+def illegible_moving(frames, regions,
+                     minimum: float = MIN_CONTRAST) -> list[str]:
+    """Every legibility failure for ink that moves, across a sequence of frames.
+
+    A frame where the mark is off screen has nothing to measure and is passed
+    over, because on a scrolling strip that is most of them. But the render as a
+    whole must show it somewhere: a mark found in no frame at all is reported,
+    since that is what the wrong file (white on cream) looks like from here and
+    is also what a colophon that never made it into the strip looks like. Either
+    way the check proved nothing, and reporting nothing would be a pass nobody
+    measured (L98).
+    """
+    failures: list[str] = []
+    frames = list(frames)
+    if not frames:
+        raise ValueError("no frames to check: an empty sample proves nothing")
+
+    for region in regions:
+        readings = []
+        for frame in frames:
+            band = find_ink_band(frame, region)
+            if band is None:
+                continue
+            reading = read_region(
+                frame, TextRegion(region.name, band, region.ink))
+            if reading.has_ink and reading.ratio is not None:
+                readings.append(reading)
+
+        if not readings:
+            failures.append(
+                f"{region.name}: nothing of the colour it is drawn in "
+                f"{region.ink} was found on its backdrop in any of the "
+                f"{len(frames)} frames sampled, so the render never shows it")
+            continue
+
+        worst = min(readings, key=lambda r: r.ratio)
+        if worst.ratio < minimum:
+            failures.append(
+                f"{region.name}: {region.ink} on {worst.background} reads at "
+                f"{worst.ratio:.2f} to 1, under the {minimum} to 1 minimum")
+    return failures
+
+
 def sample_frames(video_path: str | Path, count: int = 12) -> list[Image.Image]:
     """`count` frames spread across an encoded video.
 
