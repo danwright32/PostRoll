@@ -32,10 +32,10 @@ enum PhotoTagSuggestionList {
 
     /// Everything taggable on one photo of `day`.
     ///
-    /// The event's own accounts are taggable on a photo too: a shot of the room
-    /// or of the presenting festival is often about them rather than about a
-    /// performer. Performers come first because they are the common pick, and
-    /// the event's accounts are a handful that stay findable at the end.
+    /// The event's own accounts (organization, venue, presenting festival) come
+    /// first, then the performers. Dan's rule, 2026-08-10 (#302): those two or
+    /// three accounts are on every post of the week, so they are the pick he
+    /// reaches for most, while the performer he wants is found by typing.
     ///
     /// `appearingIn` holds the performers ticked as appearing in this day's
     /// photos; they are floated to the top so the common picks are closest to
@@ -66,7 +66,7 @@ enum PhotoTagSuggestionList {
         let performerSuggestions = ordered.compactMap(suggestion(for:))
 
         var seen = Set<String>()
-        return (performerSuggestions + eventAccounts).filter {
+        return (eventAccounts + performerSuggestions).filter {
             seen.insert($0.token.lowercased()).inserted
         }
     }
