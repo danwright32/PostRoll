@@ -69,8 +69,16 @@ HOLD_COLOUR = 1.2
 HOLD_BW = 1.5
 TRANSITION_DURATION = 1.5   # crossfade to the closing frame
 CLOSING_FRAME_DURATION = 3.0
-TOTAL_DURATION = (HOLD_RAW + SWEEP_DURATION + HOLD_COLOUR + SWEEP_DURATION
-                  + HOLD_BW + TRANSITION_DURATION + CLOSING_FRAME_DURATION)
+
+#: When the reel begins dissolving into the closing graphic, in seconds. Named
+#: for the same reason as the morph's (#335): the window has to be addressable
+#: to be checked, and this reel dissolves from a plate holding one print into a
+#: graphic holding three.
+CLOSING_CROSSFADE_START = (HOLD_RAW + SWEEP_DURATION + HOLD_COLOUR
+                           + SWEEP_DURATION + HOLD_BW)
+
+TOTAL_DURATION = (CLOSING_CROSSFADE_START + TRANSITION_DURATION
+                  + CLOSING_FRAME_DURATION)
 
 DIVIDER_WIDTH = 4
 

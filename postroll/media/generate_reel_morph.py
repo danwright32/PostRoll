@@ -37,7 +37,19 @@ SPLIT_DURATION = 5.0      # continuous split from center to full edit — no pau
 HOLD_EDIT = 1.5           # hold on full edit
 TRANSITION_DURATION = 1.5  # crossfade to closing
 CLOSING_FRAME_DURATION = 3.0
-TOTAL_DURATION = (HOLD_RAW + SPLIT_DURATION + HOLD_EDIT +
+
+#: When the reel begins dissolving into the closing graphic, in seconds.
+#:
+#: Named because that window is not a simple dissolve between two similar
+#: frames and has to be addressable to be checked (#335): the plate holds ONE
+#: print and the graphic holds three, and the caption moves from left-aligned
+#: under the print to centred above each strip, so two differently placed
+#: captions are on screen at once at partial opacity. The frame loop reads this
+#: rather than adding the same three numbers again, so a check aimed at the
+#: window cannot drift off the moment the render actually crossfades.
+CLOSING_CROSSFADE_START = HOLD_RAW + SPLIT_DURATION + HOLD_EDIT
+
+TOTAL_DURATION = (CLOSING_CROSSFADE_START +
                   TRANSITION_DURATION + CLOSING_FRAME_DURATION)
 
 # Ken Burns — disabled (was causing visible shaking)
@@ -223,7 +235,7 @@ def generate_reel_morph(
     total_frames = int(TOTAL_DURATION * FPS)
     p1 = int(HOLD_RAW * FPS)
     p2 = p1 + int(SPLIT_DURATION * FPS)
-    p3 = p2 + int(HOLD_EDIT * FPS)
+    p3 = int(CLOSING_CROSSFADE_START * FPS)
     p4 = p3 + int(TRANSITION_DURATION * FPS)
 
     with tempfile.TemporaryDirectory() as tmpdir:
