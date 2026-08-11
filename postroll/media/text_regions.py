@@ -1,0 +1,133 @@
+"""Where each template draws text, taken from that template's own constants (#298).
+
+A band per element, not a glyph-tight box. A band is built from the numbers the
+generator itself lays out with, so moving a masthead moves the check with it,
+and it cannot drift out of step with a font that resolves differently on another
+machine. The median of a band of mat is the mat, which is what the eye compares
+the text against.
+
+Every video template in `MEDIA_DESIGN_VERSIONS` appears below, either with its
+bands or with a stated reason for having none. A template that is simply missing
+would be exempt from the check written to cover it, and the suite asserts the
+table is complete in both directions (L96).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from PIL import Image
+
+from .frame_legibility import TextRegion, logo_ink
+
+
+def _band(x0: int, y0: int, x1: int, font_size: int, lines: int = 1,
+          line_gap: int = 0) -> tuple[int, int, int, int]:
+    """The rectangle a run of text at `font_size` occupies from (x0, y0).
+
+    1.35 covers an ascender-to-descender box with the slack a script face needs.
+    Bands are deliberately generous: an over-tight band that clips the glyphs
+    would measure mostly mat and report a comfortable ratio for text that is not
+    there.
+    """
+    height = int(font_size * 1.35)
+    return (x0, y0, x1, y0 + height * lines + line_gap * (lines - 1))
+
+
+def _scaled_logo_height(logo_path: str | Path, width: int) -> int:
+    with Image.open(logo_path) as img:
+        return int(img.height * (width / img.width))
+
+
+def morph_regions(print_height: int,
+                  logo_path: str | Path | None) -> list[TextRegion]:
+    """The Tuesday reel's program plate: masthead, venue line, placard, colophon.
+
+    `print_height` is set from the photograph's aspect at render time, and the
+    placard hangs off the bottom of the print, so it is read back from the module
+    after a render rather than guessed here.
+    """
+    from . import generate_reel_morph as m
+
+    regions = [
+        TextRegion("morph masthead",
+                   _band(m.MAT, m.MASTHEAD_Y, m.CANVAS_W - m.MAT, 74),
+                   m.TEXT_DARK),
+        TextRegion("morph venue line",
+                   _band(m.MAT, m.VENUE_Y, m.CANVAS_W - m.MAT, 19),
+                   m.WARM_MID),
+        TextRegion("morph placard state word",
+                   _band(m.MAT, m.PRINT_Y + print_height + 34,
+                         m.CANVAS_W - m.MAT, 20),
+                   m.ROSE_GOLD),
+        TextRegion("morph placard subtitle",
+                   _band(m.MAT, m.PRINT_Y + print_height + 34 + 32,
+                         m.CANVAS_W - m.MAT, 14),
+                   m.WARM_MID),
+    ]
+    if logo_path:
+        height = _scaled_logo_height(logo_path, m.LOGO_WIDTH)
+        regions.append(TextRegion(
+            "morph colophon wordmark",
+            (m.MAT, m.FOOTER_RULE_Y + 40, m.CANVAS_W - m.MAT,
+             m.FOOTER_RULE_Y + 40 + height),
+            logo_ink(logo_path)))
+    return regions
+
+
+def slider_regions(logo_path: str | Path | None) -> list[TextRegion]:
+    """The slider reel's cream header, plus the state labels over the mat."""
+    from . import generate_reel_slider as s
+
+    # The detail lines start below the title, at a distance the generator takes
+    # from the rendered title's own height. 70 point script measures close
+    # enough to its nominal size for a band, and the band below runs to the
+    # bottom of the header, so it holds both detail lines wherever they land.
+    return [
+        TextRegion("slider title",
+                   _band(0, s.TITLE_TOP_Y, s.CANVAS_W, 70),
+                   s.TEXT_DARK),
+        TextRegion("slider detail lines",
+                   (0, s.TITLE_TOP_Y + int(70 * 1.35), s.CANVAS_W, s.HEADER_H),
+                   s.TEXT_DARK),
+        TextRegion("slider state label",
+                   _band(0, s.LABEL_Y, s.CANVAS_W, s.LABEL_FONT_SIZE),
+                   s.LABEL_COLOR),
+    ]
+
+
+def scroll_regions() -> list[TextRegion]:
+    """The scroll reel's cream header.
+
+    Its colophon is baked into the scrolling strip rather than pinned to the
+    frame, so it passes through a different band on every frame and a fixed
+    rectangle cannot address it. Left uncovered deliberately and tracked, rather
+    than approximated by a band big enough to catch it, which would take its
+    background reading from whatever photography was passing at the time.
+    """
+    from . import generate_reel_scroll as s
+
+    return [
+        TextRegion("scroll title", _band(0, 35, s.CANVAS_W, 70), s.TEXT_DARK),
+        TextRegion("scroll detail lines",
+                   (0, 35 + int(70 * 1.35), s.CANVAS_W, s.HEADER_H),
+                   s.TEXT_DARK),
+    ]
+
+
+#: Video templates with no bands here, and why. Each is a decision on the
+#: record, so the gap cannot be mistaken for coverage.
+UNCHECKED_TEMPLATES: dict[str, str] = {
+    # Its wordmark sits on a semi-transparent cream footer over the footage, so
+    # what the mark lands on depends on the video beneath it. That surface is
+    # measured over both extremes by tests/test_screen_reel_logo_contrast.py,
+    # which is the same measurement taken where it is decided.
+    "reel_screen": "covered by tests/test_screen_reel_logo_contrast.py",
+    # Friday's clip reel: the feature is retired (2026-07-09) and nothing in the
+    # app routes to it, so an encoded render here would be checking a template
+    # that is never produced.
+    "reel_clip": "retired 2026-07-09, not rendered by the app",
+    # A still, drawn by the scroll reel's own layout maths from the same
+    # constants, so scroll_regions covers the design it shows.
+    "reel_preview": "same layout as reel_scroll, covered there",
+}
