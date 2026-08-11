@@ -66,6 +66,7 @@ targets:
       - path: Sources/Services/PhotoTagBatch.swift
       - path: Sources/Services/PhotoThumbControls.swift
       - path: Sources/Services/PhotoTagSheetNavigation.swift
+      - path: Sources/Services/PhotoTagSuggestionList.swift
       - path: Sources/Services/EventHandleSuggestions.swift
       - path: Sources/Services/FridayReviewDisplay.swift
       - path: Sources/Services/CoverReviewDisplay.swift
