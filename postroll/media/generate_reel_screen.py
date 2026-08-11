@@ -129,13 +129,11 @@ def build_chrome_overlay(event_name: str, org: str, venue: str,
     footer = Image.new("RGBA", (CANVAS_W, FOOTER_H), (*CREAM, CREAM_OPACITY))
     chrome.paste(footer, (0, footer_y), footer)
 
-    if logo_path and Path(logo_path).exists():
-        logo = Image.open(logo_path).convert("RGBA")
-        logo_scale = LOGO_WIDTH / logo.width
-        logo = logo.resize(
-            (int(logo.width * logo_scale), int(logo.height * logo_scale)),
-            Image.LANCZOS,
-        )
+    # Refuses a mark that was asked for and is not on disk, rather than laying a
+    # bare footer over the footage and reporting success (#334).
+    from .wordmark import load as _load_wordmark
+    logo = _load_wordmark(logo_path, LOGO_WIDTH)
+    if logo:
         lx = (CANVAS_W - logo.width) // 2
         ly = footer_y + (FOOTER_H - logo.height) // 2
         chrome.paste(logo, (lx, ly), logo)

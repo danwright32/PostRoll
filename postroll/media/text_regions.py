@@ -35,7 +35,13 @@ def _band(x0: int, y0: int, x1: int, font_size: int, lines: int = 1,
 
 
 def _scaled_logo_height(logo_path: str | Path, width: int) -> int:
-    with Image.open(logo_path) as img:
+    # Through the same named condition the renderers refuse on (#334), so a
+    # wordmark that was asked for and is not on disk cannot produce a band list
+    # with no colophon in it. A missing band and a mark drawn perfectly are
+    # indistinguishable to every check downstream, which is the whole reason
+    # this file exists.
+    from .wordmark import required
+    with Image.open(required(logo_path)) as img:
         return int(img.height * (width / img.width))
 
 
@@ -153,6 +159,8 @@ def scroll_moving_regions(logo_path: str | Path | None) -> list[MovingTextRegion
     if not logo_path:
         return []
 
+    from .wordmark import required
+    logo_path = required(logo_path)   # see _scaled_logo_height (#334)
     logo_x = (s.CANVAS_W - s.LOGO_WIDTH) // 2
     return [
         MovingTextRegion(

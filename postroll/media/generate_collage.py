@@ -621,13 +621,11 @@ def draw_branded_strip(
         bbox = draw.textbbox((0, 0), ch, font=detail_font)
         dx += (bbox[2] - bbox[0]) + 4
 
-    if logo_path and Path(logo_path).exists():
-        logo = Image.open(logo_path).convert("RGBA")
-        scale = LOGO_WIDTH / logo.width
-        logo = logo.resize(
-            (int(logo.width * scale), int(logo.height * scale)),
-            Image.LANCZOS,
-        )
+    # Refuses a mark that was asked for and is not on disk, rather than printing
+    # an unsigned plate and reporting success (#334).
+    from .wordmark import load as _load_wordmark
+    logo = _load_wordmark(logo_path, LOGO_WIDTH)
+    if logo:
         lx = right - PLATE_PADDING - logo.width
         ly = y + (STRIP_H - logo.height) // 2
         canvas_rgba.paste(logo, (lx, ly), logo)

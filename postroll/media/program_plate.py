@@ -204,11 +204,12 @@ def draw_plate_chrome(frame, event_name: str, org: str, venue: str, logo,
 
 
 def load_logo(logo_path: str | None, width: int = LOGO_WIDTH):
-    """The wordmark scaled to the plate's colophon width, or None."""
-    from pathlib import Path
-    if not logo_path or not Path(logo_path).exists():
-        return None
-    logo = Image.open(logo_path).convert("RGBA")
-    scale = width / logo.width
-    return logo.resize((int(logo.width * scale), int(logo.height * scale)),
-                       Image.LANCZOS)
+    """The wordmark scaled to the plate's colophon width, or None.
+
+    Kept as the plate's own name for the shared loader, because both reels and
+    their tests reach the mark through here. A path that is set and not on disk
+    raises rather than returning None: this used to swallow it and hang a
+    plate with no signature (#334).
+    """
+    from .wordmark import load
+    return load(logo_path, width)

@@ -48,7 +48,10 @@ from .select_cover_photo import (
 )
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
-LOGO_BLACK = str(ASSETS_DIR / "logo-black.png")
+
+# The same owner generate_media reads it through (#334). This module used to
+# declare its own copy of the path and its own "or no mark at all" fallback.
+from ..media.wordmark import BLACK as LOGO_BLACK, required as required_wordmark  # noqa: E402
 
 
 def generate_cover(
@@ -97,7 +100,7 @@ def generate_cover(
         org=org,
         venue=venue,
         output_path=output_path,
-        logo_path=LOGO_BLACK if Path(LOGO_BLACK).exists() else None,
+        logo_path=required_wordmark(LOGO_BLACK),
     )
     result["cover"] = output_path
     return result

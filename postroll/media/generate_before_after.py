@@ -229,14 +229,10 @@ def generate_before_after(
     # The logo is loaded HERE, before the space budget, because the footer has
     # to be tall enough to hold it. Sizing the footer from a constant and then
     # discovering the mark is taller is how it came to be cut off the page.
-    logo = None
-    if logo_path and Path(logo_path).exists():
-        logo = Image.open(logo_path).convert("RGBA")
-        logo_scale = LOGO_WIDTH / logo.width
-        logo = logo.resize(
-            (int(logo.width * logo_scale), int(logo.height * logo_scale)),
-            Image.LANCZOS,
-        )
+    # Refuses a mark that was asked for and is not on disk, rather than sizing
+    # the footer for no signature and reporting success (#334).
+    from .wordmark import load as _load_wordmark
+    logo = _load_wordmark(logo_path, LOGO_WIDTH)
     footer_min_needed = max(
         BOTTOM_CREAM_H,
         20 + LOGO_TOP_GAP + (logo.height if logo else 0) + LOGO_BOTTOM_MARGIN)
