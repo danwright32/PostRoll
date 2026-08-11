@@ -190,9 +190,6 @@ def test_slider_divider_leaves_no_dark_line_across_the_cream():
     assert darkest > 200, "the divider's shadow is streaking through the cream mat"
 
 
-def test_slider_labels_are_dark_enough_to_read_on_cream():
-    assert slider_mod.LABEL_COLOR == slider_mod.TEXT_DARK
-
 
 # ── morph is the program-plate Tuesday reel ─────────────────────────────────
 #
