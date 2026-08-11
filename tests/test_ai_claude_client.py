@@ -103,6 +103,94 @@ def test_run_prompt_raises_on_nonzero_exit():
             run_prompt("any prompt")
 
 
+def test_a_failure_reported_on_stdout_is_not_thrown_away():
+    """#296: the CLI splits its failures across both streams.
+
+    Measured against 2.1.227 on 2026-08-10. A runtime failure reports on
+    STDOUT: `claude -p --model definitely-not-a-real-model` exits 1 with "There's
+    an issue with the selected model" on stdout, while stderr carried an
+    unrelated context-window warning. A usage cap is a runtime condition, so
+    keeping stderr alone meant the cap halt could never fire and the
+    unrecognised-failures log would record the wrong text, wasting the one
+    sample #258 needs.
+    """
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=_FakeCompleted(
+            returncode=1,
+            stdout="There's an issue with the selected model (bogus).",
+            stderr="unrelated warning about the context window",
+        ),
+    ):
+        with pytest.raises(ClaudeError) as caught:
+            run_prompt("any prompt")
+
+    assert "issue with the selected model" in str(caught.value)
+
+
+def test_a_failure_reported_on_stderr_is_still_kept():
+    # Startup and config failures do come out on stderr: `--settings
+    # /nonexistent.json` exits 1 with "Error: Settings file not found" there.
+    # Preferring stdout must not lose this half.
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=_FakeCompleted(
+            returncode=1, stdout="", stderr="Error: Settings file not found: /nope.json"),
+    ):
+        with pytest.raises(ClaudeError, match="Settings file not found"):
+            run_prompt("any prompt")
+
+
+def test_the_reason_comes_before_the_noise():
+    # cap_signals matches substrings over this text, and stderr is known to
+    # carry warnings unrelated to the failure. Ordering the stream that holds
+    # the reason first keeps a stray phrase from being what a matcher sees
+    # first.
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=_FakeCompleted(
+            returncode=1, stdout="usage limit reached", stderr="auto-compact will keep"),
+    ):
+        with pytest.raises(ClaudeError) as caught:
+            run_prompt("any prompt")
+
+    message = str(caught.value)
+    assert message.index("usage limit reached") < message.index("auto-compact")
+
+
+def test_a_failure_with_nothing_on_either_stream_says_so():
+    # An exit code with no text is a different fact from a message, and a
+    # blank tail would read as a message that failed to load.
+    with patch.object(
+        subprocess, "run", return_value=_FakeCompleted(returncode=137),
+    ):
+        with pytest.raises(ClaudeError, match="no output on either stream"):
+            run_prompt("any prompt")
+
+
+def test_a_cap_on_stdout_is_recognised_end_to_end():
+    """The whole point: the halt has to be able to fire.
+
+    Classifying the raised message is what `generate_week` does, so this is the
+    real path rather than a stub of it.
+    """
+    from postroll.ai import cap_signals
+
+    with patch.object(
+        subprocess,
+        "run",
+        return_value=_FakeCompleted(
+            returncode=1, stdout="Usage limit reached", stderr="auto-compact will keep"),
+    ):
+        with pytest.raises(ClaudeError) as caught:
+            run_prompt("any prompt")
+
+    assert cap_signals.should_halt(cap_signals.classify(str(caught.value)))
+
+
 def test_run_prompt_raises_on_empty_output():
     with patch.object(
         subprocess, "run", return_value=_FakeCompleted(stdout="")
