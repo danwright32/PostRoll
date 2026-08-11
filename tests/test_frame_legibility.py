@@ -192,8 +192,11 @@ def test_every_band_sits_inside_the_canvas_it_measures():
          morph_mod.CANVAS_W, morph_mod.CANVAS_H, name)
         for w, h, name in PHOTO_SHAPES
     ] + [
-        (text_regions.slider_regions(LOGO), slider_mod.CANVAS_W, slider_mod.CANVAS_H,
-         "slider"),
+    ] + [
+        (text_regions.slider_regions(LOGO, slider_mod.print_rect((w, h))[3]),
+         slider_mod.CANVAS_W, slider_mod.CANVAS_H, f"slider {name}")
+        for w, h, name in PHOTO_SHAPES
+    ] + [
         (text_regions.scroll_regions(), scroll_mod.CANVAS_W, scroll_mod.CANVAS_H,
          "scroll"),
     ]
@@ -421,15 +424,22 @@ def test_the_tuesday_reel_reads_all_the_way_through(photos, silent_audio, tmp_pa
 @needs_mac_fonts
 def test_the_three_photo_tuesday_reel_reads_all_the_way_through(
         photos, silent_audio, tmp_path):
+    # A B&W is required now: this reel renders three states and nothing in the
+    # app reaches it without one (#164, #324). The test used to pass none, so
+    # despite its name it rendered the two-photo reel and proved nothing about
+    # the mode it is named for.
     video = slider_mod.generate_reel_slider(
-        raw_path=photos[0], edit_path=photos[1], audio_path=silent_audio,
+        raw_path=photos[0], edit_path=photos[1], bw_path=photos[2],
+        audio_path=silent_audio,
         output_path=str(tmp_path / "slider.mp4"),
         event_name="Reference Event", org="Reference Org", venue="Reference Venue",
         logo_path=LOGO)
 
     frames = legibility.sample_frames(video, SAMPLES)
+    regions = text_regions.slider_regions(
+        LOGO, slider_mod.print_rect(PHOTO_SIZE)[3])
 
-    assert legibility.illegible(frames, text_regions.slider_regions(LOGO)) == []
+    assert legibility.illegible(frames, regions) == []
 
 
 def assert_the_strip_really_scrolls(photo_paths, seed):

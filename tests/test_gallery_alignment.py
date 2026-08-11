@@ -76,9 +76,10 @@ def test_scroll_chrome_has_no_rose_gold_rules():
 # program-plate tests below).
 
 
-def test_slider_chrome_has_no_rose_gold_rules():
-    # slider's chrome also takes the photo band (photo_y, photo_h) for label placement.
-    _assert_no_chrome_rules(slider_mod, slider_mod.HEADER_H, 900)
+# The slider is deliberately absent from this group. It draws the program plate
+# now (#164), and the plate's rose-gold rules are the design rather than a
+# leftover, so the assertion that used to sit here is inverted and lives with
+# the other plate checks below.
 
 
 def test_screen_chrome_has_no_rose_gold_rules():
@@ -100,7 +101,7 @@ def _assert_detail_weight_not_thin(mod):
 def test_all_templates_use_a_non_thin_detail_weight():
     # The morph draws its detail line through the shared plate, so that is
     # the module carrying the weight it uses (#164).
-    for mod in (scroll_mod, plate_mod, slider_mod, screen_mod, ba_mod, story_mod):
+    for mod in (scroll_mod, plate_mod, screen_mod, ba_mod, story_mod):
         _assert_detail_weight_not_thin(mod)
 
 
@@ -139,13 +140,8 @@ def test_morph_background_is_cream_not_blurred_photo():
 
 
 def test_slider_background_is_cream_not_blurred_photo():
-    canvas, _ = slider_mod.prepare_photo_simple(_landscape(), _landscape())
-    assert canvas.convert("RGB").getpixel((10, 10)) == slider_mod.CREAM
-
-
-def test_slider_stacked_after_background_is_cream():
-    canvas = slider_mod.prepare_stacked_after(_landscape(), _landscape(), _landscape())
-    assert canvas.convert("RGB").getpixel((10, 10)) == slider_mod.CREAM
+    _, canvases = slider_mod.hang_the_states(_landscape(), _landscape(), _landscape())
+    assert canvases[0].convert("RGB").getpixel((10, 10)) == plate_mod.CREAM
 
 
 def test_screen_background_is_cream():
@@ -160,16 +156,16 @@ def test_screen_background_is_cream():
 # dark blurred backdrop. On cream the labels vanished and the shadow left a stray
 # dark line through the mat.
 
-def _slider_frame(divider_x=540):
-    photo = _landscape(size=(1500, 1000))          # 3:2, so it letterboxes onto cream
-    raw_canvas, photo_y = slider_mod.prepare_photo_simple(photo, photo)
-    edit_canvas, _ = slider_mod.prepare_photo_simple(photo, photo)
-    font = slider_mod.load_font(
-        slider_mod.FONT_DETAIL, slider_mod.LABEL_FONT_SIZE,
-        index=slider_mod.FONT_DETAIL_BOLD,
-    )
-    frame = slider_mod.generate_frame(raw_canvas, edit_canvas, divider_x, font)
-    return frame.convert("RGB"), photo_y
+def _slider_frame(progress=0.5, rightward=True):
+    """A mid-sweep frame of the 3-photo Tuesday reel, with its chrome."""
+    photo = _landscape(size=(1500, 1000))          # 3:2
+    rect, canvases = slider_mod.hang_the_states(photo, photo, photo)
+    frame = slider_mod.swept(canvases[0], canvases[1], rect, progress, rightward)
+    before, after = slider_mod.placard_alphas(progress)
+    frame = slider_mod.draw_plate_chrome(
+        frame, "Event", "Org", "The Venue", None, rect,
+        [(slider_mod.STATES[0], before), (slider_mod.STATES[1], after)])
+    return frame.convert("RGB"), rect
 
 
 def _darkest_in(img, box):
@@ -177,21 +173,41 @@ def _darkest_in(img, box):
     return min(min(img.getpixel((x, y))) for x in range(x0, x1, 2) for y in range(y0, y1, 2))
 
 
-def test_slider_labels_are_dark_enough_to_read_on_cream():
-    frame, _ = _slider_frame()
-    label_y = int(slider_mod.CANVAS_H * 0.75)
-    box = (slider_mod.LABEL_MARGIN, label_y, slider_mod.LABEL_MARGIN + 180, label_y + 40)
-    assert _darkest_in(frame, box) < 120, "the Edit label is not legible on the cream mat"
+def test_slider_caption_is_dark_enough_to_read_on_cream():
+    # The reel's caption placard, held at full opacity. The old RAW/Edit labels
+    # this replaces shipped white once and were invisible on the mat (#163), so
+    # the check is on the rendered pixels rather than on a colour constant.
+    frame, rect = _slider_frame(progress=0.0)
+    y = rect[1] + rect[3] + slider_mod.PLACARD_TOP_GAP
+    box = (slider_mod.MAT, y, slider_mod.MAT + 200, y + slider_mod.PLACARD_BLOCK_H)
+
+    assert _darkest_in(frame, box) < 160, "the caption is not legible on the cream mat"
 
 
-def test_slider_divider_leaves_no_dark_line_across_the_cream():
-    # In the cream band there is nothing to divide (both sides are the same cream),
-    # so the divider must not leave a shadow streak across the mat.
-    frame, photo_y = _slider_frame()
-    y = photo_y // 2   # comfortably inside the cream above the photo
-    darkest = min(min(frame.getpixel((x, y))) for x in range(0, slider_mod.CANVAS_W, 2))
-    assert darkest > 200, "the divider's shadow is streaking through the cream mat"
+def test_slider_divider_never_touches_the_cream_mat():
+    # Stronger than the old assertion, and true by construction now: the sweep
+    # is clipped to the print, so there is no row of mat it can reach. The old
+    # divider ran the full height of the canvas and its shadow streaked the mat.
+    frame, rect = _slider_frame(progress=0.5)
 
+    # Rows that are bare mat: between the masthead rule and the top of the
+    # print, and below the caption but above the colophon rule. Sampling higher
+    # would cross the masthead's own dark text, which is chrome doing its job.
+    bare_mat = ((slider_mod.RULE_Y + rect[1]) // 2, rect[1] + rect[3] + 200)
+    for y in bare_mat:
+        darkest = min(min(frame.getpixel((x, y)))
+                      for x in range(0, slider_mod.CANVAS_W, 2))
+        assert darkest > 200, f"something dark crosses the mat at y={y}"
+
+
+def test_the_slider_draws_the_plate_rules_like_every_tuesday_reel():
+    # The point of #164. The old chrome had no rose-gold rules at all, and a
+    # test here asserted their absence; the plate draws two, and a 3-photo
+    # Tuesday reel now looks like every other one.
+    frame, _ = _slider_frame(progress=0.0)
+
+    assert _row_has_color(frame, slider_mod.RULE_Y, plate_mod.ROSE_GOLD), "masthead rule"
+    assert _row_has_color(frame, slider_mod.FOOTER_RULE_Y, plate_mod.ROSE_GOLD), "colophon rule"
 
 
 # ── morph is the program-plate Tuesday reel ─────────────────────────────────

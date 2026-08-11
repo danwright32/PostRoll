@@ -300,24 +300,30 @@ def test_before_after_matches_its_reference_frame(photos, tmp_path):
 @needs_ffmpeg
 @requires_mac_fonts
 def test_slider_reel_matches_its_reference_frame(photos, silent_audio, tmp_path):
-    # 0.6s lands in the opening hold, where the branded chrome and the RAW label
-    # sit on the cream mat. That is the frame the invisible-label regression
-    # shipped on.
+    # 0.6s lands in the opening hold on the RAW, where the plate's chrome and
+    # its caption placard sit on the cream mat. That is the frame the
+    # invisible-label regression shipped on.
+    #
+    # A B&W is required now: this reel renders three states, and nothing in the
+    # app reaches it without one (#164, #324). The reference recorded before
+    # that was a photograph of the two-photo path, which the product cannot
+    # produce.
     video = slider_mod.generate_reel_slider(
-        raw_path=photos[0], edit_path=photos[1], audio_path=silent_audio,
+        raw_path=photos[0], edit_path=photos[1], bw_path=photos[2],
+        audio_path=silent_audio,
         output_path=str(tmp_path / "slider.mp4"),
         event_name="Reference Event", org="Reference Org", venue="Reference Venue",
         logo_path=LOGO)
 
     frame = _frame_from_encoded_video(video, 0.6, tmp_path / "slider.png")
     assert_shows_real_content(frame, "slider_reel")
-    # The full band the labels sit in, so the check does not depend on which
-    # side of the frame the swipe has pushed them to. It is below the photo, on
-    # the cream mat, which is what made a white label invisible.
+    _, print_top, _, print_h = slider_mod.print_rect(PHOTO_SIZE)
+    caption_top = print_top + print_h + slider_mod.PLACARD_TOP_GAP
     assert_ink_reads_against_its_background(
         frame,
-        (0, slider_mod.LABEL_Y,
-         slider_mod.CANVAS_W, slider_mod.LABEL_Y + slider_mod.LABEL_FONT_SIZE + 12),
+        (slider_mod.MAT, caption_top,
+         slider_mod.CANVAS_W - slider_mod.MAT,
+         caption_top + slider_mod.PLACARD_BLOCK_H),
         "slider_reel")
     assert_matches_golden(frame, "slider_reel", tmp_path)
 
