@@ -57,6 +57,11 @@ COLLAGE_DESIGN_VERSION = 1
 #:
 #: `DesignTokens.mediaDesignVersions` mirrors this; nothing but the parity test
 #: keeps the two in step.
+#:
+#: Bumping it is still a decision, but no longer one that can be forgotten:
+#: `postroll/media/design_fingerprint.py` hashes what each template is drawn
+#: from, and `tests/test_media_design_fingerprint.py` fails until a change to a
+#: template is reconciled with the number here (#294).
 MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # Derived, not restated: the layout sidecar #160 shipped still carries the
     # collage's number, and two copies maintained by hand drift the moment one
