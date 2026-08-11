@@ -18,6 +18,7 @@ the moment of the change, by the person who knows the answer.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -116,21 +117,100 @@ def test_the_recorded_version_is_the_version_that_ships(template, recorded):
 # ── the fingerprint measures what it claims to measure ───────────────────────
 
 
-def test_a_changed_layout_constant_moves_the_fingerprint(tmp_path, monkeypatch):
-    # The guard seen failing (L1). The morph reel's own module is rewritten with
-    # one number changed, and the fingerprint has to notice.
+def _module_level_ints(path: Path) -> dict[str, int]:
+    """Every plain integer constant a module declares at the top level."""
+    found: dict[str, int] = {}
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1):
+            continue
+        target, value = node.targets[0], node.value
+        if (isinstance(target, ast.Name) and isinstance(value, ast.Constant)
+                and isinstance(value.value, int) and not isinstance(value.value, bool)):
+            found[target.id] = value.value
+    return found
+
+
+def _perturb(source: Path, name: str) -> str:
+    """`source` rewritten with `name`'s value incremented by one.
+
+    Raises rather than returning the file unchanged when the constant is not
+    there. A substitution that matches nothing returns the original text and
+    reports success, so the caller would fingerprint an untouched file and read
+    the resulting non-change as a finding (L100).
+    """
+    changed, count = re.subn(
+        rf"^{name} = (\d+)", lambda m: f"{name} = {int(m.group(1)) + 1}",
+        source.read_text(encoding="utf-8"), count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise AssertionError(
+            f"{name} is not a module level integer in {source.name} any more, "
+            f"so nothing was perturbed and the guard would have measured "
+            f"an unchanged file")
+    return changed
+
+
+#: The constant the layout guard perturbs, named rather than taken as whichever
+#: happens to come first in the file (#333). This guard used to rewrite the
+#: FIRST module level number in `generate_reel_morph.py`. #164 moved the plate's
+#: geometry out into `program_plate.py`, which left the frame rate as the first
+#: such number, and the guard kept passing while no layout constant anywhere was
+#: being exercised. A guard that passes for a reason unrelated to its purpose is
+#: worse than an absent one, because its name is taken as coverage.
+PLATE_GEOMETRY_CONSTANT = "PRINT_Y"
+
+
+def test_the_guard_perturbs_a_constant_the_plate_really_lays_out_with():
+    # Stops the subject drifting again. The plate module holds nothing but the
+    # composition's geometry, so being a module level integer HERE is what makes
+    # a constant a layout constant, and the frame rate could never qualify.
+    plate = MEDIA_DIR / "program_plate.py"
+    geometry = _module_level_ints(plate)
+
+    assert PLATE_GEOMETRY_CONSTANT in geometry, (
+        f"{PLATE_GEOMETRY_CONSTANT} is no longer a module level integer in "
+        f"{plate.name}. The layout guard below perturbs it by name; point it at "
+        f"one of {sorted(geometry)} rather than letting it choose whichever "
+        f"number comes first, which is how it ended up on the frame rate (#333).")
+
+
+def test_a_changed_plate_geometry_constant_moves_both_reels():
+    # The guard seen failing (L1). The plate both Tuesday reels are composed on
+    # is rewritten with one geometry constant changed, and both fingerprints
+    # have to notice. Both, because #164's whole point is that the two reels
+    # share one composition: a change to it that moved only one of them would
+    # mean the other had drifted back to its own copy.
+    source = MEDIA_DIR / "program_plate.py"
+    original = source.read_text(encoding="utf-8")
+    before = {name: fp.fingerprint(name) for name in ("reel_morph", "reel_slider")}
+
+    try:
+        source.write_text(_perturb(source, PLATE_GEOMETRY_CONSTANT), encoding="utf-8")
+        after = {name: fp.fingerprint(name) for name in before}
+    finally:
+        source.write_text(original, encoding="utf-8")
+
+    unmoved = sorted(name for name in before if before[name] == after[name])
+    assert not unmoved, (
+        f"moving the plate's {PLATE_GEOMETRY_CONSTANT} changed how these render "
+        f"and their fingerprints did not move: {unmoved}. Either the template no "
+        f"longer draws on the shared plate, or its fingerprint closure has "
+        f"stopped reaching program_plate.py.")
+
+    assert {name: fp.fingerprint(name) for name in before} == before, (
+        "the perturbation was not undone")
+
+
+def test_a_changed_timing_constant_moves_the_reels_fingerprint():
+    # The reel's own module still decides something that renders, so it keeps a
+    # guard of its own. Named FPS rather than "the first number in the file", so
+    # that moving code out of this module produces a failure here instead of a
+    # silent change of subject.
     source = MEDIA_DIR / "generate_reel_morph.py"
     original = source.read_text(encoding="utf-8")
     before = fp.fingerprint("reel_morph")
 
-    numbers = re.findall(r"^[A-Z_]+ = (\d+)$", original, flags=re.MULTILINE)
-    assert numbers, "no module level numeric constant to perturb"
-
-    changed = re.sub(r"^([A-Z_]+) = (\d+)$",
-                     lambda m: f"{m.group(1)} = {int(m.group(2)) + 1}",
-                     original, count=1, flags=re.MULTILINE)
     try:
-        source.write_text(changed, encoding="utf-8")
+        source.write_text(_perturb(source, "FPS"), encoding="utf-8")
         assert fp.fingerprint("reel_morph") != before
     finally:
         source.write_text(original, encoding="utf-8")
