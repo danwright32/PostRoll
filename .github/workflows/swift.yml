@@ -41,7 +41,15 @@ on:
       - "PostRollApp/**"
       - "tests/fixtures/**"
       - "postroll/media/**"
+      # Every font-dependent check by name. `tests/test_ci_runs_the_font_dependent_checks.py`
+      # asserts this list against the files actually carrying the marker, in
+      # both directions, so a new one cannot be added without landing here.
       - "tests/test_golden_frames.py"
+      - "tests/test_frame_legibility.py"
+      # The wordmark the reference frames and the legibility bands both draw
+      # with. The colophon check takes the mark's INK from this file, so
+      # swapping it changes what every one of those checks measures (#246, L88).
+      - "postroll/assets/**"
       - ".github/workflows/swift.yml"
   workflow_dispatch:
 
@@ -89,8 +97,16 @@ jobs:
       # that quietly skips for want of ffmpeg or a system font is
       # indistinguishable from one that passed, which is the whole failure mode
       # this job exists to close. -ra reports any skip that does remain.
-      - name: Run the reference-frame checks
+      #
+      # test_frame_legibility.py was missing here until 2026-08-11. It carries
+      # the checks that read text back out of an encoded reel (#298) and the
+      # scrolling colophon check (#306), every one of them marked
+      # @needs_mac_fonts, so they skipped on Linux and were never invoked on the
+      # Mac. Both were proven on Dan's machine and neither was wired (L3): they
+      # had never run in CI at all. The guard that keeps this list honest is
+      # tests/test_ci_runs_the_font_dependent_checks.py.
+      - name: Run the reference-frame and legibility checks
         env:
           POSTROLL_REQUIRE_FFMPEG: "1"
           POSTROLL_REQUIRE_GOLDENS: "1"
-        run: pytest tests/test_golden_frames.py -v -ra
+        run: pytest tests/test_golden_frames.py tests/test_frame_legibility.py -v -ra
