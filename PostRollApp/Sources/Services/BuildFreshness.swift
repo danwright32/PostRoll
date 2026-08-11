@@ -16,10 +16,11 @@ import Foundation
 /// rebuild, which is the app the question is about. The one blind spot is
 /// honest and harmless: a rebuild with no new commits reads as current, which
 /// it is.
-/// The two times the warning shows, in a shape a sheet can be presented from.
+/// What the warning shows, in a shape a sheet can be presented from.
 struct BuildBehind: Identifiable, Equatable {
     let builtAt: Date
     let latestCommit: Date
+    let remedy: BuildFreshness.Remedy
 
     var id: String { "\(builtAt.timeIntervalSince1970)-\(latestCommit.timeIntervalSince1970)" }
 }
@@ -30,12 +31,25 @@ enum BuildFreshness {
     /// warning on that is one nobody believes.
     static let tolerance: TimeInterval = 60
 
+    /// What actually has to happen to catch up (#312).
+    ///
+    /// Two different fixes, so two different sentences. Telling Dan to rebuild
+    /// a checkout that is itself behind sends him round the loop and leaves the
+    /// symptom exactly where it was, which reads as the rebuild not working.
+    enum Remedy: Equatable {
+        /// The checkout already holds the newest work; only the app is behind.
+        case rebuild
+        /// Work merged and has not reached this Mac, so a rebuild alone would
+        /// produce another build missing the same thing.
+        case pullThenRebuild
+    }
+
     enum Verdict: Equatable {
         /// The running app was built at or after the newest commit.
         case current
         /// The running app was built before the newest commit, so it may be
         /// missing merged work.
-        case behind(builtAt: Date, latestCommit: Date)
+        case behind(builtAt: Date, latestCommit: Date, remedy: Remedy)
         /// One of the two halves could not be read. Not the same as current:
         /// nothing was compared, and saying the app is up to date on the
         /// strength of a failed read is a clean bill of health nobody measured
@@ -53,20 +67,41 @@ enum BuildFreshness {
         }
     }
 
-    /// The verdict from two times, either of which may be unreadable.
-    static func verdict(builtAt: Date?, latestCommit: Date?) -> Verdict {
+    /// The verdict from the build time, the checkout, and what merged (#312).
+    ///
+    /// `remoteCommit` is `origin/main`'s commit time, which is read from a ref
+    /// already on disk and costs nothing. A nil one is ordinary rather than a
+    /// failure (a fresh clone, a machine that has never fetched, no origin at
+    /// all), so it falls back to the checkout instead of refusing to answer:
+    /// the local comparison still stands and is still worth making.
+    ///
+    /// Note what the remote half can and cannot see. `origin/main` is as fresh
+    /// as the last fetch or push from this Mac, so it catches the ordinary case
+    /// (work merged from a session here, then never pulled back) and cannot
+    /// catch work merged from somewhere else that this Mac has not heard about.
+    /// Fetching at launch would close that, and is deliberately not done here:
+    /// it would put the network on the path to the window opening.
+    static func verdict(builtAt: Date?, localCommit: Date?,
+                        remoteCommit: Date?) -> Verdict {
         guard let builtAt else {
             return .cannotTell(reason: "the app's build time could not be read")
         }
-        guard let latestCommit else {
+        guard let localCommit else {
             return .cannotTell(
                 reason: "the PostRoll code folder could not be read, so there is "
                       + "nothing to compare this build against")
         }
-        if builtAt.addingTimeInterval(tolerance) < latestCommit {
-            return .behind(builtAt: builtAt, latestCommit: latestCommit)
-        }
-        return .current
+
+        let newest = max(localCommit, remoteCommit ?? localCommit)
+        guard builtAt.addingTimeInterval(tolerance) < newest else { return .current }
+
+        // The checkout being behind decides the fix, whether or not the app is
+        // also behind the checkout: rebuilding without pulling first cannot
+        // produce a build that has the merged work in it.
+        let checkoutBehind = localCommit.addingTimeInterval(tolerance)
+            < (remoteCommit ?? localCommit)
+        return .behind(builtAt: builtAt, latestCommit: newest,
+                       remedy: checkoutBehind ? .pullThenRebuild : .rebuild)
     }
 
     /// When a bundle's own executable was written.
@@ -87,13 +122,31 @@ enum BuildFreshness {
     /// on the machine. They are all "nothing to compare against", and the
     /// verdict above turns that into its own answer rather than into good news.
     static func latestCommitTime(inRepo repo: URL) -> Date? {
+        commitTime(inRepo: repo, ref: "HEAD")
+    }
+
+    /// The branch work merges to, as this Mac last heard it.
+    ///
+    /// A remote-tracking ref sitting in `.git`, so reading it is free and works
+    /// with no network. It is not a question asked of GitHub: it is as fresh as
+    /// the last fetch or push from here.
+    static func remoteCommitTime(inRepo repo: URL) -> Date? {
+        commitTime(inRepo: repo, ref: "origin/main")
+    }
+
+    /// When a named commit was made, or nil for every reason the read can fail.
+    ///
+    /// One implementation for both refs, so a change to how the time is parsed
+    /// or how a failure is treated cannot apply to one of them and not the
+    /// other.
+    static func commitTime(inRepo repo: URL, ref: String) -> Date? {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: repo.path, isDirectory: &isDirectory),
               isDirectory.boolValue else { return nil }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", repo.path, "log", "-1", "--format=%ct", "HEAD"]
+        process.arguments = ["-C", repo.path, "log", "-1", "--format=%ct", ref]
         let out = Pipe()
         process.standardOutput = out
         process.standardError = Pipe()
@@ -119,20 +172,51 @@ enum BuildFreshness {
     /// The verdict for the running app against the project checkout.
     static func check(bundle: Bundle = .main, repo: URL) -> Verdict {
         verdict(builtAt: buildTime(of: bundle),
-                latestCommit: latestCommitTime(inRepo: repo))
+                localCommit: latestCommitTime(inRepo: repo),
+                remoteCommit: remoteCommitTime(inRepo: repo))
     }
 
     /// What the warning says.
     ///
     /// Names both times, because "your app is old" without saying how old
-    /// leaves Dan to work out whether it matters, and names the one command
-    /// that fixes it. `postroll` is the same command the Help menu copies.
-    static func message(builtAt: Date, latestCommit: Date) -> String {
-        "The PostRoll you are running was built \(when(builtAt)). The newest "
-        + "change to the code is from \(when(latestCommit)), so this copy may be "
-        + "missing work that has already shipped.\n\n"
-        + "Run postroll in Terminal to rebuild and reinstall, then open the app "
-        + "again."
+    /// leaves Dan to work out whether it matters, and names what fixes it.
+    ///
+    /// Two endings, because there are two different situations and one sentence
+    /// covering both would be wrong for one of them. When the merged work has
+    /// not reached this Mac, a rebuild produces another build missing it, and a
+    /// message that only said "rebuild" would send him round that loop with the
+    /// symptom unchanged.
+    static func message(builtAt: Date, latestCommit: Date, remedy: Remedy) -> String {
+        let opening =
+            "The PostRoll you are running was built \(when(builtAt)). The newest "
+            + "change to the code is from \(when(latestCommit)), so this copy may "
+            + "be missing work that has already shipped.\n\n"
+
+        switch remedy {
+        case .rebuild:
+            return opening
+                + "Run postroll in Terminal to rebuild and reinstall, then open "
+                + "the app again."
+        case .pullThenRebuild:
+            return opening
+                + "That change has not reached this Mac yet, so rebuilding on its "
+                + "own would not pick it up. Run the command below in Terminal to "
+                + "pull it, rebuild and reinstall, then open the app again."
+        }
+    }
+
+    /// The one line to type, matching the fix.
+    ///
+    /// The pull names the folder rather than assuming the terminal is already
+    /// in it, and quotes it, because a path with a space in it would otherwise
+    /// silently pull in some other directory.
+    static func command(for remedy: Remedy, repo: URL) -> String {
+        switch remedy {
+        case .rebuild:
+            return "postroll"
+        case .pullThenRebuild:
+            return "cd \"\(repo.path)\" && git pull && postroll"
+        }
     }
 
     /// A time written the way a person reads one.

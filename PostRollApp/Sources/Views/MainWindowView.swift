@@ -68,7 +68,9 @@ struct MainWindowView: View {
         // the middle of the window at launch rather than left to be noticed.
         .sheet(item: $appState.buildBehind) { behind in
             BuildBehindSheet(builtAt: behind.builtAt,
-                             latestCommit: behind.latestCommit)
+                             latestCommit: behind.latestCommit,
+                             remedy: behind.remedy,
+                             repo: AppPaths.projectRoot)
         }
         .task { await checkBuildFreshness() }
         .alert(
@@ -111,9 +113,10 @@ struct MainWindowView: View {
         let repo = AppPaths.projectRoot
         let verdict = await Task.detached { BuildFreshness.check(repo: repo) }.value
         switch verdict {
-        case let .behind(builtAt, latestCommit):
+        case let .behind(builtAt, latestCommit, remedy):
             appState.buildBehind = BuildBehind(builtAt: builtAt,
-                                               latestCommit: latestCommit)
+                                               latestCommit: latestCommit,
+                                               remedy: remedy)
         case .current:
             break
         case let .cannotTell(reason):
