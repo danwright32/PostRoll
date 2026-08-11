@@ -30,6 +30,7 @@ from postroll.media import frame_legibility as legibility
 from postroll.media import generate_reel_morph as morph_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
+from postroll.media import program_plate as plate_mod
 from postroll.media import text_regions
 from postroll.media.frame_legibility import MovingTextRegion, TextRegion
 
@@ -553,8 +554,15 @@ def test_a_white_masthead_on_the_cream_mat_fails_the_tuesday_reel(
 
     The template is made to draw its masthead white, which is the defect that
     shipped, and the check has to report it from the encoded file.
+
+    Patched on `program_plate`, which is where the masthead is drawn. It used to
+    be patched on the reel module, and when the plate moved out that patch went
+    on being applied to a name nothing read, so the test rendered a perfectly
+    correct reel and asserted a failure that could no longer happen. It went red
+    and said so, which is the whole reason a seen-to-fail test is written
+    against a real render rather than a mock.
     """
-    monkeypatch.setattr(morph_mod, "TEXT_DARK", (255, 255, 255))
+    monkeypatch.setattr(plate_mod, "TEXT_DARK", (255, 255, 255))
     video = morph_mod.generate_reel_morph(
         raw_path=photos[0], edit_path=photos[1], audio_path=silent_audio,
         output_path=str(tmp_path / "white.mp4"),

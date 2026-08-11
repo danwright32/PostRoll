@@ -14,6 +14,7 @@ from PIL import Image, ImageFont
 
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_morph as morph_mod
+from postroll.media import program_plate as plate_mod
 from postroll.media import generate_reel_slider as slider_mod
 from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_story as story_mod
@@ -97,7 +98,9 @@ def _assert_detail_weight_not_thin(mod):
 
 @requires_mac_fonts
 def test_all_templates_use_a_non_thin_detail_weight():
-    for mod in (scroll_mod, morph_mod, slider_mod, screen_mod, ba_mod, story_mod):
+    # The morph draws its detail line through the shared plate, so that is
+    # the module carrying the weight it uses (#164).
+    for mod in (scroll_mod, plate_mod, slider_mod, screen_mod, ba_mod, story_mod):
         _assert_detail_weight_not_thin(mod)
 
 
@@ -132,7 +135,7 @@ def test_morph_background_is_cream_not_blurred_photo():
     # The letterbox above/below the centred photo must be cream, not a blurred
     # copy of the (blue) edit photo.
     canvas = morph_mod.prepare_photo(_landscape(), _landscape())
-    assert canvas.convert("RGB").getpixel((10, 10)) == morph_mod.CREAM
+    assert canvas.convert("RGB").getpixel((10, 10)) == plate_mod.CREAM
 
 
 def test_slider_background_is_cream_not_blurred_photo():
@@ -199,21 +202,21 @@ def test_slider_divider_leaves_no_dark_line_across_the_cream():
 def test_morph_prints_the_photo_matted_not_full_bleed():
     canvas = morph_mod.prepare_photo(_landscape(size=(1500, 1000)), _landscape())
     rgb = canvas.convert("RGB")
-    assert rgb.getpixel((10, 10)) == morph_mod.CREAM, "top mat"
+    assert rgb.getpixel((10, 10)) == plate_mod.CREAM, "top mat"
     # The print sits inside the side mat, hung at PRINT_Y, not filling the frame.
-    assert rgb.getpixel((morph_mod.MAT // 2, morph_mod.PRINT_Y + 40)) == morph_mod.CREAM, \
+    assert rgb.getpixel((plate_mod.MAT // 2, morph_mod.PRINT_Y + 40)) == plate_mod.CREAM, \
         "side mat"
     mid_x = morph_mod.CANVAS_W // 2
-    assert rgb.getpixel((mid_x, morph_mod.PRINT_Y + 40)) != morph_mod.CREAM, \
+    assert rgb.getpixel((mid_x, morph_mod.PRINT_Y + 40)) != plate_mod.CREAM, \
         "the print itself is missing"
 
 
 def test_morph_has_masthead_and_footer_colophon_rules():
-    frame = Image.new("RGB", (morph_mod.CANVAS_W, morph_mod.CANVAS_H), morph_mod.CREAM)
+    frame = Image.new("RGB", (morph_mod.CANVAS_W, morph_mod.CANVAS_H), plate_mod.CREAM)
     out = morph_mod.draw_branded_chrome(frame, "Home'r Bust!", "Home'r Bust!",
                                         "David Geffen Hall Lobby", None)
-    assert _row_has_color(out, morph_mod.RULE_Y, morph_mod.ROSE_GOLD), "masthead rule"
-    assert _row_has_color(out, morph_mod.FOOTER_RULE_Y, morph_mod.ROSE_GOLD), "colophon rule"
+    assert _row_has_color(out, morph_mod.RULE_Y, plate_mod.ROSE_GOLD), "masthead rule"
+    assert _row_has_color(out, morph_mod.FOOTER_RULE_Y, plate_mod.ROSE_GOLD), "colophon rule"
 
 
 def test_morph_caption_crossfades_through_empty():

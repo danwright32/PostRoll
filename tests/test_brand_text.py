@@ -128,10 +128,19 @@ def _templates_rendering_org_and_venue() -> list[Path]:
     return found
 
 
+#: Ways a module can satisfy the rule.
+#:
+#: Calling the helper, or handing its org and venue to the shared program plate,
+#: which calls the helper itself. The second appeared with #164: the Tuesday
+#: reel now passes both through to the plate and draws no detail line of its
+#: own, so demanding a direct import would force a dead one back in.
+ROUTES_TO_THE_RULE = ("brand_text import detail_lines", "program_plate import")
+
+
 def test_every_template_routes_its_detail_lines_through_the_helper():
     missing = [
         p.name for p in _templates_rendering_org_and_venue()
-        if "brand_text import detail_lines" not in p.read_text()
+        if not any(route in p.read_text() for route in ROUTES_TO_THE_RULE)
     ]
     assert not missing, (
         "these templates render an org and a venue without the shared rule, so "
