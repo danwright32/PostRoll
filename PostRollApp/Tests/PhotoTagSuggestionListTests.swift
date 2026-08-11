@@ -63,13 +63,15 @@ final class PhotoTagSuggestionListTests: XCTestCase {
         XCTAssertEqual(list.map { $0.token.lowercased() }, ["@carnegiehall"])
     }
 
-    func testPerformersComeBeforeTheEventsOwnAccounts() {
+    func testTheEventsOwnAccountsComeBeforeThePerformers() {
+        // Dan's rule, 2026-08-10 (#302): the org and venue lead. They are on
+        // every post of the week, so they are the pick he reaches for most.
         let list = PhotoTagSuggestionList.build(
-            eventHandles: "carnegiehall",
+            eventHandles: "dciny, carnegiehall",
             performers: [performer("Ana Vidović", handle: "anavidovic")],
             appearingIn: [])
 
-        XCTAssertEqual(list.map(\.token), ["@anavidovic", "@carnegiehall"])
+        XCTAssertEqual(list.map(\.token), ["@dciny", "@carnegiehall", "@anavidovic"])
     }
 
     // MARK: - The performer half, unchanged
