@@ -28,7 +28,13 @@ struct ExportView: View {
     /// Held in state rather than computed in `body`, which runs on every redraw:
     /// this walks every event's tag list, and a derivation whose cost scales
     /// with the whole collection does not belong on the redraw path (L91).
-    @State private var recurringAccountsNote: String? = nil
+    @State private var recurringAccounts: [RecurringAccounts.Attention] = []
+
+    /// The account whose numbers form is open, if any. The banner is the only
+    /// way in for these: the collaborator list is built from day and per-photo
+    /// tags, so a venue or org handle can never appear there, and those are
+    /// exactly the accounts the banner names.
+    @State private var editingRecurringAccount: RecurringAccounts.Attention? = nil
 
     /// Export progress is owned app-scoped by ExportManager so it survives this
     /// view being torn down on an event switch (`.id(event.id)` remount) and
@@ -98,6 +104,22 @@ struct ExportView: View {
         .onChange(of: event.exportPath) { _, _ in
             exportFolderStatus = ExportFolderStatus.of(event)
         }
+        .sheet(item: $editingRecurringAccount) { target in
+            AccountNumbersSheet(
+                handle: target.handle,
+                stats: AccountBook.shared.stats(for: target.handle),
+                onSave: { followers, likes, comments in
+                    AccountBook.shared.record(handle: target.handle, followers: followers,
+                                              likes: likes, comments: comments, on: Date())
+                    editingRecurringAccount = nil
+                    // The banner is a claim about the book, so it has to stop
+                    // making it the moment the number lands. Without this the
+                    // account Dan just counted keeps asking to be counted.
+                    refreshRecurringAccounts()
+                },
+                onCancel: { editingRecurringAccount = nil }
+            )
+        }
         .fileImporter(
             isPresented: $showingFolderPicker,
             allowedContentTypes: [.folder],
@@ -140,11 +162,10 @@ struct ExportView: View {
     /// expensive on every redraw.
     private func refreshRecurringAccounts() {
         let book = AccountBook.shared
-        recurringAccountsNote = RecurringAccounts.summary(
-            RecurringAccounts.needingAttention(
-                events: appState.events,
-                stats: { book.stats(for: $0) },
-                asOf: Date()))
+        recurringAccounts = RecurringAccounts.needingAttention(
+            events: appState.events,
+            stats: { book.stats(for: $0) },
+            asOf: Date())
     }
 
     private var readyContent: some View {
@@ -182,9 +203,20 @@ struct ExportView: View {
             // bury the few whose figures the ranking actually leans on. Not a
             // warning: nothing here is broken, and an ordinary week must not
             // arrive looking like a problem.
-            if let message = recurringAccountsNote {
-                BrandBanner(icon: "person.2", message: message)
-                    .padding(.horizontal, Spacing.xl)
+            // Every account it names carries its own way in, because there is
+            // nowhere else to send Dan: the collaborator list is built from day
+            // and per-photo tags, so a venue or org handle cannot appear there.
+            if let message = RecurringAccounts.summary(recurringAccounts) {
+                BrandBanner(
+                    icon: "person.2",
+                    message: message,
+                    actions: RecurringAccounts.actionable(recurringAccounts).map { item in
+                        BrandBannerAction(label: "Add @\(item.handle)") {
+                            editingRecurringAccount = item
+                        }
+                    }
+                )
+                .padding(.horizontal, Spacing.xl)
             }
 
             presetPicker

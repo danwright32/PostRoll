@@ -243,6 +243,33 @@ final class RecurringAccountsTests: XCTestCase {
         XCTAssertTrue(both.contains("dciny"), both)
     }
 
+    func testTheSummaryDoesNotSendDanSomewhereTheseAccountsAreNot() throws {
+        // The collaborator list is built from day and per-photo tags only, so a
+        // venue or org handle can never appear in it, and those are exactly the
+        // accounts this names. Telling him to go there names a target and gives
+        // him nowhere to go (L80). The way in is a control on this banner.
+        let items = [RecurringAccounts.Attention(
+            handle: "carnegiehall", eventCount: 6, need: .neverCounted)]
+
+        let summary = try XCTUnwrap(RecurringAccounts.summary(items))
+
+        XCTAssertFalse(summary.lowercased().contains("collaborator"), summary)
+    }
+
+    func testEveryNamedAccountCanBeActedOn() {
+        // Whatever the banner says, each account it names has to be reachable
+        // from it. Capped at the number of names the message itself carries, so
+        // it cannot promise a control for an account it did not name.
+        let items = (1...6).map {
+            RecurringAccounts.Attention(handle: "account\($0)", eventCount: 2, need: .neverCounted)
+        }
+
+        let actionable = RecurringAccounts.actionable(items)
+
+        XCTAssertEqual(actionable.count, 3)
+        XCTAssertEqual(actionable.map(\.handle), ["account1", "account2", "account3"])
+    }
+
     func testThereIsNoSummaryWhenNothingNeedsAttention() {
         XCTAssertNil(RecurringAccounts.summary([]))
     }
@@ -277,6 +304,75 @@ final class RecurringAccountsTests: XCTestCase {
 
     func testAOneOffHasNothingToSayAboutRecurrence() {
         XCTAssertNil(RecurringAccounts.recurrenceNote(handle: "@once", in: ["once": 1]))
+    }
+
+    // MARK: - The way in actually exists on the screen
+
+    private func exportViewSource() throws -> String {
+        try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/Views/ExportView.swift"),
+            encoding: .utf8)
+    }
+
+    /// A SwiftUI screen with this much environment cannot be built in a test, so
+    /// what is guarded is that the wiring is present: the banner offers a control
+    /// per named account, that control opens the numbers form, and saving
+    /// re-reads the answer. Without the last one the account just counted keeps
+    /// asking to be counted.
+    func testTheBannerOffersAControlForEachAccountItNames() throws {
+        let source = try exportViewSource()
+
+        XCTAssertTrue(source.contains("RecurringAccounts.actionable("),
+                      "the banner names accounts with no control to act on them, "
+                      + "and the collaborator list cannot show these accounts, so "
+                      + "there would be nowhere to go")
+        XCTAssertTrue(source.contains("editingRecurringAccount = item"),
+                      "the control does not open anything")
+    }
+
+    func testTheControlOpensTheSameNumbersForm() throws {
+        let source = try exportViewSource()
+
+        XCTAssertTrue(source.contains(".sheet(item: $editingRecurringAccount)"),
+                      "nothing presents the form the control claims to open")
+        XCTAssertTrue(source.contains("AccountNumbersSheet("),
+                      "a second numbers form here would drift from the one the "
+                      + "collaborator panel uses")
+    }
+
+    func testSavingRecordsTheNumbersAndStopsTheBannerAsking() throws {
+        let source = try exportViewSource()
+
+        // Scoped to the save handler, not the whole file. The refresh call also
+        // appears in onAppear and onChange, so a whole-file search passes even
+        // with the save path's copy deleted: the first version of this test did
+        // exactly that, and only broke the code to find out.
+        let handler = try XCTUnwrap(
+            source.range(of: ".sheet(item: $editingRecurringAccount)").map { start in
+                let rest = source[start.upperBound...]
+                return String(rest[..<(rest.range(of: "onCancel:")?.lowerBound ?? rest.endIndex)])
+            })
+
+        XCTAssertTrue(handler.contains("AccountBook.shared.record(handle: target.handle"),
+                      "the form saves nothing, so the banner would ask forever")
+        XCTAssertTrue(handler.contains("refreshRecurringAccounts()"),
+                      "the banner is a claim about the book and is not re-read "
+                      + "when the book changes, so the account just counted keeps "
+                      + "asking to be counted")
+    }
+
+    func testTheBannerIsNotRecomputedOnEveryRedraw() throws {
+        // It walks every event's tag list, so it belongs in stored state rather
+        // than in the view body, which runs on every redraw (L91).
+        let source = try exportViewSource()
+
+        XCTAssertTrue(source.contains("@State private var recurringAccounts"))
+        XCTAssertFalse(source.contains("if RecurringAccounts.needingAttention("),
+                       "the whole event list is being walked to decide whether "
+                       + "to draw the banner")
     }
 
     // MARK: - The book is told about every account a post tags
