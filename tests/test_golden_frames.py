@@ -45,6 +45,7 @@ from postroll.media import design_tokens as tokens
 from postroll.media import generate_before_after as ba_mod
 from postroll.media import generate_collage as collage_mod
 from postroll.media import generate_reel_morph as morph_mod
+from postroll.media import program_plate as plate_mod
 from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
@@ -342,8 +343,8 @@ def test_morph_reel_matches_its_reference_frame(photos, silent_audio, tmp_path):
     _, print_top, _, print_h = morph_mod.print_rect(PHOTO_SIZE)
     assert_ink_reads_against_its_background(
         frame,
-        (morph_mod.MAT, print_top + print_h + 20,
-         morph_mod.CANVAS_W - morph_mod.MAT, print_top + print_h + 80),
+        (plate_mod.MAT, print_top + print_h + 20,
+         morph_mod.CANVAS_W - plate_mod.MAT, print_top + print_h + 80),
         "morph_reel")
     assert_matches_golden(frame, "morph_reel", tmp_path)
 

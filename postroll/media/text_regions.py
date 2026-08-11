@@ -47,7 +47,10 @@ def morph_regions(print_height: int,
     placard hangs off the bottom of the print, so it is read back from the module
     after a render rather than guessed here.
     """
-    from . import generate_reel_morph as m
+    # Read from the PLATE, which is what draws these, rather than through the
+    # reel module that imports it. A band whose colours came from a re-export
+    # the renderer no longer reads would be measuring for ink nothing draws.
+    from . import program_plate as m
 
     regions = [
         TextRegion("morph masthead",
@@ -57,11 +60,11 @@ def morph_regions(print_height: int,
                    _band(m.MAT, m.VENUE_Y, m.CANVAS_W - m.MAT, 19),
                    m.WARM_MID),
         TextRegion("morph placard state word",
-                   _band(m.MAT, m.PRINT_Y + print_height + 34,
+                   _band(m.MAT, m.PRINT_Y + print_height + m.PLACARD_TOP_GAP,
                          m.CANVAS_W - m.MAT, 20),
                    m.ROSE_GOLD),
         TextRegion("morph placard subtitle",
-                   _band(m.MAT, m.PRINT_Y + print_height + 34 + 32,
+                   _band(m.MAT, m.PRINT_Y + print_height + m.PLACARD_TOP_GAP + 32,
                          m.CANVAS_W - m.MAT, 14),
                    m.WARM_MID),
     ]
