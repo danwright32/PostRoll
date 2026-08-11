@@ -13,6 +13,14 @@ import SwiftUI
 struct BuildBehindSheet: View {
     let builtAt: Date
     let latestCommit: Date
+    /// What actually fixes it, which decides both the sentence and the command
+    /// below: rebuilding a checkout that is itself behind changes nothing.
+    let remedy: BuildFreshness.Remedy
+    let repo: URL
+
+    private var command: String {
+        BuildFreshness.command(for: remedy, repo: repo)
+    }
 
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
@@ -33,15 +41,19 @@ struct BuildBehindSheet: View {
                     RoseGoldDivider()
                 }
 
-                Text(BuildFreshness.message(builtAt: builtAt, latestCommit: latestCommit))
+                Text(BuildFreshness.message(builtAt: builtAt,
+                                            latestCommit: latestCommit,
+                                            remedy: remedy))
                     .font(.system(size: 13))
                     .foregroundStyle(Color.warmDark)
                     .fixedSize(horizontal: false, vertical: true)
 
                 // The command on its own line, in the shape it is typed, so it
                 // can be read straight off the screen as well as copied.
-                Text("postroll")
+                Text(command)
                     .font(.system(size: 13, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(Color.warmDark)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
@@ -63,7 +75,7 @@ struct BuildBehindSheet: View {
                     // the clipboard gives no sign of its own.
                     Button(copied ? "Command copied" : "Copy command") {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString("postroll", forType: .string)
+                        NSPasteboard.general.setString(command, forType: .string)
                         copied = true
                     }
                     .buttonStyle(.link)
@@ -78,6 +90,10 @@ struct BuildBehindSheet: View {
             }
             .padding(Spacing.xl)
         }
-        .frame(width: 440, height: 300)
+        // Sized for the longer of the two states: the pull command carries an
+        // absolute path, so it wraps to a second line, and the sentence
+        // explaining why a rebuild alone is not enough is two lines longer. A
+        // notice that gets clipped is one that was never shipped (L79).
+        .frame(width: 480, height: 380)
     }
 }
