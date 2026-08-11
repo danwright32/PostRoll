@@ -22,13 +22,9 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
-from .design_tokens import (
-    DIVIDER_WHITE as DIVIDER_COLOR,
-    FONT_DETAIL,
-    FONT_DETAIL_BOLD,
-)
+from .design_tokens import DIVIDER_WHITE as DIVIDER_COLOR
 
 
 # === Layout, specific to this template ===
@@ -43,11 +39,6 @@ TRANSITION_DURATION = 1.5  # crossfade to closing
 CLOSING_FRAME_DURATION = 3.0
 TOTAL_DURATION = (HOLD_RAW + SPLIT_DURATION + HOLD_EDIT +
                   TRANSITION_DURATION + CLOSING_FRAME_DURATION)
-
-# RAW treatment
-RAW_DESATURATION = 0.0
-RAW_DARKEN = 1.0
-RAW_COOL_SHIFT = 0
 
 # Ken Burns — disabled (was causing visible shaking)
 ZOOM_START = 1.0
@@ -102,20 +93,6 @@ AFTER_ALPHA = 0.0
 AUDIO_FADE_DURATION = 2.0
 
 
-def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
-    try:
-        return ImageFont.truetype(path, size, index=index)
-    except (OSError, IOError):
-        return ImageFont.load_default()
-
-
-def _tracked(draw, text, font, fill, x, y, spacing):
-    for ch in text:
-        draw.text((x, y), ch, font=font, fill=fill)
-        b = draw.textbbox((0, 0), ch, font=font)
-        x += (b[2] - b[0]) + spacing
-
-
 def prepare_photo(photo: Image.Image, bg_photo: Image.Image) -> Image.Image:
     """Hang the photo as a matted print on the cream mat.
 
@@ -153,12 +130,6 @@ def draw_branded_chrome(frame, event_name, org, venue, logo):
         [(BEFORE_STATE, BEFORE_ALPHA), (AFTER_STATE, AFTER_ALPHA)])
 
 
-def draw_label(frame, text, x, y, font, alpha=255):
-    """Hold-on-edit / closing: pin the caption to full AFTER. The chrome draws it."""
-    set_caption_state(1.0)
-    return frame
-
-
 def ease_in_out(t):
     return t * t * (3 - 2 * t)
 
@@ -167,7 +138,6 @@ def generate_split_frame(
     raw_canvas: Image.Image,
     edit_canvas: Image.Image,
     split_progress: float,
-    font: ImageFont.FreeTypeFont,
 ) -> Image.Image:
     """One frame of the split: the edit is revealed from the centre of the PRINT
     outward. The wipe and its divider live only inside the print rectangle; the
@@ -229,19 +199,16 @@ def generate_reel_morph(
 
     raw_photo = Image.open(raw_path)
     edit_photo = Image.open(edit_path)
-    # Passed through to generate_split_frame/draw_label for signature compatibility;
-    # the caption is now the chrome's placard, so the font itself is unused there.
-    font = load_font(FONT_DETAIL, 20, index=FONT_DETAIL_BOLD)
 
     global _PRINT_RECT
     # The EDIT is the declared source: it is the photograph the reel is about,
     # and the caption hangs off the print the viewer ends on.
     _PRINT_RECT = print_rect(edit_photo.size)
 
+    # The RAW is shown exactly as it came off the camera: the whole point of the
+    # reel is the distance between it and the edit, so nothing is applied to it.
     raw_canvas = prepare_photo(raw_photo, edit_photo)
     edit_canvas = prepare_photo(edit_photo, edit_photo)
-
-    # No RAW treatment — show the actual RAW as-is
 
     closing_frame = None
     if closing_frame_path and Path(closing_frame_path).exists():
@@ -274,13 +241,13 @@ def generate_reel_morph(
 
             if i < p1:
                 # Hold on RAW
-                frame = generate_split_frame(raw_z, edit_z, 0.0, font)
+                frame = generate_split_frame(raw_z, edit_z, 0.0)
 
             elif i < p2:
                 # Continuous split from center to full edit
                 t = (i - p1) / (p2 - p1)
                 split = ease_in_out(t)
-                frame = generate_split_frame(raw_z, edit_z, split, font)
+                frame = generate_split_frame(raw_z, edit_z, split)
 
             elif i < p3:
                 # Hold on full edit; pin the caption to AFTER (chrome draws it).
