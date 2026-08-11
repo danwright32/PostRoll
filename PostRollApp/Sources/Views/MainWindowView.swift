@@ -59,6 +59,10 @@ struct MainWindowView: View {
             NewEventSheet()
                 .environment(appState)
         }
+        .sheet(isPresented: $appState.showingOutdatedDesigns) {
+            OutdatedDesignsSheet()
+                .environment(appState)
+        }
         .alert(
             "Saved events could not be read",
             isPresented: Binding(

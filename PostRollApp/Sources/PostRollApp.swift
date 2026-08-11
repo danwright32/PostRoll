@@ -47,6 +47,15 @@ struct PostRollApp: App {
                     appState.showingNewEvent = true
                 }
                 .keyboardShortcut("n")
+
+                Divider()
+
+                // The one place that answers "which days need re-rendering
+                // after a design change" (#293). It walks the preview folder,
+                // so it is behind a menu item rather than running on its own.
+                Button("Outdated Designs…") {
+                    appState.showingOutdatedDesigns = true
+                }
             }
             CommandGroup(replacing: .help) {
                 Button("Copy Install Command") {
