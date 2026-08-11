@@ -10,6 +10,9 @@ struct CaptionReviewView: View {
 
     @State private var result: WeekGenerationResult
     @State private var expanded: ReviewSection? = nil
+    /// How many separate events have tagged each account (#289). Held in state
+    /// because it walks every event's tag list and `body` runs on every redraw.
+    @State private var taggedEventCounts: [String: Int] = [:]
     /// Which account's numbers form is open (#279, #280).
     @State private var editingAccount: EditingAccount? = nil
     /// The instant the collaborator suggestions are judged fresh or stale
@@ -302,7 +305,9 @@ struct CaptionReviewView: View {
                         // Shown only while the day is open, so a week of
                         // collapsed days is not a wall of rankings (#278).
                         if expanded == section, let picks = collaborators(for: day, in: live) {
-                            CollaboratorPanel(result: picks, onEditNumbers: beginEditingNumbers)
+                            CollaboratorPanel(result: picks,
+                                              eventCounts: taggedEventCounts,
+                                              onEditNumbers: beginEditingNumbers)
                                 .padding(.horizontal, Spacing.xl)
                                 .padding(.bottom, Spacing.md)
                                 .disabled(isRegenerating)
@@ -424,6 +429,11 @@ struct CaptionReviewView: View {
             .background(Color.cream)
             .onAppear {
                 mergeGlobalTags()
+                // Which accounts keep coming back, so the panel can ask for
+                // numbers on those and stop competing for attention on the
+                // one-offs (#289). Once on arrival: it walks every event's tag
+                // list, and the answer only moves when an event is edited.
+                taggedEventCounts = RecurringAccounts.eventCounts(events: appState.events)
                 if event.previewMediaPaths.isEmpty {
                     generateGraphics()
                 } else {

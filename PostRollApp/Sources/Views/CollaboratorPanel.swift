@@ -14,6 +14,11 @@ import SwiftUI
 /// swap is Dan's call.
 struct CollaboratorPanel: View {
     let result: CollaboratorPick.Result
+    /// How many separate events have tagged each account, keyed the way the
+    /// book keys (#289). Decides which rows are worth asking numbers for.
+    /// Passed in rather than derived here, because it walks every event and
+    /// `body` runs on every redraw (L91).
+    var eventCounts: [String: Int] = [:]
     /// Open the numbers form for one account. The whole ranking runs on figures
     /// Dan enters, so the way to enter them is beside the names being ranked.
     let onEditNumbers: (String) -> Void
@@ -100,17 +105,32 @@ struct CollaboratorPanel: View {
                     .font(.system(size: 10))
                     .foregroundStyle(Color.warmMid)
                     .fixedSize(horizontal: false, vertical: true)
+                // Only on the few that come back, so the row says why it is the
+                // one worth a minute (#289).
+                if let note = RecurringAccounts.recurrenceNote(
+                        handle: candidate.handle, in: eventCounts) {
+                    Text(note)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.roseGold)
+                }
             }
             Spacer()
             // The one step way to fix a number in place (#280). Beside the
             // figure it corrects, so a stale count is fixed where it is read
             // rather than on some other screen.
+            //
+            // Quieter on an account tagged once and never again (#289): the ask
+            // is still there, it just stops competing with the handful whose
+            // numbers the ranking actually leans on. Measured on the real
+            // events: 32 of 38 accounts are one-offs.
             Button(candidate.stats?.hasEngagementData == true ? "Update" : "Add numbers") {
                 onEditNumbers(candidate.handle)
             }
             .buttonStyle(.plain)
             .font(.system(size: 11))
-            .foregroundStyle(Color.roseGold)
+            .foregroundStyle(
+                RecurringAccounts.emphasis(handle: candidate.handle, in: eventCounts) == .prominent
+                    ? Color.roseGold : Color.warmMid)
             .accessibilityLabel("Edit numbers for \(candidate.handle)")
         }
     }

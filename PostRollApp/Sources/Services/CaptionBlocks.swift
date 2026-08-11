@@ -103,6 +103,33 @@ enum CaptionBlocks {
         return (Array(ordered.prefix(limit)), Array(ordered.dropFirst(limit)))
     }
 
+    /// Every account this week's posts tag, from both routes they arrive by (#289).
+    ///
+    /// `weekTags` is the caption's own TAG LIST block. The org and venue
+    /// handles reach every post separately, which is why they are not in it and
+    /// must not be added to it: printing them there would duplicate them and eat
+    /// slots from the cap that decides who gets tagged at all (#281).
+    ///
+    /// But they ARE tagged, and anything asking "who does this week tag" has to
+    /// see both or it sees the wrong set. Measured on Dan's 19 real events: of
+    /// the 38 accounts tagged, the 6 that recur are all org or venue handles, so
+    /// a list built from `weekTags` alone misses every returning account and
+    /// keeps only the one-offs.
+    ///
+    /// One function so the book, the ranking and anything counting recurrence
+    /// share a predicate rather than each rebuilding a nearly-right one (L16).
+    static func accountsTagged(event: Event) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for handle in weekTagList(event: event)
+            + EventHandleSuggestions.accounts(in: event.eventHandles) {
+            let name = bareUsername(handle)
+            guard !name.isEmpty, seen.insert(name.lowercased()).inserted else { continue }
+            out.append(name)
+        }
+        return out
+    }
+
     /// The accounts one day's post actually tags, in the order it lists them.
     ///
     /// One predicate, shared by the export's own block and by the collaborator
