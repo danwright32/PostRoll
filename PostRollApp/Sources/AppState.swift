@@ -10,6 +10,8 @@ final class AppState {
     var events: [Event] = []
     var selectedEventID: Event.ID?
     var showingNewEvent = false
+    /// The list of days whose cached assets predate the current design (#293).
+    var showingOutdatedDesigns = false
 
     /// Set when events.json existed but its contents could not be decoded.
     /// Shown once as a dismissible alert; the bad file was moved aside, so
