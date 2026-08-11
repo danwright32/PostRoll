@@ -54,13 +54,24 @@ def _photo(tmp_path, name):
     return str(p)
 
 
-@pytest.mark.parametrize("generate", [
-    morph_mod.generate_reel_morph,
-    slider_mod.generate_reel_slider,
-])
-def test_tuesday_reel_fails_loudly_rather_than_rendering_silent(tmp_path, generate):
+#: The two Tuesday reels no longer take the same arguments: the 3-photo one
+#: requires a B&W after, because nothing in the app reaches it without one
+#: (#164, #324). Carried in the parametrisation so a missing B&W cannot make
+#: this test pass for the wrong reason: it would still raise, and the assertion
+#: below that the message mentions the audio would then be the only thing
+#: standing between a real check and a vacuous one.
+TUESDAY_REELS = [
+    pytest.param(morph_mod.generate_reel_morph, False, id="generate_reel_morph"),
+    pytest.param(slider_mod.generate_reel_slider, True, id="generate_reel_slider"),
+]
+
+
+@pytest.mark.parametrize("generate,needs_bw", TUESDAY_REELS)
+def test_tuesday_reel_fails_loudly_rather_than_rendering_silent(
+        tmp_path, generate, needs_bw):
     raw = _photo(tmp_path, "raw.jpg")
     edit = _photo(tmp_path, "edit.jpg")
+    extra = {"bw_path": _photo(tmp_path, "bw.jpg")} if needs_bw else {}
 
     with patch("postroll.audio.fetch_audio", side_effect=RuntimeError("Jamendo down")):
         with pytest.raises(Exception) as err:
@@ -68,6 +79,7 @@ def test_tuesday_reel_fails_loudly_rather_than_rendering_silent(tmp_path, genera
                 raw_path=raw, edit_path=edit, audio_path=None,
                 output_path=str(tmp_path / "out.mp4"),
                 event_name="E", org="O", venue="V",
+                **extra,
             )
 
     # And it must not have quietly produced a reel.

@@ -78,25 +78,44 @@ def morph_regions(print_height: int,
     return regions
 
 
-def slider_regions(logo_path: str | Path | None) -> list[TextRegion]:
-    """The slider reel's cream header, plus the state labels over the mat."""
-    from . import generate_reel_slider as s
+def slider_regions(logo_path: str | Path | None,
+                   print_height: int | None = None) -> list[TextRegion]:
+    """The 3-photo Tuesday reel's plate: masthead, venue line, placard, colophon.
 
-    # The detail lines start below the title, at a distance the generator takes
-    # from the rendered title's own height. 70 point script measures close
-    # enough to its nominal size for a band, and the band below runs to the
-    # bottom of the header, so it holds both detail lines wherever they land.
-    return [
-        TextRegion("slider title",
-                   _band(0, s.TITLE_TOP_Y, s.CANVAS_W, 70),
-                   s.TEXT_DARK),
-        TextRegion("slider detail lines",
-                   (0, s.TITLE_TOP_Y + int(70 * 1.35), s.CANVAS_W, s.HEADER_H),
-                   s.TEXT_DARK),
-        TextRegion("slider state label",
-                   _band(0, s.LABEL_Y, s.CANVAS_W, s.LABEL_FONT_SIZE),
-                   s.LABEL_COLOR),
+    The same plate the morph draws (#164), so the bands are the same shape. The
+    placard hangs off the bottom of the print, whose height comes from the
+    photograph, so it is passed in rather than guessed. Defaults to a 3:2
+    photograph, which is what Dan shoots.
+    """
+    from . import program_plate as p
+
+    if print_height is None:
+        print_height = p.print_rect((3, 2))[3]
+
+    regions = [
+        TextRegion("slider masthead",
+                   _band(p.MAT, p.MASTHEAD_Y, p.CANVAS_W - p.MAT, 74),
+                   p.TEXT_DARK),
+        TextRegion("slider venue line",
+                   _band(p.MAT, p.VENUE_Y, p.CANVAS_W - p.MAT, 19),
+                   p.WARM_MID),
+        TextRegion("slider placard state word",
+                   _band(p.MAT, p.PRINT_Y + print_height + p.PLACARD_TOP_GAP,
+                         p.CANVAS_W - p.MAT, 20),
+                   p.ROSE_GOLD),
+        TextRegion("slider placard subtitle",
+                   _band(p.MAT, p.PRINT_Y + print_height + p.PLACARD_TOP_GAP + 32,
+                         p.CANVAS_W - p.MAT, 14),
+                   p.WARM_MID),
     ]
+    if logo_path:
+        height = _scaled_logo_height(logo_path, p.LOGO_WIDTH)
+        regions.append(TextRegion(
+            "slider colophon wordmark",
+            (p.MAT, p.FOOTER_RULE_Y + 40, p.CANVAS_W - p.MAT,
+             p.FOOTER_RULE_Y + 40 + height),
+            logo_ink(logo_path)))
+    return regions
 
 
 def scroll_regions() -> list[TextRegion]:

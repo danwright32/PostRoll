@@ -606,6 +606,7 @@ def test_scroll_reel_ffmpeg_command(tmp_path, monkeypatch):
 def test_slider_reel_ffmpeg_command(tmp_path, monkeypatch):
     raw = _photo(tmp_path / "raw.jpg")
     edit = _photo(tmp_path / "edit.jpg")
+    bw = _photo(tmp_path / "bw.jpg")
     audio = tmp_path / "a.mp3"
     audio.write_bytes(b"fake mp3")
     out = tmp_path / "reel.mp4"
@@ -616,6 +617,7 @@ def test_slider_reel_ffmpeg_command(tmp_path, monkeypatch):
         slider_mod.generate_reel_slider(
             str(raw), str(edit), str(audio), str(out),
             event_name="Ev", org="Org", venue="Venue",
+            bw_path=str(bw),
         )
 
     ffmpeg = _assert_audio_fit_pass(cap.commands)

@@ -74,7 +74,7 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     "before_after": 1,
     "reel_screen": 1,
     "reel_morph": 2,
-    "reel_slider": 1,
+    "reel_slider": 2,
     "reel_scroll": 1,
     # The still the Thursday crop editor draws over. Same layout maths as the
     # reel it previews, so a redesign of one dates the other.

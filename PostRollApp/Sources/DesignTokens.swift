@@ -41,7 +41,7 @@ enum MediaDesign {
         "before_after": 1,
         "reel_screen": 1,
         "reel_morph": 2,
-        "reel_slider": 1,
+        "reel_slider": 2,
         "reel_scroll": 1,
         "reel_preview": 1,
         "reel_clip": 1,

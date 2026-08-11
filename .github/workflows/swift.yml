@@ -47,6 +47,7 @@ on:
       - "tests/test_golden_frames.py"
       - "tests/test_frame_legibility.py"
       - "tests/test_gallery_alignment.py"
+      - "tests/test_slider_program_plate.py"
       # The wordmark the reference frames and the legibility bands both draw
       # with. The colophon check takes the mark's INK from this file, so
       # swapping it changes what every one of those checks measures (#246, L88).
@@ -117,4 +118,4 @@ jobs:
           POSTROLL_REQUIRE_GOLDENS: "1"
         run: >
           pytest tests/test_golden_frames.py tests/test_frame_legibility.py
-          tests/test_gallery_alignment.py -v -ra
+          tests/test_gallery_alignment.py tests/test_slider_program_plate.py -v -ra
