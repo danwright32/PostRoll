@@ -63,6 +63,14 @@ struct MainWindowView: View {
             OutdatedDesignsSheet()
                 .environment(appState)
         }
+        // The app being older than the code it was built from is the one thing
+        // that makes a shipped fix look like it never worked, so it is said in
+        // the middle of the window at launch rather than left to be noticed.
+        .sheet(item: $appState.buildBehind) { behind in
+            BuildBehindSheet(builtAt: behind.builtAt,
+                             latestCommit: behind.latestCommit)
+        }
+        .task { await checkBuildFreshness() }
         .alert(
             "Saved events could not be read",
             isPresented: Binding(
@@ -89,6 +97,27 @@ struct MainWindowView: View {
             Button("Quit PostRoll") { NSApplication.shared.terminate(nil) }
         } message: {
             Text(appState.storeUnavailable ?? "")
+        }
+    }
+
+    /// Ask once, at launch, whether this build predates the code.
+    ///
+    /// Off the main actor: it stats a file and runs git, and neither belongs on
+    /// the thread drawing the window. Only a `behind` verdict is put in front of
+    /// Dan; not being able to tell is written to the log, because a popup with
+    /// nothing actionable in it is one that gets dismissed on reflex, and the
+    /// real warning would go with it.
+    private func checkBuildFreshness() async {
+        let repo = AppPaths.projectRoot
+        let verdict = await Task.detached { BuildFreshness.check(repo: repo) }.value
+        switch verdict {
+        case let .behind(builtAt, latestCommit):
+            appState.buildBehind = BuildBehind(builtAt: builtAt,
+                                               latestCommit: latestCommit)
+        case .current:
+            break
+        case let .cannotTell(reason):
+            NSLog("[PostRoll] build freshness unknown: \(reason)")
         }
     }
 }
