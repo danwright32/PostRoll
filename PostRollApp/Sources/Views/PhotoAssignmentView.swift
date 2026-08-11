@@ -62,49 +62,13 @@ struct PhotoAssignmentView: View {
     /// This event's layout (its override, or the app wide default).
     private var effectivePreset: PostingPreset { event.effectivePostingPreset }
 
-    /// Suggestions for a day's per-photo tag popover, drawn from the event's
-    /// performers. Inserts the @handle when there is a real one, otherwise the
-    /// plain name. Performers marked as appearing in that day's photos are listed
-    /// first so the common picks are closest to hand.
+    /// Suggestions for a day's per-photo tag popover: this event's performers,
+    /// then its own accounts. Built by `PhotoTagSuggestionList` so the list can
+    /// be asserted against the field shapes real events carry (#292).
     private func tagSuggestions(for day: DayName) -> [PhotoTagSuggestion] {
-        // The event's own accounts (organization, venue, and anything else
-        // written into those free-text fields) are taggable on a photo too:
-        // a shot of the room or the presenting festival is often about them
-        // rather than a performer.
-        let eventAccounts = EventHandleSuggestions
-            .tokens(fromAll: [event.eventHandles])
-            .map { PhotoTagSuggestion(token: $0, display: $0) }
-
-        let performers = event.ocrResult?.performers ?? []
-        let selected = dayPerformers[day] ?? []
-        let ordered = performers.sorted { a, b in
-            let aSel = selected.contains(a.id), bSel = selected.contains(b.id)
-            if aSel != bSel { return aSel }
-            return false
-        }
-        let performerSuggestions = ordered.compactMap { p -> PhotoTagSuggestion? in
-            let name = p.name.trimmingCharacters(in: .whitespaces)
-            let handle = p.handle.trimmingCharacters(in: .whitespaces)
-            let realHandle = PythonBridge.isRealHandle(handle)
-            guard !name.isEmpty || realHandle else { return nil }
-            let normalizedHandle = handle.hasPrefix("@") ? handle : "@\(handle)"
-            let token = realHandle ? normalizedHandle : name
-            // Label echoes the performer checkbox: name, instrument/role, handle.
-            var parts: [String] = []
-            if !name.isEmpty { parts.append(name) }
-            let designation = p.designation
-            if !designation.isEmpty { parts.append(designation.lowercased()) }
-            if realHandle { parts.append(normalizedHandle) }
-            let display = parts.isEmpty ? token : parts.joined(separator: " ")
-            return PhotoTagSuggestion(token: token, display: display)
-        }
-
-        // Performers first: they're the common pick, and the event's own
-        // accounts are a handful that stay findable at the end.
-        var seen = Set<String>()
-        return (performerSuggestions + eventAccounts).filter {
-            seen.insert($0.token.lowercased()).inserted
-        }
+        PhotoTagSuggestionList.build(eventHandles: event.eventHandles,
+                                     performers: event.ocrResult?.performers ?? [],
+                                     appearingIn: dayPerformers[day] ?? [])
     }
 
     enum PickerTarget: Equatable {
