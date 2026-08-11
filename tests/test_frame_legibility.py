@@ -431,15 +431,42 @@ def test_the_three_photo_tuesday_reel_reads_all_the_way_through(
     assert legibility.illegible(frames, text_regions.slider_regions(LOGO)) == []
 
 
+def assert_the_strip_really_scrolls(photo_paths, seed):
+    """The fixture must build a strip taller than the canvas.
+
+    Below that the generator prints "strip shorter than canvas, scroll
+    collapsed to a hold", pads the strip and renders a still. Every Thursday
+    reel test used to run in that state, so nothing about the scroll was ever
+    checked and the tests read as though it was (#319, L101).
+
+    Asserted from the strip rather than from the photo count, because the count
+    at which a strip clears the canvas moves with the row rhythm, the gaps and
+    the colophon. A number pinned here would silently stop meaning what it says.
+    """
+    strip = scroll_mod.build_collage_strip(list(photo_paths), seed=seed, logo_path=LOGO)
+    assert strip.height > scroll_mod.CANVAS_H, (
+        f"this fixture builds a {strip.width}x{strip.height} strip against a "
+        f"{scroll_mod.CANVAS_W}x{scroll_mod.CANVAS_H} canvas, so the generator "
+        "collapses the scroll to a static hold and the reel never moves. "
+        "Whatever this test believes it is checking about a scrolling reel, it "
+        "is not.")
+
+
 @needs_ffmpeg
 @needs_mac_fonts
 def test_the_thursday_reel_header_reads_all_the_way_through(
-        photos, silent_audio, tmp_path):
+        many_photos, silent_audio, tmp_path):
     # A short scroll rather than the shipping 40 seconds. `scroll_duration` is a
     # real parameter of the generator, not a seam opened for the test, and the
     # header chrome under test does not change with the duration.
+    #
+    # The header is pinned to the frame, so it does not move with the strip, but
+    # the reel still has to be a scrolling one: a still cannot show a header
+    # sitting over photographs passing beneath it.
+    assert_the_strip_really_scrolls(many_photos, seed=298)
+
     video = scroll_mod.generate_reel_scroll(
-        photo_paths=photos, audio_path=silent_audio,
+        photo_paths=many_photos, audio_path=silent_audio,
         output_path=str(tmp_path / "scroll.mp4"),
         event_name="Reference Event", org="Reference Org", venue="Reference Venue",
         seed=298, scroll_duration=4.0, logo_path=LOGO)
@@ -465,6 +492,8 @@ def test_the_thursday_reel_colophon_reads_wherever_it_scrolls_to(
     than a colophon travelling with the strip, and the check would be following
     the wrong thing while reporting a clean reading.
     """
+    assert_the_strip_really_scrolls(many_photos, seed=306)
+
     video = scroll_mod.generate_reel_scroll(
         photo_paths=many_photos, audio_path=silent_audio,
         output_path=str(tmp_path / "scroll-colophon.mp4"),
