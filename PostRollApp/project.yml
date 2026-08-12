@@ -55,6 +55,7 @@ targets:
       - path: Sources/Services/AudioPreviewPlayer.swift
       - path: Sources/Services/ProgressFileCleanup.swift
       - path: Sources/Services/ExportFolderStatus.swift
+      - path: Sources/Services/SettingsCopy.swift
       - path: Sources/Views/ReelPreviewPlayer.swift
       - path: Sources/Services/ManifestDay.swift
       - path: Sources/Services/StageNavigation.swift
