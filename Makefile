@@ -2,7 +2,7 @@ BUILD_DIR := PostRollApp/build
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
-.PHONY: install install-force build test test-python clean
+.PHONY: install install-force build test test-python test-python-fast clean
 
 # One build-and-install implementation, not two. This used to run its own
 # xcodebuild and cp, skipping the xattr clear, the stable-identity signing and
@@ -36,6 +36,13 @@ test:
 
 test-python:
 	@venv/bin/python -m pytest tests/ -q
+
+# The loop between edits. Deselects the four files that render real reels, which
+# are 8m15s of the full 9m53s. pytest prints how many it deselected, so a fast
+# suite that has quietly become a run of almost nothing is visible rather than
+# silent (#413). This is NOT the gate: `make test-python` and CI run everything.
+test-python-fast:
+	@venv/bin/python -m pytest tests/ -q -m "not slow"
 
 clean:
 	@rm -rf "$(BUILD_DIR)"

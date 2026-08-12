@@ -20,6 +20,12 @@ from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_story as story_mod
 from postroll.media import generate_before_after as ba_mod
 
+# Every check in this file renders a real reel and reads pixels back, which is
+# where the suite's time goes. `make test-python-fast` deselects it; CI and
+# `make test-python` still run it (#413).
+pytestmark = pytest.mark.slow
+
+
 
 THIN_FACES = {"Thin", "Thin Italic", "UltraLight", "UltraLight Italic"}
 

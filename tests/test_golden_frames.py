@@ -52,6 +52,12 @@ from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
 from postroll.media import generate_story as story_mod
 
+# Every check in this file renders a real reel and reads pixels back, which is
+# where the suite's time goes. `make test-python-fast` deselects it; CI and
+# `make test-python` still run it (#413).
+pytestmark = pytest.mark.slow
+
+
 
 GOLDEN_DIR = Path(__file__).resolve().parent / "fixtures" / "goldens"
 

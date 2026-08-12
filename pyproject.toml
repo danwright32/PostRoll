@@ -18,6 +18,14 @@ pythonpath = ["."]
 # into an error instead of a silently unfiltered test.
 addopts = "-ra --strict-markers"
 
+# Declared so --strict-markers accepts it. `slow` means a test that renders a
+# real reel through ffmpeg and reads pixels back: 8m15s of the suite's 9m53s
+# sits in the four files carrying it. `make test-python-fast` deselects them for
+# the loop between edits; CI still runs everything (#413).
+markers = [
+    "slow: renders real video, so it belongs to the full run rather than the fast one",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
