@@ -262,6 +262,76 @@ final class PreviewMergePolicyTests: XCTestCase {
         XCTAssertTrue(PreviewMergePolicy.absentApprovals(assets: [:], label: "Friday").isEmpty)
     }
 
+    // MARK: - Putting approvals back over a regenerated day (#383)
+
+    /// The reel is an mp4 (`reel_scroll.mp4`, `reel_screen.mp4`), and it is one
+    /// of the assets Dan approves. Restoring only the still images means a day
+    /// the generator rebuilt ships the machine's reel, which is the single
+    /// biggest thing on the page.
+    func testEveryApprovedAssetIsPutBackNotOnlyTheStillImages() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let dayDir = dir.appendingPathComponent("Thursday")
+
+        let story = try makeFile("story.png", in: dir, contents: "approved story")
+        let reel = try makeFile("reel_scroll.mp4", in: dir, contents: "approved reel")
+        // The freshly generated versions already sitting in the day folder.
+        try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
+        for name in ["story.png", "reel_scroll.mp4"] {
+            try Data("regenerated".utf8).write(to: dayDir.appendingPathComponent(name))
+        }
+
+        let dropped = PreviewMergePolicy.restoreAvailableApprovals(
+            assets: ["story": story.path, "reel": reel.path],
+            to: dayDir, label: "Thursday"
+        )
+
+        XCTAssertTrue(dropped.isEmpty)
+        XCTAssertEqual(
+            try String(contentsOf: dayDir.appendingPathComponent("reel_scroll.mp4"), encoding: .utf8),
+            "approved reel",
+            "the approved reel has to win over the regenerated one, the same as the images do")
+        XCTAssertEqual(
+            try String(contentsOf: dayDir.appendingPathComponent("story.png"), encoding: .utf8),
+            "approved story")
+    }
+
+    /// An approval that is not on disk cannot be put back, and the regenerated
+    /// file in the folder must survive rather than being deleted in the attempt.
+    func testAnAbsentApprovalLeavesTheRegeneratedFileIntact() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let dayDir = dir.appendingPathComponent("Wednesday")
+        try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
+        try Data("regenerated".utf8).write(to: dayDir.appendingPathComponent("collage.png"))
+
+        let dropped = PreviewMergePolicy.restoreAvailableApprovals(
+            assets: ["collage": dir.appendingPathComponent("collage.png").path],
+            to: dayDir, label: "Wednesday"
+        )
+
+        XCTAssertTrue(dropped.isEmpty, "an absent approval is reported by absentApprovals, not here")
+        XCTAssertEqual(
+            try String(contentsOf: dayDir.appendingPathComponent("collage.png"), encoding: .utf8),
+            "regenerated",
+            "the day folder must not be left short a file by an approval that was not there")
+    }
+
+    func testNoScratchFileIsLeftBehindByARestore() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let dayDir = dir.appendingPathComponent("Sunday")
+        try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
+        let story = try makeFile("story.png", in: dir, contents: "approved")
+
+        _ = PreviewMergePolicy.restoreAvailableApprovals(
+            assets: ["story": story.path], to: dayDir, label: "Sunday")
+
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dayDir.path),
+                       ["story.png"],
+                       "a restore must not leave staging files for Dan to upload")
+    }
+
     private func makeTempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("preview-merge-test-\(UUID().uuidString)")
@@ -269,9 +339,11 @@ final class PreviewMergePolicyTests: XCTestCase {
         return dir
     }
 
-    private func makeFile(_ name: String, in dir: URL) throws -> URL {
+    /// `contents` so a restore test can prove WHICH copy won, not merely that
+    /// a file of the right name is there.
+    private func makeFile(_ name: String, in dir: URL, contents: String = "asset") throws -> URL {
         let url = dir.appendingPathComponent(name)
-        try Data("asset".utf8).write(to: url)
+        try Data(contents.utf8).write(to: url)
         return url
     }
 }
