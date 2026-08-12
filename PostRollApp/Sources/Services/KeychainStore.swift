@@ -34,6 +34,30 @@ enum KeychainStore {
     /// The prefix every Anthropic API key carries.
     static let keyPrefix = "sk-ant-"
 
+    /// The shortest thing that could still be a whole key (#348).
+    ///
+    /// A real key measures 108 characters. The bar sits well below that so a
+    /// change to the format does not start refusing valid keys, and far above
+    /// a truncation so it cannot admit one: the value that sat stored on this
+    /// Mac for two days was thirteen characters, prefix intact.
+    ///
+    /// A prefix check alone catches the person who pasted only the part AFTER
+    /// `sk-ant-`. It cannot catch the person who pasted most of a key, which is
+    /// the commoner accident and the one that looks exactly like success.
+    static let minimumKeyLength = 40
+
+    /// Whether this value can be stored at all.
+    ///
+    /// Empty is savable and means forget the stored key, which is a legitimate
+    /// action rather than a malformed one. Anything else has to be long enough
+    /// to be a whole key: code that has already worked out the value is wrong
+    /// must block the action rather than label it and leave the button live,
+    /// which is how #348 shipped and went unnoticed.
+    static func isSavable(_ raw: String) -> Bool {
+        let cleaned = sanitize(raw)
+        return cleaned.isEmpty || cleaned.count >= minimumKeyLength
+    }
+
     /// What is wrong with the shape of what was typed, or nil.
     ///
     /// Pasting a key WITHOUT its `sk-ant-` prefix produced the same generic
@@ -47,9 +71,18 @@ enum KeychainStore {
     static func formatWarning(for raw: String) -> String? {
         let cleaned = sanitize(raw)
         guard !cleaned.isEmpty else { return nil }
-        guard !cleaned.hasPrefix(keyPrefix) else { return nil }
-        return "This does not start with \(keyPrefix). Paste the WHOLE key, "
-             + "including the \(keyPrefix) at the front, not just the part after it."
+        guard cleaned.hasPrefix(keyPrefix) else {
+            return "This does not start with \(keyPrefix). Paste the WHOLE key, "
+                 + "including the \(keyPrefix) at the front, not just the part after it."
+        }
+        guard cleaned.count >= minimumKeyLength else {
+            // The count, never the value: this message is shown on screen and
+            // the key must not be echoed anywhere.
+            return "This is only \(cleaned.count) characters. A whole key is "
+                 + "about 108, so this looks like part of one. Copy it again "
+                 + "and check the whole thing came across."
+        }
+        return nil
     }
 
     /// Store the key. Returns whether it actually landed.
