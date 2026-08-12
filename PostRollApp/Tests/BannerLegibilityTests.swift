@@ -113,6 +113,15 @@ final class BannerLegibilityTests: XCTestCase {
         let unfamiliar = RunOutcomeNotice.unfamiliarFailureNote(week: week) ?? ""
         let analytics = AnalyticsStore.recoveryText(setAsideAs: "analytics.json.broken",
                                                     restorable: false)
+        // The real halt screen needs a real HaltedWeek, built the way the app
+        // builds one: from a week that actually stopped.
+        // `choices` is the type's own, not passed in, so the screen offers
+        // exactly what the app offers.
+        let halted = HaltedWeek(reason: "Claude usage limit reached. Your allowance resets at 3pm.",
+                                finishedDays: [.sunday, .tuesday])
+        let haltedEmpty = HaltedWeek(reason: "Claude usage limit reached. Your allowance resets at 3pm.",
+                                     finishedDays: [])
+
         let missingMedia = MissingMediaBannerText.message(photoCount: 3,
                                                     standaloneNames: ["reel audio"])
 
@@ -142,10 +151,22 @@ final class BannerLegibilityTests: XCTestCase {
                 icon: "chart.bar", message: analytics, style: .error))),
             ("missing media", AnyView(BrandBanner(
                 icon: "photo", message: missingMedia, style: .warning))),
-            ("halt screen", AnyView(BrandBanner(
-                icon: "hourglass",
-                message: "\(RunOutcomeNotice.headline(week: week, failedDayCount: 0)). "
-                    + HaltedWeek.Choice.waitForReset.explanation, style: .warning))),
+            // A whole screen, not a message in a stand-in container (#393).
+            // Both endings, because the difference between them is the claim
+            // that the event was archived, and only one of them is true.
+            ("export done, complete", AnyView(ExportDoneSummary(
+                folderName: "2026-08-12 Spring Gala",
+                mediaError: nil,
+                mediaWarning: mediaWarning))),
+            ("export done, incomplete", AnyView(ExportDoneSummary(
+                folderName: "2026-08-12 Spring Gala",
+                mediaError: mediaError,
+                mediaWarning: nil))),
+            // The real halt screen body, both shapes: a run that saved some
+            // days and one that saved none, because the sentence about what
+            // survived is the whole point of the screen.
+            ("halt screen, some days saved", AnyView(HaltedWeekBody(halted: halted))),
+            ("halt screen, nothing saved", AnyView(HaltedWeekBody(halted: haltedEmpty))),
         ]
     }
 
@@ -213,6 +234,10 @@ extension BannerLegibilityTests {
     func testDumpBannersForReview() throws {
         let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["POSTROLL_BANNER_DUMP"]
             ?? FileManager.default.temporaryDirectory.appendingPathComponent("postroll-banners").path)
+        // Cleared first: an image left by an earlier run is a picture of a
+        // state the app may no longer produce, and reviewing it is worse than
+        // reviewing nothing.
+        try? FileManager.default.removeItem(at: out)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         for state in states {
             let rep = try render(state.view)

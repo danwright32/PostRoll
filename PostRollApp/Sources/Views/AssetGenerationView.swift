@@ -325,43 +325,10 @@ struct AssetGenerationView: View {
                 EventHeader(event: event, subtitle: "Stopped at the usage limit")
                     .padding([.horizontal, .top], Spacing.xl)
 
-                BrandBanner(icon: "hourglass", message: halted.reason, style: .warning)
-                    .padding(.horizontal, Spacing.xl)
-
-                // What survived, said plainly. Without this the screen reads as
-                // a total loss and Dan re-runs work he already has.
-                Text(halted.finishedDays.isEmpty
-                     ? "The run stopped before any day finished, so there is nothing to keep yet."
-                     : "Finished and saved: "
-                       + halted.finishedDays.map { $0.rawValue.capitalized }
-                                            .joined(separator: ", ") + ".")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.warmMid)
-                    .padding(.horizontal, Spacing.xl)
-
-                VStack(alignment: .leading, spacing: Spacing.md) {
-                    ForEach(halted.choices, id: \.self) { choice in
-                        VStack(alignment: .leading, spacing: Spacing.xs) {
-                            // The paid route carries the emphasised style so the
-                            // two are not offered as if equivalent. Spending
-                            // money should look like the deliberate one.
-                            if choice.spendsMoney {
-                                Button(choice.label) { take(choice) }
-                                    .buttonStyle(BrandButtonStyle())
-                            } else {
-                                Button(choice.label) { take(choice) }
-                                    .buttonStyle(.plain)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Color.warmMid)
-                            }
-                            Text(choice.explanation)
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.warmMid)
-                        }
-                    }
-                }
-                .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.xl)
+                // Everything below the header is its own view, taking plain
+                // values, so the halt screen can be rendered and measured
+                // outside the running app (#393).
+                HaltedWeekBody(halted: halted, onChoose: take)
             }
         }
     }

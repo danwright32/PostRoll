@@ -446,97 +446,26 @@ struct ExportView: View {
         String(format: "%d:%02d", mediaElapsed / 60, mediaElapsed % 60)
     }
 
+    /// The finished-export screen. Its own view taking plain values, so it can
+    /// be rendered and measured outside the running app (#393).
     private func doneContent(folder: URL, mediaError: String?, mediaWarning: String?) -> some View {
-        VStack(spacing: Spacing.lg) {
-            // A route back into the event, matching the ready screen. Without
-            // it a finished export trapped the event: the detail pane routes on
-            // the stage, the stage is .exported, so this was the only reachable
-            // screen and the only way out was quitting the app (#182).
-            HStack {
-                StageBackButton(label: "Back to caption review") {
-                    exportManager.clear(eventID: event.id)
-                    if let ev = EventStageTransition.applying(
-                            .captionsReviewed, toEventWithID: event.id, in: appState.events) {
-                        appState.updateEvent(ev)
-                    }
+        ExportDoneSummary(
+            folderName: folder.lastPathComponent,
+            mediaError: mediaError,
+            mediaWarning: mediaWarning,
+            onBack: {
+                exportManager.clear(eventID: event.id)
+                if let ev = EventStageTransition.applying(
+                        .captionsReviewed, toEventWithID: event.id, in: appState.events) {
+                    appState.updateEvent(ev)
                 }
-                Spacer()
+            },
+            onOpenFolder: { NSWorkspace.shared.open(folder) },
+            onDone: {
+                exportManager.clear(eventID: event.id)
+                appState.selectedEventID = nil
             }
-            .padding(.horizontal, Spacing.xl)
-
-            Spacer().frame(height: Spacing.lg)
-
-            // An export that lost files is not a completed export, so it does
-            // not get the checkmark, the word "complete", or the claim that the
-            // event is archived: none of those were true and all three read as
-            // success (#79).
-            let incomplete = mediaError != nil
-
-            Image(systemName: incomplete ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .font(.system(size: 44))
-                .foregroundStyle(incomplete ? Color.roseDeep : Color.roseGold.opacity(0.7))
-                .padding(.top, Spacing.xl)
-
-            Text(incomplete ? "Export incomplete" : "Export complete")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.warmDark)
-
-            Text(folder.lastPathComponent)
-                .font(.light(12))
-                .foregroundStyle(Color.warmMid)
-
-            RoseGoldDivider()
-                .frame(width: 80)
-
-            if let mediaErr = mediaError {
-                // The message is whatever actually failed. It used to append
-                // "Check that ffmpeg is installed" to every cause, which sends
-                // the diagnosis somewhere unrelated for a missing photo.
-                BrandBanner(
-                    icon: "exclamationmark.triangle",
-                    message: "The captions and blog were exported. \(mediaErr)",
-                    style: .error
-                )
-                .frame(maxWidth: 400)
-            }
-
-            // An input that was missing while the day rendered anyway. Said out
-            // loud, because a file that has moved is worth knowing about, and
-            // deliberately NOT as an error: the folder is complete and the
-            // event is archived (#265).
-            if let mediaWarn = mediaWarning {
-                BrandBanner(
-                    icon: "info.circle",
-                    message: mediaWarn,
-                    style: .warning
-                )
-                .frame(maxWidth: 400)
-            }
-
-            Text(incomplete
-                 ? "This event has NOT been archived, so nothing is on the clock to be cleaned up. Fix what's listed above and export again."
-                 : "This event is now archived. Use the archive button in the sidebar to revisit it.")
-                .font(.light(11))
-                .foregroundStyle(Color.warmMid.opacity(0.75))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 300)
-
-            HStack(spacing: Spacing.md) {
-                Button("Open in Finder") { NSWorkspace.shared.open(folder) }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.roseGold)
-                Button("Done") {
-                    exportManager.clear(eventID: event.id)
-                    appState.selectedEventID = nil
-                }
-                .buttonStyle(BrandButtonStyle())
-            }
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, Spacing.xl)
+        )
     }
 
     private func errorContent(_ message: String) -> some View {

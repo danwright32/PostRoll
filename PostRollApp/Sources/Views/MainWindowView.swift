@@ -227,18 +227,4 @@ private struct WindowConfigurator: NSViewRepresentable {
 
 // MARK: - Brand button style
 
-struct BrandButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Color.cream)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: Radius.md)
-                    .fill(configuration.isPressed ? Color.roseDeep : Color.roseGold)
-            )
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
-            .focusEffectDisabled()
-    }
-}
+

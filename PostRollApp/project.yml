@@ -58,6 +58,9 @@ targets:
       - path: Sources/Services/SettingsCopy.swift
       - path: Sources/Views/ReelPreviewPlayer.swift
       - path: Sources/Views/BrandBanner.swift
+      - path: Sources/Views/ExportDoneSummary.swift
+      - path: Sources/Views/SharedChrome.swift
+      - path: Sources/Views/HaltedWeekBody.swift
       - path: Sources/Services/ManifestDay.swift
       - path: Sources/Services/StageNavigation.swift
       - path: Sources/Services/LayoutSidecar.swift
