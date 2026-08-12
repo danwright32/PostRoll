@@ -124,8 +124,13 @@ struct HaltedWeek: Equatable {
         let kept = finishedDays.isEmpty
             ? "Nothing had finished yet."
             : "\(finishedDays.map(\.displayName).joined(separator: ", ")) are saved."
-        return "\(reason) \(kept) Choose whether to wait for the reset or finish "
-             + "on the paid API from the Generate screen."
+        // The reason comes from Python and has two producers that punctuate
+        // differently: the cap path writes a finished sentence, and the two fatal
+        // paths write a bare `str(e)` with no terminator at all. Closed through
+        // Sentence so the second kind stops running into the next sentence as
+        // "connection reset by peer Sunday, Tuesday are saved." (#405).
+        return "\(Sentence.closed(reason)) \(kept) Choose whether to wait for the reset "
+             + "or finish on the paid API from the Generate screen."
     }
 
     /// The halted state for a week, or nil when the week did not halt.

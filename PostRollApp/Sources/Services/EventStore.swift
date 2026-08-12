@@ -104,11 +104,15 @@ enum EventStore {
 
     /// System error text already ends in a period, so it cannot simply be
     /// dropped into the middle of a sentence.
+    ///
+    /// Through `Sentence` now rather than its own rule (#405). The bespoke version
+    /// stripped LEADING dots as well, turned "is the disk full?" into
+    /// "is the disk full?." by forcing a stop back on, and ate a legitimate
+    /// trailing ellipsis.
     static func unreadableMessage(_ error: Error) -> String {
-        let reason = error.localizedDescription
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        return "PostRoll could not read your saved events: \(reason). Nothing was changed or deleted, and nothing new will be saved until the file can be read again."
+        let reason = Sentence.closed(error.localizedDescription)
+        return "PostRoll could not read your saved events: \(reason) Nothing was changed "
+             + "or deleted, and nothing new will be saved until the file can be read again."
     }
 
     // load/save take the URL as a parameter (defaulting to the real store)
