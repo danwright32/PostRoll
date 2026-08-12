@@ -39,3 +39,25 @@ struct BrandButtonStyle: ButtonStyle {
             .focusEffectDisabled()
     }
 }
+
+/// A control that is plainly a control without competing with the lead action.
+///
+/// Exists because a screen offering two real choices had one of them rendered
+/// as bare text, which reads as a heading rather than something to press (#393).
+struct BrandOutlineButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Color.roseDeep)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm)
+                    .strokeBorder(Color.roseDeep.opacity(0.55), lineWidth: 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.sm)
+                            .fill(Color.cream.opacity(configuration.isPressed ? 0.0 : 0.001)))
+            )
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
