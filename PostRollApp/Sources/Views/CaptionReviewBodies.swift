@@ -40,14 +40,24 @@ struct CaptionReviewActionBar: View {
             // A per-day rebuild is the longest running of these and was the one
             // the bar did not consult, so Approve and Export stayed live and
             // copied the pre-rebuild file (#89).
-            HStack(spacing: Spacing.sm) {
+            // The two sentences stack and wrap rather than sitting on one line.
+            // Rendered through AppKit for the first time in #404, this bar wanted
+            // 654pt whatever it was given and truncated below that, so at any
+            // window narrower than about 920pt Dan read "Waiting for the Wednesday
+            // and..." and never learned which days or why (L79).
+            HStack(alignment: .top, spacing: Spacing.sm) {
                 ProgressView().controlSize(.small).tint(Color.roseGold)
-                Text("\(reason)…")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.warmDark)
-                Text("Exporting now would copy the previous version.")
-                    .font(.light(11))
-                    .foregroundStyle(Color.warmMid)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(reason)…")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.warmDark)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Exporting now would copy the previous version.")
+                        .font(.light(11))
+                        .foregroundStyle(Color.warmMid)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
             }
             .padding(Spacing.xl)
 
