@@ -79,7 +79,9 @@ final class BannerLegibilityTests: XCTestCase {
     /// Every banner state the app can show, each carrying the message its own
     /// shipping code produces. Nothing here is hand written copy: a preview of
     /// invented text would show something the app never says.
-    private var states: [(name: String, view: AnyView)] {
+    static var measuredStates: [(name: String, view: AnyView)] { BannerLegibilityTests().states }
+
+    fileprivate var states: [(name: String, view: AnyView)] {
         let refusal = ProgramReadiness.missingFiles([
             URL(fileURLWithPath: "/programs/Gala_p3.png"),
         ]).refusal ?? ""
