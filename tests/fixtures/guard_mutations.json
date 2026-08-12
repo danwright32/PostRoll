@@ -26,6 +26,22 @@
       "breaks": "the stage strip refusal is computed and never drawn (#402)"
     },
     {
+      "name": "new-event-refusal-not-satisfied-by-a-comment",
+      "file": "PostRollApp/Sources/Views/NewEventSheet.swift",
+      "find": "RefusalNote(message: refusal)",
+      "replace": "EmptyView() // RefusalNote(message: refusal)",
+      "test": "PostRollTests/VisibleRefusalGuardTests/testTheNewEventSheetDrawsWhatIsMissing",
+      "breaks": "the refusal is gone and a trailing comment still names it (L103)"
+    },
+    {
+      "name": "archive-note-not-satisfied-by-a-comment",
+      "file": "PostRollApp/Sources/Views/ExportDoneSummary.swift",
+      "find": ".fixedSize(horizontal: false, vertical: true)",
+      "replace": ".opacity(1) // .fixedSize(horizontal: false, vertical: true)",
+      "test": "PostRollTests/HostedControlLegibilityTests/testTheArchiveNoteStillDeclaresThatItWraps",
+      "breaks": "the wrap declaration is gone and a trailing comment still names it (L103)"
+    },
+    {
       "name": "refusal-note-ink",
       "file": "PostRollApp/Sources/Views/SharedChrome.swift",
       "find": ".fixedSize(horizontal: false, vertical: true)\n        }\n        .foregroundStyle(Color.warmMid)",

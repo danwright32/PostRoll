@@ -251,6 +251,10 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// The defect was found by looking at the rendered page, and what can be
     /// guarded automatically is that the view still declares it may wrap.
     func testTheArchiveNoteStillDeclaresThatItWraps() throws {
+        // Comments stripped including trailing ones, the same cut as
+        // VisibleRefusalGuardTests.code: `.opacity(1) // .fixedSize(...)`
+        // satisfied this check until the mutation registry recorded exactly
+        // that break (#416, L103).
         let source = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent()
@@ -259,7 +263,11 @@ final class HostedControlLegibilityTests: XCTestCase {
             encoding: .utf8)
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.hasPrefix("//") && !$0.hasPrefix("*") }
+            .filter { !$0.hasPrefix("*") }
+            .map { line -> String in
+                guard let slashes = line.range(of: "//") else { return line }
+                return String(line[..<slashes.lowerBound])
+            }
             .joined(separator: "\n")
 
         XCTAssertTrue(source.contains("fixedSize(horizontal: false, vertical: true)"), """
