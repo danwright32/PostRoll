@@ -20,9 +20,11 @@ final class BannerLegibilityTests: XCTestCase {
     /// The share of the page that has to be something other than the fill for
     /// the message to count as drawn.
     ///
-    /// Measured, not guessed: the five real banners render between 0.022 and
-    /// 0.064, and a page with nothing legible on it renders at 0.001. This sits
-    /// below the thinnest real one (a single line of text) and far above blank.
+    /// Measured, not guessed, and re-measured when surfaces were added (#391):
+    /// the eleven real states render between 0.022 and 0.067, and a page with
+    /// nothing legible on it renders at 0.001. This sits below the thinnest real
+    /// one (a single line of text) and far above blank. Anything added here
+    /// should be measured too rather than assumed to land in that band.
     private static let legibleInk = 0.01
 
     /// Renders a view and returns its pixels.
@@ -90,6 +92,30 @@ final class BannerLegibilityTests: XCTestCase {
                                               fileName: "collage.png"),
         ]) ?? ""
 
+        // The rest of what Dan reads, each from its own shipping code (#391).
+        let week: WeekGenerationResult = {
+            var w = WeekGenerationResult()
+            w.stoppedReason = "Claude usage limit reached"
+            // A week that stopped is not complete. PartialWeekMerge enforces
+            // that pairing, so a fixture setting only the reason would render a
+            // headline the app can never actually show (L48).
+            w.complete = false
+            w.unrecognisedFailures = ["exit 1: something the cap detector did not know"]
+            return w
+        }()
+
+        let mediaError = MediaErrorSummary.sentence([
+            "wednesday": "collage failed: no such file or directory",
+        ]) ?? ""
+        let mediaWarning = MediaErrorSummary.warningSentence([
+            "thursday": "the chosen black and white photo has moved",
+        ]) ?? ""
+        let unfamiliar = RunOutcomeNotice.unfamiliarFailureNote(week: week) ?? ""
+        let analytics = AnalyticsStore.recoveryText(setAsideAs: "analytics.json.broken",
+                                                    restorable: false)
+        let missingMedia = MissingMediaBannerText.message(photoCount: 3,
+                                                    standaloneNames: ["reel audio"])
+
         return [
             ("ocr refusal", AnyView(BrandBanner(
                 icon: "exclamationmark.triangle", message: refusal, style: .error,
@@ -106,6 +132,20 @@ final class BannerLegibilityTests: XCTestCase {
             ("upload reminder", AnyView(BrandBanner(
                 icon: "arrow.down.circle",
                 message: "Download the program from your browser first."))),
+            ("export failure", AnyView(BrandBanner(
+                icon: "exclamationmark.triangle", message: mediaError, style: .error))),
+            ("export warning", AnyView(BrandBanner(
+                icon: "exclamationmark.triangle", message: mediaWarning, style: .warning))),
+            ("unfamiliar failure", AnyView(BrandBanner(
+                icon: "questionmark.circle", message: unfamiliar, style: .warning))),
+            ("analytics recovery", AnyView(BrandBanner(
+                icon: "chart.bar", message: analytics, style: .error))),
+            ("missing media", AnyView(BrandBanner(
+                icon: "photo", message: missingMedia, style: .warning))),
+            ("halt screen", AnyView(BrandBanner(
+                icon: "hourglass",
+                message: "\(RunOutcomeNotice.headline(week: week, failedDayCount: 0)). "
+                    + HaltedWeek.Choice.waitForReset.explanation, style: .warning))),
         ]
     }
 
