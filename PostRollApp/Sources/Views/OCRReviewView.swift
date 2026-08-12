@@ -70,52 +70,21 @@ struct OCRReviewView: View {
                         .padding(.horizontal, Spacing.xl)
                         .padding(.bottom, Spacing.md)
 
-                    if let issues = detectedIssues, !issues.isEmpty {
-                        BrandBanner(
-                            icon: "exclamationmark.circle",
-                            message: issues.joined(separator: " "),
-                            style: .error
-                        )
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.bottom, Spacing.md)
-                    }
-
-                    // A program Dan knowingly took incomplete. Shown here rather
-                    // than only at import, because this is the screen where the
-                    // program data is judged, and a cast list that looks thin
-                    // needs to read as explained rather than as all there is
-                    // (#378).
-                    ForEach(livePartialPrograms, id: \.self) { note in
-                        BrandBanner(
-                            icon: "doc.badge.ellipsis",
-                            message: note,
-                            style: .warning
-                        )
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.bottom, Spacing.md)
-                    }
-
-                    if let visionSkipped = liveVisionSkipped {
-                        BrandBanner(
-                            icon: "text.magnifyingglass",
-                            message: "Names were not spell-checked against the program. "
-                                   + visionSkipped
-                                   + " Check performer names and handles carefully below.",
-                            style: .warning
-                        )
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.bottom, Spacing.md)
-                    }
-
-                    if let flagError = liveFlagsError {
-                        BrandBanner(
-                            icon: "exclamationmark.triangle",
-                            message: "Auto-flagging didn't run: \(flagError) The data was extracted, but Claude couldn't double-check it for issues. Review the sections below manually before continuing.",
-                            style: .error
-                        )
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.bottom, Spacing.md)
-                    }
+                    // Every notice this screen can show, in its own view taking
+                    // plain values, so the states that need a bad program to
+                    // reach can be rendered and measured (#396).
+                    OCRReviewNotices(
+                        detectedIssues: detectedIssues,
+                        partialProgramNotes: livePartialPrograms,
+                        visionSkippedMessage: liveVisionSkipped.map {
+                            OCRReviewReadiness.visionSkippedMessage($0)
+                        },
+                        flagErrorMessage: liveFlagsError.map {
+                            OCRReviewReadiness.flagErrorMessage($0)
+                        }
+                    )
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.bottom, Spacing.md)
 
                     if !flags.isEmpty {
                         FlagReviewSection(
@@ -145,15 +114,12 @@ struct OCRReviewView: View {
                         }
                     }
 
-                    HStack {
-                        Spacer()
-                        Button(confirmButtonLabel) {
-                            confirmAndAdvance()
-                        }
-                        .buttonStyle(BrandButtonStyle())
-                        .disabled(!unresolvedFlags.isEmpty)
-                        .help(confirmButtonHelp)
-                    }
+                    OCRConfirmBar(
+                        label: confirmButtonLabel,
+                        help: confirmButtonHelp,
+                        unresolvedFlagCount: unresolvedFlags.count,
+                        onConfirm: { confirmAndAdvance() }
+                    )
                     .padding(Spacing.xl)
                 }
             }
@@ -229,14 +195,8 @@ struct OCRReviewView: View {
     }
 
     private var detectedIssues: [String]? {
-        var issues: [String] = []
-        if ocr.performers.isEmpty {
-            issues.append("No performers found. Check that the cast list is in your photos.")
-        }
-        if ocr.pieces.isEmpty {
-            issues.append("No works or program listing found.")
-        }
-        return issues.isEmpty ? nil : issues
+        OCRReviewReadiness.detectedIssues(performerCount: ocr.performers.count,
+                                          pieceCount: ocr.pieces.count)
     }
 
     @ViewBuilder
@@ -285,19 +245,13 @@ struct OCRReviewView: View {
     // MARK: - Flag handling
 
     private var confirmButtonLabel: String {
-        if !unresolvedFlags.isEmpty {
-            return "Resolve \(unresolvedFlags.count) issue\(unresolvedFlags.count == 1 ? "" : "s")"
-        }
-        return detectedIssues != nil ? "Continue Anyway" : "Looks Good"
+        OCRReviewReadiness.confirmLabel(unresolvedFlagCount: unresolvedFlags.count,
+                                        hasDetectedIssues: detectedIssues != nil)
     }
 
     private var confirmButtonHelp: String {
-        if !unresolvedFlags.isEmpty {
-            return "Apply or dismiss each flagged issue above before continuing."
-        }
-        return detectedIssues != nil
-            ? "Missing data may produce generic captions. You can add performers or works now, or revise captions after generation."
-            : ""
+        OCRReviewReadiness.confirmHelp(unresolvedFlagCount: unresolvedFlags.count,
+                                       hasDetectedIssues: detectedIssues != nil)
     }
 
     private func applyFlag(_ flag: OCRFlag, newValue: String) -> Bool {

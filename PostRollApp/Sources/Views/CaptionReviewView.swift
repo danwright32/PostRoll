@@ -169,15 +169,9 @@ struct CaptionReviewView: View {
                     .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.md)
 
-                    if result.errorCount > 0 {
-                        BrandBanner(
-                            icon: "exclamationmark.triangle",
-                            message: "\(result.errorCount) day\(result.errorCount == 1 ? "" : "s") failed to generate. You can re-run generation from the previous step.",
-                            style: .error
-                        )
+                    CaptionReviewNotices(failedDayCount: result.errorCount)
                         .padding(.horizontal, Spacing.xl)
                         .padding(.bottom, Spacing.md)
-                    }
 
                     ForEach(daysWithContent, id: \.self) { day in
                         let section = ReviewSection.caption(day)
@@ -329,35 +323,25 @@ struct CaptionReviewView: View {
                         .disabled(isRegenerating)
                     }
 
-                if let error = regenerateError {
-                    BrandBanner(icon: "exclamationmark.triangle", message: error, style: .error)
-                        .padding(.horizontal, Spacing.xl)
-                }
-
-                // Days that generated but left a photo out because the file
-                // would not open (#228). Not an error style: these captions are
-                // usable, and the day is finished. Without this the skip is
-                // invisible, because a short alt text list looks like an
-                // ordinary one.
-                ForEach(daysWithSkippedPhotos, id: \.self) { day in
-                    if let message = event.weekResult?.warningMessage(for: day) {
-                        BrandBanner(icon: "photo.badge.exclamationmark",
-                                    message: "\(day.displayName): \(message)")
-                            .padding(.horizontal, Spacing.xl)
+                // Every notice this screen shows below the content, in its own
+                // view taking plain values, so the days that need a moved file or
+                // a dead run to reach can be rendered and measured (#396).
+                CaptionReviewNotices(
+                    regenerateError: regenerateError,
+                    skippedPhotoNotices: daysWithSkippedPhotos.compactMap { day in
+                        event.weekResult?.warningMessage(for: day).map {
+                            CaptionReviewDayNotice(id: day.rawValue,
+                                                   message: "\(day.displayName): \($0)")
+                        }
+                    },
+                    mediaWarnings: DayName.allCases.compactMap { day in
+                        event.mediaWarnings[day.rawValue].map {
+                            CaptionReviewDayNotice(id: day.rawValue,
+                                                   message: "\(day.displayName): \($0)")
+                        }
                     }
-                }
-
-                // The same shape for the graphics step: a day whose assets are
-                // finished and whose OPTIONAL input had moved. Not an error
-                // style, because the day rendered; before #265 this arrived as
-                // "regeneration failed", which it had not.
-                ForEach(DayName.allCases, id: \.self) { day in
-                    if let message = event.mediaWarnings[day.rawValue] {
-                        BrandBanner(icon: "photo.badge.exclamationmark",
-                                    message: "\(day.displayName): \(message)")
-                            .padding(.horizontal, Spacing.xl)
-                    }
-                }
+                )
+                .padding(.horizontal, Spacing.xl)
 
                 if isRegenerating {
                     // Names the day or blog pass the run is actually on, so a
@@ -377,57 +361,16 @@ struct CaptionReviewView: View {
                         .padding(Spacing.xl)
                 } else if let waiting = ExportReadiness.blockedReason(
                             regeneratingDays: regeneratingDays) {
-                    // A per-day rebuild is the longest running of these and was
-                    // the one the bar did not consult, so Approve and Export
-                    // stayed live and copied the pre-rebuild file (#89).
-                    HStack(spacing: Spacing.sm) {
-                        ProgressView().controlSize(.small).tint(Color.roseGold)
-                        Text("\(waiting)…")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color.warmDark)
-                        Text("Exporting now would copy the previous version.")
-                            .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
-                    }
-                    .padding(Spacing.xl)
+                    // The two states that are not a LongRunIndicator are their own
+                    // view taking plain values (#396). The indicator branches
+                    // above and below already are one, with their own tests.
+                    actionBar(.waitingOnRebuild(reason: waiting))
                 } else if isAnalyzingEdits {
                     LongRunIndicator(label: "Reviewing your edits…",
                                      startedAt: analyzeStartedAt)
                         .padding(Spacing.xl)
                 } else {
-                    VStack(spacing: 0) {
-                        // A preview run that died used to be indistinguishable
-                        // from one that never started: the error went into a
-                        // `try?` and the screen just showed no graphics (#75).
-                        if let graphicsError = graphics.failure(for: event.id) {
-                            BrandBanner(
-                                icon: "exclamationmark.triangle",
-                                message: "The story graphics couldn't be generated: \(graphicsError)",
-                                style: .error,
-                                actions: [
-                                    BrandBannerAction(label: "Try again", action: { generateGraphics() }),
-                                    BrandBannerAction(label: "Dismiss", action: { graphics.clearFailure(for: event.id) }),
-                                ]
-                            )
-                            .padding(.horizontal, Spacing.xl)
-                            .padding(.bottom, Spacing.sm)
-                        }
-                        HStack {
-                            // Quieter than the filled primary beside it, which is
-                            // the decision on this screen, but still visibly a
-                            // control: it throws away every edit and pays for a
-                            // fresh week. The rule is written down beside
-                            // HaltChoiceEmphasis in HaltedWeekBody.swift (#398).
-                            Button("Regenerate All…") { showRegenerateConfirm = true }
-                                .buttonStyle(.plain)
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.roseGold)
-                            Spacer()
-                            Button("Approve & Export") { advance() }
-                                .buttonStyle(BrandButtonStyle())
-                        }
-                        .padding(Spacing.xl)
-                    }
+                    actionBar(.ready(graphicsError: graphics.failure(for: event.id)))
                 }
             }
             }
@@ -524,6 +467,18 @@ struct CaptionReviewView: View {
     // MARK: - Bindings
 
     /// A day whose feed is a carousel + editable collage story: Wednesday always,
+    /// The bottom bar, wired to this screen's behaviour. One call site per state
+    /// rather than a copy of the closures each time.
+    private func actionBar(_ activity: CaptionReviewActivity) -> some View {
+        CaptionReviewActionBar(
+            activity: activity,
+            onRetryGraphics: { generateGraphics() },
+            onDismissGraphicsError: { graphics.clearFailure(for: event.id) },
+            onRegenerateAll: { showRegenerateConfirm = true },
+            onApprove: { advance() }
+        )
+    }
+
     /// plus Sunday/Monday under a balanced layout. Uses this event's effective
     /// preset so a per-event override is respected.
     private func isCollageDay(_ day: DayName) -> Bool {

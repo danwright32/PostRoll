@@ -172,37 +172,17 @@ struct PhotoAssignmentView: View {
                     .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.md)
 
-                BrandBanner(
-                    icon: "rectangle.3.group",
-                    message: "Drop photos into each posting day, or import a whole folder organized by day subfolders (named sunday–friday or day 1–day 6). Wednesday and Thursday show a crop button on each photo, and Wednesday photos also have a tag button to note who's in each carousel slide."
-                )
-                .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.sm)
-
-                if let msg = importResultMessage {
-                    BrandBanner(
-                        icon: importResultIsError ? "exclamationmark.circle" : "checkmark.circle",
-                        message: msg,
-                        style: importResultIsError ? .error : .info
-                    )
-                    .padding(.horizontal, Spacing.xl)
-                    .padding(.bottom, Spacing.sm)
-                }
-
-                if !missingMedia.isEmpty {
-                    MissingPhotosBanner(
-                        photoCount: missingMedia.photos.count,
-                        standaloneNames: missingMedia.standalone.map(\.displayName),
-                        onLocate: locateMissingPhotos,
-                        onRemove: removeMissingPhotos
-                    )
-                    .padding(.horizontal, Spacing.xl)
-                    .padding(.bottom, Spacing.sm)
-                }
-
-                HStack {
-                    Spacer()
-                    Button("Import from folder…") {
+                // Every notice this screen shows, in its own view taking plain
+                // values, so the missing-media state can be rendered without a
+                // photo actually going missing off disk first (#396).
+                PhotoAssignmentNotices(
+                    importResult: importResultMessage,
+                    importFailed: importResultIsError,
+                    missingPhotoCount: missingMedia.photos.count,
+                    missingStandaloneNames: missingMedia.standalone.map(\.displayName),
+                    onLocateMissing: locateMissingPhotos,
+                    onRemoveMissing: removeMissingPhotos,
+                    onImportFolder: {
                         importResultMessage = nil
                         let panel = NSOpenPanel()
                         panel.canChooseFiles = false
@@ -213,10 +193,7 @@ struct PhotoAssignmentView: View {
                             importFromFolder(url)
                         }
                     }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.roseGold)
-                }
+                )
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.lg)
 
@@ -324,20 +301,8 @@ struct PhotoAssignmentView: View {
 
                 }
 
-                VStack(alignment: .trailing, spacing: Spacing.sm) {
-                    if totalPhotos == 0 {
-                        Text("Add photos to at least one day to continue.")
-                            .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
-                    }
-                    HStack {
-                        Spacer()
-                        Button("Continue to Generation") { advance() }
-                            .buttonStyle(BrandButtonStyle())
-                            .disabled(totalPhotos == 0)
-                    }
-                }
-                .padding(Spacing.xl)
+                PhotoAssignmentContinueBar(totalPhotos: totalPhotos,
+                                           onContinue: { advance() })
             }
         }
         .background(Color.cream)
@@ -2342,44 +2307,6 @@ private struct PhotoThumb: View {
             image = loaded
             loadFailed = (loaded == nil)
         }
-    }
-}
-
-/// Banner shown when an event references photos whose files are gone, offering
-/// to drop the dead references in one click.
-private struct MissingPhotosBanner: View {
-    let photoCount: Int
-    /// Named standalone files (e.g. "Tuesday B&W photo"), so the banner points
-    /// at the control to fix rather than only counting files.
-    var standaloneNames: [String] = []
-    let onLocate: () -> Void
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: Spacing.sm) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(Color.roseGold)
-            Text(MissingMediaBannerText.message(photoCount: photoCount, standaloneNames: standaloneNames))
-                .font(.system(size: 11))
-                .foregroundStyle(Color.warmDark)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            Button("Locate…", action: onLocate)
-                .buttonStyle(.plain)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.roseGold)
-            Text("·").foregroundStyle(Color.warmMid.opacity(0.5))
-            Button("Remove missing", action: onRemove)
-                .buttonStyle(BrandOutlineButtonStyle())
-        }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, 9)
-        .background(
-            RoundedRectangle(cornerRadius: Radius.sm)
-                .fill(Color.roseGold.opacity(0.08))
-                .overlay(RoundedRectangle(cornerRadius: Radius.sm).strokeBorder(Color.roseGold.opacity(0.25), lineWidth: 0.5))
-        )
     }
 }
 

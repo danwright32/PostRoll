@@ -61,6 +61,14 @@ targets:
       - path: Sources/Views/ExportDoneSummary.swift
       - path: Sources/Views/SharedChrome.swift
       - path: Sources/Views/HaltedWeekBody.swift
+      - path: Sources/Views/GenerationScreenBodies.swift
+      - path: Sources/Services/GenerationFailureText.swift
+      - path: Sources/Services/GenerationRunPlan.swift
+      - path: Sources/Views/CaptionReviewBodies.swift
+      - path: Sources/Views/OCRReviewBodies.swift
+      - path: Sources/Services/OCRReviewReadiness.swift
+      - path: Sources/Views/PhotoAssignmentBodies.swift
+      - path: Sources/Services/Sentence.swift
       - path: Sources/Services/ManifestDay.swift
       - path: Sources/Services/StageNavigation.swift
       - path: Sources/Services/LayoutSidecar.swift

@@ -41,7 +41,10 @@ enum RunOutcomeNotice {
         guard let week, week.hasUnrecognisedFailures else { return nil }
         let count = week.unrecognisedFailures.count
         let subject = count == 1 ? "one failure" : "\(count) failures"
-        return "This run hit \(subject) the app did not recognise. They are "
+        // The pronoun agrees with the count. Rendering this screen showed the
+        // singular reading "one failure ... They are recorded" (#396).
+        let pronoun = count == 1 ? "It is" : "They are"
+        return "This run hit \(subject) the app did not recognise. \(pronoun) "
              + "recorded word for word in the log. If the week stopped early or "
              + "behaved oddly, that text is what is needed to fix it."
     }
