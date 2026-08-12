@@ -18,10 +18,17 @@ ships in the only honest shape available.
   blip than a cap.
 
 `CALIBRATED` stays False until a real cap has been seen and the patterns are
-checked against it. Activation is tracked on #258 so the observe-only state
-cannot quietly become permanent. (#211 was split; #258 is the half that waits
-on observing a real cap, and it is also where the "warn before the wall"
-threshold gets chosen, since there is no honest basis for one until then.)
+checked against it.
+
+The observe-only state reports ITSELF, on every run, through
+`calibration_notice`. It used to be tracked by an open issue whose only job was
+to stay open (#258, split from #211), which is a poor place for it: an issue is
+seen only by somebody already reading the backlog, while this is seen by whoever
+runs a week. #258 was closed once the notice existed.
+
+When a real cap is finally seen, two things are decided together: the patterns
+are checked against its actual wording, and the "warn before the wall"
+threshold gets chosen, since there is no honest basis for one until then.
 """
 
 from __future__ import annotations
@@ -140,6 +147,35 @@ def unrecognised(path: Path | str | None = None) -> list[str]:
         text = entry.get("text")
         out.append(text if isinstance(text, str) else line)
     return out
+
+
+def calibration_notice() -> str | None:
+    """That this guard is still a hypothesis, or None once it is not.
+
+    Said on every run, whether or not anything has been recorded. That is the
+    whole point: `report_unrecognised` below speaks only once a failure has
+    landed in the file, so before any cap is ever hit the dormant state is
+    completely silent, which is exactly when it is easiest to forget it is
+    dormant.
+
+    This used to be tracked by an open issue whose only job was to stay open
+    (#258). An issue is a poor place for it, because it is seen only by
+    somebody already looking at the backlog, while this is seen by whoever runs
+    a week. The state now reports itself and the issue was closed.
+
+    It names the CONSEQUENCE rather than the word "uncalibrated", which tells a
+    reader nothing: what matters is that an unknown failure will not stop the
+    week.
+    """
+    if CALIBRATED:
+        return None
+    return (
+        "The subscription cap patterns have never been checked against a real "
+        "cap, so they are a hypothesis. A failure matching none of them will "
+        "NOT halt the week, it is recorded verbatim instead. If a week ever "
+        "stops making sense partway through, read that record before assuming "
+        "the run was fine."
+    )
 
 
 def report_unrecognised(path: Path | str | None = None) -> str | None:

@@ -414,6 +414,13 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
     # Said on the way out, every run, while the file has anything in it (#217).
     if (report := cap_signals.report_unrecognised()):
         print(f"[generate_week] {report}", file=sys.stderr, flush=True)
+    # And every run regardless, while the cap guard is still a hypothesis. The
+    # report above speaks only once a failure has been recorded, so before any
+    # cap is ever hit the dormant state is silent. This used to be tracked by an
+    # open issue whose only job was to stay open (#258); the state reports
+    # itself now.
+    if (notice := cap_signals.calibration_notice()):
+        print(f"[generate_week] {notice}", file=sys.stderr, flush=True)
     print(f"[generate_week] output written to {output_path}", flush=True)
 
     # Write per-phase timing data for the Swift layer to consume
