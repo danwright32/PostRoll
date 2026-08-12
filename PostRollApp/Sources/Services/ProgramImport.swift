@@ -62,10 +62,22 @@ enum ProgramImport {
             case .couldNotRenderPage(let page):
                 return "Page \(page) couldn't be turned into an image."
             case .couldNotWritePage(let page, let reason):
-                return "Page \(page) couldn't be saved: \(reason)"
+                return "Page \(page) couldn't be saved: \(Failure.sentence(reason))"
             case .couldNotStoreFile(let reason):
-                return "The file couldn't be copied into PostRoll's program folder: \(reason)"
+                return "The file couldn't be copied into PostRoll's program folder: "
+                    + Failure.sentence(reason)
             }
+        }
+
+        /// Closes a reason handed to us by the system, which carries no
+        /// punctuation of its own ("No space left on device"). Without this the
+        /// next sentence collides with it and the banner reads "...No space
+        /// left on device None of the 9 pages...", which is only visible once
+        /// the thing is rendered (#389).
+        private static func sentence(_ reason: String) -> String {
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let last = trimmed.last else { return trimmed }
+            return ".?!".contains(last) ? trimmed : trimmed + "."
         }
     }
 
