@@ -80,7 +80,7 @@ struct SettingsView: View {
             } header: {
                 Text("Anthropic API Key")
             } footer: {
-                Text("Used to call Claude directly, bypassing the CLI for faster generation. Get a key at console.anthropic.com.")
+                Text(.init(SettingsCopy.apiKeyFooter))
                     .foregroundStyle(.secondary)
                     .font(.system(size: 11))
             }
