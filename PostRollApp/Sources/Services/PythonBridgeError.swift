@@ -12,8 +12,18 @@ enum PythonBridgeError: LocalizedError {
             return Self.humanise(stderr: stderr)
         case .outputMissing:
             return "Generation finished but produced no output. Check that the program PDF has readable text and try again."
-        case .invalidOutput:
-            return "Generated output couldn't be read. Try regenerating. If it keeps failing, check \(AppPaths.logsDirDisplayPath)."
+        case .invalidOutput(let reason):
+            // Every call site writes a reason and this switch used to discard
+            // all of them, so "No OCR result. Complete the OCR step first."
+            // and "Cover regeneration did not produce a cover path." arrived
+            // as the same sentence, and the one naming the step to go back to
+            // was the one that never showed up (#365).
+            let detail = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            let whereToLook = "If it keeps failing, check \(AppPaths.logsDirDisplayPath)."
+            guard !detail.isEmpty else {
+                return "Generated output couldn't be read. Try regenerating. \(whereToLook)"
+            }
+            return "\(detail)\n\n\(whereToLook)"
         case .timedOut(let seconds):
             return "The operation was still running after \(Int(seconds / 60)) minutes and was stopped. Check your internet connection and try again."
         }
