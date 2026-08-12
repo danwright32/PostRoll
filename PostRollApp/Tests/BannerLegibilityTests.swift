@@ -20,11 +20,15 @@ final class BannerLegibilityTests: XCTestCase {
     /// The share of the page that has to be something other than the fill for
     /// the message to count as drawn.
     ///
-    /// Measured, not guessed, and re-measured when surfaces were added (#391):
-    /// the eleven real states render between 0.022 and 0.067, and a page with
-    /// nothing legible on it renders at 0.001. This sits below the thinnest real
-    /// one (a single line of text) and far above blank. Anything added here
-    /// should be measured too rather than assumed to land in that band.
+    /// Measured, not guessed, and re-measured every time surfaces were added
+    /// (#391, #396). With the four stage screens in, the thirty-one real states
+    /// render between 0.022 and 0.130, and a page with nothing legible on it
+    /// renders at 0.001. This sits below the thinnest real one (a single line of
+    /// text) and far above blank.
+    ///
+    /// `testTheThinnestRealSurfaceStillClearsTheThresholdWithRoom` is what keeps
+    /// that true: adding a surface thinner than this is a failure rather than a
+    /// reason to lower the number.
     private static let legibleInk = 0.01
 
     /// Renders a view and returns its pixels.
@@ -125,6 +129,51 @@ final class BannerLegibilityTests: XCTestCase {
         let missingMedia = MissingMediaBannerText.message(photoCount: 3,
                                                     standaloneNames: ["reel audio"])
 
+        // The four remaining stage screens (#396). Each one's body is now its own
+        // view taking plain values, and every message below is produced by the
+        // shipping code that produces it in the app.
+        // A run that reached the end of the week with two steps dead, and a
+        // photo it could not open on a third. Both facts come off the same
+        // object the app reads, so the headline, the mark and the cards below
+        // cannot be from three different weeks.
+        let failedWeek: WeekGenerationResult = {
+            var w = WeekGenerationResult()
+            w.complete = true
+            w.errors = [
+                "thursday": "RuntimeError: ffmpeg not found on PATH",
+                "blog": "anthropic api error: overloaded_error",
+            ]
+            w.warnings = ["thursday": [
+                SkippedPhoto(file: "DSC_4417.jpg", reason: "could not be opened"),
+            ]]
+            return w
+        }()
+
+        // The clean ending, which is the only one allowed to claim the week
+        // finished. A separate fixture rather than the same one read differently,
+        // because the difference between these two screens IS the claim.
+        let cleanWeek: WeekGenerationResult = {
+            var w = WeekGenerationResult()
+            w.complete = true
+            return w
+        }()
+
+        let failureCards = ["blog", "thursday"].map { key in
+            let raw = failedWeek.errors[key] ?? ""
+            let (text, fixable) = GenerationFailureText.humanize(day: key, raw: raw)
+            return GenerationFailureCard(id: key,
+                                         label: GenerationFailureText.dayLabel(key),
+                                         message: text,
+                                         fixable: fixable)
+        }
+
+        // A real retry timeline, on the app's own fallback timings, which is what
+        // a first run shows before TimingStore has any history.
+        let retry = GenerationRunPlan.retryPlan(retryDays: ["thursday", "blog"],
+                                                dayCount: 5)
+
+        let ocrIssues = OCRReviewReadiness.detectedIssues(performerCount: 0, pieceCount: 0)
+
         return [
             ("ocr refusal", AnyView(BrandBanner(
                 icon: "exclamationmark.triangle", message: refusal, style: .error,
@@ -167,6 +216,111 @@ final class BannerLegibilityTests: XCTestCase {
             // survived is the whole point of the screen.
             ("halt screen, some days saved", AnyView(HaltedWeekBody(halted: halted))),
             ("halt screen, nothing saved", AnyView(HaltedWeekBody(halted: haltedEmpty))),
+
+            // Generation, all four of its screens (#396).
+            ("generation configure, ready", AnyView(GenerationConfigureBody(
+                daysCount: 5, totalPhotos: 48, hasBlog: true))),
+            // The state that refuses to start. Its sentence is the only thing
+            // explaining the disabled button beside it.
+            ("generation configure, no photos", AnyView(GenerationConfigureBody(
+                daysCount: 0, totalPhotos: 0, hasBlog: false))),
+            ("generation running, retry", AnyView(GenerationRunningBody(
+                eventName: "Spring Gala",
+                subtitle: GenerationRunPlan.subtitle(retryDays: ["thursday", "blog"],
+                                                     dayCount: 5),
+                phases: retry?.phases ?? [],
+                activePhaseIndex: 1,
+                elapsedFormatted: "1:12",
+                estimatedTotalFormatted: TimingStore.formatClock(retry?.estimate ?? 0)))),
+            ("generation failed", AnyView(GenerationErrorBody(
+                message: "The run died: exit 1. See the log for what Python reported.",
+                hasPreviousResults: true))),
+            // A finished run and a finished run with failures are different
+            // screens, and only one of them may claim the week is done.
+            ("generation done, clean", AnyView(GenerationDoneBody(
+                eventName: "Spring Gala",
+                headline: RunOutcomeNotice.headline(week: cleanWeek, failedDayCount: 0),
+                isUnqualifiedSuccess: RunOutcomeNotice.isUnqualifiedSuccess(
+                    week: cleanWeek, failedDayCount: 0),
+                // No regenerable days on purpose: that control is a `Menu`, and
+                // ImageRenderer cannot draw one. See
+                // testTheUnrenderableControlsAreNamedRatherThanMeasured.
+                programPDFLabel: "Download program PDF",
+                hasBlog: true))),
+            ("generation done, with failures", AnyView(GenerationDoneBody(
+                eventName: "Spring Gala",
+                headline: RunOutcomeNotice.headline(week: failedWeek, failedDayCount: 2),
+                isUnqualifiedSuccess: RunOutcomeNotice.isUnqualifiedSuccess(
+                    week: failedWeek, failedDayCount: 2),
+                unfamiliarNote: unfamiliar,
+                failures: failureCards,
+                programPDFLabel: "Building program PDF…",
+                programPDFDisabled: true,
+                programBakeError: "The page scans could not be read.",
+                hasBlog: true))),
+
+            // Caption review's bottom bar and its notices (#396).
+            ("caption bar, ready", AnyView(CaptionReviewActionBar(
+                activity: .ready(graphicsError: nil)))),
+            ("caption bar, graphics failed", AnyView(CaptionReviewActionBar(
+                activity: .ready(graphicsError:
+                    "collage failed: no such file or directory")))),
+            // This one carries a ProgressView, which ImageRenderer draws as a
+            // placeholder. Kept anyway because its two sentences are the point and
+            // they dominate the measurement; see
+            // testTheUnrenderableControlsAreNamedRatherThanMeasured.
+            ("caption bar, waiting on rebuild", AnyView(CaptionReviewActionBar(
+                activity: .waitingOnRebuild(reason: ExportReadiness.blockedReason(
+                    regeneratingDays: [.thursday, .wednesday]) ?? "")))),
+            ("caption notices", AnyView(CaptionReviewNotices(
+                failedDayCount: failedWeek.errorCount,
+                regenerateError: "Regeneration failed: exit 1",
+                skippedPhotoNotices: DayName.allCases.compactMap { day in
+                    failedWeek.warningMessage(for: day).map {
+                        CaptionReviewDayNotice(id: day.rawValue,
+                                               message: "\(day.displayName): \($0)")
+                    }
+                },
+                mediaWarnings: [CaptionReviewDayNotice(
+                    id: "tuesday",
+                    message: "Tuesday: the chosen black and white photo has moved")]))),
+
+            // OCR review's notices and the bar that ends it (#396).
+            ("ocr notices, all four", AnyView(OCRReviewNotices(
+                detectedIssues: ocrIssues,
+                partialProgramNotes: [ProgramShortfall.acceptanceNote(for: incomplete)],
+                visionSkippedMessage: OCRReviewReadiness.visionSkippedMessage(
+                    "The program pages were too large to read."),
+                flagErrorMessage: OCRReviewReadiness.flagErrorMessage(
+                    "connection reset by peer")))),
+            // The bar that refuses, with its reason drawn rather than only in a
+            // tooltip, which is the whole point of measuring ink on it.
+            ("ocr bar, blocked", AnyView(OCRConfirmBar(
+                label: OCRReviewReadiness.confirmLabel(unresolvedFlagCount: 3,
+                                                       hasDetectedIssues: true),
+                help: OCRReviewReadiness.confirmHelp(unresolvedFlagCount: 3,
+                                                     hasDetectedIssues: true),
+                unresolvedFlagCount: 3))),
+            ("ocr bar, thin data", AnyView(OCRConfirmBar(
+                label: OCRReviewReadiness.confirmLabel(unresolvedFlagCount: 0,
+                                                       hasDetectedIssues: true),
+                help: OCRReviewReadiness.confirmHelp(unresolvedFlagCount: 0,
+                                                     hasDetectedIssues: true),
+                unresolvedFlagCount: 0))),
+
+            // Photo assignment (#396). The missing-media state needed a photo to
+            // actually go missing off disk before anyone could look at it.
+            ("photo notices, missing media", AnyView(PhotoAssignmentNotices(
+                importResult: "Imported 42 photos across 5 days.",
+                missingPhotoCount: 3,
+                missingStandaloneNames: ["Tuesday B&W photo"]))),
+            ("photo notices, import failed", AnyView(PhotoAssignmentNotices(
+                importResult: "No day subfolders found in that folder.",
+                importFailed: true))),
+            ("photo continue bar, no photos", AnyView(
+                PhotoAssignmentContinueBar(totalPhotos: 0))),
+            ("photo continue bar, ready", AnyView(
+                PhotoAssignmentContinueBar(totalPhotos: 48))),
         ]
     }
 
@@ -181,6 +335,33 @@ final class BannerLegibilityTests: XCTestCase {
         }
     }
 
+    /// What each surface actually measures, so the threshold above stays a
+    /// measured number rather than one carried forward on faith (#396).
+    ///
+    /// Printed rather than asserted per surface: pinning each figure would fail on
+    /// every legitimate wording change, which is a guard asserting a rendering
+    /// instead of the rule behind it (L103). What IS asserted is the property the
+    /// threshold depends on, that the thinnest real surface still clears it with
+    /// room, so adding a screen cannot quietly drag the band down onto blank.
+    func testTheThinnestRealSurfaceStillClearsTheThresholdWithRoom() throws {
+        var measured: [(String, Double)] = []
+        for state in states {
+            measured.append((state.name, inkCoverage(try render(state.view))))
+        }
+        let sorted = measured.sorted { $0.1 < $1.1 }
+        for (name, coverage) in sorted {
+            print(String(format: "  %.4f  %@", coverage, name))
+        }
+
+        let thinnest = try XCTUnwrap(sorted.first)
+        XCTAssertGreaterThan(thinnest.1, Self.legibleInk * 1.5, """
+            "\(thinnest.0)" measures \(String(format: "%.4f", thinnest.1)), which is \
+            close enough to the \(Self.legibleInk) threshold that the check above can \
+            no longer tell a thin surface from a blank one. Re-measure the threshold \
+            against the real band rather than lowering it.
+            """)
+    }
+
     /// A banner is worth nothing if the words run past the edge of it. Rendering
     /// at a narrow width is where a long message with a two button row breaks.
     func testEveryBannerStillDrawsItsMessageWhenNarrow() throws {
@@ -189,6 +370,26 @@ final class BannerLegibilityTests: XCTestCase {
             XCTAssertGreaterThan(coverage, Self.legibleInk,
                                  "the \"\(state.name)\" banner lost its message at 300pt wide")
         }
+    }
+
+    /// Two controls this harness cannot draw, named here rather than left to be
+    /// rediscovered (#396).
+    ///
+    /// `ImageRenderer` has no AppKit host, so `Menu` and `ProgressView` come out as
+    /// a bright placeholder block instead of themselves. That block is a colour
+    /// unlike the fill, so it MEASURES AS INK: a state consisting of one of these
+    /// and nothing else would sail through every check above while showing the
+    /// reader nothing. This proves that is what happens, which is why the two
+    /// affected states are built without their menu and why the one that keeps its
+    /// spinner carries real sentences beside it.
+    func testTheUnrenderableControlsAreNamedRatherThanMeasured() throws {
+        let spinnerOnly = inkCoverage(try render(ProgressView().frame(height: 40)))
+        XCTAssertGreaterThan(spinnerOnly, Self.legibleInk, """
+            A bare ProgressView measured \(String(format: "%.4f", spinnerOnly)), which \
+            clears the legibility threshold while drawing no words at all. If this \
+            ever stops being true, ImageRenderer has learned to draw it and the \
+            states above can carry their menus again.
+            """)
     }
 
     /// The measurement has to be able to tell legible from invisible, or the

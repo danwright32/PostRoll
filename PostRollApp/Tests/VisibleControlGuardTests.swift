@@ -21,13 +21,15 @@ final class VisibleControlGuardTests: XCTestCase {
 
     /// `file|button label` for every action that is the decision on its screen.
     /// None of these may be drawn in the body text colour.
+    /// The `*Bodies` files are where the presentational half of each screen now
+    /// lives (#396), which is also where these controls are drawn.
     private static let decisions = [
-        "AssetGenerationView.swift|Use previous results",
-        "AssetGenerationView.swift|Regenerate all",
+        "GenerationScreenBodies.swift|Use previous results",
+        "GenerationScreenBodies.swift|Regenerate all",
         "CaptionReviewView.swift|Re-cut with AI",
         "ExportView.swift|Skip, text export only",
         "OCRReviewView.swift|Keep OCR Text",
-        "PhotoAssignmentView.swift|Remove missing",
+        "PhotoAssignmentBodies.swift|Remove missing",
         "ProgramUploadView.swift|No program",
     ]
 
@@ -45,8 +47,8 @@ final class VisibleControlGuardTests: XCTestCase {
     /// The app's established quiet-but-visible treatment is the rose accent,
     /// which is what every sibling of these two already wears.
     private static let paidActions = [
-        "AssetGenerationView.swift|Regenerate blog post",
-        "CaptionReviewView.swift|Regenerate All…",
+        "GenerationScreenBodies.swift|Regenerate blog post",
+        "CaptionReviewBodies.swift|Regenerate All…",
     ]
 
     /// Colours that are the same as ordinary text, so a control wearing one is

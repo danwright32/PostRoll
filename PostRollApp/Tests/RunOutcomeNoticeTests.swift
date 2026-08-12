@@ -69,6 +69,20 @@ final class RunOutcomeNoticeTests: XCTestCase {
         XCTAssertTrue(note.contains("one failure"), note)
     }
 
+    /// Found by rendering the done screen for the first time (#396): the count was
+    /// made singular and the sentence after it was not, so a run with one
+    /// unfamiliar failure read "one failure ... They are recorded".
+    func testTheSentenceAfterTheCountAgreesWithIt() throws {
+        let one = try XCTUnwrap(
+            RunOutcomeNotice.unfamiliarFailureNote(week: week(unrecognised: ["x"])))
+        XCTAssertTrue(one.contains("It is recorded"), one)
+        XCTAssertFalse(one.contains("They are"), one)
+
+        let several = try XCTUnwrap(
+            RunOutcomeNotice.unfamiliarFailureNote(week: week(unrecognised: ["x", "y"])))
+        XCTAssertTrue(several.contains("They are recorded"), several)
+    }
+
     func testSeveralUnfamiliarFailuresAreCounted() throws {
         let note = try XCTUnwrap(RunOutcomeNotice.unfamiliarFailureNote(
             week: week(unrecognised: ["a", "b", "c"])))

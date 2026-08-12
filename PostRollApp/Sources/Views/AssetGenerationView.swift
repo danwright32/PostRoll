@@ -48,14 +48,16 @@ struct AssetGenerationView: View {
         genManager.run(for: event.id)?.elapsedSeconds ?? 0
     }
 
-    // Phase timeline — full run uses the rolling-window history from TimingStore;
-    // retries build a smaller, retry-specific timeline so the UI reflects reality.
-    private var scaledPhases: [(name: String, startsAt: Int)] {
-        retryPhases?.phases ?? TimingStore.shared.scaledGenerationPhases()
+    // Phase timeline: a full run uses the rolling window history from
+    // TimingStore, a retry builds a smaller timeline of its own. The arithmetic
+    // for both lives in GenerationRunPlan, where it can be tested (#396).
+    private var scaledPhases: [GenerationRunPlan.Phase] {
+        retryPlan?.phases ?? TimingStore.shared.scaledGenerationPhases()
+            .map { GenerationRunPlan.Phase(name: $0.name, startsAt: $0.startsAt) }
     }
 
     private var estimatedTotalFormatted: String {
-        if let retry = retryPhases {
+        if let retry = retryPlan {
             return TimingStore.formatClock(retry.estimate)
         }
         if let est = TimingStore.shared.generationEstimate {
@@ -64,88 +66,25 @@ struct AssetGenerationView: View {
         return "~6:00"
     }
 
-    /// Returns retry-specific phase timeline when `retryDays` is set. Caption and
-    /// blog means come from TimingStore if available; otherwise fall back to a
-    /// proportion of the full-run estimate.
-    private var retryPhases: (phases: [(name: String, startsAt: Int)], estimate: Double)? {
-        guard let retry = activeRetryDays else { return nil }
-
-        let fullEstimate = TimingStore.shared.generationEstimate ?? 360
-        let captionsMean = TimingStore.shared.captionsMean ?? (fullEstimate * 0.50)
-        let blogMean     = TimingStore.shared.blogMean     ?? (fullEstimate * 0.25)
-        let totalDayCount = max(1, daysWithPhotos.count)
-
-        let retryDayKeys = retry.subtracting(["blog"])
-        let hasBlog = retry.contains("blog")
-
-        let perDay = captionsMean / Double(totalDayCount)
-        let retryCaptionsTotal = perDay * Double(max(1, retryDayKeys.count))
-
-        var phases: [(name: String, startsAt: Int)] = []
-        var cursor = 0
-
-        if !retryDayKeys.isEmpty {
-            let sortedDayNames = DayName.allCases
-                .filter { retryDayKeys.contains($0.rawValue) }
-                .map { $0.displayName }
-            phases.append(("Re-reading photos", cursor))
-            cursor += 5
-            phases.append(("Writing \(joinNames(sortedDayNames)) captions", cursor))
-            cursor += Int(retryCaptionsTotal.rounded())
-        }
-
-        if hasBlog {
-            phases.append(("Drafting blog post", cursor))
-            cursor += Int(blogMean.rounded())
-        }
-
-        return (phases, Double(cursor))
+    /// The retry timeline, or nil for a full run. Timings come from TimingStore
+    /// here and are passed in, so the plan itself has no singleton to read.
+    private var retryPlan: (phases: [GenerationRunPlan.Phase], estimate: Double)? {
+        GenerationRunPlan.retryPlan(
+            retryDays: activeRetryDays,
+            dayCount: daysWithPhotos.count,
+            fullEstimate: TimingStore.shared.generationEstimate,
+            captionsMean: TimingStore.shared.captionsMean,
+            blogMean: TimingStore.shared.blogMean)
     }
 
-    private func joinNames(_ names: [String]) -> String {
-        switch names.count {
-        case 0: return ""
-        case 1: return names[0]
-        case 2: return "\(names[0]) + \(names[1])"
-        default:
-            let head = names.dropLast().joined(separator: ", ")
-            return "\(head) + \(names.last!)"
-        }
-    }
-
-    /// One-line subtitle shown above the phase timeline so the user knows whether
-    /// this is a full run or a partial retry.
     private var runningSubtitle: String {
-        guard let retry = activeRetryDays else {
-            let count = daysWithPhotos.count
-            return "Generating all \(count) \(count == 1 ? "day" : "days")"
-        }
-        let dayKeys = retry.subtracting(["blog"])
-        let dayNames = DayName.allCases
-            .filter { dayKeys.contains($0.rawValue) }
-            .map { $0.displayName }
-        let hasBlog = retry.contains("blog")
-
-        if dayNames.isEmpty && hasBlog { return "Retrying blog post" }
-        if hasBlog { return "Retrying \(joinNames(dayNames)) + blog" }
-        return "Retrying \(joinNames(dayNames))"
+        GenerationRunPlan.subtitle(retryDays: activeRetryDays,
+                                   dayCount: daysWithPhotos.count)
     }
 
     private var activePhaseIndex: Int {
-        var active = 0
-        for (i, phase) in scaledPhases.enumerated() {
-            if elapsedSeconds >= phase.startsAt { active = i }
-        }
-        return active
-    }
-
-    private func phaseState(for index: Int) -> PhaseState {
-        index < activePhaseIndex  ? .completed :
-        index == activePhaseIndex ? .active    : .pending
-    }
-
-    private var canGenerate: Bool {
-        totalPhotoCount > 0
+        GenerationRunPlan.activePhaseIndex(phases: scaledPhases,
+                                           elapsedSeconds: elapsedSeconds)
     }
 
     var daysWithPhotos: [DayName] {
@@ -215,29 +154,12 @@ struct AssetGenerationView: View {
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.md)
 
-                // Summary row
-                GenerationSummaryRow(
+                GenerationConfigureBody(
                     daysCount: daysWithPhotos.count,
                     totalPhotos: totalPhotoCount,
-                    hasBlog: !event.blogPhotoPaths.isEmpty
+                    hasBlog: !event.blogPhotoPaths.isEmpty,
+                    onGenerate: { startGeneration() }
                 )
-                .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.lg)
-
-                VStack(alignment: .trailing, spacing: Spacing.sm) {
-                    if !canGenerate {
-                        Text("Add photos to at least one day to generate.")
-                            .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
-                    }
-                    HStack {
-                        Spacer()
-                        Button("Generate All") { startGeneration() }
-                            .buttonStyle(BrandButtonStyle())
-                            .disabled(!canGenerate)
-                    }
-                }
-                .padding(Spacing.xl)
             }
         }
         .background(Color.cream)
@@ -245,60 +167,20 @@ struct AssetGenerationView: View {
 
     // MARK: - Running
 
-    private var phaseColumn: some View {
-        VStack(spacing: Spacing.lg) {
-            Text(event.name)
-                .font(.signPainter(28))
-                .foregroundStyle(Color.warmDark)
-
-            Text(runningSubtitle)
-                .font(.system(size: 11, weight: .medium))
-                .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
-                .textCase(.uppercase)
-
-            // Phase timeline
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(scaledPhases.enumerated()), id: \.offset) { i, phase in
-                    PhaseRow(name: phase.name, state: phaseState(for: i))
-                        .opacity(phasesVisible ? 1 : 0)
-                        .offset(y: phasesVisible ? 0 : 6)
-                        .animation(
-                            .spring(response: 0.4, dampingFraction: 0.82)
-                            .delay(Double(i) * 0.07),
-                            value: phasesVisible
-                        )
-                }
-            }
-            .animation(.easeOut(duration: 0.3), value: activePhaseIndex)
-            .padding(.vertical, Spacing.sm)
-
-            // Elapsed clock
-            HStack(spacing: Spacing.xs) {
-                Image(systemName: "timer")
-                    .font(.system(size: 11))
-                Text(elapsedFormatted)
-                    .font(.system(size: 12, weight: .medium).monospacedDigit())
-                Text("/ \(estimatedTotalFormatted)")
-                    .font(.light(12))
-            }
-            .foregroundStyle(Color.warmMid)
-
-            Button("Cancel") {
-                cancelGeneration()
-            }
-            .buttonStyle(.plain)
-            .font(.system(size: 11))
-            .foregroundStyle(Color.warmMid.opacity(0.7))
-            .padding(.top, Spacing.sm)
-        }
-    }
-
     private var runningView: some View {
         ZStack {
             Color.cream.ignoresSafeArea()
-            phaseColumn
-                .frame(maxWidth: 380)
+            GenerationRunningBody(
+                eventName: event.name,
+                subtitle: runningSubtitle,
+                phases: scaledPhases,
+                activePhaseIndex: activePhaseIndex,
+                elapsedFormatted: elapsedFormatted,
+                estimatedTotalFormatted: estimatedTotalFormatted,
+                revealed: phasesVisible,
+                onCancel: { cancelGeneration() }
+            )
+            .frame(maxWidth: 380)
         }
         .background(Color.cream)
         .onAppear { phasesVisible = true }
@@ -358,35 +240,28 @@ struct AssetGenerationView: View {
                 EventHeader(event: event, subtitle: "Generation Failed")
                     .padding([.horizontal, .top], Spacing.xl)
 
-                BrandBanner(icon: "exclamationmark.triangle", message: message, style: .error)
-                    .padding(.horizontal, Spacing.xl)
-
-                HStack(spacing: Spacing.md) {
-                    Spacer()
-                    if event.weekResult != nil {
-                        Button("Use previous results") {
-                            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                                genManager.clearOutcome(eventID: event.id)
-                            }
+                // Everything below the header is its own view taking plain
+                // values, so this screen can be rendered and measured outside
+                // the running app (#396).
+                GenerationErrorBody(
+                    message: message,
+                    hasPreviousResults: event.weekResult != nil,
+                    onUsePrevious: {
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                            genManager.clearOutcome(eventID: event.id)
                         }
-                        .buttonStyle(BrandOutlineButtonStyle())
-                    }
-                    Button("Fix inputs") {
+                    },
+                    onFixInputs: {
                         genManager.clearOutcome(eventID: event.id)
                         goFixInputs()
-                    }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.roseGold)
-                    Button("Try Again") {
+                    },
+                    onTryAgain: {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
                             forceConfigure = true
                             genManager.clearOutcome(eventID: event.id)
                         }
                     }
-                    .buttonStyle(BrandButtonStyle())
-                }
-                .padding(Spacing.xl)
+                )
             }
         }
         .background(Color.cream)
@@ -445,114 +320,18 @@ struct AssetGenerationView: View {
         key.capitalized
     }
 
-    private func failedDayLabel(_ key: String) -> String {
-        switch key {
-        case "blog": return "Blog post"
-        case PreviewMergePolicy.graphicsRunKey: return "Visual assets"
-        default: return key.capitalized
-        }
-    }
-
-    private var failedDaysSummary: String {
-        let labels = failedDayKeys.map { failedDayLabel($0) }
-        switch labels.count {
-        case 0: return ""
-        case 1: return labels[0]
-        case 2: return "\(labels[0]) and \(labels[1])"
-        default:
-            let allButLast = labels.dropLast().joined(separator: ", ")
-            return "\(allButLast), and \(labels.last!)"
-        }
-    }
-
-    /// Pick an actionable summary for a Python-side error and decide whether
-    /// the photographer can resolve it by re-editing inputs. The displayed
-    /// message always includes the raw error so Dan can see what actually
-    /// happened — the summary is a hint, not a replacement.
-    private func humanizeError(day: String, raw: String) -> (text: String, fixable: Bool) {
-        let (summary, fixable) = humanizeSummary(day: day, raw: raw)
-        if summary.isEmpty {
-            return (raw, fixable)
-        }
-        return ("\(summary)\n\nRaw: \(raw)", fixable)
-    }
-
-    /// Returns just the actionable summary — no raw error appended. Empty
-    /// string when we don't have a useful translation.
-    private func humanizeSummary(day: String, raw: String) -> (text: String, fixable: Bool) {
-        let lower = raw.lowercased()
-
-        // ffmpeg / system-level issues — not fixable from the GUI
-        if lower.contains("ffmpeg") {
-            return ("ffmpeg isn't installed. Run `brew install ffmpeg` in Terminal, then retry.", false)
-        }
-        if lower.contains("jamendo") || lower.contains("jamendo_client_id") {
-            return ("Couldn't reach Jamendo for background audio. Check your JAMENDO_CLIENT_ID env var or upload your own audio file.", false)
-        }
-
-        // Claude API errors — distinguish between distinct failure modes.
-        // Matches must be specific enough that an "anthropic" mention in a
-        // stack-trace doesn't get mis-classified as an auth failure.
-        if lower.contains("request_too_large") || lower.contains("413") {
-            return ("\(failedDayLabel(day)) sent too much data to Claude in one request. Reduce inputs (fewer photos, shorter notes) and retry.", true)
-        }
-        if lower.contains("rate_limit") || lower.contains("429") {
-            return ("Hit Claude's rate limit. Wait ~30 seconds and retry — no input changes needed.", false)
-        }
-        if lower.contains("invalid_api_key") || lower.contains("401") || lower.contains("authentication") {
-            return ("Claude API key is invalid or missing. Set ANTHROPIC_API_KEY and retry.", false)
-        }
-        if lower.contains("overloaded_error") || lower.contains("529") {
-            return ("Claude is overloaded right now. Wait a minute and retry — no input changes needed.", false)
-        }
-        if lower.contains("anthropic api error") {
-            return ("Claude API error during \(failedDayLabel(day)). Often resolves on retry.", false)
-        }
-
-        // Common input-missing patterns — fixable on the photo-assignment screen
-        // Any collage day, and the real floor rather than a Classic-preset
-        // literal. Under Balanced a day with its full 4 photos was told it
-        // needed 10, which is a message that contradicts the app's own
-        // generator (#119, #195).
-        if let collageDay = DayName(rawValue: day),
-           PostingPreset.current.isCollageCarousel(collageDay),
-           lower.contains("collage skipped") || lower.contains("collage_min") {
-            return (CollagePhotoSelection.generationShortfallHint(day: collageDay), true)
-        }
-        if day == "tuesday" && (lower.contains("raw") || lower.contains("edited")) {
-            return ("Tuesday's before/after reel needs a RAW + edited photo. Assign them and retry.", true)
-        }
-        if day == "friday" && (lower.contains("raw") || lower.contains("edited")) {
-            return ("Friday's before/after story reuses Tuesday's RAW + edited. Assign them on Tuesday and retry.", true)
-        }
-        if day == "thursday" && lower.contains("photo") && lower.contains("empty") {
-            return ("Thursday's scroll reel needs at least one photo. Add photos to Thursday and retry.", true)
-        }
-        if lower.contains("no such file") || lower.contains("filenotfounderror") {
-            return ("A photo or audio file was moved or deleted. Re-assign your photos on the photo screen and retry.", true)
-        }
-
-        if lower.contains("story fallback failed") {
-            return ("Even the static-image fallback for \(failedDayLabel(day)) couldn't run. Often fixed by re-uploading the day's photos.", true)
-        }
-
-        // No specific summary — caller will display the raw error verbatim.
-        return ("", true)
-    }
-
-    private struct FailedDayInfo: Identifiable {
-        let id: String      // day key
-        let label: String
-        let message: String
-        let fixable: Bool
-    }
-
-    private var failedDayInfos: [FailedDayInfo] {
+    /// One card per failed day, with its message produced by
+    /// `GenerationFailureText` rather than by this view, so the same words can be
+    /// tested and rendered outside the app (#396).
+    private var failureCards: [GenerationFailureCard] {
         let failures = allFailures
         return failedDayKeys.compactMap { key in
             guard let raw = failures[key] else { return nil }
-            let (text, fixable) = humanizeError(day: key, raw: raw)
-            return FailedDayInfo(id: key, label: failedDayLabel(key), message: text, fixable: fixable)
+            let (text, fixable) = GenerationFailureText.humanize(day: key, raw: raw)
+            return GenerationFailureCard(id: key,
+                                         label: GenerationFailureText.dayLabel(key),
+                                         message: text,
+                                         fixable: fixable)
         }
     }
 
@@ -569,88 +348,37 @@ struct AssetGenerationView: View {
 
     private var doneView: some View {
         let errorCount = failedDayKeys.count
+        let cards = failureCards
 
         return ScrollView {
-        VStack(spacing: Spacing.lg) {
-            Spacer(minLength: Spacing.xl)
+            VStack(spacing: 0) {
+                Spacer(minLength: Spacing.xl)
 
-            Text(event.name)
-                .font(.signPainter(28))
-                .foregroundStyle(Color.warmDark)
-
-            // A run that never reached the end of the week gets the same hollow
-            // mark as one with failures. Python said so on every run and nothing
-            // read it, so a week the watchdog cut off looked finished (#262).
-            Image(systemName: RunOutcomeNotice.isUnqualifiedSuccess(
-                week: liveWeekResult, failedDayCount: errorCount)
-                    ? "checkmark.circle.fill" : "checkmark.circle")
-                .font(.system(size: 44))
-                .foregroundStyle(Color.roseGold.opacity(0.7))
-                .scaleEffect(showCheckmark ? 1 : 0.1)
-                .opacity(showCheckmark ? 1 : 0)
-
-            Text(RunOutcomeNotice.headline(week: liveWeekResult, failedDayCount: errorCount))
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.warmDark)
-                .opacity(showCheckmark ? 1 : 0)
-                .offset(y: showCheckmark ? 0 : 8)
-
-            // The verbatim text of a failure the cap detector did not recognise.
-            // #258 cannot start until a real cap's wording has been seen, and
-            // before this the only place it appeared was stderr (#217, #262).
-            if let note = RunOutcomeNotice.unfamiliarFailureNote(week: liveWeekResult) {
-                Text(note)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.warmDark.opacity(0.75))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: 460, alignment: .leading)
-                    .padding(Spacing.sm)
-                    .background(Color.roseGold.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
-                    .opacity(showCheckmark ? 1 : 0)
-            }
-
-            if errorCount > 0 {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    ForEach(failedDayInfos) { info in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(info.label.uppercased())
-                                .font(.system(size: 9, weight: .medium))
-                                .tracking(1.1)
-                                .foregroundStyle(Color.roseDeep)
-                            Text(info.message)
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.warmDark)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Spacing.sm)
-                        .background(Color.roseDeep.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
-                    }
-                }
-                .frame(maxWidth: 460)
-                .opacity(showCheckmark ? 1 : 0)
-            }
-
-            RoseGoldDivider()
-                .frame(width: showCheckmark ? 80 : 0)
-
-            VStack(spacing: Spacing.sm) {
-                Button("Continue to Review") { advance() }
-                    .buttonStyle(BrandButtonStyle())
-
-                if errorCount > 0 {
-                    // If any failed day is fixable, give the user a clear path
-                    // back to the input screen before retrying.
-                    if failedDayInfos.contains(where: \.fixable) {
-                        Button("Fix inputs") { goFixInputs() }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.roseGold)
-                    }
-                    Button("Retry \(failedDaysSummary)") {
+                // The whole screen below the name is its own view taking plain
+                // values, so it can be rendered and measured outside the running
+                // app (#396). Reaching a run that failed on Thursday, or one the
+                // watchdog cut off, is not something a check could do before.
+                GenerationDoneBody(
+                    eventName: event.name,
+                    headline: RunOutcomeNotice.headline(week: liveWeekResult,
+                                                        failedDayCount: errorCount),
+                    isUnqualifiedSuccess: RunOutcomeNotice.isUnqualifiedSuccess(
+                        week: liveWeekResult, failedDayCount: errorCount),
+                    unfamiliarNote: RunOutcomeNotice.unfamiliarFailureNote(week: liveWeekResult),
+                    failures: cards,
+                    regenerableDays: regenerableDayKeys.map {
+                        GenerationRegenerableDay(id: $0, label: regenerableDayLabel($0))
+                    },
+                    programPDFLabel: (!event.programImagePaths.isEmpty || event.programPDFPath != nil)
+                        ? programPDFButtonLabel : nil,
+                    programPDFDisabled: isPreparingProgramPDF
+                        || ProgramPDFBakery.shared.isBaking(event.id),
+                    programBakeError: ProgramPDFBakery.shared.failure(for: event.id),
+                    hasBlog: !event.blogPhotoPaths.isEmpty,
+                    revealed: showCheckmark,
+                    onContinue: { advance() },
+                    onFixInputs: { goFixInputs() },
+                    onRetryFailures: {
                         // A graphics failure needs its day's media re-rendered,
                         // which the default partial retry skips: without this the
                         // retry would re-write the caption and leave the missing
@@ -660,83 +388,28 @@ struct AssetGenerationView: View {
                             mediaErrorKeys: Set(event.mediaErrors.keys))
                         startGeneration(retryDays: plan.days,
                                         regenerateGraphics: plan.regenerateGraphics)
-                    }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
-                }
-
-                // Re-roll a single day's caption without nuking the others. Lists
-                // every day that has photos assigned. Graphics are not re-rendered
-                // (that is what the failure Retry above and the review screen's
-                // per-day ↺ are for). Blog and "all" stay as separate shortcuts.
-                if !regenerableDayKeys.isEmpty {
-                    Menu {
-                        ForEach(regenerableDayKeys, id: \.self) { dayKey in
-                            Button(regenerableDayLabel(dayKey)) {
-                                startGeneration(retryDays: Set([dayKey]))
-                            }
+                    },
+                    // Re-rolls one day's caption without touching the others.
+                    // Graphics are not re-rendered here; that is what the failure
+                    // retry above and the review screen's per-day control are for.
+                    onRegenerateDay: { dayKey in
+                        startGeneration(retryDays: Set([dayKey]))
+                    },
+                    onDownloadProgramPDF: { downloadProgramPDF() },
+                    onRetryProgramBake: {
+                        ProgramPDFBakery.shared.bake(event: event, appState: appState,
+                                                     deletingScansOnSuccess: true)
+                    },
+                    onRegenerateBlog: { startGeneration(retryDays: Set(["blog"])) },
+                    onRegenerateAll: {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                            forceConfigure = true
                         }
-                    } label: {
-                        Label("Regenerate one day…", systemImage: "arrow.clockwise")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.roseGold)
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                }
+                )
 
-                if !event.programImagePaths.isEmpty || event.programPDFPath != nil {
-                    Button(programPDFButtonLabel) {
-                        downloadProgramPDF()
-                    }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
-                    .disabled(isPreparingProgramPDF || ProgramPDFBakery.shared.isBaking(event.id))
-                }
-
-                // A failed bake used to be dropped by a `try?`, so the program
-                // just stopped existing with nothing said (#80).
-                if let bakeError = ProgramPDFBakery.shared.failure(for: event.id) {
-                    BrandBanner(
-                        icon: "exclamationmark.triangle",
-                        message: "The searchable program PDF couldn't be built: \(bakeError). The page scans have been kept.",
-                        style: .error,
-                        actions: [BrandBannerAction(label: "Try again", action: {
-                            ProgramPDFBakery.shared.bake(event: event, appState: appState,
-                                                         deletingScansOnSuccess: true)
-                        })]
-                    )
-                }
-
-                if !event.blogPhotoPaths.isEmpty {
-                    // The accent, like every other paid shortcut in this stack.
-                    // It was the one drawn in the body colour, which made the
-                    // cheapest way to find it clicking text to see what it did
-                    // (#398).
-                    Button("Regenerate blog post") {
-                        startGeneration(retryDays: Set(["blog"]))
-                    }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
-                }
-
-                Button("Regenerate all") {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                        forceConfigure = true
-                    }
-                }
-                .buttonStyle(BrandOutlineButtonStyle())
+                Spacer(minLength: Spacing.xl)
             }
-            .opacity(showCheckmark ? 1 : 0)
-
-            Spacer(minLength: Spacing.xl)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, Spacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cream)
@@ -848,88 +521,5 @@ struct AssetGenerationView: View {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.stage = .captionsReviewed
         appState.updateEvent(ev)
-    }
-}
-
-// MARK: - Generation summary row
-
-private struct GenerationSummaryRow: View {
-    let daysCount: Int
-    let totalPhotos: Int
-    let hasBlog: Bool
-
-    var body: some View {
-        HStack(spacing: Spacing.xl) {
-            SummaryStat(value: "\(daysCount)", label: "DAYS")
-            SummaryStat(value: "\(totalPhotos)", label: "PHOTOS")
-            if hasBlog {
-                SummaryStat(value: "1", label: "BLOG POST")
-            }
-        }
-        .padding(Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.creamDeep)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(Color.creamEdge, lineWidth: 1)
-        )
-    }
-}
-
-private struct SummaryStat: View {
-    let value: String
-    let label: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value)
-                .font(.signPainter(26))
-                .foregroundStyle(Color.roseGold)
-            Text(label)
-                .font(.system(size: 9, weight: .medium))
-                .tracking(1.2)
-                .foregroundStyle(Color.warmMid)
-        }
-    }
-}
-
-// MARK: - Phase row
-
-private enum PhaseState: Equatable {
-    case pending, active, completed
-}
-
-private struct PhaseRow: View {
-    let name: String
-    let state: PhaseState
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Group {
-                switch state {
-                case .completed:
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.roseGold.opacity(0.5))
-                case .active:
-                    Image(systemName: "circle.fill")
-                        .foregroundStyle(Color.roseGold)
-                        .symbolEffect(.pulse)
-                case .pending:
-                    Image(systemName: "circle")
-                        .foregroundStyle(Color.creamEdge)
-                }
-            }
-            .font(.system(size: 12))
-            .frame(width: 16, alignment: .center)
-
-            Text(name)
-                .font(.system(size: 13, weight: state == .active ? .medium : .regular))
-                .foregroundStyle(
-                    state == .pending  ? Color.warmMid.opacity(0.5) :
-                    state == .active   ? Color.warmDark             : Color.warmMid
-                )
-        }
-        .animation(.easeOut(duration: 0.25), value: state)
     }
 }
