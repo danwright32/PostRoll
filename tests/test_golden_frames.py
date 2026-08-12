@@ -42,6 +42,7 @@ from PIL import Image, ImageChops
 
 from conftest import needs_ffmpeg, needs_mac_fonts as requires_mac_fonts
 from postroll.media import design_tokens as tokens
+from postroll.media import frame_legibility as legibility
 from postroll.media import generate_before_after as ba_mod
 from postroll.media import generate_collage as collage_mod
 from postroll.media import generate_reel_morph as morph_mod
@@ -194,6 +195,45 @@ def photos(tmp_path) -> list[str]:
     return [_patterned_photo(tmp_path / f"p{i}.jpg", seed=i) for i in range(10)]
 
 
+def _broad_photo(path: Path, seed: int) -> str:
+    """Structure at a scale h.264 reproduces the same way on any machine.
+
+    For the closing graphic only. The patterned photo above draws a 40px check,
+    which is fine as one large print but lands near the encoder's limit once the
+    graphic scales it into two or three strips: CI disagreed with this machine
+    on 5.4% of those pixels while every other reference matched, because the two
+    encoders quantise a near-Nyquist pattern differently. Loosening the
+    tolerance would have hidden that rather than fixed it, and would have
+    loosened every other reference with it.
+
+    The bands here are wide and the gradient is smooth, so the reference is
+    decided by the chrome and the layout it exists to defend rather than by
+    whether two encoders round a checkerboard the same way. It keeps the bright
+    top band and plenty of distinct colours, so a moved crop or an unrendered
+    print is as visible as before.
+    """
+    width, height = PHOTO_SIZE
+    photo = Image.new("RGB", (width, height))
+    pixels = photo.load()
+    for y in range(height):
+        band = ((y // 220) + seed) % 3
+        base = [(150, 96, 74), (96, 76, 68), (196, 158, 120)][band]
+        for x in range(width):
+            lift = 0.72 + 0.28 * (x / width)
+            pixels[x, y] = (int(base[0] * lift), int(base[1] * lift),
+                            int(base[2] * lift))
+    for y in range(90, 190):          # the bright band a top-anchored crop keeps
+        for x in range(width):
+            pixels[x, y] = (242, 232, 214)
+    photo.save(path, "JPEG", quality=92)
+    return str(path)
+
+
+@pytest.fixture
+def broad_photos(tmp_path) -> list[str]:
+    return [_broad_photo(tmp_path / f"b{i}.jpg", seed=i) for i in range(3)]
+
+
 @pytest.fixture
 def screen_recording(tmp_path) -> str:
     """A stand-in for a Lightroom screen capture (#263).
@@ -297,9 +337,46 @@ def test_before_after_matches_its_reference_frame(photos, tmp_path):
 
 # ── reels, sampled from the encoded file ──────────────────────────────────────
 
+def _closing_graphic(photos, tmp_path, *, bw: str | None) -> str:
+    """The before/after graphic a Tuesday reel ends on (#341).
+
+    Rendered by the shipped generator rather than stood in for, because the reel
+    dissolves into THIS image and holds on it for three seconds. Recorded
+    without one, the last four and a half seconds of each reel are a held plate,
+    which is a shape the app never produces: `generate_media` always passes a
+    closing graphic. A reference frame photographs whatever the surface was
+    showing when it was taken, so it would defend that shape indefinitely (L84).
+
+    `bw` is what makes the pairing honest. `generate_media` hands the SAME
+    `bw_path` to the graphic and to the reel, so a three photo reel closes on a
+    three strip graphic and a two photo reel on a two strip one. Giving both
+    reels the two photo graphic would record the slider ending on a pairing the
+    app never produces, which is the defect this issue is about, one layer down.
+    """
+    path = tmp_path / ("closing_bw.png" if bw else "closing.png")
+    ba_mod.generate_before_after(
+        raw_path=photos[0], edit_path=photos[1], output_path=str(path),
+        event_name="Reference Event", org="Reference Org",
+        venue="Reference Venue", logo_path=LOGO, bw_path=bw)
+    return str(path)
+
+
+@pytest.fixture
+def closing_graphic(photos, tmp_path) -> str:
+    """The two photo graphic, which is what the morph reel closes on."""
+    return _closing_graphic(photos, tmp_path, bw=None)
+
+
+@pytest.fixture
+def closing_graphic_bw(photos, tmp_path) -> str:
+    """The three photo graphic, which is what the slider reel closes on."""
+    return _closing_graphic(photos, tmp_path, bw=photos[2])
+
+
 @needs_ffmpeg
 @requires_mac_fonts
-def test_slider_reel_matches_its_reference_frame(photos, silent_audio, tmp_path):
+def test_slider_reel_matches_its_reference_frame(photos, silent_audio,
+                                                 closing_graphic_bw, tmp_path):
     # 0.6s lands in the opening hold on the RAW, where the plate's chrome and
     # its caption placard sit on the cream mat. That is the frame the
     # invisible-label regression shipped on.
@@ -313,7 +390,7 @@ def test_slider_reel_matches_its_reference_frame(photos, silent_audio, tmp_path)
         audio_path=silent_audio,
         output_path=str(tmp_path / "slider.mp4"),
         event_name="Reference Event", org="Reference Org", venue="Reference Venue",
-        logo_path=LOGO)
+        closing_frame_path=closing_graphic_bw, logo_path=LOGO)
 
     frame = _frame_from_encoded_video(video, 0.6, tmp_path / "slider.png")
     assert_shows_real_content(frame, "slider_reel")
@@ -330,12 +407,13 @@ def test_slider_reel_matches_its_reference_frame(photos, silent_audio, tmp_path)
 
 @needs_ffmpeg
 @requires_mac_fonts
-def test_morph_reel_matches_its_reference_frame(photos, silent_audio, tmp_path):
+def test_morph_reel_matches_its_reference_frame(photos, silent_audio,
+                                                closing_graphic, tmp_path):
     video = morph_mod.generate_reel_morph(
         raw_path=photos[0], edit_path=photos[1], audio_path=silent_audio,
         output_path=str(tmp_path / "morph.mp4"),
         event_name="Reference Event", org="Reference Org", venue="Reference Venue",
-        logo_path=LOGO)
+        closing_frame_path=closing_graphic, logo_path=LOGO)
 
     frame = _frame_from_encoded_video(video, 0.6, tmp_path / "morph.png")
     assert_shows_real_content(frame, "morph_reel")
@@ -353,6 +431,89 @@ def test_morph_reel_matches_its_reference_frame(photos, silent_audio, tmp_path):
          morph_mod.CANVAS_W - plate_mod.MAT, print_top + print_h + 80),
         "morph_reel")
     assert_matches_golden(frame, "morph_reel", tmp_path)
+
+
+#: Which module each Tuesday reel's closing check runs against. The window is
+#: read off the module's own timeline rather than written here, so moving the
+#: timings moves the sampling point with them.
+CLOSING_REELS = {"morph_reel_closing": morph_mod, "slider_reel_closing": slider_mod}
+
+#: Mean per-channel difference below which two frames are the same picture.
+#: Measured, not guessed (#339): the closing hold reads 3.5 against the
+#: graphic handed in and 59.6 against the reel's own plate frame.
+SAME_PICTURE = 15.0
+
+
+@needs_ffmpeg
+@requires_mac_fonts
+@pytest.mark.parametrize("name", sorted(CLOSING_REELS))
+def test_the_closing_hold_matches_its_reference_frame(
+        name, photos, broad_photos, silent_audio, tmp_path):
+    """The three seconds every Tuesday reel ends on (#341).
+
+    A reference of its own, because it is a different design from the one the
+    0.6s frames record: the plate holds ONE print and the graphic holds three,
+    and the caption moves from left-aligned below the print to centred above
+    each strip. Nothing photographed that, so nothing would notice it breaking.
+    """
+    module = CLOSING_REELS[name]
+    # The graphic is built here, on photographs whose structure survives the
+    # encoder identically on any machine (see `_broad_photo`). The reel itself
+    # still runs on the ordinary fixture; only the frame being photographed for
+    # the reference needs that property.
+    closing = _closing_graphic(broad_photos, tmp_path, bw=None)
+    closing_bw = _closing_graphic(broad_photos, tmp_path, bw=broad_photos[2])
+    if module is morph_mod:
+        video = morph_mod.generate_reel_morph(
+            raw_path=photos[0], edit_path=photos[1], audio_path=silent_audio,
+            output_path=str(tmp_path / "morph_closing.mp4"),
+            event_name="Reference Event", org="Reference Org",
+            venue="Reference Venue",
+            closing_frame_path=closing, logo_path=LOGO)
+    else:
+        video = slider_mod.generate_reel_slider(
+            raw_path=photos[0], edit_path=photos[1], bw_path=photos[2],
+            audio_path=silent_audio,
+            output_path=str(tmp_path / "slider_closing.mp4"),
+            event_name="Reference Event", org="Reference Org",
+            venue="Reference Venue",
+            closing_frame_path=closing_bw, logo_path=LOGO)
+
+    # Half a second into the hold: past the dissolve, and clear of the last
+    # frame, where a seek decodes nothing.
+    stamp = (module.CLOSING_CROSSFADE_START + module.TRANSITION_DURATION + 0.5)
+    frame = _frame_from_encoded_video(video, stamp, tmp_path / f"{name}.png")
+    source = Image.open(closing_bw if module is slider_mod else closing).convert("RGB")
+
+    assert_shows_real_content(frame, name)
+
+    # Checked against the GRAPHIC IT WAS GIVEN rather than against a committed
+    # PNG, and this is a deliberate departure from every other reference here.
+    #
+    # A pixel reference works for the other frames because they are mostly flat
+    # cream: the codec moves that by 2 per channel and almost nothing crosses
+    # the tolerance. This frame is roughly three quarters photograph, and two
+    # ffmpeg builds do not agree on it. Measured on CI against this machine:
+    # 5.4% of pixels with the checkerboard fixture, and still 1.0% after that
+    # was replaced with smooth bands, where every plate frame sits under 0.5%.
+    #
+    # Loosening MAX_CHANGED_FRACTION to admit it would have loosened all seven
+    # other references by the same amount, to hide a disagreement about
+    # photographs nobody is checking. So the frame is compared to its own source
+    # image, which is what #339 already proved holds across machines, and the
+    # chrome this reference exists to defend is asserted directly below.
+    difference = legibility.mean_difference(frame, source)
+    assert difference < SAME_PICTURE, (
+        f"{name}: the closing hold differs from the graphic it was given by "
+        f"{difference:.1f} of 255, so it is holding on something else")
+
+    # The two elements with real regression history on this template: the
+    # masthead, and the wordmark that has shipped invisible three times.
+    assert_ink_reads_against_its_background(
+        frame, (0, 120, frame.width, 380), f"{name} masthead")
+    assert_ink_reads_against_its_background(
+        frame, (0, frame.height - 200, frame.width, frame.height),
+        f"{name} colophon")
 
 
 @needs_ffmpeg
@@ -439,6 +600,12 @@ def test_the_reel_references_come_from_an_encoded_video():
         block = source.split(f'"{reel}", tmp_path)')[0].rsplit("def test_", 1)[1]
         assert "_frame_from_encoded_video" in block, (
             f"{reel} builds its frame without decoding the encoded file")
+    # The closing references share one parametrized test, so they are named
+    # through a variable rather than a literal and the split above cannot find
+    # them. Checked on the block that renders them instead.
+    closing = source.rsplit("def test_the_closing_hold_matches_its_reference_frame", 1)[1]
+    assert "_frame_from_encoded_video" in closing.split("def test_")[0], (
+        "the closing references are built without decoding the encoded file")
 
 
 def test_the_cream_tolerance_covers_what_the_codec_actually_does_to_it():
