@@ -60,8 +60,12 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
+                    // Unchanged, or not long enough to be a whole key (#348).
+                    // The warning above says which, so a disabled button is
+                    // never unexplained.
                     .disabled(KeychainStore.sanitize(apiKey) ==
-                              (KeychainStore.readAPIKey() ?? ""))
+                              (KeychainStore.readAPIKey() ?? "")
+                              || !KeychainStore.isSavable(apiKey))
 
                     if saved {
                         Label("Saved", systemImage: "checkmark.circle.fill")

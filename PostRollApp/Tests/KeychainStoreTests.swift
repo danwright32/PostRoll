@@ -32,8 +32,60 @@ final class KeychainStoreTests: XCTestCase {
 
     // MARK: - #128: a key pasted without its prefix must not look like a bad key
 
+    /// A key of the length a real one actually is. The old value here was
+    /// nineteen characters and was called "a full key", which is how the
+    /// missing length check in #348 stayed invisible: the test that was
+    /// supposed to prove a whole key is accepted was itself asserting on a
+    /// truncated one.
+    static let realisticKey = "sk-ant-api03-" + String(repeating: "A", count: 95)
+
     func testAFullKeyIsAccepted() {
-        XCTAssertNil(KeychainStore.formatWarning(for: "sk-ant-api03-abc123"))
+        XCTAssertEqual(Self.realisticKey.count, 108, "the sample is not key sized")
+        XCTAssertNil(KeychainStore.formatWarning(for: Self.realisticKey))
+    }
+
+    // MARK: - #348: the right shape at the wrong length is still not a key
+
+    func testATruncatedKeyIsRefusedEvenThoughThePrefixIsRight() {
+        // The exact value that sat stored on Dan's Mac from 2026-08-09: the
+        // prefix was right, so nothing complained, and the metered path had
+        // never once run.
+        let warning = KeychainStore.formatWarning(for: "sk-ant-abc123")
+
+        XCTAssertNotNil(warning, "thirteen characters passed as a whole key")
+        XCTAssertTrue(warning!.contains("108"),
+                      "the message does not say how long a real key is: \(warning ?? "nil")")
+    }
+
+    func testTheMessageSaysHowLongWhatWasPastedIs() {
+        // Naming the number is what lets a person see they pasted part of it,
+        // without the key itself ever being echoed.
+        let warning = KeychainStore.formatWarning(for: "sk-ant-abc123") ?? ""
+
+        XCTAssertTrue(warning.contains("13"), "got: \(warning)")
+        XCTAssertFalse(warning.contains("abc123"), "the message echoes the key: \(warning)")
+    }
+
+    func testATruncatedKeyCannotBeSaved() {
+        // L67: code that has already detected the value is wrong must block the
+        // action, not merely label it. A warning beside an enabled button is
+        // how this shipped and sat unnoticed for two days.
+        XCTAssertFalse(KeychainStore.isSavable("sk-ant-abc123"))
+        XCTAssertTrue(KeychainStore.isSavable(Self.realisticKey))
+    }
+
+    func testClearingTheKeyIsStillAllowed() {
+        // Empty means "forget the stored key", which must not be caught by a
+        // length rule aimed at truncation.
+        XCTAssertTrue(KeychainStore.isSavable(""))
+        XCTAssertTrue(KeychainStore.isSavable("   "))
+    }
+
+    func testTheMinimumIsBelowARealKeyAndFarAboveATruncation() {
+        // Guards the constant itself. Set at or above 108 it would refuse real
+        // keys; set near 13 it would admit the value this issue is about.
+        XCTAssertLessThan(KeychainStore.minimumKeyLength, 108)
+        XCTAssertGreaterThan(KeychainStore.minimumKeyLength, 20)
     }
 
     func testAKeyPastedWithoutThePrefixIsCalledOut() {
@@ -57,7 +109,7 @@ final class KeychainStoreTests: XCTestCase {
     func testTheCheckIgnoresSurroundingWhitespace() {
         // A key copied from a browser commonly carries a trailing newline, and
         // that must not be reported as a missing prefix.
-        XCTAssertNil(KeychainStore.formatWarning(for: "  sk-ant-api03-abc\n"))
+        XCTAssertNil(KeychainStore.formatWarning(for: "  " + Self.realisticKey + "\n"))
     }
 
     func testTheWarningDoesNotBlockSaving() {
