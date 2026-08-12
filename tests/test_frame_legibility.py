@@ -35,6 +35,12 @@ from postroll.media import text_regions
 from postroll.media.frame_legibility import MovingTextRegion, TextRegion
 from postroll.media.generate_before_after import generate_before_after
 
+# Every check in this file renders a real reel and reads pixels back, which is
+# where the suite's time goes. `make test-python-fast` deselects it; CI and
+# `make test-python` still run it (#413).
+pytestmark = pytest.mark.slow
+
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LOGO = str(REPO_ROOT / "postroll" / "assets" / "logo-black.png")

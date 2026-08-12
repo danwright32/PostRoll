@@ -27,6 +27,12 @@ from conftest import needs_ffmpeg, needs_mac_fonts
 from postroll.media import generate_reel_slider as slider_mod
 from postroll.media import program_plate as plate_mod
 
+# Every check in this file renders a real reel and reads pixels back, which is
+# where the suite's time goes. `make test-python-fast` deselects it; CI and
+# `make test-python` still run it (#413).
+pytestmark = pytest.mark.slow
+
+
 
 # ── the sweep, as geometry ───────────────────────────────────────────────────
 
