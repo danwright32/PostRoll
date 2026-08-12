@@ -48,6 +48,27 @@ final class SentenceTests: XCTestCase {
         XCTAssertEqual(Sentence.closed("?"), "?")
     }
 
+    /// An ellipsis is already an ending (#405).
+    ///
+    /// Both directions were wrong before. Adding a stop after one produced "…."
+    /// on every truncated stderr preview, which is any Python traceback line over
+    /// 120 characters. Collapsing one to a single stop rewrites the other system's
+    /// words, which is what one of the two bespoke copies of this rule did.
+    func testAnEllipsisIsLeftExactlyAsItCame() {
+        XCTAssertEqual(Sentence.closed("RuntimeError: something very long\u{2026}"),
+                       "RuntimeError: something very long\u{2026}")
+        XCTAssertEqual(Sentence.closed("still working..."), "still working...")
+        XCTAssertEqual(Sentence.closed("  trailing space after it\u{2026}  "),
+                       "trailing space after it\u{2026}")
+    }
+
+    /// Two dots is a stutter, three is an ellipsis. The line between them is the
+    /// whole reason this cannot be a one-liner at each call site.
+    func testTwoDotsCollapseButThreeDoNot() {
+        XCTAssertEqual(Sentence.closed("could not be read.."), "could not be read.")
+        XCTAssertEqual(Sentence.closed("could not be read..."), "could not be read...")
+    }
+
     /// The sentences the two screens actually build, so this test fails if either
     /// stops using the helper.
     func testTheTwoRealSentencesReadCorrectly() {

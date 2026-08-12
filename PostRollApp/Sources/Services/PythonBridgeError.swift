@@ -87,13 +87,20 @@ enum PythonBridgeError: LocalizedError {
 
     /// The last line of stderr rather than a raw traceback, and never the whole
     /// thing. Nothing is claimed about a failure we did not recognise.
+    ///
+    /// Closed through `Sentence` (#405). Two things were wrong here, and one of
+    /// them fired every time: a truncated preview already ends in an ellipsis, so
+    /// appending a stop produced "…." on any stderr line over 120 characters,
+    /// which Python tracebacks routinely are. The other is the ordinary case,
+    /// where a sentence-shaped message from our own Python already ends in a stop
+    /// and a bare exception repr ends in nothing.
     private static func fallback(stderr: String) -> String {
         let trimmed = stderr.split(separator: "\n")
             .last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
             .map(String.init) ?? stderr
         let preview = trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
-        return "Generation failed: \(preview). Check \(AppPaths.logsDirDisplayPath) "
-             + "if this persists."
+        return "Generation failed: \(Sentence.closed(preview)) "
+             + "Check \(AppPaths.logsDirDisplayPath) if this persists."
     }
 }
 
