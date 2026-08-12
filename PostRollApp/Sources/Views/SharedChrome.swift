@@ -24,6 +24,30 @@ struct StageBackButton: View {
     }
 }
 
+/// Why a control will not do what it looks like it does, drawn on screen.
+///
+/// One view rather than a copy per screen, because the whole defect this exists
+/// to stop is a refusal that got computed and then had nowhere to go (#402).
+///
+/// Quiet on purpose: this sits under a control that is already visibly
+/// unavailable, so it explains rather than alarms. What it must not be is
+/// absent, or delivered only on hover, which is a refusal nobody finds (L49,
+/// L109).
+struct RefusalNote: View {
+    let message: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 4) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 9))
+            Text(message)
+                .font(.light(10))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(Color.warmMid)
+    }
+}
+
 struct BrandButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

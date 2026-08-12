@@ -321,6 +321,18 @@ final class BannerLegibilityTests: XCTestCase {
                 PhotoAssignmentContinueBar(totalPhotos: 0))),
             ("photo continue bar, ready", AnyView(
                 PhotoAssignmentContinueBar(totalPhotos: 48))),
+
+            // The two refusals that used to be unreadable (#402): one delivered
+            // only on hover, one never computed at all. Both messages come from
+            // the code that decides the gate, so a wording change moves what is
+            // measured here rather than leaving this asserting a stale copy.
+            ("stage strip refusal, no program", AnyView(RefusalNote(
+                message: StageNavigation.blockedReason(
+                    for: .assetsGenerated,
+                    in: Event(name: "Spring Gala", org: "Ballet", venue: "City Center",
+                              date: Date(), shootType: .fullShow)) ?? ""))),
+            ("new event refusal, nothing filled in", AnyView(RefusalNote(
+                message: NewEventValidation.refusal(name: "", org: "") ?? ""))),
         ]
     }
 
