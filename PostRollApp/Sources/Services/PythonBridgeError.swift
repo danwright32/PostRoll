@@ -29,38 +29,71 @@ enum PythonBridgeError: LocalizedError {
         }
     }
 
+    /// What to tell Dan about a whole run that died.
+    ///
+    /// What the failure IS comes from `RunFailureKind`, which is the only place
+    /// that reads the text. This decides what to say about it, in the language of
+    /// a whole run. `GenerationFailureText` says it in the language of one day,
+    /// off the same kind, so the two can no longer disagree about what happened
+    /// or how long to wait (#401).
     private static func humanise(stderr: String) -> String {
-        let s = stderr.lowercased()
-        if s.contains("no performers") || s.contains("performers is empty") || s.contains("no performer") {
-            return "Generation failed: no performers found in your OCR data. Go back to OCR review and add at least one performer, then try again."
+        switch RunFailureKind.of(stderr) {
+        case .performersMissing:
+            return "Generation failed: no performers found in your OCR data. Go back to OCR "
+                 + "review and add at least one performer, then try again."
+        case .piecesMissing:
+            return "Generation failed: no program works found in your OCR data. Go back to OCR "
+                 + "review and add at least one work, then try again."
+        case .ffmpegMissing:
+            return "Media generation failed: ffmpeg is not installed. Run `brew install ffmpeg` "
+                 + "in Terminal, then try again."
+        case .audioServiceUnreachable:
+            return "Couldn't reach Jamendo for background audio. Check your JAMENDO_CLIENT_ID "
+                 + "env var, or upload your own audio file, then try again."
+        case .requestTooLarge:
+            return "The program photos are too large for the AI service to process in one call. "
+                 + "Try uploading fewer pages at a time, or downscale the images "
+                 + "(Preview › Tools › Adjust Size), then try again."
+        case .rateLimited:
+            return waitSentence("The AI service is rate-limiting right now.", .rateLimited)
+        case .overloaded:
+            return waitSentence("The AI service is overloaded right now.", .overloaded)
+        case .authFailed:
+            return "Generation failed: the AI service rejected the API key. Check that "
+                 + "ANTHROPIC_API_KEY is set correctly, then try again."
+        case .aiServiceError:
+            return waitSentence("Generation failed: the AI service returned an error.",
+                                .aiServiceError)
+        case .outputUnreadable:
+            return "Generation failed: the output could not be read. This is usually a "
+                 + "temporary issue. Try again."
+        case .fileMissing:
+            return "Generation failed: a required file was not found. Check that your photos "
+                 + "are still in their original locations."
+        // The per-day kinds cannot be reached from here, because `of` is called
+        // without a day. Named rather than defaulted, so adding a kind is a
+        // compile error here instead of silently becoming the fallback.
+        case .collageShortfall, .beforeAfterInputsMissing, .reelPhotosMissing,
+             .storyFallbackFailed, .unknown:
+            return fallback(stderr: stderr)
         }
-        if s.contains("no pieces") || s.contains("pieces is empty") || s.contains("no works") {
-            return "Generation failed: no program works found in your OCR data. Go back to OCR review and add at least one work, then try again."
-        }
-        if s.contains("ffmpeg") {
-            return "Media generation failed: ffmpeg is not installed. Run `brew install ffmpeg` in Terminal, then try again."
-        }
-        // Order matters: check 413 / request_too_large BEFORE the generic "anthropic" check.
-        if s.contains("413") || s.contains("request_too_large") || s.contains("request exceeds the maximum size") || s.contains("payload too large") {
-            return "The program photos are too large for the AI service to process in one call. Try uploading fewer pages at a time, or downscale the images (Preview › Tools › Adjust Size), then try again."
-        }
-        if s.contains("rate_limit") || s.contains("rate limit") || s.contains("429") || s.contains("overloaded") {
-            return "The AI service is rate-limiting or overloaded right now. Wait a minute and try again."
-        }
-        if s.contains("anthropic") || s.contains("openai") || s.contains("api key") || s.contains("apikey") {
-            return "Generation failed: could not connect to the AI service. Check that your API key is set correctly and that you have internet access."
-        }
-        if s.contains("json") || s.contains("decode") || s.contains("parse") {
-            return "Generation failed: the output could not be read. This is usually a temporary issue. Try again."
-        }
-        if s.contains("no such file") || s.contains("filenotfounderror") {
-            return "Generation failed: a required file was not found. Check that your photos are still in their original locations."
-        }
-        // Fall back to a trimmed version of stderr (first 120 chars), not a raw traceback
-        let trimmed = stderr.split(separator: "\n").last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+    }
+
+    /// One wait per kind, taken from the kind rather than written per sentence.
+    private static func waitSentence(_ cause: String, _ kind: RunFailureKind) -> String {
+        guard let wait = kind.waitAdvice else { return "\(cause) Try again." }
+        return "\(cause) Wait \(wait) and try again."
+    }
+
+    /// The last line of stderr rather than a raw traceback, and never the whole
+    /// thing. Nothing is claimed about a failure we did not recognise.
+    private static func fallback(stderr: String) -> String {
+        let trimmed = stderr.split(separator: "\n")
+            .last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
             .map(String.init) ?? stderr
         let preview = trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
-        return "Generation failed: \(preview). Check \(AppPaths.logsDirDisplayPath) if this persists."
+        return "Generation failed: \(preview). Check \(AppPaths.logsDirDisplayPath) "
+             + "if this persists."
     }
 }
 

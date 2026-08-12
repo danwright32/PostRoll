@@ -36,64 +36,76 @@ enum GenerationFailureText {
     /// Just the actionable hint. Empty when there is no useful translation, in
     /// which case the caller shows the raw error verbatim rather than inventing
     /// an explanation for it.
+    ///
+    /// What the failure IS comes from `RunFailureKind`, which is the only place
+    /// that reads the text. This function only decides what to say about it, in
+    /// the language of one day rather than a whole run (#401).
     static func summary(day: String, raw: String) -> (text: String, fixable: Bool) {
-        let lower = raw.lowercased()
+        let kind = RunFailureKind.of(raw, day: day)
+        return (sentence(for: kind, day: day), kind.isFixableFromTheApp)
+    }
 
-        // ffmpeg / system level issues. Not fixable from the GUI.
-        if lower.contains("ffmpeg") {
-            return ("ffmpeg isn't installed. Run `brew install ffmpeg` in Terminal, then retry.", false)
+    /// The per-day wording. Empty means say nothing and show the raw error.
+    private static func sentence(for kind: RunFailureKind, day: String) -> String {
+        switch kind {
+        case .ffmpegMissing:
+            return "ffmpeg isn't installed. Run `brew install ffmpeg` in Terminal, then retry."
+        case .audioServiceUnreachable:
+            return "Couldn't reach Jamendo for background audio. Check your JAMENDO_CLIENT_ID "
+                 + "env var or upload your own audio file."
+        case .requestTooLarge:
+            return "\(dayLabel(day)) sent too much data to Claude in one request. Reduce inputs "
+                 + "(fewer photos, shorter notes) and retry."
+        case .rateLimited, .overloaded, .aiServiceError:
+            return serviceSentence(for: kind, day: day)
+        case .authFailed:
+            return "Claude API key is invalid or missing. Set ANTHROPIC_API_KEY and retry."
+        case .performersMissing:
+            return "No performers were found in your program data. Go back to OCR review and "
+                 + "add at least one, then retry."
+        case .piecesMissing:
+            return "No program works were found in your program data. Go back to OCR review and "
+                 + "add at least one, then retry."
+        // The collage floor comes from the live preset rather than a Classic
+        // literal: under Balanced a day with its full 4 photos was told it needed
+        // 10, which contradicts the app's own generator (#119, #195).
+        case .collageShortfall(let collageDay):
+            return CollagePhotoSelection.generationShortfallHint(day: collageDay)
+        case .beforeAfterInputsMissing(let inputDay):
+            return inputDay == "friday"
+                ? "Friday's before/after story reuses Tuesday's RAW + edited. Assign them on "
+                  + "Tuesday and retry."
+                : "Tuesday's before/after reel needs a RAW + edited photo. Assign them and retry."
+        case .reelPhotosMissing:
+            return "Thursday's scroll reel needs at least one photo. Add photos to Thursday "
+                 + "and retry."
+        case .fileMissing:
+            return "A photo or audio file was moved or deleted. Re-assign your photos on the "
+                 + "photo screen and retry."
+        case .storyFallbackFailed:
+            return "Even the static-image fallback for \(dayLabel(day)) couldn't run. Often "
+                 + "fixed by re-uploading the day's photos."
+        case .outputUnreadable:
+            return "\(dayLabel(day)) finished but its output couldn't be read. This is usually "
+                 + "temporary, so retry."
+        case .unknown:
+            // Nothing recognised, so nothing claimed. The caller shows the raw
+            // error on its own rather than an invented explanation of it.
+            return ""
         }
-        if lower.contains("jamendo") || lower.contains("jamendo_client_id") {
-            return ("Couldn't reach Jamendo for background audio. Check your JAMENDO_CLIENT_ID env var or upload your own audio file.", false)
-        }
+    }
 
-        // Claude API errors, kept distinct from each other. Matches have to be
-        // specific enough that an "anthropic" mention in a stack trace is not
-        // read as an auth failure.
-        if lower.contains("request_too_large") || lower.contains("413") {
-            return ("\(dayLabel(day)) sent too much data to Claude in one request. Reduce inputs (fewer photos, shorter notes) and retry.", true)
+    /// The three service failures, sharing one shape so the wait cannot differ
+    /// between them by accident. The wait itself belongs to the kind (#401).
+    private static func serviceSentence(for kind: RunFailureKind, day: String) -> String {
+        let cause: String
+        switch kind {
+        case .rateLimited:  cause = "Hit Claude's rate limit."
+        case .overloaded:   cause = "Claude is overloaded right now."
+        default:            cause = "Claude API error during \(dayLabel(day))."
         }
-        if lower.contains("rate_limit") || lower.contains("429") {
-            return ("Hit Claude's rate limit. Wait ~30 seconds and retry, no input changes needed.", false)
-        }
-        if lower.contains("invalid_api_key") || lower.contains("401") || lower.contains("authentication") {
-            return ("Claude API key is invalid or missing. Set ANTHROPIC_API_KEY and retry.", false)
-        }
-        if lower.contains("overloaded_error") || lower.contains("529") {
-            return ("Claude is overloaded right now. Wait a minute and retry, no input changes needed.", false)
-        }
-        if lower.contains("anthropic api error") {
-            return ("Claude API error during \(dayLabel(day)). Often resolves on retry.", false)
-        }
-
-        // Missing inputs, fixable on the photo assignment screen. The collage
-        // floor comes from the live preset rather than a Classic literal: under
-        // Balanced a day with its full 4 photos was told it needed 10, which
-        // contradicts the app's own generator (#119, #195).
-        if let collageDay = DayName(rawValue: day),
-           PostingPreset.current.isCollageCarousel(collageDay),
-           lower.contains("collage skipped") || lower.contains("collage_min") {
-            return (CollagePhotoSelection.generationShortfallHint(day: collageDay), true)
-        }
-        if day == "tuesday" && (lower.contains("raw") || lower.contains("edited")) {
-            return ("Tuesday's before/after reel needs a RAW + edited photo. Assign them and retry.", true)
-        }
-        if day == "friday" && (lower.contains("raw") || lower.contains("edited")) {
-            return ("Friday's before/after story reuses Tuesday's RAW + edited. Assign them on Tuesday and retry.", true)
-        }
-        if day == "thursday" && lower.contains("photo") && lower.contains("empty") {
-            return ("Thursday's scroll reel needs at least one photo. Add photos to Thursday and retry.", true)
-        }
-        if lower.contains("no such file") || lower.contains("filenotfounderror") {
-            return ("A photo or audio file was moved or deleted. Re-assign your photos on the photo screen and retry.", true)
-        }
-
-        if lower.contains("story fallback failed") {
-            return ("Even the static-image fallback for \(dayLabel(day)) couldn't run. Often fixed by re-uploading the day's photos.", true)
-        }
-
-        // No specific summary. The caller shows the raw error verbatim.
-        return ("", true)
+        guard let wait = kind.waitAdvice else { return cause }
+        return "\(cause) Wait \(wait) and retry, no input changes needed."
     }
 
     /// "Sunday, Thursday, and Blog post", for the retry button's label.
