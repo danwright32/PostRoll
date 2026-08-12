@@ -190,8 +190,17 @@ struct ProgramPDFBuilder {
             else { continue }
 
             let dest = dir.appendingPathComponent(rasterizedPageName(stem: stem, page: i + 1))
-            try? pngData.write(to: dest)
-            results.append(dest)
+            // Only pages that actually reached disk are returned. The write was
+            // behind `try?` with the append below it running regardless, so a
+            // failed page still went back to the caller as a path, and whatever
+            // opened it found nothing there (#362).
+            do {
+                try pngData.write(to: dest)
+                results.append(dest)
+            } catch {
+                NSLog("ProgramPDFBuilder: page \(i + 1) of \(stem) could not be written "
+                      + "to \(dest.path): \(error.localizedDescription)")
+            }
         }
         return results
     }
