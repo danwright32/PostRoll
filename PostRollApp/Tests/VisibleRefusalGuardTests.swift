@@ -37,17 +37,27 @@ final class VisibleRefusalGuardTests: XCTestCase {
             .appendingPathComponent("Sources")
     }
 
-    /// Source with comment lines stripped.
+    /// Source with comments stripped, trailing ones included.
     ///
     /// A guard that matches on raw source can be satisfied by prose ABOUT the
     /// thing, including a comment explaining that the thing was removed, which is
     /// indistinguishable from working (L103). It matters here specifically: the
     /// tooltip-only site carried a comment claiming it said which work was
     /// missing, and that comment was true of the intent and false of the screen.
+    ///
+    /// Cut at the first "//" on the line, not only whole comment lines, because
+    /// `EmptyView() // RefusalNote(...)` satisfied every check below until the
+    /// mutation registry recorded exactly that break (#416). Deliberately naive
+    /// about "//" inside a string literal: none of these files puts one on a
+    /// line that also carries an asserted token, and the clean run proves it.
     private func code(_ text: String) -> String {
         text.split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.hasPrefix("//") && !$0.hasPrefix("*") }
+            .filter { !$0.hasPrefix("*") }
+            .map { line -> String in
+                guard let slashes = line.range(of: "//") else { return line }
+                return String(line[..<slashes.lowerBound])
+            }
             .joined(separator: "\n")
     }
 
