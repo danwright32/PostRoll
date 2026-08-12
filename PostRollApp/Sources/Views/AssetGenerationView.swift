@@ -712,12 +712,16 @@ struct AssetGenerationView: View {
                 }
 
                 if !event.blogPhotoPaths.isEmpty {
+                    // The accent, like every other paid shortcut in this stack.
+                    // It was the one drawn in the body colour, which made the
+                    // cheapest way to find it clicking text to see what it did
+                    // (#398).
                     Button("Regenerate blog post") {
                         startGeneration(retryDays: Set(["blog"]))
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(Color.roseGold)
                 }
 
                 Button("Regenerate all") {

@@ -31,6 +31,24 @@ final class VisibleControlGuardTests: XCTestCase {
         "ProgramUploadView.swift|No program",
     ]
 
+    /// `file|button label` for every control that SPENDS MONEY.
+    ///
+    /// A separate rule from `decisions`, and separate because the two answer
+    /// different questions. A paid action is often not the decision on its
+    /// screen: `Approve & Export` is the decision on caption review, and
+    /// `Continue to Review` is on the generation done screen, so the paid
+    /// actions beside them are deliberately quieter and do not want a filled or
+    /// outlined control. What they cannot be is invisible. Body-colour text
+    /// gets found by clicking words to see what happens, which is how a paid
+    /// run gets started by accident.
+    ///
+    /// The app's established quiet-but-visible treatment is the rose accent,
+    /// which is what every sibling of these two already wears.
+    private static let paidActions = [
+        "AssetGenerationView.swift|Regenerate blog post",
+        "CaptionReviewView.swift|Regenerate All…",
+    ]
+
     /// Colours that are the same as ordinary text, so a control wearing one is
     /// indistinguishable from a label.
     private static let labelColours = ["warmMid", "warmDark", "warmFaint"]
@@ -82,38 +100,71 @@ final class VisibleControlGuardTests: XCTestCase {
         return sites
     }
 
+    // MARK: - The two rules, each run in both directions
+
     func testNoDecisionIsDrawnInTheBodyTextColour() throws {
+        try assertNoneWearALabelColour(
+            Self.decisions,
+            because: "These buttons ARE the decision on their screen and are drawn in the "
+                   + "same colour as ordinary text, so nothing says they can be pressed")
+    }
+
+    func testNoPaidActionIsDrawnInTheBodyTextColour() throws {
+        try assertNoneWearALabelColour(
+            Self.paidActions,
+            because: "These buttons SPEND MONEY and are drawn in the same colour as ordinary "
+                   + "text, so the only way to discover them is to click words and find out")
+    }
+
+    func testEveryListedDecisionStillExists() throws {
+        try assertNothingIsStale(Self.decisions)
+    }
+
+    func testEveryListedPaidActionStillExists() throws {
+        try assertNothingIsStale(Self.paidActions)
+    }
+
+    // MARK: - Shared checks
+
+    /// One implementation for both registries, because two copies of this drift
+    /// and only one of them gets the next fix.
+    private func assertNoneWearALabelColour(_ registry: [String], because reason: String,
+                                           file: StaticString = #filePath,
+                                           line: UInt = #line) throws {
         let sites = try plainButtonSites()
         XCTAssertGreaterThan(sites.count, 40,
-                             "the scan found almost no plain buttons, so it has stopped working")
+                             "the scan found almost no plain buttons, so it has stopped working",
+                             file: file, line: line)
 
         let offenders = sites.filter { site in
-            Self.decisions.contains("\(site.file)|\(site.label)")
+            registry.contains("\(site.file)|\(site.label)")
                 && Self.labelColours.contains(site.colour)
         }.map { "\($0.file): \($0.label) is \($0.colour)" }
 
         XCTAssertTrue(offenders.isEmpty, """
-            These buttons ARE the decision on their screen and are drawn in the \
-            same colour as ordinary text, so nothing says they can be pressed:
+            \(reason):
 
             \(offenders.joined(separator: "\n"))
-            """)
+            """, file: file, line: line)
     }
 
-    func testEveryListedDecisionStillExists() throws {
+    /// The other direction: an entry that has outlived its button.
+    private func assertNothingIsStale(_ registry: [String],
+                                     file: StaticString = #filePath,
+                                     line: UInt = #line) throws {
         let sites = try plainButtonSites()
         let present = Set(sites.map { "\($0.file)|\($0.label)" })
         // A plain-styled entry that has since become a filled button is no
         // longer a plain button at all, which is the fix, not a failure.
         let filled = try filledButtonLabels()
-        let stale = Self.decisions.filter { !present.contains($0) && !filled.contains($0) }
+        let stale = registry.filter { !present.contains($0) && !filled.contains($0) }
 
         XCTAssertTrue(stale.isEmpty, """
             These entries match nothing any more. An entry that has outlived its \
             button silently exempts whatever drifts into its place, so delete them:
 
             \(stale.joined(separator: "\n"))
-            """)
+            """, file: file, line: line)
     }
 
     /// `file|label` for buttons wearing one of the app's real control styles.
