@@ -197,6 +197,92 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// The app's default window is 1200pt with a sidebar of at least 230, so 400pt
     /// is a deliberately harsh floor rather than the narrowest real case: a notice
     /// that survives it survives anything Dan can drag the window to.
+    private func heightAt(_ view: some View, width: CGFloat) -> CGFloat {
+        let host = NSHostingView(rootView: view.frame(width: width))
+        host.frame = NSRect(x: 0, y: 0, width: width, height: 1)
+        host.layoutSubtreeIfNeeded()
+        return host.fittingSize.height
+    }
+
+    /// Every surface in the ink harness, checked for the thing ink cannot see.
+    ///
+    /// A layout that wraps gets taller as it narrows. One that truncates keeps its
+    /// height and drops words instead, and both measure as plenty of ink, so the
+    /// harness next door cannot tell them apart (#411).
+    ///
+    /// Honest about its reach: this catches a surface whose whole height stops
+    /// moving, and it will miss a truncating line sitting beside something else
+    /// that does wrap, which is how the export screen hid one of its two. Looking
+    /// at the rendered pages is still the thing that finds those.
+    func testNoMeasuredSurfaceTruncatesWhenTheWindowNarrows() throws {
+        var offenders: [String] = []
+        for state in BannerLegibilityTests.measuredStates {
+            let needed = requiredWidth(state.view)
+            guard needed > Self.narrowestPane else { continue }
+            let wide = heightAt(state.view, width: 900)
+            let narrow = heightAt(state.view, width: 400)
+            if narrow <= wide {
+                offenders.append("\(state.name): wants \(Int(needed))pt and stays "
+                                 + "\(Int(wide))pt tall at both widths")
+            }
+        }
+        XCTAssertTrue(offenders.isEmpty, """
+            These surfaces need more width than a narrow pane gives them and do not \
+            get taller when squeezed, which means they are dropping words:
+
+            \(offenders.joined(separator: "\n"))
+            """)
+    }
+
+    /// The line under the export banner, guarded at the source (#411).
+    ///
+    /// A source check rather than a measured one, and the reason is worth stating
+    /// because two measured versions of this were written first and BOTH passed on
+    /// the broken layout:
+    ///
+    /// * Measuring the note on its own forces it into a 300pt frame, which makes
+    ///   it wrap whether or not it is allowed to.
+    /// * Measuring the whole export screen sees nothing either: the line is capped
+    ///   at 300pt whatever the window does, and a `Spacer()` absorbs the
+    ///   difference, so the screen is 542pt tall at 400 wide with the fix and
+    ///   542pt without it.
+    ///
+    /// So nothing about the geometry moves when this line loses half its words.
+    /// The defect was found by looking at the rendered page, and what can be
+    /// guarded automatically is that the view still declares it may wrap.
+    func testTheArchiveNoteStillDeclaresThatItWraps() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/Views/ExportDoneSummary.swift"),
+            encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("//") && !$0.hasPrefix("*") }
+            .joined(separator: "\n")
+
+        XCTAssertTrue(source.contains("fixedSize(horizontal: false, vertical: true)"), """
+            ExportArchiveNote no longer says it may grow taller, so it goes back to \
+            one line and drops the end of its sentence. On a failed export that is \
+            the half naming what to do about it.
+            """)
+    }
+
+    /// Both sentences are too long for one line at the width they are held to, so
+    /// the wrap above is load bearing rather than decorative.
+    func testTheArchiveNoteSentencesNeedMoreThanOneLine() {
+        for incomplete in [true, false] {
+            let note = ExportArchiveNote(isIncomplete: incomplete)
+            XCTAssertGreaterThan(requiredWidth(Text(note.message).font(.light(11))),
+                                 ExportArchiveNote.width, """
+                "\(note.message)" now fits on one line at \
+                \(Int(ExportArchiveNote.width))pt, so the wrapping guard above is no \
+                longer protecting anything and this pair should be rethought.
+                """)
+        }
+    }
+
     func testANoticeWrapsWhenTheWindowNarrowsRatherThanTruncating() throws {
         let bar = CaptionReviewActionBar(activity: .waitingOnRebuild(
             reason: ExportReadiness.blockedReason(
