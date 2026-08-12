@@ -41,6 +41,13 @@ struct Event: Identifiable, Codable, Hashable {
     /// failure, or a skipped cross-check reads as a program with nothing wrong.
     var visionCheckSkipped: String? = nil
 
+    /// Programs Dan knowingly took incomplete, keyed by the uploaded file's
+    /// name (#378). Set only when he takes the readable pages of a program that
+    /// did not come in whole, and cleared for a file that later comes in whole.
+    /// Persisted because the captions and blog are written long after the
+    /// import, and by then nothing else can tell that the program is short.
+    var partialProgramNotes: [String: String] = [:]
+
     // Event-wide handles applied to every day's caption (org, venue, recurring tags)
     var eventHandles: String = ""
 
@@ -151,6 +158,7 @@ extension Event {
         pendingFlags      = try c.decodeIfPresent([OCRFlag].self,                  forKey: .pendingFlags)      ?? []
         pendingFlagsError = try c.decodeIfPresent(String.self,                     forKey: .pendingFlagsError)
         visionCheckSkipped = try c.decodeIfPresent(String.self,                     forKey: .visionCheckSkipped)
+        partialProgramNotes = try c.decodeIfPresent([String: String].self,          forKey: .partialProgramNotes) ?? [:]
         eventURL          = try c.decodeIfPresent(String.self,                     forKey: .eventURL)          ?? ""
         eventHandles      = try c.decodeIfPresent(String.self,                     forKey: .eventHandles)      ?? ""
         postingPresetOverride = try c.decodeIfPresent(PostingPreset.self,          forKey: .postingPresetOverride)

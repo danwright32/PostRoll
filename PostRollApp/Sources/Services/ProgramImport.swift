@@ -108,11 +108,16 @@ enum ProgramImport {
         /// reclaims them if Dan never does.
         let pagesThatWorked: [URL]
         let failures: [Failure]
+        /// What the source PDF said it held, so an acceptance can record how
+        /// much of the program was taken rather than only how many pages.
+        let declaredPageCount: Int?
 
-        init(fileName: String, pagesThatWorked: [URL], failures: [Failure]) {
+        init(fileName: String, pagesThatWorked: [URL], failures: [Failure],
+             declaredPageCount: Int? = nil) {
             self.fileName = fileName
             self.pagesThatWorked = pagesThatWorked
             self.failures = failures
+            self.declaredPageCount = declaredPageCount
         }
 
         /// Names the file, every page that is missing and why, and says plainly
@@ -164,6 +169,31 @@ enum ProgramImport {
         var pagesToAdd: [URL] = []
         var incomplete: [Incomplete] = []
         var imported: [Imported] = []
+    }
+
+    /// What to record when Dan takes the readable pages of a program that did
+    /// not come in whole.
+    ///
+    /// The escape hatch is the ONE case where a short program becomes the
+    /// program, which makes it the one case that needs a record: everything
+    /// downstream reads the pages and cannot tell a program that is short from
+    /// one that is small, and here it genuinely is short (#378).
+    static func acceptanceNote(for incomplete: Incomplete) -> String {
+        let taken = incomplete.pagesThatWorked.count
+        let outOf = incomplete.declaredPageCount.map { " of \($0)" } ?? ""
+        let causes = incomplete.failures.map(\.message).joined(separator: " ")
+        return "\(incomplete.fileName): \(taken)\(outOf) pages were read. \(causes) "
+            + "You chose to continue without the rest, so anything printed on "
+            + "\(taken == 1 ? "the other pages" : "the missing pages") is not in the program data below."
+    }
+
+    /// The notes still true after a fresh import: a file that has since come in
+    /// whole is no longer partial, so its note goes. A re-import that failed
+    /// the same way leaves the program just as short, so its note stays.
+    static func notes(_ existing: [String: String], clearedBy plan: Plan) -> [String: String] {
+        var kept = existing
+        for file in plan.imported { kept.removeValue(forKey: file.fileName) }
+        return kept
     }
 
     /// Whether the stored program is still whole at the moment OCR is about to
@@ -244,7 +274,8 @@ enum ProgramImport {
                 plan.incomplete.append(Incomplete(
                     fileName: upload.source.lastPathComponent,
                     pagesThatWorked: upload.result.pages,
-                    failures: upload.result.failures
+                    failures: upload.result.failures,
+                    declaredPageCount: upload.result.declaredPageCount
                 ))
                 continue
             }

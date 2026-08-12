@@ -185,6 +185,103 @@ final class ProgramImportTests: XCTestCase {
         XCTAssertEqual(plan.incomplete.first?.fileName, "Short.pdf")
     }
 
+    // MARK: - Taking an incomplete program on purpose (#378)
+
+    /// The escape hatch from #368 is the one case where a short program does
+    /// become the program. That makes it exactly the case that needs a record:
+    /// without one, the OCR review, captions and blog are built from a program
+    /// known to be incomplete and nothing says so, which is the defect #368
+    /// closed arriving by Dan's own hand.
+    func testAcceptingAnIncompleteProgramIsRecordedAgainstItsFile() throws {
+        // Built through plan(), not by hand, so this also pins that the declared
+        // count actually reaches the record rather than being dropped on the way.
+        let plan = ProgramImport.plan(for: [
+            ProgramImport.Upload(
+                source: page("Gala.pdf"),
+                result: ProgramImport.Rasterisation(
+                    pages: (1...9).map { page("Gala_p\($0).png") },
+                    failures: [.couldNotWritePage(3, reason: "No space left on device")],
+                    declaredPageCount: 12
+                )
+            )
+        ])
+        let incomplete = try XCTUnwrap(plan.incomplete.first)
+
+        let note = ProgramImport.acceptanceNote(for: incomplete)
+
+        XCTAssertTrue(note.contains("Gala.pdf"), note)
+        XCTAssertTrue(note.contains("9"), "how much of the program was read: \(note)")
+        XCTAssertTrue(note.contains("12"), "out of how much: \(note)")
+        XCTAssertTrue(note.contains("3"), "which page is absent from it: \(note)")
+    }
+
+    func testANoteSurvivesUntilThatFileComesInWhole() {
+        let existing = [
+            "Gala.pdf": "old note",
+            "Cast.pdf": "unrelated note",
+        ]
+
+        let plan = ProgramImport.plan(for: [
+            ProgramImport.Upload(
+                source: page("Gala.pdf"),
+                result: ProgramImport.Rasterisation(
+                    pages: (1...12).map { page("Gala_p\($0).png") },
+                    declaredPageCount: 12
+                )
+            )
+        ])
+
+        let kept = ProgramImport.notes(existing, clearedBy: plan)
+
+        XCTAssertNil(kept["Gala.pdf"],
+                     "the file has since come in whole, so the program is no longer partial")
+        XCTAssertEqual(kept["Cast.pdf"], "unrelated note",
+                       "another file's shortfall is untouched by this one being fixed")
+    }
+
+    func testAnIncompleteReimportDoesNotClearTheNote() {
+        let plan = ProgramImport.plan(for: [
+            ProgramImport.Upload(
+                source: page("Gala.pdf"),
+                result: ProgramImport.Rasterisation(
+                    pages: [page("Gala_p1.png")],
+                    failures: [.missingPage(3)]
+                )
+            )
+        ])
+
+        let kept = ProgramImport.notes(["Gala.pdf": "old note"], clearedBy: plan)
+
+        XCTAssertEqual(kept["Gala.pdf"], "old note",
+                       "a re-import that failed the same way leaves the program just as partial")
+    }
+
+    /// The captions and blog are written long after the import, often in a
+    /// later session, and by then nothing else can tell the program is short.
+    /// A record that does not survive a relaunch is no record at all.
+    func testAPartialProgramNoteSurvivesASaveAndReload() throws {
+        var event = Event(name: "Spring Gala", org: "Org", venue: "Hall",
+                          date: Date(timeIntervalSince1970: 0), shootType: .fullShow)
+        event.partialProgramNotes = ["Gala.pdf": "9 of 12 pages were read."]
+
+        let reloaded = try JSONDecoder().decode(
+            Event.self, from: try JSONEncoder().encode(event))
+
+        XCTAssertEqual(reloaded.partialProgramNotes, ["Gala.pdf": "9 of 12 pages were read."])
+    }
+
+    func testEventsSavedBeforeTheFieldExistedStillLoad() throws {
+        let legacy = """
+        {"id":"22222222-2222-2222-2222-222222222222","name":"Old Show","org":"Org",
+         "venue":"Hall","date":0,"shootType":"Performance"}
+        """.data(using: .utf8)!
+
+        let event = try JSONDecoder().decode(Event.self, from: legacy)
+
+        XCTAssertEqual(event.partialProgramNotes, [:],
+                       "a missing key must not wipe the rest of a saved event")
+    }
+
     // MARK: - The program still being whole when OCR reads it
 
     /// #372: #368 closed this at the import end, so a partial program can no

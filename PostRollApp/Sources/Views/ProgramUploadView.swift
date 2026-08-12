@@ -187,6 +187,7 @@ struct ProgramUploadView: View {
                 addPages(plan.pagesToAdd)
                 incompleteUploads.append(contentsOf: plan.incomplete)
                 lastImport = plan.imported
+                clearNotesForFilesNowWhole(plan)
                 isImporting = false
             }
         }
@@ -236,12 +237,34 @@ struct ProgramUploadView: View {
             actions.append(BrandBannerAction(
                 label: "Import the \(count) page\(count == 1 ? "" : "s") that worked"
             ) {
-                addPages(upload.pagesThatWorked)
+                accept(upload)
                 dismiss(upload)
             })
         }
         actions.append(BrandBannerAction(label: "Dismiss") { dismiss(upload) })
         return actions
+    }
+
+    /// Takes the readable pages of a program that did not come in whole, and
+    /// records that this is what happened. The record is the point: this is the
+    /// one route by which a short program legitimately becomes the program, so
+    /// it is the one place the shortfall would otherwise vanish (#378).
+    private func accept(_ upload: ProgramImport.Incomplete) {
+        addPages(upload.pagesThatWorked)
+        guard var ev = appState.events.first(where: { $0.id == event.id }) else { return }
+        ev.partialProgramNotes[upload.fileName] = ProgramImport.acceptanceNote(for: upload)
+        appState.updateEvent(ev)
+    }
+
+    /// A file that has since come in whole is no longer a partial program, so
+    /// its record goes. A re-import that failed the same way leaves it just as
+    /// short, so that record stays.
+    private func clearNotesForFilesNowWhole(_ plan: ProgramImport.Plan) {
+        guard var ev = appState.events.first(where: { $0.id == event.id }) else { return }
+        let kept = ProgramImport.notes(ev.partialProgramNotes, clearedBy: plan)
+        guard kept != ev.partialProgramNotes else { return }
+        ev.partialProgramNotes = kept
+        appState.updateEvent(ev)
     }
 
     private func dismiss(_ upload: ProgramImport.Incomplete) {
