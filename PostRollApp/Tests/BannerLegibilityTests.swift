@@ -164,8 +164,12 @@ final class BannerLegibilityTests: XCTestCase {
 
 #if POSTROLL_TESTS
 extension BannerLegibilityTests {
-    /// Writes every banner state to PNG so a person can look at them.
-    /// Set POSTROLL_BANNER_DUMP to a directory to run it.
+    /// Writes every banner state to PNG so a person can look at them, which is
+    /// the whole point of #389 and the only reason the run-on was ever found.
+    ///
+    /// It asserts, rather than merely producing files: a utility in the suite
+    /// that cannot fail is indistinguishable from one that silently stopped
+    /// working, and this codebase already treats that as a defect.
     func testDumpBannersForReview() throws {
         let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["POSTROLL_BANNER_DUMP"]
             ?? FileManager.default.temporaryDirectory.appendingPathComponent("postroll-banners").path)
@@ -176,6 +180,12 @@ extension BannerLegibilityTests {
             try png.write(to: out.appendingPathComponent(
                 state.name.replacingOccurrences(of: " ", with: "-") + ".png"))
         }
+
+        let written = try FileManager.default.contentsOfDirectory(atPath: out.path)
+            .filter { $0.hasSuffix(".png") }
+        XCTAssertEqual(written.count, states.count,
+                       "every state has to reach disk, or a review of these images is a "
+                       + "review of whichever ones happened to be written")
     }
 }
 #endif
