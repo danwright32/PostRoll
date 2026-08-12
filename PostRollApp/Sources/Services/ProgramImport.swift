@@ -206,11 +206,31 @@ enum ProgramImport {
         }
     }
 
-    /// Checks every page the event points at is still a file on disk.
+    /// Checks every page the event points at can actually yield its content.
+    ///
+    /// Readability, not mere existence: a zero byte or unreadable file passes
+    /// an existence check, reaches OCR, and contributes nothing, which is the
+    /// same quietly short program by another route. The refusal this produces
+    /// says the page cannot be read, so this is what has to be measured (#379).
     static func readiness(of pages: [URL], fileManager: FileManager = .default) -> Readiness {
         guard !pages.isEmpty else { return .noPages }
-        let missing = pages.filter { !fileManager.fileExists(atPath: $0.path) }
-        return missing.isEmpty ? .ready : .missingFiles(missing)
+        let unreadable = pages.filter { !isReadable($0, fileManager: fileManager) }
+        return unreadable.isEmpty ? .ready : .missingFiles(unreadable)
+    }
+
+    /// Whether one page yields at least one byte.
+    ///
+    /// Opens the file and reads a byte rather than reading it whole: a program
+    /// page is a multi megabyte scan, and this runs for every page each time
+    /// Run OCR is pressed. One byte is enough to separate a file that is there
+    /// and readable from one that is absent, empty, or blocked, which is
+    /// exactly what the refusal claims.
+    private static func isReadable(_ url: URL, fileManager: FileManager) -> Bool {
+        guard fileManager.fileExists(atPath: url.path) else { return false }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        let head = try? handle.read(upToCount: 1)
+        return (head?.isEmpty == false)
     }
 
     /// Splits a batch into the pages that may be added and the uploads that may
