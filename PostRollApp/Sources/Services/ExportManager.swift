@@ -306,19 +306,12 @@ final class ExportManager {
                         // it has to be said out loud rather than skipped (#377).
                         absentApprovals.append(contentsOf: PreviewMergePolicy.absentApprovals(
                             assets: assets, label: day.displayName))
-                        for (_, srcPath) in assets where srcPath.hasSuffix(".png") {
-                            guard FileManager.default.fileExists(atPath: srcPath) else { continue }
-                            let src = URL(fileURLWithPath: srcPath)
-                            let dest = dayDir.appendingPathComponent(src.lastPathComponent)
-                            try? FileManager.default.removeItem(at: dest)
-                            do {
-                                try FileManager.default.copyItem(at: src, to: dest)
-                            } catch {
-                                droppedAssets.append(EventExporter.DroppedAsset(
-                                    label: "\(day.displayName) \(src.lastPathComponent)",
-                                    source: src, reason: error.localizedDescription))
-                            }
-                        }
+                        // Every approved asset, not only the PNGs. The reel is an
+                        // mp4 and is one of the things Dan approves, so restoring
+                        // images alone shipped the machine's reel on any day that
+                        // was regenerated (#383).
+                        droppedAssets.append(contentsOf: PreviewMergePolicy.restoreAvailableApprovals(
+                            assets: assets, to: dayDir, label: day.displayName))
                     }
                 } catch {
                     mediaError = error.localizedDescription

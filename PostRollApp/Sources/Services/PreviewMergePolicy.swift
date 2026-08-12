@@ -145,32 +145,68 @@ enum PreviewMergePolicy {
 
         try? fileManager.createDirectory(at: dayDir, withIntermediateDirectories: true)
 
-        var dropped: [EventExporter.DroppedAsset] = []
         // Sorted so a failure reports the same way twice, rather than in
         // whatever order the dictionary happened to hash.
-        for (_, srcPath) in assets.sorted(by: { $0.key < $1.key }) {
-            let src = URL(fileURLWithPath: srcPath)
-            let dest = dayDir.appendingPathComponent(src.lastPathComponent)
-            // Copy beside the destination first and only swap once the whole
-            // file is there. Deleting first and copying second means a copy
-            // that fails has already taken the previous export's file with it,
-            // which is worse than not exporting at all (#357).
-            let staged = dayDir.appendingPathComponent(
-                ".\(src.lastPathComponent).partial-\(UUID().uuidString)")
-            do {
-                try fileManager.copyItem(at: src, to: staged)
-                if fileManager.fileExists(atPath: dest.path) {
-                    _ = try fileManager.replaceItemAt(dest, withItemAt: staged)
-                } else {
-                    try fileManager.moveItem(at: staged, to: dest)
-                }
-            } catch {
-                try? fileManager.removeItem(at: staged)
-                dropped.append(EventExporter.DroppedAsset(
-                    label: "\(label) \(src.lastPathComponent)",
-                    source: src, reason: error.localizedDescription))
-            }
+        let dropped = assets.sorted { $0.key < $1.key }.compactMap {
+            place(URL(fileURLWithPath: $0.value), into: dayDir,
+                  label: label, fileManager: fileManager)
         }
         return PreviewCopyResult(attempted: true, dropped: dropped)
+    }
+
+    /// Puts every approved asset that IS on disk back over a day the generator
+    /// has just rebuilt, and returns whichever could not be placed.
+    ///
+    /// Unlike `copyPreviewAssetsIfComplete` this does not require all of them:
+    /// this runs precisely because some are absent, and the absent ones are
+    /// reported by `absentApprovals` rather than here.
+    ///
+    /// Every approved asset, not only the still images. The reel is an mp4 and
+    /// is one of the things Dan approves, so restoring images alone shipped the
+    /// machine's reel on any day that was regenerated (#383).
+    static func restoreAvailableApprovals(
+        assets: [String: String]?,
+        to dayDir: URL,
+        label: String,
+        fileManager: FileManager = .default
+    ) -> [EventExporter.DroppedAsset] {
+        guard let assets, !assets.isEmpty else { return [] }
+        try? fileManager.createDirectory(at: dayDir, withIntermediateDirectories: true)
+        return assets.sorted { $0.key < $1.key }
+            .filter { fileManager.fileExists(atPath: $0.value) }
+            .compactMap {
+                place(URL(fileURLWithPath: $0.value), into: dayDir,
+                      label: label, fileManager: fileManager)
+            }
+    }
+
+    /// Places one file in the day folder, returning a dropped asset when it
+    /// could not be.
+    ///
+    /// Copies beside the destination first and only swaps once the whole file is
+    /// there. Deleting first and copying second means a copy that fails has
+    /// already taken the previous export's file with it, which is worse than not
+    /// exporting at all (#357). One implementation, so the restore path cannot
+    /// drift back to the unsafe order that the fast path already got right.
+    private static func place(
+        _ src: URL, into dayDir: URL, label: String, fileManager: FileManager
+    ) -> EventExporter.DroppedAsset? {
+        let dest = dayDir.appendingPathComponent(src.lastPathComponent)
+        let staged = dayDir.appendingPathComponent(
+            ".\(src.lastPathComponent).partial-\(UUID().uuidString)")
+        do {
+            try fileManager.copyItem(at: src, to: staged)
+            if fileManager.fileExists(atPath: dest.path) {
+                _ = try fileManager.replaceItemAt(dest, withItemAt: staged)
+            } else {
+                try fileManager.moveItem(at: staged, to: dest)
+            }
+            return nil
+        } catch {
+            try? fileManager.removeItem(at: staged)
+            return EventExporter.DroppedAsset(
+                label: "\(label) \(src.lastPathComponent)",
+                source: src, reason: error.localizedDescription)
+        }
     }
 }
