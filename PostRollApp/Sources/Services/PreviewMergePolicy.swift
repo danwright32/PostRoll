@@ -89,6 +89,49 @@ enum PreviewMergePolicy {
         static let declined = PreviewCopyResult(attempted: false, dropped: [])
     }
 
+    /// An approved preview that was not on disk when the export went to put it
+    /// back over the freshly generated version.
+    ///
+    /// This is deliberately NOT a `DroppedAsset`: that says the folder is short
+    /// a file, and here it is not. Python regenerated the day, so the folder
+    /// holds a perfectly good image. What is missing is Dan's approval of it,
+    /// and the two call for different words and different actions (#377).
+    struct AbsentApproval: Equatable {
+        /// How to name it to Dan, e.g. "Wednesday collage.png".
+        let label: String
+        let fileName: String
+    }
+
+    /// The approved previews for one day that are no longer on disk.
+    ///
+    /// Sorted by asset key so the same day reports the same way twice, rather
+    /// than in whatever order the dictionary happened to hash.
+    static func absentApprovals(
+        assets: [String: String]?,
+        label: String,
+        fileManager: FileManager = .default
+    ) -> [AbsentApproval] {
+        guard let assets, !assets.isEmpty else { return [] }
+        return assets.sorted { $0.key < $1.key }
+            .filter { !fileManager.fileExists(atPath: $0.value) }
+            .map { _, path in
+                let name = URL(fileURLWithPath: path).lastPathComponent
+                return AbsentApproval(label: "\(label) \(name)", fileName: name)
+            }
+    }
+
+    /// What to tell Dan, or nil when every approval was used. Nil rather than
+    /// an empty string so an ordinary export cannot render a blank notice,
+    /// which is how a notice stops being read before the one time it matters.
+    static func substitutionNotice(_ absent: [AbsentApproval]) -> String? {
+        guard !absent.isEmpty else { return nil }
+        let names = absent.map(\.label).joined(separator: ", ")
+        let count = absent.count
+        return "\(count) approved image\(count == 1 ? "" : "s") could not be found, so the "
+            + "freshly generated version\(count == 1 ? " was" : "s were") exported instead "
+            + "of the one\(count == 1 ? "" : "s") you approved: \(names)."
+    }
+
     @discardableResult
     static func copyPreviewAssetsIfComplete(
         assets: [String: String]?,
