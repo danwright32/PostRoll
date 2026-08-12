@@ -207,7 +207,7 @@ final class ProgramImportTests: XCTestCase {
         ])
         let incomplete = try XCTUnwrap(plan.incomplete.first)
 
-        let note = ProgramImport.acceptanceNote(for: incomplete)
+        let note = ProgramShortfall.acceptanceNote(for: incomplete)
 
         XCTAssertTrue(note.contains("Gala.pdf"), note)
         XCTAssertTrue(note.contains("9"), "how much of the program was read: \(note)")
@@ -231,7 +231,7 @@ final class ProgramImportTests: XCTestCase {
             )
         ])
 
-        let kept = ProgramImport.notes(existing, clearedBy: plan)
+        let kept = ProgramShortfall.notes(existing, clearedBy: plan)
 
         XCTAssertNil(kept["Gala.pdf"],
                      "the file has since come in whole, so the program is no longer partial")
@@ -250,7 +250,7 @@ final class ProgramImportTests: XCTestCase {
             )
         ])
 
-        let kept = ProgramImport.notes(["Gala.pdf": "old note"], clearedBy: plan)
+        let kept = ProgramShortfall.notes(["Gala.pdf": "old note"], clearedBy: plan)
 
         XCTAssertEqual(kept["Gala.pdf"], "old note",
                        "a re-import that failed the same way leaves the program just as partial")
@@ -295,7 +295,7 @@ final class ProgramImportTests: XCTestCase {
         let present = try [1, 2].map { try makeFile("Gala_p\($0).png", in: dir) }
         let gone = dir.appendingPathComponent("Gala_p3.png")
 
-        let readiness = ProgramImport.readiness(of: present + [gone])
+        let readiness = ProgramReadiness.of(present + [gone])
 
         XCTAssertEqual(readiness, .missingFiles([gone]))
         let refusal = try XCTUnwrap(readiness.refusal)
@@ -334,7 +334,7 @@ final class ProgramImportTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: unreadable.path),
                       "precondition: an unreadable page is still a file that exists")
 
-        let readiness = ProgramImport.readiness(of: [good, empty, unreadable])
+        let readiness = ProgramReadiness.of([good, empty, unreadable])
 
         XCTAssertEqual(readiness, .missingFiles([empty, unreadable]),
                        "a page that cannot yield its content is no use to OCR, however "
@@ -347,22 +347,20 @@ final class ProgramImportTests: XCTestCase {
 
         let pages = try [1, 2, 3].map { try makeFile("Recital_p\($0).png", in: dir) }
 
-        XCTAssertEqual(ProgramImport.readiness(of: pages), .ready)
-        XCTAssertNil(ProgramImport.readiness(of: pages).refusal,
+        XCTAssertEqual(ProgramReadiness.of(pages), .ready)
+        XCTAssertNil(ProgramReadiness.of(pages).refusal,
                      "a whole program must not be refused")
     }
 
     /// #374: pressing Run OCR with no pages sent the event back to the upload
     /// screen with nothing on it saying why.
     func testReadinessRefusesAnEmptyProgramInItsOwnWords() throws {
-        let empty = ProgramImport.readiness(of: [])
+        let empty = ProgramReadiness.of([])
         XCTAssertEqual(empty, .noPages)
 
         let dir = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let missing = ProgramImport.readiness(
-            of: [dir.appendingPathComponent("Only_p1.png")]
-        )
+        let missing = ProgramReadiness.of([dir.appendingPathComponent("Only_p1.png")])
 
         let noPages = try XCTUnwrap(empty.refusal)
         let gone = try XCTUnwrap(missing.refusal)

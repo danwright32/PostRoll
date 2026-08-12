@@ -58,7 +58,7 @@ final class OCRManager {
         // reason, rather than bouncing Dan there with nothing said (#374).
         let live = appState.events.first(where: { $0.id == eventID })
         guard let ev = live else { return }
-        let readiness = ProgramImport.readiness(of: ev.programImagePaths)
+        let readiness = ProgramReadiness.of(ev.programImagePaths)
         guard readiness == .ready else {
             refusals[eventID] = readiness.refusal
             var back = ev
