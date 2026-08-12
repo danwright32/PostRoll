@@ -105,9 +105,7 @@ struct ProgramUploadView: View {
 
                 HStack {
                     Button("No program") { skipProgram() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
+                        .buttonStyle(BrandOutlineButtonStyle())
                     Spacer()
                     if !event.programImagePaths.isEmpty && !isImporting {
                         Button("Run OCR") { advanceToOCR() }

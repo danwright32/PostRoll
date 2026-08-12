@@ -1600,10 +1600,8 @@ private struct FlagRow: View {
                         .help("Replace the \(fieldName) value with what you typed.")
 
                         Button("Keep OCR Text", action: onDismiss)
-                            .buttonStyle(.plain)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.warmMid)
                             .help("The OCR text was correct. Mark this flag reviewed and leave the value alone.")
+                            .buttonStyle(BrandOutlineButtonStyle())
                     }
 
                     if let err = applyError {
@@ -1621,10 +1619,8 @@ private struct FlagRow: View {
 
                     HStack(spacing: 6) {
                         Button("Keep OCR Text", action: onDismiss)
-                            .buttonStyle(.plain)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.warmMid)
                             .help("The OCR data was correct. Mark this flag reviewed and leave it alone.")
+                            .buttonStyle(BrandOutlineButtonStyle())
                     }
                 }
 

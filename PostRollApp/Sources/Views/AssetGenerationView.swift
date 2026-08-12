@@ -369,9 +369,7 @@ struct AssetGenerationView: View {
                                 genManager.clearOutcome(eventID: event.id)
                             }
                         }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.warmMid)
+                        .buttonStyle(BrandOutlineButtonStyle())
                     }
                     Button("Fix inputs") {
                         genManager.clearOutcome(eventID: event.id)
@@ -727,9 +725,7 @@ struct AssetGenerationView: View {
                         forceConfigure = true
                     }
                 }
-                .buttonStyle(.plain)
-                .font(.system(size: 11))
-                .foregroundStyle(Color.warmMid)
+                .buttonStyle(BrandOutlineButtonStyle())
             }
             .opacity(showCheckmark ? 1 : 0)
 

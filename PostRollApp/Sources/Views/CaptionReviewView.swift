@@ -3551,9 +3551,7 @@ private struct FridayClipEditor: View {
 
                     if hasOverride, let onRecutWithAI {
                         Button("Re-cut with AI", action: onRecutWithAI)
-                            .buttonStyle(.plain)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.warmMid)
+                            .buttonStyle(BrandOutlineButtonStyle())
                     }
                 }
                 .padding(.top, Spacing.xs)
