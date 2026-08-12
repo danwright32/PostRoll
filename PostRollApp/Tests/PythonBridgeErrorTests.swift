@@ -62,6 +62,48 @@ final class PythonBridgeErrorTests: XCTestCase {
         XCTAssertTrue(message.contains("API key"), "got: \(message)")
         XCTAssertFalse(message.contains("too large"), "unrelated older \"413\" substring must not leak in, got: \(message)")
     }
+
+    // MARK: - PythonBridgeError.invalidOutput carries a reason (#365)
+
+    // Over twenty call sites in PythonBridge pass a written reason to
+    // `invalidOutput`, and the switch that renders it never read the payload,
+    // so every one of them arrived as the same generic sentence. The one
+    // telling Dan exactly which step to go back to was the one that never
+    // showed up.
+
+    func testTwoDifferentCausesDoNotProduceTheSameMessage() {
+        let noOCR = PythonBridgeError
+            .invalidOutput("No OCR result. Complete the OCR step first.").errorDescription
+        let noCover = PythonBridgeError
+            .invalidOutput("Cover regeneration did not produce a cover path.").errorDescription
+
+        XCTAssertNotEqual(noOCR, noCover,
+                          "every call site writes a reason; they must not all render identically")
+    }
+
+    func testTheReasonTheCallSiteGaveIsWhatTheUserReads() {
+        let message = PythonBridgeError
+            .invalidOutput("No OCR result. Complete the OCR step first.").errorDescription ?? ""
+
+        XCTAssertTrue(message.contains("Complete the OCR step first"), "got: \(message)")
+    }
+
+    func testTheMessageStillPointsAtTheLogs() {
+        let message = PythonBridgeError.invalidOutput("Could not serialise current blog.")
+            .errorDescription ?? ""
+
+        XCTAssertTrue(message.contains(AppPaths.logsDirDisplayPath),
+                      "the way to dig further has to survive alongside the reason, got: \(message)")
+    }
+
+    func testACallSiteThatGivesNoReasonStillSaysSomethingUseful() {
+        // Not every throw has a sentence to offer, and an empty message would
+        // be worse than the generic one.
+        let message = PythonBridgeError.invalidOutput("   \n ").errorDescription ?? ""
+
+        XCTAssertFalse(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertTrue(message.contains(AppPaths.logsDirDisplayPath), "got: \(message)")
+    }
 }
 
 /// #90: every Python subprocess wrote its stderr into ONE shared log, and each
