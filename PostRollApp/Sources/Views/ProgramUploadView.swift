@@ -252,7 +252,7 @@ struct ProgramUploadView: View {
     private func accept(_ upload: ProgramImport.Incomplete) {
         addPages(upload.pagesThatWorked)
         guard var ev = appState.events.first(where: { $0.id == event.id }) else { return }
-        ev.partialProgramNotes[upload.fileName] = ProgramImport.acceptanceNote(for: upload)
+        ev.partialProgramNotes[upload.fileName] = ProgramShortfall.acceptanceNote(for: upload)
         appState.updateEvent(ev)
     }
 
@@ -261,7 +261,7 @@ struct ProgramUploadView: View {
     /// short, so that record stays.
     private func clearNotesForFilesNowWhole(_ plan: ProgramImport.Plan) {
         guard var ev = appState.events.first(where: { $0.id == event.id }) else { return }
-        let kept = ProgramImport.notes(ev.partialProgramNotes, clearedBy: plan)
+        let kept = ProgramShortfall.notes(ev.partialProgramNotes, clearedBy: plan)
         guard kept != ev.partialProgramNotes else { return }
         ev.partialProgramNotes = kept
         appState.updateEvent(ev)
