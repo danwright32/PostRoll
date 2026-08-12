@@ -433,9 +433,7 @@ struct ExportView: View {
             Button("Skip, text export only") {
                 exportManager.skipMedia(eventID: event.id)
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 11))
-            .foregroundStyle(Color.warmMid)
+            .buttonStyle(BrandOutlineButtonStyle())
             Spacer()
         }
         .frame(maxWidth: .infinity)
