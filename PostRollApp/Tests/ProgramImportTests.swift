@@ -212,6 +212,38 @@ final class ProgramImportTests: XCTestCase {
         XCTAssertFalse(refusal.lowercased().contains("went missing"), refusal)
     }
 
+    /// #379: the check asked whether each page EXISTS, while the refusal it
+    /// produces says the page cannot be read. A zero byte or unreadable file
+    /// passes an existence check, reaches OCR, and contributes nothing, which
+    /// puts the program back to being quietly short. A message may claim only
+    /// what its check measured, so the check has to measure readability.
+    func testReadinessRefusesAPageThatIsThereButCannotBeRead() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let good = try makeFile("Gala_p1.png", in: dir)
+        let empty = dir.appendingPathComponent("Gala_p2.png")
+        try Data().write(to: empty)
+        let unreadable = try makeFile("Gala_p3.png", in: dir)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000],
+                                              ofItemAtPath: unreadable.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                                   ofItemAtPath: unreadable.path)
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: empty.path),
+                      "precondition: an empty page is still a file that exists")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unreadable.path),
+                      "precondition: an unreadable page is still a file that exists")
+
+        let readiness = ProgramImport.readiness(of: [good, empty, unreadable])
+
+        XCTAssertEqual(readiness, .missingFiles([empty, unreadable]),
+                       "a page that cannot yield its content is no use to OCR, however "
+                       + "present the file is")
+    }
+
     func testReadinessPassesWhenEveryPageIsThere() throws {
         let dir = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
