@@ -185,7 +185,9 @@ struct ProgramPDFBuilder {
             try? FileManager.default.copyItem(at: url, to: retainedSource)
         }
 
-        var result = ProgramImport.Rasterisation()
+        // Recorded before the loop, from the document rather than from what the
+        // loop managed to do, so the two can disagree (#373).
+        var result = ProgramImport.Rasterisation(declaredPageCount: doc.pageCount)
         for i in 0..<doc.pageCount {
             let number = i + 1
             guard let page = doc.page(at: i) else {

@@ -71,9 +71,20 @@ enum ProgramImport {
     struct Rasterisation: Sendable {
         var pages: [URL] = []
         var failures: [Failure] = []
+        /// How many pages the source PDF itself says it has, when the source is
+        /// a PDF. This is a SECOND route to the same number: the failure list
+        /// is produced by our own loop, so a page that loop never visited at all
+        /// is invisible to it, and only the document's own count can disagree
+        /// (#373). Nil for an uploaded image, which declares nothing.
+        var declaredPageCount: Int?
 
-        /// True only when every page of the upload became a file on disk.
-        var isComplete: Bool { failures.isEmpty }
+        /// True only when every page of the upload became a file on disk AND
+        /// the count matches what the document declared.
+        var isComplete: Bool {
+            guard failures.isEmpty else { return false }
+            guard let declaredPageCount else { return true }
+            return pages.count == declaredPageCount
+        }
     }
 
     /// One uploaded file, ready to be rasterised or already copied.
@@ -122,11 +133,84 @@ enum ProgramImport {
         }
     }
 
+    /// One file that came in whole, and what it contributed. Shown so Dan can
+    /// check the count against the program in his hand: a PDF that is itself
+    /// short, or simply the wrong file, produces no failure anywhere and is
+    /// only ever caught by somebody reading the number (#373).
+    struct Imported: Identifiable, Sendable {
+        let id = UUID()
+        let fileName: String
+        let pageCount: Int
+        let declaredPageCount: Int?
+
+        init(fileName: String, pageCount: Int, declaredPageCount: Int?) {
+            self.fileName = fileName
+            self.pageCount = pageCount
+            self.declaredPageCount = declaredPageCount
+        }
+
+        var summary: String {
+            let pages = "page\(pageCount == 1 ? "" : "s")"
+            guard let declaredPageCount else {
+                return "\(fileName): \(pageCount) \(pages)"
+            }
+            return "\(fileName): \(pageCount) of \(declaredPageCount) \(pages)"
+        }
+    }
+
     /// What a batch of uploads contributes to the event, and what has to be
     /// reported instead of contributed.
     struct Plan {
         var pagesToAdd: [URL] = []
         var incomplete: [Incomplete] = []
+        var imported: [Imported] = []
+    }
+
+    /// Whether the stored program is still whole at the moment OCR is about to
+    /// read it.
+    ///
+    /// The import side of this (above) cannot cover it: a page can be deleted,
+    /// moved, or reclaimed at any point after it was imported, and OCR reads
+    /// whatever paths the event holds now. A page that is gone reads as a
+    /// program that never had it (#372), and an empty list used to bounce Dan
+    /// back to the upload screen with nothing saying why (#374).
+    enum Readiness: Equatable {
+        case ready
+        /// The event holds no program pages at all.
+        case noPages
+        /// Pages the event still points at that are no longer on disk.
+        case missingFiles([URL])
+
+        /// Why OCR will not run, or nil when it will. Nil rather than an empty
+        /// string so a caller cannot render a blank refusal over a good program.
+        var refusal: String? {
+            switch self {
+            case .ready:
+                return nil
+            case .noPages:
+                return "There are no program pages to read yet. Add the program above, "
+                    + "or choose \"No program\" if this shoot doesn't have one."
+            case .missingFiles(let urls):
+                let names = urls.map(\.lastPathComponent).joined(separator: ", ")
+                let count = urls.count
+                // "Cannot be read", not "was deleted": the check underneath only
+                // asks whether the file can be seen, and on a Mac a file the app
+                // is blocked from reading is indistinguishable from one that is
+                // gone. A message may claim only what its check measured.
+                return "\(count) program page\(count == 1 ? "" : "s") can't be read "
+                    + "(\(names)). \(count == 1 ? "It" : "They") may have been moved, deleted, "
+                    + "or blocked by macOS privacy settings. Reading the rest would treat what "
+                    + "is left as the whole program, so add \(count == 1 ? "it" : "them") again "
+                    + "before running OCR."
+            }
+        }
+    }
+
+    /// Checks every page the event points at is still a file on disk.
+    static func readiness(of pages: [URL], fileManager: FileManager = .default) -> Readiness {
+        guard !pages.isEmpty else { return .noPages }
+        let missing = pages.filter { !fileManager.fileExists(atPath: $0.path) }
+        return missing.isEmpty ? .ready : .missingFiles(missing)
     }
 
     /// Splits a batch into the pages that may be added and the uploads that may
@@ -148,6 +232,11 @@ enum ProgramImport {
                 seen.insert(page)
                 plan.pagesToAdd.append(page)
             }
+            plan.imported.append(Imported(
+                fileName: upload.source.lastPathComponent,
+                pageCount: upload.result.pages.count,
+                declaredPageCount: upload.result.declaredPageCount
+            ))
         }
         return plan
     }

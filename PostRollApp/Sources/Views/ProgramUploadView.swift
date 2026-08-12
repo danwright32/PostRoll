@@ -7,6 +7,7 @@ import PDFKit
 struct ProgramUploadView: View {
     let event: Event
     @Environment(AppState.self) private var appState
+    @Environment(OCRManager.self) private var ocrManager
     @State private var isTargeted = false
     @State private var showingFilePicker = false
     @State private var isImporting = false
@@ -14,6 +15,10 @@ struct ProgramUploadView: View {
     /// Uploads that did not come in whole, shown until Dan either takes the
     /// readable pages or dismisses them (#368).
     @State private var incompleteUploads: [ProgramImport.Incomplete] = []
+    /// What the last import brought in, per file, against what the file itself
+    /// said it held (#373). Replaced by the next import rather than accumulated:
+    /// it is a statement about that import, not about the event.
+    @State private var lastImport: [ProgramImport.Imported] = []
 
     init(event: Event) {
         self.event = event
@@ -59,6 +64,21 @@ struct ProgramUploadView: View {
                         }
                 }
 
+                // Why OCR sent the event back here, on the screen it landed on
+                // (#374). Without this, pressing Run OCR moved Dan to an
+                // earlier screen with nothing said, which reads as the app
+                // losing his work rather than as a refusal he can act on.
+                if let refusal = ocrManager.refusal(for: event.id) {
+                    BrandBanner(
+                        icon: "exclamationmark.triangle",
+                        message: refusal,
+                        style: .error,
+                        actions: [BrandBannerAction(label: "Dismiss") {
+                            ocrManager.clearRefusal(for: event.id)
+                        }]
+                    )
+                }
+
                 // A file that did not come in whole. Shown here, above the
                 // pages, because the pages are what it is a statement about.
                 ForEach(incompleteUploads) { upload in
@@ -75,6 +95,7 @@ struct ProgramUploadView: View {
                     isTargeted: $isTargeted,
                     isImporting: isImporting,
                     imagePaths: event.programImagePaths,
+                    lastImport: lastImport,
                     onPickFiles: { showingFilePicker = true },
                     onRemove: removeImage
                 )
@@ -165,6 +186,7 @@ struct ProgramUploadView: View {
             await MainActor.run {
                 addPages(plan.pagesToAdd)
                 incompleteUploads.append(contentsOf: plan.incomplete)
+                lastImport = plan.imported
                 isImporting = false
             }
         }
@@ -197,6 +219,10 @@ struct ProgramUploadView: View {
             ev.programImagePaths.append(page)
         }
         appState.updateEvent(ev)
+        // The refusal was about the pages as they were. Changing them makes it
+        // a statement about a set that no longer exists, and a reason shown
+        // after it stopped being true is worse than none.
+        ocrManager.clearRefusal(for: event.id)
     }
 
     /// The way forward from a file that came in short. Refusing it is the
@@ -236,6 +262,10 @@ struct ProgramUploadView: View {
         guard var ev = appState.events.first(where: { $0.id == event.id }) else { return }
         ev.programImagePaths.removeAll { $0 == url }
         appState.updateEvent(ev)
+        ocrManager.clearRefusal(for: event.id)
+        // Both notices describe the pages as they were. Removing one makes each
+        // a statement about a set that no longer exists.
+        lastImport = []
     }
 
     private func advanceToOCR() {
@@ -463,6 +493,9 @@ private struct ProgramDropZone: View {
     @Binding var isTargeted: Bool
     let isImporting: Bool
     let imagePaths: [URL]
+    /// What the last import brought in per file, against what each file said it
+    /// held. Empty on a screen Dan has merely returned to.
+    let lastImport: [ProgramImport.Imported]
     let onPickFiles: () -> Void
     let onRemove: (URL) -> Void
 
@@ -537,6 +570,16 @@ private struct ProgramDropZone: View {
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
                     .foregroundStyle(Color.roseGold)
+            }
+
+            // What each file brought in against what it said it held, so a PDF
+            // that is itself short (or simply the wrong file) is visible by eye.
+            // Nothing in the app can detect that: only Dan knows how many pages
+            // the program in his hand has (#373).
+            ForEach(lastImport) { file in
+                Text(file.summary)
+                    .font(.light(11))
+                    .foregroundStyle(Color.warmMid.opacity(0.8))
             }
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110))], spacing: Spacing.sm) {

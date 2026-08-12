@@ -28,25 +28,46 @@ final class OCRManager {
 
     private let tracker = EventJobTracker<Run>(elapsed: \.elapsedSeconds)
 
+    /// Why OCR would not run, per event, for the upload screen to show once it
+    /// has been sent back there. Held here rather than on the event because it
+    /// describes this attempt, not the record: it must not outlive the pages
+    /// changing, and it has no business being written to disk.
+    private var refusals: [Event.ID: String] = [:]
+
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isRunning(_ id: Event.ID) -> Bool { tracker.isActive(id) }
     func hasFailed(_ id: Event.ID) -> Bool { tracker.hasFailed(id) }
+
+    /// Why the last attempt to run OCR was refused, or nil.
+    func refusal(for id: Event.ID) -> String? { refusals[id] }
+
+    /// Drops the refusal. Called when it is acknowledged, and whenever the
+    /// pages it is about change, so a reason cannot go on being shown after it
+    /// has stopped being true.
+    func clearRefusal(for id: Event.ID) { refusals[id] = nil }
 
     /// Begin OCR for `eventID`. No-op if a run is already in flight for it, so
     /// re-entering the screen (or a view remount) doesn't launch a duplicate.
     func start(eventID: Event.ID, appState: AppState) {
         guard !isRunning(eventID) else { return }
 
-        // Program images must exist; otherwise route back to the upload screen.
+        // The program has to be whole, and still on disk, before Python reads
+        // it: OCR takes the pages it is given for the entire program, so a page
+        // that is gone silently costs every performer and work printed on it
+        // (#372). A refusal routes back to the upload screen carrying its own
+        // reason, rather than bouncing Dan there with nothing said (#374).
         let live = appState.events.first(where: { $0.id == eventID })
-        guard let ev = live, !ev.programImagePaths.isEmpty else {
-            if var ev = live {
-                ev.stage = .created
-                appState.updateEvent(ev)
-            }
+        guard let ev = live else { return }
+        let readiness = ProgramImport.readiness(of: ev.programImagePaths)
+        guard readiness == .ready else {
+            refusals[eventID] = readiness.refusal
+            var back = ev
+            back.stage = .created
+            appState.updateEvent(back)
             return
         }
 
+        refusals[eventID] = nil
         tracker.begin(Run(status: .running, elapsedSeconds: 0, phaseOverride: nil, task: nil), for: eventID)
 
         let task = Task { [weak self] in
