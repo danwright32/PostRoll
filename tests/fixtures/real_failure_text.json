@@ -1,0 +1,100 @@
+{
+  "_README": [
+    "The text that actually reaches the app when a generation fails, for #403.",
+    "",
+    "Every needle in RunFailureKind used to come from what a developer imagined",
+    "Python writes. These are measured instead. generate_week.py stores the bare",
+    "str(e) of the exception in errors[day], with no prefix of its own, so what is",
+    "recorded here is exactly what the classifier reads.",
+    "",
+    "`provenance` on each entry says how it was obtained, and it is the whole point",
+    "of this file. Do not add an entry without one, and do not write `captured` on",
+    "something that was reasoned about (L48).",
+    "",
+    "  captured        run against the real thing on 2026-08-12, text copied verbatim",
+    "  sdk-formatter   built by the line in the installed SDK that builds these",
+    "                  messages (_base_client.py, `Error code: {status} - {body}`),",
+    "                  with the API's documented error body. The `captured` 401 entry",
+    "                  below matches this construction exactly, character for",
+    "                  character, which is what makes it trustworthy for the statuses",
+    "                  that cannot be triggered on demand.",
+    "",
+    "One entry is deliberately absent. A rate limit and an overload cannot be caused",
+    "to order, and the SDK is configured with max_retries=4, so by the time either",
+    "reaches the app it has already backed off four times. Both are recorded here as",
+    "sdk-formatter rather than pretended to be captured."
+  ],
+
+  "cases": [
+    {
+      "name": "a rejected API key",
+      "provenance": "captured",
+      "expected": "authFailed",
+      "text": "Anthropic API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'API key is invalid.'}, 'request_id': None}"
+    },
+    {
+      "name": "ffmpeg is not installed at all",
+      "provenance": "captured",
+      "expected": "ffmpegMissing",
+      "text": "FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'"
+    },
+    {
+      "name": "ffmpeg is installed, ran, and failed because an input file was gone",
+      "provenance": "captured",
+      "expected": "fileMissing",
+      "note": "The one that mattered. Every wrapper in postroll/media prefixes its message with the word ffmpeg, so a missing photo arrived as advice to install a package that was already installed, with no route back to re-assign the photo.",
+      "text": "ffmpeg failed: bavutil      60. 26.100 / 60. 26.100\n  libavcodec     62. 28.100 / 62. 28.100\n  libavformat    62. 12.100 / 62. 12.100\n[in#0 @ 0x9f2c10000] Error opening input: No such file or directory\nError opening input file /photos/thursday/DSC_4417.jpg.\nError opening input files: No such file or directory\n"
+    },
+    {
+      "name": "no Jamendo key",
+      "provenance": "captured",
+      "expected": "audioServiceUnreachable",
+      "text": "JAMENDO_CLIENT_ID environment variable is not set. Get a free key at https://devportal.jamendo.com"
+    },
+    {
+      "name": "a photo that has been moved or deleted",
+      "provenance": "captured",
+      "expected": "fileMissing",
+      "text": "FileNotFoundError: [Errno 2] No such file or directory: '/photos/wednesday/DSC_4417.jpg'"
+    },
+    {
+      "name": "more content than the model will accept",
+      "provenance": "sdk-formatter",
+      "expected": "requestTooLarge",
+      "note": "Trying to cause this for real cost 0.72 USD and did not produce it: 240k tokens was accepted rather than refused, because the window is far larger than assumed. Not attempted again. Reducing inputs is the only thing that fixes it, so classifying it as a generic service error tells Dan to wait and retry something that will fail identically.",
+      "text": "Anthropic API error: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'prompt is too long: 1048576 tokens > 1000000 maximum'}, 'request_id': 'req_011CTgLm4rB29WqSaMPLE'}"
+    },
+    {
+      "name": "a payload over the request size limit",
+      "provenance": "sdk-formatter",
+      "expected": "requestTooLarge",
+      "text": "Anthropic API error: Error code: 413 - {'type': 'error', 'error': {'type': 'request_too_large', 'message': 'Request exceeds the maximum allowed size.'}, 'request_id': 'req_011CTgLm4rB29WqSaMPLE'}"
+    },
+    {
+      "name": "rate limited",
+      "provenance": "sdk-formatter",
+      "expected": "rateLimited",
+      "text": "Anthropic API error: Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': 'This request would exceed your organization's rate limit.'}, 'request_id': 'req_011CTgLm4rB29WqSaMPLE'}"
+    },
+    {
+      "name": "the service is overloaded",
+      "provenance": "sdk-formatter",
+      "expected": "overloaded",
+      "text": "Anthropic API error: Error code: 529 - {'type': 'error', 'error': {'type': 'overloaded_error', 'message': 'Overloaded'}, 'request_id': None}"
+    },
+    {
+      "name": "a reply with no text block in it",
+      "provenance": "captured",
+      "expected": "aiServiceError",
+      "note": "Raised by claude_client itself rather than by the SDK, and it does not contain the words `api error`, so it used to fall through to the unrecognised fallback.",
+      "text": "Anthropic API returned no text block. Blocks received: thinking"
+    },
+    {
+      "name": "a crash in our own code",
+      "provenance": "captured",
+      "expected": "unknown",
+      "note": "Must stay unknown. Nothing may be claimed about a failure we do not recognise, and the raw text is shown on its own.",
+      "text": "KeyError: 'performers'"
+    }
+  ]
+}
