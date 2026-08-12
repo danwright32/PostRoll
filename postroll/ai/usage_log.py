@@ -22,11 +22,15 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+# Re-exported rather than defined: this was `base_model`'s home before #361
+# moved it somewhere `page_regions` can share it. `usage_log.base_model` stays
+# a working name so callers and tests do not have to care.
+from .model_ids import base_model  # noqa: F401
 
 #: Published list prices, US dollars per million tokens, keyed by base model id.
 #: Source: Anthropic model pricing table as of 2026-06-24. Update alongside any
@@ -53,8 +57,6 @@ PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
 #: Cache reads bill at roughly a tenth of the input rate; writes at 1.25x.
 CACHE_READ_MULTIPLIER = 0.1
 CACHE_WRITE_MULTIPLIER = 1.25
-
-_DATED_SUFFIX = re.compile(r"-\d{8}$")
 
 _A_MILLION = 1_000_000
 
@@ -96,11 +98,6 @@ class Summary:
     def complete(self) -> bool:
         """False when `cost_usd` is missing money it cannot account for."""
         return self.unpriced_calls == 0 and self.unreadable_lines == 0
-
-
-def base_model(model: str) -> str:
-    """`claude-haiku-4-5-20251001` -> `claude-haiku-4-5`."""
-    return _DATED_SUFFIX.sub("", (model or "").strip())
 
 
 def cost_usd(usage: Usage) -> float | None:

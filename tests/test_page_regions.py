@@ -91,6 +91,42 @@ def test_an_unknown_model_falls_back_to_the_smallest_known_budget():
     assert pr.image_budget_for("claude-not-a-real-model") == 1568
 
 
+def test_every_model_the_app_actually_pins_declares_its_own_budget():
+    """The sibling of test_the_model_the_app_actually_pins_is_priced (#359).
+
+    Pricing has had this guard for a while; the budget table had none, and the
+    fallback for a model nobody listed is the SMALL tier. So repinning to a
+    high-resolution model without touching this file silently shrinks every
+    program page before it is sent, which is exactly the no-op the module
+    docstring says must not be allowed to happen, with no error and nothing
+    failing.
+
+    The nearby alias check cannot catch it: both sides of that assertion come
+    from the same lookup, so it passes just as happily when both fall through
+    to the default (L70).
+    """
+    from postroll.ai.claude_client import _MODEL_ALIASES, _resolve_model
+
+    for alias in _MODEL_ALIASES:
+        model = _resolve_model(alias)
+        assert pr.explicit_image_budget(model) is not None, (
+            f"{alias} resolves to {model}, which has no declared image budget, "
+            f"so it would quietly use the {pr.DEFAULT_IMAGE_BUDGET}px small tier"
+        )
+
+
+def test_one_implementation_decides_what_a_dated_model_id_reduces_to():
+    """#361: this rule lived in two files, as a regex here and a slice there.
+
+    They agree on every id in use today and are free to disagree on the next
+    one, and a disagreement surfaces as a wrong cost figure or a wrongly sized
+    image rather than as an error, so nothing would flag it.
+    """
+    from postroll.ai import usage_log
+
+    assert pr.base_model is usage_log.base_model
+
+
 # ── when splitting is worth it ────────────────────────────────────────────────
 
 def test_a_page_already_within_the_budget_is_left_alone(tmp_path):
