@@ -1,0 +1,37 @@
+{
+  "comment": "One recorded perturbation per named guard (#416). `venv/bin/python tools/check_guards.py` (or `make check-guards`) applies each entry's find/replace to the file the guard protects, runs only that test, requires it to FAIL, and restores the file. Run it whenever a guard is added or changed. Perturbations must keep the code compiling: a build error fails every test trivially and proves nothing, so the checker reports it as an error rather than a kill. `tests/test_guard_mutation_registry.py` holds every anchor and test name to the code on every suite run.",
+  "entries": [
+    {
+      "name": "archive-note-wraps",
+      "file": "PostRollApp/Sources/Views/ExportDoneSummary.swift",
+      "find": ".fixedSize(horizontal: false, vertical: true)",
+      "replace": ".fixedSize(horizontal: false, vertical: false)",
+      "test": "PostRollTests/HostedControlLegibilityTests/testTheArchiveNoteStillDeclaresThatItWraps",
+      "breaks": "the archive note goes back to one line and drops the end of its sentence (#411)"
+    },
+    {
+      "name": "new-event-refusal-drawn",
+      "file": "PostRollApp/Sources/Views/NewEventSheet.swift",
+      "find": "RefusalNote(message: refusal)",
+      "replace": "EmptyView()",
+      "test": "PostRollTests/VisibleRefusalGuardTests/testTheNewEventSheetDrawsWhatIsMissing",
+      "breaks": "the sheet computes which field is empty and never draws it (#402)"
+    },
+    {
+      "name": "stage-strip-refusal-drawn",
+      "file": "PostRollApp/Sources/Views/ProgramUploadView.swift",
+      "find": "RefusalNote(message: refusal)",
+      "replace": "EmptyView()",
+      "test": "PostRollTests/VisibleRefusalGuardTests/testTheStageStripDrawsItsRefusalRatherThanHidingItOnHover",
+      "breaks": "the stage strip refusal is computed and never drawn (#402)"
+    },
+    {
+      "name": "refusal-note-ink",
+      "file": "PostRollApp/Sources/Views/SharedChrome.swift",
+      "find": ".fixedSize(horizontal: false, vertical: true)\n        }\n        .foregroundStyle(Color.warmMid)",
+      "replace": ".fixedSize(horizontal: false, vertical: true)\n        }\n        .foregroundStyle(Color.cream)",
+      "test": "PostRollTests/BannerLegibilityTests/testEveryBannerActuallyDrawsItsMessage",
+      "breaks": "RefusalNote draws cream on cream, the invisible-type defect that has shipped three times (#389)"
+    }
+  ]
+}
