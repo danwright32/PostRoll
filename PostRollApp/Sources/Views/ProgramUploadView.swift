@@ -583,20 +583,44 @@ struct StageStepBar: View {
     let event: Event
     @Environment(AppState.self) private var appState
 
+    /// The step Dan last tried to open and could not.
+    ///
+    /// The STAGE rather than the sentence, so the message below re-derives from
+    /// the live event: read the program and the note about reading the program
+    /// disappears on its own, instead of sitting there until something clears it
+    /// (L14).
+    @State private var refusedStage: EventStage?
+
     private var here: EventStage { StageNavigation.step(containing: event.stage) }
 
+    private var refusal: String? {
+        refusedStage.flatMap { StageNavigation.blockedReason(for: $0, in: event) }
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(Array(StageNavigation.steps.enumerated()), id: \.element) { index, stage in
-                if index > 0 {
-                    Rectangle()
-                        .fill(Color.creamEdge)
-                        .frame(width: 12, height: 1)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                ForEach(Array(StageNavigation.steps.enumerated()), id: \.element) { index, stage in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(Color.creamEdge)
+                            .frame(width: 12, height: 1)
+                    }
+                    step(stage)
                 }
-                step(stage)
+                Spacer()
             }
-            Spacer()
+
+            // Drawn where the gate is applied, from the same function that
+            // applies it. `StageNavigation.blockedReason` has always written a
+            // sentence naming the missing work; until #402 the only way to read
+            // it was to hover, so pressing a greyed step did nothing at all and
+            // said nothing about why.
+            if let refusal {
+                RefusalNote(message: refusal)
+            }
         }
+        .animation(.easeOut(duration: 0.15), value: refusal)
     }
 
     @ViewBuilder
@@ -606,7 +630,15 @@ struct StageStepBar: View {
         let done = StageNavigation.isBehind(stage, current: event.stage)
 
         Button {
-            guard blocked == nil, !isHere else { return }
+            // A step that cannot be opened SAYS so rather than absorbing the
+            // press. It keeps its unavailable colouring, so it still reads as
+            // somewhere he cannot go yet, but now the reason is reachable
+            // without a mouse hover (#402, #182).
+            if let blocked {
+                refusedStage = stage
+                return
+            }
+            refusedStage = nil
             // The LIVE record, never the captured prop: a stage change applied
             // to this screen's snapshot writes back over everything saved
             // since it opened (#103).
@@ -627,9 +659,9 @@ struct StageStepBar: View {
                 )
         }
         .buttonStyle(.plain)
-        .disabled(blocked != nil || isHere)
-        // The refusal says which work is missing rather than leaving a control
-        // that greys out and explains nothing.
+        // Only "you are here" is genuinely inert. A blocked step stays pressable
+        // so it can explain itself; its colouring is what says it is unavailable.
+        .disabled(isHere)
         .help(blocked ?? (isHere ? "You are here" : "Go to \(StageNavigation.title(stage))"))
     }
 

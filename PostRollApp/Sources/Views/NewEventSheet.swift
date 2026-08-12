@@ -11,10 +11,13 @@ struct NewEventSheet: View {
     @State private var date = Date()
     @State private var shootType = ShootType.fullShow
 
-    private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !org.trimmingCharacters(in: .whitespaces).isEmpty
+    /// Why this cannot be created yet, from the same predicate that disables the
+    /// button, so a greyed control can never sit beside nothing (#402).
+    private var refusal: String? {
+        NewEventValidation.refusal(name: name, org: org)
     }
+
+    private var isValid: Bool { refusal == nil }
 
     var body: some View {
         NavigationStack {
@@ -66,17 +69,22 @@ struct NewEventSheet: View {
                         }
 
                         // Actions
-                        HStack {
-                            Button("Cancel") { dismiss() }
-                                .buttonStyle(.plain)
-                                .font(.system(size: 13))
-                                .foregroundStyle(Color.warmMid)
-                            Spacer()
-                            Button("Create Event") { createEvent() }
-                                .buttonStyle(BrandButtonStyle())
-                                .keyboardShortcut(.defaultAction)
-                                .disabled(!isValid)
-                                .opacity(isValid ? 1 : 0.4)
+                        VStack(alignment: .trailing, spacing: Spacing.sm) {
+                            if let refusal {
+                                RefusalNote(message: refusal)
+                            }
+                            HStack {
+                                Button("Cancel") { dismiss() }
+                                    .buttonStyle(.plain)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color.warmMid)
+                                Spacer()
+                                Button("Create Event") { createEvent() }
+                                    .buttonStyle(BrandButtonStyle())
+                                    .keyboardShortcut(.defaultAction)
+                                    .disabled(!isValid)
+                                    .opacity(isValid ? 1 : 0.4)
+                            }
                         }
                         .padding(.bottom, Spacing.xl)
                     }
