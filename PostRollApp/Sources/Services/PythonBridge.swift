@@ -338,9 +338,39 @@ actor PythonBridge {
         }
         try await runProcess(args: args)
 
-        guard let data = try? Data(contentsOf: jsonFile),
-              let candidates = try? JSONDecoder().decode([CollageCandidate].self, from: data)
-        else { return [] }
+        return try Self.decodeCollageCandidates(from: jsonFile)
+    }
+
+    /// Read the layout gallery's result file.
+    ///
+    /// Everything that can go wrong here is technical, and none of it means the
+    /// day has no photos. That distinction is the whole point: the two
+    /// no-photos branches return before Python is ever run, so an empty array
+    /// out of `renderCollageCandidates` now means only what the view's message
+    /// says it means, and a read or decode failure carries its own reason
+    /// instead of borrowing that one (#358).
+    nonisolated static func decodeCollageCandidates(from jsonFile: URL) throws -> [CollageCandidate] {
+        let data: Data
+        do {
+            data = try Data(contentsOf: jsonFile)
+        } catch {
+            throw PythonBridgeError.outputMissing
+        }
+
+        let candidates: [CollageCandidate]
+        do {
+            candidates = try JSONDecoder().decode([CollageCandidate].self, from: data)
+        } catch {
+            throw PythonBridgeError.invalidOutput(
+                "The layout options file could not be read: \(error.localizedDescription)")
+        }
+
+        // Photos were already proven present, so a run that produced nothing
+        // is a broken run rather than an empty day.
+        guard !candidates.isEmpty else {
+            throw PythonBridgeError.invalidOutput(
+                "The layout run finished without producing any options.")
+        }
         return candidates
     }
 
