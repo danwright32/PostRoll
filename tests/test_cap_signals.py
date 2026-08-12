@@ -355,21 +355,90 @@ def test_the_run_reports_the_file_on_stderr_at_the_end():
     )
 
 
-def test_the_inactive_guard_names_a_live_issue_that_would_activate_it():
+def test_the_inactive_guard_still_has_something_keeping_it_visible():
     """An observe-only guard is indistinguishable from no guard once the reason
-    for it is forgotten, so it has to point at the issue that turns it on.
+    for it is forgotten, so something has to keep saying it is dormant.
 
-    #211 was split, and the half that waits on observing a real cap is #258.
-    This fails if CALIBRATED is still False while the docstring points at an
-    issue that has been closed out from under it, which is exactly how a
-    temporary state becomes permanent.
+    That used to be an open issue (#258), and this test asserted the docstring
+    named it. An issue is a weak marker: it is seen only by somebody already
+    reading the backlog, and it can be closed out from under the guard, which is
+    exactly how a temporary state becomes permanent. The marker is now the
+    notice the guard prints on every run, so this asserts THAT exists rather
+    than that a ticket does.
     """
     import postroll.ai.cap_signals as cs
 
     if cs.CALIBRATED:
         return  # calibrated, so there is nothing left to activate
 
-    doc = cs.__doc__ or ""
-    assert "#258" in doc, (
-        "the guard is still observe-only but no longer names the open issue "
-        "that would activate it. Repoint it, or nothing will ever turn it on")
+    notice = cs.calibration_notice()
+    assert notice, (
+        "the guard is still observe-only and nothing announces it, so the "
+        "dormant state is invisible to whoever runs a week")
+
+
+# ── the dormant state says so itself, without an open issue to remember it ────
+#
+# #258 was the marker keeping this visible: an issue nobody could work, whose
+# only job was to stop the observe-only state becoming permanent by being
+# forgotten (L65). An issue is a poor place for that, because it is only seen by
+# somebody already looking at the backlog. The guard now says it on every run.
+
+
+def test_an_uncalibrated_guard_announces_itself_with_nothing_recorded(tmp_path):
+    # The gap that made the issue necessary. report_unrecognised speaks only
+    # once a failure has been recorded, so before any cap is ever hit the
+    # dormant state is completely silent, which is exactly when it is easiest to
+    # forget it is dormant.
+    import postroll.ai.cap_signals as cs
+
+    assert cs.unrecognised(tmp_path / "none.jsonl") == []
+    notice = cs.calibration_notice()
+
+    assert notice, "the dormant guard says nothing until something goes wrong"
+
+
+def test_the_notice_says_what_the_dormant_state_actually_costs():
+    # Naming it as "uncalibrated" means nothing to a reader. What matters is
+    # the behaviour: an unknown failure does not halt the week.
+    import postroll.ai.cap_signals as cs
+
+    notice = cs.calibration_notice()
+
+    assert "halt" in notice.lower(), notice
+    assert "#258" not in notice, "the notice must not depend on an issue number"
+
+
+def test_a_calibrated_guard_stops_saying_it(monkeypatch):
+    # The notice has to disappear on its own when the state it reports ends,
+    # or it becomes noise that trains everybody to skim past it (L36).
+    import postroll.ai.cap_signals as cs
+
+    monkeypatch.setattr(cs, "CALIBRATED", True)
+
+    assert cs.calibration_notice() is None
+
+
+def test_a_real_week_actually_prints_the_notice():
+    """Built is not wired (L3).
+
+    A notice nothing calls is exactly the state #258 existed to prevent, one
+    level further in. This asserts the week's own exit path reads it, so the
+    self-reporting cannot quietly stop happening.
+    """
+    import ast
+    import inspect
+    from postroll.ai import generate_week as gw
+
+    # Through the AST, not the raw text. A comment mentioning the name would
+    # satisfy a substring match, which is how a guard ends up green on prose
+    # (#315). Only a real call counts.
+    tree = ast.parse(inspect.getsource(gw.generate_week))
+    called = {
+        node.func.attr for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+
+    assert "calibration_notice" in called, (
+        "generate_week never asks whether the cap guard is still a hypothesis, "
+        "so nothing says so and the dormant state is invisible again")
