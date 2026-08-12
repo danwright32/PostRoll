@@ -287,3 +287,47 @@ def test_the_estimate_prices_a_known_model():
 
     assert estimate.complete is True
     assert estimate.usd > 0
+
+
+# ── the capture records what was billed, not the nickname (#353) ─────────────
+
+
+def test_the_recorder_stores_the_resolved_model_not_the_alias(monkeypatch):
+    """The estimate is the number printed BEFORE a paid command spends.
+
+    Callers pass `sonnet`; the price table is keyed on `claude-sonnet-4-6`. A
+    capture holding the alias makes `estimate_usd` report itself INCOMPLETE, so
+    the one figure meant to inform the decision to spend says nothing. It failed
+    honestly rather than reporting a false zero, which is why the 2026-08-11 run
+    printed $0.00 and the real $0.68 had to be read out of the usage log by
+    hand afterwards.
+    """
+    from postroll.ai import claude_client
+
+    monkeypatch.setattr(claude_client, "_run_sdk", lambda prompt, **kw: "answered")
+    records, restore = ct.install_recorder(
+        claude_client, clock=iter([0.0, 1.0] * 10).__next__)
+    try:
+        claude_client._run_sdk("write it", step="blog", model="sonnet")
+    finally:
+        restore()
+
+    assert records[0].model == claude_client._resolve_model("sonnet")
+    assert records[0].model != "sonnet", "the alias was stored rather than the id"
+
+
+def test_a_capture_of_resolved_models_can_actually_be_priced():
+    priced = ct.estimate_usd(
+        [_record(model="claude-sonnet-4-6")], tokens_per_call=1000)
+
+    assert priced.complete, f"unpriced: {priced.unpriced}"
+    assert priced.usd > 0
+
+
+def test_an_alias_that_gains_no_mapping_is_still_reported_rather_than_guessed():
+    # If a future alias resolves to itself and is not in the price table, the
+    # estimate must keep saying so rather than folding it in at zero.
+    estimate = ct.estimate_usd([_record(model="sonnet")], tokens_per_call=1000)
+
+    assert estimate.complete is False
+    assert "sonnet" in estimate.unpriced

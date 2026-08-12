@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,6 +57,59 @@ class Choice:
     #: Whether the chosen transport can actually carry this request's images.
     #: False plus a non-empty image_paths is a refusal, never a silent drop.
     carries_images: bool = True
+    #: Whether this path was FALLEN BACK TO rather than chosen (#352). A
+    #: deliberate switch and a missing key both land on the CLI, and only one
+    #: of them is something to tell somebody about.
+    fallback: bool = False
+
+
+def is_fallback(choice: Choice) -> bool:
+    """Whether this run ended up somewhere nobody asked it to go."""
+    return choice.fallback
+
+
+#: Whether this process has already said it is running on the wrong path.
+#: A week makes fourteen calls, and repeating the same warning on each is how a
+#: real warning trains somebody to skim past it (L36).
+_fallback_announced = False
+
+
+def reset_fallback_notice() -> None:
+    """Forget that the notice was given. For tests, and for a fresh run."""
+    global _fallback_announced
+    _fallback_announced = False
+
+
+def announce_fallback(choice: Choice, *, out=None) -> bool:
+    """Say once, per process, that this run is on a path nobody chose.
+
+    Returns whether anything was said, so a caller that wants to record it
+    alongside a week's other warnings can tell.
+    """
+    global _fallback_announced
+    warning = fallback_warning(choice)
+    if warning is None or _fallback_announced:
+        return False
+    _fallback_announced = True
+    print(f"warning: {warning}", file=out if out is not None else sys.stderr,
+          flush=True)
+    return True
+
+
+def fallback_warning(choice: Choice) -> str | None:
+    """What to tell somebody about an unintended path, or None.
+
+    Measured rather than asserted: #213 ran a real week down both and found the
+    CLI roughly five times slower on the work it can do, able to carry 57% of a
+    week because it cannot attach images, and running the app's prompts inside
+    instructions that are not the app's (#354).
+    """
+    if not choice.fallback:
+        return None
+    return ("This ran on the Claude Code CLI rather than the paid API, which "
+            "nobody asked for. That path is about five times slower, cannot "
+            "attach photographs, and shapes its answers with instructions that "
+            f"are not this app's. {choice.reason}")
 
 
 def build_content(req: Request) -> list[dict]:
@@ -136,6 +190,10 @@ def choose_transport(req: Request) -> Choice:
             "cli",
             "no ANTHROPIC_API_KEY is set, so there is no paid path to use.",
             carries_images=False,
+            # The only branch nobody chose. The switch above is a decision and
+            # a web-tool call is the right path; this one is the app quietly
+            # ending up somewhere worse (#352).
+            fallback=True,
         )
 
     return Choice("sdk", "the metered Anthropic API is the default path.")

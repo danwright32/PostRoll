@@ -163,7 +163,12 @@ def install_recorder(claude_client, clock: Callable[[], float] = time.monotonic)
         def recorded(prompt, **kwargs):
             started = clock()
             step = kwargs.get("step", "unknown")
-            model = kwargs.get("model", "unknown")
+            # The id that gets billed, not the alias the caller passed (#353).
+            # Callers say `sonnet`; the price table is keyed on
+            # `claude-sonnet-4-6`, so a capture holding the alias makes the
+            # estimate report itself incomplete and the figure printed before
+            # spending says nothing.
+            model = claude_client._resolve_model(kwargs.get("model", "unknown"))
             images = len(kwargs.get("image_paths") or ())
             try:
                 output = inner(prompt, **kwargs)

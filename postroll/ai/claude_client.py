@@ -278,10 +278,18 @@ def partition_uploadable(
 
 def _needs_cli(allowed_tools: list[str] | None) -> bool:
     """Return True if any requested tool requires the Claude Code CLI,
-    or if no ANTHROPIC_API_KEY is set (fall back to CLI auth)."""
-    return transport.choose_transport(
+    or if no ANTHROPIC_API_KEY is set (fall back to CLI auth).
+
+    Says so, once, when the CLI is where this ended up rather than where it was
+    sent (#352). The routing already knew; nothing read it, so a fall back to a
+    path that is five times slower and cannot carry photographs happened in
+    silence for two days.
+    """
+    choice = transport.choose_transport(
         transport.Request(prompt="", allowed_tools=tuple(allowed_tools or ()))
-    ).transport == "cli"
+    )
+    transport.announce_fallback(choice)
+    return choice.transport == "cli"
 
 
 # ── SDK path ──────────────────────────────────────────────────────────────────
