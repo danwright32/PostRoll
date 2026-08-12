@@ -150,7 +150,8 @@ final class ProgramPDFBuilderTests: XCTestCase {
         XCTAssertTrue(combined.write(to: source))
 
         let out = dir.appendingPathComponent("out")
-        let pages = ProgramPDFBuilder.rasterise(pdfAt: source, into: out)
+        let result = ProgramPDFBuilder.rasterise(pdfAt: source, into: out)
+        let pages = result.pages
 
         // One PNG per page, named by the shared convention, written to disk.
         XCTAssertEqual(pages.map(\.lastPathComponent),
@@ -158,6 +159,8 @@ final class ProgramPDFBuilderTests: XCTestCase {
         for page in pages {
             XCTAssertTrue(FileManager.default.fileExists(atPath: page.path))
         }
+        XCTAssertTrue(result.isComplete, "a PDF that rasterised in full reports no failures")
+        XCTAssertTrue(result.failures.isEmpty)
 
         // The original PDF is retained next to the pages, intact (2 pages).
         let retained = out.appendingPathComponent("DcinyProgram.pdf")
@@ -175,6 +178,10 @@ final class ProgramPDFBuilderTests: XCTestCase {
     /// regardless, so a page that failed to write still went back to the caller
     /// as a path. Whatever opened it, program OCR among them, found nothing
     /// there. Only pages that reached disk may be returned.
+    ///
+    /// #368 is the other half: dropping the page silently left a SHORTER list,
+    /// which reads downstream exactly like a program that has fewer pages. The
+    /// page that failed has to come back named.
     @MainActor
     func testRasteriseReturnsOnlyPagesThatReachedDisk() throws {
         let p1 = try makeTextPDF("a.pdf", text: "Movement I", size: CGSize(width: 400, height: 300))
@@ -192,14 +199,41 @@ final class ProgramPDFBuilderTests: XCTestCase {
         XCTAssertFalse(FileManager.default.isWritableFile(atPath: out.path),
                        "precondition: the output folder has to be genuinely unwritable")
 
-        let pages = ProgramPDFBuilder.rasterise(pdfAt: source, into: out)
+        let result = ProgramPDFBuilder.rasterise(pdfAt: source, into: out)
 
-        XCTAssertTrue(pages.isEmpty,
+        XCTAssertTrue(result.pages.isEmpty,
                       "a page that could not be written must not be handed back as a path")
-        for page in pages {
+        for page in result.pages {
             XCTAssertTrue(FileManager.default.fileExists(atPath: page.path),
                           "every returned page has to be a file that is actually there")
         }
+
+        // And the caller is told, naming the page, rather than being handed a
+        // list that is simply one shorter (#368).
+        XCTAssertFalse(result.isComplete)
+        XCTAssertEqual(result.failures.count, 1)
+        XCTAssertEqual(result.failures.first?.page, 1)
+        if case .couldNotWritePage(let page, let reason) = result.failures.first {
+            XCTAssertEqual(page, 1)
+            XCTAssertFalse(reason.isEmpty, "the reason is what says whether a retry can work")
+        } else {
+            XCTFail("expected a write failure naming the page, got \(String(describing: result.failures.first))")
+        }
+    }
+
+    /// A file that will not open as a PDF at all used to come back as an empty
+    /// page list, which is what a program with no pages looks like too (#368).
+    @MainActor
+    func testRasteriseReportsADocumentItCouldNotOpen() throws {
+        let bad = dir.appendingPathComponent("not-really.pdf")
+        FileManager.default.createFile(atPath: bad.path, contents: Data("garbage".utf8))
+
+        let result = ProgramPDFBuilder.rasterise(pdfAt: bad, into: dir.appendingPathComponent("out-bad"))
+
+        XCTAssertTrue(result.pages.isEmpty)
+        XCTAssertFalse(result.isComplete,
+                       "an unopenable PDF must not report the same as one that simply had no pages")
+        XCTAssertEqual(result.failures, [.unreadableDocument])
     }
 
     func testBundlesEachImageAsAPageInOrder() throws {

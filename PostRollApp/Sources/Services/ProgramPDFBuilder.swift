@@ -165,10 +165,18 @@ struct ProgramPDFBuilder {
     /// Rasterises each page of `url` to a 2× PNG in `dir` (named by
     /// `rasterizedPageName`) and retains the original PDF alongside them as
     /// `<stem>.pdf`, so `makePDF` can later embed the source pages verbatim.
-    /// Returns the page image URLs in order. Uses PDFKit so page orientation
-    /// (including /Rotate) is handled correctly.
-    static func rasterise(pdfAt url: URL, into dir: URL, scale: CGFloat = 2) -> [URL] {
-        guard let doc = PDFDocument(url: url), doc.pageCount > 0 else { return [] }
+    /// Uses PDFKit so page orientation (including /Rotate) is handled correctly.
+    ///
+    /// Returns the page image URLs in order AND every page that did not become
+    /// one. A page that failed used to be dropped from the list, which reads
+    /// downstream exactly like a program with fewer pages: program OCR would
+    /// take the remaining pages for the whole thing (#368). The caller decides
+    /// what to do about a short program, and it cannot decide without being
+    /// told there is one.
+    static func rasterise(pdfAt url: URL, into dir: URL, scale: CGFloat = 2) -> ProgramImport.Rasterisation {
+        guard let doc = PDFDocument(url: url), doc.pageCount > 0 else {
+            return ProgramImport.Rasterisation(failures: [.unreadableDocument])
+        }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let stem = url.deletingPathExtension().lastPathComponent
 
@@ -177,9 +185,13 @@ struct ProgramPDFBuilder {
             try? FileManager.default.copyItem(at: url, to: retainedSource)
         }
 
-        var results: [URL] = []
+        var result = ProgramImport.Rasterisation()
         for i in 0..<doc.pageCount {
-            guard let page = doc.page(at: i) else { continue }
+            let number = i + 1
+            guard let page = doc.page(at: i) else {
+                result.failures.append(.missingPage(number))
+                continue
+            }
             let bounds = page.bounds(for: .mediaBox)
             let size   = CGSize(width: bounds.width * scale, height: bounds.height * scale)
             let image  = page.thumbnail(of: size, for: .mediaBox)
@@ -187,22 +199,26 @@ struct ProgramPDFBuilder {
             guard let tiff      = image.tiffRepresentation,
                   let bitmapRep = NSBitmapImageRep(data: tiff),
                   let pngData   = bitmapRep.representation(using: .png, properties: [:])
-            else { continue }
+            else {
+                result.failures.append(.couldNotRenderPage(number))
+                continue
+            }
 
-            let dest = dir.appendingPathComponent(rasterizedPageName(stem: stem, page: i + 1))
+            let dest = dir.appendingPathComponent(rasterizedPageName(stem: stem, page: number))
             // Only pages that actually reached disk are returned. The write was
             // behind `try?` with the append below it running regardless, so a
             // failed page still went back to the caller as a path, and whatever
             // opened it found nothing there (#362).
             do {
                 try pngData.write(to: dest)
-                results.append(dest)
+                result.pages.append(dest)
             } catch {
-                NSLog("ProgramPDFBuilder: page \(i + 1) of \(stem) could not be written "
+                NSLog("ProgramPDFBuilder: page \(number) of \(stem) could not be written "
                       + "to \(dest.path): \(error.localizedDescription)")
+                result.failures.append(.couldNotWritePage(number, reason: error.localizedDescription))
             }
         }
-        return results
+        return result
     }
 
     // MARK: - Source PDF loading

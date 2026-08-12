@@ -11,6 +11,9 @@ struct ProgramUploadView: View {
     @State private var showingFilePicker = false
     @State private var isImporting = false
     @State private var eventURL: String = ""
+    /// Uploads that did not come in whole, shown until Dan either takes the
+    /// readable pages or dismisses them (#368).
+    @State private var incompleteUploads: [ProgramImport.Incomplete] = []
 
     init(event: Event) {
         self.event = event
@@ -54,6 +57,17 @@ struct ProgramUploadView: View {
                             ev.eventURL = url
                             appState.updateEvent(ev)
                         }
+                }
+
+                // A file that did not come in whole. Shown here, above the
+                // pages, because the pages are what it is a statement about.
+                ForEach(incompleteUploads) { upload in
+                    BrandBanner(
+                        icon: "exclamationmark.triangle",
+                        message: upload.message,
+                        style: .error,
+                        actions: actions(for: upload)
+                    )
                 }
 
                 // Drop zone
@@ -107,8 +121,19 @@ struct ProgramUploadView: View {
                     guard let url else { return }
                     // Copy synchronously here — the temp URL is invalidated as soon
                     // as this closure returns, so the copy can't be deferred.
-                    guard let dest = Self.permanentCopy(of: url) else { return }
-                    Task { @MainActor in self.appendFiles([dest]) }
+                    let copied = Self.permanentCopy(of: url)
+                    Task { @MainActor in
+                        switch copied {
+                        case .success(let dest):
+                            self.appendFiles([dest])
+                        case .failure(let error):
+                            // A dropped page that never landed used to vanish
+                            // here without a word, which is the same silence
+                            // #368 is about.
+                            self.report(fileName: url.lastPathComponent,
+                                        failure: .couldNotStoreFile(reason: error.localizedDescription))
+                        }
+                    }
                 }
             }
         }
@@ -118,6 +143,10 @@ struct ProgramUploadView: View {
     /// Accepts both image URLs and PDFs. PDFs are rasterised page-by-page to PNG.
     /// Image files are copied into ~/Documents/PostRoll/programs/ so the stored
     /// path stays valid even if the user later moves or deletes the source.
+    ///
+    /// A file that did not come in whole adds nothing and is reported instead:
+    /// program OCR reads `programImagePaths`, so a short list there becomes the
+    /// program (#368).
     private func appendFiles(_ urls: [URL]) {
         isImporting = true
         Task {
@@ -125,41 +154,79 @@ struct ProgramUploadView: View {
             // before these awaits and writing it back afterwards was the worst
             // version of #103: the async gap guarantees the snapshot is stale,
             // so anything saved while the import ran was reverted.
-            var added: [URL] = []
+            var uploads: [ProgramImport.Upload] = []
             for url in urls {
-                if url.pathExtension.lowercased() == "pdf" {
-                    let pages = await Task.detached(priority: .userInitiated) {
-                        Self.rasterisePDF(at: url)
-                    }.value
-                    for page in pages where !added.contains(page) {
-                        added.append(page)
-                    }
-                } else {
-                    let stored = await Task.detached(priority: .userInitiated) {
-                        Self.permanentCopy(of: url) ?? url
-                    }.value
-                    if !added.contains(stored) {
-                        added.append(stored)
-                    }
-                }
+                let result = await Task.detached(priority: .userInitiated) {
+                    Self.importFile(at: url)
+                }.value
+                uploads.append(ProgramImport.Upload(source: url, result: result))
             }
+            let plan = ProgramImport.plan(for: uploads)
             await MainActor.run {
-                if var ev = appState.events.first(where: { $0.id == event.id }) {
-                    for page in added where !ev.programImagePaths.contains(page) {
-                        ev.programImagePaths.append(page)
-                    }
-                    appState.updateEvent(ev)
-                }
+                addPages(plan.pagesToAdd)
+                incompleteUploads.append(contentsOf: plan.incomplete)
                 isImporting = false
             }
         }
     }
 
-    /// Rasterises each PDF page to a 2× PNG in ~/Documents/PostRoll/programs/
-    /// and retains the original PDF alongside them, so the downloadable program
-    /// keeps born-digital text. See `ProgramPDFBuilder.rasterise`.
-    private nonisolated static func rasterisePDF(at url: URL) -> [URL] {
-        ProgramPDFBuilder.rasterise(pdfAt: url, into: AppPaths.programsDir)
+    /// One uploaded file's outcome. A PDF is rasterised page by page; anything
+    /// else is copied into the program folder. Both report a failure rather
+    /// than returning a path to something that is not there: the copy used to
+    /// fall back to the source URL, leaving the event pointing outside
+    /// PostRoll's own storage at a file the sweep cannot protect.
+    private nonisolated static func importFile(at url: URL) -> ProgramImport.Rasterisation {
+        if url.pathExtension.lowercased() == "pdf" {
+            return ProgramPDFBuilder.rasterise(pdfAt: url, into: AppPaths.programsDir)
+        }
+        switch permanentCopy(of: url) {
+        case .success(let stored):
+            return ProgramImport.Rasterisation(pages: [stored])
+        case .failure(let error):
+            return ProgramImport.Rasterisation(
+                failures: [.couldNotStoreFile(reason: error.localizedDescription)]
+            )
+        }
+    }
+
+    /// Merges pages into the LIVE event, never a captured snapshot (#103).
+    private func addPages(_ pages: [URL]) {
+        guard !pages.isEmpty,
+              var ev = appState.events.first(where: { $0.id == event.id }) else { return }
+        for page in pages where !ev.programImagePaths.contains(page) {
+            ev.programImagePaths.append(page)
+        }
+        appState.updateEvent(ev)
+    }
+
+    /// The way forward from a file that came in short. Refusing it is the
+    /// default, not a wall: a page that is genuinely damaged in the source PDF
+    /// must not make the rest of the program unusable, so Dan can take the
+    /// readable pages knowing which one is missing (L54).
+    private func actions(for upload: ProgramImport.Incomplete) -> [BrandBannerAction] {
+        var actions: [BrandBannerAction] = []
+        if !upload.pagesThatWorked.isEmpty {
+            let count = upload.pagesThatWorked.count
+            actions.append(BrandBannerAction(
+                label: "Import the \(count) page\(count == 1 ? "" : "s") that worked"
+            ) {
+                addPages(upload.pagesThatWorked)
+                dismiss(upload)
+            })
+        }
+        actions.append(BrandBannerAction(label: "Dismiss") { dismiss(upload) })
+        return actions
+    }
+
+    private func dismiss(_ upload: ProgramImport.Incomplete) {
+        incompleteUploads.removeAll { $0.id == upload.id }
+    }
+
+    /// Surfaces a file that produced no pages at all.
+    private func report(fileName: String, failure: ProgramImport.Failure) {
+        incompleteUploads.append(ProgramImport.Incomplete(
+            fileName: fileName, pagesThatWorked: [], failures: [failure]
+        ))
     }
 
     private func removeImage(_ url: URL) {
@@ -205,16 +272,18 @@ struct ProgramUploadView: View {
         appState.updateEvent(ev)
     }
 
-    private nonisolated static func permanentCopy(of url: URL) -> URL? {
+    /// Copies an uploaded image into the program folder, reporting why it could
+    /// not rather than returning nil: the caller has to say what went wrong.
+    private nonisolated static func permanentCopy(of url: URL) -> Result<URL, Error> {
         let dir = AppPaths.programsDir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let dest = dir.appendingPathComponent(url.lastPathComponent)
-        if FileManager.default.fileExists(atPath: dest.path) { return dest }
+        if FileManager.default.fileExists(atPath: dest.path) { return .success(dest) }
         do {
             try FileManager.default.copyItem(at: url, to: dest)
-            return dest
+            return .success(dest)
         } catch {
-            return nil
+            return .failure(error)
         }
     }
 }
