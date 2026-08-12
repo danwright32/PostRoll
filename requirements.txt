@@ -6,6 +6,10 @@ anthropic==0.96.0
 
 # Test-only, pinned for the same reason: CI installed pytest unpinned.
 pytest==8.4.2
+# Runs the reference-frame checks in parallel. They are 9.8 of the macOS job's
+# 13 minutes, and they are safe to parallelise because every one of them writes
+# only into pytest's per-test tmp_path (#412).
+pytest-xdist==3.8.0
 
 # Static checks, run in CI before the suite (#113).
 ruff==0.16.2

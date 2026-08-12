@@ -116,6 +116,15 @@ jobs:
         env:
           POSTROLL_REQUIRE_FFMPEG: "1"
           POSTROLL_REQUIRE_GOLDENS: "1"
+      #
+      # `-n auto` because these four files are 586s of this job's 13 minutes,
+      # every second of it spent rendering real reels through ffmpeg. Locally,
+      # four workers took them from 495s to 221s. Safe to parallelise because
+      # every test here writes only into pytest's per-test tmp_path and reads
+      # everything else; `test_reference_frames_are_safe_to_parallelise` holds
+      # that true. `auto` rather than a fixed count so it follows the runner
+      # rather than this Mac.
         run: >
           pytest tests/test_golden_frames.py tests/test_frame_legibility.py
-          tests/test_gallery_alignment.py tests/test_slider_program_plate.py -v -ra
+          tests/test_gallery_alignment.py tests/test_slider_program_plate.py
+          -n auto -v -ra
