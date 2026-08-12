@@ -193,9 +193,15 @@ enum ProgramImport {
             case .missingFiles(let urls):
                 let names = urls.map(\.lastPathComponent).joined(separator: ", ")
                 let count = urls.count
-                return "\(count) program page\(count == 1 ? "" : "s") went missing from disk "
-                    + "(\(names)). Reading the rest would treat what is left as the whole "
-                    + "program, so add \(count == 1 ? "it" : "them") again before running OCR."
+                // "Cannot be read", not "was deleted": the check underneath only
+                // asks whether the file can be seen, and on a Mac a file the app
+                // is blocked from reading is indistinguishable from one that is
+                // gone. A message may claim only what its check measured.
+                return "\(count) program page\(count == 1 ? "" : "s") can't be read "
+                    + "(\(names)). \(count == 1 ? "It" : "They") may have been moved, deleted, "
+                    + "or blocked by macOS privacy settings. Reading the rest would treat what "
+                    + "is left as the whole program, so add \(count == 1 ? "it" : "them") again "
+                    + "before running OCR."
             }
         }
     }

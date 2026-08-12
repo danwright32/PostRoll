@@ -204,6 +204,12 @@ final class ProgramImportTests: XCTestCase {
         let refusal = try XCTUnwrap(readiness.refusal)
         XCTAssertTrue(refusal.contains("Gala_p3.png"),
                       "the refusal has to name the page that is gone: \(refusal)")
+        // The check asks whether the file can be SEEN, and a file the app is
+        // blocked from reading looks identical to one that was deleted, so the
+        // message may not assert deletion (L11).
+        XCTAssertTrue(refusal.contains("can't be read"),
+                      "the refusal may claim only what the check measured: \(refusal)")
+        XCTAssertFalse(refusal.lowercased().contains("went missing"), refusal)
     }
 
     func testReadinessPassesWhenEveryPageIsThere() throws {
