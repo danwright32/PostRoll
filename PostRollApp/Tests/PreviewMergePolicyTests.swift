@@ -79,11 +79,12 @@ final class PreviewMergePolicyTests: XCTestCase {
         let reel = makeFile("reel_clip.mp4")
         let cover = makeFile("cover.png")
 
-        let copied = PreviewMergePolicy.copyPreviewAssetsIfComplete(
-            assets: ["reel": reel.path, "cover": cover.path], to: dayDir
+        let result = PreviewMergePolicy.copyPreviewAssetsIfComplete(
+            assets: ["reel": reel.path, "cover": cover.path], to: dayDir, label: "Friday"
         )
 
-        XCTAssertTrue(copied)
+        XCTAssertTrue(result.satisfied)
+        XCTAssertTrue(result.dropped.isEmpty)
         XCTAssertTrue(FileManager.default.fileExists(atPath: dayDir.appendingPathComponent("reel_clip.mp4").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: dayDir.appendingPathComponent("cover.png").path))
     }
@@ -92,17 +93,19 @@ final class PreviewMergePolicyTests: XCTestCase {
         let reel = makeFile("reel_clip.mp4")
         let missingCoverPath = sourceDir.appendingPathComponent("cover.png").path
 
-        let copied = PreviewMergePolicy.copyPreviewAssetsIfComplete(
-            assets: ["reel": reel.path, "cover": missingCoverPath], to: dayDir
+        let result = PreviewMergePolicy.copyPreviewAssetsIfComplete(
+            assets: ["reel": reel.path, "cover": missingCoverPath], to: dayDir, label: "Friday"
         )
 
-        XCTAssertFalse(copied, "a day with any stale/missing asset must fall through to Python, not copy a partial set")
+        XCTAssertFalse(result.satisfied, "a day with any stale/missing asset must fall through to Python, not copy a partial set")
+        XCTAssertFalse(result.attempted, "the fast path never ran, so there is nothing to report as dropped")
+        XCTAssertTrue(result.dropped.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: dayDir.appendingPathComponent("reel_clip.mp4").path))
     }
 
     func testReturnsFalseWhenAssetsIsNilOrEmpty() {
-        XCTAssertFalse(PreviewMergePolicy.copyPreviewAssetsIfComplete(assets: nil, to: dayDir))
-        XCTAssertFalse(PreviewMergePolicy.copyPreviewAssetsIfComplete(assets: [:], to: dayDir))
+        XCTAssertFalse(PreviewMergePolicy.copyPreviewAssetsIfComplete(assets: nil, to: dayDir, label: "Friday").satisfied)
+        XCTAssertFalse(PreviewMergePolicy.copyPreviewAssetsIfComplete(assets: [:], to: dayDir, label: "Friday").satisfied)
     }
 
     func testCoverOnlyAssetCopiesJustAsAnyOtherKeyWould() throws {
@@ -110,10 +113,94 @@ final class PreviewMergePolicyTests: XCTestCase {
         // run) is cover.png must still copy, proving no key is special-cased.
         let cover = makeFile("cover.png")
 
-        let copied = PreviewMergePolicy.copyPreviewAssetsIfComplete(assets: ["cover": cover.path], to: dayDir)
+        let result = PreviewMergePolicy.copyPreviewAssetsIfComplete(assets: ["cover": cover.path], to: dayDir, label: "Friday")
 
-        XCTAssertTrue(copied)
+        XCTAssertTrue(result.satisfied)
         XCTAssertTrue(FileManager.default.fileExists(atPath: dayDir.appendingPathComponent("cover.png").path))
+    }
+
+    // MARK: - a copy that fails is not a success (#357)
+
+    // The pre-check above proves every SOURCE exists. Nothing proved the copies
+    // themselves worked: they ran behind `try?` and the function returned true
+    // regardless, so ExportManager recorded the day as "copied directly, no
+    // Python needed" and the export finished clean with the folder short a file.
+    // The sibling loop in the same function (ExportManager's Python-regenerated
+    // days) has caught this since #79; only the fast path missed it.
+
+    func testAFailedCopyIsReportedRatherThanCountedAsSuccess() throws {
+        let reel = makeFile("reel_clip.mp4")
+        try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
+        // A day folder that cannot be written to, the way a permissions problem
+        // or a volume that went away presents.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dayDir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dayDir.path) }
+        XCTAssertFalse(FileManager.default.isWritableFile(atPath: dayDir.path),
+                       "precondition: the day folder has to be genuinely unwritable for this to test anything")
+
+        let result = PreviewMergePolicy.copyPreviewAssetsIfComplete(
+            assets: ["reel": reel.path], to: dayDir, label: "Friday")
+
+        XCTAssertTrue(result.attempted, "every source existed, so the fast path did run")
+        XCTAssertFalse(result.satisfied, "nothing reached the folder, so the day is not done")
+        XCTAssertEqual(result.dropped.count, 1)
+        XCTAssertEqual(result.dropped.first?.source, reel)
+        XCTAssertTrue(result.dropped.first?.label.contains("Friday") == true,
+                      "the warning has to name the day, not just say something went wrong")
+    }
+
+    func testAnAlreadyExportedFileSurvivesACopyThatCannotRun() throws {
+        // The damaging half: the destination was deleted on the line before the
+        // copy, so a copy that then failed left the folder worse off than not
+        // exporting at all, and still reported success.
+        let reel = makeFile("reel_clip.mp4")
+        try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
+        let existing = dayDir.appendingPathComponent("reel_clip.mp4")
+        try Data("a good file from the previous export".utf8).write(to: existing)
+
+        // The source passes the existence check and still cannot be read.
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: reel.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: reel.path) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: reel.path),
+                      "precondition: the pre-check has to pass, or this tests the wrong branch")
+        XCTAssertFalse(FileManager.default.isReadableFile(atPath: reel.path),
+                       "precondition: the source has to be genuinely unreadable")
+
+        let result = PreviewMergePolicy.copyPreviewAssetsIfComplete(
+            assets: ["reel": reel.path], to: dayDir, label: "Friday")
+
+        XCTAssertFalse(result.satisfied)
+        XCTAssertEqual(result.dropped.count, 1)
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8),
+                       "a good file from the previous export",
+                       "a replacement that never arrived must not take the existing file with it")
+    }
+
+    func testASuccessfulCopyStillReplacesAnOlderExportedFile() throws {
+        // The guard above must not turn into "never overwrite": re-exporting a
+        // day whose graphic changed has to end with the NEW file in the folder.
+        let reel = makeFile("reel_clip.mp4")
+        try Data("fresh render".utf8).write(to: reel)
+        try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
+        let existing = dayDir.appendingPathComponent("reel_clip.mp4")
+        try Data("stale render".utf8).write(to: existing)
+
+        let result = PreviewMergePolicy.copyPreviewAssetsIfComplete(
+            assets: ["reel": reel.path], to: dayDir, label: "Friday")
+
+        XCTAssertTrue(result.satisfied)
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "fresh render")
+    }
+
+    func testNoTemporaryFileIsLeftBehindInTheDayFolder() throws {
+        let reel = makeFile("reel_clip.mp4")
+
+        _ = PreviewMergePolicy.copyPreviewAssetsIfComplete(
+            assets: ["reel": reel.path], to: dayDir, label: "Friday")
+
+        let names = try FileManager.default.contentsOfDirectory(atPath: dayDir.path)
+        XCTAssertEqual(names, ["reel_clip.mp4"],
+                       "the swap must not leave scratch files for Dan to upload")
     }
 }
 
