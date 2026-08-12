@@ -249,7 +249,13 @@ enum ImportFailureText {
     static func message(_ failures: [AppPaths.ImportCopyFailure]) -> String {
         guard let first = failures.first else { return "" }
         if failures.count == 1 {
-            return "\(first.fileName) was not imported: PostRoll couldn't copy it into its own storage (\(first.message)). Linking it where it sits would break as soon as that folder moves."
+            // The reason is a Cocoa file-system error, which is a whole sentence
+            // ending in a stop, so parenthesising it and adding another produced
+            // "(...already exists.)." The existing test's fixture had no
+            // terminator, so nothing exercised the real shape (#405).
+            return "\(first.fileName) was not imported: PostRoll couldn't copy it into "
+                 + "its own storage. \(Sentence.closed(first.message)) Linking it where "
+                 + "it sits would break as soon as that folder moves."
         }
         let names = failures.map(\.fileName).joined(separator: ", ")
         return "\(failures.count) files were not imported: PostRoll couldn't copy them into its own storage. Files: \(names)."

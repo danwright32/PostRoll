@@ -63,7 +63,11 @@ enum MediaErrorSummary {
         let keys = orderedKeys(warnings)
         guard !keys.isEmpty else { return nil }
 
-        let lines = keys.map { "\(displayName($0)): \(warnings[$0] ?? "")" }
+        // Each reason is closed, so the sentence after the list does not run into
+        // the last one. Python's own wording for these carries no terminator
+        // ("Thursday black and white photo not found: /photos/x.jpg"), which is
+        // confirmed at postroll/media/missing_media.py rather than assumed (#405).
+        let lines = keys.map { "\(displayName($0)): \(Sentence.closed(warnings[$0] ?? ""))" }
         let subject = keys.count == 1 ? "That day was" : "Those days were"
         return lines.joined(separator: "\n")
              + "\n\n\(subject) exported without the missing input, so nothing is "

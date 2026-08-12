@@ -74,10 +74,13 @@ enum ProgramImport {
         /// next sentence collides with it and the banner reads "...No space
         /// left on device None of the 9 pages...", which is only visible once
         /// the thing is rendered (#389).
+        ///
+        /// One line now, because this used to be its own copy of the rule and had
+        /// two holes `Sentence` does not: a reason already ending "read.." kept
+        /// both stops, and an empty reason left our next sentence colliding with
+        /// a bare colon (#405).
         private static func sentence(_ reason: String) -> String {
-            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let last = trimmed.last else { return trimmed }
-            return ".?!".contains(last) ? trimmed : trimmed + "."
+            Sentence.closed(reason)
         }
     }
 

@@ -25,6 +25,12 @@ enum Sentence {
         let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 
+        // An ellipsis is already an ending, and a deliberate one. Left exactly as
+        // it came, because collapsing it to a full stop rewrites the other
+        // system's words, and adding a stop after it produces "…." which is what
+        // a truncated stderr preview was doing on every long traceback (#405).
+        if trimmed.hasSuffix("…") || trimmed.hasSuffix("...") { return trimmed }
+
         // Drop every terminator already there, then add exactly one back. A
         // reason ending "read.." or "wrong!?" is not something to reproduce.
         var body = Substring(trimmed)
