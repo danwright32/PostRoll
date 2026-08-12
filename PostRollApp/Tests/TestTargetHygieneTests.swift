@@ -38,6 +38,28 @@ enum TestSourceInventory {
         return Set(entries.filter { $0.pathExtension == "swift" }.map(\.lastPathComponent))
     }
 
+    /// The XCTestCase subclasses declared in one file's source.
+    ///
+    /// Comment lines are stripped first, so a guard cannot be satisfied (or
+    /// failed) by prose ABOUT a class rather than the declaration itself: a
+    /// check that is green on a comment is indistinguishable from one that
+    /// works (L103).
+    static func suiteNames(in source: String) -> [String] {
+        source.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("//") && !$0.hasPrefix("*") }
+            .compactMap { line in
+                guard let range = line.range(
+                    of: #"^(final )?class ([A-Za-z0-9_]+)\s*:\s*XCTestCase"#,
+                    options: .regularExpression) else { return nil }
+                return line[range]
+                    .replacingOccurrences(of: "final ", with: "")
+                    .replacingOccurrences(of: "class ", with: "")
+                    .split(separator: ":").first
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+            }
+    }
+
     /// Files carrying `needle`, considering only ones the project compiles.
     static func offenders(in dir: URL, registered: Set<String>, containing needle: String,
                           excluding: String) -> [String] {
@@ -130,6 +152,51 @@ final class TestTargetHygieneTests: XCTestCase {
         )
     }
 
+    /// One suite per file, so `-only-testing:PostRollTests/SomeTests` runs what
+    /// its name says (#384).
+    ///
+    /// A file holding two suites reads as one: tests appended at what looks like
+    /// the end of it land in the second, and a targeted run of the first then
+    /// executes none of them and reports success. That happened on 2026-08-12
+    /// while proving a new guard could fail: the deliberate break was in place,
+    /// the targeted run came back green, and the tests it was meant to run were
+    /// sitting in a class the invocation never named. A run that executes none
+    /// of what you meant is indistinguishable from one that passed (L98).
+    ///
+    /// Reads the files the generated project compiles, so a half-written file in
+    /// the directory cannot fail it.
+    func testEachTestFileHoldsExactlyOneSuite() throws {
+        let registered = TestSourceInventory.registeredNames(inProject: try generatedProject())
+        XCTAssertGreaterThan(registered.count, 50,
+                             "the project lists almost no Swift files, so this guard is vacuous")
+
+        var offenders: [String] = []
+        var suitesSeen = 0
+        for name in registered.sorted() {
+            let url = testsDir.appendingPathComponent(name)
+            guard let contents = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            let suites = TestSourceInventory.suiteNames(in: contents)
+            suitesSeen += suites.count
+            if suites.count > 1 {
+                offenders.append("\(name): \(suites.joined(separator: ", "))")
+            }
+        }
+
+        // Finding no suites at all would pass the assertion below while proving
+        // nothing, which is the failure mode this guard is about (L98).
+        XCTAssertGreaterThan(suitesSeen, 50,
+                             "the scanner found almost no test suites, so it has stopped working")
+        XCTAssertTrue(offenders.isEmpty, """
+            These files hold more than one test suite. Tests added at what looks \
+            like the end of the file land in the last one, and a targeted run of \
+            the first reports success having run none of them.
+
+            Move each extra suite into its own file named after it:
+
+            \(offenders.joined(separator: "\n"))
+            """)
+    }
+
     /// `AppState(events:)` builds an event list without reading the store, so a
     /// test can never see or rewrite the real events.json. It must stay out of
     /// the shipping app: an accidental call there would not look like an
@@ -185,82 +252,5 @@ final class TestTargetHygieneTests: XCTestCase {
             + "Found \(definitions) mentions in project.yml. Defining it on the app target "
             + "would make every test-only seam reachable from the shipping app."
         )
-    }
-}
-
-/// #224: the guard's own inputs, exercised against a directory this test owns.
-///
-/// The flake that produced this issue was the import guard reading whatever was
-/// in `Tests/` at that instant. These pin the boundary that fixes it: a file the
-/// project does not compile cannot fail the import guard, and a file it does
-/// compile still can.
-final class TestSourceInventoryTests: XCTestCase {
-
-    private var dir: URL!
-
-    override func setUpWithError() throws {
-        dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("hygiene-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    }
-
-    override func tearDownWithError() throws {
-        try? FileManager.default.removeItem(at: dir)
-    }
-
-    private func write(_ name: String, _ body: String) throws {
-        try Data(body.utf8).write(to: dir.appendingPathComponent(name))
-    }
-
-    func testAFileTheProjectCompilesIsChecked() throws {
-        let needle = "@testable import " + "PostRoll"
-        try write("Real.swift", "import XCTest\n\(needle)\n")
-
-        let offenders = TestSourceInventory.offenders(
-            in: dir, registered: ["Real.swift"], containing: needle, excluding: "Guard.swift")
-
-        XCTAssertEqual(offenders, ["Real.swift"])
-    }
-
-    func testAStrayFileTheProjectDoesNotCompileCannotFailTheGuard() throws {
-        // The flake: something else writing into the directory while the guard
-        // ran. A file the bundle does not compile cannot break the bundle.
-        let needle = "@testable import " + "PostRoll"
-        try write("Real.swift", "import XCTest\n")
-        try write("Scratch.swift.bak.swift", needle)
-
-        let offenders = TestSourceInventory.offenders(
-            in: dir, registered: ["Real.swift"], containing: needle, excluding: "Guard.swift")
-
-        XCTAssertTrue(offenders.isEmpty, "a file nobody compiles cannot break the build")
-    }
-
-    func testAFileThatDisappearsMidRunIsNotAnOffender() throws {
-        // Registered but unreadable right now: absence is not evidence of the
-        // forbidden import, and guessing either way is worse than saying no.
-        let needle = "@testable import " + "PostRoll"
-
-        let offenders = TestSourceInventory.offenders(
-            in: dir, registered: ["Vanished.swift"], containing: needle, excluding: "Guard.swift")
-
-        XCTAssertTrue(offenders.isEmpty)
-    }
-
-    func testItReadsFileNamesOutOfTheGeneratedProject() {
-        let pbxproj = """
-        /* Begin PBXBuildFile section */
-        A1 /* AudioPreviewPlayerTests.swift in Sources */ = {isa = PBXBuildFile; };
-        A2 /* Layout_Sidecar-Tests.swift in Sources */ = {isa = PBXBuildFile; };
-        /* End PBXBuildFile section */
-        """
-        let names = TestSourceInventory.registeredNames(inProject: pbxproj)
-        XCTAssertEqual(names, ["AudioPreviewPlayerTests.swift", "Layout_Sidecar-Tests.swift"])
-    }
-
-    func testAnEmptyProjectYieldsNoNamesRatherThanEverything() {
-        // The failure direction that matters: an unparsed project must not
-        // silently mean "check nothing", which is why the guard also asserts a
-        // floor on the count.
-        XCTAssertTrue(TestSourceInventory.registeredNames(inProject: "").isEmpty)
     }
 }
