@@ -48,6 +48,263 @@
       "replace": ".fixedSize(horizontal: false, vertical: true)\n        }\n        .foregroundStyle(Color.cream)",
       "test": "PostRollTests/BannerLegibilityTests/testEveryBannerActuallyDrawsItsMessage",
       "breaks": "RefusalNote draws cream on cream, the invisible-type defect that has shipped three times (#389)"
+    },
+    {
+      "name": "ci-font-asset-trigger",
+      "file": ".github/workflows/swift.yml",
+      "find": "      - \"postroll/assets/**\"",
+      "replace": "      - \"postroll/**\"",
+      "test": "tests/test_ci_runs_the_font_dependent_checks.py::test_the_macos_job_triggers_on_the_assets_those_checks_draw_with",
+      "breaks": "the macOS job stops triggering on the assets the font checks draw with (L88)"
+    },
+    {
+      "name": "fast-subset-deselects",
+      "file": "Makefile",
+      "find": "-m \"not slow\"",
+      "replace": "-m \"not fast\"",
+      "test": "tests/test_fast_subset_stays_honest.py::test_there_is_a_fast_target_and_it_is_not_the_gate",
+      "breaks": "the fast target quietly stops deselecting anything"
+    },
+    {
+      "name": "reference-frames-parallel",
+      "file": ".github/workflows/swift.yml",
+      "find": "-n auto -v -ra",
+      "replace": "-v -ra",
+      "test": "tests/test_reference_frames_are_safe_to_parallelise.py::test_the_step_still_runs_in_parallel",
+      "breaks": "the reference frame step silently goes back to serial"
+    },
+    {
+      "name": "ci-unit-scheme",
+      "file": ".github/workflows/swift.yml",
+      "find": "-scheme PostRollTests",
+      "replace": "-scheme PostRoll",
+      "test": "tests/test_ci_gates.py::test_it_runs_the_unit_test_scheme_not_the_gui_one",
+      "breaks": "CI runs the GUI-driving scheme a headless runner cannot drive"
+    },
+    {
+      "name": "install-script-portability",
+      "file": "PostRollApp/build-install.sh",
+      "find": "SWIFT_LOG=\"$(mktemp \"${TMPDIR:-/tmp}/postroll-swift-tests.XXXXXX\")\"",
+      "replace": "SWIFT_LOG=\"$(mktemp -t postroll-swift-tests)\"",
+      "test": "tests/test_build_and_test_gates.py::test_the_install_script_uses_no_bsd_only_shell_forms",
+      "breaks": "a BSD-only shell form returns to the install script (CI is Linux)"
+    },
+    {
+      "name": "prepush-icloud-checker",
+      "file": ".githooks/pre-push",
+      "find": "check_icloud_duplicates.py",
+      "replace": "check_icloud_dupes.py",
+      "test": "tests/test_icloud_duplicates.py::test_the_pre_push_hook_runs_the_checker",
+      "breaks": "the pre-push hook stops running the iCloud duplicate checker"
+    },
+    {
+      "name": "collage-design-version-parity",
+      "file": "PostRollApp/Sources/DesignTokens.swift",
+      "find": "static let collageDesignVersion = 1",
+      "replace": "static let collageDesignVersion = 2",
+      "test": "tests/test_collage_design_version.py::test_swift_mirrors_the_same_version",
+      "breaks": "the Swift collage design version drifts from the Python one"
+    },
+    {
+      "name": "design-stamp-filename-parity",
+      "file": "PostRollApp/Sources/Services/DesignStamp.swift",
+      "find": "static let stampName = \"design.json\"",
+      "replace": "static let stampName = \"designs.json\"",
+      "test": "tests/test_media_design_version.py::test_swift_uses_the_same_stamp_filename",
+      "breaks": "Swift reads a different stamp file than Python writes"
+    },
+    {
+      "name": "palette-mirror-parity",
+      "file": "PostRollApp/Sources/DesignTokens.swift",
+      "find": "static let hairline  = Color(red: 214/255, green: 208/255, blue: 200/255)",
+      "replace": "static let hairline  = Color(red: 212/255, green: 201/255, blue: 192/255)",
+      "test": "tests/test_design_tokens.py::test_the_swift_mirror_agrees_with_the_python_tokens[hairline-HAIRLINE]",
+      "breaks": "the Swift hairline colour drifts from the Python palette"
+    },
+    {
+      "name": "crop-anchor-swift-parity",
+      "file": "PostRollApp/Sources/Models/Event.swift",
+      "find": "static let topAnchoredY: Double = -1.0",
+      "replace": "static let topAnchoredY: Double = -0.5",
+      "test": "tests/test_top_anchored_crop.py::test_swift_and_python_agree_on_the_anchor",
+      "breaks": "the Swift crop anchor drifts from Python and crops start eating the top (#167)"
+    },
+    {
+      "name": "crop-anchor-python-parity",
+      "file": "postroll/media/generate_collage.py",
+      "find": "TOP_ANCHORED_CROP_Y = -1.0",
+      "replace": "TOP_ANCHORED_CROP_Y = -0.9",
+      "test": "tests/test_crop_geometry_parity.py::test_the_fixture_constants_match_the_implementation",
+      "breaks": "the Python crop anchor drifts from the shared crop fixture (#168)"
+    },
+    {
+      "name": "vision-thinness-parity",
+      "file": "PostRollApp/Sources/Services/VisionTextLayer.swift",
+      "find": "static let minimumWords = 8",
+      "replace": "static let minimumWords = 9",
+      "test": "tests/test_vision_cross_check.py::test_the_swift_mirror_of_the_thinness_rule_agrees",
+      "breaks": "the Swift thinness rule drifts from the Python one"
+    },
+    {
+      "name": "subscription-env-parity",
+      "file": "PostRollApp/Sources/Services/HaltedWeek.swift",
+      "find": "static let subscriptionEnv = \"POSTROLL_USE_SUBSCRIPTION\"",
+      "replace": "static let subscriptionEnv = \"POSTROLL_USE_SUBSCRIPTIONS\"",
+      "test": "tests/test_subscription_transport.py::test_the_swift_mirror_of_the_switch_name_agrees",
+      "breaks": "Swift flips a different switch than Python reads"
+    },
+    {
+      "name": "shoot-type-parity",
+      "file": "PostRollApp/Sources/Models/Event.swift",
+      "find": "case combo     = \"Combo\"",
+      "replace": "case combo     = \"Comboo\"",
+      "test": "tests/test_event_manifest.py::test_the_shoot_type_table_matches_the_swift_it_mirrors",
+      "breaks": "the manifest tool's shoot type table drifts from the Swift enum"
+    },
+    {
+      "name": "design-fingerprint-moves",
+      "file": "postroll/media/program_plate.py",
+      "find": "PRINT_Y = 430",
+      "replace": "PRINT_Y = 431",
+      "test": "tests/test_media_design_fingerprint.py::test_the_template_still_renders_the_design_its_version_claims[reel_morph]",
+      "breaks": "a plate geometry change ships without a design version bump"
+    },
+    {
+      "name": "dead-tuning-control",
+      "file": "postroll/media/generate_reel_morph.py",
+      "find": "FPS = 30",
+      "replace": "RAW_DESATURATION = 0.0\nFPS = 30",
+      "test": "tests/test_no_dead_tuning_controls.py::test_the_reel_generator_declares_nothing_it_never_reads[generate_reel_morph]",
+      "breaks": "a tuning constant nothing reads lands in a reel generator (L46)"
+    },
+    {
+      "name": "wordmark-required-cover",
+      "file": "postroll/ai/generate_cover.py",
+      "find": "logo_path=required_wordmark(",
+      "replace": "logo_path=str(",
+      "test": "tests/test_wordmark_required.py::test_no_app_call_site_turns_a_missing_wordmark_into_no_mark[generate_cover]",
+      "breaks": "a missing wordmark file becomes a cover with no mark instead of an error"
+    },
+    {
+      "name": "screen-reel-dark-mark",
+      "file": "postroll/ai/generate_media.py",
+      "find": "# by a measured pixel test.\n                            logo_path=required_wordmark(LOGO_BLACK),",
+      "replace": "# by a measured pixel test.\n                            logo_path=required_wordmark(LOGO_WHITE),",
+      "test": "tests/test_screen_reel_logo_contrast.py::test_the_screen_reel_is_given_the_dark_mark",
+      "breaks": "the screen reel gets the white mark on a light surface, invisible again"
+    },
+    {
+      "name": "hashtag-gate-prompt",
+      "file": "postroll/ai/generate_captions.py",
+      "find": "org/show, composer/playwright/band, genre.",
+      "replace": "org/show, composer/playwright/band, performers visible, genre.",
+      "test": "tests/test_performer_hashtag_gate.py::test_the_prompt_no_longer_demands_performer_hashtags",
+      "breaks": "the caption prompt contradicts the performer hashtag fame gate"
+    },
+    {
+      "name": "prd-status-honest",
+      "file": "postroll-prd.md",
+      "find": "uploads that to Metricool by hand.",
+      "replace": "uploads that to the scheduler by machine.",
+      "test": "tests/test_prd_matches_the_build.py::test_the_status_says_what_actually_happens_today",
+      "breaks": "the PRD claims publishing the code does not do (L32)"
+    },
+    {
+      "name": "docs-ai-cost-honest",
+      "file": "postroll-prd.md",
+      "find": "- Metricool: $216/year (unchanged)",
+      "replace": "- Metricool: $216/year (unchanged), Claude Code: $0",
+      "test": "tests/test_paid_default_path.py::test_the_docs_do_not_claim_the_ai_is_free",
+      "breaks": "the docs claim the AI path is free when the default path is metered"
+    },
+    {
+      "name": "appkit-wrapper-lifetime",
+      "file": "PostRollApp/Sources/Views/MainWindowView.swift",
+      "find": "/// Lifetime, audited against #196 (#198): this hands nothing to anything that",
+      "replace": "/// This wrapper hands nothing to anything that",
+      "test": "PostRollTests/AppKitWrapperLifetimeTests/testEveryAppKitWrapperHasAnsweredTheLifetimeQuestion",
+      "breaks": "an AppKit wrapper loses its recorded answer to the lifetime question (#196)"
+    },
+    {
+      "name": "blog-heading-by-hand",
+      "file": "PostRollApp/Sources/Services/EventExporter.swift",
+      "find": "let md = BlogDraftText.copyText(title: blog.title, body: blog.body) + \"\\n\"",
+      "replace": "let md = \"# \\(blog.title)\\n\\n\\(blog.body)\" + \"\\n\"",
+      "test": "PostRollTests/BlogDraftTextContractTests/testNoScreenBuildsTheHeadingByHand",
+      "breaks": "a screen assembles the blog heading by hand instead of the shared renderer"
+    },
+    {
+      "name": "collaborator-sort-default",
+      "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+      "find": "let followers = candidate.stats?.followers, followers > 0",
+      "replace": "let followers = Optional(candidate.stats?.followers ?? 0), followers > 0",
+      "test": "PostRollTests/CollaboratorPickTests/testTheSortCannotDefaultAMissingFigureToZero",
+      "breaks": "a missing follower figure silently scores as zero (L50)"
+    },
+    {
+      "name": "review-staleness-refresh",
+      "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+      "find": ".onAppear { refreshDesignStaleness() }",
+      "replace": ".onAppear { }",
+      "test": "PostRollTests/LayoutSidecarContentsTests/testTheReviewScreenReadsTheStampOnceRatherThanEveryRedraw",
+      "breaks": "the review screen never refreshes design staleness on appear"
+    },
+    {
+      "name": "discarded-write-allowlist",
+      "file": "PostRollApp/Sources/Services/AppPaths.swift",
+      "find": "try? fm.copyItem(at: seed, to: dest)",
+      "replace": "try? fm.copyItem(at: seed, to: dest as URL)",
+      "test": "PostRollTests/DiscardedFileWriteGuardTests/testNoFileProducingWriteHasItsFailureThrownAway",
+      "breaks": "a discarded file-write stops matching its allowlist entry (#362)"
+    },
+    {
+      "name": "sentence-rule-copy",
+      "file": "PostRollApp/Sources/Services/EventStore.swift",
+      "find": "let reason = Sentence.closed(error.localizedDescription)",
+      "replace": "let raw = error.localizedDescription; let reason = \".?!\".contains(raw.last ?? \" \") ? raw : raw + \".\"",
+      "test": "PostRollTests/InterpolatedReasonTests/testNoScreenKeepsItsOwnCopyOfTheRule",
+      "breaks": "a screen grows its own copy of the sentence-closing rule"
+    },
+    {
+      "name": "manifest-day-rule-copy",
+      "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+      "find": "var dayEntry = ManifestDay.sharedEntry(pd, day: dayName)",
+      "replace": "guard !pd.photoPaths.isEmpty || pd.rawPhotoPath != nil || !pd.clipPaths.isEmpty else { continue }; var dayEntry = ManifestDay.sharedEntry(pd, day: dayName)",
+      "test": "PostRollTests/ManifestDaySharedEntryTests/testNeitherBuilderCarriesItsOwnCopyOfTheRule",
+      "breaks": "a manifest builder grows its own copy of the day-inclusion rule"
+    },
+    {
+      "name": "picker-storage-route",
+      "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+      "find": "let outcome = ImportedPicks.copy(panel.urls)",
+      "replace": "let outcome = ImportedPicks.Outcome(stored: panel.urls, failures: [])",
+      "test": "PostRollTests/PickerStorageHygieneTests/testEveryPickerRoutesItsPickIntoAppStorage",
+      "breaks": "a picker stores raw picked URLs without copying them in (the TCC bug class)"
+    },
+    {
+      "name": "test-seam-stays-out",
+      "file": "PostRollApp/Sources/AppState.swift",
+      "find": "#if POSTROLL_TESTS",
+      "replace": "#if true",
+      "test": "PostRollTests/TestTargetHygieneTests/testTheAppStateTestSeamStaysOutOfTheShippingApp",
+      "breaks": "the test-only seam ships in the app target"
+    },
+    {
+      "name": "paid-action-ink",
+      "file": "PostRollApp/Sources/Views/CaptionReviewBodies.swift",
+      "find": "                        .foregroundStyle(Color.roseGold)",
+      "replace": "                        .foregroundStyle(Color.warmMid)",
+      "test": "PostRollTests/VisibleControlGuardTests/testNoPaidActionIsDrawnInTheBodyTextColour",
+      "breaks": "a paid action is drawn in the body text colour and stops reading as a control (L49)"
+    },
+    {
+      "name": "recurring-banner-control",
+      "file": "PostRollApp/Sources/Views/ExportView.swift",
+      "find": "RecurringAccounts.actionable(recurringAccounts)",
+      "replace": "Array(recurringAccounts.prefix(3))",
+      "test": "PostRollTests/RecurringAccountsTests/testTheBannerOffersAControlForEachAccountItNames",
+      "breaks": "the recurring-accounts banner names accounts it offers no control for (L80)"
     }
-  ]
+  ],
+  "comment_uncovered": "Guards deliberately NOT registered, because no compile-safe one line perturbation expresses the defect they catch: UploadPageCropRemovalTests (adding a real crop control is not one line; prose would trip it but proves nothing), the absence guards test_blog_draft_text.py::test_no_module_builds_the_heading_by_hand / test_layout_sidecar.py::test_no_generator_builds_the_name_by_hand / test_blog_meta.py::test_neither_string_can_reach_the_ai_round_trip (their only one line trip is planting the banned text artificially), test_suite_hygiene.py and test_guard_mutation_registry.py (they protect the test suite and this registry themselves), test_bridge_payload_contract.py / test_manifest_contract.py (the one line rename anchor is ambiguous in PythonBridge.swift), test_brand_text.py (removing the route in one line breaks the module's own names), test_event_slug_parity.py (slug internals are not safely one line perturbable), and the measured pixel thresholds in test_golden_frames.py / test_frame_legibility.py / test_screen_reel_logo_contrast.py's contrast checks (failing them takes a rendering change, not a text edit)."
 }
