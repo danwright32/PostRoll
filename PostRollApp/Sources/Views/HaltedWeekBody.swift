@@ -1,5 +1,37 @@
 import SwiftUI
 
+// MARK: - How prominent a control is allowed to be
+//
+// The three tiers this app uses, written down here because #395 styled one paid
+// action as an outlined control and left another as body-coloured text, and
+// nothing recorded whether that was a decision or an oversight (#398).
+//
+//   Filled (`BrandButtonStyle`)         The decision on the screen. Exactly one.
+//   Outlined (`BrandOutlineButtonStyle`) A real alternative to that decision,
+//                                        standing on its own with no filled
+//                                        button beside it to be read against.
+//   Accent text (`.plain` + roseGold)   A side route: useful, not the decision,
+//                                        and read correctly as a link because
+//                                        it is not the colour of prose.
+//
+// Two rules cut across those tiers, and both are enforced in
+// VisibleControlGuardTests rather than left to review:
+//
+//   1. An action that IS the decision is never body-coloured text. A bare-text
+//      option reads as a heading above its own explanation, which is how the
+//      free way out of a halt shipped looking like a label (#395).
+//   2. An action that SPENDS MONEY is never body-coloured text either, whatever
+//      tier it sits in. It may be quiet; it may not be invisible. `Regenerate
+//      All…` on caption review and `Regenerate blog post` on the generation done
+//      screen are quiet on purpose, because each sits opposite a filled primary
+//      that is the actual decision, so they take the accent rather than an
+//      outline. `Re-cut with AI` stands alone with nothing to be quiet against,
+//      which is why it took the outline instead.
+//
+// So the two paid actions in #398 do NOT look alike, and that is the answer
+// rather than an accident: what they share is being legible controls, and what
+// separates them is whether a filled primary is on screen to be quieter than.
+
 /// How prominent each way out of a halt is.
 ///
 /// Its own type so the rule can be read and tested, rather than living as an

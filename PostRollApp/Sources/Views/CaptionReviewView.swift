@@ -413,10 +413,15 @@ struct CaptionReviewView: View {
                             .padding(.bottom, Spacing.sm)
                         }
                         HStack {
+                            // Quieter than the filled primary beside it, which is
+                            // the decision on this screen, but still visibly a
+                            // control: it throws away every edit and pays for a
+                            // fresh week. The rule is written down beside
+                            // HaltChoiceEmphasis in HaltedWeekBody.swift (#398).
                             Button("Regenerate All…") { showRegenerateConfirm = true }
                                 .buttonStyle(.plain)
                                 .font(.system(size: 12))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(Color.roseGold)
                             Spacer()
                             Button("Approve & Export") { advance() }
                                 .buttonStyle(BrandButtonStyle())
