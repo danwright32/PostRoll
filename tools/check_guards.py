@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import enum
 import json
+import os
 import re
 import subprocess
 import sys
@@ -171,7 +172,14 @@ def classify(entry: Entry, returncode: int, output: str) -> Verdict:
 
 
 def real_runner(cmd: list[str], cwd: Path) -> tuple[int, str]:
-    completed = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    # No bytecode may be written from MUTATED source. The mutation and the
+    # restore can land in the same clock second with the same file size, and
+    # Python's cache validation checks exactly those two stand-ins, so a cache
+    # compiled from the broken code would outlive the restore and later suite
+    # runs would fail on code no file contains (L40; seen live 2026-08-12).
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    completed = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                               env=env)
     return completed.returncode, completed.stdout + completed.stderr
 
 

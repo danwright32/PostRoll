@@ -65,6 +65,9 @@ def test_every_named_test_still_exists(entry: Entry):
             "entry")
     else:
         path_part, method = entry.test.split("::")
+        # A parametrised node id carries its case in brackets; the function
+        # the file declares is the part before them.
+        method = method.split("[")[0]
         test_file = REPO_ROOT / path_part
         assert test_file.is_file(), f"{path_part} has moved"
         assert f"def {method}(" in test_file.read_text(), (

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -123,6 +124,27 @@ def a_runner(returncode: int, output: str):
 
     run.calls = calls
     return run
+
+
+# ── The real runner ───────────────────────────────────────────────────────────
+
+
+def test_the_real_runner_forbids_bytecode_writes():
+    """A pytest run against MUTATED source must not leave compiled bytecode
+    behind: the mutation and the restore can land in the same clock second
+    with the same file size (\"-0.9\" for \"-1.0\"), and Python's cache checks
+    exactly those two stand-ins, so a cache written from the broken code
+    outlives the restore and the suite fails on code no file contains (L40).
+    Seen live on 2026-08-12: the crop anchor mutation poisoned the cache and
+    five crop tests failed on a byte-clean tree."""
+    from tools.check_guards import real_runner
+
+    code, output = real_runner(
+        [sys.executable, "-c",
+         "import os; print(os.environ.get('PYTHONDONTWRITEBYTECODE', 'unset'))"],
+        Path.cwd())
+    assert code == 0
+    assert output.strip() == "1"
 
 
 # ── Loading the registry ──────────────────────────────────────────────────────
