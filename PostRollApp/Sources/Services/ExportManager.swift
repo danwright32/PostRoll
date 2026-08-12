@@ -211,6 +211,9 @@ final class ExportManager {
             // and a warning about a file that IS in the folder is its own defect.
             // Reconciled against the finished folder below (#357).
             var previewCopyFailures: [(asset: EventExporter.DroppedAsset, destination: URL)] = []
+            /// Approved images that were not on disk to be put back over the
+            /// regenerated ones, so the export used the machine's version (#377).
+            var absentApprovals: [PreviewMergePolicy.AbsentApproval] = []
 
             for day in daysToProcess {
                 let hasContent = (capturedEvent.weekResult?[day] != nil)
@@ -296,6 +299,13 @@ final class ExportManager {
                     for day in daysToProcess where daysNeedingPython.contains(day.rawValue) {
                         guard let assets = previewPaths[day.rawValue] else { continue }
                         let dayDir = folder.appendingPathComponent(day.folderName)
+                        // An approval that is not on disk cannot be put back, and
+                        // the day then ships the machine's version of an image Dan
+                        // approved his own edit of. The folder is not short a file,
+                        // so this is not a dropped asset: it is a substitution, and
+                        // it has to be said out loud rather than skipped (#377).
+                        absentApprovals.append(contentsOf: PreviewMergePolicy.absentApprovals(
+                            assets: assets, label: day.displayName))
                         for (_, srcPath) in assets where srcPath.hasSuffix(".png") {
                             guard FileManager.default.fileExists(atPath: srcPath) else { continue }
                             let src = URL(fileURLWithPath: srcPath)
@@ -328,10 +338,17 @@ final class ExportManager {
             let dropWarning = EventExporter.Outcome(folder: folder, dropped: droppedAssets).warning
             let combinedError = [mediaError, dropWarning].compactMap { $0 }.joined(separator: "\n\n")
 
+            // A substitution goes in the WARNING slot, not the error one: the
+            // folder is complete and usable, it just isn't carrying the version
+            // Dan approved, which is his call to make rather than a failure.
+            let substitution = PreviewMergePolicy.substitutionNotice(absentApprovals)
+            let combinedWarning = [mediaWarning, substitution]
+                .compactMap { $0 }.joined(separator: "\n\n")
+
             finishSuccess(eventID: eventID, folder: folder, onlyDay: onlyDay,
                           daysNeedingPython: daysNeedingPython,
                           mediaError: combinedError.isEmpty ? nil : combinedError,
-                          mediaWarning: mediaWarning,
+                          mediaWarning: combinedWarning.isEmpty ? nil : combinedWarning,
                           appState: appState)
         } catch is CancellationError {
             // Cancelled (skipMedia handles its own terminal state).
