@@ -2,7 +2,7 @@ BUILD_DIR := PostRollApp/build
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
-.PHONY: install install-force build test test-python test-python-fast clean
+.PHONY: install install-force build test test-python test-python-fast check-guards clean
 
 # One build-and-install implementation, not two. This used to run its own
 # xcodebuild and cp, skipping the xattr clear, the stable-identity signing and
@@ -43,6 +43,14 @@ test-python:
 # silent (#413). This is NOT the gate: `make test-python` and CI run everything.
 test-python-fast:
 	@venv/bin/python -m pytest tests/ -q -m "not slow"
+
+# Proves the registered guard tests still go red on deliberately broken code
+# (#416). Not part of `make test`: it mutates the working tree and pays a Swift
+# build per entry. Run it whenever a guard is added or changed. The registry
+# lives in tests/fixtures/guard_mutations.json and is held to the code on every
+# normal suite run by tests/test_guard_mutation_registry.py.
+check-guards:
+	@venv/bin/python tools/check_guards.py
 
 clean:
 	@rm -rf "$(BUILD_DIR)"
