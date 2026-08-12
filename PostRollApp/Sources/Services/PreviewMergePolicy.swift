@@ -68,23 +68,66 @@ enum PreviewMergePolicy {
     /// like "reel", "story", or any other key, no exclusions needed.
     /// Extracted from ExportManager so it's testable with real files
     /// instead of Task/AppState/security-scoped URLs.
+    /// What the fast copy path actually did.
+    ///
+    /// `satisfied` is the only thing a caller may read as "this day is done".
+    /// The pre-check proves every SOURCE exists; it says nothing about whether
+    /// the copies worked, and for a long time this returned a bare `true`
+    /// regardless, so an export finished clean with the folder short a file
+    /// (#357).
+    struct PreviewCopyResult {
+        /// Every source existed, so the fast path ran rather than declining.
+        let attempted: Bool
+        /// One entry per asset that could not be placed in the day folder.
+        /// Same currency as every other copy in the export since #79, so these
+        /// reach the user through the warning that already exists.
+        let dropped: [EventExporter.DroppedAsset]
+
+        /// Ran, and placed everything it promised.
+        var satisfied: Bool { attempted && dropped.isEmpty }
+
+        static let declined = PreviewCopyResult(attempted: false, dropped: [])
+    }
+
     @discardableResult
     static func copyPreviewAssetsIfComplete(
         assets: [String: String]?,
         to dayDir: URL,
+        label: String,
         fileManager: FileManager = .default
-    ) -> Bool {
+    ) -> PreviewCopyResult {
         guard let assets, !assets.isEmpty,
               assets.values.allSatisfy({ fileManager.fileExists(atPath: $0) })
-        else { return false }
+        else { return .declined }
 
         try? fileManager.createDirectory(at: dayDir, withIntermediateDirectories: true)
-        for (_, srcPath) in assets {
+
+        var dropped: [EventExporter.DroppedAsset] = []
+        // Sorted so a failure reports the same way twice, rather than in
+        // whatever order the dictionary happened to hash.
+        for (_, srcPath) in assets.sorted(by: { $0.key < $1.key }) {
             let src = URL(fileURLWithPath: srcPath)
             let dest = dayDir.appendingPathComponent(src.lastPathComponent)
-            try? fileManager.removeItem(at: dest)
-            _ = try? fileManager.copyItem(at: src, to: dest)
+            // Copy beside the destination first and only swap once the whole
+            // file is there. Deleting first and copying second means a copy
+            // that fails has already taken the previous export's file with it,
+            // which is worse than not exporting at all (#357).
+            let staged = dayDir.appendingPathComponent(
+                ".\(src.lastPathComponent).partial-\(UUID().uuidString)")
+            do {
+                try fileManager.copyItem(at: src, to: staged)
+                if fileManager.fileExists(atPath: dest.path) {
+                    _ = try fileManager.replaceItemAt(dest, withItemAt: staged)
+                } else {
+                    try fileManager.moveItem(at: staged, to: dest)
+                }
+            } catch {
+                try? fileManager.removeItem(at: staged)
+                dropped.append(EventExporter.DroppedAsset(
+                    label: "\(label) \(src.lastPathComponent)",
+                    source: src, reason: error.localizedDescription))
+            }
         }
-        return true
+        return PreviewCopyResult(attempted: true, dropped: dropped)
     }
 }

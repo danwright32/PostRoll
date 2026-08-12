@@ -206,6 +206,11 @@ final class ExportManager {
 
             var daysNeedingPython: [String] = []
             var contentDayCount = 0
+            // Held rather than reported straight away: the day these came from
+            // falls through to Python, which may well produce the file anyway,
+            // and a warning about a file that IS in the folder is its own defect.
+            // Reconciled against the finished folder below (#357).
+            var previewCopyFailures: [(asset: EventExporter.DroppedAsset, destination: URL)] = []
 
             for day in daysToProcess {
                 let hasContent = (capturedEvent.weekResult?[day] != nil)
@@ -230,12 +235,24 @@ final class ExportManager {
                     return false
                 }()
 
-                if !hasUnflattenedEdits,
-                   PreviewMergePolicy.copyPreviewAssetsIfComplete(
-                       assets: previewPaths[day.rawValue],
-                       to: folder.appendingPathComponent(day.folderName)
-                   ) {
-                    // All preview files existed and were copied directly, no Python needed.
+                // A copy that failed is not a day that is done (#357). It falls
+                // through to Python like any other incomplete day, and the
+                // failures are held so they can be reported if Python does not
+                // rescue them either.
+                let dayFolder = folder.appendingPathComponent(day.folderName)
+                let fastCopy = hasUnflattenedEdits
+                    ? PreviewMergePolicy.PreviewCopyResult.declined
+                    : PreviewMergePolicy.copyPreviewAssetsIfComplete(
+                        assets: previewPaths[day.rawValue],
+                        to: dayFolder,
+                        label: day.displayName
+                      )
+                previewCopyFailures.append(contentsOf: fastCopy.dropped.map {
+                    ($0, dayFolder.appendingPathComponent($0.source.lastPathComponent))
+                })
+
+                if fastCopy.satisfied {
+                    // Every preview file existed and landed, no Python needed.
                 } else {
                     daysNeedingPython.append(day.rawValue)
                 }
@@ -297,6 +314,14 @@ final class ExportManager {
                     mediaError = error.localizedDescription
                 }
             }
+
+            // A preview that would not copy is only worth reporting if it is
+            // still absent once Python has had its turn. Judged from the
+            // finished folder rather than from either code path, so a file put
+            // there by the regen is not reported missing (#357).
+            droppedAssets.append(contentsOf: previewCopyFailures
+                .filter { !FileManager.default.fileExists(atPath: $0.destination.path) }
+                .map(\.asset))
 
             // The dropped-asset warning shares the done screen's error slot with
             // the Python error: both mean the folder isn't what it claims.
