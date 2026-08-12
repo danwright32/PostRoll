@@ -74,14 +74,27 @@ enum RunFailureKind: Equatable {
         // Local tooling first: an ffmpeg failure often carries a stack trace that
         // mentions the AI client library, and reading it as a service problem
         // sends Dan to check his API key over a missing brew package.
-        if s.contains("ffmpeg") { return .ffmpegMissing }
+        //
+        // ABSENT, not merely mentioned. Every ffmpeg wrapper in postroll/media
+        // prefixes its message with the word, so the word says nothing about
+        // whether the binary is installed. Measuring real output showed a missing
+        // photo arriving as "ffmpeg failed: ... No such file or directory", which
+        // was read as a missing package: Dan was told to install something he
+        // already had, and the route back to re-assign the photo was withheld
+        // because a missing package is not fixable from the app (#403).
+        if isAbsentBinary("ffmpeg", in: s) { return .ffmpegMissing }
         if s.contains("jamendo") { return .audioServiceUnreachable }
 
         // Then the specific service failures, before the generic one. A payload
         // that is too large is also "an anthropic api error", and the generic
         // reading of it tells Dan to retry something that will fail identically.
-        if s.contains("request_too_large") || s.contains("request exceeds the maximum size")
-            || s.contains("payload too large") || hasCode("413", in: s) {
+        if s.contains("request_too_large") || s.contains("request exceeds the maximum")
+            || s.contains("payload too large") || hasCode("413", in: s)
+            // A prompt past the context window arrives as an ordinary 400, so
+            // without this it read as a generic service error and Dan was told to
+            // wait and retry something that fails identically every time. The only
+            // thing that fixes it is sending less (#403).
+            || s.contains("prompt is too long") || s.contains("too many tokens") {
             return .requestTooLarge
         }
         if s.contains("rate_limit") || s.contains("rate limit") || hasCode("429", in: s) {
@@ -101,7 +114,12 @@ enum RunFailureKind: Equatable {
         // Dan's own code was reported as a connection problem and told him to
         // check his API key. The strict rule wins, and a stack trace that merely
         // passes through the library now falls to the honest fallback (#401).
-        if s.contains("anthropic api error") || s.contains("openai api error")
+        // "anthropic api" rather than "anthropic api error": the client also
+        // raises its own failures about the service, such as a reply that came
+        // back carrying no text block at all, and those used to fall through to
+        // the unrecognised fallback (#403). Still narrow enough that a traceback
+        // through the library, "/x/anthropic/client.py", does not match.
+        if s.contains("anthropic api") || s.contains("openai api")
             || s.contains("apistatuserror") || s.contains("apiconnectionerror") {
             return .aiServiceError
         }
@@ -181,5 +199,20 @@ enum RunFailureKind: Equatable {
     private static func hasCode(_ code: String, in text: String) -> Bool {
         text.range(of: "(?<![0-9a-z])\(code)(?![0-9a-z])",
                    options: [.regularExpression]) != nil
+    }
+
+    /// Whether a command line tool is MISSING, as opposed to named in a message.
+    ///
+    /// The distinction the measured output forced (#403). Python reports an absent
+    /// binary as a `FileNotFoundError` naming the binary itself, and a shell
+    /// reports it as not found; a tool that ran and failed says neither, and its
+    /// real cause is further down its own stderr.
+    private static func isAbsentBinary(_ name: String, in text: String) -> Bool {
+        text.contains("no such file or directory: '\(name)'")
+            || text.contains("no such file or directory: \"\(name)\"")
+            || text.contains("\(name): command not found")
+            || text.contains("\(name): not found")
+            || text.contains("\(name) is not installed")
+            || text.contains("\(name) not found on path")
     }
 }

@@ -102,13 +102,43 @@ final class RunFailureKindTests: XCTestCase {
             RunFailureKind.of("anthropic api error: rate_limit_error (429)"), .rateLimited)
     }
 
-    /// An ffmpeg failure often carries a stack trace through the AI client
+    /// An absent ffmpeg often carries a stack trace through the AI client
     /// library. Reading that as a service problem sends Dan to check his API key
     /// over a missing brew package.
     func testLocalToolingBeatsAStackTraceThatMentionsTheService() {
         let text = "Traceback:\n  File \"/x/anthropic/client.py\"\n"
-                 + "RuntimeError: ffmpeg exited 127"
+                 + "FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'"
         XCTAssertEqual(RunFailureKind.of(text), .ffmpegMissing)
+    }
+
+    /// ffmpeg being NAMED is not ffmpeg being MISSING (#403).
+    ///
+    /// Every ffmpeg wrapper in postroll/media prefixes its message with the word,
+    /// so the word carries no information about whether the binary is installed.
+    /// The real cause is further down its own stderr, and here it is a photo that
+    /// is not on disk, which Dan can fix and which the install advice hid.
+    func testFFmpegRanAndFailedIsNotFFmpegMissing() {
+        let text = "ffmpeg failed: [in#0 @ 0x9f2c] Error opening input: "
+                 + "No such file or directory\n"
+                 + "Error opening input file /photos/thursday/DSC_4417.jpg.\n"
+        let kind = RunFailureKind.of(text)
+
+        XCTAssertEqual(kind, .fileMissing, "the missing photo is the cause, not the tool")
+        XCTAssertTrue(kind.isFixableFromTheApp,
+                      "and re-assigning that photo is something Dan can do")
+    }
+
+    /// A prompt past the context window arrives as an ordinary 400, so it has to
+    /// be recognised by its words. Waiting does not shorten a prompt.
+    func testAPromptPastTheWindowIsReadAsTooMuchInput() {
+        let text = "Anthropic API error: Error code: 400 - {'type': 'error', 'error': "
+                 + "{'type': 'invalid_request_error', 'message': 'prompt is too long: "
+                 + "1048576 tokens > 1000000 maximum'}}"
+        let kind = RunFailureKind.of(text)
+
+        XCTAssertEqual(kind, .requestTooLarge)
+        XCTAssertTrue(kind.isFixableFromTheApp, "sending less is the only thing that fixes it")
+        XCTAssertNil(kind.waitAdvice, "waiting does not shorten a prompt")
     }
 
     /// The drift this issue exists to settle, and the direction it settled in.
