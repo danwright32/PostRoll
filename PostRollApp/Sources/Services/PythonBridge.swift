@@ -331,14 +331,40 @@ actor PythonBridge {
             let o = pd.collageCropOffsets[url.absoluteString] ?? CropOffset()
             return [o.x, o.y, o.scale]
         }
-        if offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }),
-           let cropData = try? JSONSerialization.data(withJSONObject: offsets) {
-            try? cropData.write(to: cropFile)
-            args += ["--crop-offsets-json", cropFile.path]
-        }
+        args += try Self.cropOffsetsArgument(offsets: offsets, writingTo: cropFile)
         try await runProcess(args: args)
 
         return try Self.decodeCollageCandidates(from: jsonFile)
+    }
+
+    /// The `--crop-offsets-json` argument for a layout run, or nothing when the
+    /// day carries no crops worth sending.
+    ///
+    /// The argument is produced only after the file it names is on disk. It
+    /// used to be appended whether or not the write behind it worked, and
+    /// Python reads that path unguarded, so a failed write reached Dan as a
+    /// FileNotFoundError about a temp file rather than as anything about his
+    /// crops (#360).
+    ///
+    /// Refusing beats carrying on without them: options rendered from the
+    /// wrong crops look like real options, and he would choose a layout from
+    /// thumbnails that do not match what gets exported (L75).
+    nonisolated static func cropOffsetsArgument(
+        offsets: [[Double]], writingTo cropFile: URL
+    ) throws -> [String] {
+        guard offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 })
+        else { return [] }
+
+        do {
+            let cropData = try JSONSerialization.data(withJSONObject: offsets)
+            try cropData.write(to: cropFile)
+        } catch {
+            throw PythonBridgeError.invalidOutput(
+                "Your saved crops for this day couldn't be handed to the layout "
+                + "renderer, so the options would have ignored them: "
+                + error.localizedDescription)
+        }
+        return ["--crop-offsets-json", cropFile.path]
     }
 
     /// Read the layout gallery's result file.
