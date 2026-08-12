@@ -118,6 +118,42 @@ final class ProgramImportTests: XCTestCase {
         }
     }
 
+    /// #389: seen only once these were rendered. A reason from the operating
+    /// system ("No space left on device") carries no full stop, and the message
+    /// puts the next sentence straight after it, so the banner read
+    /// "...No space left on device None of the 9 pages...". Every cause has to
+    /// end as a sentence, whatever the system hands us.
+    func testEveryCauseEndsAsASentence() {
+        let causes: [ProgramImport.Failure] = [
+            .unreadableDocument,
+            .missingPage(3),
+            .couldNotRenderPage(3),
+            .couldNotWritePage(3, reason: "No space left on device"),
+            .couldNotStoreFile(reason: "Permission denied"),
+        ]
+
+        for cause in causes {
+            let last = cause.message.last
+            XCTAssertTrue(last == "." || last == "?" || last == "!",
+                          "\"\(cause.message)\" runs straight into whatever follows it")
+        }
+    }
+
+    /// And the assembled banner must not collide two sentences, which is what
+    /// the person actually reads.
+    func testTheAssembledMessageDoesNotRunTwoSentencesTogether() {
+        let incomplete = ProgramImport.Incomplete(
+            fileName: "Gala.pdf",
+            pagesThatWorked: [page("Gala_p1.png")],
+            failures: [.couldNotWritePage(3, reason: "No space left on device")]
+        )
+
+        XCTAssertFalse(incomplete.message.contains("device None"),
+                       "two sentences ran together: \(incomplete.message)")
+        XCTAssertTrue(incomplete.message.contains("device."),
+                      "the cause has to close before the next sentence: \(incomplete.message)")
+    }
+
     func testAFileThatProducedNothingSaysSoRatherThanOfferingPages() throws {
         let plan = ProgramImport.plan(for: [
             ProgramImport.Upload(
