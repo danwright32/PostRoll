@@ -48,6 +48,15 @@ struct OCRReviewView: View {
             .visionCheckSkipped
     }
 
+    /// Programs taken knowingly incomplete (#378). Read live, and sorted so the
+    /// same event reads the same way twice rather than in dictionary order.
+    private var livePartialPrograms: [String] {
+        (appState.events.first(where: { $0.id == event.id }) ?? event)
+            .partialProgramNotes
+            .sorted { $0.key < $1.key }
+            .map(\.value)
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
@@ -66,6 +75,21 @@ struct OCRReviewView: View {
                             icon: "exclamationmark.circle",
                             message: issues.joined(separator: " "),
                             style: .error
+                        )
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.md)
+                    }
+
+                    // A program Dan knowingly took incomplete. Shown here rather
+                    // than only at import, because this is the screen where the
+                    // program data is judged, and a cast list that looks thin
+                    // needs to read as explained rather than as all there is
+                    // (#378).
+                    ForEach(livePartialPrograms, id: \.self) { note in
+                        BrandBanner(
+                            icon: "doc.badge.ellipsis",
+                            message: note,
+                            style: .warning
                         )
                         .padding(.horizontal, Spacing.xl)
                         .padding(.bottom, Spacing.md)
