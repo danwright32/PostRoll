@@ -171,6 +171,37 @@ final class ProgramPDFBuilderTests: XCTestCase {
         XCTAssertEqual(resolved.pdfURL.path, retained.path)
     }
 
+    /// #362: each page was written behind `try?` with the append running
+    /// regardless, so a page that failed to write still went back to the caller
+    /// as a path. Whatever opened it, program OCR among them, found nothing
+    /// there. Only pages that reached disk may be returned.
+    @MainActor
+    func testRasteriseReturnsOnlyPagesThatReachedDisk() throws {
+        let p1 = try makeTextPDF("a.pdf", text: "Movement I", size: CGSize(width: 400, height: 300))
+        let combined = PDFDocument()
+        combined.insert(try XCTUnwrap(PDFDocument(url: p1)?.page(at: 0)?.copy() as? PDFPage), at: 0)
+        let source = dir.appendingPathComponent("Locked.pdf")
+        XCTAssertTrue(combined.write(to: source))
+
+        // A destination that exists and cannot be written to, the way a
+        // permissions problem or a full volume presents.
+        let out = dir.appendingPathComponent("out-locked")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: out.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: out.path) }
+        XCTAssertFalse(FileManager.default.isWritableFile(atPath: out.path),
+                       "precondition: the output folder has to be genuinely unwritable")
+
+        let pages = ProgramPDFBuilder.rasterise(pdfAt: source, into: out)
+
+        XCTAssertTrue(pages.isEmpty,
+                      "a page that could not be written must not be handed back as a path")
+        for page in pages {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: page.path),
+                          "every returned page has to be a file that is actually there")
+        }
+    }
+
     func testBundlesEachImageAsAPageInOrder() throws {
         let pages = [
             try makePNG("page1.png", size: NSSize(width: 120, height: 160)),
