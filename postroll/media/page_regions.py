@@ -35,6 +35,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from ..ai.model_ids import base_model
+
 #: Longest edge, in pixels, each model will accept before reducing the image
 #: itself. Anything not listed falls back to the smallest, because guessing high
 #: sends an image that is quietly reduced again, which is the defect this file
@@ -65,15 +67,28 @@ BAND_OVERLAP = 0.04
 _INK_LEVEL = 140
 
 
-def image_budget_for(model: str) -> int:
-    """Longest edge this model accepts before it reduces the image itself."""
+def explicit_image_budget(model: str) -> int | None:
+    """The budget this model DECLARES, or None when it declares none.
+
+    Split out from `image_budget_for` so the difference between a declared
+    budget and the fallback is something the code can be asked about rather
+    than something a caller has to infer from the number (#359). A test walks
+    every pinned alias through this; asking `image_budget_for` instead would
+    pass just as happily on the fallback.
+    """
     from ..ai.claude_client import _resolve_model
 
     resolved = _resolve_model((model or "").strip())
-    base = resolved.rsplit("-", 1)[0] if resolved[-8:].isdigit() else resolved
-    return _MODEL_IMAGE_BUDGET.get(
-        resolved, _MODEL_IMAGE_BUDGET.get(base, DEFAULT_IMAGE_BUDGET)
-    )
+    declared = _MODEL_IMAGE_BUDGET.get(resolved)
+    if declared is not None:
+        return declared
+    return _MODEL_IMAGE_BUDGET.get(base_model(resolved))
+
+
+def image_budget_for(model: str) -> int:
+    """Longest edge this model accepts before it reduces the image itself."""
+    declared = explicit_image_budget(model)
+    return DEFAULT_IMAGE_BUDGET if declared is None else declared
 
 
 def _ink_profile(img: Image.Image, *, along_rows: bool) -> list[bool]:
