@@ -57,12 +57,24 @@ else
   echo "==> Running the Python tests before installing"
   REPO_ROOT="$(cd .. && pwd)"
   if [[ -x "${REPO_ROOT}/venv/bin/python" ]]; then
-    # Through the Makefile target rather than a second copy of the pytest
-    # command (#430). This script used to spell the invocation itself, so the
-    # day the full run was split into a serial pass and a parallel one, the
-    # install gate would have kept running the old single serial command and
+    # The FAST subset, not the whole suite (#432, approved 2026-08-13).
+    #
+    # The four files that render real reels are most of the suite's runtime and
+    # this gate is paid on every install, several times an evening. They still run
+    # on every pull request and on every push to main, so a regression they catch
+    # still blocks the merge; what this gives up is that an install can briefly
+    # precede those checks. That is a deliberate relaxation of the full-suite gate
+    # chosen in #98, not an oversight.
+    #
+    # Honest figure: this saves about two minutes per install, not the eight the
+    # issue was written with. #497 made the full suite one parallel pass, which
+    # took it from 9m53s to about 3m30s before this change was made.
+    #
+    # Through the Makefile target rather than a second copy of the pytest command
+    # (#430). This script used to spell the invocation itself, so the day the run
+    # changed shape the install gate would have kept running the old command and
     # nobody would have seen the difference.
-    make -C "${REPO_ROOT}" test-python
+    make -C "${REPO_ROOT}" test-python-fast
   else
     # A missing venv is not a pass. Refuse rather than install a bundle whose
     # entire generation pipeline went unchecked.
