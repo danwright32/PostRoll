@@ -536,7 +536,93 @@ def _salvage_list_response(items: list[Any]) -> dict[str, Any]:
     return {}
 
 
-def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
+#: What a retry adds when a call answered with the wrong shape. One definition,
+#: because the per-batch retry and the whole-run retry are the same correction
+#: and a second copy is free to weaken on one path only.
+_REINFORCED_PREFIX = (
+    "CRITICAL: Your response MUST be a single JSON object with the keys "
+    "performers, pieces, scenes, organization_notes, program_notes, "
+    "venue_notes, production_details, other. DO NOT return a top-level "
+    "JSON array \u2014 the array fields must be values inside the object. "
+    "Use empty arrays/strings for fields the program doesn't cover.\n\n"
+)
+
+
+def _write_partial(output_path: Path, data: dict[str, Any]) -> None:
+    """Put what has finished on disk, atomically (#479).
+
+    Called after every batch rather than once at the end. Each batch is a
+    600s paid call, and a run can be stopped by something that is not an
+    exception at all: the app's watchdog SIGTERMs the subprocess at 1800s, and
+    before this every batch already read and already paid for went with it.
+    The same shape generate_week uses per day (#206, L5).
+
+    Written to a temp file and moved into place, so a kill mid-write cannot
+    leave a truncated file where a good one used to be.
+    """
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = output_path.with_suffix(output_path.suffix + ".partial")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                       encoding="utf-8")
+        tmp.replace(output_path)
+    except OSError as e:
+        # Never fails the run: this exists to protect work, and refusing to
+        # continue because the protection could not be written would destroy
+        # more than it saves. It says so rather than failing silently.
+        print(f"warning: could not save progress after a batch ({e}); a stop "
+              "from here loses the batches read so far",
+              file=sys.stderr, flush=True)
+
+
+def _read_one_batch(batch: list[str], *, position: int, total: int) -> dict[str, Any] | None:
+    """One batch's structured data, with the retry its single-batch sibling gets.
+
+    A batch answering with the wrong shape used to be recorded as None and
+    merged away to nothing: no retry, no salvage, no warning (#479). The
+    reinforced prompt and the list salvage already existed for a one-batch
+    programme, and a batch is the same failure on a bigger document.
+
+    Returns None when the pages genuinely could not be read, having said which
+    ones. None is a gap the merge skips, not an empty result that overwrites.
+    """
+    where = f"batch {position} of {total} ({', '.join(Path(b).name for b in batch)})"
+    image_list = "\n".join(f"- {p}" for p in batch)
+
+    data = run_json_prompt(PROMPT_TEMPLATE.format(image_list=image_list),
+                           timeout=600, image_paths=batch,
+                           step="ocr:focused", model=OCR_MODEL)
+    if isinstance(data, dict):
+        return data
+
+    print(f"warning: OCR returned {type(data).__name__} for {where}; "
+          "retrying with reinforced prompt", file=sys.stderr, flush=True)
+    data = run_json_prompt(
+        _REINFORCED_PREFIX + PROMPT_TEMPLATE.format(image_list=image_list),
+        timeout=600, image_paths=batch, step="ocr:focused_retry",
+        model=OCR_MODEL)
+    if isinstance(data, dict):
+        return data
+
+    if isinstance(data, list):
+        salvaged = _salvage_list_response(data)
+        if salvaged:
+            print(f"warning: {where} still a list after retry; salvaged as "
+                  f"{[k for k, v in salvaged.items() if v]}",
+                  file=sys.stderr, flush=True)
+            return salvaged
+
+    # The gap, named. Without this the programme quietly comes back read from
+    # fewer pages than it has, which is the worst failure this path can produce
+    # because nothing on screen distinguishes it from a complete read.
+    print(f"warning: could not read {where}; the programme is missing whatever "
+          "those pages held, so check the cast list and notes against the "
+          "printed programme", file=sys.stderr, flush=True)
+    return None
+
+
+def extract_program(image_paths: list[str | Path], *,
+                    output_path: Path | None = None) -> dict[str, Any]:
     """Run OCR on one or more program images and return structured data.
 
     Accepts JPEG, PNG, and HEIC paths. HEIC files are auto-converted to
@@ -561,20 +647,48 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
                   file=sys.stderr, flush=True)
 
         per_batch: list[dict[str, Any] | None] = []
-        for batch in batches:
-            image_list = "\n".join(f"- {p}" for p in batch)
-            batch_prompt = PROMPT_TEMPLATE.format(image_list=image_list)
-            result = run_json_prompt(batch_prompt, timeout=600, image_paths=batch,
-                                     step="ocr:focused", model=OCR_MODEL)
-            per_batch.append(result if isinstance(result, dict) else None)
-            if not isinstance(result, dict) and len(batches) == 1:
-                # Single-batch programs keep the existing retry and salvage
-                # path below, which needs the raw non-dict response.
-                per_batch = []
-                data = result
-                break
+        failures: list[str] = []
+        if len(batches) == 1:
+            # One batch has nothing to protect and nothing to merge: it either
+            # finishes or the run produced nothing at all, so it keeps the
+            # existing whole-run retry and salvage below, which needs the raw
+            # non-dict response, and pays no extra write.
+            image_list = "\n".join(f"- {p}" for p in batches[0])
+            data = run_json_prompt(PROMPT_TEMPLATE.format(image_list=image_list),
+                                   timeout=600, image_paths=batches[0],
+                                   step="ocr:focused", model=OCR_MODEL)
         else:
-            data = merge_program_data(per_batch) if per_batch else {}
+            for position, batch in enumerate(batches, start=1):
+                # Each batch is its own failure boundary (L73). Independent
+                # pages sharing one try block would make every page's fate
+                # depend on every other page's worst case, and the ones lost
+                # are unrelated to the one that broke.
+                try:
+                    per_batch.append(
+                        _read_one_batch(batch, position=position,
+                                        total=len(batches)))
+                except ClaudeError as e:
+                    failures.append(f"batch {position}: {e}")
+                    print(f"warning: {e} (batch {position} of {len(batches)}; "
+                          "the remaining pages are still being read)",
+                          file=sys.stderr, flush=True)
+                    per_batch.append(None)
+
+                # On disk before the next 600s call starts, so a stop from
+                # here keeps what has already been paid for (#479, #206).
+                if output_path is not None:
+                    _write_partial(output_path,
+                                   merge_program_data(per_batch))
+
+            if not any(isinstance(r, dict) for r in per_batch):
+                raise ClaudeError(
+                    "Every OCR batch failed, so nothing was read from the "
+                    "programme at all. "
+                    + ("; ".join(failures) if failures else
+                       "None of the batches returned usable data.")
+                )
+
+            data = merge_program_data(per_batch)
             # A split means no single call saw the work listing and the notes
             # section together, so the cross-page instruction in the prompt
             # could not be followed. One text-only pass puts them back (#219).
@@ -592,14 +706,7 @@ def extract_program(image_paths: list[str | Path]) -> dict[str, Any]:
                 f"warning: OCR returned {type(data).__name__}, retrying with reinforced prompt",
                 file=sys.stderr,
             )
-            retry_prompt = (
-                "CRITICAL: Your response MUST be a single JSON object with the keys "
-                "performers, pieces, scenes, organization_notes, program_notes, "
-                "venue_notes, production_details, other. DO NOT return a top-level "
-                "JSON array — the array fields must be values inside the object. "
-                "Use empty arrays/strings for fields the program doesn't cover.\n\n"
-                + base_prompt
-            )
+            retry_prompt = _REINFORCED_PREFIX + base_prompt
             data = run_json_prompt(retry_prompt, timeout=600, image_paths=resolved, step="ocr:focused_retry",
                                model=OCR_MODEL)
 
@@ -708,7 +815,11 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        data = extract_program(args.image)
+        # The output path goes IN, not just out (#479). Each batch of a large
+        # programme is a 600s paid call, and passing the destination is what
+        # lets a run stopped partway leave the batches it already read where
+        # the app can find them, instead of paying for them all again.
+        data = extract_program(args.image, output_path=args.output)
     except (ClaudeError, FileNotFoundError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

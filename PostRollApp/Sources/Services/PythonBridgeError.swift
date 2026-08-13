@@ -5,6 +5,13 @@ enum PythonBridgeError: LocalizedError {
     case outputMissing
     case invalidOutput(String)
     case timedOut(seconds: TimeInterval)
+    /// An OCR run that died partway but had already read some of the programme
+    /// (#479). Each batch of a large programme is a paid call and is written to
+    /// disk as it finishes, so the pages already read survive the stop. Carried
+    /// as an error rather than returned as a result on purpose: this is not a
+    /// finished read, and half a cast list presented as a complete one is worse
+    /// than a failure, because nothing then tells Dan to check the rest.
+    case partialOCR(OCRResult, reason: String)
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +33,16 @@ enum PythonBridgeError: LocalizedError {
             return "\(detail)\n\n\(whereToLook)"
         case .timedOut(let seconds):
             return "The operation was still running after \(Int(seconds / 60)) minutes and was stopped. Check your internet connection and try again."
+        case .partialOCR(let result, let reason):
+            let read = [
+                result.performers.isEmpty ? nil : "\(result.performers.count) performer\(result.performers.count == 1 ? "" : "s")",
+                result.pieces.isEmpty ? nil : "\(result.pieces.count) piece\(result.pieces.count == 1 ? "" : "s")",
+            ].compactMap { $0 }.joined(separator: " and ")
+            let found = read.isEmpty ? "some of the programme" : read
+            return "Only part of the programme was read before this stopped: "
+                + "\(found) came through, and the rest of the pages did not. "
+                + "Check the cast list and notes against the printed programme "
+                + "before generating, or run the scan again.\n\n\(reason)"
         }
     }
 

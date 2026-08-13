@@ -142,20 +142,54 @@ final class OCRManager {
                           visionSkipped: visionSkipped, appState: appState)
         } catch is CancellationError {
             // User cancelled — cancel() already cleaned up state and navigation.
+        } catch PythonBridgeError.partialOCR(let salvaged, let reason) {
+            // The run died partway but had already read some of the programme,
+            // and every page it read was a paid call (#479). Throwing that away
+            // makes the retry pay for them again, so it is kept, and it is kept
+            // WITH a note: a half-read cast list that looks complete is worse
+            // than a failure, because nothing would tell Dan to check the rest.
+            finishSuccess(
+                eventID: eventID, snapshot: ev, result: salvaged,
+                flags: [], flagError: nil, visionSkipped: nil,
+                appState: appState,
+                partialRead: "Only part of the programme was read before the "
+                    + "scan stopped. Check the cast list and notes against the "
+                    + "printed programme, or scan again. (\(reason))")
         } catch {
             finishFailure(eventID: eventID, message: error.localizedDescription)
         }
     }
 
+    /// Where a partial-read note is filed (#479).
+    ///
+    /// Deliberately not a file name: `ProgramShortfall.notes(clearedBy:)`
+    /// removes a note whose key matches a re-imported programme, and this note
+    /// is about the RUN rather than about any one upload. A complete read
+    /// clears it instead, in `finishSuccess`, so it cannot outlive the fix.
+    static let partialReadNoteKey = "This scan"
+
+
     private func finishSuccess(eventID: Event.ID, snapshot ev: Event, result: OCRResult,
                                flags: [OCRFlag], flagError: String?,
-                               visionSkipped: String?, appState: AppState) {
+                               visionSkipped: String?, appState: AppState,
+                               partialRead: String? = nil) {
         tracker.remove(eventID)
 
         // Base the write-back on the live event: OCR takes minutes and a snapshot
         // would revert edits (e.g. a rename) made during the run.
         var updated = appState.events.first(where: { $0.id == eventID }) ?? ev
         updated.ocrResult = result
+        // This run's own note, set or cleared together. A complete read clears
+        // what a partial one left, so a warning about pages that went unread
+        // cannot outlive the run that finally read them. Independent of the
+        // flag pass and the vision check, which have their own fields: one
+        // status field shared by two checks lets a pass from one erase the
+        // other's failure (L53).
+        if let partialRead {
+            updated.partialProgramNotes[Self.partialReadNoteKey] = partialRead
+        } else {
+            updated.partialProgramNotes.removeValue(forKey: Self.partialReadNoteKey)
+        }
         updated.pendingFlags = flags
         updated.pendingFlagsError = flagError
         updated.visionCheckSkipped = visionSkipped
