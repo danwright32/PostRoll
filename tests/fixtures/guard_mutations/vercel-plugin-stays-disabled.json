@@ -1,0 +1,8 @@
+{
+  "name": "vercel-plugin-stays-disabled",
+  "file": ".claude/settings.json",
+  "find": "\"vercel-plugin@vercel-vercel-plugin\": false",
+  "replace": "\"vercel-plugin@vercel-vercel-plugin\": true",
+  "test": "tests/test_project_plugin_settings.py::test_the_vercel_plugin_is_disabled_for_this_repo",
+  "breaks": "the Vercel plugin is enabled again here, so every session reopens with its injected documentation and its 'You must run the Skill(...)' lines (#499)"
+}
