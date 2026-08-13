@@ -333,6 +333,46 @@ class JamendoUnavailable(RuntimeError):
     """
 
 
+def _raise_for_envelope(data: dict[str, Any], *, what: str) -> None:
+    """Turn Jamendo's in-body failure report into a real failure (#471).
+
+    Jamendo answers HTTP 200 with an empty `results` list for an invalid client
+    id, an exhausted rate limit or a malformed query, and reports the actual
+    cause in a `headers` envelope beside it. Read as results alone, a failure
+    is indistinguishable from a search that genuinely matched nothing, so
+    `fetch_audio` told Dan to try different tags for a problem no tag can fix
+    and the music picker showed an empty list for an auth failure (L23).
+
+    Two independent signals, either of which is enough: the status word and the
+    numeric code. Matching on one remembered spelling is how a guard passes on
+    the shape the vendor actually sends.
+
+    An ABSENT envelope is not a failure. It is no information at all, and
+    reading it as one would turn every good answer into an outage. The codes
+    themselves are deliberately not classified into retryable and permanent:
+    that would be a guess about a vocabulary nobody here has measured, so the
+    code and the vendor's own words are passed through verbatim instead.
+    """
+    envelope = data.get("headers")
+    if not isinstance(envelope, dict):
+        return
+
+    status = str(envelope.get("status", "")).strip().lower()
+    code = envelope.get("code")
+    failed = (status and status != "success") or (code not in (None, 0, "0"))
+    if not failed:
+        return
+
+    message = str(envelope.get("error_message") or "").strip()
+    detail = message or status or "no reason given"
+    raise JamendoUnavailable(
+        f"The music service refused to {what}: {detail} "
+        f"(Jamendo status={status or 'unknown'}, code={code}). "
+        "This is an account, quota or query problem rather than a problem "
+        "with the tags, so different tags will not fix it."
+    )
+
+
 def _jamendo_json(url: str, *, what: str) -> dict[str, Any]:
     """GET a Jamendo endpoint and parse the JSON, retrying a transient blip.
 
@@ -346,6 +386,7 @@ def _jamendo_json(url: str, *, what: str) -> dict[str, Any]:
         try:
             with urllib.request.urlopen(url, timeout=15) as resp:
                 data: dict[str, Any] = json.loads(resp.read().decode())
+            _raise_for_envelope(data, what=what)
             return data
         except (urllib.error.URLError, TimeoutError, OSError,
                 json.JSONDecodeError) as e:

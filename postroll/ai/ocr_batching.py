@@ -73,11 +73,23 @@ def encoded_size(paths: list[str | Path]) -> int:
     return total
 
 
-def batch_images(paths: list[str | Path], *, limit_bytes: int) -> list[list[str]]:
-    """Group images into requests that each stay under `limit_bytes`.
+def batch_images(paths: list[str | Path], *, limit_bytes: int,
+                 max_images: int | None = None) -> list[list[str]]:
+    """Group images into requests that each stay under the request's ceilings.
 
     Reading order is preserved across and within batches: a program read out of
     order is a different program.
+
+    TWO ceilings, because the API has two (#470). Bytes is the one a scanned
+    program hits: a handful of full-resolution pages is already tens of
+    megabytes. Count is the one a photo set hits: a full show's worth of
+    reel photos is small individually and far too many to attach to one
+    request. A caller measuring only bytes is refused on exactly the large
+    input it batched for.
+
+    `max_images` is optional so the OCR callers, which have never been near the
+    count ceiling, keep the grouping they already have rather than being
+    re-split by a limit that was not what stopped them.
     """
     from .claude_client import ClaudeError
 
@@ -93,7 +105,9 @@ def batch_images(paths: list[str | Path], *, limit_bytes: int) -> list[list[str]
                 f"({one / 1e6:.1f} MB against a {limit_bytes / 1e6:.0f} MB limit). "
                 "Re-export the program at a lower resolution and try again."
             )
-        if current and current_size + one > limit_bytes:
+        too_heavy = current and current_size + one > limit_bytes
+        too_many = max_images is not None and len(current) >= max_images
+        if too_heavy or too_many:
             batches.append(current)
             current, current_size = [], 0
         current.append(str(p))
