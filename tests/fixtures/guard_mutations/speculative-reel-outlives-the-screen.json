@@ -1,0 +1,8 @@
+{
+  "name": "speculative-reel-outlives-the-screen",
+  "file": "PostRollApp/Sources/Services/PreviewGraphicsManager.swift",
+  "find": "        if let existing = speculativeReels[eventID] { return existing }",
+  "replace": "        if false, let existing = speculativeReels[eventID] { return existing }",
+  "test": "PostRollTests/CaptionReviewOwnershipTests/testTheSpeculativeRendererIsTheSameOneAcrossARemount",
+  "breaks": "a remount gets a fresh pre-renderer whose anti-collision guard knows nothing about the orphaned encode, so two ffmpeg runs write the same reel.mp4 (#456)"
+}

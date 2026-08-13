@@ -58,6 +58,22 @@ final class PreviewGraphicsManager {
         }
     }
 
+    /// Claim the full preview run for an event without this manager driving it.
+    ///
+    /// For GenerationManager, which runs its own graphics pass alongside the
+    /// captions and went straight to the bridge, so the duplicate-run guard did
+    /// not see it (#456). Returns false when a run is already in flight, in
+    /// which case the caller must not start another: two runs are two writers
+    /// on the same MP4s and PNGs.
+    @discardableResult
+    func beginFullRun(_ eventID: UUID) -> Bool {
+        state.beginFullRun(eventID)
+    }
+
+    func endFullRun(_ eventID: UUID) {
+        state.endFullRun(eventID)
+    }
+
     /// Marks a single day as regenerating. Returns false when it already is, so
     /// the caller skips launching a duplicate.
     @discardableResult
@@ -67,5 +83,81 @@ final class PreviewGraphicsManager {
 
     func endDayRegen(_ day: DayName, for eventID: UUID) {
         state.endDay(day, for: eventID)
+    }
+
+    /// When this day's regen started, for the elapsed time on its spinner.
+    func dayStartedAt(_ day: DayName, for eventID: UUID) -> Date? {
+        state.dayStartedAt(day, for: eventID)
+    }
+
+    // MARK: - Cover regeneration (#141, moved here by #456)
+
+    @discardableResult
+    func beginCoverRegen(_ day: DayName, for eventID: UUID) -> Bool {
+        state.beginCover(day, for: eventID)
+    }
+
+    func endCoverRegen(_ day: DayName, for eventID: UUID) {
+        state.endCover(day, for: eventID)
+    }
+
+    func coverRegeneratingDays(_ eventID: UUID) -> Set<DayName> {
+        state.coverRegeneratingDays(for: eventID)
+    }
+
+    func coverStartedAt(_ day: DayName, for eventID: UUID) -> Date? {
+        state.coverStartedAt(day, for: eventID)
+    }
+
+    // MARK: - Thursday reel editor (#456)
+
+    /// The built editor image for an event, and whether a build is running.
+    ///
+    /// Held here rather than in the review screen's `@State`, because the
+    /// `.id(event.id)` remount discarded both: switching away and back during
+    /// the build restarted it while the orphan was still running, and the
+    /// finished URL was thrown away.
+    private var thursdayEditor: [UUID: URL] = [:]
+    private var buildingThursdayEditor: Set<UUID> = []
+
+    func thursdayEditorURL(_ eventID: UUID) -> URL? { thursdayEditor[eventID] }
+    func isBuildingThursdayEditor(_ eventID: UUID) -> Bool {
+        buildingThursdayEditor.contains(eventID)
+    }
+
+    /// Returns false when a build is already running for this event, in which
+    /// case the caller must not start another: both write the same PNG and
+    /// layout JSON.
+    @discardableResult
+    func beginThursdayEditorBuild(_ eventID: UUID) -> Bool {
+        buildingThursdayEditor.insert(eventID).inserted
+    }
+
+    func finishThursdayEditorBuild(_ eventID: UUID, url: URL?) {
+        buildingThursdayEditor.remove(eventID)
+        if let url { thursdayEditor[eventID] = url }
+    }
+
+    /// Drop a built editor whose inputs have changed, so the next expand
+    /// rebuilds it rather than showing a strip of the previous photos.
+    func invalidateThursdayEditor(_ eventID: UUID) {
+        thursdayEditor.removeValue(forKey: eventID)
+    }
+
+    // MARK: - Speculative reel pre-render (#456)
+
+    private var speculativeReels: [UUID: SpeculativeReelRenderer] = [:]
+
+    /// The pre-renderer for one event, created once and kept.
+    ///
+    /// It was a `@State` value, so the remount took its anti-collision guard
+    /// down with it: the orphaned encode kept writing reel.mp4 while the fresh
+    /// instance, knowing nothing about it, started a second ffmpeg writing the
+    /// same file.
+    func speculativeReel(for eventID: UUID) -> SpeculativeReelRenderer {
+        if let existing = speculativeReels[eventID] { return existing }
+        let made = SpeculativeReelRenderer(day: .thursday)
+        speculativeReels[eventID] = made
+        return made
     }
 }
