@@ -132,28 +132,53 @@ def test_there_is_a_fast_target_and_it_is_not_the_gate():
     assert "not slow" in fast, "the fast target does not actually deselect anything"
 
 
+def _marker_filters(recipe: str) -> list[str | None]:
+    """The `-m` expression of each pytest command in a recipe, None if unfiltered.
+
+    None is the interesting value: a command with no marker filter runs
+    everything, which is how the full target covers both halves in one pass.
+    """
+    filters: list[str | None] = []
+    for line in recipe.splitlines():
+        if "pytest" not in line:
+            continue
+        # Only the part AFTER pytest. The command starts `python -m pytest`, so a
+        # scan of the whole line reads Python's module flag as pytest's marker
+        # filter and reports every full run as selecting "pytest".
+        arguments = line.split("pytest", 1)[1]
+        match = re.search(r'-m\s+("[^"]+"|\S+)', arguments)
+        filters.append(match.group(1).strip('"') if match else None)
+    return filters
+
+
 def test_the_full_target_still_runs_the_slow_files():
     """The defect this exists to catch: nothing runs the expensive files locally.
 
-    Asserted as "the full run selects the slow marker" rather than as "the full
-    run does not deselect it", because the second is a proxy and passes happily
-    for a full target that simply stopped running them (L63). Dropping the slow
-    pass entirely is exactly the shape of that mistake, and it would leave every
-    reel-rendering check to CI alone.
+    Asserted as "the full run reaches the slow files" rather than as "it does not
+    deselect them", because the second is a proxy and passes happily for a full
+    target that simply stopped running them (L63). It is satisfied either by one
+    unfiltered pass or by a pass that selects the marker, so the shape of the run
+    can change without this having to be rewritten to match it.
     """
-    _, full = _target("test-python")
+    prerequisites, full = _target("test-python")
+    filters = _marker_filters(full)
 
-    assert "-m slow" in full, (
-        "the full local target no longer selects the slow files, so the four "
-        "files that render real reels run nowhere but CI:\n" + full)
+    assert filters, f"the full target runs no pytest command at all: {full}"
+    reaches_them = any(f is None or f == "slow" for f in filters)
+    assert reaches_them, (
+        "the full local target no longer reaches the slow files, so the four "
+        f"files that render real reels run nowhere but CI. Filters: {filters}, "
+        f"prerequisites: {prerequisites}")
 
 
 def test_the_full_target_still_runs_the_ordinary_tests_too():
-    """The other half of the same split. Two passes make two ways to lose one."""
+    """The other half. However the run is split, both halves have to be in it."""
     prerequisites, full = _target("test-python")
+    filters = _marker_filters(full)
 
-    reaches_them = "test-python-fast" in prerequisites or "not slow" in full
+    reaches_them = (any(f is None or "not slow" in (f or "") for f in filters)
+                    or "test-python-fast" in prerequisites)
     assert reaches_them, (
-        "the full local target runs the slow files and nothing else, so the "
-        f"1700 ordinary tests are skipped locally. Prerequisites: "
-        f"{prerequisites}, recipe:\n{full}")
+        "the full local target reaches the slow files and nothing else, so the "
+        f"1700 ordinary tests are skipped locally. Filters: {filters}, "
+        f"prerequisites: {prerequisites}")

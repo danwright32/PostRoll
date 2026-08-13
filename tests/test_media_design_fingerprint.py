@@ -21,6 +21,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -159,6 +160,35 @@ def _perturb(source: Path, name: str) -> str:
 PLATE_GEOMETRY_CONSTANT = "PRINT_Y"
 
 
+# ── perturbing a COPY, never the checkout (#497) ──────────────────────────────
+
+
+@pytest.fixture
+def tree(tmp_path: Path) -> Path:
+    """A copy of `postroll/media/` to perturb, and the root to fingerprint it at.
+
+    These four guards have to change a real module and watch the fingerprint
+    move. They used to do that to the checkout and restore it afterwards, which
+    made the whole suite unsafe to run in parallel: the collision is on disk, so
+    separate worker processes do not help, and a worker hashing one of these files
+    mid-perturbation reported a redesign that never happened. It also meant a run
+    interrupted before the restore left an edit in the working tree that nobody
+    made. `tests/conftest.py` now fails any module that writes into the source
+    tree at all.
+
+    Returned as the ROOT rather than the media directory, because that is what
+    `fingerprint` takes: it resolves `postroll.media.x` beneath it.
+    """
+    shutil.copytree(MEDIA_DIR, tmp_path / "postroll" / "media")
+    return tmp_path
+
+
+def _perturb_in(tree: Path, module: str, constant: str) -> None:
+    """Rewrite `constant` in the COPY of `module`, incremented by one."""
+    source = tree / "postroll" / "media" / module
+    source.write_text(_perturb(source, constant), encoding="utf-8")
+
+
 def test_the_guard_perturbs_a_constant_the_plate_really_lays_out_with():
     # Stops the subject drifting again. The plate module holds nothing but the
     # composition's geometry, so being a module level integer HERE is what makes
@@ -173,21 +203,19 @@ def test_the_guard_perturbs_a_constant_the_plate_really_lays_out_with():
         f"number comes first, which is how it ended up on the frame rate (#333).")
 
 
-def test_a_changed_plate_geometry_constant_moves_both_reels():
+def test_a_changed_plate_geometry_constant_moves_both_reels(tree: Path):
     # The guard seen failing (L1). The plate both Tuesday reels are composed on
     # is rewritten with one geometry constant changed, and both fingerprints
     # have to notice. Both, because #164's whole point is that the two reels
     # share one composition: a change to it that moved only one of them would
     # mean the other had drifted back to its own copy.
-    source = MEDIA_DIR / "program_plate.py"
-    original = source.read_text(encoding="utf-8")
     before = {name: fp.fingerprint(name) for name in ("reel_morph", "reel_slider")}
+    assert {name: fp.fingerprint(name, tree) for name in before} == before, (
+        "the copy does not fingerprint the same as the checkout, so anything "
+        "measured against it says nothing about what ships")
 
-    try:
-        source.write_text(_perturb(source, PLATE_GEOMETRY_CONSTANT), encoding="utf-8")
-        after = {name: fp.fingerprint(name) for name in before}
-    finally:
-        source.write_text(original, encoding="utf-8")
+    _perturb_in(tree, "program_plate.py", PLATE_GEOMETRY_CONSTANT)
+    after = {name: fp.fingerprint(name, tree) for name in before}
 
     unmoved = sorted(name for name in before if before[name] == after[name])
     assert not unmoved, (
@@ -196,26 +224,18 @@ def test_a_changed_plate_geometry_constant_moves_both_reels():
         f"longer draws on the shared plate, or its fingerprint closure has "
         f"stopped reaching program_plate.py.")
 
-    assert {name: fp.fingerprint(name) for name in before} == before, (
-        "the perturbation was not undone")
 
-
-def test_a_changed_timing_constant_moves_the_reels_fingerprint():
+def test_a_changed_timing_constant_moves_the_reels_fingerprint(tree: Path):
     # The reel's own module still decides something that renders, so it keeps a
     # guard of its own. Named FPS rather than "the first number in the file", so
     # that moving code out of this module produces a failure here instead of a
     # silent change of subject.
-    source = MEDIA_DIR / "generate_reel_morph.py"
-    original = source.read_text(encoding="utf-8")
     before = fp.fingerprint("reel_morph")
+    assert fp.fingerprint("reel_morph", tree) == before
 
-    try:
-        source.write_text(_perturb(source, "FPS"), encoding="utf-8")
-        assert fp.fingerprint("reel_morph") != before
-    finally:
-        source.write_text(original, encoding="utf-8")
+    _perturb_in(tree, "generate_reel_morph.py", "FPS")
 
-    assert fp.fingerprint("reel_morph") == before, "the perturbation was not undone"
+    assert fp.fingerprint("reel_morph", tree) != before
 
 
 def test_a_changed_token_moves_only_the_templates_that_read_it(monkeypatch):
@@ -234,33 +254,28 @@ def test_a_changed_token_moves_only_the_templates_that_read_it(monkeypatch):
     assert moved == readers, f"moved {sorted(moved)}, expected {sorted(readers)}"
 
 
-def test_a_comment_or_a_docstring_is_not_a_redesign():
+def test_a_comment_or_a_docstring_is_not_a_redesign(tree: Path):
     # A fingerprint that moved on prose would be overridden within a week.
-    source = MEDIA_DIR / "generate_reel_morph.py"
-    original = source.read_text(encoding="utf-8")
     before = fp.fingerprint("reel_morph")
+    source = tree / "postroll" / "media" / "generate_reel_morph.py"
 
-    try:
-        source.write_text(original + "\n\n# A note about the design.\n",
-                          encoding="utf-8")
-        assert fp.fingerprint("reel_morph") == before
-    finally:
-        source.write_text(original, encoding="utf-8")
+    source.write_text(source.read_text(encoding="utf-8")
+                      + "\n\n# A note about the design.\n", encoding="utf-8")
+
+    assert fp.fingerprint("reel_morph", tree) == before
 
 
-def test_a_change_to_an_imported_helper_moves_the_fingerprint():
+def test_a_change_to_an_imported_helper_moves_the_fingerprint(tree: Path):
     # The closure is transitive on purpose: the text a reel draws is measured
     # and placed by brand_text, so a change there changes what renders while the
     # reel's own module is untouched.
-    helper = MEDIA_DIR / "brand_text.py"
-    original = helper.read_text(encoding="utf-8")
     before = fp.fingerprint("reel_morph")
+    helper = tree / "postroll" / "media" / "brand_text.py"
 
-    try:
-        helper.write_text(original + "\n_UNUSED_MARKER = 1\n", encoding="utf-8")
-        assert fp.fingerprint("reel_morph") != before
-    finally:
-        helper.write_text(original, encoding="utf-8")
+    helper.write_text(helper.read_text(encoding="utf-8") + "\n_UNUSED_MARKER = 1\n",
+                      encoding="utf-8")
+
+    assert fp.fingerprint("reel_morph", tree) != before
 
 
 def test_the_version_numbers_themselves_are_not_part_of_the_fingerprint(monkeypatch):

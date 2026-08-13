@@ -364,26 +364,26 @@
     {
       "name": "full-local-run-includes-the-slow-files",
       "file": "Makefile",
-      "find": "-m slow -n auto",
-      "replace": "-m \"not slow\" -n auto",
+      "find": "-q -n auto",
+      "replace": "-q -n auto -m \"not slow\"",
       "test": "tests/test_fast_subset_stays_honest.py::test_the_full_target_still_runs_the_slow_files",
-      "breaks": "the full local run stops running the four files that render real reels (#430)"
+      "breaks": "the full local run stops running the four files that render real reels (#430, #497)"
     },
     {
       "name": "full-local-run-includes-the-fast-tests",
       "file": "Makefile",
-      "find": "test-python: test-python-fast",
-      "replace": "test-python:",
+      "find": "tests/ -q -n auto",
+      "replace": "tests/ -q -n auto -m slow",
       "test": "tests/test_fast_subset_stays_honest.py::test_the_full_target_still_runs_the_ordinary_tests_too",
-      "breaks": "the full local run drops the 1700 ordinary tests and runs only the reels (#430)"
+      "breaks": "the full local run drops the 1700 ordinary tests and runs only the reels (#430, #497)"
     },
     {
-      "name": "parallel-stays-off-the-unsafe-suite",
+      "name": "full-local-run-stays-parallel",
       "file": "Makefile",
-      "find": "pytest tests/ -q -m slow -n auto",
-      "replace": "pytest tests/ -q -n auto",
-      "test": "tests/test_reference_frames_are_safe_to_parallelise.py::test_nothing_runs_the_whole_suite_in_parallel",
-      "breaks": "the whole suite runs in parallel, which flakes on the fingerprint tests' perturbation of real files (#497)"
+      "find": "pytest tests/ -q -n auto",
+      "replace": "pytest tests/ -q",
+      "test": "tests/test_reference_frames_are_safe_to_parallelise.py::test_the_whole_suite_is_run_in_parallel",
+      "breaks": "the full local run goes back to serial, six minutes slower, with nothing saying so (#497)"
     },
     {
       "name": "install-gate-uses-one-spelling",
@@ -392,6 +392,14 @@
       "replace": "    (cd \"${REPO_ROOT}\" && venv/bin/python -m pytest tests/ -q)",
       "test": "tests/test_build_and_test_gates.py::test_the_install_gate_runs_the_suite_the_make_target_defines",
       "breaks": "the install gate keeps its own copy of the pytest command, which then drifts from the Makefile's (#430)"
+    },
+    {
+      "name": "source-tree-guard-armed",
+      "file": "tests/conftest.py",
+      "find": "@pytest.fixture(autouse=True, scope=\"module\")",
+      "replace": "@pytest.fixture(scope=\"module\")",
+      "test": "tests/test_reference_frames_are_safe_to_parallelise.py::test_the_source_tree_guard_is_still_armed",
+      "breaks": "the guard stops applying to every module, so the next test that rewrites a real source file is found as a flaky parallel run (#497)"
     }
   ],
   "comment_uncovered": "Guards deliberately NOT registered, because no compile-safe one line perturbation expresses the defect they catch: UploadPageCropRemovalTests (adding a real crop control is not one line; prose would trip it but proves nothing), the absence guards test_blog_draft_text.py::test_no_module_builds_the_heading_by_hand / test_layout_sidecar.py::test_no_generator_builds_the_name_by_hand / test_blog_meta.py::test_neither_string_can_reach_the_ai_round_trip (their only one line trip is planting the banned text artificially), test_suite_hygiene.py and test_guard_mutation_registry.py (they protect the test suite and this registry themselves), test_bridge_payload_contract.py / test_manifest_contract.py (the one line rename anchor is ambiguous in PythonBridge.swift), test_brand_text.py (removing the route in one line breaks the module's own names), test_event_slug_parity.py (slug internals are not safely one line perturbable), and the measured pixel thresholds in test_golden_frames.py / test_frame_legibility.py / test_screen_reel_logo_contrast.py's contrast checks (failing them takes a rendering change, not a text edit)."

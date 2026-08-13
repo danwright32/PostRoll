@@ -133,3 +133,66 @@ def sample_logo(tmp_path):
     path = tmp_path / "logo.png"
     img.save(str(path), "PNG")
     return str(path)
+
+
+# ── nothing rewrites the source tree (#497) ──────────────────────────────────
+#
+# Measured, not suspected: `pytest tests/ -n auto` failed on 2026-08-13 claiming
+# the reel_morph template had been redesigned. It had not.
+# `test_media_design_fingerprint.py` proved its guards by writing a perturbed
+# copy of a real module under `postroll/media/` into place and restoring it
+# afterwards, and `design_fingerprint` hashes those files off disk, so a worker
+# hashing one mid-perturbation read the perturbation.
+#
+# Two things go wrong when a test writes into the checked-out source tree, and
+# only one of them is about speed:
+#
+#   * It is the reason the suite cannot be run in parallel. The collision is on
+#     DISK, so separate worker processes do not help, and it is a race, so it
+#     fails on nobody's machine twice the same way.
+#   * A run that dies between the write and the restore (an interrupt, a crash, a
+#     killed worker) leaves a modified source file in the working tree.
+#     `tools/check_guards.py` then refuses to run, because it will not mutate a
+#     file with uncommitted changes, and the diff looks like an edit nobody made.
+#
+# Checked per module rather than per test: the same guarantee for a hundredth of
+# the stat calls, and the module is what has to be fixed anyway.
+
+_SOURCE_TREE = Path(__file__).resolve().parent.parent / "postroll"
+
+
+def _source_tree_state() -> dict[str, tuple[int, int]]:
+    state: dict[str, tuple[int, int]] = {}
+    for path in _SOURCE_TREE.rglob("*.py"):
+        stat = path.stat()
+        state[str(path)] = (stat.st_mtime_ns, stat.st_size)
+    return state
+
+
+def source_tree_changes(before: dict[str, tuple[int, int]],
+                        after: dict[str, tuple[int, int]]) -> list[str]:
+    """Files that were written, added or removed between two snapshots.
+
+    Pulled out of the fixture so the comparison can be exercised directly. A
+    guard whose own mechanism has never been seen working is indistinguishable
+    from one that reports green because it compares nothing (L1).
+    """
+    return sorted(
+        Path(name).name for name in set(before) | set(after)
+        if before.get(name) != after.get(name)
+    )
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _source_tree_is_read_only():
+    before = _source_tree_state()
+    yield
+    touched = source_tree_changes(before, _source_tree_state())
+
+    assert not touched, (
+        "This module wrote to files in the source tree: " + ", ".join(touched)
+        + ".\nEven a write that is restored afterwards is a problem: it makes the "
+        "suite unsafe to run in parallel, and a run that dies before the restore "
+        "leaves an edit in the working tree that nobody made. Copy what you need "
+        "into tmp_path and work on the copy (#497)."
+    )

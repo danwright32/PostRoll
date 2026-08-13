@@ -84,15 +84,31 @@ _IGNORED_TOKENS = frozenset({"MEDIA_DESIGN_VERSIONS", "COLLAGE_DESIGN_VERSION",
 _TOKENS_MODULE = "postroll.media.design_tokens"
 
 
-def module_path(dotted: str) -> Path:
+#: Where the modules being hashed are read from. Overridable so a test can
+#: fingerprint a COPY of the tree instead of the checkout (#497).
+#:
+#: The four guards that prove this module notices a change used to write a
+#: perturbed module into `postroll/media/` and restore it afterwards. That made
+#: the whole suite unsafe to run in parallel, because a worker hashing the same
+#: file mid-perturbation read the perturbation and reported a redesign that never
+#: happened, and it meant a run interrupted between the write and the restore left
+#: an edit in the working tree that nobody made.
+#:
+#: Only CODE is read from here. Token VALUES come from the imported
+#: `design_tokens` module either way, since a value is what the running program
+#: holds rather than what some copy of the file says.
+DEFAULT_ROOT = PACKAGE_ROOT.parent
+
+
+def module_path(dotted: str, root: Path | None = None) -> Path:
     """The source file of a first-party module, by dotted name."""
     if not dotted.startswith("postroll."):
         raise ValueError(f"not a first-party module: {dotted}")
-    return PACKAGE_ROOT.parent / (dotted.replace(".", "/") + ".py")
+    return (root or DEFAULT_ROOT) / (dotted.replace(".", "/") + ".py")
 
 
-def _parse(dotted: str) -> ast.Module:
-    return ast.parse(module_path(dotted).read_text(encoding="utf-8"))
+def _parse(dotted: str, root: Path | None = None) -> ast.Module:
+    return ast.parse(module_path(dotted, root).read_text(encoding="utf-8"))
 
 
 def _resolve(dotted: str, node: ast.ImportFrom) -> str | None:
@@ -115,7 +131,7 @@ def _resolve(dotted: str, node: ast.ImportFrom) -> str | None:
 _DESIGN_PACKAGE = "postroll.media."
 
 
-def _closure(dotted: str) -> set[str]:
+def _closure(dotted: str, root: Path | None = None) -> set[str]:
     """`dotted` and every `postroll.media` module it imports, transitively.
 
     The token module is excluded: its VALUES are hashed by name below, so
@@ -130,7 +146,7 @@ def _closure(dotted: str) -> set[str]:
                 or not current.startswith(_DESIGN_PACKAGE)):
             continue
         try:
-            tree = _parse(current)
+            tree = _parse(current, root)
         except OSError:
             # A module named by an import that has no file of its own (a
             # package, a namespace). Nothing to hash, and nothing hidden: the
@@ -162,13 +178,13 @@ def _strip_docstrings(tree: ast.AST) -> ast.AST:
     return tree
 
 
-def _code_hash(dotted: str) -> str:
+def _code_hash(dotted: str, root: Path | None = None) -> str:
     return hashlib.sha256(
-        ast.dump(_strip_docstrings(_parse(dotted)), annotate_fields=True).encode()
+        ast.dump(_strip_docstrings(_parse(dotted, root)), annotate_fields=True).encode()
     ).hexdigest()
 
 
-def referenced_tokens(dotted: str) -> set[str]:
+def referenced_tokens(dotted: str, root: Path | None = None) -> set[str]:
     """Design token names a module's closure reads.
 
     Both spellings the generators use: imported by name
@@ -180,8 +196,8 @@ def referenced_tokens(dotted: str) -> set[str]:
     defined = {name for name in vars(design_tokens)
                if name.isupper() and name not in _IGNORED_TOKENS}
     found: set[str] = set()
-    for module in _closure(dotted):
-        tree = _parse(module)
+    for module in _closure(dotted, root):
+        tree = _parse(module, root)
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
                 if _resolve(module, node) == _TOKENS_MODULE:
@@ -191,26 +207,30 @@ def referenced_tokens(dotted: str) -> set[str]:
     return found
 
 
-def fingerprint(template: str) -> str:
-    """One hash over everything that decides how `template` renders."""
+def fingerprint(template: str, root: Path | None = None) -> str:
+    """One hash over everything that decides how `template` renders.
+
+    `root` is where the code is read from, defaulting to this checkout. See
+    DEFAULT_ROOT for why anything else would want to pass it.
+    """
     modules = TEMPLATE_MODULES[template]
 
     parts: list[str] = []
     closure: set[str] = set()
     for dotted in modules:
-        closure |= _closure(dotted)
+        closure |= _closure(dotted, root)
     for dotted in sorted(closure):
-        parts.append(f"code {dotted} {_code_hash(dotted)}")
+        parts.append(f"code {dotted} {_code_hash(dotted, root)}")
 
     tokens: set[str] = set()
     for dotted in modules:
-        tokens |= referenced_tokens(dotted)
+        tokens |= referenced_tokens(dotted, root)
     for name in sorted(tokens):
         parts.append(f"token {name} {getattr(design_tokens, name)!r}")
 
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()
 
 
-def fingerprints() -> dict[str, str]:
+def fingerprints(root: Path | None = None) -> dict[str, str]:
     """Every template's fingerprint, keyed as `MEDIA_DESIGN_VERSIONS` is."""
-    return {name: fingerprint(name) for name in sorted(TEMPLATE_MODULES)}
+    return {name: fingerprint(name, root) for name in sorted(TEMPLATE_MODULES)}
