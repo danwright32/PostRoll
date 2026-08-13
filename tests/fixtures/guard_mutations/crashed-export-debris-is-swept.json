@@ -1,0 +1,8 @@
+{
+  "name": "crashed-export-debris-is-swept",
+  "file": "PostRollApp/Sources/Services/ExportStaging.swift",
+  "find": "        sweepAbandoned(in: parent)\n",
+  "replace": "",
+  "test": "PostRollTests/ExportStagingTests/testAStagingFolderLeftByACrashedRunIsClearedByTheNextExport",
+  "breaks": "a staging folder left by a crashed or force-quit export stays in the person's own export destination forever, holding a full part-built copy"
+}

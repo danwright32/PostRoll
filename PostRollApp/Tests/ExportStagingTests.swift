@@ -152,4 +152,58 @@ final class ExportStagingTests: XCTestCase {
         // And the previous export is back where it was, not left renamed.
         XCTAssertEqual(try contents(final.appendingPathComponent("CAPTIONS.txt")), "the captions")
     }
+
+    // MARK: - Debris from a run that never finished
+
+    /// A staging folder is only cleaned up when the run ends. A crash or a
+    /// force quit ends nothing, so the folder stays in the person's own export
+    /// destination holding a full part-built copy, and nothing removes it.
+    private func stalePostRollFolders() -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [])
+            .filter { $0.hasPrefix(".postroll-export-") }
+            .sorted()
+    }
+
+    func testAStagingFolderLeftByACrashedRunIsClearedByTheNextExport() throws {
+        // What a force quit mid-export leaves: the folder, its part-built
+        // contents, and no process that knows about it.
+        let orphan = root.appendingPathComponent(".postroll-export-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: orphan.appendingPathComponent("Org_Show_2026-01-01"),
+            withIntermediateDirectories: true)
+        try Data("half an export".utf8)
+            .write(to: orphan.appendingPathComponent("Org_Show_2026-01-01/partial.mp4"))
+
+        let staging = try ExportStaging.begin(finalFolder: final)
+        defer { staging.abandon() }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path),
+                       "the crashed run's folder is still taking up space")
+    }
+
+    func testAnExportRunningRightNowIsNotSweptAwayByAnother() throws {
+        // Two events can export into one destination at the same time. Deleting
+        // "any staging folder" would take the other run's work with it, turning
+        // a tidy-up into the incident.
+        let live = try ExportStaging.begin(finalFolder: root.appendingPathComponent("Other_Show_2026-02-02"))
+        defer { live.abandon() }
+        try Data("in flight".utf8)
+            .write(to: live.workingFolder.appendingPathComponent("reel.mp4"))
+
+        let second = try ExportStaging.begin(finalFolder: final)
+        defer { second.abandon() }
+
+        XCTAssertEqual(try contents(live.workingFolder.appendingPathComponent("reel.mp4")),
+                       "in flight",
+                       "a concurrent export deleted the other one's staged work")
+    }
+
+    func testACommittedRunLeavesNothingForTheNextSweep() throws {
+        let staging = try ExportStaging.begin(finalFolder: final)
+        try "captions".write(to: staging.workingFolder.appendingPathComponent("CAPTIONS.txt"),
+                             atomically: true, encoding: .utf8)
+        try staging.commit()
+
+        XCTAssertTrue(stalePostRollFolders().isEmpty, stalePostRollFolders().description)
+    }
 }

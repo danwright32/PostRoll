@@ -1,0 +1,8 @@
+{
+  "name": "the-sweep-leaves-a-running-export-alone",
+  "file": "PostRollApp/Sources/Services/ExportStaging.swift",
+  "find": "            guard !live.contains(folder) else { continue }\n",
+  "replace": "",
+  "test": "PostRollTests/ExportStagingTests/testAnExportRunningRightNowIsNotSweptAwayByAnother",
+  "breaks": "one export deletes another's staged work when two events export into the same destination at once, turning a tidy-up into the incident"
+}
