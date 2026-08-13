@@ -9,14 +9,18 @@ final class AccountBookRecoveryTests: XCTestCase {
     private var file: URL!
     private let stamp = Date(timeIntervalSince1970: 1_700_000_000)
 
-    override func setUpWithError() throws {
+    // `setUp() async throws`, not `setUpWithError`: CI builds with Xcode 16.4,
+    // where the throwing override is nonisolated and cannot touch these
+    // main-actor properties at all. The local Xcode accepts it, so this only
+    // shows up in CI.
+    override func setUp() async throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("AccountBookRecovery-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         file = root.appendingPathComponent("accounts.json")
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
         // The gate is process-wide and keyed by path, so a blocked temp path
         // from one test must not follow the suite into the next one.
