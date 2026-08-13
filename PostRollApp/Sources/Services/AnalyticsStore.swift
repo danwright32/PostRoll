@@ -150,19 +150,26 @@ final class AnalyticsStore {
     // MARK: - Posts
 
     /// Merge a new batch of posts, deduping on igPostID. Newer import wins.
-    func mergePosts(_ new: [IGPost]) {
+    ///
+    /// Returns what the save did, because the screen that calls this reports the
+    /// import as done and must not do so when the write was refused (#439).
+    @discardableResult
+    func mergePosts(_ new: [IGPost]) -> StoreSaveOutcome {
         var byID = Dictionary(uniqueKeysWithValues: posts.map { ($0.igPostID, $0) })
         for post in new { byID[post.igPostID] = post }
         posts = byID.values.sorted { $0.publishedAt > $1.publishedAt }
         lastImport = Date()
-        save()
+        return save()
     }
 
     // MARK: - Reports
 
-    func addReport(_ report: InsightReport) {
+    /// Same reason as `mergePosts`: the screen that generates a report says so on
+    /// screen, and a refused write means the report is in this window only.
+    @discardableResult
+    func addReport(_ report: InsightReport) -> StoreSaveOutcome {
         reports.insert(report, at: 0)
-        save()
+        return save()
     }
 
     // MARK: - Org bands
