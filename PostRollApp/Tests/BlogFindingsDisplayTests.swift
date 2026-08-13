@@ -10,7 +10,7 @@ import XCTest
 /// outlive the correction.
 final class BlogFindingsDisplayTests: XCTestCase {
 
-    private func blog(_ findings: [BlogFinding],
+    private func blog(_ findings: [QualityFinding],
                       body: String = "draft",
                       checked: String = "draft") -> BlogOutput {
         var out = BlogOutput(title: "T", body: body)
@@ -19,42 +19,42 @@ final class BlogFindingsDisplayTests: XCTestCase {
         return out
     }
 
-    private let one = BlogFinding(code: "invented_number",
+    private let one = QualityFinding(code: "invented_number",
                                   message: "No count in the source data means no number in the post.",
                                   detail: "'thirty' does not appear in the program data")
-    private let two = BlogFinding(code: "alt_text_length",
+    private let two = QualityFinding(code: "alt_text_length",
                                   message: "Alt text must be 15 to 25 words.",
                                   detail: "a.jpg: 34 words.")
 
     // MARK: - summary
 
     func testNoFindingsShowsNothing() {
-        XCTAssertNil(BlogFindingsDisplay.summary(blog: blog([])))
+        XCTAssertNil(blog([]).findingsSummary)
     }
 
     func testOneFindingIsCountedInTheSingular() {
-        XCTAssertEqual(BlogFindingsDisplay.summary(blog: blog([one])), "1 check to fix")
+        XCTAssertEqual(blog([one]).findingsSummary, "1 check to fix")
     }
 
     func testSeveralFindingsAreCounted() {
-        XCTAssertEqual(BlogFindingsDisplay.summary(blog: blog([one, two])), "2 checks to fix")
+        XCTAssertEqual(blog([one, two]).findingsSummary, "2 checks to fix")
     }
 
     // MARK: - staleness once the draft is edited
 
     func testFindingsAreCurrentWhileTheBodyIsUntouched() {
-        XCTAssertFalse(BlogFindingsDisplay.isStale(blog: blog([one])))
+        XCTAssertFalse(blog([one]).findingsAreStale)
     }
 
     func testFindingsGoStaleOnceTheBodyIsEdited() {
         let edited = blog([one], body: "Dan fixed it", checked: "draft")
-        XCTAssertTrue(BlogFindingsDisplay.isStale(blog: edited),
+        XCTAssertTrue(edited.findingsAreStale,
                       "the checks ran against the generated draft, not this text")
     }
 
     func testAnEditedDraftSaysTheChecksAreAgainstTheOriginal() {
         let edited = blog([one, two], body: "Dan fixed it", checked: "draft")
-        XCTAssertEqual(BlogFindingsDisplay.summary(blog: edited),
+        XCTAssertEqual(edited.findingsSummary,
                        "2 checks against the original draft")
     }
 
@@ -62,7 +62,7 @@ final class BlogFindingsDisplayTests: XCTestCase {
         // No record of what was checked is not evidence Dan changed anything,
         // and greying out every older event's findings would be worse.
         let unstamped = blog([one], body: "draft", checked: "")
-        XCTAssertFalse(BlogFindingsDisplay.isStale(blog: unstamped))
+        XCTAssertFalse(unstamped.findingsAreStale)
     }
 
     func testAPhotoSwapRechecksRatherThanGoingStale() {
@@ -73,17 +73,17 @@ final class BlogFindingsDisplayTests: XCTestCase {
         swapped.generatedBody = "body with old markers"
         swapped.applyFindings([one], checkedBody: "body with new markers")
 
-        XCTAssertFalse(BlogFindingsDisplay.isStale(blog: swapped))
-        XCTAssertEqual(BlogFindingsDisplay.summary(blog: swapped), "1 check to fix")
+        XCTAssertFalse(swapped.findingsAreStale)
+        XCTAssertEqual(swapped.findingsSummary, "1 check to fix")
     }
 
     // MARK: - grouping
 
     func testRepeatsOfOneCheckCollapseUnderOneHeading() {
-        let alt2 = BlogFinding(code: "alt_text_length",
+        let alt2 = QualityFinding(code: "alt_text_length",
                                message: "Alt text must be 15 to 25 words.",
                                detail: "b.jpg: 31 words.")
-        let groups = BlogFindingsDisplay.grouped(findings: [two, one, alt2])
+        let groups = FindingsDisplay.grouped(findings: [two, one, alt2])
 
         XCTAssertEqual(groups.count, 2)
         XCTAssertEqual(groups[0].message, "Alt text must be 15 to 25 words.")
@@ -92,13 +92,13 @@ final class BlogFindingsDisplayTests: XCTestCase {
     }
 
     func testGroupsKeepFirstAppearanceOrder() {
-        let groups = BlogFindingsDisplay.grouped(findings: [one, two])
+        let groups = FindingsDisplay.grouped(findings: [one, two])
         XCTAssertEqual(groups.map(\.code), ["invented_number", "alt_text_length"])
     }
 
     func testAFindingWithNoDetailStillShowsItsMessage() {
-        let bare = BlogFinding(code: "stacked_photos", message: "Two photos with no prose between them.")
-        let groups = BlogFindingsDisplay.grouped(findings: [bare])
+        let bare = QualityFinding(code: "stacked_photos", message: "Two photos with no prose between them.")
+        let groups = FindingsDisplay.grouped(findings: [bare])
         XCTAssertEqual(groups.count, 1)
         XCTAssertTrue(groups[0].details.isEmpty)
     }

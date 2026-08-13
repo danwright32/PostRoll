@@ -58,6 +58,13 @@ from .ai_tells import (
 )
 from .claude_client import (run_json_prompt, run_prompt, run_review_pass,
                             load_brand_voice, ClaudeError, partition_uploadable)
+from .blog_quality import finding_entry
+from .caption_credits import (
+    HANDLE_RE,
+    credit_findings,
+    norm_handle,
+    rewrite_lost_a_credit,
+)
 from .caption_quality import problems_in, REWRITE_PROMPT
 from .performer_hashtags import strip_performer_hashtags
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
@@ -863,14 +870,17 @@ def generate_caption(
         alt_texts = _reinsert_skipped(alt_texts, kept_indices, len(original_paths))
         scene_labels = _reinsert_skipped(scene_labels, kept_indices, len(original_paths))
 
+    # A credit appears exactly once (#188, #191). The prompt asks for a few
+    # woven into the body and the rest left for the trailing stack; this
+    # removes from that stack anything the body already credits, because
+    # whether a handle appears twice is checkable and a rule that lives only
+    # in a prompt is a hope.
+    final_caption = dedupe_credit_stack(_enforce_caption_bans(
+        strip_em_dashes(data.get("caption", "").strip()),
+        tag_handles=tag_handles, name_mentions=name_mentions))
+
     return {
-        # A credit appears exactly once (#188, #191). The prompt asks for a few
-        # woven into the body and the rest left for the trailing stack; this
-        # removes from that stack anything the body already credits, because
-        # whether a handle appears twice is checkable and a rule that lives only
-        # in a prompt is a hope.
-        "caption": dedupe_credit_stack(_enforce_caption_bans(
-            strip_em_dashes(data.get("caption", "").strip()))),
+        "caption": final_caption,
         # Deterministic backstop, not a second ask of the model: the prompt
         # above states the fame gate, and this enforces it against the program
         # data. A rule that lives only in a prompt is a hope (#199).
@@ -891,6 +901,19 @@ def generate_caption(
             {"file": Path(original_paths[s.index]).name, "reason": s.reason}
             for s in skipped_photos
         ],
+        # The handle and name rules, checked rather than asked for (#475).
+        # Reported, not repaired: an invented handle cannot be replaced with
+        # the right one by anything here, and Dan reads the caption before it
+        # is posted.
+        "findings": [
+            finding_entry(f) for f in credit_findings(
+                final_caption, tag_handles=tag_handles,
+                name_mentions=name_mentions)
+        ],
+        # The exact text those findings were measured against, so an edited
+        # caption stops showing findings about the text before the edit. Same
+        # reason BlogOutput carries findings_body (#201).
+        "findings_caption": final_caption,
     }
 
 
@@ -907,17 +930,23 @@ def generate_caption(
 # Which credits read naturally in the body is a judgement, so the prompt asks
 # for that. Whether a handle appears twice is exactly checkable, so it is
 # settled here rather than by asking the model whether it obeyed.
-_STACK_HANDLE = re.compile(r"@[A-Za-z0-9._]+")
+# One definition of what an @ handle looks like and of how two spellings of
+# one are compared, shared with the credit checks in caption_credits (#475).
+# Two copies would drift, and they drift in the direction that matters: the
+# dedupe keeping a credit the enforcement thinks is missing, or the other way
+# round.
+_STACK_HANDLE = HANDLE_RE
 
 
 def _norm_handle(token: str) -> str:
-    """A handle without the punctuation that ends the sentence it sits in.
+    """A handle in comparison form, with the leading @ kept.
 
-    A dot is legal INSIDE a handle (@safa.wav) but never at the end, so a
-    handle written mid-sentence comes back as "@safa.wav." and would otherwise
-    never match the same handle standing alone in the stack.
+    `norm_handle` drops the @ so a bare handle-book entry and a written one
+    compare equal. The stack dedupe compares tokens that always carry it, and
+    keeping it here means an @-less word in a credit stack can never collide
+    with a handle.
     """
-    return token.casefold().rstrip(".,;:!?)\u2026")
+    return "@" + norm_handle(token)
 
 
 def _stack_looks_like_credits(block: str) -> bool:
@@ -1003,7 +1032,8 @@ def _plain_name_runs(stack: str) -> list[str]:
     return re.findall(r"\b(?:[A-Z][\w'\-.]*)(?:\s+[A-Z][\w'\-.]*)+", stack)
 
 
-def _enforce_caption_bans(caption: str) -> str:
+def _enforce_caption_bans(caption: str, *, tag_handles=None,
+                          name_mentions=None) -> str:
     """Remove engagement bait and the generic second person, in code (#110).
 
     The prompt already bans both, and the blog already enforces its equivalent
@@ -1035,6 +1065,20 @@ def _enforce_caption_bans(caption: str) -> str:
     if not reworded or problems_in(reworded):
         print(f"warning: caption still contains {'; '.join(problems)} after a "
               "rewrite, keeping the original", file=sys.stderr, flush=True)
+        return caption
+
+    # The rewrite's keep-every-handle instruction lives only in REWRITE_PROMPT,
+    # so the pass added to enforce one rule can silently break a harder one:
+    # delete a credit Dan promised somebody, or invent a handle pointing at a
+    # stranger's account (#475). Both are checkable, and unlike the generate
+    # path there is a known-good caption in hand, so the rewrite is refused
+    # rather than reported (L5).
+    damage = rewrite_lost_a_credit(caption, reworded, tag_handles=tag_handles,
+                                   name_mentions=name_mentions)
+    if damage:
+        print(f"warning: the caption ban rewrite {', '.join(damage)}; keeping "
+              "the original, which still contains "
+              f"{'; '.join(problems)}", file=sys.stderr, flush=True)
         return caption
     return reworded
 

@@ -785,7 +785,19 @@ actor PythonBridge {
     nonisolated static func buildCaptionRevisionManifest(
         event: Event, day: DayName, program: Any, existing: Any, feedback: String
     ) -> [String: Any] {
-        [
+        // The same credit lists the week manifest sends for this day (#476).
+        // Without them the hashtag gate judged against the programme alone, so
+        // a person credited by plain name or tagged on a photo could keep a
+        // hashtag on a revision that generation would have stripped, and the
+        // credit checks (#475) had no tag list to judge a handle against.
+        //
+        // Sent even when empty, unlike the week manifest's per-day entries:
+        // there, an absent key means the day itself carries nothing, while
+        // here an absent key would be indistinguishable from an app version
+        // that does not send them, and Python's fallback is a different rule
+        // rather than an error.
+        let credits = CaptionCreditInputs.forDay(event.days[day.rawValue], event: event)
+        return [
             "event":         event.name,
             "org":           event.org,
             "venue":         event.venue,
@@ -796,6 +808,9 @@ actor PythonBridge {
             "program":       program,
             "existing":      existing,
             "feedback":      feedback,
+            "tag_handles":   credits.handles,
+            "name_mentions": credits.names,
+            "photo_tags":    credits.photoTags,
         ]
     }
 
@@ -1322,61 +1337,15 @@ actor PythonBridge {
                 }
             }
 
-            // Merge selected performers into handles / name mentions
-            let selectedIDs = Set(pd.selectedPerformerIDs)
-            var performerHandles: [String] = []
-            var performerNames: [String] = []
-            for p in performers where selectedIDs.contains(p.id) {
-                let h = p.handle.trimmingCharacters(in: .whitespaces)
-                if !h.isEmpty && Self.isRealHandle(h) {
-                    performerHandles.append(h.hasPrefix("@") ? h : "@\(h)")
-                } else if !p.name.isEmpty {
-                    performerNames.append(p.name)
-                }
-            }
-
-            // People tagged on individual photos are credited by the caption too
-            // (#171). Without this, tagging a carousel photo only produced the
-            // PHOTO TAGS list in CAPTIONS.txt and Dan had to tick the same
-            // person again at day level to get them into the caption.
-            var photoTagHandles: [String] = []
-            var photoTagNames: [String] = []
-            for tags in pd.photoTags.values {
-                for raw in tags {
-                    let tag = raw.trimmingCharacters(in: .whitespaces)
-                    guard !tag.isEmpty else { continue }
-                    if tag.hasPrefix("@") {
-                        if Self.isRealHandle(tag) { photoTagHandles.append(tag) }
-                    } else {
-                        photoTagNames.append(tag)
-                    }
-                }
-            }
-            // photoTags iterates a dictionary, so sort for a stable manifest.
-            photoTagHandles.sort()
-            photoTagNames.sort()
-
             // Event-wide handles (org, venue) + selected performer handles +
-            // manual day handles + per-photo tags. Deduped case-insensitively so
-            // someone picked two ways is credited once.
-            let allHandles = Self.dedupedPreservingOrder(
-                eventHandleList + performerHandles + pd.tagHandles + photoTagHandles)
-            let allNames = Self.dedupedPreservingOrder(
-                performerNames + pd.nameMentions + photoTagNames)
-            if !allHandles.isEmpty { dayEntry["tag_handles"]   = allHandles }
-            if !allNames.isEmpty   { dayEntry["name_mentions"] = allNames }
-            if !pd.notes.isEmpty   { dayEntry["notes"]         = pd.notes }
-            // Per-photo people tags (Wednesday). Re-key from the URL
-            // absoluteString the UI stores to the POSIX path used in `photos`,
-            // so Python can line each tag up with its photo by path.
-            if !pd.photoTags.isEmpty {
-                var tagsByPath: [String: [String]] = [:]
-                for (key, tags) in pd.photoTags where !tags.isEmpty {
-                    let path = URL(string: key)?.path ?? key
-                    tagsByPath[path] = tags
-                }
-                if !tagsByPath.isEmpty { dayEntry["photo_tags"] = tagsByPath }
-            }
+            // manual day handles + per-photo tags, deduped case-insensitively
+            // so someone picked two ways is credited once. Derived in one place
+            // because the revision manifest sends the same lists (#476).
+            let credits = CaptionCreditInputs.forDay(pd, event: event)
+            if !credits.handles.isEmpty { dayEntry["tag_handles"]   = credits.handles }
+            if !credits.names.isEmpty   { dayEntry["name_mentions"] = credits.names }
+            if !pd.notes.isEmpty        { dayEntry["notes"]         = pd.notes }
+            if !credits.photoTags.isEmpty { dayEntry["photo_tags"] = credits.photoTags }
             daysDict[dayName.rawValue] = dayEntry
         }
 
