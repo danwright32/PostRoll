@@ -50,13 +50,11 @@ final class ImageActorBoundaryGuardTests: XCTestCase {
                 // A comment ABOUT the pattern is not the pattern (L103).
                 guard !line.hasPrefix("//"), !line.hasPrefix("///"), !line.hasPrefix("*") else { continue }
                 guard line.contains("Task.detached") else { continue }
-                // The image may be named on this line or on the next few, since
-                // the closure is usually wrapped.
-                let window = lines[i..<min(i + 5, lines.count)]
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.hasPrefix("//") }
-                    .joined(separator: " ")
-                if window.contains("NSImage") {
+                // Only what is INSIDE the closure. Stopping at its end matters:
+                // building an image from bytes on this side, one line after an
+                // unrelated detached task, is the shape being asked for, and a
+                // guard that flags it is a guard nobody can satisfy.
+                if Self.detachedBody(lines, from: i).contains("NSImage") {
                     offenders.append("\(url.lastPathComponent):\(i + 1)  \(line)")
                 }
             }
@@ -73,6 +71,18 @@ final class ImageActorBoundaryGuardTests: XCTestCase {
             """)
     }
 
+    /// The closure a `Task.detached` on `line` opens, up to and including the
+    /// line that closes it.
+    private static func detachedBody(_ lines: [Substring], from line: Int) -> String {
+        var body: [String] = []
+        for raw in lines[line..<min(line + 8, lines.count)] {
+            let text = raw.trimmingCharacters(in: .whitespaces)
+            if !text.hasPrefix("//") { body.append(text) }
+            if text.contains("}.value") || text.hasSuffix("}.value") { break }
+        }
+        return body.joined(separator: " ")
+    }
+
     func testTheGuardActuallyFindsThisPattern() throws {
         // The scan is only worth anything if it matches the shape it forbids.
         let sample = """
@@ -84,14 +94,29 @@ final class ImageActorBoundaryGuardTests: XCTestCase {
             """
         let lines = sample.split(separator: "\n", omittingEmptySubsequences: false)
         var matched = false
-        for (i, rawLine) in lines.enumerated() {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            guard line.contains("Task.detached") else { continue }
-            let window = lines[i..<min(i + 5, lines.count)]
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .joined(separator: " ")
-            if window.contains("NSImage") { matched = true }
+        for (i, rawLine) in lines.enumerated()
+        where rawLine.trimmingCharacters(in: .whitespaces).contains("Task.detached") {
+            if Self.detachedBody(lines, from: i).contains("NSImage") { matched = true }
         }
         XCTAssertTrue(matched, "the scan does not match the pattern it forbids")
+    }
+
+    func testTheGuardDoesNotFlagBuildingAnImageFromBytesAfterwards() throws {
+        // The shape this whole change is moving TO: an unrelated detached task,
+        // then the image built from Sendable bytes on this side.
+        let sample = """
+            async let bytes = ImageLoad.bytes(url)
+            async let decoded = Task.detached {
+                LayoutSidecar.read(at: layoutURL).cells
+            }.value
+            let (loadedBytes, cells) = await (bytes, decoded)
+            let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
+            """
+        let lines = sample.split(separator: "\n", omittingEmptySubsequences: false)
+        for (i, rawLine) in lines.enumerated()
+        where rawLine.trimmingCharacters(in: .whitespaces).contains("Task.detached") {
+            XCTAssertFalse(Self.detachedBody(lines, from: i).contains("NSImage"),
+                           "the scan flags an image built outside the detached closure")
+        }
     }
 }

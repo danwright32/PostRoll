@@ -24,9 +24,15 @@ enum ImageLoad: Equatable {
     ///
     /// The BYTES cross the actor boundary, not the image. `NSImage` is not
     /// Sendable, so handing one back from a detached task is an error under
-    /// strict concurrency, and the app has never compiled on the Xcode CI runs
+    /// strict concurrency, and the app had never compiled on the Xcode CI runs
     /// because several loaders did exactly that. `Data` is Sendable, and
     /// decoding it here costs nothing that reading the file did not already.
+    ///
+    /// `@MainActor` for the same reason, one level up: `ImageLoad` holds an
+    /// NSImage, so it is not Sendable either, and a nonisolated async function
+    /// returning one to a main-actor caller is the identical crossing. Every
+    /// call site is a SwiftUI `.task`, which is already on the main actor.
+    @MainActor
     static func read(_ url: URL) async -> ImageLoad {
         let data = await Task.detached { try? Data(contentsOf: url) }.value
         guard let data, let image = NSImage(data: data) else { return .missing }
@@ -36,6 +42,16 @@ enum ImageLoad: Equatable {
     /// For call sites that already loaded the image alongside something else.
     static func of(_ image: NSImage?) -> ImageLoad {
         image.map(ImageLoad.loaded) ?? .missing
+    }
+
+    /// Just the bytes, for a call site loading an image CONCURRENTLY with
+    /// something else.
+    ///
+    /// `async let` starts a child task, and an `ImageLoad` (or a bare NSImage)
+    /// coming back from one is the same non-Sendable crossing `read` avoids.
+    /// Data is Sendable, so the concurrency is kept and only the decode moves.
+    static func bytes(_ url: URL) async -> Data? {
+        await Task.detached { try? Data(contentsOf: url) }.value
     }
 
     var image: NSImage? {

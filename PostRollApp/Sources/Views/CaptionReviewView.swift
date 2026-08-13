@@ -4821,11 +4821,12 @@ private struct CollagePreviewThumbnail: View {
         // MainActor.run so SwiftUI fires exactly one render — no intermediate flash
         // where the PNG is visible but the cell overlays haven't appeared yet.
         .task(id: url) {
-            async let img     = ImageLoad.read(url).image
+            async let bytes   = ImageLoad.bytes(url)
             async let decoded = Task.detached {
                 LayoutSidecar.read(at: layoutURL).cells
             }.value
-            let (loadedImage, loadedCells) = await (img, decoded)
+            let (loadedBytes, loadedCells) = await (bytes, decoded)
+            let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
             let sampledGap = Self.sampleGapColor(from: loadedImage)
             await MainActor.run {
                 image = loadedImage
@@ -4839,11 +4840,12 @@ private struct CollagePreviewThumbnail: View {
         .onChange(of: isRegenerating) { _, nowRegenerating in
             if !nowRegenerating {
                 Task {
-                    async let img     = ImageLoad.read(url).image
+                    async let bytes   = ImageLoad.bytes(url)
                     async let decoded = Task.detached {
                         LayoutSidecar.read(at: layoutURL).cells
                     }.value
-                    let (loadedImage, loadedCells) = await (img, decoded)
+                    let (loadedBytes, loadedCells) = await (bytes, decoded)
+                    let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
                     let sampledGap = Self.sampleGapColor(from: loadedImage)
                     // Commit image, cells, and override-clear in one render cycle.
                     await MainActor.run {
@@ -5167,11 +5169,12 @@ private struct ReelStripPreviewThumbnail: View {
             }
         }
         .task(id: url) {
-            async let img = ImageLoad.read(url).image
+            async let bytes = ImageLoad.bytes(url)
             async let decoded = Task.detached {
                 (try? JSONDecoder().decode(ReelStripLayout.self, from: Data(contentsOf: layoutURL)))
             }.value
-            let (loadedImage, layout) = await (img, decoded)
+            let (loadedBytes, layout) = await (bytes, decoded)
+            let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
             await MainActor.run {
                 image = loadedImage
                 if let layout {
@@ -5184,11 +5187,12 @@ private struct ReelStripPreviewThumbnail: View {
         .onChange(of: isRegenerating) { _, nowRegenerating in
             if !nowRegenerating {
                 Task {
-                    async let img = ImageLoad.read(url).image
+                    async let bytes = ImageLoad.bytes(url)
                     async let decoded = Task.detached {
                         (try? JSONDecoder().decode(ReelStripLayout.self, from: Data(contentsOf: layoutURL)))
                     }.value
-                    let (loadedImage, layout) = await (img, decoded)
+                    let (loadedBytes, layout) = await (bytes, decoded)
+                    let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
                     await MainActor.run {
                         image = loadedImage
                         if let layout {
