@@ -151,7 +151,47 @@ jobs:
   # pixels back out. They need this runner for its FONTS, not for a build, so the
   # job deliberately does not install XcodeGen or compile the app.
   reference-frames:
+    name: reference-frames (${{ matrix.shard.name }})
     runs-on: macos-15
+
+    # ── why it is fanned out over a matrix (#507) ─────────────────────────────
+    #
+    # Once every pull request started running this job it became the entire merge
+    # wait: about 6m15s against the Swift half's 2m. It was already parallel, so
+    # the ceiling was the runner rather than the checks. A standard GitHub macOS
+    # runner has 3 cores, and these four files are roughly 14 minutes of measured
+    # CPU (846s summed on a 10-core Mac, where they finish in 152s wall), so
+    # `-n auto` inside one job could only ever divide that by three.
+    #
+    # A larger runner is the other way to do it and is deliberately not used:
+    # larger runners bill on a private repo, which this one becomes.
+    #
+    # The shards are balanced by MEASURED time, not by file count. Summed
+    # durations on this Mac: the legibility file 580s, the golden frames 221s,
+    # the program plate 40s, the gallery alignment 5s. One file is 69% of the
+    # work, so it sets the floor on its own and a third shard would buy nothing
+    # but another runner's start-up. Splitting that file is what would let the
+    # balance go further; until then two shards are the whole of the win.
+    #
+    # The extra cost is small and worth naming: each shard pays the ~16s of
+    # checkout, pip and ffmpeg install again, so the billed minutes go up by
+    # about that while the wall clock nearly halves. That matters at the 10x
+    # private-repo multiplier, and it is still the cheap way to buy this.
+    #
+    # Which files each shard runs is read back out of this matrix by
+    # tests/ci_workflow.py, and three guards depend on it: every font-gated file
+    # has to appear in exactly one shard, or it runs nowhere while CI stays
+    # green.
+    strategy:
+      # One shard going red says nothing about the other, and cancelling it
+      # would hide a second failure until the first is fixed and re-run.
+      fail-fast: false
+      matrix:
+        shard:
+          - name: legibility
+            files: tests/test_frame_legibility.py
+          - name: goldens
+            files: tests/test_golden_frames.py tests/test_slider_program_plate.py tests/test_gallery_alignment.py
     steps:
       - uses: actions/checkout@v5
 
@@ -191,14 +231,17 @@ jobs:
           POSTROLL_REQUIRE_FFMPEG: "1"
           POSTROLL_REQUIRE_GOLDENS: "1"
       #
-      # `-n auto` because these four files are 586s of the 780 this job used to
-      # take, every second of it spent rendering real reels through ffmpeg.
-      # Locally, four workers took them from 495s to 221s. Safe to parallelise
-      # because every test here writes only into pytest's per-test tmp_path, and
-      # `tests/conftest.py` now fails any module that writes into the source tree
-      # at all (#497), so that is enforced rather than remembered. `auto` rather
-      # than a fixed count so it follows the runner rather than this Mac.
+      # `-n auto` divides a shard across the cores of the runner it landed on,
+      # the matrix above divides the files across runners, and the two multiply.
+      # Safe to parallelise because every test here writes only into pytest's
+      # per-test tmp_path, and `tests/conftest.py` fails any module that writes
+      # into the source tree at all (#497), so that is enforced rather than
+      # remembered. `auto` rather than a fixed count so it follows the runner
+      # rather than this Mac.
+      #
+      # The files come from the matrix, not from this line. A hardcoded list here
+      # would leave the matrix fanning the job out while every copy ran the same
+      # thing, which is why a guard asserts this interpolation exists.
         run: >
-          pytest tests/test_golden_frames.py tests/test_frame_legibility.py
-          tests/test_gallery_alignment.py tests/test_slider_program_plate.py
+          pytest ${{ matrix.shard.files }}
           -n auto -v -ra

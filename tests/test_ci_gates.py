@@ -45,11 +45,21 @@ def swift() -> str:
 
 def _jobs(swift: str) -> dict[str, str]:
     """Each job's name and body, so a claim about one job cannot be satisfied by
-    something sitting in the other."""
+    something sitting in the other.
+
+    Comment lines are dropped first. Every job here is introduced by prose that
+    explains it, and prose about one job routinely names what the other one runs,
+    so a scan that read the comments would report the two jobs as one the moment
+    somebody documented them properly (L103). That is not hypothetical: the
+    comment describing #507's shard balance names the reference-frame test files,
+    and it sat above the job rather than inside it.
+    """
     after = swift.split("\njobs:", 1)[1]
     jobs: dict[str, str] = {}
     current = None
     for line in after.splitlines():
+        if line.strip().startswith("#"):
+            continue
         header = re.match(r"^  ([A-Za-z][\w-]*):\s*$", line)
         if header:
             current = header.group(1)
