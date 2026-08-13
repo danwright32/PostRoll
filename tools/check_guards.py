@@ -187,8 +187,14 @@ def _git(repo_root: Path, *args: str) -> str | None:
 
 
 def merge_base(repo_root: Path) -> str | None:
-    """What a scoped run diffs against: the branch's upstream, else main."""
-    for candidate in ("@{upstream}", "origin/main", "origin/master"):
+    """What a scoped run diffs against: main first, the upstream only as a
+    fallback.
+
+    Main first because the question is "does my unmerged work touch a
+    registered guard", and a branch's own upstream already holds the change
+    the moment it is pushed, so a run based there answers "nothing to verify"
+    about work main has never seen."""
+    for candidate in ("origin/main", "origin/master", "@{upstream}"):
         out = _git(repo_root, "merge-base", candidate, "HEAD")
         if out and out.strip():
             return out.strip()
