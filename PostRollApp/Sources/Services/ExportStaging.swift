@@ -27,6 +27,40 @@ struct ExportStaging {
 
     private let stagingRoot: URL
 
+    /// The staging folders this process is currently using.
+    ///
+    /// Two events can export into one destination at the same time, so the
+    /// sweep below has to leave a run that is still going. In-memory on
+    /// purpose: after a crash it is empty, which is exactly right, because
+    /// nothing left on disk then belongs to a live run.
+    private static let live = LiveStagingFolders()
+
+    /// Folders left by a run that never ended.
+    ///
+    /// A run that fails or is cancelled cleans up after itself, but a crash or
+    /// a force quit ends nothing, so the folder stays in the person's own
+    /// export destination holding a full part-built copy and nothing removes
+    /// it. Swept at the start of the next export, which is the first moment the
+    /// app has access to that folder again: it is one the person picked, and
+    /// the security scope for it only exists while an export is running.
+    private static func sweepAbandoned(in parent: URL) {
+        let fm = FileManager.default
+        let names = (try? fm.contentsOfDirectory(atPath: parent.path)) ?? []
+        for name in names where name.hasPrefix(stagingPrefix) {
+            let folder = parent.appendingPathComponent(name)
+            guard !live.contains(folder) else { continue }
+            do {
+                try fm.removeItem(at: folder)
+            } catch {
+                // Named rather than swallowed: this is disk in a folder the
+                // person opens, and a sweep that quietly fails leaves it there.
+                NSLog("ExportStaging: could not remove abandoned \(name): \(error)")
+            }
+        }
+    }
+
+    private static let stagingPrefix = ".postroll-export-"
+
     /// Prepare a staging folder for an export of `finalFolder`.
     ///
     /// A scoped re-export starts from a copy of what is already there, because
@@ -40,8 +74,11 @@ struct ExportStaging {
         // Inside the destination rather than the system temp folder, so the
         // swap at the end is a rename within one volume rather than a copy
         // across two, which is neither atomic nor free for a folder of reels.
-        let stagingRoot = parent.appendingPathComponent(".postroll-export-\(UUID().uuidString)")
+        // Before claiming a new one, clear out any left by a run that died.
+        sweepAbandoned(in: parent)
+        let stagingRoot = parent.appendingPathComponent(stagingPrefix + UUID().uuidString)
         try fm.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+        live.insert(stagingRoot)
         let working = stagingRoot.appendingPathComponent(finalFolder.lastPathComponent)
 
         do {
@@ -59,6 +96,7 @@ struct ExportStaging {
                 try fm.createDirectory(at: working, withIntermediateDirectories: true)
             }
         } catch {
+            live.remove(stagingRoot)
             try? fm.removeItem(at: stagingRoot)
             throw error
         }
@@ -126,12 +164,41 @@ struct ExportStaging {
                               previousExportAt: previousExportAt)
         }
         if let displaced { try? fm.removeItem(at: displaced) }
+        Self.live.remove(stagingRoot)
         try? fm.removeItem(at: stagingRoot)
         return finalFolder
     }
 
     /// Throw the staged work away. The export already on disk is untouched.
     func abandon() {
+        Self.live.remove(stagingRoot)
         try? FileManager.default.removeItem(at: stagingRoot)
+    }
+}
+
+/// Which staging folders belong to a run that is still going.
+///
+/// Its own type with a lock because `ExportStaging.begin` runs off the main
+/// actor (the text export is a detached task), and two exports starting at once
+/// would otherwise race the set that decides what the sweep may delete.
+private final class LiveStagingFolders: @unchecked Sendable {
+    private let lock = NSLock()
+    private var paths: Set<String> = []
+
+    private func key(_ url: URL) -> String { url.standardizedFileURL.path }
+
+    func insert(_ url: URL) {
+        lock.lock(); defer { lock.unlock() }
+        paths.insert(key(url))
+    }
+
+    func remove(_ url: URL) {
+        lock.lock(); defer { lock.unlock() }
+        paths.remove(key(url))
+    }
+
+    func contains(_ url: URL) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return paths.contains(key(url))
     }
 }
