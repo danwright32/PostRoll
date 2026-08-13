@@ -1,0 +1,8 @@
+{
+  "name": "web-performer-failure-is-not-an-empty-page",
+  "file": "PostRollApp/Sources/Services/WebPerformersOutcome.swift",
+  "find": "            return .keepProgramList(reason: failure)",
+  "replace": "            return .keepProgramList(reason: \"the page listed no performers\")",
+  "test": "PostRollTests/WebPerformersOutcomeTests/testTheTwoCausesDoNotSayTheSameThing",
+  "breaks": "a failed website fetch says the same thing as a page listing nobody, so nothing on screen can tell a network failure from the event genuinely having no listed performers (#449)"
+}

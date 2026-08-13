@@ -109,18 +109,18 @@ final class OCRManager {
                 // the less preferred source, with nothing saying so (#449).
                 // Same shape as visionSkipped five lines below, which records
                 // its reason for exactly this reason.
+                var fetched: [Performer]? = nil
+                var failure: String? = nil
                 do {
-                    let webPerformers = try await PythonBridge.shared.fetchWebPerformers(
-                        eventURL: url)
-                    if webPerformers.isEmpty {
-                        webPerformersSkipped = "the page listed no performers"
-                    } else {
-                        result.performers = webPerformers
-                    }
+                    fetched = try await PythonBridge.shared.fetchWebPerformers(eventURL: url)
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
-                    webPerformersSkipped = error.localizedDescription
+                    failure = error.localizedDescription
+                }
+                switch WebPerformersOutcome.decide(fetched: fetched, failure: failure) {
+                case .use(let performers):        result.performers = performers
+                case .keepProgramList(let reason): webPerformersSkipped = reason
                 }
             }
 
