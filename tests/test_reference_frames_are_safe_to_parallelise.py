@@ -152,54 +152,48 @@ def test_the_scan_reads_a_command_split_over_several_lines():
     assert commands == ["pytest tests/test_golden_frames.py -n auto -v -ra"], commands
 
 
-def test_nothing_runs_the_whole_suite_in_parallel():
-    """The suite as a whole is NOT safe to parallelise, and that is measured.
+def test_the_whole_suite_is_run_in_parallel():
+    """The restriction this file used to enforce is lifted, and this is what
+    replaced it (L65: a guard whose reason has gone must be reasoned about, not
+    quietly deleted).
 
-    On 2026-08-13 `pytest tests/ -n auto` was run against a clean tree and failed
-    on `test_media_design_fingerprint.py`, reporting that the reel_morph template
-    had been redesigned. It had not. That file proves its own guards by writing a
-    perturbed copy of real modules under `postroll/media/` into place and
-    restoring them afterwards, so a worker hashing those same files while the
-    perturbation is in place reads it and reports a redesign that never happened.
+    Until #497 the suite could not be run wholly in parallel. `pytest tests/ -n
+    auto` failed on `test_media_design_fingerprint.py`, which proved its own
+    guards by writing a perturbed copy of a real module under `postroll/media/`
+    into place and restoring it, so a worker hashing that same file
+    mid-perturbation read the perturbation and reported a redesign that never
+    happened. Those guards now perturb a copy in `tmp_path`, and
+    `tests/conftest.py` fails any module that writes into the source tree at all,
+    which is what keeps this true rather than anyone remembering it.
 
-    Because the collision is on DISK it does not matter that workers are separate
-    processes, and because it depends on timing it fails on nobody's machine
-    twice the same way. Flake like that costs more than the six minutes parallel
-    running saves, so `-n` stays scoped to files that have been shown to keep
-    their writes to `tmp_path`: the four reference-frame files, whether they are
-    named directly or selected by the slow marker.
-
-    #497 fixes the fingerprint tests, and this test is what has to be revisited
-    when it lands.
+    Measured twice on 2026-08-13, both green: 1787 tests in 3m24s and 3m34s,
+    against 9m53s serial.
     """
-    offenders: list[str] = []
-    for relative in PYTEST_CALLERS:
-        for command in _pytest_invocations(_code(REPO_ROOT / relative)):
-            if "-n" not in command.split():
-                continue
-            scoped = "-m slow" in command or "tests/test_" in command
-            if not scoped:
-                offenders.append(f"{relative}: {command}")
+    local = _pytest_invocations(_code(REPO_ROOT / "Makefile"))
+    full = [c for c in local if "-m" not in c.split()]
 
-    assert not offenders, (
-        "These run pytest in parallel over a selection wider than the files "
-        "proven safe for it, which buys six minutes and pays for it in flake "
-        "that reproduces nowhere:\n" + "\n".join(offenders)
-    )
+    assert full, (
+        "no local target runs the whole suite unfiltered any more, so either the "
+        f"run was split again or the full local run has stopped being full: {local}")
+    assert all("-n" in c.split() for c in full), (
+        "the full local run is serial again, which puts six minutes back on every "
+        f"run: {full}")
 
 
-def test_the_slow_files_are_the_ones_the_local_run_parallelises():
-    """The local full run has to parallelise the expensive half, or the four
-    files that are 8m15s of a 9m53s run are still serial and the change bought
-    nothing."""
-    parallel = [command for command in _pytest_invocations(_code(REPO_ROOT / "Makefile"))
-                if "-n" in command.split()]
+def test_the_source_tree_guard_is_still_armed():
+    """What makes parallel running safe, and why it cannot be a comment.
 
-    assert parallel, (
-        "no local target runs anything in parallel, so the full run is back to "
-        "ten minutes")
-    assert any("-m slow" in line for line in parallel), (
-        f"the local parallel pass does not select the slow files: {parallel}")
+    A test that writes into the checkout breaks the suite in two ways: it makes
+    parallel runs flake in a way that reproduces on nobody's machine, and a run
+    that dies between the write and the restore leaves an edit in the working tree
+    that nobody made. The guard is a fixture rather than a test, so this asserts it
+    is present and applies to everything.
+    """
+    conftest = _code(REPO_ROOT / "tests" / "conftest.py")
+
+    assert "autouse=True" in conftest and "_source_tree_is_read_only" in conftest, (
+        "the guard that stops a test writing into postroll/ is gone, so the next "
+        "one to do it will be found as a flaky parallel run instead")
 
 
 def test_every_reference_frame_file_uses_tmp_path():
