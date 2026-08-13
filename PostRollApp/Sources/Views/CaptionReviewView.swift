@@ -117,18 +117,17 @@ struct CaptionReviewView: View {
         guard let result = event.weekResult else { return [] }
         return DayName.allCases.filter { result.warningMessage(for: $0) != nil }
     }
-    /// When each day's current regen started, so the UI can show elapsed
-    /// time instead of a bare spinner (#135's Friday pipeline in particular:
-    /// import copy + Stage 1 scoring + Stage 2 Claude + ffmpeg render can
-    /// genuinely take a while).
-    @State private var regenerationStartTimes: [DayName: Date] = [:]
+    // When each day's regen started, whether a cover is rebuilding, the built
+    // Thursday editor, and the speculative reel pre-render all live on
+    // PreviewGraphicsManager now (#456). They were @State, and the
+    // .id(event.id) remount #75 proved is a real path discarded every one of
+    // them mid-flight: the orphaned encode kept writing the same reel.mp4 the
+    // fresh instance started writing, the editor build restarted while its
+    // orphan ran, and the elapsed time vanished while the manager-owned
+    // spinner survived, which is exactly the indistinct state #135 exists to
+    // prevent.
     @State private var graphicVersions: [DayName: Int] = [:]
 
-    // Cover image regen (Thursday + Friday only, #141). Separate from
-    // regeneratingDays/regenerationStartTimes: regenerating the cover must
-    // never look like (or actually trigger) a full reel/story regen.
-    @State private var coverRegeneratingDays: Set<DayName> = []
-    @State private var coverRegenerationStartTimes: [DayName: Date] = [:]
 
     // Collage crop offsets (separate from carousel) — keyed by day rawValue then photo URL absoluteString
     @State private var dayCollageCropOffsets: [String: [String: CropOffset]] = [:]
@@ -139,15 +138,6 @@ struct CaptionReviewView: View {
     // Friday clip reel manual edits (reorder/include-exclude/trim), keyed by day rawValue
     @State private var dayFridayClipOverride: [String: [ReelClipOverride]] = [:]
 
-    // Thursday reel editor — built eagerly in the background on view appear so the
-    // PNG + layout JSON are ready by the time the user expands the Thursday card.
-    @State private var thursdayEditorURL: URL? = nil
-    @State private var isBuildingThursdayEditor: Bool = false
-
-    // Pre-renders the Thursday reel in the background as the user edits crops /
-    // swaps photos, so "Apply changes" usually adopts a finished encode instead
-    // of waiting on ffmpeg. Reset per event (the view is .id(event.id)-remounted).
-    @State private var speculativeReel = SpeculativeReelRenderer(day: .thursday)
 
     var body: some View {
         ZStack {
@@ -220,7 +210,7 @@ struct CaptionReviewView: View {
                             onSwapFridayClip: day == .friday ? { swapFridayClip($0) } : nil,
                             onRecutFridayWithAI: day == .friday ? { recutFridayWithAI() } : nil,
                             onToggleFridayTitleCard: day == .friday ? { toggleFridayTitleCard() } : nil,
-                            fridayRegenStartedAt: day == .friday ? regenerationStartTimes[.friday] : nil,
+                            fridayRegenStartedAt: day == .friday ? graphics.dayStartedAt(.friday, for: event.id) : nil,
                             fridayRegenerateError: day == .friday ? regenerateError : nil,
                             onSkipFridayClips: day == .friday ? { skipFridayClipsKeepStoryOnly() } : nil,
                             onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
@@ -265,10 +255,11 @@ struct CaptionReviewView: View {
                             collageCropOffsets: isCollageDay(day) ? collageOffsetsBinding(day) : nil,
                             collageCellOverride: isCollageDay(day) ? collageCellOverrideBinding(day) : nil,
                             reelCropOffsets: day == .thursday ? reelOffsetsBinding(day) : nil,
-                            thursdayEditorURL: day == .thursday ? thursdayEditorURL : nil,
-                            isBuildingThursdayEditor: day == .thursday ? isBuildingThursdayEditor : false,
-                            isCoverRegenerating: coverRegeneratingDays.contains(day),
-                            coverRegenStartedAt: coverRegenerationStartTimes[day],
+                            thursdayEditorURL: day == .thursday ? graphics.thursdayEditorURL(event.id) : nil,
+                            isBuildingThursdayEditor: day == .thursday ? graphics.isBuildingThursdayEditor(event.id) : false,
+                            thursdayEditorFailure: day == .thursday ? graphics.thursdayEditorFailure(event.id) : nil,
+                            isCoverRegenerating: graphics.coverRegeneratingDays(event.id).contains(day),
+                            coverRegenStartedAt: graphics.coverStartedAt(day, for: event.id),
                             onRegenerateCover: (day == .thursday || day == .friday) ? { regenerateCover(day: day) } : nil,
                             onChooseCoverOverride: (day == .thursday || day == .friday) ? {
                                 let panel = NSOpenPanel()
@@ -510,7 +501,7 @@ struct CaptionReviewView: View {
                 save()
                 // Assume the user will Apply: start encoding the new crop in the
                 // background now so the button press is near-instant.
-                if day == .thursday { speculativeReel.schedule(for: liveEvent) }
+                if day == .thursday { graphics.speculativeReel(for: event.id).schedule(for: liveEvent) }
             }
         )
     }
@@ -637,11 +628,15 @@ struct CaptionReviewView: View {
 
     /// Kick off the Thursday reel still-preview build in the background so the
     /// per-cell editor is ready the moment the user expands Thursday. Safe to
-    /// call multiple times — idempotent via `thursdayEditorURL` and the
-    /// in-progress guard.
+    /// call multiple times: both the built URL and the in-progress guard live
+    /// on the manager, so a remount mid-build no longer starts a second one
+    /// writing the same PNG and layout JSON while the first is still going
+    /// (#456).
     private func prepareThursdayEditor() {
-        guard thursdayEditorURL == nil, !isBuildingThursdayEditor else { return }
-        let live = appState.events.first(where: { $0.id == event.id }) ?? event
+        let eventID = event.id
+        guard graphics.thursdayEditorURL(eventID) == nil,
+              !graphics.isBuildingThursdayEditor(eventID) else { return }
+        let live = appState.events.first(where: { $0.id == eventID }) ?? event
         guard let thurPd = live.days[DayName.thursday.rawValue],
               !thurPd.photoPaths.isEmpty,
               let reelStr = live.previewMediaPaths[DayName.thursday.rawValue]?["reel"] else {
@@ -651,15 +646,20 @@ struct CaptionReviewView: View {
             .deletingLastPathComponent()
             .appendingPathComponent("reel_preview.png")
         if FileManager.default.fileExists(atPath: expected.path) {
-            thursdayEditorURL = expected
+            graphics.finishThursdayEditorBuild(eventID, url: expected)
             return
         }
-        isBuildingThursdayEditor = true
+        // The guard and the work are claimed together: checking above and
+        // claiming here would let two remounts both pass the check.
+        guard graphics.beginThursdayEditorBuild(eventID) else { return }
         Task {
-            let built = try? await PythonBridge.shared.runBuildReelPreview(event: live)
-            await MainActor.run {
-                thursdayEditorURL = built
-                isBuildingThursdayEditor = false
+            do {
+                let built = try await PythonBridge.shared.runBuildReelPreview(event: live)
+                await MainActor.run { graphics.finishThursdayEditorBuild(eventID, url: built) }
+            } catch {
+                await MainActor.run {
+                    graphics.failThursdayEditorBuild(eventID, reason: error.localizedDescription)
+                }
             }
         }
     }
@@ -925,7 +925,6 @@ struct CaptionReviewView: View {
         appState.updateEvent(ev)
 
         graphics.beginDayRegen(.friday, for: event.id)
-        regenerationStartTimes[.friday] = Date()
         regenerateError = nil
         Task {
             do {
@@ -933,7 +932,6 @@ struct CaptionReviewView: View {
                 let reelPath = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
                 await MainActor.run {
                     graphics.endDayRegen(.friday, for: event.id)
-                    regenerationStartTimes[.friday] = nil
                     guard let reelPath else {
                         regenerateError = "Friday reel edit couldn't be applied: no reel to update"
                         return
@@ -948,7 +946,6 @@ struct CaptionReviewView: View {
             } catch {
                 await MainActor.run {
                     graphics.endDayRegen(.friday, for: event.id)
-                    regenerationStartTimes[.friday] = nil
                     regenerateError = "Friday reel edit failed: \(error.localizedDescription)"
                 }
             }
@@ -1113,7 +1110,7 @@ struct CaptionReviewView: View {
         ev.days[day.rawValue] = pd
         appState.updateEvent(ev)
         // Pre-render the swapped order in the background ahead of "Apply changes".
-        if day == .thursday { speculativeReel.schedule(for: liveEvent) }
+        if day == .thursday { graphics.speculativeReel(for: event.id).schedule(for: liveEvent) }
     }
 
     private func regenerateGraphic(day: DayName, newLayout: Bool = false) {
@@ -1144,24 +1141,22 @@ struct CaptionReviewView: View {
         }
 
         graphics.beginDayRegen(day, for: event.id)
-        regenerationStartTimes[day] = Date()
         regenerateError = nil
         Task {
             // For Thursday, try to adopt a speculative pre-render that was kicked
             // off when the user edited. `newLayout` randomizes the seed, so there's
             // nothing pre-rendered to match — skip straight to a fresh encode.
             if day == .thursday, !newLayout,
-               let result = await speculativeReel.take(matching: eventSnapshot) {
+               let result = await graphics.speculativeReel(for: event.id).take(matching: eventSnapshot) {
                 await MainActor.run {
                     graphics.endDayRegen(day, for: event.id)
-                    regenerationStartTimes[day] = nil
                     applyRegenResult(result, day: day)
                 }
                 return
             }
             // No usable pre-render: make sure no stale speculative encode is still
             // writing the same output file before we start a fresh one.
-            if day == .thursday { speculativeReel.cancelAll() }
+            if day == .thursday { graphics.speculativeReel(for: event.id).cancelAll() }
 
             // Capture the result so we can distinguish "Python crashed" from
             // "Python exited 0 but reported a per-day error". Both used to be
@@ -1179,7 +1174,6 @@ struct CaptionReviewView: View {
 
             await MainActor.run {
                 graphics.endDayRegen(day, for: event.id)
-                regenerationStartTimes[day] = nil
                 switch outcome {
                 case .failure(let error):
                     regenerateError = "\(day.displayName) regeneration failed: \(error.localizedDescription)"
@@ -1245,8 +1239,7 @@ struct CaptionReviewView: View {
     /// PythonBridge.runCoverRegeneration instead, the cheap cover-only path.
     private func regenerateCover(day: DayName, overrideSource: URL? = nil) {
         guard let live = appState.events.first(where: { $0.id == event.id }) else { return }
-        coverRegeneratingDays.insert(day)
-        coverRegenerationStartTimes[day] = Date()
+        guard graphics.beginCoverRegen(day, for: event.id) else { return }
         Task {
             let outcome: Result<PythonBridge.CoverRegenerationResult, Error>
             do {
@@ -1259,8 +1252,7 @@ struct CaptionReviewView: View {
             }
 
             await MainActor.run {
-                coverRegeneratingDays.remove(day)
-                coverRegenerationStartTimes[day] = nil
+                graphics.endCoverRegen(day, for: event.id)
                 switch outcome {
                 case .failure(let error):
                     regenerateError = "\(day.displayName) cover regeneration failed: \(error.localizedDescription)"
@@ -1473,6 +1465,8 @@ private struct CaptionSection: View {
     var reelCropOffsets: Binding<[String: CropOffset]>? = nil
     var thursdayEditorURL: URL? = nil
     var isBuildingThursdayEditor: Bool = false
+    /// Why the editor is not there, when a build ran and failed (#456).
+    var thursdayEditorFailure: String? = nil
     /// Cover image (Thursday scroll reel + Friday auto-cut clip reel, #141).
     var isCoverRegenerating: Bool = false
     var coverRegenStartedAt: Date? = nil
@@ -2241,10 +2235,24 @@ private struct CaptionSection: View {
                                         .padding(Spacing.md)
                                     } else if day == .thursday {
                                         VStack(spacing: 10) {
-                                            ProgressView().controlSize(.small).tint(.white)
-                                            Text(isBuildingThursdayEditor ? "Preparing editor…" : "Loading…")
-                                                .font(.system(size: 10, weight: .medium))
-                                                .foregroundStyle(.white.opacity(0.8))
+                                            // A build that failed is not a slow
+                                            // one: spinning here forever is the
+                                            // shape #461 was about (L10).
+                                            if let failure = thursdayEditorFailure {
+                                                Image(systemName: "exclamationmark.triangle.fill")
+                                                    .font(.system(size: 14))
+                                                    .foregroundStyle(.white.opacity(0.85))
+                                                Text("The per photo editor could not be prepared. \(Sentence.closed(failure))")
+                                                    .font(.system(size: 10, weight: .medium))
+                                                    .foregroundStyle(.white.opacity(0.8))
+                                                    .multilineTextAlignment(.center)
+                                                    .fixedSize(horizontal: false, vertical: true)
+                                            } else {
+                                                ProgressView().controlSize(.small).tint(.white)
+                                                Text(isBuildingThursdayEditor ? "Preparing editor…" : "Loading…")
+                                                    .font(.system(size: 10, weight: .medium))
+                                                    .foregroundStyle(.white.opacity(0.8))
+                                            }
                                         }
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                                         .padding(Spacing.md)

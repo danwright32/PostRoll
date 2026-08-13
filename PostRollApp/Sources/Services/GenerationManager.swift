@@ -62,8 +62,17 @@ final class GenerationManager {
             // Result, not `try?`: a graphics crash used to vanish here, and so did
             // the per-day errors of a run that exited cleanly. Either way the run
             // reported success and the day just silently had no media.
-            let graphicsTask: Task<Result<PythonBridge.PreviewGenerationResult, Error>?, Never>? = doGraphics
+            //
+            // Registered with PreviewGraphicsManager before it starts, and
+            // released after (#456). This call went straight to the bridge, so
+            // the duplicate-run guard #75 added did not see it: a preview run
+            // started here and one started from the review screen are two
+            // writers on the same MP4s and PNGs, which is the exact hazard that
+            // guard exists for.
+            let claimed = doGraphics && PreviewGraphicsManager.shared.beginFullRun(eventID)
+            let graphicsTask: Task<Result<PythonBridge.PreviewGenerationResult, Error>?, Never>? = claimed
                 ? Task {
+                    defer { PreviewGraphicsManager.shared.endFullRun(eventID) }
                     do { return .success(try await PythonBridge.shared.runPreviewGeneration(
                         event: ev, days: onlyDays.map { Array($0) })) }
                     catch { return .failure(error) }

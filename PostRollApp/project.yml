@@ -81,6 +81,8 @@ targets:
       - path: Sources/Services/BuildFreshness.swift
       - path: Sources/Services/PreviewMergePolicy.swift
       - path: Sources/Services/PreviewRunState.swift
+      - path: Sources/Services/PreviewGraphicsManager.swift
+      - path: Sources/Services/SpeculativeReelRenderer.swift
       - path: Sources/Services/PerformerPanelDisplay.swift
       - path: Sources/Services/PhotoTagBatch.swift
       - path: Sources/Services/PhotoThumbControls.swift

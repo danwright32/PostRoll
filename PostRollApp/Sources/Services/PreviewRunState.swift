@@ -14,6 +14,17 @@ struct PreviewRunState: Equatable {
     /// state rather than a spinner that looks the same whether the work is
     /// progressing, hung or dead (#95).
     private var fullRunStarts: [UUID: Date] = [:]
+    /// The same, per day, so a single-day regen shows elapsed time too. It
+    /// lived in the view as `regenerationStartTimes` and died on the
+    /// `.id(event.id)` remount while the manager-owned spinner survived, which
+    /// degraded the display to the indistinct state #135 exists to prevent
+    /// (#456).
+    private var dayRunStarts: [UUID: [DayName: Date]] = [:]
+    /// Cover regeneration, kept apart from the day runs above on purpose:
+    /// regenerating a cover must never look like, or trigger, a full reel or
+    /// story regen (#141).
+    private var coverRuns: [UUID: Set<DayName>] = [:]
+    private var coverRunStarts: [UUID: [DayName: Date]] = [:]
 
     init() {}
 
@@ -37,10 +48,11 @@ struct PreviewRunState: Equatable {
 
     /// Registers a single-day regeneration. Returns false when that day is
     /// already regenerating for this event.
-    mutating func beginDay(_ day: DayName, for eventID: UUID) -> Bool {
+    mutating func beginDay(_ day: DayName, for eventID: UUID, at now: Date = Date()) -> Bool {
         var days = dayRuns[eventID] ?? []
         let inserted = days.insert(day).inserted
         dayRuns[eventID] = days
+        if inserted { dayRunStarts[eventID, default: [:]][day] = now }
         return inserted
     }
 
@@ -48,9 +60,41 @@ struct PreviewRunState: Equatable {
         guard var days = dayRuns[eventID] else { return }
         days.remove(day)
         if days.isEmpty { dayRuns.removeValue(forKey: eventID) } else { dayRuns[eventID] = days }
+        dayRunStarts[eventID]?.removeValue(forKey: day)
+        if dayRunStarts[eventID]?.isEmpty == true { dayRunStarts.removeValue(forKey: eventID) }
     }
 
     func regeneratingDays(for eventID: UUID) -> Set<DayName> { dayRuns[eventID] ?? [] }
+
+    /// When this day's regen started, or nil when it is not running.
+    func dayStartedAt(_ day: DayName, for eventID: UUID) -> Date? {
+        dayRunStarts[eventID]?[day]
+    }
+
+    // MARK: - Cover regeneration (#141)
+
+    @discardableResult
+    mutating func beginCover(_ day: DayName, for eventID: UUID, at now: Date = Date()) -> Bool {
+        var days = coverRuns[eventID] ?? []
+        let inserted = days.insert(day).inserted
+        coverRuns[eventID] = days
+        if inserted { coverRunStarts[eventID, default: [:]][day] = now }
+        return inserted
+    }
+
+    mutating func endCover(_ day: DayName, for eventID: UUID) {
+        guard var days = coverRuns[eventID] else { return }
+        days.remove(day)
+        if days.isEmpty { coverRuns.removeValue(forKey: eventID) } else { coverRuns[eventID] = days }
+        coverRunStarts[eventID]?.removeValue(forKey: day)
+        if coverRunStarts[eventID]?.isEmpty == true { coverRunStarts.removeValue(forKey: eventID) }
+    }
+
+    func coverRegeneratingDays(for eventID: UUID) -> Set<DayName> { coverRuns[eventID] ?? [] }
+
+    func coverStartedAt(_ day: DayName, for eventID: UUID) -> Date? {
+        coverRunStarts[eventID]?[day]
+    }
 
     /// Any preview work at all for this event, full or per-day.
     func isBusy(_ eventID: UUID) -> Bool {
