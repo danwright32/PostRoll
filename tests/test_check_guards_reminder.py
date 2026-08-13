@@ -30,6 +30,11 @@ GUARD_TEST = (
     "}\n"
 )
 
+PY_GUARD = (
+    "def test_mirror_agrees():\n"
+    "    assert 'constant' in open('Sources/Note.swift').read()\n"
+)
+
 REGISTRY = {
     "entries": [
         {
@@ -39,7 +44,15 @@ REGISTRY = {
             "replace": "Color.cream",
             "test": "PostRollTests/NoteGuardTests/testInk",
             "breaks": "the note goes invisible",
-        }
+        },
+        {
+            "name": "note-mirror",
+            "file": "Sources/Note.swift",
+            "find": "let wraps = true",
+            "replace": "let wraps = false",
+            "test": "tests/test_note_mirror.py::test_mirror_agrees",
+            "breaks": "the mirror drifts",
+        },
     ]
 }
 
@@ -63,6 +76,9 @@ def repo(tmp_path: Path) -> Path:
     (repo / "PostRollApp" / "Tests" / "NoteGuardTests.swift").write_text(GUARD_TEST)
     (repo / "PostRollApp" / "Tests" / "PlainTests.swift").write_text(
         "import XCTest\nfinal class PlainTests: XCTestCase {}\n")
+    (repo / "tests" / "test_note_mirror.py").write_text(PY_GUARD)
+    (repo / "tests" / "test_plain.py").write_text(
+        "def test_plain():\n    assert True\n")
     (repo / "Sources" / "Note.swift").write_text("let color = Color.warmMid\n")
     git(repo, "init", "-b", "main")
     git(repo, "add", "-A")
@@ -127,6 +143,28 @@ def test_uncommitted_guard_work_counts_when_the_push_chains_a_commit(repo: Path)
     assert "NoteGuardTests.swift" in note
 
 
+def test_a_registered_python_guard_change_reminds(repo: Path):
+    """More than half the registry lives in the Python suite; a push editing
+    one of those guard files gets the same reminder as a Swift one (#425)."""
+    commit_change(repo, "tests/test_note_mirror.py",
+                  PY_GUARD.replace("'constant'", "'tightened constant'"))
+    note = remind(repo, "git push")
+    assert "test_note_mirror.py" in note
+    assert "--changed" in note
+
+
+def test_a_new_python_source_scanning_test_reminds_even_when_unregistered(repo: Path):
+    (repo / "tests" / "test_fresh_scan.py").write_text(
+        "from pathlib import Path\n"
+        "def test_workflow_names_the_scheme():\n"
+        "    text = Path('.github/workflows/swift.yml').read_text()\n"
+        "    assert 'PostRollTests' in text\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "new python scan test")
+    note = remind(repo, "git push")
+    assert "test_fresh_scan.py" in note
+
+
 # ── The pushes it must stay silent on ─────────────────────────────────────────
 
 
@@ -145,6 +183,8 @@ def test_silent_when_only_ordinary_files_changed(repo: Path):
     commit_change(repo, "PostRollApp/Tests/PlainTests.swift",
                   "import XCTest\nfinal class PlainTests: XCTestCase { func testA() {} }\n")
     commit_change(repo, "Sources/Note.swift", "let color = Color.warmMid // note\n")
+    commit_change(repo, "tests/test_plain.py",
+                  "def test_plain():\n    assert 1 + 1 == 2\n")
     assert remind(repo, "git push") == ""
 
 

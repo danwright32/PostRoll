@@ -7,9 +7,11 @@ hook, wired in this repo's own .claude/settings.json so it fires only here.
 It watches a `git push` for two shapes of change arriving WITHOUT a matching
 change to tests/fixtures/guard_mutations.json:
 
-* a change to a test file that holds a class the registry names, and
-* a test file that reads app source as text (the "Sources" signature), which
-  is a source-scanning guard whether or not anyone registered it yet.
+* a change to a test file the registry names (a Swift file holding a
+  registered class, or a pytest guard file, #425), and
+* a test file in either language that reads app source, workflow, or module
+  text, which is a source-scanning guard whether or not anyone registered
+  it yet.
 
 ADVISORY, never blocking: the mutation check rewrites working tree files and
 pays a Swift build per entry, so it cannot run inside the push itself. The
@@ -33,9 +35,15 @@ from pathlib import Path
 
 REGISTRY = Path("tests/fixtures/guard_mutations.json")
 TESTS_DIR = Path("PostRollApp/Tests")
+PY_TESTS_DIR = Path("tests")
 # What a source-scanning Swift test looks like: it builds a path into the app
 # sources to read them as text. Both existing guard files do exactly this.
 SOURCE_SCAN = re.compile(r'appendingPathComponent\(\s*"Sources')
+# And the Python equivalent (#425): a test that reads the workflows, the app
+# sources, or live module source as text. Deliberately a little broad, since
+# over-matching costs one advisory line while under-matching is silence.
+PY_SOURCE_SCAN = re.compile(
+    r'\.github/workflows|PostRollApp/Sources|"PostRollApp"|inspect\.getsource')
 
 
 def is_git_push(command: str) -> bool:
@@ -92,35 +100,47 @@ def changed_files(repo: Path, include_pending: bool) -> list[str]:
     return sorted(set(changed))
 
 
-def registered_guard_classes(repo: Path) -> list[str]:
+def registered_guards(repo: Path) -> tuple[list[str], set[str]]:
+    """The registry's Swift class names and its pytest guard files."""
     try:
         data = json.loads((repo / REGISTRY).read_text())
     except (OSError, ValueError):
-        return []
-    classes = []
+        return [], set()
+    classes: list[str] = []
+    pytest_files: set[str] = set()
     for entry in data.get("entries", []):
         test = entry.get("test", "")
         parts = test.split("/")
         if test.startswith("PostRollTests/") and len(parts) == 3:
             classes.append(parts[1])
-    return classes
+        elif test.startswith("tests/") and "::" in test:
+            pytest_files.add(test.split("::")[0])
+    return classes, pytest_files
 
 
 def watched_changes(repo: Path, changed: list[str]) -> list[str]:
-    classes = registered_guard_classes(repo)
+    classes, pytest_files = registered_guards(repo)
     watched = []
     for path in changed:
-        if not (path.startswith(str(TESTS_DIR)) and path.endswith(".swift")):
+        swift = path.startswith(str(TESTS_DIR)) and path.endswith(".swift")
+        python = (path.startswith(str(PY_TESTS_DIR))
+                  and Path(path).name.startswith("test_")
+                  and path.endswith(".py"))
+        if not (swift or python):
+            continue
+        if path in pytest_files:
+            watched.append(path)
             continue
         full = repo / path
         try:
             text = full.read_text()
         except OSError:
             continue  # deleted in this push; nothing to remind about
-        if SOURCE_SCAN.search(text):
+        if (SOURCE_SCAN if swift else PY_SOURCE_SCAN).search(text):
             watched.append(path)
             continue
-        if any(re.search(rf"\bclass {re.escape(name)}\b", text) for name in classes):
+        if swift and any(re.search(rf"\bclass {re.escape(name)}\b", text)
+                         for name in classes):
             watched.append(path)
     return watched
 
