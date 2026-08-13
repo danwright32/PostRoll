@@ -99,8 +99,27 @@ final class PreviewFolderReclaimTests: XCTestCase {
     }
 
     func testAMissingPreviewFolderIsNotAFailure() {
+        // Nothing rendered yet is the ordinary first-launch state.
         let absent = root.appendingPathComponent("no-preview-here")
         XCTAssertEqual(OrphanedMediaCleanup.sweepPreviewFolders(events: [], previewDir: absent), [])
+    }
+
+    func testAnUnreadableFolderDeletesNothing() throws {
+        try XCTSkipIf(getuid() == 0, "permission based tests are meaningless as root")
+        let event = anEvent(name: "Deleted Show")
+        try writePreview(for: event)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000],
+                                              ofItemAtPath: previewDir.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                   ofItemAtPath: previewDir.path)
+        }
+
+        // Deleting nothing is the right answer for a folder we could not read.
+        // The leak carries on, which is why the code says so in the log rather
+        // than treating it as a clean sweep (L11).
+        XCTAssertEqual(OrphanedMediaCleanup.sweepPreviewFolders(events: [], previewDir: previewDir),
+                       [])
     }
 
     // MARK: - Wired, not just built (L3)

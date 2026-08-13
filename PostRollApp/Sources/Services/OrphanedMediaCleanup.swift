@@ -56,11 +56,25 @@ enum OrphanedMediaCleanup {
         previewDir: URL = AppPaths.previewDir
     ) -> [String] {
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(
-            at: previewDir,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
+        let entries: [URL]
+        do {
+            entries = try fm.contentsOfDirectory(
+                at: previewDir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch let error as NSError where error.isFileNotFound {
+            // Nothing has been rendered yet. The ordinary first-launch state,
+            // and not worth a word.
+            return []
+        } catch {
+            // Deleting nothing is the right answer for a folder we could not
+            // read, but it is not the same answer as a folder with nothing in
+            // it: the leak this exists to stop carries on, and silence would
+            // make that indistinguishable from a clean sweep (L11).
+            NSLog("OrphanedMediaCleanup: could not read \(previewDir.lastPathComponent), so no preview folders were reclaimed: \(error)")
+            return []
+        }
 
         let live = Set(events.map(ArchiveCleanup.slug(event:)))
         var removed: [String] = []
