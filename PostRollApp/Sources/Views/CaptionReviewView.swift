@@ -257,6 +257,7 @@ struct CaptionReviewView: View {
                             reelCropOffsets: day == .thursday ? reelOffsetsBinding(day) : nil,
                             thursdayEditorURL: day == .thursday ? graphics.thursdayEditorURL(event.id) : nil,
                             isBuildingThursdayEditor: day == .thursday ? graphics.isBuildingThursdayEditor(event.id) : false,
+                            thursdayEditorFailure: day == .thursday ? graphics.thursdayEditorFailure(event.id) : nil,
                             isCoverRegenerating: graphics.coverRegeneratingDays(event.id).contains(day),
                             coverRegenStartedAt: graphics.coverStartedAt(day, for: event.id),
                             onRegenerateCover: (day == .thursday || day == .friday) ? { regenerateCover(day: day) } : nil,
@@ -652,9 +653,13 @@ struct CaptionReviewView: View {
         // claiming here would let two remounts both pass the check.
         guard graphics.beginThursdayEditorBuild(eventID) else { return }
         Task {
-            let built = try? await PythonBridge.shared.runBuildReelPreview(event: live)
-            await MainActor.run {
-                graphics.finishThursdayEditorBuild(eventID, url: built)
+            do {
+                let built = try await PythonBridge.shared.runBuildReelPreview(event: live)
+                await MainActor.run { graphics.finishThursdayEditorBuild(eventID, url: built) }
+            } catch {
+                await MainActor.run {
+                    graphics.failThursdayEditorBuild(eventID, reason: error.localizedDescription)
+                }
             }
         }
     }
@@ -1460,6 +1465,8 @@ private struct CaptionSection: View {
     var reelCropOffsets: Binding<[String: CropOffset]>? = nil
     var thursdayEditorURL: URL? = nil
     var isBuildingThursdayEditor: Bool = false
+    /// Why the editor is not there, when a build ran and failed (#456).
+    var thursdayEditorFailure: String? = nil
     /// Cover image (Thursday scroll reel + Friday auto-cut clip reel, #141).
     var isCoverRegenerating: Bool = false
     var coverRegenStartedAt: Date? = nil
@@ -2228,10 +2235,24 @@ private struct CaptionSection: View {
                                         .padding(Spacing.md)
                                     } else if day == .thursday {
                                         VStack(spacing: 10) {
-                                            ProgressView().controlSize(.small).tint(.white)
-                                            Text(isBuildingThursdayEditor ? "Preparing editor…" : "Loading…")
-                                                .font(.system(size: 10, weight: .medium))
-                                                .foregroundStyle(.white.opacity(0.8))
+                                            // A build that failed is not a slow
+                                            // one: spinning here forever is the
+                                            // shape #461 was about (L10).
+                                            if let failure = thursdayEditorFailure {
+                                                Image(systemName: "exclamationmark.triangle.fill")
+                                                    .font(.system(size: 14))
+                                                    .foregroundStyle(.white.opacity(0.85))
+                                                Text("The per photo editor could not be prepared. \(Sentence.closed(failure))")
+                                                    .font(.system(size: 10, weight: .medium))
+                                                    .foregroundStyle(.white.opacity(0.8))
+                                                    .multilineTextAlignment(.center)
+                                                    .fixedSize(horizontal: false, vertical: true)
+                                            } else {
+                                                ProgressView().controlSize(.small).tint(.white)
+                                                Text(isBuildingThursdayEditor ? "Preparing editor…" : "Loading…")
+                                                    .font(.system(size: 10, weight: .medium))
+                                                    .foregroundStyle(.white.opacity(0.8))
+                                            }
                                         }
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                                         .padding(Spacing.md)

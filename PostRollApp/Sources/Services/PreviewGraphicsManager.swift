@@ -119,23 +119,39 @@ final class PreviewGraphicsManager {
     /// finished URL was thrown away.
     private var thursdayEditor: [UUID: URL] = [:]
     private var buildingThursdayEditor: Set<UUID> = []
+    /// Why the last build did not produce an editor. Its own field because a
+    /// build that failed and a build that has not run yet are different
+    /// screens: the failed one used to sit on "Loading…" forever, which is the
+    /// spinner-over-a-failure shape (L10).
+    private var thursdayEditorFailures: [UUID: String] = [:]
 
     func thursdayEditorURL(_ eventID: UUID) -> URL? { thursdayEditor[eventID] }
     func isBuildingThursdayEditor(_ eventID: UUID) -> Bool {
         buildingThursdayEditor.contains(eventID)
     }
+    func thursdayEditorFailure(_ eventID: UUID) -> String? { thursdayEditorFailures[eventID] }
 
     /// Returns false when a build is already running for this event, in which
     /// case the caller must not start another: both write the same PNG and
     /// layout JSON.
     @discardableResult
     func beginThursdayEditorBuild(_ eventID: UUID) -> Bool {
-        buildingThursdayEditor.insert(eventID).inserted
+        guard buildingThursdayEditor.insert(eventID).inserted else { return false }
+        thursdayEditorFailures.removeValue(forKey: eventID)
+        return true
     }
 
     func finishThursdayEditorBuild(_ eventID: UUID, url: URL?) {
         buildingThursdayEditor.remove(eventID)
         if let url { thursdayEditor[eventID] = url }
+    }
+
+    /// The build threw. Said out loud rather than left as a spinner: this used
+    /// to be a `try?`, so a failed build was indistinguishable from a slow one
+    /// and the card sat on "Loading…" for as long as it was open.
+    func failThursdayEditorBuild(_ eventID: UUID, reason: String) {
+        buildingThursdayEditor.remove(eventID)
+        thursdayEditorFailures[eventID] = reason
     }
 
     /// Drop a built editor whose inputs have changed, so the next expand

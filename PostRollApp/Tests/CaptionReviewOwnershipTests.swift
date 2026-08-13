@@ -152,4 +152,35 @@ final class CaptionReviewOwnershipTests: XCTestCase {
         XCTAssertFalse(manager.beginFullRun(id))
         XCTAssertTrue(manager.isGenerating(id))
     }
+
+    // MARK: - A failed build is not a slow one
+
+    @MainActor
+    func testAFailedThursdayEditorBuildIsReportedRatherThanLeftSpinning() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+
+        _ = manager.beginThursdayEditorBuild(id)
+        manager.failThursdayEditorBuild(id, reason: "ffmpeg is not installed.")
+
+        // Without this the card sits on "Loading…" for as long as it is open,
+        // which is a spinner over a failure (L10).
+        XCTAssertEqual(manager.thursdayEditorFailure(id), "ffmpeg is not installed.")
+        XCTAssertFalse(manager.isBuildingThursdayEditor(id))
+        XCTAssertNil(manager.thursdayEditorURL(id))
+    }
+
+    @MainActor
+    func testRetryingClearsTheFailureSoTheCardStopsShowingIt() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        manager.failThursdayEditorBuild(id, reason: "ffmpeg is not installed.")
+
+        XCTAssertTrue(manager.beginThursdayEditorBuild(id))
+
+        // A stored error that outlives the run it was about reads as a failure
+        // that is happening now.
+        XCTAssertNil(manager.thursdayEditorFailure(id))
+        manager.finishThursdayEditorBuild(id, url: nil)
+    }
 }
