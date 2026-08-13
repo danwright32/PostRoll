@@ -198,6 +198,11 @@ final class BannerLegibilityTests: XCTestCase {
                 icon: "exclamationmark.triangle", message: mediaWarning, style: .warning))),
             ("unfamiliar failure", AnyView(BrandBanner(
                 icon: "questionmark.circle", message: unfamiliar, style: .warning))),
+            ("save failure", AnyView(BrandBanner(
+                icon: "exclamationmark.triangle.fill",
+                message: SaveFailureNotice.message(reason: "The volume is out of space."),
+                style: .error,
+                actions: [BrandBannerAction(label: SaveFailureNotice.retryLabel, action: {})]))),
             ("analytics recovery", AnyView(BrandBanner(
                 icon: "chart.bar", message: analytics, style: .error))),
             ("missing media", AnyView(BrandBanner(

@@ -215,7 +215,13 @@ final class TestTargetHygieneTests: XCTestCase {
             contentsOf: appDir.appendingPathComponent("Sources/AppState.swift"),
             encoding: .utf8)
 
-        let seam = "init(events: [Event])"
+        // Matched on the PREFIX, not the whole signature. This guard used to look
+        // for `init(events: [Event])` exactly, and on 2026-08-13 the seam gained a
+        // storeURL parameter (#446). The exact match then found nothing, took the
+        // early return below, and passed while checking nothing at all: it would
+        // have stayed green with the seam moved out of the flag entirely. Caught
+        // by `tools/check_guards.py`, which reported it as SURVIVED (L103).
+        let seam = "init(events:"
         guard let seamRange = source.range(of: seam) else {
             // Gone entirely is fine: the thing being guarded is that it is
             // never reachable from the app, not that it exists.

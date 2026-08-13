@@ -69,6 +69,7 @@ targets:
       - path: Sources/Services/OCRReviewReadiness.swift
       - path: Sources/Views/PhotoAssignmentBodies.swift
       - path: Sources/Services/Sentence.swift
+      - path: Sources/Services/SaveFailureNotice.swift
       - path: Sources/Services/RunFailureKind.swift
       - path: Sources/Services/NewEventValidation.swift
       - path: Sources/Services/ManifestDay.swift
