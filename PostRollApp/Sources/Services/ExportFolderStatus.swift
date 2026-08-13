@@ -28,7 +28,8 @@ enum ExportFolderStatus: Equatable {
     /// finish. `emptyDayFolders` and `hasCaptions` are read off the folder
     /// itself, because with no manifest there is no record of what was meant to
     /// be there and guessing would be worse than saying what is missing now.
-    case unfinished(fileCount: Int, emptyDayFolders: [String], hasCaptions: Bool)
+    case unfinished(fileCount: Int, emptyDayFolders: [String], hasCaptions: Bool,
+                    unreadableDayFolders: [String] = [])
 
     /// The folder is there and could not be listed, so nothing can be said
     /// about what is in it (#451). Its own case rather than folding into
@@ -61,14 +62,22 @@ enum ExportFolderStatus: Equatable {
 
         var fileCount = 0
         var empties: [String] = []
+        var unreadableDays: [String] = []
         var hasCaptions = false
         for entry in listing.entriesIgnoringFailure {
             let isFolder = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             if isFolder {
+                // A day folder that cannot be listed is its own answer too. It
+                // is the same defect one level down: counted as zero files, it
+                // would be reported as an empty day and read as an export that
+                // lost that day's files.
                 let inside = DirectoryListing.of(entry, fileManager: fileManager)
-                    .entriesIgnoringFailure
-                fileCount += inside.count
-                if inside.isEmpty { empties.append(entry.lastPathComponent) }
+                guard case .entries(let files) = inside else {
+                    unreadableDays.append(entry.lastPathComponent)
+                    continue
+                }
+                fileCount += files.count
+                if files.isEmpty { empties.append(entry.lastPathComponent) }
             } else {
                 fileCount += 1
                 if entry.lastPathComponent == "CAPTIONS.txt" { hasCaptions = true }
@@ -76,7 +85,8 @@ enum ExportFolderStatus: Equatable {
         }
         return .unfinished(fileCount: fileCount,
                            emptyDayFolders: empties.sorted(),
-                           hasCaptions: hasCaptions)
+                           hasCaptions: hasCaptions,
+                           unreadableDayFolders: unreadableDays.sorted())
     }
 
     /// Whether this is worth showing at all. A finished export is the expected
@@ -115,12 +125,20 @@ enum ExportFolderStatus: Equatable {
                  + "Folders, or move the folder somewhere PostRoll can read. Exporting "
                  + "again would land in the same place."
 
-        case .unfinished(let count, let empties, let hasCaptions):
+        case .unfinished(let count, let empties, let hasCaptions, let unreadableDays):
             var parts = ["That export folder was never finished, so it is missing files."]
             if !hasCaptions { parts.append("CAPTIONS.txt is not in it.") }
             if !empties.isEmpty {
                 parts.append("\(empties.joined(separator: ", ")) "
                              + (empties.count == 1 ? "is empty." : "are empty."))
+            }
+            // Named apart from the empty ones: those are days that lost their
+            // files, these are days nothing could look inside, and only one of
+            // the two is fixed by exporting again.
+            if !unreadableDays.isEmpty {
+                parts.append("\(unreadableDays.joined(separator: ", ")) could not be read, "
+                             + "so what is in \(unreadableDays.count == 1 ? "it" : "them") "
+                             + "is unknown.")
             }
             parts.append("\(count) \(count == 1 ? "file is" : "files are") there now. Export again.")
             return parts.joined(separator: " ")
