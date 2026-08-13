@@ -211,11 +211,16 @@ def test_load_registry_refuses_two_files_claiming_one_name(tmp_path: Path):
 
 def test_load_registry_refuses_a_file_that_is_not_a_json_entry(tmp_path: Path):
     """A stray `.json.bak` or `.jsonc` beside the entries would be silently
-    globbed past, which is an entry quietly missing from every sweep (L100)."""
+    globbed past, which is an entry quietly missing from every sweep (L100).
+
+    The message has to be the one about the file not belonging, because a
+    stray file that merely fails the required-fields check later would make
+    this pass while the skip it exists to catch is wide open."""
     path = write_registry(tmp_path / "registry", [registry_dict()])
     (path / "note-wraps.json.bak").write_text("{}")
-    with pytest.raises(RegistryError, match="note-wraps.json.bak"):
+    with pytest.raises(RegistryError, match="is not an entry file") as raised:
         load_registry(path)
+    assert "note-wraps.json.bak" in str(raised.value)
 
 
 def test_load_registry_allows_the_readme_beside_the_entries(tmp_path: Path):
