@@ -3,6 +3,12 @@ import AppKit
 
 /// #461: a thumbnail whose file has gone spun forever, because `NSImage?` says
 /// the same nil for "not read yet" and "not there".
+///
+/// The async cases are `@MainActor` individually rather than the class being
+/// isolated: `ImageLoad` holds an NSImage and is not Sendable, so a nonisolated
+/// test receiving one from the main actor is the same crossing this type exists
+/// to avoid, and isolating the whole class breaks `setUpWithError` on the Xcode
+/// CI runs.
 final class ImageLoadTests: XCTestCase {
     private var dir: URL!
 
@@ -30,6 +36,7 @@ final class ImageLoadTests: XCTestCase {
         return url
     }
 
+    @MainActor
     func testAFileThatIsThereLoads() async throws {
         let url = try writePNG(named: "photo.png")
         let load = await ImageLoad.read(url)
@@ -37,6 +44,7 @@ final class ImageLoadTests: XCTestCase {
         XCTAssertFalse(load.isMissing)
     }
 
+    @MainActor
     func testAFileThatIsGoneIsMissingRatherThanStillLoading() async {
         let load = await ImageLoad.read(dir.appendingPathComponent("reclaimed.jpg"))
 
@@ -47,6 +55,7 @@ final class ImageLoadTests: XCTestCase {
         XCTAssertNil(load.image)
     }
 
+    @MainActor
     func testAFileThatIsNotAnImageIsMissingRatherThanLoaded() async throws {
         // A truncated or corrupt file reads as bytes and decodes to nothing,
         // which is a state a thumbnail has to render as gone rather than as
