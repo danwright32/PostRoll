@@ -327,11 +327,10 @@ final class AccountBook {
             // Not there yet is a first launch, not a failure. Anything else is
             // a file we could not read, and the same refusal applies: we do not
             // know what is in it, so we must not write over it.
-            let nsError = error as NSError
-            let missing = (nsError.domain == NSCocoaErrorDomain
-                           && nsError.code == NSFileReadNoSuchFileError)
-                || (nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(ENOENT))
-            if !missing {
+            // Through the shared classification rather than an inline copy of it
+            // (#439): three stores were each deciding "is this file merely
+            // absent" for themselves, and one of them had it wrong.
+            if !(error as NSError).isFileNotFound {
                 NSLog("AccountBook: could not read \(fileURL.lastPathComponent): \(error)")
                 loadStatus = .unreadable
             }

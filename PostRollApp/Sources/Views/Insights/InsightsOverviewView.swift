@@ -133,17 +133,28 @@ struct InsightsOverviewView: View {
             do {
                 let result = try await PythonBridge.shared.importMetaCSV(paths: urls)
                 let prev = analyticsStore.posts.count
-                analyticsStore.mergePosts(result.posts)
+                let save = analyticsStore.mergePosts(result.posts)
                 let added = analyticsStore.posts.count - prev
                 let updated = result.posts.count - max(0, added)
-                var summary = "Imported \(result.posts.count) posts (\(max(0, added)) new, \(max(0, updated)) updated)."
-                if !result.warnings.isEmpty {
-                    summary += " \(result.warnings.count) warning\(result.warnings.count == 1 ? "" : "s")."
-                }
-                importSummary = summary
-                if !result.warnings.isEmpty {
-                    importError = result.warnings.prefix(3).joined(separator: "\n")
-                }
+                // The words, and whether they may be said as a success, are
+                // decided in one place (#439). A merge that was refused a write
+                // is not an import that happened.
+                switch InsightsDisplay.importNotice(imported: result.posts.count,
+                                                    added: max(0, added),
+                                                    updated: max(0, updated),
+                                                    warnings: result.warnings.count,
+                                                    save: save) {
+                case .saved(let text):
+                    importSummary = text
+                    if !result.warnings.isEmpty {
+                        importError = result.warnings.prefix(3).joined(separator: "\n")
+                    }
+                case .notSaved(let text):
+                    // Deliberately NOT importSummary: that row renders a green
+                    // tick, and a tick over a write that did not happen is the
+                    // whole defect.
+                    importSummary = nil
+                    importError = text
             } catch {
                 importError = error.localizedDescription
             }
@@ -164,7 +175,13 @@ struct InsightsOverviewView: View {
                     orgBands: bands,
                     globalHashtags: globalTags
                 )
-                analyticsStore.addReport(report)
+                // Same rule as the import above (#439): a report the store was
+                // refused permission to write is in this window only, and the
+                // screen has to say so rather than showing it as recorded.
+                if let unsaved = InsightsDisplay.unsavedReportNotice(
+                    save: analyticsStore.addReport(report)) {
+                    generationError = unsaved
+                }
             } catch {
                 generationError = error.localizedDescription
             }

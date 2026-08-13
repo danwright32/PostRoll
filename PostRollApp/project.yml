@@ -92,6 +92,7 @@ targets:
       - path: Sources/Services/DebouncedStoreWriter.swift
       - path: Sources/Services/EventStageTransition.swift
       - path: Sources/Services/StoreBackups.swift
+      - path: Sources/Services/StoreSaveGate.swift
       - path: Sources/Services/InsightsDisplay.swift
       - path: Sources/Services/CaptionBlocks.swift
       - path: Sources/Services/BlogMeta.swift

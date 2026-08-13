@@ -194,6 +194,38 @@ final class DataMigrationTests: XCTestCase {
                        "an unreadable legacy events.json must not mark the migration complete")
     }
 
+    // MARK: - Absent, in either spelling the system uses (#439)
+    //
+    // The end-to-end tests above cover the two outcomes, but each can only
+    // produce one spelling of "not there" from a real filesystem. The decision
+    // itself is asserted against both, because recognising only one of them means
+    // a fresh install is read as "not allowed yet" and the marker is never
+    // written, so the migration retries on every launch forever.
+
+    func testAnAbsentLegacyStoreIsRecognisedInEitherSpelling() {
+        for error in [NSError(domain: NSCocoaErrorDomain,
+                              code: NSFileReadNoSuchFileError, userInfo: nil),
+                      NSError(domain: NSPOSIXErrorDomain,
+                              code: Int(ENOENT), userInfo: nil)] {
+            XCTAssertTrue(DataMigration.legacyStoreIsAbsent(error),
+                          "\(error.domain) \(error.code) has to read as a fresh install")
+        }
+    }
+
+    func testARefusedLegacyStoreIsNotCountedAsAbsent() {
+        // The half-migrated library this exists to prevent: anything other than
+        // "not there" must leave the marker unwritten and retry.
+        for error in [NSError(domain: NSCocoaErrorDomain,
+                              code: NSFileReadNoPermissionError, userInfo: nil),
+                      NSError(domain: NSPOSIXErrorDomain,
+                              code: Int(EACCES), userInfo: nil),
+                      NSError(domain: NSPOSIXErrorDomain,
+                              code: Int(EIO), userInfo: nil)] {
+            XCTAssertFalse(DataMigration.legacyStoreIsAbsent(error),
+                           "\(error.domain) \(error.code) was mistaken for a fresh install")
+        }
+    }
+
     func testMigrateSkippedUnderDataDirOverride() throws {
         let fm = FileManager.default
         let base = try tmpDir()
