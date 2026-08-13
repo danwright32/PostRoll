@@ -1,0 +1,8 @@
+{
+  "name": "source-tree-guard-armed",
+  "file": "tests/conftest.py",
+  "find": "@pytest.fixture(autouse=True, scope=\"module\")",
+  "replace": "@pytest.fixture(scope=\"module\")",
+  "test": "tests/test_reference_frames_are_safe_to_parallelise.py::test_the_source_tree_guard_is_still_armed",
+  "breaks": "the guard stops applying to every module, so the next test that rewrites a real source file is found as a flaky parallel run (#497)"
+}

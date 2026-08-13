@@ -5,7 +5,7 @@ A guard is only real once it has been seen to fail, and the moment to see it
 is the push that adds or changes one. This is a Claude Code PreToolUse(Bash)
 hook, wired in this repo's own .claude/settings.json so it fires only here.
 It watches a `git push` for two shapes of change arriving WITHOUT a matching
-change to tests/fixtures/guard_mutations.json:
+change under tests/fixtures/guard_mutations/ (one JSON file per entry, #506):
 
 * a change to a test file the registry names (a Swift file holding a
   registered class, or a pytest guard file, #425), and
@@ -33,7 +33,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REGISTRY = Path("tests/fixtures/guard_mutations.json")
+REGISTRY = Path("tests/fixtures/guard_mutations")
 TESTS_DIR = Path("PostRollApp/Tests")
 PY_TESTS_DIR = Path("tests")
 # What a source-scanning Swift test looks like: it builds a path into the app
@@ -101,14 +101,21 @@ def changed_files(repo: Path, include_pending: bool) -> list[str]:
 
 
 def registered_guards(repo: Path) -> tuple[list[str], set[str]]:
-    """The registry's Swift class names and its pytest guard files."""
-    try:
-        data = json.loads((repo / REGISTRY).read_text())
-    except (OSError, ValueError):
-        return [], set()
+    """The registry's Swift class names and its pytest guard files, read from
+    one file per entry (#506)."""
     classes: list[str] = []
     pytest_files: set[str] = set()
-    for entry in data.get("entries", []):
+    try:
+        sources = sorted((repo / REGISTRY).glob("*.json"))
+    except OSError:
+        return [], set()
+    for source in sources:
+        try:
+            entry = json.loads(source.read_text())
+        except (OSError, ValueError):
+            continue  # advisory: an unreadable entry costs a reminder, not a crash
+        if not isinstance(entry, dict):
+            continue
         test = entry.get("test", "")
         parts = test.split("/")
         if test.startswith("PostRollTests/") and len(parts) == 3:
@@ -154,19 +161,21 @@ def reminder(payload_text: str) -> str | None:
         return None
     if not is_git_push(command):
         return None
-    if not (cwd / REGISTRY).is_file():
+    if not (cwd / REGISTRY).is_dir():
         return None
 
     changed = changed_files(cwd, include_pending=chains_a_commit(command))
-    if str(REGISTRY) in changed:
+    registry_prefix = str(REGISTRY) + "/"
+    if any(path.startswith(registry_prefix) for path in changed):
         return None
     watched = watched_changes(cwd, changed)
     if not watched:
         return None
     names = ", ".join(Path(p).name for p in watched)
     return (f"This push changes guard tests ({names}) without touching "
-            f"tests/fixtures/guard_mutations.json. If a guard was added or "
-            f"changed, record or refresh its mutation entry and run "
+            f"tests/fixtures/guard_mutations/. If a guard was added or "
+            f"changed, record or refresh its mutation entry (one file per "
+            f"guard, tests/fixtures/guard_mutations/<name>.json) and run "
             f"`venv/bin/python tools/check_guards.py --changed` (scoped to "
             f"this diff; `make check-guards` is the full sweep) so the guard "
             f"is seen to fail (#416, #422, #426).")

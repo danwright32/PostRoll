@@ -1,0 +1,8 @@
+{
+  "name": "ffmpeg-cache-fallback",
+  "file": ".github/workflows/tests.yml",
+  "find": "              install_from_apt\n            }",
+  "replace": "              echo \"carrying on without it\"\n            }",
+  "test": "tests/test_ci_caches_and_cancels.py::test_a_cold_or_refused_package_cache_still_installs_ffmpeg",
+  "breaks": "a cached package set dpkg refuses leaves the job with no ffmpeg at all (#430)"
+}

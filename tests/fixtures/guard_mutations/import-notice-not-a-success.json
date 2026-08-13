@@ -1,0 +1,8 @@
+{
+  "name": "import-notice-not-a-success",
+  "file": "PostRollApp/Sources/Services/InsightsDisplay.swift",
+  "find": "            return .notSaved(counts + \" into this window, but nothing was saved: your \"",
+  "replace": "            return .saved(counts + \" into this window, but nothing was saved: your \"",
+  "test": "PostRollTests/ImportNoticeTests/testARefusedSaveIsNotShownAsASuccess",
+  "breaks": "an import the store refused to write is drawn beside a green tick, so Dan reads it as kept and finds it gone at next launch (#439, L12)"
+}

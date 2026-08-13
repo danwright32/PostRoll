@@ -1,0 +1,8 @@
+{
+  "name": "pip-wheels-cached",
+  "file": ".github/workflows/tests.yml",
+  "find": "          cache: pip",
+  "replace": "          # cache: pip",
+  "test": "tests/test_ci_caches_and_cancels.py::test_the_python_workflow_caches_its_wheels",
+  "breaks": "every run re-downloads the same pinned wheels, and a comment still names the setting (L103)"
+}

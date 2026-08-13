@@ -1,0 +1,8 @@
+{
+  "name": "ci-unit-scheme",
+  "file": ".github/workflows/swift.yml",
+  "find": "-scheme PostRollTests",
+  "replace": "-scheme PostRoll",
+  "test": "tests/test_ci_gates.py::test_it_runs_the_unit_test_scheme_not_the_gui_one",
+  "breaks": "CI runs the GUI-driving scheme a headless runner cannot drive"
+}

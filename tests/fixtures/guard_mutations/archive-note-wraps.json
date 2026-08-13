@@ -1,0 +1,8 @@
+{
+  "name": "archive-note-wraps",
+  "file": "PostRollApp/Sources/Views/ExportDoneSummary.swift",
+  "find": ".fixedSize(horizontal: false, vertical: true)",
+  "replace": ".fixedSize(horizontal: false, vertical: false)",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheArchiveNoteStillDeclaresThatItWraps",
+  "breaks": "the archive note goes back to one line and drops the end of its sentence (#411)"
+}

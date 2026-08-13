@@ -1,0 +1,8 @@
+{
+  "name": "full-local-run-includes-the-slow-files",
+  "file": "Makefile",
+  "find": "-q -n auto",
+  "replace": "-q -n auto -m \"not slow\"",
+  "test": "tests/test_fast_subset_stays_honest.py::test_the_full_target_still_runs_the_slow_files",
+  "breaks": "the full local run stops running the four files that render real reels (#430, #497)"
+}

@@ -77,7 +77,11 @@ def entry(**overrides) -> Entry:
 
 
 def write_registry(path: Path, entries: list[dict]) -> Path:
-    path.write_text(json.dumps({"entries": entries}))
+    """The registry as it is really laid out: a directory holding one file per
+    entry, each file named for the entry inside it (#506)."""
+    path.mkdir(parents=True, exist_ok=True)
+    for raw in entries:
+        (path / f"{raw['name']}.json").write_text(json.dumps(raw))
     return path
 
 
@@ -148,41 +152,105 @@ def test_the_real_runner_forbids_bytecode_writes():
 
 
 # ── Loading the registry ──────────────────────────────────────────────────────
+#
+# One file per entry, globbed (#506). Every branch that adds a guard used to
+# append to one shared JSON file, so five branches in a day meant five rebase
+# conflicts in the same place, and every hand resolution was a chance to drop
+# an entry, which would remove a guard proof with no test noticing.
 
 
 def test_load_registry_reads_entries(tmp_path: Path):
-    path = write_registry(tmp_path / "r.json", [registry_dict()])
+    path = write_registry(tmp_path / "registry", [registry_dict()])
     entries = load_registry(path)
     assert len(entries) == 1
     assert entries[0].name == "note-ink"
     assert entries[0].find == "Color.warmMid"
 
 
-def test_load_registry_refuses_a_missing_field(tmp_path: Path):
-    broken = registry_dict()
-    del broken["breaks"]
-    path = write_registry(tmp_path / "r.json", [broken])
-    with pytest.raises(RegistryError, match="breaks"):
+def test_load_registry_reads_every_file_in_the_directory(tmp_path: Path):
+    """A loader that reads some of the directory is indistinguishable from one
+    that reads all of it: the entries it skipped are simply never proven."""
+    path = write_registry(tmp_path / "registry", [
+        registry_dict(),
+        registry_dict(name="note-wraps", find="let wraps = true",
+                      replace="let wraps = false"),
+        registry_dict(name="note-shape", find="struct Note",
+                      replace="struct Memo"),
+    ])
+    assert {e.name for e in load_registry(path)} == {
+        "note-ink", "note-wraps", "note-shape"}
+
+
+def test_load_registry_refuses_a_malformed_file(tmp_path: Path):
+    """A half written entry must stop the run and name itself, never be
+    skipped: a skipped entry reads exactly like a guard nobody registered."""
+    path = write_registry(tmp_path / "registry", [registry_dict()])
+    (path / "half-written.json").write_text('{"name": "half-written",')
+    with pytest.raises(RegistryError, match="half-written.json"):
         load_registry(path)
 
 
-def test_load_registry_refuses_duplicate_names(tmp_path: Path):
-    path = write_registry(tmp_path / "r.json", [registry_dict(), registry_dict()])
+def test_load_registry_refuses_a_file_holding_the_old_whole_registry_shape(
+        tmp_path: Path):
+    """One file, one entry. A pasted `{"entries": [...]}` has no required
+    fields at its top level, so it must fail rather than load as nothing."""
+    path = write_registry(tmp_path / "registry", [registry_dict()])
+    (path / "legacy.json").write_text(json.dumps({"entries": [registry_dict()]}))
+    with pytest.raises(RegistryError, match="legacy.json"):
+        load_registry(path)
+
+
+def test_load_registry_refuses_two_files_claiming_one_name(tmp_path: Path):
+    """Names have to stay unique across files, or `--only` and every message
+    naming a guard become ambiguous."""
+    path = write_registry(tmp_path / "registry", [registry_dict()])
+    (path / "note-ink-again.json").write_text(json.dumps(registry_dict()))
     with pytest.raises(RegistryError, match="note-ink"):
+        load_registry(path)
+
+
+def test_load_registry_refuses_a_file_that_is_not_a_json_entry(tmp_path: Path):
+    """A stray `.json.bak` or `.jsonc` beside the entries would be silently
+    globbed past, which is an entry quietly missing from every sweep (L100)."""
+    path = write_registry(tmp_path / "registry", [registry_dict()])
+    (path / "note-wraps.json.bak").write_text("{}")
+    with pytest.raises(RegistryError, match="note-wraps.json.bak"):
+        load_registry(path)
+
+
+def test_load_registry_allows_the_readme_beside_the_entries(tmp_path: Path):
+    """The prose explaining the mechanism lives in the directory too."""
+    path = write_registry(tmp_path / "registry", [registry_dict()])
+    (path / "README.md").write_text("how this works\n")
+    assert len(load_registry(path)) == 1
+
+
+def test_load_registry_refuses_a_directory_that_is_not_there(tmp_path: Path):
+    """A missing registry is not an empty one: it must say so rather than
+    report zero guards to check (L98)."""
+    with pytest.raises(RegistryError, match="does not exist"):
+        load_registry(tmp_path / "nowhere")
+
+
+def test_load_registry_refuses_a_missing_field(tmp_path: Path):
+    broken = registry_dict()
+    del broken["breaks"]
+    path = write_registry(tmp_path / "registry", [broken])
+    with pytest.raises(RegistryError, match="breaks"):
         load_registry(path)
 
 
 def test_load_registry_refuses_a_mutation_that_changes_nothing(tmp_path: Path):
     """find == replace is a mutation check that checks nothing, which is the
     exact defect this tool exists to catch (L1)."""
-    path = write_registry(tmp_path / "r.json",
+    path = write_registry(tmp_path / "registry",
                           [registry_dict(replace="Color.warmMid")])
     with pytest.raises(RegistryError, match="changes nothing"):
         load_registry(path)
 
 
 def test_load_registry_refuses_an_unrecognised_test_spec(tmp_path: Path):
-    path = write_registry(tmp_path / "r.json",
+    path = write_registry(tmp_path / "registry",
                           [registry_dict(test="SomethingElse/NoteTests/testInk")])
     with pytest.raises(RegistryError, match="SomethingElse"):
         load_registry(path)
@@ -318,7 +386,7 @@ def test_a_dirty_target_file_is_refused_untouched(repo: Path):
 
 
 def test_every_mutation_killed_exits_zero(repo: Path, tmp_path: Path):
-    registry = write_registry(tmp_path / "r.json", [registry_dict()])
+    registry = write_registry(tmp_path / "registry", [registry_dict()])
     lines: list[str] = []
     code = check_guards(repo, registry, a_runner(65, SWIFT_RED), log=lines.append)
     assert code == 0
@@ -326,7 +394,7 @@ def test_every_mutation_killed_exits_zero(repo: Path, tmp_path: Path):
 
 
 def test_a_surviving_mutation_fails_the_run_and_names_the_guard(repo: Path, tmp_path: Path):
-    registry = write_registry(tmp_path / "r.json", [registry_dict()])
+    registry = write_registry(tmp_path / "registry", [registry_dict()])
     lines: list[str] = []
     code = check_guards(repo, registry, a_runner(0, SWIFT_GREEN), log=lines.append)
     assert code != 0
@@ -335,13 +403,13 @@ def test_a_surviving_mutation_fails_the_run_and_names_the_guard(repo: Path, tmp_
 
 def test_an_empty_registry_is_a_failure_not_a_pass(repo: Path, tmp_path: Path):
     """Zero guards checked has to be its own non-success outcome (L98)."""
-    registry = write_registry(tmp_path / "r.json", [])
+    registry = write_registry(tmp_path / "registry", [])
     code = check_guards(repo, registry, a_runner(65, SWIFT_RED), log=lambda _: None)
     assert code != 0
 
 
 def test_only_runs_the_named_entry(repo: Path, tmp_path: Path):
-    registry = write_registry(tmp_path / "r.json", [
+    registry = write_registry(tmp_path / "registry", [
         registry_dict(),
         registry_dict(name="note-wraps", find="let wraps = true",
                       replace="let wraps = false"),
@@ -353,7 +421,7 @@ def test_only_runs_the_named_entry(repo: Path, tmp_path: Path):
 
 
 def test_only_matching_nothing_is_a_failure(repo: Path, tmp_path: Path):
-    registry = write_registry(tmp_path / "r.json", [registry_dict()])
+    registry = write_registry(tmp_path / "registry", [registry_dict()])
     runner = a_runner(65, SWIFT_RED)
     code = check_guards(repo, registry, runner, only="no-such-guard",
                         log=lambda _: None)
@@ -394,7 +462,7 @@ def scoped_repo(tmp_path: Path) -> Path:
                       find="let other = 1", replace="let other = 2",
                       test="tests/test_other.py::test_other"),
     ]
-    write_registry(repo / "tests" / "fixtures" / "guard_mutations.json", entries)
+    write_registry(repo / "tests" / "fixtures" / "guard_mutations", entries)
     git(repo, "init", "-b", "main")
     git(repo, "add", "-A")
     git(repo, "commit", "-m", "seed")
@@ -403,7 +471,7 @@ def scoped_repo(tmp_path: Path) -> Path:
 
 
 def scoped_registry(repo: Path) -> Path:
-    return repo / "tests" / "fixtures" / "guard_mutations.json"
+    return repo / "tests" / "fixtures" / "guard_mutations"
 
 
 def run_changed(repo: Path, runner) -> tuple[int, list[str]]:
@@ -448,9 +516,10 @@ def test_changed_mode_selects_a_pytest_entry_whose_test_file_changed(scoped_repo
 
 
 def test_changed_mode_selects_an_edited_registry_entry_only(scoped_repo: Path):
-    registry = json.loads(scoped_registry(scoped_repo).read_text())
-    registry["entries"][1]["breaks"] = "reworded"
-    scoped_registry(scoped_repo).write_text(json.dumps(registry))
+    record = scoped_registry(scoped_repo) / "other-guard.json"
+    entry_json = json.loads(record.read_text())
+    entry_json["breaks"] = "reworded"
+    record.write_text(json.dumps(entry_json))
     git(scoped_repo, "add", "-A")
     git(scoped_repo, "commit", "-m", "edit one entry")
     runner = a_runner(1, "1 failed")
@@ -537,14 +606,14 @@ def test_changed_mode_without_a_base_refuses(tmp_path: Path):
     (repo / "Sources").mkdir(parents=True)
     (repo / "tests" / "fixtures").mkdir(parents=True)
     (repo / "Sources" / "Note.swift").write_text(SOURCE)
-    write_registry(repo / "tests" / "fixtures" / "guard_mutations.json",
+    write_registry(repo / "tests" / "fixtures" / "guard_mutations",
                    [registry_dict()])
     git(repo, "init", "-b", "main")
     git(repo, "add", "-A")
     git(repo, "commit", "-m", "seed")
     runner = a_runner(65, SWIFT_RED)
     lines: list[str] = []
-    code = check_guards(repo, repo / "tests" / "fixtures" / "guard_mutations.json",
+    code = check_guards(repo, repo / "tests" / "fixtures" / "guard_mutations",
                         runner, changed_only=True, log=lines.append)
     assert code != 0
     assert runner.calls == []

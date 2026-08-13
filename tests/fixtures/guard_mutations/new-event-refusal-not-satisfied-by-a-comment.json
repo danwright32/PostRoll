@@ -1,0 +1,8 @@
+{
+  "name": "new-event-refusal-not-satisfied-by-a-comment",
+  "file": "PostRollApp/Sources/Views/NewEventSheet.swift",
+  "find": "RefusalNote(message: refusal)",
+  "replace": "EmptyView() // RefusalNote(message: refusal)",
+  "test": "PostRollTests/VisibleRefusalGuardTests/testTheNewEventSheetDrawsWhatIsMissing",
+  "breaks": "the refusal is gone and a trailing comment still names it (L103)"
+}

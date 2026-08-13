@@ -9,6 +9,8 @@ suite run and in CI, and hold the registry to the code in both directions:
   once, so a recorded perturbation still names one real place.
 * registry to tests: every named test still exists, so the checker can never
   green-light an entry by running nothing (L98).
+* directory to registry: every file on disk is actually loaded, so a glob that
+  quietly reads a subset cannot pass for a full registry (#506).
 
 What these deliberately do NOT check is the verdict itself: whether the guard
 actually goes red on the mutated code needs a real test run against a mutated
@@ -35,6 +37,16 @@ def entries() -> list[Entry]:
 def test_the_registry_loads_and_is_not_empty():
     """An empty registry checks nothing while looking installed (L98, L65)."""
     assert len(entries()) >= 1
+
+
+def test_every_entry_file_on_disk_is_actually_loaded():
+    """The registry is a directory read by globbing (#506), so the count that
+    matters is the one on disk: a loader reading a subset of the files reports
+    a clean sweep over guards it never touched, which is indistinguishable
+    from the full one."""
+    files = sorted((REPO_ROOT / DEFAULT_REGISTRY).glob("*.json"))
+    assert len(files) >= 1, "no entry files under the registry directory"
+    assert {path.stem for path in files} == {e.name for e in entries()}
 
 
 @pytest.mark.parametrize("entry", entries(), ids=lambda e: e.name)

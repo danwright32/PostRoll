@@ -1,0 +1,8 @@
+{
+  "name": "prd-status-honest",
+  "file": "postroll-prd.md",
+  "find": "uploads that to Metricool by hand.",
+  "replace": "uploads that to the scheduler by machine.",
+  "test": "tests/test_prd_matches_the_build.py::test_the_status_says_what_actually_happens_today",
+  "breaks": "the PRD claims publishing the code does not do (L32)"
+}

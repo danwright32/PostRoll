@@ -1,0 +1,8 @@
+{
+  "name": "new-event-refusal-drawn",
+  "file": "PostRollApp/Sources/Views/NewEventSheet.swift",
+  "find": "RefusalNote(message: refusal)",
+  "replace": "EmptyView()",
+  "test": "PostRollTests/VisibleRefusalGuardTests/testTheNewEventSheetDrawsWhatIsMissing",
+  "breaks": "the sheet computes which field is empty and never draws it (#402)"
+}

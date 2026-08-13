@@ -1,0 +1,8 @@
+{
+  "name": "test-seam-stays-out",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "#if POSTROLL_TESTS",
+  "replace": "#if true",
+  "test": "PostRollTests/TestTargetHygieneTests/testTheAppStateTestSeamStaysOutOfTheShippingApp",
+  "breaks": "the test-only seam ships in the app target"
+}

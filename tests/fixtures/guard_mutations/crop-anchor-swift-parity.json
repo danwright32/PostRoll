@@ -1,0 +1,8 @@
+{
+  "name": "crop-anchor-swift-parity",
+  "file": "PostRollApp/Sources/Models/Event.swift",
+  "find": "static let topAnchoredY: Double = -1.0",
+  "replace": "static let topAnchoredY: Double = -0.5",
+  "test": "tests/test_top_anchored_crop.py::test_swift_and_python_agree_on_the_anchor",
+  "breaks": "the Swift crop anchor drifts from Python and crops start eating the top (#167)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "picker-storage-route",
+  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "find": "let outcome = ImportedPicks.copy(panel.urls)",
+  "replace": "let outcome = ImportedPicks.Outcome(stored: panel.urls, failures: [])",
+  "test": "PostRollTests/PickerStorageHygieneTests/testEveryPickerRoutesItsPickIntoAppStorage",
+  "breaks": "a picker stores raw picked URLs without copying them in (the TCC bug class)"
+}

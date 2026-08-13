@@ -1,0 +1,8 @@
+{
+  "name": "install-script-portability",
+  "file": "PostRollApp/build-install.sh",
+  "find": "SWIFT_LOG=\"$(mktemp \"${TMPDIR:-/tmp}/postroll-swift-tests.XXXXXX\")\"",
+  "replace": "SWIFT_LOG=\"$(mktemp -t postroll-swift-tests)\"",
+  "test": "tests/test_build_and_test_gates.py::test_the_install_script_uses_no_bsd_only_shell_forms",
+  "breaks": "a BSD-only shell form returns to the install script (CI is Linux)"
+}

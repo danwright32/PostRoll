@@ -1,0 +1,8 @@
+{
+  "name": "shoot-type-parity",
+  "file": "PostRollApp/Sources/Models/Event.swift",
+  "find": "case combo     = \"Combo\"",
+  "replace": "case combo     = \"Comboo\"",
+  "test": "tests/test_event_manifest.py::test_the_shoot_type_table_matches_the_swift_it_mirrors",
+  "breaks": "the manifest tool's shoot type table drifts from the Swift enum"
+}

@@ -35,26 +35,26 @@ PY_GUARD = (
     "    assert 'constant' in open('Sources/Note.swift').read()\n"
 )
 
-REGISTRY = {
-    "entries": [
-        {
-            "name": "note-ink",
-            "file": "Sources/Note.swift",
-            "find": "Color.warmMid",
-            "replace": "Color.cream",
-            "test": "PostRollTests/NoteGuardTests/testInk",
-            "breaks": "the note goes invisible",
-        },
-        {
-            "name": "note-mirror",
-            "file": "Sources/Note.swift",
-            "find": "let wraps = true",
-            "replace": "let wraps = false",
-            "test": "tests/test_note_mirror.py::test_mirror_agrees",
-            "breaks": "the mirror drifts",
-        },
-    ]
-}
+# One file per entry, as the real registry is laid out (#506).
+REGISTRY = [
+    {
+        "name": "note-ink",
+        "file": "Sources/Note.swift",
+        "find": "Color.warmMid",
+        "replace": "Color.cream",
+        "test": "PostRollTests/NoteGuardTests/testInk",
+        "breaks": "the note goes invisible",
+    },
+    {
+        "name": "note-mirror",
+        "file": "Sources/Note.swift",
+        "find": "let wraps = true",
+        "replace": "let wraps = false",
+        "test": "tests/test_note_mirror.py::test_mirror_agrees",
+        "breaks": "the mirror drifts",
+    },
+]
+REGISTRY_DIR = Path("tests") / "fixtures" / "guard_mutations"
 
 
 def git(repo: Path, *args: str) -> None:
@@ -68,11 +68,12 @@ def git(repo: Path, *args: str) -> None:
 def repo(tmp_path: Path) -> Path:
     """A repo shaped like this one: a registry, a guard test, a plain test."""
     repo = tmp_path / "repo"
-    (repo / "tests" / "fixtures").mkdir(parents=True)
+    (repo / REGISTRY_DIR).mkdir(parents=True)
     (repo / "PostRollApp" / "Tests").mkdir(parents=True)
     (repo / "Sources").mkdir()
-    (repo / "tests" / "fixtures" / "guard_mutations.json").write_text(
-        json.dumps(REGISTRY))
+    for entry in REGISTRY:
+        (repo / REGISTRY_DIR / f"{entry['name']}.json").write_text(
+            json.dumps(entry))
     (repo / "PostRollApp" / "Tests" / "NoteGuardTests.swift").write_text(GUARD_TEST)
     (repo / "PostRollApp" / "Tests" / "PlainTests.swift").write_text(
         "import XCTest\nfinal class PlainTests: XCTestCase {}\n")
@@ -171,11 +172,27 @@ def test_a_new_python_source_scanning_test_reminds_even_when_unregistered(repo: 
 def test_silent_when_the_registry_changed_in_the_same_push(repo: Path):
     commit_change(repo, "PostRollApp/Tests/NoteGuardTests.swift",
                   GUARD_TEST + "// changed\n")
-    registry = json.loads(
-        (repo / "tests" / "fixtures" / "guard_mutations.json").read_text())
-    registry["entries"][0]["breaks"] = "updated"
-    commit_change(repo, "tests/fixtures/guard_mutations.json",
-                  json.dumps(registry))
+    record = repo / REGISTRY_DIR / "note-ink.json"
+    entry = json.loads(record.read_text())
+    entry["breaks"] = "updated"
+    commit_change(repo, str(REGISTRY_DIR / "note-ink.json"), json.dumps(entry))
+    assert remind(repo, "git push") == ""
+
+
+def test_silent_when_a_brand_new_entry_file_arrives_in_the_same_push(repo: Path):
+    """One file per entry means a newly registered guard is a file that did
+    not exist before, which the directory check has to count as the registry
+    having been touched (#506)."""
+    commit_change(repo, "PostRollApp/Tests/NoteGuardTests.swift",
+                  GUARD_TEST + "// changed\n")
+    commit_change(repo, str(REGISTRY_DIR / "note-fresh.json"), json.dumps({
+        "name": "note-fresh",
+        "file": "Sources/Note.swift",
+        "find": "let color",
+        "replace": "let colour",
+        "test": "PostRollTests/NoteGuardTests/testInk",
+        "breaks": "the fresh guard stops guarding",
+    }))
     assert remind(repo, "git push") == ""
 
 

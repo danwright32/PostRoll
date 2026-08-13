@@ -9,7 +9,7 @@ the 10x private-repo multiplier.
 Each of those is now closed by a piece of configuration, which is exactly the
 kind of thing that gets silently reverted in a merge conflict or dropped while
 editing something nearby. So each one is asserted, with the reason it exists, and
-every one of them is registered in `tests/fixtures/guard_mutations.json` so it
+every one of them is registered in `tests/fixtures/guard_mutations/` so it
 has been seen to go red (L1).
 
 These read the workflows as text rather than parsing YAML, for the reason

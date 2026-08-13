@@ -1,0 +1,8 @@
+{
+  "name": "sentence-rule-copy",
+  "file": "PostRollApp/Sources/Services/StoreSaveGate.swift",
+  "find": "let reason = Sentence.closed(error.localizedDescription)",
+  "replace": "let raw = error.localizedDescription; let reason = \".?!\".contains(raw.last ?? \" \") ? raw : raw + \".\"",
+  "test": "PostRollTests/InterpolatedReasonTests/testNoScreenKeepsItsOwnCopyOfTheRule",
+  "breaks": "a store grows its own copy of the sentence-closing rule, which is where the unreadable-store message is now built (#439)"
+}

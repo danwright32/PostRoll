@@ -1,0 +1,8 @@
+{
+  "name": "save-failure-surfaced",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "            saveFailure = SaveFailureNotice.message(reason: reason)",
+  "replace": "            NSLog(\"save failed: \\(reason)\")",
+  "test": "PostRollTests/AppStateSaveFailureTests/testAFailedSaveIsSurfacedRatherThanLogged",
+  "breaks": "a save that starts failing mid-session goes back to reaching NSLog and nothing else, so an evening of captions is lost by quitting (#446)"
+}

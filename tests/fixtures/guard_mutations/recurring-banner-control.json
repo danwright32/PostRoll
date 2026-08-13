@@ -1,0 +1,8 @@
+{
+  "name": "recurring-banner-control",
+  "file": "PostRollApp/Sources/Views/ExportView.swift",
+  "find": "RecurringAccounts.actionable(recurringAccounts)",
+  "replace": "Array(recurringAccounts.prefix(3))",
+  "test": "PostRollTests/RecurringAccountsTests/testTheBannerOffersAControlForEachAccountItNames",
+  "breaks": "the recurring-accounts banner names accounts it offers no control for (L80)"
+}

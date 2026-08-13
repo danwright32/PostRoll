@@ -1,0 +1,8 @@
+{
+  "name": "linux-pr-cancellation-scoped",
+  "file": ".github/workflows/tests.yml",
+  "find": "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+  "replace": "cancel-in-progress: true",
+  "test": "tests/test_ci_caches_and_cancels.py::test_a_push_to_main_is_never_cancelled[linux]",
+  "breaks": "same, on the Linux workflow (#430)"
+}

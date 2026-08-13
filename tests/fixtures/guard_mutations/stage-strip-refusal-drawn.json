@@ -1,0 +1,8 @@
+{
+  "name": "stage-strip-refusal-drawn",
+  "file": "PostRollApp/Sources/Views/ProgramUploadView.swift",
+  "find": "RefusalNote(message: refusal)",
+  "replace": "EmptyView()",
+  "test": "PostRollTests/VisibleRefusalGuardTests/testTheStageStripDrawsItsRefusalRatherThanHidingItOnHover",
+  "breaks": "the stage strip refusal is computed and never drawn (#402)"
+}
