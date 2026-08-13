@@ -22,50 +22,14 @@ enum StoreRecovery {
 }
 
 // MARK: - Save gate
+//
+// The gate itself, the not-found classification and the words for an unreadable
+// store all live in StoreSaveGate.swift now (#439). They were private to this
+// file, so AnalyticsStore could not use them and went without: a file it failed
+// to read was renamed as corrupt, and a failed rename let the next save write
+// over bytes nobody had read.
 
-/// Tracks store files that must not be written to.
-///
-/// A store whose bytes could not be read, or whose unreadable bytes could not
-/// be moved aside, is still the only copy of every event, caption, blog draft,
-/// OCR result and crop edit. Writing over it would destroy data precisely
-/// because we could not read it. The block is keyed by path and is lifted the
-/// moment a load proves that file readable again.
-private final class SaveGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var blocked: Set<String> = []
-
-    private func key(_ url: URL) -> String { url.standardizedFileURL.path }
-
-    func block(_ url: URL) {
-        lock.lock()
-        defer { lock.unlock() }
-        blocked.insert(key(url))
-    }
-
-    func unblock(_ url: URL) {
-        lock.lock()
-        defer { lock.unlock() }
-        blocked.remove(key(url))
-    }
-
-    func isBlocked(_ url: URL) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return blocked.contains(key(url))
-    }
-}
-
-private let saveGate = SaveGate()
-
-private extension NSError {
-    /// True when the file simply is not there (a first launch), as opposed to
-    /// being present but unreadable. `fileExists` cannot be used to tell these
-    /// apart: it also returns false for a path the process is denied.
-    var isFileNotFound: Bool {
-        (domain == NSCocoaErrorDomain && code == NSFileReadNoSuchFileError)
-            || (domain == NSPOSIXErrorDomain && code == Int(ENOENT))
-    }
-}
+private let saveGate = StoreSaveGate.shared
 
 enum EventStore {
     static var storeURL: URL { AppPaths.eventsFile }
@@ -82,12 +46,10 @@ enum EventStore {
         case unreadable
     }
 
-    enum SaveOutcome: Equatable {
-        case saved
-        /// Refused, because writing would overwrite a store we could not read.
-        case blocked
-        case failed(String)
-    }
+    /// One vocabulary for what a save did, shared with the other file-backed
+    /// stores rather than restated here (#439). Kept as a nested name so every
+    /// existing call site and test still reads `EventStore.SaveOutcome`.
+    typealias SaveOutcome = StoreSaveOutcome
 
     struct LoadResult {
         var events: [Event]
@@ -110,9 +72,7 @@ enum EventStore {
     /// "is the disk full?." by forcing a stop back on, and ate a legitimate
     /// trailing ellipsis.
     static func unreadableMessage(_ error: Error) -> String {
-        let reason = Sentence.closed(error.localizedDescription)
-        return "PostRoll could not read your saved events: \(reason) Nothing was changed "
-             + "or deleted, and nothing new will be saved until the file can be read again."
+        StoreRecoveryText.unreadable("Your saved events", error)
     }
 
     // load/save take the URL as a parameter (defaulting to the real store)

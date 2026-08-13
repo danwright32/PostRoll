@@ -55,7 +55,16 @@ final class AnalyticsStore {
 
     // MARK: - Persistence
 
-    func save() {
+    @discardableResult
+    func save() -> StoreSaveOutcome {
+        // The gate events.json has had since #88 (#439). Without it, a file this
+        // store failed to READ was written over by the next import, and what it
+        // wrote was the empty list the failed read had produced.
+        guard !StoreSaveGate.shared.isBlocked(fileURL) else {
+            NSLog("AnalyticsStore: refusing to save; analytics.json could not be read and must not be overwritten")
+            return .blocked
+        }
+
         let stored = StoredData(
             posts: posts,
             reports: reports,
@@ -71,32 +80,70 @@ final class AnalyticsStore {
                 (try? Self.decoder.decode(StoredData.self, from: candidate)) != nil
             }
             try data.write(to: fileURL, options: .atomic)
+            return .saved
         } catch {
             NSLog("AnalyticsStore: failed to save analytics.json: \(error)")
+            return .failed(error.localizedDescription)
         }
     }
 
     private func load() {
         let url = fileURL
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
+
+        // No `fileExists` check here on purpose. It returns false for a path the
+        // process is DENIED as well as for one that is absent, so a TCC refusal
+        // used to read as a first launch: Insights showed an empty history, and
+        // the next save wrote that emptiness over every imported post. Only the
+        // error from the read itself tells the two apart (#439).
+        let data: Data
         do {
-            let data = try Data(contentsOf: url)
+            data = try Data(contentsOf: url)
+        } catch let error as NSError where error.isFileNotFound {
+            StoreSaveGate.shared.unblock(url)
+            return
+        } catch {
+            // Unknown contents, not invalid contents. The file stays exactly
+            // where it is, unrenamed, and nothing is written over it.
+            NSLog("AnalyticsStore: could not read analytics.json: \(error)")
+            StoreSaveGate.shared.block(url)
+            recoveryMessage = StoreRecoveryText.unreadable(
+                "Your imported Instagram history", error)
+            return
+        }
+
+        do {
             let stored = try Self.decoder.decode(StoredData.self, from: data)
             posts = stored.posts
             reports = stored.reports
             orgFollowerBands = stored.orgFollowerBands
             lastImport = stored.lastImport
-        } catch {
-            // Do not leave an undecodable file in place: the next save would
+            StoreSaveGate.shared.unblock(url)
+        } catch let error as DecodingError {
+            // Genuine corruption: the bytes are there and they are not analytics
+            // data. Do not leave it in place, because the next save would
             // overwrite it and discard all imported history. Set it aside.
             NSLog("AnalyticsStore: failed to decode analytics.json: \(error)")
             let setAside = StoreRecovery.setAside(url)
+            if setAside == nil {
+                // The original could not be preserved, so it is still the only
+                // copy. Saving now would erode it one generation at a time.
+                StoreSaveGate.shared.block(url)
+            } else {
+                StoreSaveGate.shared.unblock(url)
+            }
             // Say so. This used to be an NSLog and nothing else, so the entire
             // imported history could vanish and the only evidence was the
             // Insights screen looking empty, which reads as "no data imported
             // yet" rather than "your data could not be read" (#88).
             recoveryMessage = Self.recoveryText(setAsideAs: setAside?.lastPathComponent,
                                                 restorable: StoreBackups.newest(for: url) != nil)
+        } catch {
+            // Not a decode failure, so there is no evidence the file is bad.
+            // Never rename on an error we do not understand.
+            NSLog("AnalyticsStore: unexpected failure reading analytics.json: \(error)")
+            StoreSaveGate.shared.block(url)
+            recoveryMessage = StoreRecoveryText.unreadable(
+                "Your imported Instagram history", error)
         }
     }
 

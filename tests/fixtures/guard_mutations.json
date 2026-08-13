@@ -251,11 +251,11 @@
     },
     {
       "name": "sentence-rule-copy",
-      "file": "PostRollApp/Sources/Services/EventStore.swift",
+      "file": "PostRollApp/Sources/Services/StoreSaveGate.swift",
       "find": "let reason = Sentence.closed(error.localizedDescription)",
       "replace": "let raw = error.localizedDescription; let reason = \".?!\".contains(raw.last ?? \" \") ? raw : raw + \".\"",
       "test": "PostRollTests/InterpolatedReasonTests/testNoScreenKeepsItsOwnCopyOfTheRule",
-      "breaks": "a screen grows its own copy of the sentence-closing rule"
+      "breaks": "a store grows its own copy of the sentence-closing rule, which is where the unreadable-store message is now built (#439)"
     },
     {
       "name": "manifest-day-rule-copy",
@@ -416,6 +416,38 @@
       "replace": "make -C \"${REPO_ROOT}\" test-python-nonexistent",
       "test": "tests/test_build_and_test_gates.py::test_the_install_gate_runs_the_fast_subset_and_ci_still_runs_everything",
       "breaks": "the install gate stops running the fast subset, so an install is gated on nothing (#432)"
+    },
+    {
+      "name": "analytics-save-gate",
+      "file": "PostRollApp/Sources/Services/AnalyticsStore.swift",
+      "find": "guard !StoreSaveGate.shared.isBlocked(fileURL) else {",
+      "replace": "guard !StoreSaveGate.shared.isBlocked(URL(fileURLWithPath: \"/nowhere\")) else {",
+      "test": "PostRollTests/AnalyticsStoreRecoveryTests/testSavingIsRefusedWhileTheFileCouldNotBeRead",
+      "breaks": "analytics.json is written over even though the last load could not read it (#439)"
+    },
+    {
+      "name": "analytics-file-exists-precheck",
+      "file": "PostRollApp/Sources/Services/AnalyticsStore.swift",
+      "find": "        let data: Data\n        do {\n            data = try Data(contentsOf: url)",
+      "replace": "        guard FileManager.default.fileExists(atPath: url.path) else { return }\n        let data: Data\n        do {\n            data = try Data(contentsOf: url)",
+      "test": "PostRollTests/AnalyticsStoreRecoveryTests/testADeniedFolderIsNotMistakenForAFreshInstall",
+      "breaks": "the fileExists precheck returns, so a TCC-denied file reads as a fresh install (#439)"
+    },
+    {
+      "name": "not-found-rule-one-copy",
+      "file": "PostRollApp/Sources/Services/DataMigration.swift",
+      "find": "        (error as NSError).isFileNotFound\n    }",
+      "replace": "        (error as NSError).code == NSFileReadNoSuchFileError\n    }",
+      "test": "PostRollTests/StoreSaveGateTests/testNoStoreKeepsItsOwnCopyOfTheNotFoundRule",
+      "breaks": "a store grows its own copy of the absent-versus-unreadable rule again, and this one misses the POSIX spelling (#439)"
+    },
+    {
+      "name": "legacy-store-absent-both-spellings",
+      "file": "PostRollApp/Sources/Services/DataMigration.swift",
+      "find": "        (error as NSError).isFileNotFound\n    }",
+      "replace": "        (error as NSError).code == NSFileReadNoSuchFileError\n    }",
+      "test": "PostRollTests/DataMigrationTests/testAnAbsentLegacyStoreIsRecognisedInEitherSpelling",
+      "breaks": "only the Cocoa spelling of not-found counts as a fresh install, so a POSIX ENOENT read leaves the migration marker unwritten and retrying on every launch (#439)"
     }
   ],
   "comment_uncovered": "Guards deliberately NOT registered, because no compile-safe one line perturbation expresses the defect they catch: UploadPageCropRemovalTests (adding a real crop control is not one line; prose would trip it but proves nothing), the absence guards test_blog_draft_text.py::test_no_module_builds_the_heading_by_hand / test_layout_sidecar.py::test_no_generator_builds_the_name_by_hand / test_blog_meta.py::test_neither_string_can_reach_the_ai_round_trip (their only one line trip is planting the banned text artificially), test_suite_hygiene.py and test_guard_mutation_registry.py (they protect the test suite and this registry themselves), test_bridge_payload_contract.py / test_manifest_contract.py (the one line rename anchor is ambiguous in PythonBridge.swift), test_brand_text.py (removing the route in one line breaks the module's own names), test_event_slug_parity.py (slug internals are not safely one line perturbable), and the measured pixel thresholds in test_golden_frames.py / test_frame_legibility.py / test_screen_reel_logo_contrast.py's contrast checks (failing them takes a rendering change, not a text edit)."

@@ -27,6 +27,20 @@ import Foundation
 /// data-safety model above.
 enum DataMigration {
 
+    /// Whether a failed read of the legacy events.json means there is nothing
+    /// there (a fresh install, so App Support can be claimed) rather than that
+    /// access has not been granted yet (bail and retry next launch).
+    ///
+    /// Named here, and used at the one place that decision is made, so it can be
+    /// exercised with each spelling the system actually produces. Through the
+    /// shared classification (#439): this file had its own, and it recognised
+    /// only the Cocoa spelling, so a fresh install whose read failed with POSIX
+    /// ENOENT instead was read as "not allowed yet" and the marker was never
+    /// written, leaving the migration to retry on every launch forever.
+    static func legacyStoreIsAbsent(_ error: Error) -> Bool {
+        (error as NSError).isFileNotFound
+    }
+
     /// Entry point (see STATUS above — not currently called). No-op when already
     /// migrated, when running against a redirected data dir (tests/automation),
     /// or when there's nothing in the legacy location.
@@ -63,8 +77,7 @@ enum DataMigration {
         do {
             rawEvents = try String(contentsOf: oldEvents, encoding: .utf8)
         } catch {
-            let ns = error as NSError
-            if ns.domain == NSCocoaErrorDomain && ns.code == NSFileReadNoSuchFileError {
+            if legacyStoreIsAbsent(error) {
                 fm.createFile(atPath: marker.path, contents: nil)
             } else {
                 NSLog("DataMigration: legacy events.json not readable yet (\(error)); will retry.")
