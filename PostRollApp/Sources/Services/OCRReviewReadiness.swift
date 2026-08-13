@@ -60,6 +60,21 @@ enum OCRReviewReadiness {
             + " Check performer names and handles carefully below."
     }
 
+    /// The event's website was not read, so the performers below came from the
+    /// program instead (#449).
+    ///
+    /// Says which list Dan is looking at, because that is the part he can act
+    /// on: the program lists every individual member where the site lists the
+    /// conductors and group names, so a cast list that reads as too long is
+    /// explained rather than looking like what the event actually is.
+    static func webPerformersSkippedMessage(_ reason: String) -> String {
+        "The performers below came from the program, not the event's website. "
+            + Sentence.closed(reason)
+            + " The program lists every member of a group where the site lists "
+            + "the group and its conductor, so check the cast list before "
+            + "continuing."
+    }
+
     /// Auto-flagging died, so nothing double-checked the extraction.
     ///
     /// This is where the missing stop was found by rendering the screen (#396):

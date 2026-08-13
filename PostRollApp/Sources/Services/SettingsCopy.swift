@@ -23,4 +23,13 @@ enum SettingsCopy {
     static let apiKeyFooter =
         "Used to call Claude directly, bypassing the CLI for faster generation. "
         + "Get a key at [console.anthropic.com](\(consoleURL))."
+
+    /// The keychain refused to remove the key (#448).
+    ///
+    /// Says the key is still there, because that is the part that costs money:
+    /// the next run keeps using it. Distinct from a refused SAVE, which leaves
+    /// the previous key in place instead (L11).
+    static let keyNotRemoved =
+        "The key could not be removed from your keychain. It is still stored, "
+        + "so generation will keep using it. Check Keychain Access, then try again."
 }

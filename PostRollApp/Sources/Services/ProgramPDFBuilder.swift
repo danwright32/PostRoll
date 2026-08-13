@@ -141,20 +141,12 @@ struct ProgramPDFBuilder {
         let data = try makePDF(from: imagePaths)
         guard !data.isEmpty else { throw BuildError.encodingFailed }
 
+        // The write-beside-then-swap this used to spell out itself now lives in
+        // SafeFileSwap, so the three callers that need it share one
+        // implementation rather than each working it out (#445).
+        try SafeFileSwap.install(data, at: destination)
+
         let fm = FileManager.default
-        try fm.createDirectory(at: destination.deletingLastPathComponent(),
-                               withIntermediateDirectories: true)
-        let temp = destination.deletingLastPathComponent()
-            .appendingPathComponent(".\(destination.lastPathComponent).\(UUID().uuidString).part")
-        try data.write(to: temp, options: .atomic)
-        defer { try? fm.removeItem(at: temp) }
-
-        if fm.fileExists(atPath: destination.path) {
-            _ = try fm.replaceItemAt(destination, withItemAt: temp)
-        } else {
-            try fm.moveItem(at: temp, to: destination)
-        }
-
         let size = (try? fm.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? nil
         guard let size, size > 0 else { throw BuildError.encodingFailed }
         return destination

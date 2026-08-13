@@ -134,12 +134,36 @@ enum KeychainStore {
         return writer.add(add as CFDictionary, nil) == errSecSuccess
     }
 
-    static func deleteAPIKey() {
+    /// The one keychain call a delete makes, injectable for the same reason
+    /// `Writer` is: a test that deleted for real would remove Dan's actual API
+    /// key (L2).
+    struct Deleter {
+        var delete: (CFDictionary) -> OSStatus = SecItemDelete
+
+        init(delete: @escaping (CFDictionary) -> OSStatus = SecItemDelete) {
+            self.delete = delete
+        }
+    }
+
+    /// Removes the stored key. Returns whether it is genuinely gone.
+    ///
+    /// The status used to be discarded, so Settings flipped to Saved whatever
+    /// happened, and a keychain that refused the delete left the key stored
+    /// while the screen said it was not, with the next run still billing
+    /// against it. That is the shape #112 fixed for `saveAPIKey` and this is
+    /// its unswept twin (#448, L12, L30).
+    ///
+    /// Nothing stored counts as removed: that is the state the caller asked
+    /// for, and reporting it as a failure would be a distinct cause getting
+    /// the wrong message (L11).
+    @discardableResult
+    static func deleteAPIKey(using deleter: Deleter = Deleter()) -> Bool {
         let query: [CFString: Any] = [
             kSecClass:       kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
         ]
-        SecItemDelete(query as CFDictionary)
+        let status = deleter.delete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 }

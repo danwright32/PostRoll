@@ -42,9 +42,18 @@ struct SettingsView: View {
                     Button("Save") {
                         let trimmed = KeychainStore.sanitize(apiKey)
                         if trimmed.isEmpty {
-                            KeychainStore.deleteAPIKey()
-                            saved = true
-                            saveError = nil
+                            // Clearing the field means removing the key, and a
+                            // keychain that refuses that used to report exactly
+                            // like one that did it: the green Saved state while
+                            // the key sat there and the next run kept billing
+                            // against it (#448).
+                            if KeychainStore.deleteAPIKey() {
+                                saved = true
+                                saveError = nil
+                            } else {
+                                saved = false
+                                saveError = SettingsCopy.keyNotRemoved
+                            }
                         } else if KeychainStore.saveAPIKey(trimmed) {
                             saved = true
                             saveError = nil

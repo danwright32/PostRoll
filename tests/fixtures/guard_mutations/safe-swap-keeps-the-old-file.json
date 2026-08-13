@@ -1,0 +1,8 @@
+{
+  "name": "safe-swap-keeps-the-old-file",
+  "file": "PostRollApp/Sources/Services/SafeFileSwap.swift",
+  "find": "        try install(at: destination) { temp in\n            try FileManager.default.copyItem(at: source, to: temp)\n        }",
+  "replace": "        try? FileManager.default.removeItem(at: destination)\n        try FileManager.default.copyItem(at: source, to: destination)",
+  "test": "PostRollTests/SafeFileSwapTests/testAFailedCopyLeavesTheExistingFileExactlyAsItWas",
+  "breaks": "the destination is deleted before the copy, so a copy that fails has already destroyed the file it was replacing (#445)"
+}

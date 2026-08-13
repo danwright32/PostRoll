@@ -453,8 +453,11 @@ struct AssetGenerationView: View {
         if fresh, let prebuilt = event.programPDFPath,
            FileManager.default.fileExists(atPath: prebuilt.path) {
             do {
-                try? FileManager.default.removeItem(at: dest)
-                try FileManager.default.copyItem(at: prebuilt, to: dest)
+                // Through the safe swap, not delete-then-copy. `dest` is a path
+                // Dan chose himself in a save panel, so it could be any file on
+                // his disk, and a failure after the delete used to leave him
+                // with neither his file nor the PDF (#445, L5).
+                try SafeFileSwap.install(copyOf: prebuilt, at: dest)
                 NSWorkspace.shared.open(dest)
             } catch {
                 programPDFError = error.localizedDescription

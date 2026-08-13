@@ -1,0 +1,8 @@
+{
+  "name": "audit-log-refuses-to-rewrite",
+  "file": "PostRollApp/Sources/Services/ArchiveCleanup.swift",
+  "find": "        if alreadyThere {",
+  "replace": "        if false {",
+  "test": "PostRollTests/ArchiveCleanupAuditTests/testAnUnopenableLogIsLeftAloneRatherThanRewritten",
+  "breaks": "a log that exists and cannot be opened is treated as one that is not there, so the whole history of past reclaims is replaced by one line (#444)"
+}

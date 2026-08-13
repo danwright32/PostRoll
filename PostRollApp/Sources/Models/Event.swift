@@ -40,6 +40,12 @@ struct Event: Identifiable, Codable, Hashable {
     /// independent checks, and a pass from one must not erase the other's
     /// failure, or a skipped cross-check reads as a program with nothing wrong.
     var visionCheckSkipped: String? = nil
+    /// Why the performer list was not fetched from the event's website, when it
+    /// was not (#449). Its own field for the same reason as the one above: the
+    /// two checks are independent, and a silent failure here means the program
+    /// list shipped in place of the source the code itself prefers, with
+    /// nothing saying so.
+    var webPerformersSkipped: String? = nil
 
     /// Programs Dan knowingly took incomplete, keyed by the uploaded file's
     /// name (#378). Set only when he takes the readable pages of a program that
@@ -172,6 +178,7 @@ extension Event {
         pendingFlags      = try c.decodeIfPresent([OCRFlag].self,                  forKey: .pendingFlags)      ?? []
         pendingFlagsError = try c.decodeIfPresent(String.self,                     forKey: .pendingFlagsError)
         visionCheckSkipped = try c.decodeIfPresent(String.self,                     forKey: .visionCheckSkipped)
+        webPerformersSkipped = try c.decodeIfPresent(String.self,                   forKey: .webPerformersSkipped)
         partialProgramNotes = try c.decodeIfPresent([String: String].self,          forKey: .partialProgramNotes) ?? [:]
         eventURL          = try c.decodeIfPresent(String.self,                     forKey: .eventURL)          ?? ""
         eventHandles      = try c.decodeIfPresent(String.self,                     forKey: .eventHandles)      ?? ""

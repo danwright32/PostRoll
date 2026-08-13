@@ -48,6 +48,13 @@ struct OCRReviewView: View {
             .visionCheckSkipped
     }
 
+    /// Why the event's website was not read for performers (#449). Read live
+    /// for the same reason as the two above.
+    private var liveWebPerformersSkipped: String? {
+        (appState.events.first(where: { $0.id == event.id }) ?? event)
+            .webPerformersSkipped
+    }
+
     /// Programs taken knowingly incomplete (#378). Read live, and sorted so the
     /// same event reads the same way twice rather than in dictionary order.
     private var livePartialPrograms: [String] {
@@ -78,6 +85,9 @@ struct OCRReviewView: View {
                         partialProgramNotes: livePartialPrograms,
                         visionSkippedMessage: liveVisionSkipped.map {
                             OCRReviewReadiness.visionSkippedMessage($0)
+                        },
+                        webPerformersSkippedMessage: liveWebPerformersSkipped.map {
+                            OCRReviewReadiness.webPerformersSkippedMessage($0)
                         },
                         flagErrorMessage: liveFlagsError.map {
                             OCRReviewReadiness.flagErrorMessage($0)

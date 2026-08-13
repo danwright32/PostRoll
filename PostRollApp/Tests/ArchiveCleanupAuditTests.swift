@@ -99,4 +99,73 @@ final class ArchiveCleanupAuditTests: XCTestCase {
         XCTAssertTrue(text.contains("Vocal Colors"), text)
         XCTAssertTrue(text.contains("Perpetual Light"), text)
     }
+
+    // MARK: - #444: an unopenable log must not be replaced by one line
+
+    /// The audit log is the only record of what a sweep took. A failed open on
+    /// an EXISTING log used to fall through to a whole-file write, replacing
+    /// every past reclaim with the current line, on exactly the record that
+    /// exists to explain a mistargeted delete months later (L105).
+
+    private func existingLog(_ contents: String) throws -> URL {
+        let url = ArchiveCleanup.auditLog(dataRoot: dataRoot)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try Data(contents.utf8).write(to: url)
+        return url
+    }
+
+    private var sampleReclaim: ArchiveCleanup.Reclaim {
+        ArchiveCleanup.Reclaim(eventName: "Vocal Colors", eventID: UUID(),
+                               slug: "dciny-vocal-colors", removed: ["/tmp/gone"])
+    }
+
+    func testAnAppendKeepsWhatWasAlreadyThere() throws {
+        let url = try existingLog("older reclaim\n")
+
+        XCTAssertEqual(ArchiveCleanup.appendToAuditLog(sampleReclaim, dataRoot: dataRoot),
+                       .recorded)
+
+        let after = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(after.contains("older reclaim"), "the history was lost: \(after)")
+        XCTAssertTrue(after.contains("Vocal Colors"), "the new line is missing: \(after)")
+    }
+
+    func testTheFirstReclaimCreatesTheLog() throws {
+        let url = ArchiveCleanup.auditLog(dataRoot: dataRoot)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+
+        XCTAssertEqual(ArchiveCleanup.appendToAuditLog(sampleReclaim, dataRoot: dataRoot),
+                       .recorded)
+
+        XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("Vocal Colors"))
+    }
+
+    /// A log that exists and cannot be opened. Losing this reclaim is the right
+    /// trade: an unrecorded tidy-up costs one line, and rewriting costs every
+    /// line ever written.
+    func testAnUnopenableLogIsLeftAloneRatherThanRewritten() throws {
+        let url = try existingLog("a year of reclaims\n")
+        try FileManager.default.setAttributes([.posixPermissions: 0o400], ofItemAtPath: url.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644],
+                                                   ofItemAtPath: url.path)
+        }
+
+        let outcome = ArchiveCleanup.appendToAuditLog(sampleReclaim, dataRoot: dataRoot)
+
+        guard case .refusedToOverwriteExistingLog = outcome else {
+            return XCTFail("an unopenable log was not reported as one: \(outcome)")
+        }
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "a year of reclaims\n",
+                       "the history was replaced by the line that could not be appended")
+    }
+
+    /// Nothing to record is not a write, and must not report as a refusal.
+    func testAnEmptyReclaimIsNotAFailure() {
+        let empty = ArchiveCleanup.Reclaim(eventName: "E", eventID: UUID(),
+                                           slug: "e", removed: [])
+
+        XCTAssertEqual(ArchiveCleanup.appendToAuditLog(empty, dataRoot: dataRoot), .recorded)
+    }
 }

@@ -36,11 +36,36 @@ enum ArchiveCleanup {
         dataRoot.appendingPathComponent("logs").appendingPathComponent("archive-cleanup.log")
     }
 
+    /// What happened to one attempted audit-log append.
+    ///
+    /// Three outcomes rather than a Bool, because "could not open a log that is
+    /// already there" is the one that matters and used to be indistinguishable
+    /// from a first write (#444, L11).
+    enum AuditWrite: Equatable {
+        /// Appended to the existing log, or created it for the first time.
+        case recorded
+        /// The log exists and could not be opened for writing. Nothing was
+        /// written, deliberately: see `appendToAuditLog`.
+        case refusedToOverwriteExistingLog(String)
+        /// There was no log and one could not be created.
+        case couldNotCreate(String)
+    }
+
     /// Append one reclaim to the audit log. Never raises: failing to record a
     /// tidy-up must not fail the launch that triggered it, and a reclaim that
     /// could not be written is still better than one that was never attempted.
-    static func appendToAuditLog(_ reclaim: Reclaim, dataRoot: URL) {
-        guard !reclaim.removed.isEmpty else { return }
+    ///
+    /// The fallback whole-file write happens ONLY when there is no log yet.
+    /// It used to be the branch for any failed open, so a log that existed but
+    /// could not be opened (permissions, flags, a lock) was replaced by a
+    /// single line: the entire history of past reclaims gone, on the one record
+    /// that exists to explain a mistargeted delete months later. That is
+    /// append-by-rewrite, and a read that cannot distinguish absent from
+    /// unreadable erases the record exactly when it is worth having (#444,
+    /// L105).
+    @discardableResult
+    static func appendToAuditLog(_ reclaim: Reclaim, dataRoot: URL) -> AuditWrite {
+        guard !reclaim.removed.isEmpty else { return .recorded }
         let stamp = ISO8601DateFormatter().string(from: Date())
         let line = "\(stamp) reclaimed for \"\(reclaim.eventName)\" "
                  + "(\(reclaim.eventID.uuidString), slug \(reclaim.slug)): "
@@ -48,12 +73,39 @@ enum ArchiveCleanup {
         let url = auditLog(dataRoot: dataRoot)
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
+
+        // Asked BEFORE the open, so the answer cannot be inferred from the
+        // open having failed. Those are two different questions and the whole
+        // defect was answering the second with the first.
+        let alreadyThere = FileManager.default.fileExists(atPath: url.path)
+
         if let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }
             _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: Data(line.utf8))
-        } else {
-            try? Data(line.utf8).write(to: url)
+            do {
+                try handle.write(contentsOf: Data(line.utf8))
+                return .recorded
+            } catch {
+                let reason = error.localizedDescription
+                NSLog("ArchiveCleanup: could not append to the audit log: \(reason)")
+                return .refusedToOverwriteExistingLog(reason)
+            }
+        }
+
+        if alreadyThere {
+            let reason = "the log at \(url.path) exists but could not be opened for writing"
+            NSLog("ArchiveCleanup: \(reason); this reclaim is unrecorded rather "
+                  + "than overwriting the history of past ones.")
+            return .refusedToOverwriteExistingLog(reason)
+        }
+
+        do {
+            try Data(line.utf8).write(to: url)
+            return .recorded
+        } catch {
+            let reason = error.localizedDescription
+            NSLog("ArchiveCleanup: could not create the audit log: \(reason)")
+            return .couldNotCreate(reason)
         }
     }
 
