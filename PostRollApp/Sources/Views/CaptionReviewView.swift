@@ -1727,6 +1727,23 @@ private struct CaptionSection: View {
                    let reelPath = previewPaths?["reel"] {
                     // ── Friday: dual-slot review (auto-cut reel + before/after story) (#135) ──
                     let reelURL = URL(fileURLWithPath: reelPath)
+                    // Which clips the crop gate refused, said out loud on the
+                    // screen where Dan is deciding whether the cut is right
+                    // (#489). The field carried this all along and nothing read
+                    // it.
+                    if let cropNote = FridayReviewDisplay.cropNote(plan) {
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "crop")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.warmMid)
+                            Text(cropNote)
+                                .font(.light(11))
+                                .foregroundStyle(Color.warmMid)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.xs)
+                    }
                     HStack(alignment: .top, spacing: 0) {
                         VStack(alignment: .leading, spacing: 0) {
                             HStack {

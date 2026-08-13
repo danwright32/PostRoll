@@ -60,17 +60,6 @@ enum GenerationFailureText {
             return serviceSentence(for: kind, day: day)
         case .authFailed:
             return "Claude API key is invalid or missing. Set ANTHROPIC_API_KEY and retry."
-        case .performersMissing:
-            return "No performers were found in your program data. Go back to OCR review and "
-                 + "add at least one, then retry."
-        case .piecesMissing:
-            return "No program works were found in your program data. Go back to OCR review and "
-                 + "add at least one, then retry."
-        // The collage floor comes from the live preset rather than a Classic
-        // literal: under Balanced a day with its full 4 photos was told it needed
-        // 10, which contradicts the app's own generator (#119, #195).
-        case .collageShortfall(let collageDay):
-            return CollagePhotoSelection.generationShortfallHint(day: collageDay)
         case .beforeAfterInputsMissing(let inputDay):
             return inputDay == "friday"
                 ? "Friday's before/after story reuses Tuesday's RAW + edited. Assign them on "

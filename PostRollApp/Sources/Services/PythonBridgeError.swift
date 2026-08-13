@@ -55,12 +55,6 @@ enum PythonBridgeError: LocalizedError {
     /// or how long to wait (#401).
     private static func humanise(stderr: String) -> String {
         switch RunFailureKind.of(stderr) {
-        case .performersMissing:
-            return "Generation failed: no performers found in your OCR data. Go back to OCR "
-                 + "review and add at least one performer, then try again."
-        case .piecesMissing:
-            return "Generation failed: no program works found in your OCR data. Go back to OCR "
-                 + "review and add at least one work, then try again."
         case .ffmpegMissing:
             return "Media generation failed: ffmpeg is not installed. Run `brew install ffmpeg` "
                  + "in Terminal, then try again."
@@ -90,7 +84,7 @@ enum PythonBridgeError: LocalizedError {
         // The per-day kinds cannot be reached from here, because `of` is called
         // without a day. Named rather than defaulted, so adding a kind is a
         // compile error here instead of silently becoming the fallback.
-        case .collageShortfall, .beforeAfterInputsMissing, .reelPhotosMissing,
+        case .beforeAfterInputsMissing, .reelPhotosMissing,
              .storyFallbackFailed, .unknown:
             return fallback(stderr: stderr)
         }

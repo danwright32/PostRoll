@@ -268,7 +268,7 @@ struct EventListView: View {
     }
 
     private func commitRename(event: Event) {
-        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+        let trimmed = FieldText.normalized(renameText)
         if !trimmed.isEmpty,
            var ev = appState.events.first(where: { $0.id == event.id }) {
             // Live read (#103): renaming must not revert other saved work.

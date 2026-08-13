@@ -98,6 +98,7 @@ targets:
       - path: Sources/Views/ImageLoad.swift
       - path: Sources/Views/LongRunIndicator.swift
       - path: Sources/Services/BrandVoiceSaveText.swift
+      - path: Sources/Services/FieldText.swift
       - path: Sources/Services/StoreRestoreText.swift
       - path: Sources/Services/DataInventory.swift
       - path: Sources/Services/ExportStaging.swift

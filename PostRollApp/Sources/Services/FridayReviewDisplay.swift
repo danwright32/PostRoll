@@ -25,4 +25,26 @@ enum FridayReviewDisplay {
     static func isInsufficientClipsError(_ message: String) -> Bool {
         message.hasPrefix("insufficient_clips:")
     }
+
+    /// What the review card says about the crops in the cut, or nil when there
+    /// is nothing to say (#489).
+    ///
+    /// `crop_confidence` was decoded, persisted into events.json and documented
+    /// as the gate's final decision, and then read by nothing: a stored field
+    /// with a writer and no reader looks alive to any is-this-used check, so
+    /// the thing it was added for silently never happened (L46).
+    ///
+    /// What it actually means is worth showing. `apply_selection` sets a clip
+    /// to "low" and centres it whenever the crop it was given could not be
+    /// trusted for that shot, so a low count is the number of clips Dan is
+    /// seeing uncropped rather than framed the way the selection asked for.
+    static func cropNote(_ plan: FridayClipPlan?) -> String? {
+        guard let plan, !plan.selections.isEmpty else { return nil }
+        let uncropped = plan.selections.filter { $0.cropConfidence != "high" }.count
+        guard uncropped > 0 else { return nil }
+        let subject = uncropped == 1 ? "clip is" : "clips are"
+        return "\(uncropped) of \(plan.selections.count) \(subject) shown uncropped: "
+             + "the framing suggested for \(uncropped == 1 ? "it" : "them") was not "
+             + "confident enough to use."
+    }
 }

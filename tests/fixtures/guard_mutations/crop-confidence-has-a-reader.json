@@ -1,0 +1,8 @@
+{
+  "name": "crop-confidence-has-a-reader",
+  "file": "PostRollApp/Sources/Services/FridayReviewDisplay.swift",
+  "find": "        let uncropped = plan.selections.filter { $0.cropConfidence != \"high\" }.count",
+  "replace": "        let uncropped = 0",
+  "test": "PostRollTests/FridayCropNoteTests/testTheNoteCountsTheClipsShownUncropped",
+  "breaks": "cropConfidence goes back to being written, persisted and read by nothing, so Dan is never told which clips are shown uncropped (#489, L46)"
+}
