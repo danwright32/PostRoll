@@ -79,16 +79,16 @@ enum AppPaths {
             .appendingPathComponent("Documents/PostRoll")
     }
 
-    static var eventsFile: URL { root.appendingPathComponent("events.json") }
+    static var eventsFile: URL { layout.eventsFile }
     /// Generation logs. Under the data root (not the Documents checkout) so the
     /// Python subprocess never writes to the TCC-protected folder during a run.
-    static var logsDir: URL { root.appendingPathComponent("logs") }
+    static var logsDir: URL { layout.logsDir }
 
     /// Where a running generation reports the step it is on, per event (#95,
     /// #96). One known path per event rather than a value threaded through
     /// every call, so any screen showing that event's progress can read it
     /// without the path being handed down to it.
-    static var progressDir: URL { root.appendingPathComponent("progress") }
+    static var progressDir: URL { layout.progressDir }
 
     static func progressFile(forEventID id: UUID) -> URL {
         progressDir.appendingPathComponent("\(id.uuidString).json")
@@ -119,7 +119,7 @@ enum AppPaths {
     /// Writable brand voice doc. Lives under the data root (not the TCC-protected
     /// Documents checkout) so generation-time reads/appends never prompt. Seeded
     /// once from the checkout's read-only default via `ensureBrandVoiceSeeded`.
-    static var brandVoiceFile: URL { root.appendingPathComponent("brand-voice.md") }
+    static var brandVoiceFile: URL { layout.brandVoiceFile }
     /// The read-only default shipped in the Python checkout — the seed source.
     static var brandVoiceSeed: URL {
         projectRoot.appendingPathComponent("postroll/assets/brand-voice.md")
@@ -143,23 +143,52 @@ enum AppPaths {
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         try? fm.copyItem(at: seed, to: dest)
     }
-    static var analyticsFile: URL { root.appendingPathComponent("analytics.json") }
-    static var programsDir: URL { root.appendingPathComponent("programs") }
+    static var analyticsFile: URL { layout.analyticsFile }
+    static var programsDir: URL { layout.programsDir }
     /// Canonical location of an event's baked, searchable program PDF (one per
     /// event), so the upload-time bake and the on-demand rebuild agree on it.
     static func programPDFFile(eventID: UUID) -> URL {
         programsDir.appendingPathComponent("\(eventID.uuidString)_program.pdf")
     }
-    static var photosDir: URL { root.appendingPathComponent("photos") }
-    static var audioDir: URL { root.appendingPathComponent("audio") }
+    static var photosDir: URL { layout.photosDir }
+    static var audioDir: URL { layout.audioDir }
     /// Video clips (Friday auto-cut clip reel). A dedicated directory rather
     /// than reusing photosDir. Clips are large 4K video files with a
     /// different size/lifecycle profile than photos.
-    static var clipsDir: URL { root.appendingPathComponent("clips") }
+    static var clipsDir: URL { layout.clipsDir }
     /// Where Python writes collage/reel preview graphics. Lives under the data
     /// root (not the Documents project checkout) so the caption review screen,
     /// which reloads these on every visit, never triggers a TCC prompt.
-    static var previewDir: URL { root.appendingPathComponent("preview") }
+    static var previewDir: URL { layout.previewDir }
+
+    /// Every folder and file the app keeps, expressed against one root.
+    ///
+    /// The statics above are this struct built on the live `root`. A test (or
+    /// any sweep that must not reach live media) builds one on a temp directory
+    /// instead and is then structurally unable to touch real data (L2), rather
+    /// than being trusted to pass the right four directories to every call.
+    ///
+    /// One place naming these folders, so the backup doc's inventory and the
+    /// code cannot drift apart (L41): `DataInventory` reads its names from here.
+    struct Layout {
+        let root: URL
+
+        var eventsFile: URL { root.appendingPathComponent("events.json") }
+        var analyticsFile: URL { root.appendingPathComponent("analytics.json") }
+        var brandVoiceFile: URL { root.appendingPathComponent("brand-voice.md") }
+        var accountsFile: URL { root.appendingPathComponent("accounts.json") }
+        var photosDir: URL { root.appendingPathComponent("photos") }
+        var audioDir: URL { root.appendingPathComponent("audio") }
+        var clipsDir: URL { root.appendingPathComponent("clips") }
+        var programsDir: URL { root.appendingPathComponent("programs") }
+        var previewDir: URL { root.appendingPathComponent("preview") }
+        var logsDir: URL { root.appendingPathComponent("logs") }
+        var progressDir: URL { root.appendingPathComponent("progress") }
+    }
+
+    static var layout: Layout { Layout(root: root) }
+
+    static var accountsFile: URL { layout.accountsFile }
 
     /// True when `url` already lives under `storageRoot`.
     static func isInside(_ url: URL, root storageRoot: URL) -> Bool {

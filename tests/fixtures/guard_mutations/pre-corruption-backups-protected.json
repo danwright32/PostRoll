@@ -1,0 +1,8 @@
+{
+  "name": "pre-corruption-backups-protected",
+  "file": "PostRollApp/Sources/Services/StoreBackups.swift",
+  "find": "        let untouchable = Set(protected(for: store).map(\\.lastPathComponent))",
+  "replace": "        let untouchable: Set<String> = []",
+  "test": "PostRollTests/StoreRestoreTests/testPreCorruptionBackupsAreNotPrunedAwayByLaterSaves",
+  "breaks": "pruning stops protecting the generations taken before a corruption, so ordinary saves of the near-empty store destroy all five within five saves (#441)"
+}

@@ -139,19 +139,24 @@ final class AccountBookTests: XCTestCase {
 
     // MARK: - Failure paths
 
-    func testUnreadableBytesBlockTheSaveThatWouldOverwriteThem() throws {
-        // The file is the only copy of every number Dan has typed. Writing over
-        // bytes we could not read destroys data precisely because we could not
-        // read it.
+    func testBadBytesAreKeptButNoLongerBlockEverySaveForever() throws {
+        // The file is the only copy of every number Dan has typed, so bytes we
+        // could not read are never written over. They are moved out of the way
+        // instead (#505), which is what lets the numbers he types NEXT be saved:
+        // leaving them in place switched saving off for good.
         let url = root.appendingPathComponent("accounts.json")
         try Data("this is not json".utf8).write(to: url)
 
         let reopened = AccountBook(fileURL: url)
-        XCTAssertEqual(reopened.loadStatus, .unreadable)
         reopened.record(handle: "janecellist", followers: 2_000, likes: 50, comments: 10, on: stamp)
 
-        let onDisk = try String(contentsOf: url, encoding: .utf8)
-        XCTAssertEqual(onDisk, "this is not json", "the bad file was overwritten")
+        let aside = try FileManager.default.contentsOfDirectory(atPath: root.path)
+            .filter { $0.contains(".corrupt-") }
+        XCTAssertEqual(aside.count, 1, "the unreadable bytes were not preserved: \(aside)")
+        XCTAssertEqual(try String(contentsOf: root.appendingPathComponent(aside[0]), encoding: .utf8),
+                       "this is not json")
+        XCTAssertEqual(AccountBook(fileURL: url).stats(for: "janecellist")?.followers, 2_000,
+                       "numbers entered after the failure were dropped")
     }
 
     func testAMissingFileIsAFirstLaunchNotAFailure() {

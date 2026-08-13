@@ -1,0 +1,8 @@
+{
+  "name": "restore-offers-a-pre-corruption-backup",
+  "file": "PostRollApp/Sources/Services/StoreBackups.swift",
+  "find": "            return stamp <= cutoff\n        }\n        return beforeTheCorruption.last",
+  "replace": "            _ = cutoff\n            return !stamp.isEmpty\n        }\n        return beforeTheCorruption.last",
+  "test": "PostRollTests/StoreRestoreTests/testTheOfferedBackupPredatesTheCorruption",
+  "breaks": "the restore offers the newest backup overall, which after a corruption is a copy of the empty store the person is trying to undo (#441)"
+}

@@ -102,6 +102,13 @@ struct MainWindowView: View {
                 set: { if !$0 { appState.dataLoadWarning = nil } }
             )
         ) {
+            // The way back, on the screen that reports the loss (#441). Five
+            // verified-good generations sat beside the bad file with nothing in
+            // the app able to offer them, and Dan does not use the terminal, so
+            // the only restore path was one he could not take.
+            if appState.restorableBackup != nil {
+                Button(StoreRestoreText.restoreLabel) { appState.restoreLatestBackup() }
+            }
             Button("OK", role: .cancel) {}
         } message: {
             Text(appState.dataLoadWarning ?? "")
