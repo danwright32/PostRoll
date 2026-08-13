@@ -35,20 +35,6 @@
                ReferencedContainer = "container:PostRoll.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0F4295ACD5DE116720581975"
-               BuildableName = "PostRollUITests.xctest"
-               BlueprintName = "PostRollUITests"
-               ReferencedContainer = "container:PostRoll.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -75,17 +61,6 @@
                BlueprintIdentifier = "997CBCF9F0A0617C7B6979B4"
                BuildableName = "PostRollTests.xctest"
                BlueprintName = "PostRollTests"
-               ReferencedContainer = "container:PostRoll.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0F4295ACD5DE116720581975"
-               BuildableName = "PostRollUITests.xctest"
-               BlueprintName = "PostRollUITests"
                ReferencedContainer = "container:PostRoll.xcodeproj">
             </BuildableReference>
          </TestableReference>

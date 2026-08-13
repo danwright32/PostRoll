@@ -46,7 +46,6 @@
 		1586DA533207E98C55E7B323 /* ProgramScanRetention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C730A2EC98AB6C005790D5 /* ProgramScanRetention.swift */; };
 		166B82377FC1F3902F71930D /* ScrollEdgeFade.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E7E9ACC974F574D7CFD1C5C /* ScrollEdgeFade.swift */; };
 		16AE7873A1693C6354FF894A /* EventStageTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C87570BA3AD45676B230BE /* EventStageTransition.swift */; };
-		17466D295D8F05B54DE1E25D /* PostRollUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BEF272B5F90344755388061 /* PostRollUITests.swift */; };
 		1758A0D65257085AE746D342 /* AccountBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F0D6646C0B294EE3E160093 /* AccountBook.swift */; };
 		178B92250AE12E773152292E /* StoreSaveGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6E673DA1DB87EBBABFBC34 /* StoreSaveGate.swift */; };
 		18B95D502E4D7DF414D86D71 /* PreviewMergePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA165A0BD9026AD99EB583C0 /* PreviewMergePolicy.swift */; };
@@ -181,6 +180,7 @@
 		5E46AABA7AC85ABE30BAF6BC /* EditorUndoOwnershipTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B82E97F011FAAC0068E157A /* EditorUndoOwnershipTests.swift */; };
 		5ECF601D1BF127859EE7D60F /* ProgramImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6FB0F11FC651EA82765511 /* ProgramImportTests.swift */; };
 		5EFAD06877B2E6A95FD45147 /* StoreRestoreText.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5CFC22FB89D594588276E3B /* StoreRestoreText.swift */; };
+		5FCD1F3126286FECDB79D7FD /* PreviewFolderReclaimTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115105E48D1AE863FB39C408 /* PreviewFolderReclaimTests.swift */; };
 		616D66684D8DEC793B55C7F0 /* TestTargetHygieneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8FCB22FC37C59AF0CF4F0F /* TestTargetHygieneTests.swift */; };
 		632A6F5553565AD9EC174F00 /* WeekTagCapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B330ED7CD61A0C07344F9035 /* WeekTagCapTests.swift */; };
 		64B2371FA36B65D342A440B0 /* CollageCandidateDecodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C64A0938FE65930EEC2E52 /* CollageCandidateDecodeTests.swift */; };
@@ -441,16 +441,6 @@
 		FFE97A98ECF4AAE9184C7446 /* CollaboratorPick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15F45FD4127BF297B57498C /* CollaboratorPick.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		C666224406EDD9F47796D65F /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E92F9D1D1BDC7895CF4F899D /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = B955FBE44C941F654416434C;
-			remoteInfo = PostRoll;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
 		02FCD6AE4B4DC3CD82121288 /* BlogDraftTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlogDraftTextTests.swift; sourceTree = "<group>"; };
 		063889C1DCF3E243F0DCDA44 /* CaptionCreditInputsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionCreditInputsTests.swift; sourceTree = "<group>"; };
@@ -467,6 +457,7 @@
 		0E6716B61EC5A881EA45EAFE /* PipelineProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineProgress.swift; sourceTree = "<group>"; };
 		0E83BAF17639BE7E00C4A0CD /* PhotoTagSuggestionListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTagSuggestionListTests.swift; sourceTree = "<group>"; };
 		0E97F6D547BC8A7723659213 /* CollageCandidateCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollageCandidateCache.swift; sourceTree = "<group>"; };
+		115105E48D1AE863FB39C408 /* PreviewFolderReclaimTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFolderReclaimTests.swift; sourceTree = "<group>"; };
 		116086AEAC5CE358E5A0272D /* GeneratedOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedOutput.swift; sourceTree = "<group>"; };
 		131DFC672BC525BCA210EE58 /* Analytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Analytics.swift; sourceTree = "<group>"; };
 		1430D2DEA74BEE99C4DF9EFF /* AnalyticsRecoveryMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsRecoveryMessageTests.swift; sourceTree = "<group>"; };
@@ -478,7 +469,6 @@
 		19ECACDDD7D7D79F095DE3B5 /* TitleCardToggleLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleCardToggleLabelTests.swift; sourceTree = "<group>"; };
 		1A1A02011F643C5C2D2DA9CA /* ExportManagerReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManagerReadinessTests.swift; sourceTree = "<group>"; };
 		1BC49A2A51E69A25F612E2D2 /* ManifestDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManifestDay.swift; sourceTree = "<group>"; };
-		1BEF272B5F90344755388061 /* PostRollUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostRollUITests.swift; sourceTree = "<group>"; };
 		1C6E673DA1DB87EBBABFBC34 /* StoreSaveGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreSaveGate.swift; sourceTree = "<group>"; };
 		1C87C92505985A015591B53B /* AnalyticsDatesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsDatesTests.swift; sourceTree = "<group>"; };
 		1D504A37FCE01EEAADDE23CA /* PostingPresetSharedFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostingPresetSharedFixtureTests.swift; sourceTree = "<group>"; };
@@ -544,7 +534,6 @@
 		476642084119287DEB101612 /* StoreSaveGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreSaveGateTests.swift; sourceTree = "<group>"; };
 		497ED26AC48B11B74747402F /* UploadPageCropRemovalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadPageCropRemovalTests.swift; sourceTree = "<group>"; };
 		49EE43808332C9208FB1772A /* BrandBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandBanner.swift; sourceTree = "<group>"; };
-		4A31D6EB78C2CCA95EEA28E2 /* PostRollUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PostRollUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4A48BAAC376D511DC5794DF5 /* CoverReviewDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverReviewDisplay.swift; sourceTree = "<group>"; };
 		4AF8368DE34541E316A856B4 /* BuildFreshness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildFreshness.swift; sourceTree = "<group>"; };
 		4BBB18CA53E26EBA86CA6A39 /* PreviewRunStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewRunStateTests.swift; sourceTree = "<group>"; };
@@ -962,17 +951,8 @@
 			children = (
 				B50B51B46F18FDB67EA62320 /* PostRoll.app */,
 				3D9F706E921F18E81E4867E2 /* PostRollTests.xctest */,
-				4A31D6EB78C2CCA95EEA28E2 /* PostRollUITests.xctest */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		885ED4AD944C9C4558CA58EF /* UITests */ = {
-			isa = PBXGroup;
-			children = (
-				1BEF272B5F90344755388061 /* PostRollUITests.swift */,
-			);
-			path = UITests;
 			sourceTree = "<group>";
 		};
 		BFF2DD083753BE3271ACE867 /* Tests */ = {
@@ -1110,6 +1090,7 @@
 				BF9F3E1F3D03A06B57231103 /* PostingDayRemovePhotosTests.swift */,
 				1D504A37FCE01EEAADDE23CA /* PostingPresetSharedFixtureTests.swift */,
 				17CA661F528639B67099B6E0 /* PostingPresetTests.swift */,
+				115105E48D1AE863FB39C408 /* PreviewFolderReclaimTests.swift */,
 				8A26923494812F2E3647D2CE /* PreviewGenerationClipPlanDecodeTests.swift */,
 				398BF9FDD2292EB705B90D3E /* PreviewGenerationCoverPickDecodeTests.swift */,
 				A86186352444AE55261F590E /* PreviewMergePolicyTests.swift */,
@@ -1168,7 +1149,6 @@
 				DEEDE6F9DD9D9B527BB6E897 /* Assets.xcassets */,
 				3A3642944A2936FF46914115 /* Sources */,
 				BFF2DD083753BE3271ACE867 /* Tests */,
-				885ED4AD944C9C4558CA58EF /* UITests */,
 				8806F03194951F1F4902C863 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -1176,24 +1156,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		0F4295ACD5DE116720581975 /* PostRollUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 1C551DB5913D6DFA47088C00 /* Build configuration list for PBXNativeTarget "PostRollUITests" */;
-			buildPhases = (
-				9E2BAE3874B44B5E780F0F67 /* Sources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				876D69A0C7124CF1921D23D2 /* PBXTargetDependency */,
-			);
-			name = PostRollUITests;
-			packageProductDependencies = (
-			);
-			productName = PostRollUITests;
-			productReference = 4A31D6EB78C2CCA95EEA28E2 /* PostRollUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 		997CBCF9F0A0617C7B6979B4 /* PostRollTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 534C2067EDF7B29173AF7E9A /* Build configuration list for PBXNativeTarget "PostRollTests" */;
@@ -1238,9 +1200,6 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
-					0F4295ACD5DE116720581975 = {
-						TestTargetID = B955FBE44C941F654416434C;
-					};
 					B955FBE44C941F654416434C = {
 						ProvisioningStyle = Automatic;
 					};
@@ -1262,7 +1221,6 @@
 			targets = (
 				B955FBE44C941F654416434C /* PostRoll */,
 				997CBCF9F0A0617C7B6979B4 /* PostRollTests */,
-				0F4295ACD5DE116720581975 /* PostRollUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -1422,14 +1380,6 @@
 				349346387528196EE7DF5234 /* StoredErrorPolicy.swift in Sources */,
 				BB144752575DF3A9048399CF /* TimingStore.swift in Sources */,
 				8B0DDAC9403ECCE5B0D1A335 /* VisionTextLayer.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		9E2BAE3874B44B5E780F0F67 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				17466D295D8F05B54DE1E25D /* PostRollUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1650,6 +1600,7 @@
 				7C6EF0F77216F738C0EDBEE4 /* PostingPresetSharedFixtureTests.swift in Sources */,
 				4FA8AED832F83F053D19215C /* PostingPresetStore.swift in Sources */,
 				086373116DF126243D4CCBF6 /* PostingPresetTests.swift in Sources */,
+				5FCD1F3126286FECDB79D7FD /* PreviewFolderReclaimTests.swift in Sources */,
 				2859D555A9530152273AEFA8 /* PreviewGenerationClipPlanDecodeTests.swift in Sources */,
 				11C0D56B4FB9A039F0D500DC /* PreviewGenerationCoverPickDecodeTests.swift in Sources */,
 				AF94D7AC43C0F75E721D856C /* PreviewMergePolicy.swift in Sources */,
@@ -1733,14 +1684,6 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXTargetDependency section */
-		876D69A0C7124CF1921D23D2 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = B955FBE44C941F654416434C /* PostRoll */;
-			targetProxy = C666224406EDD9F47796D65F /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin XCBuildConfiguration section */
 		0455CE64F6AF578AE5B53BE2 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -1766,26 +1709,6 @@
 				SDKROOT = macosx;
 				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 6.0;
-			};
-			name = Debug;
-		};
-		3B4FA3E0CF75C9E79CCAEB89 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "-";
-				COMBINE_HIDPI_IMAGES = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dwphotony.PostRollUITests;
-				SDKROOT = macosx;
-				SWIFT_VERSION = 6.0;
-				TEST_TARGET_NAME = PostRoll;
 			};
 			name = Debug;
 		};
@@ -1977,38 +1900,9 @@
 			};
 			name = Debug;
 		};
-		E34E2FCC48B32A90CBC23C12 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "-";
-				COMBINE_HIDPI_IMAGES = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dwphotony.PostRollUITests;
-				SDKROOT = macosx;
-				SWIFT_VERSION = 6.0;
-				TEST_TARGET_NAME = PostRoll;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		1C551DB5913D6DFA47088C00 /* Build configuration list for PBXNativeTarget "PostRollUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				3B4FA3E0CF75C9E79CCAEB89 /* Debug */,
-				E34E2FCC48B32A90CBC23C12 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
 		40660DD58F3C6DF3D3C95189 /* Build configuration list for PBXNativeTarget "PostRoll" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

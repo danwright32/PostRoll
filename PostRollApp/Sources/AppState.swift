@@ -180,12 +180,18 @@ final class AppState {
     /// The orphan sweep, against this AppState's data root rather than the
     /// live one. One helper because three call sites ran it and each passed a
     /// different (defaulted) set of folders (L16).
-    private func sweepOrphanedMedia() {
-        OrphanedMediaCleanup.sweep(events: events,
+    private func sweepOrphanedMedia(owners: [Event]? = nil) {
+        let owning = owners ?? events
+        OrphanedMediaCleanup.sweep(events: owning,
                                    photosDir: layout.photosDir,
                                    audioDir: layout.audioDir,
                                    programsDir: layout.programsDir,
                                    clipsDir: layout.clipsDir)
+        // The preview folder too (#482). It was the one derived resource a
+        // delete left behind, on the machine whose disk has been filled by
+        // exactly this class before.
+        OrphanedMediaCleanup.sweepPreviewFolders(events: owning,
+                                                 previewDir: layout.previewDir)
     }
 
     /// Put the newest verified-good backup of the store back, for the button on
@@ -326,12 +332,8 @@ final class AppState {
 
         // Anything else the delete orphaned is reclaimed now; the event itself
         // still counts as an owner of its files until the window closes.
-        OrphanedMediaCleanup.sweep(
-            events: DeletionPolicy.mediaOwners(events: events, pendingDeletion: event),
-            photosDir: layout.photosDir,
-            audioDir: layout.audioDir,
-            programsDir: layout.programsDir,
-            clipsDir: layout.clipsDir
+        sweepOrphanedMedia(
+            owners: DeletionPolicy.mediaOwners(events: events, pendingDeletion: event)
         )
 
         let work = DispatchWorkItem { [weak self] in self?.finalizePendingDeletion() }
