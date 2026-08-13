@@ -1,0 +1,8 @@
+{
+  "name": "no-image-across-an-actor-boundary",
+  "file": "PostRollApp/Sources/Views/PhotoAssignmentView.swift",
+  "find": "        .task { image = await ImageLoad.read(url).image }",
+  "replace": "        .task { image = await Task.detached { NSImage(contentsOf: url) }.value }",
+  "test": "PostRollTests/ImageActorBoundaryGuardTests/testNoDetachedTaskHandsBackAnImage",
+  "breaks": "an NSImage is handed back from a detached task, which is not Sendable and does not compile on the CI Xcode, while the local one accepts it (#461)"
+}
