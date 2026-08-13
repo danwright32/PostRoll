@@ -1,0 +1,8 @@
+{
+  "name": "stripe-plugin-stays-disabled",
+  "file": ".claude/settings.json",
+  "find": "\"stripe@claude-plugins-official\": false",
+  "replace": "\"stripe@claude-plugins-official\": true",
+  "test": "tests/test_project_plugin_settings.py::test_the_off_topic_plugins_are_disabled_for_this_repo[stripe]",
+  "breaks": "the Stripe plugin is enabled again here, so its 9 skill and command entries, its Company Researcher agent and its MCP server are offered in every session in a repo that takes no payments (#499)"
+}
