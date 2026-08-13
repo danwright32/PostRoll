@@ -103,6 +103,20 @@ jobs:
           key: ${{ steps.cache-key.outputs.key }}
           restore-keys: ${{ steps.cache-key.outputs.prefix }}-
 
+      # The app itself, before the tests. The PostRollTests scheme compiles a
+      # hand-listed subset of Sources, so nothing in CI had ever compiled the
+      # views: a missing brace in InsightsOverviewView sat on main with every
+      # check green, and the app could not be built at all (L3, L88). This is
+      # the job that has to notice, because it is the only one with an Xcode.
+      - name: Build the app
+        run: |
+          xcodebuild \
+            -project PostRollApp/PostRoll.xcodeproj \
+            -scheme PostRoll \
+            -destination 'platform=macOS' \
+            -derivedDataPath PostRollApp/.derived-data \
+            build
+
       - name: Run the Swift unit tests
         run: |
           xcodebuild \

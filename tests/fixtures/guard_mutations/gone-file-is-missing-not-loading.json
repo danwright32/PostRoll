@@ -1,0 +1,8 @@
+{
+  "name": "gone-file-is-missing-not-loading",
+  "file": "PostRollApp/Sources/Views/ImageLoad.swift",
+  "find": "        guard let data, let image = NSImage(data: data) else { return .missing }",
+  "replace": "        guard let data, let image = NSImage(data: data) else { return .loading }",
+  "test": "PostRollTests/ImageLoadTests/testAFileThatIsGoneIsMissingRatherThanStillLoading",
+  "breaks": "a photo that has been reclaimed or moved shows a spinner forever, with nothing telling loading from gone (#461, L10)"
+}

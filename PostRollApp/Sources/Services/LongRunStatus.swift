@@ -74,6 +74,16 @@ enum LongRunState {
     /// and train Dan to ignore it, which is the failure #36 describes.
     static let defaultSilenceThreshold: TimeInterval = 660
 
+    /// For work that runs entirely on this Mac: a CSV parse, a Vision OCR pass
+    /// over a program's pages (#460).
+    ///
+    /// Sized well above what that work takes rather than close to it, for the
+    /// reason `defaultSilenceThreshold` is what it is: a threshold that fires on
+    /// ordinary runs trains Dan to ignore it (L36). It is generous by design,
+    /// and its only consequence is a note saying nothing new has been reported,
+    /// so nothing is blocked if it is early.
+    static let localWorkSilenceThreshold: TimeInterval = 180
+
     /// What to show, from the run's start, the last step it reported, and now.
     ///
     /// Staleness is measured from the STEP's own timestamp rather than from the

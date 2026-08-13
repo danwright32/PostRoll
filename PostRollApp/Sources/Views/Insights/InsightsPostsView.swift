@@ -52,10 +52,22 @@ struct InsightsPostsView: View {
             if analyticsStore.posts.isEmpty {
                 PostsEmptyState()
             } else if filteredPosts.isEmpty {
+                // The message says which of the two emptied the list, because a
+                // Stories or Feed segment that matches nothing is not a search
+                // miss and reading one as the other sends Dan to the wrong
+                // control (L11).
                 VStack(spacing: 6) {
-                    Text("No posts match \"\(searchText)\"")
+                    Text(InsightsPostsEmpty.message(searchText: searchText,
+                                                    filter: filterType.rawValue))
                         .font(.light(12))
                         .foregroundStyle(Color.warmMid)
+                    if !searchText.isEmpty {
+                        Button("Clear Search") { searchText = "" }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.roseGold)
+                            .padding(.top, Spacing.xs)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.cream)
@@ -70,10 +82,14 @@ struct InsightsPostsView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .background(Color.cream)
-                .searchable(text: $searchText, prompt: "Search captions and orgs")
             }
         }
         .background(Color.cream)
+        // Attached to the screen, never to the non-empty branch. Inside that
+        // branch the List and the toolbar's search field both leave the
+        // hierarchy the moment a query matches nothing, so the state Dan is
+        // stuck in removes the only control that changes it (L45, L109).
+        .searchable(text: $searchText, prompt: "Search captions and orgs")
     }
 }
 

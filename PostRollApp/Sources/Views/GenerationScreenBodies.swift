@@ -203,6 +203,11 @@ struct GenerationDoneBody: View {
     /// nil hides it, because this event has no program.
     var programPDFLabel: String? = nil
     var programPDFDisabled: Bool = false
+    /// When the current program PDF build started, so a multi page Vision OCR
+    /// pass shows elapsed time and can convert to a stalled state rather than
+    /// sitting on a label that reads the same whether it is working or dead
+    /// (#460). nil renders nothing.
+    var programPDFStartedAt: Date? = nil
     /// A bake that failed. Before #80 a `try?` dropped this and the program just
     /// stopped existing with nothing said.
     var programBakeError: String? = nil
@@ -331,6 +336,12 @@ struct GenerationDoneBody: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Color.roseGold)
                     .disabled(programPDFDisabled)
+
+                if programPDFStartedAt != nil {
+                    LongRunIndicator(label: "Reading the program pages…",
+                                     startedAt: programPDFStartedAt,
+                                     silenceThreshold: LongRunState.localWorkSilenceThreshold)
+                }
             }
 
             if let programBakeError {

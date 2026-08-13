@@ -23,6 +23,8 @@ struct AssetGenerationView: View {
     @State private var programPDFError: String?
     // True while a program PDF is being rebuilt on demand (OCR runs off-main).
     @State private var isPreparingProgramPDF = false
+    /// When the current program PDF build started (#460).
+    @State private var programPDFStartedAt: Date?
 
 
     /// The view's display is derived (not stored): an active/failed run in the
@@ -373,6 +375,7 @@ struct AssetGenerationView: View {
                         ? programPDFButtonLabel : nil,
                     programPDFDisabled: isPreparingProgramPDF
                         || ProgramPDFBakery.shared.isBaking(event.id),
+                    programPDFStartedAt: programPDFStartedAt,
                     programBakeError: ProgramPDFBakery.shared.failure(for: event.id),
                     hasBlog: !event.blogPhotoPaths.isEmpty,
                     revealed: showCheckmark,
@@ -465,6 +468,7 @@ struct AssetGenerationView: View {
         let eventID = event.id
         let cacheURL = AppPaths.programPDFFile(eventID: eventID)
         isPreparingProgramPDF = true
+        programPDFStartedAt = Date()
         Task.detached(priority: .userInitiated) {
             do {
                 let data = try ProgramPDFBuilder.makePDF(from: pages)
@@ -478,6 +482,7 @@ struct AssetGenerationView: View {
                 let fingerprint = ProgramPDFBuilder.fingerprint(of: pages)
                 await MainActor.run {
                     isPreparingProgramPDF = false
+                    programPDFStartedAt = nil
                     if cached, var live = appState.events.first(where: { $0.id == eventID }) {
                         live.programPDFPath = cacheURL
                         live.programPDFFingerprint = fingerprint
@@ -488,6 +493,7 @@ struct AssetGenerationView: View {
             } catch {
                 await MainActor.run {
                     isPreparingProgramPDF = false
+                    programPDFStartedAt = nil
                     programPDFError = error.localizedDescription
                 }
             }

@@ -138,6 +138,27 @@ def test_the_build_cache_key_carries_the_toolchain(macos):
         "toolchain-derived prefix")
 
 
+def test_ci_compiles_the_app_and_not_only_the_test_target(macos):
+    """The app has to be built by something before main (L3, L88).
+
+    The PostRollTests scheme compiles a hand-listed subset of Sources, so the
+    views were in no CI job at all: a missing brace in InsightsOverviewView sat
+    on main with every check green and the app could not be built. This job is
+    the only one with an Xcode in it, so it is the one that has to notice.
+    """
+    # Every xcodebuild invocation, as (scheme, action) pairs.
+    runs = re.findall(r"-scheme\s+(\S+)(.*?)(?=-scheme|\Z)", macos, re.S)
+    assert runs, "no xcodebuild invocations in the macOS workflow at all"
+
+    app_builds = [
+        scheme for scheme, rest in runs
+        if scheme == "PostRoll" and re.search(r"^\s+build\s*$", rest, re.M)
+    ]
+    assert app_builds, (
+        "no CI step builds the PostRoll app scheme, so nothing compiles the "
+        f"view layer before it reaches main. Schemes run: {[s for s, _ in runs]}")
+
+
 def test_the_swift_tests_build_into_the_folder_that_is_cached(macos):
     """Built is not wired (L3).
 

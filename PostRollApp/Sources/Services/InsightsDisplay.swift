@@ -99,3 +99,19 @@ enum InsightsDisplay {
         }
     }
 }
+
+/// What the Posts list says when it has nothing to show (#463).
+///
+/// Out of the view so the wording can be pinned: the old sentence blamed the
+/// search in every case, so a Stories or Feed segment that simply holds no
+/// posts read as "No posts match \"\"" with empty quotes, which names a control
+/// Dan never touched (L11).
+enum InsightsPostsEmpty {
+    static func message(searchText: String, filter: String) -> String {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty {
+            return "No \(filter.lowercased()) posts in your imported history."
+        }
+        return "No posts match \"\(query)\"."
+    }
+}
