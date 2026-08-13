@@ -1,0 +1,8 @@
+{
+  "name": "contract-covers-every-manifest-the-bridge-builds",
+  "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+  "find": "    nonisolated static func buildCoverManifest(",
+  "replace": "    nonisolated static func buildCoverSheetManifest(",
+  "test": "tests/test_bridge_contract_covers_the_code.py::test_every_manifest_the_bridge_builds_is_in_the_contract",
+  "breaks": "a manifest the bridge sends to Python has no contract entry, so it is exempt from both halves of the payload check (#488, L96)"
+}

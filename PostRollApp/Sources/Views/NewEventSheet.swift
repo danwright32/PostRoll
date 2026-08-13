@@ -98,10 +98,10 @@ struct NewEventSheet: View {
 
     private func createEvent() {
         let event = Event(
-            name: name.trimmingCharacters(in: .whitespaces),
-            org: org.trimmingCharacters(in: .whitespaces),
-            venue: venue.trimmingCharacters(in: .whitespaces),
-            venueContext: venueContext.trimmingCharacters(in: .whitespaces),
+            name: FieldText.normalized(name),
+            org: FieldText.normalized(org),
+            venue: FieldText.normalized(venue),
+            venueContext: FieldText.normalized(venueContext),
             date: date,
             shootType: shootType
         )

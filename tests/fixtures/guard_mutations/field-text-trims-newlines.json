@@ -1,0 +1,8 @@
+{
+  "name": "field-text-trims-newlines",
+  "file": "PostRollApp/Sources/Services/FieldText.swift",
+  "find": "        raw.trimmingCharacters(in: .whitespacesAndNewlines)",
+  "replace": "        raw.trimmingCharacters(in: .whitespaces)",
+  "test": "PostRollTests/FieldTextTests/testATrailingNewlineIsTrimmedFromAStoredValue",
+  "breaks": "a pasted value keeps its trailing newline, and since org and venue are handle-book keys that org becomes a permanently separate key whose saved handles never auto-fill again (#491)"
+}

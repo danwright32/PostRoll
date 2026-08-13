@@ -15,10 +15,10 @@ enum NewEventValidation {
     /// blocks creation without a reason is not representable.
     static func refusal(name: String, org: String) -> String? {
         var missing: [String] = []
-        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if FieldText.isBlank(name) {
             missing.append("a name")
         }
-        if org.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if FieldText.isBlank(org) {
             missing.append("an organisation")
         }
         guard !missing.isEmpty else { return nil }

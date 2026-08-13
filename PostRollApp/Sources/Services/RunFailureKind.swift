@@ -35,9 +35,6 @@ enum RunFailureKind: Equatable {
 
     // Inputs. `fileMissing` is a file that moved; the rest are a step not done.
     case fileMissing
-    case performersMissing
-    case piecesMissing
-    case collageShortfall(DayName)
     case beforeAfterInputsMissing(day: String)
     case reelPhotosMissing
     case storyFallbackFailed
@@ -124,23 +121,8 @@ enum RunFailureKind: Equatable {
             return .aiServiceError
         }
 
-        // Then a step Dan has not finished, which is more actionable than the
-        // file-level and parse-level readings below.
-        if s.contains("no performers") || s.contains("performers is empty")
-            || s.contains("no performer") {
-            return .performersMissing
-        }
-        if s.contains("no pieces") || s.contains("pieces is empty") || s.contains("no works") {
-            return .piecesMissing
-        }
-
         // Then the per-day input shortfalls, which need to know which day.
         if let day {
-            if let collageDay = DayName(rawValue: day),
-               PostingPreset.current.isCollageCarousel(collageDay),
-               s.contains("collage skipped") || s.contains("collage_min") {
-                return .collageShortfall(collageDay)
-            }
             if (day == "tuesday" || day == "friday")
                 && (s.contains("raw") || s.contains("edited")) {
                 return .beforeAfterInputsMissing(day: day)
@@ -175,8 +157,7 @@ enum RunFailureKind: Equatable {
         case .ffmpegMissing, .audioServiceUnreachable, .rateLimited, .overloaded,
              .authFailed, .aiServiceError:
             return false
-        case .requestTooLarge, .outputUnreadable, .fileMissing, .performersMissing,
-             .piecesMissing, .collageShortfall, .beforeAfterInputsMissing,
+        case .requestTooLarge, .outputUnreadable, .fileMissing, .beforeAfterInputsMissing,
              .reelPhotosMissing, .storyFallbackFailed, .unknown:
             return true
         }

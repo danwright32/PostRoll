@@ -10,7 +10,7 @@ final class HandleBook: @unchecked Sendable {
     private init() {}
 
     private func normalize(_ name: String) -> String {
-        name.trimmingCharacters(in: .whitespaces).lowercased()
+        FieldText.normalized(name).lowercased()
     }
 
     // MARK: - Org handles

@@ -387,7 +387,7 @@ struct EventHeader: View {
     }
 
     private func commitRename() {
-        let trimmed = editName.trimmingCharacters(in: .whitespaces)
+        let trimmed = FieldText.normalized(editName)
         if !trimmed.isEmpty,
            var ev = appState.events.first(where: { $0.id == event.id }) {
             // Live read (#103): renaming must not revert other saved work.

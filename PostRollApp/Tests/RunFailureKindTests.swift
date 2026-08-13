@@ -28,8 +28,6 @@ final class RunFailureKindTests: XCTestCase {
         ("authentication failed", .authFailed),
         ("no api key configured", .authFailed),
         ("anthropic api error: something new", .aiServiceError),
-        ("no performers found in ocr data", .performersMissing),
-        ("pieces is empty", .piecesMissing),
         ("FileNotFoundError: /photos/a.jpg", .fileMissing),
         ("no such file or directory", .fileMissing),
         ("story fallback failed", .storyFallbackFailed),
@@ -198,7 +196,7 @@ final class RunFailureKindTests: XCTestCase {
     }
 
     func testEveryInputFailureIsFixableFromTheApp() {
-        for kind in [RunFailureKind.fileMissing, .performersMissing, .piecesMissing,
+        for kind in [RunFailureKind.fileMissing,
                      .reelPhotosMissing, .storyFallbackFailed, .requestTooLarge,
                      .beforeAfterInputsMissing(day: "tuesday")] {
             XCTAssertTrue(kind.isFixableFromTheApp, "\(kind)")
