@@ -24,6 +24,13 @@ workflow: a hand-kept registry checks only what it lists, so the file missing
 from it is exempt from the very check meant to catch it (L96). This walks
 `tests/` for the marker and asserts the workflow names every file that carries
 it.
+
+This used to check two things: that the job RUNS every font-gated file, and that
+it TRIGGERS on changes to them. The second is gone with the paths filter it was
+about (#431), since every pull request now runs the job whatever it touched, and
+`test_ci_gates.py` holds that. Running them is still checked here, because that is
+a separate claim: a file the job does not name in its pytest command executes
+nowhere while reporting green.
 """
 
 from __future__ import annotations
@@ -99,28 +106,3 @@ def test_the_macos_job_runs_every_font_dependent_test_file():
         "except the macOS job, and the macOS job does not run them: "
         f"{missing}. They therefore execute nowhere in CI while reporting "
         "green. Add them to the pytest command in .github/workflows/swift.yml.")
-
-
-def test_the_macos_job_triggers_on_every_font_dependent_test_file():
-    # The other half, and the one #246 was about: a job filtered to paths that
-    # do not include the test itself skips precisely the change that breaks it.
-    workflow = _workflow_text()
-
-    missing = sorted(f for f in font_dependent_test_files() if f not in workflow)
-
-    assert not missing, (
-        f"the macOS job does not trigger on changes to {missing}, so editing "
-        "one of them on a pull request runs nothing. Add it under `paths` in "
-        ".github/workflows/swift.yml.")
-
-
-def test_the_macos_job_triggers_on_the_assets_those_checks_draw_with():
-    # The reference frames and the legibility bands both read
-    # postroll/assets/logo-black.png, and the colophon check takes the mark's
-    # INK from that file. Swapping the asset changes what every one of them
-    # measures, so a filter that omits it skips the change most able to break
-    # them (L88).
-    assert "postroll/assets/" in _workflow_text(), (
-        "the macOS job does not trigger on postroll/assets/**, but the "
-        "reference-frame and legibility checks read the wordmark from there "
-        "and measure its ink. Replacing that file would go unchecked.")

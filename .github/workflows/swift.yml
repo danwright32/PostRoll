@@ -1,63 +1,55 @@
 name: macOS
 
-# Split out of tests.yml so it can carry its own trigger rules (#233).
+# Split out of tests.yml so it can carry its own trigger rules (#233), and split
+# again into two parallel jobs (#431).
 #
-# The swift job used to live there behind `if: github.event_name !=
-# 'pull_request'`, a deliberate cost decision: this repo is private, where
-# macOS runner minutes bill at a 10x multiplier.
+# ── why every pull request runs this ─────────────────────────────────────────
 #
-# The cost of that decision showed up on 2026-08-09. A compile error in test
+# It did not always. The Swift job used to be skipped on pull requests
+# altogether, and then ran only when a PR touched a hand-listed set of paths.
+# Both versions were cost decisions: macOS runner minutes bill at a 10x
+# multiplier on a PRIVATE repo. This repo is public while its backlog is being
+# worked through, so that multiplier is dormant rather than gone, and it applies
+# again the day the repo goes private.
+#
+# The cost of the first version showed up on 2026-08-09. A compile error in test
 # setup, which only the older Xcode in CI rejects, sat red on main across eight
 # merges. Both signals available at merge time were structurally unable to show
-# it: PRs skipped this job entirely, and running the suite locally passes
-# because the local Xcode is the one that ACCEPTS the code CI rejects.
+# it: PRs skipped this job entirely, and running the suite locally passes because
+# the local Xcode is the one that ACCEPTS the code CI rejects.
 #
-# So the trade is narrowed rather than reversed. A pull request runs this only
-# when it touches something that can break the Swift build, and a PR that
-# cannot still costs nothing. Pushes to main run it regardless of what changed,
-# so main is always fully verified.
+# The paths filter that replaced it narrowed the hole rather than closing it, and
+# maintaining it was its own failure mode: #246 was a job filtered to the app
+# folder while two of its tests read cross-language fixtures living beside the
+# Python suite, and a skipped job looks exactly like a passing one.
 #
-# Touching the app is not the only way (#246). Swift tests also read shared
-# cross-language fixtures under `tests/fixtures/`, so a PR that regenerates one
-# from the Python side can turn the Swift suite red. The whole directory is
-# listed rather than the two files those tests read today: more shared fixtures
-# are coming (#168, #124), and the failure mode of naming files one at a time
-# is that the next one is added by someone not thinking about this file. Some
-# fixtures there are Python-only, so this occasionally runs the job for nothing,
-# which is the cheap side of the trade against missing a break entirely.
+# So on 2026-08-13 Dan decided to remove the filter for good rather than keep
+# tuning it: every pull request runs both jobs, whatever it touched, and the
+# minutes are accepted as the price of never having to ask whether the check that
+# stayed silent was the one that mattered. Re-narrowing this is a deliberate
+# decision to reopen that hole, not a tidy-up.
 #
-# It also carries the reference-frame checks (#163), which is why this is the
-# macOS job rather than the Swift job. Those render the real templates, and the
-# templates draw with macOS system fonts (SignPainter, HelveticaNeue) that the
-# Linux runner in tests.yml does not have, so a recorded frame can only be
-# compared on a Mac. Reusing the runner that is already being paid for beats
-# starting a second one.
+# ── why two jobs ─────────────────────────────────────────────────────────────
+#
+# The two halves are independent and were running in sequence inside one job, so
+# a Swift compile error was reported only after seven minutes of rendering reels.
+# They are separate jobs now: the Swift half reports in about 90 seconds, both
+# still block a merge, and the wall clock is the slower of the two rather than
+# their sum.
+#
+# The reference-frame checks (#163) belong on a Mac rather than in tests.yml
+# because they render the real templates, and the templates draw with macOS
+# system fonts (SignPainter, HelveticaNeue) that the Linux runner does not have,
+# so a recorded frame can only be compared here.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-    paths:
-      - "PostRollApp/**"
-      - "tests/fixtures/**"
-      - "postroll/media/**"
-      # Every font-dependent check by name. `tests/test_ci_runs_the_font_dependent_checks.py`
-      # asserts this list against the files actually carrying the marker, in
-      # both directions, so a new one cannot be added without landing here.
-      - "tests/test_golden_frames.py"
-      - "tests/test_frame_legibility.py"
-      - "tests/test_gallery_alignment.py"
-      - "tests/test_slider_program_plate.py"
-      # The wordmark the reference frames and the legibility bands both draw
-      # with. The colophon check takes the mark's INK from this file, so
-      # swapping it changes what every one of those checks measures (#246, L88).
-      - "postroll/assets/**"
-      - ".github/workflows/swift.yml"
   workflow_dispatch:
 
-# Pushing a fix to a pull request used to leave the superseded run billing to
-# completion, nine macOS minutes at the 10x private-repo multiplier, for a commit
-# nobody would ever merge (#430).
+# Pushing a fix to a pull request used to leave the superseded run running to
+# completion, nine macOS minutes, for a commit nobody would ever merge (#430).
 #
 # The group is the PR number rather than the ref, so a push to main gets a group
 # of its own keyed by SHA. That matters in both directions: a merge is never
@@ -71,9 +63,8 @@ concurrency:
 jobs:
   # Runs the PostRollTests scheme, not the PostRoll scheme, so the GUI-driving
   # PostRollUITests target is excluded: a headless runner cannot reliably drive
-  # XCUIApplication. Then the reference-frame checks, which need this runner's
-  # fonts.
-  macos:
+  # XCUIApplication.
+  swift-unit:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -156,10 +147,19 @@ jobs:
           path: PostRollApp/.derived-data
           key: ${{ steps.cache-key.outputs.key }}
 
+  # No Xcode work here at all: these render through Python and Pillow and read
+  # pixels back out. They need this runner for its FONTS, not for a build, so the
+  # job deliberately does not install XcodeGen or compile the app.
+  reference-frames:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
@@ -191,13 +191,13 @@ jobs:
           POSTROLL_REQUIRE_FFMPEG: "1"
           POSTROLL_REQUIRE_GOLDENS: "1"
       #
-      # `-n auto` because these four files are 586s of this job's 13 minutes,
-      # every second of it spent rendering real reels through ffmpeg. Locally,
-      # four workers took them from 495s to 221s. Safe to parallelise because
-      # every test here writes only into pytest's per-test tmp_path and reads
-      # everything else; `test_reference_frames_are_safe_to_parallelise` holds
-      # that true. `auto` rather than a fixed count so it follows the runner
-      # rather than this Mac.
+      # `-n auto` because these four files are 586s of the 780 this job used to
+      # take, every second of it spent rendering real reels through ffmpeg.
+      # Locally, four workers took them from 495s to 221s. Safe to parallelise
+      # because every test here writes only into pytest's per-test tmp_path, and
+      # `tests/conftest.py` now fails any module that writes into the source tree
+      # at all (#497), so that is enforced rather than remembered. `auto` rather
+      # than a fixed count so it follows the runner rather than this Mac.
         run: >
           pytest tests/test_golden_frames.py tests/test_frame_legibility.py
           tests/test_gallery_alignment.py tests/test_slider_program_plate.py

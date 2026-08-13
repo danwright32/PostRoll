@@ -10,6 +10,13 @@ have caught it before merging.
 These assert the trigger rules that close that hole, so re-adding the blanket
 pull-request skip goes red instead of going unnoticed for another eight merges.
 
+The rule is now the strongest available: every pull request runs both jobs,
+whatever it touched (#431). The paths filter that used to narrow it is gone, and
+the tests that checked its coverage went with it, because a filter that runs
+everything has no coverage to check. Two of those tests were themselves written
+after a filter skipped precisely the change that broke the suite (#246), which is
+the argument for not having one.
+
 They read the workflow as text rather than parsing YAML, which is a real
 limitation: a rule expressed in a shape these strings do not match would pass
 here. Adding a YAML parser to the runtime dependencies for one test is not
@@ -36,58 +43,20 @@ def swift() -> str:
     return SWIFT.read_text()
 
 
-# ── deriving the trigger paths from what the tests actually read ──────────────
-
-def _outside_inputs() -> set[str]:
-    """Repo-relative files the Swift tests read from outside `PostRollApp/`.
-
-    Read out of the sources rather than listed by hand, because a list
-    maintained beside the tests drifts the moment someone adds a fixture and
-    does not think of this file, which is the exact failure #246 is about.
-    """
-    # Two ways the tests name a repo file: appendingPathComponent on a URL they
-    # built themselves, and RepoFixture, which takes the repo-relative path
-    # directly (#271). Both are matched, because a scan that knew only the
-    # first went blind the moment the suites moved to the helper, and this test
-    # correctly refused rather than reporting a confident empty set.
-    patterns = (
-        r'appendingPathComponent\(\s*"([^"]+)"',
-        r'RepoFixture\.(?:data|text)\(\s*"([^"]+)"',
-    )
-    found: set[str] = set()
-    for source in sorted(SWIFT_TESTS.rglob("*.swift")):
-        text = source.read_text()
-        for pattern in patterns:
-            for literal in re.findall(pattern, text):
-                if literal.startswith("/") or ".." in literal:
-                    continue
-                # Only literals that name a real committed file are inputs; the
-                # rest are paths built at runtime inside a temp directory.
-                if (REPO_ROOT / literal).is_file():
-                    found.add(literal)
-    return found
-
-
-def _trigger_paths(swift: str) -> list[str]:
-    """The `paths:` entries on the pull_request trigger, in order."""
-    after = swift.split("paths:", 1)[1]
-    entries = []
-    for line in after.splitlines()[1:]:
-        stripped = line.strip()
-        if not stripped.startswith("- "):
-            break
-        entries.append(stripped[2:].strip().strip('"').strip("'"))
-    return entries
-
-
-def _is_covered(path: str, patterns: list[str]) -> bool:
-    for pattern in patterns:
-        if pattern.endswith("/**"):
-            if path.startswith(pattern[:-2]):
-                return True
-        elif pattern == path:
-            return True
-    return False
+def _jobs(swift: str) -> dict[str, str]:
+    """Each job's name and body, so a claim about one job cannot be satisfied by
+    something sitting in the other."""
+    after = swift.split("\njobs:", 1)[1]
+    jobs: dict[str, str] = {}
+    current = None
+    for line in after.splitlines():
+        header = re.match(r"^  ([A-Za-z][\w-]*):\s*$", line)
+        if header:
+            current = header.group(1)
+            jobs[current] = ""
+        elif current:
+            jobs[current] += line + "\n"
+    return jobs
 
 
 # ── the hole that let a red main through ──────────────────────────────────────
@@ -109,40 +78,69 @@ def test_it_is_not_hiding_back_in_the_python_workflow():
     assert "swift" not in TESTS.read_text().lower()
 
 
-# ── the cost trade it replaces ────────────────────────────────────────────────
-
-def test_pull_requests_only_pay_when_they_touch_the_app(swift):
-    # macOS runner minutes bill at a 10x multiplier on a private repo, so a
-    # Python-only PR must still cost nothing. Touching the app is the only way
-    # a PR can break the Swift build.
-    assert "paths:" in swift
-    assert "PostRollApp/**" in swift
+# ── every pull request runs it, whatever it touched (#431) ────────────────────
 
 
-def test_every_file_the_swift_tests_read_from_outside_the_app_triggers_the_job(swift):
-    # #246: two Swift tests read cross-language fixtures under `tests/`, so a
-    # PR that regenerates one of them can turn the Swift suite red while the
-    # job that would have said so never runs. A skipped job looks exactly like
-    # a passing one, which is the same shape of hole #245 was written to close.
-    #
-    # Derived from the sources so a fixture added later is covered without
-    # anyone remembering this file exists.
-    inputs = _outside_inputs()
-    assert inputs, (
-        "found no cross-language inputs at all; the regex has stopped matching "
-        "how the Swift tests locate fixtures, so this test now proves nothing")
+def test_no_paths_filter_narrows_what_a_pull_request_runs(swift):
+    """The decision this replaces two years of tuning with.
 
-    patterns = _trigger_paths(swift)
-    uncovered = sorted(p for p in inputs if not _is_covered(p, patterns))
-    assert not uncovered, (
-        f"the Swift tests read {uncovered} but no trigger path covers them, so "
-        f"a PR changing those files would skip the job that they can break")
+    A filter has to be maintained against everything the suite reads, and the
+    failure mode of getting it wrong is silent: the job is skipped, and a skipped
+    job is indistinguishable from a passing one. That happened twice, once by
+    skipping pull requests entirely (#233) and once by filtering to the app folder
+    while two tests read fixtures living beside the Python suite (#246).
+
+    Re-adding a filter is therefore a deliberate reopening of that hole, and it
+    fails here rather than being noticed eight merges later.
+    """
+    assert "paths:" not in swift, (
+        "a paths filter is back on the macOS workflow, so some pull requests will "
+        "skip these checks, and a skipped check reads exactly like a passing one")
 
 
-def test_a_change_to_this_workflow_runs_it(swift):
-    # Otherwise editing the trigger rules is the one change that cannot be
-    # verified by the job it configures.
-    assert ".github/workflows/swift.yml" in swift
+def test_the_two_halves_run_as_separate_jobs(swift):
+    """Otherwise a Swift compile error is reported only after the reels render.
+
+    They are independent: one compiles and tests the app, the other renders
+    templates through Python. In one job they ran in sequence and the wall clock
+    was their sum, so the fast signal arrived last.
+    """
+    jobs = _jobs(swift)
+
+    assert len(jobs) >= 2, f"the macOS work is back in one job: {list(jobs)}"
+    running_swift = [name for name, body in jobs.items()
+                     if "-scheme PostRollTests" in body]
+    running_frames = [name for name, body in jobs.items()
+                      if "test_golden_frames.py" in body]
+
+    assert running_swift and running_frames, (
+        f"could not find both halves: swift in {running_swift}, "
+        f"reference frames in {running_frames}")
+    assert set(running_swift).isdisjoint(running_frames), (
+        "the Swift tests and the reference frames are in the same job again, so "
+        "the quick signal waits on the slow one")
+
+
+def test_the_reference_frame_job_does_not_pay_for_a_build(swift):
+    """It needs this runner's FONTS, not a compiler.
+
+    Left in, an Xcode build would put two and a half minutes back onto the job
+    that is already the slow half, for nothing it uses.
+    """
+    frames = next(body for name, body in _jobs(swift).items()
+                  if "test_golden_frames.py" in body)
+
+    assert "xcodebuild" not in frames, (
+        "the reference-frame job builds the app, which it never uses")
+    assert "xcodegen" not in frames, (
+        "the reference-frame job generates the Xcode project, which it never uses")
+
+
+def test_pull_requests_still_run_the_app_checks(swift):
+    # The pull_request trigger has to be there at all: this whole file exists
+    # because it once was not.
+    assert "pull_request:" in swift
+    assert "branches: [main]" in swift
 
 
 def test_pushes_to_main_run_it_regardless_of_what_changed(swift):
@@ -189,12 +187,6 @@ def test_the_reference_frames_run_on_a_mac(swift):
     assert "tests/test_golden_frames.py" in swift, (
         "the reference-frame checks are not run by any job, so they only ever "
         "guard a template on whoever remembers to run them locally")
-
-
-def test_a_change_to_a_media_generator_runs_the_reference_frames(swift):
-    # The templates are what the frames are OF, so a change to one that does not
-    # trigger the job leaves the check it was written for unrun.
-    assert "postroll/media/**" in swift
 
 
 def test_a_missing_font_or_encoder_fails_the_job_rather_than_skipping(swift):

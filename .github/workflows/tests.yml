@@ -100,4 +100,13 @@ jobs:
         # No PYTHONPATH prefix: pyproject.toml puts the repo root on the path
         # and points pytest at tests/, so a local run and a CI run are the same
         # command (#114).
-        run: pytest -v
+        #
+        # `-n auto` on a 4 vCPU runner takes this from 169s to roughly 70 to 100s
+        # (#431). Only safe since #497: the design fingerprint guards used to
+        # write perturbed copies of real modules into the source tree and restore
+        # them, so a worker hashing one of those files mid-perturbation reported a
+        # redesign that never happened. They work on a copy in tmp_path now, and
+        # `tests/conftest.py` fails any module that writes into the source tree,
+        # so the precondition is enforced rather than assumed. Proven by two clean
+        # full-suite parallel runs before this landed.
+        run: pytest -v -n auto
