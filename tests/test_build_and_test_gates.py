@@ -8,6 +8,7 @@ tests skipping silently in CI, and an untested build being installed to
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -199,6 +200,32 @@ def test_the_swift_output_still_reaches_the_operator_on_a_green_run(tmp_path):
     combined = result.stdout + result.stderr
     assert "Executed 927 tests" in combined, combined[-2000:]
     assert "permissions problem" not in combined, combined[-2000:]
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_the_install_gate_runs_the_suite_the_make_target_defines():
+    """One spelling of the Python run, not two (#430).
+
+    This script used to carry its own `pytest tests/ -q`, identical to the
+    Makefile's. The day the full run was split into a serial pass and a parallel
+    one, the install gate would have gone on running the old single command and
+    nothing would have said so: it would still have been a full green suite, just
+    five minutes slower than the one everybody else was running.
+
+    Comment lines are stripped first, so the prose explaining the delegation
+    cannot satisfy the check for it (L103).
+    """
+    code = "\n".join(
+        line for line in BUILD_INSTALL.read_text().splitlines()
+        if not line.strip().startswith("#")
+    )
+
+    assert re.search(r"make\s+-C\s+\S+\s+test-python", code), (
+        "the install gate does not run the Makefile's Python test target, so "
+        "how it runs the suite can drift from how everything else does")
+    assert "-m pytest" not in code, (
+        "the install gate has its own pytest invocation again; the Makefile is "
+        "the one place that decides what the full run is")
 
 
 @pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")

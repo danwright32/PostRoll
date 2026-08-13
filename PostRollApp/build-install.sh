@@ -57,7 +57,12 @@ else
   echo "==> Running the Python tests before installing"
   REPO_ROOT="$(cd .. && pwd)"
   if [[ -x "${REPO_ROOT}/venv/bin/python" ]]; then
-    (cd "${REPO_ROOT}" && PYTHONPATH=. venv/bin/python -m pytest tests/ -q)
+    # Through the Makefile target rather than a second copy of the pytest
+    # command (#430). This script used to spell the invocation itself, so the
+    # day the full run was split into a serial pass and a parallel one, the
+    # install gate would have kept running the old single serial command and
+    # nobody would have seen the difference.
+    make -C "${REPO_ROOT}" test-python
   else
     # A missing venv is not a pass. Refuse rather than install a bundle whose
     # entire generation pipeline went unchecked.

@@ -55,6 +55,19 @@ on:
       - ".github/workflows/swift.yml"
   workflow_dispatch:
 
+# Pushing a fix to a pull request used to leave the superseded run billing to
+# completion, nine macOS minutes at the 10x private-repo multiplier, for a commit
+# nobody would ever merge (#430).
+#
+# The group is the PR number rather than the ref, so a push to main gets a group
+# of its own keyed by SHA. That matters in both directions: a merge is never
+# cancelled by the next one (cancel-in-progress is false for pushes anyway), and
+# it is never QUEUED behind the previous one either, which a ref-keyed group
+# would have done to every pair of back-to-back merges.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Runs the PostRollTests scheme, not the PostRoll scheme, so the GUI-driving
   # PostRollUITests target is excluded: a headless runner cannot reliably drive
@@ -74,13 +87,74 @@ jobs:
         working-directory: PostRollApp
         run: xcodegen generate
 
+      # The key has to carry the TOOLCHAIN, not just the sources (#412). CI runs
+      # an older Xcode than the dev machine, and modules built by one are not
+      # valid input for another, so a key without it restores a cache that is
+      # worse than no cache: a build that fails for a reason unrelated to the
+      # change. Computed into an output once, so the restore and the save cannot
+      # end up spelling the same key two different ways.
+      - name: Work out the build-cache key
+        id: cache-key
+        run: |
+          toolchain=$(xcodebuild -version | tr -d ' .' | tr '\n' '-')
+          prefix="derived-data-${{ runner.os }}-${toolchain}"
+          echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}-${{ hashFiles('PostRollApp/**/*.swift', 'PostRollApp/project.yml') }}" >> "$GITHUB_OUTPUT"
+
+      # restore + save rather than actions/cache, because the save has to be a
+      # step this file controls: the folder is pruned and measured before
+      # anything is uploaded.
+      - name: Restore the build cache
+        id: build-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: PostRollApp/.derived-data
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: ${{ steps.cache-key.outputs.prefix }}-
+
       - name: Run the Swift unit tests
         run: |
           xcodebuild \
             -project PostRollApp/PostRoll.xcodeproj \
             -scheme PostRollTests \
             -destination 'platform=macOS' \
+            -derivedDataPath PostRollApp/.derived-data \
             test
+
+      # Only the compiled products earn their upload. Index.noindex is the
+      # editor's symbol index, which nothing on a runner reads, and Logs is a
+      # transcript of the run that just finished.
+      #
+      # The cap is the point of measuring: overture#2585 is this same folder
+      # filling a 926 GiB volume, and GitHub evicts a repo's oldest entries once
+      # it holds 10 GB, so an unbounded upload here would quietly push out the
+      # pip and ffmpeg caches and slow down the runs this was added to speed up.
+      # Over the cap it declines to save and says so, which leaves the job as
+      # slow as it is today rather than breaking it.
+      - name: Prune and measure the build cache
+        if: ${{ !cancelled() && steps.build-cache.outputs.cache-hit != 'true' }}
+        id: cache-size
+        run: |
+          rm -rf PostRollApp/.derived-data/Index.noindex PostRollApp/.derived-data/Logs
+          megabytes=$(du -sm PostRollApp/.derived-data | cut -f1)
+          echo "Build cache is ${megabytes} MB after pruning (cap 2000 MB)."
+          if [ "${megabytes}" -gt 2000 ]; then
+            echo "over-cap=true" >> "$GITHUB_OUTPUT"
+            echo "Not uploading it: over the cap."
+          else
+            echo "over-cap=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Saved even when the tests went red, because the run most likely to want
+      # a warm cache is the re-push that fixes them. Not on a cancelled run: a
+      # half-written folder is not worth keeping under a key that then looks
+      # like a hit.
+      - name: Save the build cache
+        if: ${{ !cancelled() && steps.build-cache.outputs.cache-hit != 'true' && steps.cache-size.outputs.over-cap == 'false' }}
+        uses: actions/cache/save@v4
+        with:
+          path: PostRollApp/.derived-data
+          key: ${{ steps.cache-key.outputs.key }}
 
       - name: Set up Python
         uses: actions/setup-python@v6

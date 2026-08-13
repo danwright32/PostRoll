@@ -16,6 +16,8 @@ audio/
 Test2
 build/
 PostRollApp/build/
+# Where CI points xcodebuild so the compiled products can be cached (#430).
+PostRollApp/.derived-data/
 
 # Local generation outputs and logs
 logs/
