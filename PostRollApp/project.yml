@@ -39,116 +39,22 @@ targets:
     platform: macOS
     sources:
       - path: Tests
-      - path: Sources/Models
-      - path: Sources/Services/EventStore.swift
-      - path: Sources/Services/ArchiveCleanup.swift
-      - path: Sources/Services/AppPaths.swift
-      - path: Sources/Services/OrphanedMediaCleanup.swift
-      - path: Sources/Services/DeletionPolicy.swift
-      - path: Sources/Services/MediaReclaim.swift
-      - path: Sources/Services/DayStateMerger.swift
-      - path: Sources/Services/EventJobTracker.swift
-      - path: Sources/Services/EventExporter.swift
-      - path: Sources/Services/PostingPresetStore.swift
-      - path: Sources/Services/CollageCandidate.swift
-      - path: Sources/Services/CollageCandidateCache.swift
-      - path: Sources/Services/AudioPreviewPlayer.swift
-      - path: Sources/Services/ProgressFileCleanup.swift
-      - path: Sources/Services/ExportFolderStatus.swift
-      - path: Sources/Services/SettingsCopy.swift
-      - path: Sources/Views/ReelPreviewPlayer.swift
-      - path: Sources/Views/BrandBanner.swift
-      - path: Sources/Views/ExportDoneSummary.swift
-      - path: Sources/Views/SharedChrome.swift
-      - path: Sources/Views/HaltedWeekBody.swift
-      - path: Sources/Views/GenerationScreenBodies.swift
-      - path: Sources/Services/GenerationFailureText.swift
-      - path: Sources/Services/GenerationRunPlan.swift
-      - path: Sources/Views/CaptionReviewBodies.swift
-      - path: Sources/Views/OCRReviewBodies.swift
-      - path: Sources/Services/OCRReviewReadiness.swift
-      - path: Sources/Views/PhotoAssignmentBodies.swift
-      - path: Sources/Services/Sentence.swift
-      - path: Sources/Services/SaveFailureNotice.swift
-      - path: Sources/Services/RunFailureKind.swift
-      - path: Sources/Services/NewEventValidation.swift
-      - path: Sources/Services/ManifestDay.swift
-      - path: Sources/Services/StageNavigation.swift
-      - path: Sources/Services/LayoutSidecar.swift
-      - path: Sources/Services/DesignStamp.swift
-      - path: Sources/Services/DesignStaleScan.swift
-      - path: Sources/Services/OutdatedDesignsDisplay.swift
-      - path: Sources/Services/BuildFreshness.swift
-      - path: Sources/Services/PreviewMergePolicy.swift
-      - path: Sources/Services/PreviewRunState.swift
-      - path: Sources/Services/PreviewGraphicsManager.swift
-      - path: Sources/Services/SpeculativeReelRenderer.swift
-      - path: Sources/Services/PerformerPanelDisplay.swift
-      - path: Sources/Services/PhotoTagBatch.swift
-      - path: Sources/Services/PhotoThumbControls.swift
-      - path: Sources/Services/PhotoTagSheetNavigation.swift
-      - path: Sources/Services/PhotoTagSuggestionList.swift
-      - path: Sources/Services/EventHandleSuggestions.swift
-      - path: Sources/Services/FridayReviewDisplay.swift
-      - path: Sources/Services/CoverReviewDisplay.swift
-      - path: Sources/Services/BlogDraftText.swift
-      - path: Sources/Services/FindingsDisplay.swift
-      - path: Sources/Services/DebouncedStoreWriter.swift
-      - path: Sources/Services/EventStageTransition.swift
-      - path: Sources/Services/StoreBackups.swift
-      - path: Sources/Services/StoreSaveGate.swift
-      - path: Sources/Views/ImageLoad.swift
-      - path: Sources/Views/LongRunIndicator.swift
-      - path: Sources/Services/BrandVoiceSaveText.swift
-      - path: Sources/Services/FieldText.swift
-      - path: Sources/Services/StoreRestoreText.swift
-      - path: Sources/Services/DataInventory.swift
-      - path: Sources/Services/ExportStaging.swift
-      - path: Sources/Services/CollageBakeOutcome.swift
-      - path: Sources/Services/InsightsDisplay.swift
-      - path: Sources/Services/CaptionBlocks.swift
-      - path: Sources/Services/BlogMeta.swift
-      - path: Sources/Services/AccountBook.swift
-      - path: Sources/Services/RecurringAccounts.swift
-      - path: Sources/Services/EventHandleSuggestions.swift
-      - path: Sources/Services/CollaboratorPick.swift
-      - path: Sources/Services/ScrollEdgeFade.swift
-      - path: Sources/Services/ExportReadiness.swift
-      - path: Sources/Services/ExportManifest.swift
-      - path: Sources/Services/ReelAudioSwap.swift
-      - path: Sources/Services/CollageLayoutReset.swift
-      - path: Sources/Services/AnalyticsStore.swift
-      - path: Sources/Services/PipelineProgress.swift
-      - path: Sources/Services/LongRunStatus.swift
-      - path: Sources/Services/ProgramPDFBuilder.swift
-      - path: Sources/Services/ProgramImport.swift
-      - path: Sources/Services/ProgramReadiness.swift
-      - path: Sources/Services/ProgramShortfall.swift
-      - path: Sources/Services/VisionTextLayer.swift
-      - path: Sources/Services/HaltedWeek.swift
-      - path: Sources/Services/PartialWeekMerge.swift
-      - path: Sources/Services/MediaErrorSummary.swift
-      - path: Sources/Services/RunOutcomeNotice.swift
-      - path: Sources/Services/ProgramScanRetention.swift
-      - path: Sources/Services/DataMigration.swift
-      - path: Sources/Services/CollageRenderer.swift
-      - path: Sources/Services/CollageGeometry.swift
-      - path: Sources/Services/ClipCropFrameStrip.swift
-      - path: Sources/Services/LegacyDataReclaim.swift
-      - path: Sources/Services/MediaPresence.swift
-      - path: Sources/Services/MissingMediaScan.swift
-      - path: Sources/Services/StoredErrorPolicy.swift
-      - path: Sources/Services/PythonBridgeError.swift
-      - path: Sources/Services/ProcessRunner.swift
-      - path: Sources/Services/PythonBridge.swift
-      - path: Sources/Services/CaptionCreditInputs.swift
-      - path: Sources/Services/TimingStore.swift
-      - path: Sources/Services/KeychainStore.swift
-      - path: Sources/Services/ExportManager.swift
-      - path: Sources/Services/NotificationService.swift
-      - path: Sources/AppState.swift
-      - path: Sources/Views/SpellCheckingTextEditor.swift
-      - path: Sources/DesignTokens.swift
+      # The whole of Sources, globbed, so a new file is compiled by the Swift
+      # suite the moment it exists (#527). This was a hand-kept list of every
+      # file, one path at a time: anything missing from it was exempt from the
+      # entire Swift suite, and nothing failed when somebody forgot, because the
+      # tests still passed, just without that file in them (L96). Six entries
+      # were added by hand in one session, twice only after a build error made
+      # it obvious.
+      #
+      # What is left OUT is written down here instead, where it reads as a
+      # decision. tests/test_swift_test_target_covers_sources.py holds the
+      # manifest to that: every Sources file is globbed in or named below.
+      - path: Sources
+        excludes:
+          # The @main entry point. A test bundle is loaded into a host process
+          # that already has one, so it must not carry a second.
+          - PostRollApp.swift
     settings:
       base:
         SWIFT_VERSION: "6.0"

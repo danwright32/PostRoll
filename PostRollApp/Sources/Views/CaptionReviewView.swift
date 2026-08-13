@@ -101,6 +101,10 @@ struct CaptionReviewView: View {
     @State private var analyzeStartedAt: Date? = nil
     @State private var learningSuggestion: String? = nil
     @State private var showLearnSheet = false
+    /// Set when the learn-from-edits pass could not be run at all (#526). Its
+    /// own field rather than a shared one, so a failed review cannot be read as
+    /// a failed export or erase some other notice (L53).
+    @State private var learningFailure: String? = nil
 
     // Preview graphics generation
     // Preview-graphic runs are owned by PreviewGraphicsManager, not this view:
@@ -427,6 +431,22 @@ struct CaptionReviewView: View {
                 },
                 onCancel: { editingAccount = nil }
             )
+        }
+        // The review of Dan's edits could not be run. Reported rather than
+        // skipped past, and it does not block the week: the captions are
+        // already saved, so the only thing lost is the note the pass would have
+        // proposed. Continuing is his call, taken here rather than made for him
+        // by a `try?` (#526).
+        .alert("Your edits could not be reviewed",
+               isPresented: Binding(get: { learningFailure != nil },
+                                    set: { if !$0 { learningFailure = nil } })) {
+            Button("Continue to export") {
+                learningFailure = nil
+                finalizeAdvance()
+            }
+            Button("Stay here", role: .cancel) { learningFailure = nil }
+        } message: {
+            Text(learningFailure ?? "")
         }
         .sheet(isPresented: $showLearnSheet) {
             if let suggestion = learningSuggestion {
@@ -1364,15 +1384,28 @@ struct CaptionReviewView: View {
         isAnalyzingEdits = true
         analyzeStartedAt = Date()
         Task {
-            let suggestion = try? await PythonBridge.shared.runLearnFromEdits(result: result)
+            // Not `try?`. A pass that FAILED used to return the same nil as one
+            // with nothing to say, so a paid Claude call that never ran looked
+            // exactly like a model that had no note to add, and the week
+            // advanced either way (#526).
+            var suggestion: String? = nil
+            var failure: String? = nil
+            do {
+                suggestion = try await PythonBridge.shared.runLearnFromEdits(result: result)
+            } catch {
+                failure = error.localizedDescription
+            }
             await MainActor.run {
                 isAnalyzingEdits = false
                 analyzeStartedAt = nil
-                if let s = suggestion, !s.isEmpty {
+                switch LearnFromEditsOutcome.decide(suggestion: suggestion, failure: failure) {
+                case .offerSuggestion(let s):
                     learningSuggestion = s
                     showLearnSheet = true
-                } else {
+                case .advance:
                     finalizeAdvance()
+                case .reportFailure(let message):
+                    learningFailure = message
                 }
             }
         }

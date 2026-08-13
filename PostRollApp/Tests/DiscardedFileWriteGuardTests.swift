@@ -28,6 +28,17 @@ final class DiscardedFileWriteGuardTests: XCTestCase {
     /// line in the tree. The first version of this guard did exactly that.
     private static let producingCalls = [".copyItem(", ".moveItem(", ".replaceItemAt(", ".write(to:"]
 
+    /// Modifiers a function declaration may carry before `func`.
+    ///
+    /// A line is only read as a declaration when everything before `func` is
+    /// one of these, so `func` appearing inside a closure, a string or a
+    /// trailing expression is not mistaken for one.
+    private static let declarationModifiers: Set<String> = [
+        "public", "private", "internal", "fileprivate", "open", "package",
+        "static", "class", "final", "override", "mutating", "nonisolated",
+        "@MainActor", "@discardableResult", "@objc", "@inlinable", "@nonobjc",
+    ]
+
     /// `file:line-fragment` -> why discarding this one is the right call.
     ///
     /// Every entry is a promise that nothing downstream treats the file as
@@ -71,14 +82,92 @@ final class DiscardedFileWriteGuardTests: XCTestCase {
             .appendingPathComponent("Sources")
     }
 
-    /// Every `try?` in Sources sitting on a file-producing call, as
-    /// `file|trimmed line`.
-    private static func discardedProducingWrites() throws -> [String] {
-        var found: [String] = []
+    /// Every Swift file under Sources.
+    private static func sourceFiles() throws -> [URL] {
+        var urls: [URL] = []
         let files = FileManager.default.enumerator(at: sourcesDir,
                                                    includingPropertiesForKeys: nil)
         while let url = files?.nextObject() as? URL {
-            guard url.pathExtension == "swift" else { continue }
+            if url.pathExtension == "swift" { urls.append(url) }
+        }
+        return urls.sorted { $0.path < $1.path }
+    }
+
+    /// The function name a line declares, if the line is a declaration.
+    private static func declaredFunctionName(_ line: String) -> String? {
+        guard let range = line.range(of: #"\bfunc\s+[A-Za-z0-9_]+"#,
+                                     options: .regularExpression) else { return nil }
+        for token in line[line.startIndex..<range.lowerBound].split(separator: " ") {
+            guard declarationModifiers.contains(String(token)) else { return nil }
+        }
+        return line[range].split(separator: " ").last.map(String.init)
+    }
+
+    /// Throwing functions declared in Sources whose own body produces a file.
+    ///
+    /// This is the half #462 slipped through and #526 closes. The guard used to
+    /// look at one physical line, so `try? fm.copyItem(…)` was caught and
+    /// `try? bridge.appendBrandVoiceNote(…)` was not, even though the second is
+    /// the first with a function call in front of it. Four sites survived on
+    /// exactly that difference: they discarded a throwing write one level deep
+    /// and then told Dan the note had been saved.
+    ///
+    /// Deliberately one level, not the transitive closure. Following calls all
+    /// the way down reaches around a hundred and forty names, including `save`,
+    /// `load`, `open` and `commit`, and a bare name that common collides with
+    /// unrelated APIs (`handle.write(contentsOf:)`, `asset.load(.duration)`) and
+    /// turns the guard into noise. One level is the wrapper somebody wrote to
+    /// do the writing, which is the thing being hidden.
+    private static func fileProducingWrappers() throws -> Set<String> {
+        var names: Set<String> = []
+        for url in try sourceFiles() {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+                .map(String.init)
+            var i = 0
+            while i < lines.count {
+                let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+                guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("*"),
+                      let name = declaredFunctionName(trimmed) else { i += 1; continue }
+
+                // The signature runs to the first brace, which may be several
+                // lines down when the parameters are wrapped.
+                var header = ""
+                var open = i
+                while open < lines.count {
+                    header += lines[open]
+                    if lines[open].contains("{") { break }
+                    open += 1
+                }
+                guard open < lines.count else { break }
+
+                var depth = 0
+                var body = ""
+                var end = open
+                while end < lines.count {
+                    depth += lines[end].filter { $0 == "{" }.count
+                    depth -= lines[end].filter { $0 == "}" }.count
+                    body += lines[end] + "\n"
+                    end += 1
+                    if depth <= 0 { break }
+                }
+
+                if header.contains("throws"),
+                   producingCalls.contains(where: { body.contains($0) }) {
+                    names.insert(name)
+                }
+                i = max(end, i + 1)
+            }
+        }
+        return names
+    }
+
+    /// Every `try?` in Sources sitting on a file-producing call, as
+    /// `file|trimmed line`.
+    private static func discardedProducingWrites() throws -> [String] {
+        let wrappers = try fileProducingWrappers()
+        var found: [String] = []
+        for url in try sourceFiles() {
             let text = try String(contentsOf: url, encoding: .utf8)
             for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
                 let line = rawLine.trimmingCharacters(in: .whitespaces)
@@ -86,7 +175,11 @@ final class DiscardedFileWriteGuardTests: XCTestCase {
                 // matches prose is indistinguishable from one that works (L103).
                 guard !line.hasPrefix("//"), !line.hasPrefix("///"), !line.hasPrefix("*") else { continue }
                 guard line.contains("try?") else { continue }
-                guard producingCalls.contains(where: { line.contains($0) }) else { continue }
+                let direct = producingCalls.contains { line.contains($0) }
+                let wrapped = wrappers.contains { name in
+                    line.range(of: "\\b\(name)\\s*\\(", options: .regularExpression) != nil
+                }
+                guard direct || wrapped else { continue }
                 found.append("\(url.lastPathComponent)|\(line)")
             }
         }
@@ -143,6 +236,28 @@ final class DiscardedFileWriteGuardTests: XCTestCase {
         XCTAssertFalse(occurrences.isEmpty,
                        "the scanner found nothing at all, which means it stopped working")
         XCTAssertGreaterThanOrEqual(occurrences.count, Self.allowed.count)
+    }
+
+    /// The wrapper half has to be able to see wrappers.
+    ///
+    /// Finding none would leave every assertion above green while the widened
+    /// guard checked nothing at all, which is the shape it exists to close
+    /// (L98). Asserted as "it still finds several", not as a pinned list: a
+    /// pinned list would need editing every time a function is renamed, and
+    /// each edit is a chance to pin the empty answer (L63).
+    func testTheScannerStillFindsFileProducingWrappers() throws {
+        let wrappers = try Self.fileProducingWrappers()
+
+        XCTAssertGreaterThanOrEqual(wrappers.count, 5, """
+            The scanner found \(wrappers.count) throwing functions in Sources that \
+            write a file. It has found ten or more every time it has been run, so \
+            this means the parser has stopped recognising declarations rather than \
+            the tree having changed. While it reads zero, a `try?` on any wrapper \
+            is invisible to this guard, which is exactly how #462's four sites \
+            survived it.
+
+            Found: \(wrappers.sorted().joined(separator: ", "))
+            """)
     }
 
     private func matches(_ key: String, _ occurrence: String) -> Bool {
