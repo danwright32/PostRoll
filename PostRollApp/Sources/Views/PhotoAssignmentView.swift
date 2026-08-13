@@ -2312,21 +2312,6 @@ private struct PhotoThumb: View {
 
 /// Placeholder shown in a photo thumbnail when the underlying file can't be
 /// read (moved or deleted off disk).
-private struct MissingPhotoBadge: View {
-    var body: some View {
-        Color.creamDeep.overlay {
-            VStack(spacing: 2) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.roseGold.opacity(0.85))
-                Text("missing")
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(Color.warmMid)
-            }
-        }
-    }
-}
-
 // MARK: - Audio File Picker (with play/pause)
 
 private struct AudioFilePicker: View {
@@ -2450,7 +2435,7 @@ private struct DayNotesField: View {
 private struct PhotoPreviewOverlay: View {
     let url: URL
     let onDismiss: () -> Void
-    @State private var image: NSImage?
+    @State private var load: ImageLoad = .loading
 
     var body: some View {
         ZStack {
@@ -2458,14 +2443,30 @@ private struct PhotoPreviewOverlay: View {
                 .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
 
-            if let image {
+            switch load {
+            case .loaded(let image):
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
                     .padding(48)
                     .shadow(color: .black.opacity(0.5), radius: 24, y: 6)
-            } else {
+            case .loading:
                 ProgressView().tint(.white)
+            case .missing:
+                // Opened from a thumbnail, so the file was there when the list
+                // was drawn. A spinner here reads as a slow load of a photo
+                // that is simply gone (L10).
+                VStack(spacing: Spacing.sm) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.white.opacity(0.85))
+                    Text("This file is missing")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                    Text(url.lastPathComponent)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
             }
 
             // Dismiss button — top right
@@ -2485,7 +2486,7 @@ private struct PhotoPreviewOverlay: View {
                 Spacer()
             }
         }
-        .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+        .task { load = await ImageLoad.read(url) }
     }
 }
 

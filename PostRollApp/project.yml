@@ -95,6 +95,9 @@ targets:
       - path: Sources/Services/EventStageTransition.swift
       - path: Sources/Services/StoreBackups.swift
       - path: Sources/Services/StoreSaveGate.swift
+      - path: Sources/Views/ImageLoad.swift
+      - path: Sources/Views/LongRunIndicator.swift
+      - path: Sources/Services/BrandVoiceSaveText.swift
       - path: Sources/Services/StoreRestoreText.swift
       - path: Sources/Services/DataInventory.swift
       - path: Sources/Services/InsightsDisplay.swift

@@ -441,10 +441,20 @@ struct CaptionReviewView: View {
             if let suggestion = learningSuggestion {
                 LearningSuggestionSheet(
                     suggestion: suggestion,
+                    // Returns whether the write happened, so the sheet can
+                    // stay open on a failure. It used to discard a suggestion
+                    // Dan had just edited by hand, dismiss, and advance the
+                    // week, and the only copy of those words was in the sheet
+                    // that closed (#462).
                     onSave: { editedSuggestion in
-                        try? PythonBridge.shared.appendBrandVoiceNote(editedSuggestion)
-                        showLearnSheet = false
-                        finalizeAdvance()
+                        do {
+                            try PythonBridge.shared.appendBrandVoiceNote(editedSuggestion)
+                            showLearnSheet = false
+                            finalizeAdvance()
+                            return nil
+                        } catch {
+                            return BrandVoiceSaveText.failed(error.localizedDescription)
+                        }
                     },
                     onSkip: {
                         showLearnSheet = false
@@ -1477,6 +1487,9 @@ private struct CaptionSection: View {
     @State private var saveToBrandVoice = false
     @State private var isRevising = false
     @State private var revisionError: String?
+    /// A brand voice note that would not write, kept apart from the revision's
+    /// own outcome (#462).
+    @State private var brandVoiceError: String?
     @State private var undoCaption: DayCaption? = nil
     @State private var mockupWidth: CGFloat = 480
 
@@ -1813,12 +1826,17 @@ private struct CaptionSection: View {
                                         saveToBrandVoice: $saveToBrandVoice,
                                         isRevising: isRevising,
                                         error: revisionError,
+                                        brandVoiceError: brandVoiceError,
                                         onApply: { applyRevision() },
                                         onCancel: {
                                             showingRevision = false
                                             feedbackText = ""
                                             saveToBrandVoice = false
                                             revisionError = nil
+                                brandVoiceError = nil
+                                    brandVoiceError = nil
+                                        brandVoiceError = nil
+                                            brandVoiceError = nil
                                         }
                                     )
                                 } else {
@@ -1974,12 +1992,17 @@ private struct CaptionSection: View {
                                         saveToBrandVoice: $saveToBrandVoice,
                                         isRevising: isRevising,
                                         error: revisionError,
+                                        brandVoiceError: brandVoiceError,
                                         onApply: { applyRevision() },
                                         onCancel: {
                                             showingRevision = false
                                             feedbackText = ""
                                             saveToBrandVoice = false
                                             revisionError = nil
+                                brandVoiceError = nil
+                                    brandVoiceError = nil
+                                        brandVoiceError = nil
+                                            brandVoiceError = nil
                                         }
                                     )
                                 } else {
@@ -2079,12 +2102,16 @@ private struct CaptionSection: View {
                                     saveToBrandVoice: $saveToBrandVoice,
                                     isRevising: isRevising,
                                     error: revisionError,
+                                    brandVoiceError: brandVoiceError,
                                     onApply: { applyRevision() },
                                     onCancel: {
                                         showingRevision = false
                                         feedbackText = ""
                                         saveToBrandVoice = false
                                         revisionError = nil
+                                brandVoiceError = nil
+                                    brandVoiceError = nil
+                                        brandVoiceError = nil
                                     }
                                 )
                             } else {
@@ -2378,12 +2405,15 @@ private struct CaptionSection: View {
                                 saveToBrandVoice: $saveToBrandVoice,
                                 isRevising: isRevising,
                                 error: revisionError,
+                                brandVoiceError: brandVoiceError,
                                 onApply: { applyRevision() },
                                 onCancel: {
                                     showingRevision = false
                                     feedbackText = ""
                                     saveToBrandVoice = false
                                     revisionError = nil
+                                brandVoiceError = nil
+                                    brandVoiceError = nil
                                 }
                             )
                         } else {
@@ -2423,15 +2453,30 @@ private struct CaptionSection: View {
         Task {
             do {
                 try await onRevise(trimmed)
+                // The revision has landed. A note that will not write is its own
+                // failure and gets its own field: reporting it as the revision
+                // failing would tell Dan his edit had not happened when it had
+                // (#462, L53).
+                var noteFailure: String? = nil
                 if shouldSave {
-                    try? PythonBridge.shared.appendBrandVoiceNote(trimmed)
+                    do {
+                        try PythonBridge.shared.appendBrandVoiceNote(trimmed)
+                    } catch {
+                        noteFailure = BrandVoiceSaveText
+                            .revisionLandedButNoteDidNot(error.localizedDescription)
+                    }
                 }
                 await MainActor.run {
                     undoCaption = snapshot
                     isRevising = false
-                    showingRevision = false
-                    feedbackText = ""
-                    saveToBrandVoice = false
+                    brandVoiceError = noteFailure
+                    // Held open on a failed note, because the note is the text
+                    // in this sheet and dismissing is what threw it away.
+                    showingRevision = (noteFailure != nil)
+                    if noteFailure == nil {
+                        feedbackText = ""
+                        saveToBrandVoice = false
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -2450,6 +2495,10 @@ private struct RevisionPanel: View {
     @Binding var saveToBrandVoice: Bool
     let isRevising: Bool
     let error: String?
+    /// The revision landed and only the brand voice note did not (#462). Its
+    /// own field rather than a second meaning for `error`, which would say the
+    /// revision failed when it did not.
+    var brandVoiceError: String? = nil
     let onApply: () -> Void
     let onCancel: () -> Void
     @FocusState private var focused: Bool
@@ -2493,6 +2542,13 @@ private struct RevisionPanel: View {
 
             if let error {
                 Text(error)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.roseDeep)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let brandVoiceError {
+                Text(brandVoiceError)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.roseDeep)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2546,6 +2602,9 @@ private struct BlogSection: View {
     @State private var saveToBrandVoice = false
     @State private var isRevising = false
     @State private var revisionError: String?
+    /// A brand voice note that would not write, kept apart from the revision's
+    /// own outcome (#462).
+    @State private var brandVoiceError: String?
     @State private var isSwappingPhotos = false
     @State private var photoSwapError: String?
     @State private var undoBlog: BlogOutput? = nil
@@ -2799,12 +2858,14 @@ private struct BlogSection: View {
                             saveToBrandVoice: $saveToBrandVoice,
                             isRevising: isRevising,
                             error: revisionError,
+                            brandVoiceError: brandVoiceError,
                             onApply: { applyRevision() },
                             onCancel: {
                                 showingRevision = false
                                 feedbackText = ""
                                 saveToBrandVoice = false
                                 revisionError = nil
+                                brandVoiceError = nil
                             }
                         )
                     } else {
@@ -2906,15 +2967,28 @@ private struct BlogSection: View {
         Task {
             do {
                 try await onRevise(trimmed)
+                // The revision has landed. A note that will not write is its own
+                // failure and gets its own field: reporting it as the revision
+                // failing would tell Dan his edit had not happened when it had
+                // (#462, L53).
+                var noteFailure: String? = nil
                 if shouldSave {
-                    try? PythonBridge.shared.appendBrandVoiceNote(trimmed)
+                    do {
+                        try PythonBridge.shared.appendBrandVoiceNote(trimmed)
+                    } catch {
+                        noteFailure = BrandVoiceSaveText
+                            .revisionLandedButNoteDidNot(error.localizedDescription)
+                    }
                 }
                 await MainActor.run {
                     undoBlog = snapshot
                     isRevising = false
-                    showingRevision = false
-                    feedbackText = ""
-                    saveToBrandVoice = false
+                    brandVoiceError = noteFailure
+                    showingRevision = (noteFailure != nil)
+                    if noteFailure == nil {
+                        feedbackText = ""
+                        saveToBrandVoice = false
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -4204,7 +4278,7 @@ private struct PreviewGraphicThumbnail: View {
     var isRegenerating: Bool = false
     var onRegenerate: (() -> Void)? = nil
     var maxHeight: CGFloat? = nil
-    @State private var image: NSImage?
+    @State private var load: ImageLoad = .loading
 
     private var resolvedMaxHeight: CGFloat {
         maxHeight ?? max(440, (NSScreen.main?.visibleFrame.height ?? 800) * 0.82)
@@ -4212,14 +4286,7 @@ private struct PreviewGraphicThumbnail: View {
 
     var body: some View {
         Group {
-            if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Color.creamDeep
-                    .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
-            }
+            load.thumbnail(iconSize: 22, labelSize: 11)
         }
         .aspectRatio(9/16, contentMode: .fit)
         .frame(maxWidth: .infinity, maxHeight: resolvedMaxHeight)
@@ -4273,23 +4340,18 @@ private struct PreviewGraphicThumbnail: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { if !isRegenerating { onPreview() } }
-        .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+        .task { load = await ImageLoad.read(url) }
     }
 }
 
 private struct ReviewThumb: View {
     let url: URL
     let onTap: () -> Void
-    @State private var image: NSImage?
+    @State private var load: ImageLoad = .loading
 
     var body: some View {
         Group {
-            if let image {
-                Image(nsImage: image).resizable().scaledToFill()
-            } else {
-                Color.creamDeep
-                    .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
-            }
+            load.thumbnail()
         }
         .frame(width: 80, height: 80)
         .clipShape(RoundedRectangle(cornerRadius: Radius.md))
@@ -4299,7 +4361,7 @@ private struct ReviewThumb: View {
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
-        .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+        .task { load = await ImageLoad.read(url) }
     }
 }
 
@@ -5599,12 +5661,16 @@ private struct ReviewMediaFileRow: View {
 
 private struct LearningSuggestionSheet: View {
     let suggestion: String
-    let onSave: (String) -> Void
+    /// Returns nil when the note was written, or what to say when it was not.
+    /// The sheet stays open on a failure, because the text it holds is the only
+    /// copy of what Dan typed (#462).
+    let onSave: (String) -> String?
     let onSkip: () -> Void
 
     @State private var editedSuggestion: String
+    @State private var saveError: String?
 
-    init(suggestion: String, onSave: @escaping (String) -> Void, onSkip: @escaping () -> Void) {
+    init(suggestion: String, onSave: @escaping (String) -> String?, onSkip: @escaping () -> Void) {
         self.suggestion = suggestion
         self.onSave = onSave
         self.onSkip = onSkip
@@ -5647,8 +5713,15 @@ private struct LearningSuggestionSheet: View {
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
 
+            if let saveError {
+                Text(saveError)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.roseDeep)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack(spacing: Spacing.md) {
-                Button("Add to brand voice") { onSave(trimmed) }
+                Button("Add to brand voice") { saveError = onSave(trimmed) }
                     .buttonStyle(BrandButtonStyle())
                     .disabled(trimmed.isEmpty)
                 Button("Reset") { editedSuggestion = suggestion }
@@ -5674,7 +5747,7 @@ private struct LearningSuggestionSheet: View {
 private struct ReviewPhotoOverlay: View {
     let url: URL
     let onDismiss: () -> Void
-    @State private var image: NSImage?
+    @State private var load: ImageLoad = .loading
 
     var body: some View {
         ZStack {
@@ -5682,14 +5755,30 @@ private struct ReviewPhotoOverlay: View {
                 .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
 
-            if let image {
+            switch load {
+            case .loaded(let image):
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
                     .padding(48)
                     .shadow(color: .black.opacity(0.5), radius: 24, y: 6)
-            } else {
+            case .loading:
                 ProgressView().tint(.white)
+            case .missing:
+                // Opened from a thumbnail, so the file was there when the list
+                // was drawn. A spinner here reads as a slow load of a photo
+                // that is simply gone (L10).
+                VStack(spacing: Spacing.sm) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.white.opacity(0.85))
+                    Text("This file is missing")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                    Text(url.lastPathComponent)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
             }
 
             VStack {
@@ -5707,7 +5796,7 @@ private struct ReviewPhotoOverlay: View {
                 Spacer()
             }
         }
-        .task { image = await Task.detached { NSImage(contentsOf: url) }.value }
+        .task { load = await ImageLoad.read(url) }
     }
 }
 

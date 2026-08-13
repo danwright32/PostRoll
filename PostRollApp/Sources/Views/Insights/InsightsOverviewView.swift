@@ -7,6 +7,11 @@ struct InsightsOverviewView: View {
     @Environment(AppState.self) private var appState
 
     @State private var isImporting = false
+    /// When the current import or analysis started (#460). A bare spinner looks
+    /// identical whether the work is progressing, hung or dead, so both of
+    /// these runs report elapsed time and convert to a stalled state.
+    @State private var importStartedAt: Date?
+    @State private var generationStartedAt: Date?
     @State private var importError: String?
     @State private var importSummary: String?
     @State private var isGenerating = false
@@ -47,6 +52,12 @@ struct InsightsOverviewView: View {
                     .help("Import Meta Business Suite CSV export (allows multiple files)")
                 }
 
+                if isImporting {
+                    LongRunIndicator(label: "Reading the CSV files…",
+                                     startedAt: importStartedAt,
+                                     silenceThreshold: LongRunState.localWorkSilenceThreshold)
+                }
+
                 RoseGoldDivider()
 
                 if let summary = importSummary {
@@ -85,8 +96,11 @@ struct InsightsOverviewView: View {
                         .disabled(isGenerating)
 
                         if isGenerating {
-                            ProgressView()
-                                .scaleEffect(0.7)
+                            // A paid Claude pass over the whole post history,
+                            // behind an indefinite spinner with no elapsed time
+                            // and no stall state until #460.
+                            LongRunIndicator(label: "Analyzing your posts…",
+                                             startedAt: generationStartedAt)
                                 .padding(.leading, 4)
                         }
                         Spacer()
@@ -127,6 +141,7 @@ struct InsightsOverviewView: View {
 
         let urls = panel.urls
         isImporting = true
+        importStartedAt = Date()
         importError = nil
         importSummary = nil
         Task {
@@ -155,15 +170,18 @@ struct InsightsOverviewView: View {
                     // whole defect.
                     importSummary = nil
                     importError = text
+                }
             } catch {
                 importError = error.localizedDescription
             }
             isImporting = false
+            importStartedAt = nil
         }
     }
 
     private func generateInsights() {
         isGenerating = true
+        generationStartedAt = Date()
         generationError = nil
         let posts = analyticsStore.posts
         let bands = analyticsStore.orgFollowerBands
@@ -186,6 +204,7 @@ struct InsightsOverviewView: View {
                 generationError = error.localizedDescription
             }
             isGenerating = false
+            generationStartedAt = nil
         }
     }
 }
@@ -415,8 +434,13 @@ private struct FindingRow: View {
 private struct BrandVoiceSuggestionRow: View {
     let suggestion: String
     @State private var applied = false
+    /// A write that did not happen (#462). Applied used to flip regardless, and
+    /// the button then disabled itself, so a failed save was unrecoverable from
+    /// this surface.
+    @State private var saveError: String?
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .top, spacing: 10) {
             Text(suggestion)
                 .font(.light(12))
@@ -425,13 +449,34 @@ private struct BrandVoiceSuggestionRow: View {
             Spacer()
             Button(applied ? "Applied" : "Apply") {
                 guard !applied else { return }
-                try? PythonBridge.shared.appendInsightNote(suggestion)
-                withAnimation { applied = true }
+                do {
+                    try PythonBridge.shared.appendInsightNote(suggestion)
+                    saveError = nil
+                    withAnimation { applied = true }
+                } catch {
+                    // Deliberately NOT flipping to Applied: the button stays
+                    // live so the write can be tried again, which is the whole
+                    // difference between this and a claim (L12).
+                    saveError = BrandVoiceSaveText.failed(error.localizedDescription)
+                }
             }
             .buttonStyle(.plain)
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(applied ? Color.warmMid : Color.roseGold)
             .disabled(applied)
+        }
+
+        if let saveError {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.roseDeep)
+                Text(saveError)
+                    .font(.light(11))
+                    .foregroundStyle(Color.roseDeep)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
         }
         .padding(8)
         .background(

@@ -1,0 +1,8 @@
+{
+  "name": "empty-segment-is-not-a-search-miss",
+  "file": "PostRollApp/Sources/Services/InsightsDisplay.swift",
+  "find": "        if query.isEmpty {\n            return \"No \\(filter.lowercased()) posts in your imported history.\"\n        }\n",
+  "replace": "",
+  "test": "PostRollTests/HonestStateTests/testAnEmptySegmentIsNotReportedAsASearchMiss",
+  "breaks": "a Stories or Feed segment holding nothing reads as a failed search with empty quotes, naming a control Dan never touched (#463)"
+}

@@ -42,6 +42,12 @@ struct LongRunIndicator: View {
     var estimate: String? = nil
     /// Set when the run has already failed; always wins over the rest.
     var failedMessage: String? = nil
+    /// How long this particular work may go quiet before it is shown as
+    /// stalled. The default is sized to a Claude call, which is the slowest
+    /// thing this app waits on; local work (a CSV parse, a Vision OCR pass)
+    /// takes a fraction of that, and holding it to the same threshold would
+    /// mean a hung one still looked healthy ten minutes in (#460).
+    var silenceThreshold: TimeInterval = LongRunState.defaultSilenceThreshold
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -50,7 +56,8 @@ struct LongRunIndicator: View {
             }
             let status = LongRunState.status(
                 startedAt: startedAt, step: step, now: context.date,
-                failedMessage: failedMessage)
+                failedMessage: failedMessage,
+                silenceThreshold: silenceThreshold)
 
             switch status {
             case .idle, .finished:

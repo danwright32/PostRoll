@@ -1,0 +1,8 @@
+{
+  "name": "local-work-has-its-own-stall-threshold",
+  "file": "PostRollApp/Sources/Services/LongRunStatus.swift",
+  "find": "    static let localWorkSilenceThreshold: TimeInterval = 180",
+  "replace": "    static let localWorkSilenceThreshold: TimeInterval = 660",
+  "test": "PostRollTests/HonestStateTests/testLocalWorkStallsWellBeforeAClaudeCallWould",
+  "breaks": "a CSV parse or OCR pass that hangs still looks healthy eleven minutes in, because it is held to the threshold sized for a Claude call (#460)"
+}

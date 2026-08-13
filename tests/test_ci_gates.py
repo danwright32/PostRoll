@@ -174,10 +174,29 @@ def test_it_can_still_be_run_by_hand(swift):
 # ── what it actually runs ─────────────────────────────────────────────────────
 
 def test_it_runs_the_unit_test_scheme_not_the_gui_one(swift):
-    # A headless runner cannot reliably drive XCUIApplication, and a job that
-    # fails for that reason teaches everyone to ignore it.
-    assert "-scheme PostRollTests" in swift
-    assert "-scheme PostRoll " not in swift
+    """A headless runner cannot reliably drive XCUIApplication, and a job that
+    fails for that reason teaches everyone to ignore it.
+
+    What is forbidden is TESTING a scheme that pulls in PostRollUITests, not
+    naming the app scheme at all. Asserting the absence of the name was a proxy
+    for the rule (L63), and it also forbade the one thing that had to happen:
+    compiling the app, which no CI job did until a file that would not build
+    reached main with every check green.
+    """
+    import re
+
+    runs = re.findall(r"-scheme\s+(\S+)(.*?)(?=-scheme|\Z)", swift, re.S)
+    assert any(scheme == "PostRollTests" for scheme, _ in runs), \
+        "the unit test scheme is not run at all"
+
+    gui_tested = [
+        scheme for scheme, rest in runs
+        if scheme in {"PostRoll", "PostRollUITests"}
+        and re.search(r"^\s+test\s*$", rest, re.M)
+    ]
+    assert not gui_tested, (
+        f"{gui_tested} is TESTED on a headless runner, which drags in "
+        "PostRollUITests and cannot pass reliably")
 
 
 def test_it_regenerates_the_project_rather_than_trusting_the_checked_in_copy(swift):
