@@ -34,6 +34,66 @@ enum OrphanedMediaCleanup {
             .reduce(0) { $0 + removeOrphans(in: $1, referenced: referenced) }
     }
 
+    /// Preview folders whose event no longer exists.
+    ///
+    /// Its own rule because `preview/` is a folder PER EVENT keyed by slug, not
+    /// a flat directory of files, so the file sweep above cannot see it. Nothing
+    /// else could either: the only code that ever deletes a preview folder is
+    /// `ArchiveCleanup`, which iterates events still in the store, so a DELETED
+    /// event's rendered reels, collages, story graphics and layout sidecars were
+    /// reclaimed by nothing at all and leaked forever (#482, L38).
+    ///
+    /// Keyed on the slug rather than the id, because that is what the folder is
+    /// named, and a live duplicate shares its original's slug: comparing against
+    /// every live event's slug is what stops this deleting a folder another
+    /// event is still using.
+    ///
+    /// Returns the folders removed, so the caller can say what happened rather
+    /// than report a number that could mean anything.
+    @discardableResult
+    static func sweepPreviewFolders(
+        events: [Event],
+        previewDir: URL = AppPaths.previewDir
+    ) -> [String] {
+        let fm = FileManager.default
+        let entries: [URL]
+        do {
+            entries = try fm.contentsOfDirectory(
+                at: previewDir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch let error as NSError where error.isFileNotFound {
+            // Nothing has been rendered yet. The ordinary first-launch state,
+            // and not worth a word.
+            return []
+        } catch {
+            // Deleting nothing is the right answer for a folder we could not
+            // read, but it is not the same answer as a folder with nothing in
+            // it: the leak this exists to stop carries on, and silence would
+            // make that indistinguishable from a clean sweep (L11).
+            NSLog("OrphanedMediaCleanup: could not read \(previewDir.lastPathComponent), so no preview folders were reclaimed: \(error)")
+            return []
+        }
+
+        let live = Set(events.map(ArchiveCleanup.slug(event:)))
+        var removed: [String] = []
+        for entry in entries {
+            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+            else { continue }
+            guard !live.contains(entry.lastPathComponent) else { continue }
+            do {
+                try fm.removeItem(at: entry)
+                removed.append(entry.lastPathComponent)
+            } catch {
+                // Named rather than swallowed: a folder that would not go is
+                // disk this Mac has already been filled by once.
+                NSLog("OrphanedMediaCleanup: could not remove preview folder \(entry.lastPathComponent): \(error)")
+            }
+        }
+        return removed
+    }
+
     /// Every on-disk media path any event points at, standardized for comparison.
     static func referencedPaths(in events: [Event]) -> Set<String> {
         var set: Set<String> = []

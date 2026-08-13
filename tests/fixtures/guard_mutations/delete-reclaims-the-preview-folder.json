@@ -1,0 +1,8 @@
+{
+  "name": "delete-reclaims-the-preview-folder",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "        OrphanedMediaCleanup.sweepPreviewFolders(events: owning,\n                                                 previewDir: layout.previewDir)\n",
+  "replace": "",
+  "test": "PostRollTests/PreviewFolderReclaimTests/testDeletingAnEventReclaimsItsPreviewFolderForReal",
+  "breaks": "a deleted event's rendered reels, collages and story graphics are reclaimed by nothing and leak forever (#482, L38)"
+}
