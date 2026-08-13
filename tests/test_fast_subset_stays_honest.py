@@ -101,17 +101,59 @@ def test_the_marker_is_registered():
         "the slow marker has to be declared in pyproject.toml or every run errors"
 
 
-def test_there_is_a_fast_target_and_it_is_not_the_gate():
-    """The fast target exists, deselects the slow files, and the full target
-    still runs everything."""
-    makefile = MAKEFILE.read_text(encoding="utf-8")
+def _target(name: str) -> tuple[list[str], str]:
+    """A make target's prerequisites, and its recipe as one string.
 
-    assert "test-python-fast:" in makefile, "no fast target to run"
-    fast = makefile.split("test-python-fast:", 1)[1].split("\n\n", 1)[0]
+    Both halves matter since the full run was split in two (#430): the full
+    target reaches the ordinary tests through a PREREQUISITE and the slow ones
+    through its own recipe, so a check that read only one of those would be
+    reading half the run.
+    """
+    makefile = MAKEFILE.read_text(encoding="utf-8")
+    header = re.search(rf"^{re.escape(name)}:(.*)$", makefile, re.MULTILINE)
+    assert header, f"there is no {name} target in the Makefile"
+
+    recipe: list[str] = []
+    for line in makefile[header.end():].splitlines()[1:]:
+        if line.startswith("\t"):
+            recipe.append(line.strip())
+        elif not line.strip():
+            continue
+        else:
+            break
+    return header.group(1).split(), "\n".join(recipe)
+
+
+def test_there_is_a_fast_target_and_it_is_not_the_gate():
+    """The fast target exists and deselects the slow files."""
+    _, fast = _target("test-python-fast")
+
+    assert fast, "the fast target runs nothing at all"
     assert "not slow" in fast, "the fast target does not actually deselect anything"
 
-    full = makefile.split("test-python:", 1)[1].split("\n\n", 1)[0]
-    assert "not slow" not in full, (
-        "the FULL target is deselecting the slow files too, so nothing runs them "
-        "locally at all"
-    )
+
+def test_the_full_target_still_runs_the_slow_files():
+    """The defect this exists to catch: nothing runs the expensive files locally.
+
+    Asserted as "the full run selects the slow marker" rather than as "the full
+    run does not deselect it", because the second is a proxy and passes happily
+    for a full target that simply stopped running them (L63). Dropping the slow
+    pass entirely is exactly the shape of that mistake, and it would leave every
+    reel-rendering check to CI alone.
+    """
+    _, full = _target("test-python")
+
+    assert "-m slow" in full, (
+        "the full local target no longer selects the slow files, so the four "
+        "files that render real reels run nowhere but CI:\n" + full)
+
+
+def test_the_full_target_still_runs_the_ordinary_tests_too():
+    """The other half of the same split. Two passes make two ways to lose one."""
+    prerequisites, full = _target("test-python")
+
+    reaches_them = "test-python-fast" in prerequisites or "not slow" in full
+    assert reaches_them, (
+        "the full local target runs the slow files and nothing else, so the "
+        f"1700 ordinary tests are skipped locally. Prerequisites: "
+        f"{prerequisites}, recipe:\n{full}")

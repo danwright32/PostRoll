@@ -7,16 +7,32 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A pull request cancels its own superseded run rather than paying for a commit
+# nobody will merge (#430). A push to main gets a group of its own keyed by SHA,
+# so consecutive merges neither cancel nor queue behind one another. The macOS
+# workflow carries the same block, for the same reason.
+#
+# (Naming that other workflow's filename here is deliberately avoided:
+# `test_ci_gates.py` asserts this file mentions nothing of the sort, which is how
+# it catches that job being moved back in to run twice at double the cost.)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
+      # `cache: pip` keys the wheel cache on requirements.txt, which is pinned
+      # exactly (test_ci_gates.py holds that true), so a restore can only ever
+      # be the same wheels this run asked for (#430).
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -31,8 +47,46 @@ jobs:
       # Installed explicitly rather than inherited from whatever the runner
       # image happens to ship (#106). The end-to-end audio and reel tests skip
       # without it, and a silent skip in CI is indistinguishable from a pass.
+      # What is cached is the .deb files, not the installed state: fetching them
+      # is the slow part, about 25s of every run (#430). The key carries the
+      # runner image, because the package versions belong to it, so an image
+      # bump re-downloads instead of trying to install packages built for the
+      # last one.
+      - name: Restore the ffmpeg packages
+        uses: actions/cache@v4
+        with:
+          path: ~/ffmpeg-debs
+          key: ffmpeg-debs-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}
+
+      # Every path here ends in a real install or a non-zero exit. A cache miss,
+      # or a cached set dpkg refuses, falls through to exactly the clean install
+      # this step used to do, so the worst case is the speed it has today rather
+      # than a job that fails for want of a cache. The verification step below is
+      # what makes that safe to assume rather than hope: it is the guard on a bad
+      # restore, and a silent skip for want of ffmpeg is the whole failure mode
+      # this install exists to close (#106).
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: |
+          set -euo pipefail
+          install_from_apt() {
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          }
+          if compgen -G "$HOME/ffmpeg-debs/*.deb" > /dev/null; then
+            echo "Installing ffmpeg from the cached packages."
+            sudo dpkg -i "$HOME"/ffmpeg-debs/*.deb || {
+              echo "The cached packages did not install; falling back to a clean install."
+              install_from_apt
+            }
+          else
+            echo "No cached packages yet: fetching them."
+            sudo apt-get update
+            sudo apt-get install -y --download-only ffmpeg
+            mkdir -p "$HOME/ffmpeg-debs"
+            sudo cp /var/cache/apt/archives/*.deb "$HOME/ffmpeg-debs/"
+            sudo chown -R "$(id -u):$(id -g)" "$HOME/ffmpeg-debs"
+            sudo apt-get install -y ffmpeg
+          fi
 
       - name: Confirm ffmpeg is actually here
         run: ffmpeg -version && ffprobe -version

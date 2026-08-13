@@ -304,6 +304,94 @@
       "replace": "Array(recurringAccounts.prefix(3))",
       "test": "PostRollTests/RecurringAccountsTests/testTheBannerOffersAControlForEachAccountItNames",
       "breaks": "the recurring-accounts banner names accounts it offers no control for (L80)"
+    },
+    {
+      "name": "macos-pr-cancellation-scoped",
+      "file": ".github/workflows/swift.yml",
+      "find": "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+      "replace": "cancel-in-progress: true",
+      "test": "tests/test_ci_caches_and_cancels.py::test_a_push_to_main_is_never_cancelled[macos]",
+      "breaks": "cancellation stops being scoped to pull requests, so a merge to main is cancelled by the next one and main is left unverified (#430)"
+    },
+    {
+      "name": "linux-pr-cancellation-scoped",
+      "file": ".github/workflows/tests.yml",
+      "find": "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+      "replace": "cancel-in-progress: true",
+      "test": "tests/test_ci_caches_and_cancels.py::test_a_push_to_main_is_never_cancelled[linux]",
+      "breaks": "same, on the Linux workflow (#430)"
+    },
+    {
+      "name": "macos-concurrency-group-per-commit",
+      "file": ".github/workflows/swift.yml",
+      "find": "group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}",
+      "replace": "group: ${{ github.workflow }}-${{ github.ref }}",
+      "test": "tests/test_ci_caches_and_cancels.py::test_consecutive_merges_do_not_queue_behind_one_another[macos]",
+      "breaks": "the group goes back to the ref, so back-to-back merges queue one behind the other (#430)"
+    },
+    {
+      "name": "derived-data-actually-built-into",
+      "file": ".github/workflows/swift.yml",
+      "find": "            -derivedDataPath PostRollApp/.derived-data \\\n",
+      "replace": "",
+      "test": "tests/test_ci_caches_and_cancels.py::test_the_swift_tests_build_into_the_folder_that_is_cached",
+      "breaks": "the cache is restored and saved while xcodebuild builds somewhere else, so it is uploaded and never read (L3)"
+    },
+    {
+      "name": "derived-data-cache-capped",
+      "file": ".github/workflows/swift.yml",
+      "find": " && steps.cache-size.outputs.over-cap == 'false' }}",
+      "replace": " }}",
+      "test": "tests/test_ci_caches_and_cancels.py::test_the_build_cache_is_measured_against_a_cap_before_it_is_uploaded",
+      "breaks": "the folder is uploaded however large it is, evicting the other caches (#430, overture#2585)"
+    },
+    {
+      "name": "pip-wheels-cached",
+      "file": ".github/workflows/tests.yml",
+      "find": "          cache: pip",
+      "replace": "          # cache: pip",
+      "test": "tests/test_ci_caches_and_cancels.py::test_the_python_workflow_caches_its_wheels",
+      "breaks": "every run re-downloads the same pinned wheels, and a comment still names the setting (L103)"
+    },
+    {
+      "name": "ffmpeg-cache-fallback",
+      "file": ".github/workflows/tests.yml",
+      "find": "              install_from_apt\n            }",
+      "replace": "              echo \"carrying on without it\"\n            }",
+      "test": "tests/test_ci_caches_and_cancels.py::test_a_cold_or_refused_package_cache_still_installs_ffmpeg",
+      "breaks": "a cached package set dpkg refuses leaves the job with no ffmpeg at all (#430)"
+    },
+    {
+      "name": "full-local-run-includes-the-slow-files",
+      "file": "Makefile",
+      "find": "-m slow -n auto",
+      "replace": "-m \"not slow\" -n auto",
+      "test": "tests/test_fast_subset_stays_honest.py::test_the_full_target_still_runs_the_slow_files",
+      "breaks": "the full local run stops running the four files that render real reels (#430)"
+    },
+    {
+      "name": "full-local-run-includes-the-fast-tests",
+      "file": "Makefile",
+      "find": "test-python: test-python-fast",
+      "replace": "test-python:",
+      "test": "tests/test_fast_subset_stays_honest.py::test_the_full_target_still_runs_the_ordinary_tests_too",
+      "breaks": "the full local run drops the 1700 ordinary tests and runs only the reels (#430)"
+    },
+    {
+      "name": "parallel-stays-off-the-unsafe-suite",
+      "file": "Makefile",
+      "find": "pytest tests/ -q -m slow -n auto",
+      "replace": "pytest tests/ -q -n auto",
+      "test": "tests/test_reference_frames_are_safe_to_parallelise.py::test_nothing_runs_the_whole_suite_in_parallel",
+      "breaks": "the whole suite runs in parallel, which flakes on the fingerprint tests' perturbation of real files (#497)"
+    },
+    {
+      "name": "install-gate-uses-one-spelling",
+      "file": "PostRollApp/build-install.sh",
+      "find": "    make -C \"${REPO_ROOT}\" test-python",
+      "replace": "    (cd \"${REPO_ROOT}\" && venv/bin/python -m pytest tests/ -q)",
+      "test": "tests/test_build_and_test_gates.py::test_the_install_gate_runs_the_suite_the_make_target_defines",
+      "breaks": "the install gate keeps its own copy of the pytest command, which then drifts from the Makefile's (#430)"
     }
   ],
   "comment_uncovered": "Guards deliberately NOT registered, because no compile-safe one line perturbation expresses the defect they catch: UploadPageCropRemovalTests (adding a real crop control is not one line; prose would trip it but proves nothing), the absence guards test_blog_draft_text.py::test_no_module_builds_the_heading_by_hand / test_layout_sidecar.py::test_no_generator_builds_the_name_by_hand / test_blog_meta.py::test_neither_string_can_reach_the_ai_round_trip (their only one line trip is planting the banned text artificially), test_suite_hygiene.py and test_guard_mutation_registry.py (they protect the test suite and this registry themselves), test_bridge_payload_contract.py / test_manifest_contract.py (the one line rename anchor is ambiguous in PythonBridge.swift), test_brand_text.py (removing the route in one line breaks the module's own names), test_event_slug_parity.py (slug internals are not safely one line perturbable), and the measured pixel thresholds in test_golden_frames.py / test_frame_legibility.py / test_screen_reel_logo_contrast.py's contrast checks (failing them takes a rendering change, not a text edit)."

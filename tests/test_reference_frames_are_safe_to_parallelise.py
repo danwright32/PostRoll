@@ -100,6 +100,108 @@ def test_no_reference_frame_test_writes_to_a_fixed_path():
     )
 
 
+#: Everything that runs pytest, so a parallel flag cannot be added to one of them
+#: without this file having an opinion about it.
+PYTEST_CALLERS = (
+    Path("Makefile"),
+    Path(".github/workflows/swift.yml"),
+    Path(".github/workflows/tests.yml"),
+    Path("PostRollApp/build-install.sh"),
+)
+
+
+def _pytest_invocations(text: str) -> list[str]:
+    """Every pytest command in a file, each flattened onto one line.
+
+    Flattened because a YAML folded block writes one command over several lines,
+    and the macOS job's is written that way: its flags sit on a line of their own
+    with no `pytest` on it. A scan that read single lines would skip the very
+    invocation it exists to check, which is the shape of guard that reports green
+    while blind.
+
+    A command ends at the first blank line or the next YAML key, which covers
+    both a Makefile recipe line and a workflow step.
+    """
+    commands: list[str] = []
+    for match in re.finditer(r"pytest\b", text):
+        tail = text[match.start():]
+        end = len(tail)
+        for stop in re.finditer(r"\n\s*\n|\n\s*-?\s*name:|\n\w+:", tail):
+            end = stop.start()
+            break
+        commands.append(" ".join(tail[:end].split()))
+    return commands
+
+
+def test_the_scan_reads_a_command_split_over_several_lines():
+    """The scanner's own precondition, seen to work rather than assumed (L1).
+
+    If this ever stops holding, the parallel-safety check below silently starts
+    ignoring the one invocation in the repo that is written this way.
+    """
+    folded = (
+        "      - name: Run the checks\n"
+        "        run: >\n"
+        "          pytest tests/test_golden_frames.py\n"
+        "          -n auto -v -ra\n"
+        "\n"
+        "      - name: Something else\n"
+    )
+    commands = _pytest_invocations(folded)
+
+    assert commands == ["pytest tests/test_golden_frames.py -n auto -v -ra"], commands
+
+
+def test_nothing_runs_the_whole_suite_in_parallel():
+    """The suite as a whole is NOT safe to parallelise, and that is measured.
+
+    On 2026-08-13 `pytest tests/ -n auto` was run against a clean tree and failed
+    on `test_media_design_fingerprint.py`, reporting that the reel_morph template
+    had been redesigned. It had not. That file proves its own guards by writing a
+    perturbed copy of real modules under `postroll/media/` into place and
+    restoring them afterwards, so a worker hashing those same files while the
+    perturbation is in place reads it and reports a redesign that never happened.
+
+    Because the collision is on DISK it does not matter that workers are separate
+    processes, and because it depends on timing it fails on nobody's machine
+    twice the same way. Flake like that costs more than the six minutes parallel
+    running saves, so `-n` stays scoped to files that have been shown to keep
+    their writes to `tmp_path`: the four reference-frame files, whether they are
+    named directly or selected by the slow marker.
+
+    #497 fixes the fingerprint tests, and this test is what has to be revisited
+    when it lands.
+    """
+    offenders: list[str] = []
+    for relative in PYTEST_CALLERS:
+        for command in _pytest_invocations(_code(REPO_ROOT / relative)):
+            if "-n" not in command.split():
+                continue
+            scoped = "-m slow" in command or "tests/test_" in command
+            if not scoped:
+                offenders.append(f"{relative}: {command}")
+
+    assert not offenders, (
+        "These run pytest in parallel over a selection wider than the files "
+        "proven safe for it, which buys six minutes and pays for it in flake "
+        "that reproduces nowhere:\n" + "\n".join(offenders)
+    )
+
+
+def test_the_slow_files_are_the_ones_the_local_run_parallelises():
+    """The local full run has to parallelise the expensive half, or the four
+    files that are 8m15s of a 9m53s run are still serial and the change bought
+    nothing."""
+    parallel = [command for command in _pytest_invocations(_code(REPO_ROOT / "Makefile"))
+                if "-n" in command.split()]
+
+    assert parallel, (
+        "no local target runs anything in parallel, so the full run is back to "
+        "ten minutes")
+    assert any("-m slow" in line for line in parallel), (
+        f"the local parallel pass does not select the slow files: {parallel}")
+
+
 def test_every_reference_frame_file_uses_tmp_path():
     """The positive form of the same property, so a file that stopped taking
     tmp_path at all is caught rather than passing for want of a match."""
