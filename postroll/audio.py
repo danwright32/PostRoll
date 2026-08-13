@@ -499,14 +499,22 @@ def _score_match(track: dict[str, Any], composer: str, title: str) -> int:
     return score
 
 
-def _search_tracks_namesearch(query: str, client_id: str) -> list[dict[str, Any]]:
+def _search_tracks_namesearch(query: str, client_id: str, *,
+                              degrade: bool = True) -> list[dict[str, Any]]:
     """Full-text search across track + artist names. Different endpoint usage
     than `_search_tracks` (which filters by tag).
 
-    Best effort: this runs once per candidate query across every program piece,
-    so one unreachable query degrades to no match rather than failing the whole
-    program search. It still REPORTS, because a total outage would otherwise be
-    indistinguishable from "nothing in the program matched" (#93).
+    Best effort by default: this runs once per candidate query across every
+    program piece, so one unreachable query degrades to no match rather than
+    failing the whole program search. It still REPORTS, because a total outage
+    would otherwise be indistinguishable from "nothing in the program matched"
+    (#93).
+
+    `degrade=False` hands the failure to the caller instead, which is what the
+    per-piece sweep wants. Degrading is the right answer for ONE failure and
+    the wrong one for a run of them: the code waving each through has no notion
+    of volume, so a blip and a total outage arrive on the same path and are
+    indistinguishable (L77). The sweep counts them by stopping at the first.
     """
     params = urllib.parse.urlencode(
         {
@@ -522,12 +530,22 @@ def _search_tracks_namesearch(query: str, client_id: str) -> list[dict[str, Any]
     try:
         data = _jamendo_json(url, what=f"look up {query!r}")
     except JamendoUnavailable as e:
+        if not degrade:
+            raise
         print(f"warning: {e}", file=sys.stderr, flush=True)
         return []
     return [
         t for t in data.get("results", [])
         if t.get("audiodownload_allowed") and t.get("audiodownload")
     ]
+
+
+def _ranked(scored: list[tuple[int, dict[str, Any], str]],
+            max_results: int) -> list[tuple[dict[str, Any], int, str]]:
+    """Best matches first, capped. One definition, because the sweep can also
+    return early on an outage and the two exits must agree on the shape."""
+    ordered = sorted(scored, key=lambda x: -x[0])
+    return [(track, score, label) for score, track, label in ordered[:max_results]]
 
 
 def search_program_pieces(
@@ -587,7 +605,20 @@ def search_program_pieces(
         piece_results = 0
 
         for query in queries:
-            for track in _search_tracks_namesearch(query, client_id):
+            # Not degraded per query here (L77). One refusal from the service
+            # is a fact about the account or the quota, so it will be true for
+            # every remaining query in the programme: asking anyway prints the
+            # same warning once per query, spends more of the quota the refusal
+            # may be about, and ends by reporting "no piece matched", which is
+            # not what happened.
+            try:
+                found = _search_tracks_namesearch(query, client_id, degrade=False)
+            except JamendoUnavailable as e:
+                print(f"warning: {e} Stopped searching the programme after "
+                      f"{len(scored)} match(es); the reel falls back to "
+                      "tag-matched music.", file=sys.stderr, flush=True)
+                return _ranked(scored, max_results)
+            for track in found:
                 tid = str(track.get("id", ""))
                 if not tid or tid in seen_ids:
                     continue
@@ -606,8 +637,7 @@ def search_program_pieces(
             # Plenty to choose from — stop scanning more pieces
             break
 
-    scored.sort(key=lambda x: -x[0])
-    return [(t, s, label) for s, t, label in scored[:max_results]]
+    return _ranked(scored, max_results)
 
 
 def fetch_program_audio_candidates(
