@@ -25,6 +25,7 @@ import pytest
 
 from postroll.media import design_stamp
 from postroll.media import design_tokens as tokens
+from tests.source_text import swift_without_comments
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -453,7 +454,9 @@ def test_the_shared_fixture_is_what_the_writer_actually_produces(tmp_path):
 def test_swift_mirrors_every_declared_version():
     # Two tables in two languages with nothing forcing them to agree would make
     # every asset read stale, or none of them.
-    text = SWIFT_TOKENS.read_text(encoding="utf-8")
+    # Comments stripped, or a commented-out table carrying the marker decides
+    # what this reads (#436).
+    text = swift_without_comments(SWIFT_TOKENS.read_text(encoding="utf-8"))
     marker = "static let mediaDesignVersions: [String: Int] = ["
     assert marker in text, (
         "DesignTokens.swift does not declare mediaDesignVersions, so the app "

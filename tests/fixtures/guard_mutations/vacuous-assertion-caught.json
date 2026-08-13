@@ -1,0 +1,8 @@
+{
+  "name": "vacuous-assertion-caught",
+  "file": "tests/test_top_anchored_crop.py",
+  "find": "    assert result.getpixel((50, 10)) == (255, 255, 255)",
+  "replace": "    assert result.getpixel((50, 10)) == (255, 255, 255) or True",
+  "test": "tests/test_suite_hygiene.py::test_no_test_module_holds_an_assertion_that_cannot_fail",
+  "breaks": "an assertion is silenced with `or True` instead of deleted, so it is green forever while reading like a check (#435)"
+}

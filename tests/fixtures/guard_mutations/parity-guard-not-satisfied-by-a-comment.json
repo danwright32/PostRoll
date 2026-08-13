@@ -1,0 +1,8 @@
+{
+  "name": "parity-guard-not-satisfied-by-a-comment",
+  "file": "PostRollApp/Sources/DesignTokens.swift",
+  "find": "    static let collageDesignVersion = 1",
+  "replace": "    // static let collageDesignVersion = 1\n    static let collageDesignVersion = 2",
+  "test": "tests/test_collage_design_version.py::test_swift_mirrors_the_same_version",
+  "breaks": "the Swift collage version drifts while a comment quoting the old one satisfies the parity guard (#436)"
+}

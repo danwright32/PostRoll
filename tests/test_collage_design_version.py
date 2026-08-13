@@ -21,6 +21,7 @@ import pytest
 
 from postroll.media import design_tokens as tokens
 from postroll.media.layout_sidecar import layout_sidecar_path, read_layout_sidecar
+from tests.source_text import swift_without_comments
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -35,7 +36,9 @@ def test_there_is_a_declared_collage_design_version():
 def test_swift_mirrors_the_same_version():
     # Two numbers in two languages with nothing forcing them to agree would
     # make every collage read stale, or none of them.
-    text = SWIFT_TOKENS.read_text()
+    # Comments stripped, or a commented-out old version carrying the marker
+    # decides what this reads (#436).
+    text = swift_without_comments(SWIFT_TOKENS.read_text())
     marker = "static let collageDesignVersion = "
     assert marker in text, (
         "DesignTokens.swift does not declare collageDesignVersion, so the app "
