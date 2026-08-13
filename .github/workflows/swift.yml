@@ -61,9 +61,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Runs the PostRollTests scheme, not the PostRoll scheme, so the GUI-driving
-  # PostRollUITests target is excluded: a headless runner cannot reliably drive
-  # XCUIApplication.
+  # Builds the PostRoll app, then runs the PostRollTests scheme. The app is
+  # BUILT and not TESTED on purpose: building is what catches a view file that
+  # does not compile, which nothing in CI did until #521, and a headless runner
+  # cannot reliably drive a window (which is why the UI smoke test was deleted
+  # in #509 rather than moved here).
   swift-unit:
     runs-on: macos-15
     steps:
