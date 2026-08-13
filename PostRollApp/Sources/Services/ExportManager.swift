@@ -176,6 +176,10 @@ final class ExportManager {
         // says which of the two it is.
         let accountNotes = [AccountBook.shared.recoveryNote].compactMap { $0 }
 
+        // Held outside the do so the failure paths can throw the staged work
+        // away: a staging folder nobody commits is debris in Dan's own folder.
+        var staging: ExportStaging?
+
         do {
             // Step 1: text export (fast, on background thread). The security
             // scope is released once the synchronous export returns.
@@ -187,14 +191,20 @@ final class ExportManager {
                                                 asOf: exportedAt,
                                                 collaboratorNotes: accountNotes)
             }.value
+            // Every step below writes into the STAGING folder; `destination`
+            // is where it all lands when the run finishes (#442). Anything
+            // shown to Dan or stored on the event uses the destination, because
+            // the staging path exists only while the run does.
             let folder = textExport.folder
+            let destination = textExport.destination
+            staging = textExport.staging
             // Files the export meant to copy and couldn't. Carried all the way
             // to the done screen: an export folder that is short a photo used
             // to report success and still stamp the event as Exported (#79).
             var droppedAssets = textExport.dropped
 
             tracker.update(eventID) {
-                $0.phase = .generatingMedia(folder)
+                $0.phase = .generatingMedia(destination)
                 $0.estimatedMediaSeconds = TimingStore.shared.mediaExportEstimate
             }
 
@@ -213,6 +223,9 @@ final class ExportManager {
             /// Approved images that were not on disk to be put back over the
             /// regenerated ones, so the export used the machine's version (#377).
             var absentApprovals: [PreviewMergePolicy.AbsentApproval] = []
+            /// Days whose collage was there but could not carry Dan's edits
+            /// into the export (#447).
+            var collageBakeFailures: [(day: String, reason: CollageBakeOutcome.Reason)] = []
 
             for day in daysToProcess {
                 let hasContent = (capturedEvent.weekResult?[day] != nil)
@@ -224,9 +237,21 @@ final class ExportManager {
                 // the balanced preset): render directly from the live SwiftUI
                 // overlay so crop offsets / cell-frame edits match what the user
                 // saw on screen.
-                if capturedEvent.effectivePostingPreset.isCollageCarousel(day),
-                   (await renderCollage(day: day, event: capturedEvent, exportFolder: folder)) != nil {
-                    continue
+                if capturedEvent.effectivePostingPreset.isCollageCarousel(day) {
+                    switch await renderCollage(day: day, event: capturedEvent, exportFolder: folder) {
+                    case .baked:
+                        continue
+                    case .couldNotApplyEdits(let reason):
+                        // Held rather than thrown: the day still falls through
+                        // to the copy and the Python regen, so the folder ends
+                        // up complete. What it will NOT carry is Dan's crop
+                        // offsets and cell edits, and that has to be said out
+                        // loud or the export finishes clean carrying an image
+                        // he did not approve (#447).
+                        collageBakeFailures.append((day: day.displayName, reason: reason))
+                    case .nothingToBake:
+                        break
+                    }
                 }
 
                 // Thursday reel renders a live overlay on saved frames; if the user
@@ -327,24 +352,50 @@ final class ExportManager {
 
             // The dropped-asset warning shares the done screen's error slot with
             // the Python error: both mean the folder isn't what it claims.
-            let dropWarning = EventExporter.Outcome(folder: folder, dropped: droppedAssets).warning
+            let dropWarning = EventExporter.warning(for: droppedAssets)
             let combinedError = [mediaError, dropWarning].compactMap { $0 }.joined(separator: "\n\n")
 
             // A substitution goes in the WARNING slot, not the error one: the
             // folder is complete and usable, it just isn't carrying the version
             // Dan approved, which is his call to make rather than a failure.
             let substitution = PreviewMergePolicy.substitutionNotice(absentApprovals)
-            let combinedWarning = [mediaWarning, substitution]
+            // Same slot and the same reason: the folder is complete, it is just
+            // not carrying the version Dan adjusted (#447).
+            let collageNotice = CollageBakeNotice.sentence(collageBakeFailures)
+            let combinedWarning = [mediaWarning, substitution, collageNotice]
                 .compactMap { $0 }.joined(separator: "\n\n")
 
-            finishSuccess(eventID: eventID, folder: folder, onlyDay: onlyDay,
+            // The run is over, so the staged export replaces the previous one
+            // now (#442). Until this line the previous export is untouched and
+            // complete, which is the whole point: a text write that throws, a
+            // Python step that dies or a disk that fills leaves Dan with the
+            // last export he could actually upload.
+            var swapError: String? = nil
+            do {
+                try textExport.staging.commit()
+            } catch let failure as ExportStaging.SwapFailure {
+                // The work was done and is sitting somewhere; saying "export
+                // failed" without naming that folder loses all of it (L11).
+                swapError = "The export could not be moved into "
+                    + "\(destination.lastPathComponent): \(Sentence.closed(failure.reason)) "
+                    + "It is complete and waiting at \(failure.stagedAt.path), and the "
+                    + "previous export is still in place."
+            } catch {
+                swapError = Sentence.closed(error.localizedDescription)
+            }
+            let errorWithSwap = [combinedError.isEmpty ? nil : combinedError, swapError]
+                .compactMap { $0 }.joined(separator: "\n\n")
+
+            finishSuccess(eventID: eventID, folder: destination, onlyDay: onlyDay,
                           daysNeedingPython: daysNeedingPython,
-                          mediaError: combinedError.isEmpty ? nil : combinedError,
+                          mediaError: errorWithSwap.isEmpty ? nil : errorWithSwap,
                           mediaWarning: combinedWarning.isEmpty ? nil : combinedWarning,
                           appState: appState)
         } catch is CancellationError {
             // Cancelled (skipMedia handles its own terminal state).
+            staging?.abandon()
         } catch {
+            staging?.abandon()
             destinationRoot.stopAccessingSecurityScopedResource()
             tracker.update(eventID) {
                 $0.task = nil
@@ -409,11 +460,12 @@ final class ExportManager {
     /// day (Wednesday always; Sunday/Monday under the balanced preset). Returns
     /// the output URL on success, nil if any precondition is missing.
     @MainActor
-    private func renderCollage(day: DayName, event: Event, exportFolder: URL) async -> URL? {
+    private func renderCollage(day: DayName, event: Event,
+                               exportFolder: URL) async -> CollageBakeOutcome {
         guard let basePath = event.previewMediaPaths[day.rawValue]?["collage"]
-        else { return nil }
+        else { return .nothingToBake }
         let baseURL = URL(fileURLWithPath: basePath)
-        guard FileManager.default.fileExists(atPath: baseURL.path) else { return nil }
+        guard FileManager.default.fileExists(atPath: baseURL.path) else { return .nothingToBake }
 
         let pd = event.days[day.rawValue]
         // Both sources are reconciled against the day's current photos: a layout
@@ -426,7 +478,7 @@ final class ExportManager {
             guard !decoded.isEmpty else { return nil }
             return CollageCell.usable(decoded, forPhotos: photos)
         }()
-        guard let cells else { return nil }
+        guard let cells else { return .couldNotApplyEdits(.layoutDoesNotMatchThePhotos) }
 
         let dayDir = exportFolder.appendingPathComponent(day.folderName)
         try? FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
@@ -438,7 +490,7 @@ final class ExportManager {
             cropOffsets: pd?.collageCropOffsets ?? [:],
             outputURL: outputURL
         )
-        return ok ? outputURL : nil
+        return ok ? .baked(outputURL) : .couldNotApplyEdits(.renderFailed)
     }
 
     /// Rough estimate for the visual asset run. Days copied from approved

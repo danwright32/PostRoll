@@ -74,7 +74,7 @@ enum ArchiveCleanup {
         let threshold = TimeInterval(archiveAgeDays) * 86_400
         var dirty = false
 
-        for i in events.indices where events[i].stage == .exported {
+        for i in events.indices where events[i].isExported {
             // Events exported before archivedAt existed carry no stamp;
             // falling back to the shoot date would sweep them on the first
             // launch after updating (the shoot is always months older than

@@ -103,26 +103,61 @@ final class EventExporterTests: XCTestCase {
     func testFullReexportRebuildsAndRemovesOrphans() throws {
         let p1 = makeFile("shot-100.jpg")
         let p2 = makeFile("shot-277.jpg")
-        let first = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1, p2]), to: root).folder
+        // Committed, both of them: an export is only a previous export once it
+        // is in place, and comparing two uncommitted staging folders would pass
+        // this test without either re-export rule being exercised (#442).
+        let first = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1, p2]), to: root)
+            .staging.commit()
         XCTAssertTrue(FileManager.default.fileExists(atPath: first.appendingPathComponent("4. Wednesday/carousel/02.jpg").path))
 
         // Re-export with Wednesday trimmed to one photo: the stale 02.jpg must
         // not survive (full export rebuilds the folder from scratch).
-        let second = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1]), to: root).folder
+        let second = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1]), to: root)
+            .staging.commit()
         XCTAssertTrue(FileManager.default.fileExists(atPath: second.appendingPathComponent("4. Wednesday/carousel/01.jpg").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: second.appendingPathComponent("4. Wednesday/carousel/02.jpg").path),
                        "orphaned carousel photo from the previous export must be gone")
     }
 
+    func testANewExportDoesNotTouchThePreviousOneUntilItIsFinished() throws {
+        // The failure #442 is about: the previous export used to be deleted
+        // before a single replacement file existed, so a text write that threw,
+        // a Python step that died or a full disk left Dan with nothing to
+        // upload. This is the state any of those leaves behind, and the last
+        // complete export has to still be sitting in it.
+        let p1 = makeFile("shot-100.jpg")
+        let p2 = makeFile("shot-277.jpg")
+        let complete = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1, p2]), to: root)
+            .staging.commit()
+        let captions = complete.appendingPathComponent("CAPTIONS.txt")
+        let before = try String(contentsOf: captions, encoding: .utf8)
+        XCTAssertFalse(before.isEmpty, "setup: the previous export must be real")
+
+        // A second export, mid run: written, not yet committed.
+        let inFlight = try EventExporter.export(event: makeEvent(wednesdayPhotos: [p1]), to: root)
+
+        XCTAssertEqual(try String(contentsOf: captions, encoding: .utf8), before,
+                       "the previous export was overwritten before the new one finished")
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: complete.appendingPathComponent("4. Wednesday/carousel/02.jpg").path),
+            "the previous export was already being taken apart")
+
+        // And a run that never commits leaves nothing behind in Dan's folder.
+        inFlight.staging.abandon()
+        let stray = try FileManager.default.contentsOfDirectory(atPath: root.path)
+            .filter { $0.hasPrefix(".postroll-export-") }
+        XCTAssertTrue(stray.isEmpty, "a staging folder nobody committed was left behind: \(stray)")
+    }
+
     func testSingleDayExportLeavesMasterFilesUntouched() throws {
         let event = makeEvent(wednesdayPhotos: [makeFile("shot-100.jpg")])
-        let folder = try EventExporter.export(event: event, to: root).folder
+        let folder = try EventExporter.export(event: event, to: root).staging.commit()
 
         let captionsURL = folder.appendingPathComponent("CAPTIONS.txt")
         let before = try String(contentsOf: captionsURL, encoding: .utf8)
 
         // Scoped re-export of just Sunday must not rewrite CAPTIONS.txt or the blog.
-        _ = try EventExporter.export(event: event, to: root, days: [.sunday])
+        try EventExporter.export(event: event, to: root, days: [.sunday]).staging.commit()
         let after = try String(contentsOf: captionsURL, encoding: .utf8)
         XCTAssertEqual(before, after, "single-day export must leave the master CAPTIONS.txt as-is")
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("0. Blog/draft.md").path))

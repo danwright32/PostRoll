@@ -97,6 +97,8 @@ targets:
       - path: Sources/Services/StoreSaveGate.swift
       - path: Sources/Services/StoreRestoreText.swift
       - path: Sources/Services/DataInventory.swift
+      - path: Sources/Services/ExportStaging.swift
+      - path: Sources/Services/CollageBakeOutcome.swift
       - path: Sources/Services/InsightsDisplay.swift
       - path: Sources/Services/CaptionBlocks.swift
       - path: Sources/Services/BlogMeta.swift

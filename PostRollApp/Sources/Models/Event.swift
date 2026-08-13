@@ -123,6 +123,20 @@ struct Event: Identifiable, Codable, Hashable {
         stage == .exported && exportPath == nil && archivedAt == nil
     }
 
+    /// Genuinely exported: files exist somewhere and the week is finished.
+    ///
+    /// The one predicate everything that acts on "is this exported" goes
+    /// through (#455, L16). `stage == .exported` alone is a router flag, not a
+    /// milestone, and reading it raw cost real data: the launch sweep stamped
+    /// `archivedAt` on an event Dan had only approved, which started the 60 day
+    /// clock that reclaims its preview media and program scans while the export
+    /// it still owed had never run. The sidebar read it raw too, so the same
+    /// event was hidden from the default list under a toggle calling it
+    /// exported, one row after a badge saying Ready to Export.
+    var isExported: Bool {
+        stage == .exported && !isAwaitingExport
+    }
+
     var displayDate: String {
         let f = DateFormatter()
         f.dateStyle = .medium

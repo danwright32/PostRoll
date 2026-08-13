@@ -1,0 +1,8 @@
+{
+  "name": "export-old-folder-survives-a-failed-run",
+  "file": "PostRollApp/Sources/Services/EventExporter.swift",
+  "find": "        let staging = try ExportStaging.begin(",
+  "replace": "        try? FileManager.default.removeItem(at: destination)\n        let staging = try ExportStaging.begin(",
+  "test": "PostRollTests/EventExporterTests/testANewExportDoesNotTouchThePreviousOneUntilItIsFinished",
+  "breaks": "the previous export is deleted before a single replacement file exists, so a run that dies partway leaves nothing to upload (#442, L5)"
+}
