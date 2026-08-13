@@ -1,0 +1,8 @@
+{
+  "name": "ci-selects-the-recorded-xcode",
+  "file": ".github/workflows/swift.yml",
+  "find": "sudo xcode-select --switch \"${app}\"",
+  "replace": "echo \"would switch to ${app}\"",
+  "test": "tests/test_toolchain_matches_ci.py::test_the_workflow_selects_the_recorded_xcode_rather_than_the_image_default",
+  "breaks": "CI reads the recorded Xcode and then compiles with whatever the runner image defaults to, so the compiler moves under the repo without a commit (#528)"
+}
