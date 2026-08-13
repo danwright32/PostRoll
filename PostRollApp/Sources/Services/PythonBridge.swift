@@ -1743,6 +1743,31 @@ actor PythonBridge {
         }
     }
 
+    /// What a failed OCR run left behind, when it left something usable (#479).
+    ///
+    /// Python writes the merged result after every batch, so a run stopped
+    /// partway (an exception, or the watchdog's SIGTERM at 1800s) leaves the
+    /// pages it had already read and paid for on disk. Without this read, that
+    /// write protects nothing: the run reports as failed and the retry pays for
+    /// those pages again.
+    ///
+    /// An EMPTY file is not a partial read. Nothing was recovered, so offering
+    /// it would present a programme with nothing in it as a programme that had
+    /// nothing in it. A file that does not parse is not one either.
+    nonisolated static func salvagedOCR(at url: URL) -> OCRResult? {
+        guard let data = try? Data(contentsOf: url),
+              let result = try? JSONDecoder().decode(OCRResult.self, from: data)
+        else { return nil }
+
+        let hasContent = !result.performers.isEmpty
+            || !result.pieces.isEmpty
+            || !result.scenes.isEmpty
+            || ![result.organizationNotes, result.programNotes, result.venueNotes,
+                 result.productionDetails, result.other]
+                .allSatisfy(\.isEmpty)
+        return hasContent ? result : nil
+    }
+
     func runOCR(imagePaths: [URL]) async throws -> OCRResult {
         let outputFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("postroll_ocr_\(UUID().uuidString).json")
@@ -1752,7 +1777,18 @@ actor PythonBridge {
         var args = ["-m", "postroll.ai.ocr_program", "--output", outputFile.path]
         for path in imagePaths { args += ["--image", path.path] }
 
-        try await runProcess(args: args)
+        do {
+            try await runProcess(args: args)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // A stopped run may still have read most of a long programme.
+            if let salvaged = Self.salvagedOCR(at: outputFile) {
+                throw PythonBridgeError.partialOCR(
+                    salvaged, reason: error.localizedDescription)
+            }
+            throw error
+        }
 
         guard FileManager.default.fileExists(atPath: outputFile.path) else {
             throw PythonBridgeError.outputMissing
