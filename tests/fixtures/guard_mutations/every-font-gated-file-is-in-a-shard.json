@@ -1,0 +1,8 @@
+{
+  "name": "every-font-gated-file-is-in-a-shard",
+  "file": ".github/workflows/swift.yml",
+  "find": " tests/test_gallery_alignment.py",
+  "replace": "",
+  "test": "tests/test_ci_runs_the_font_dependent_checks.py::test_the_macos_job_runs_every_font_dependent_test_file",
+  "breaks": "a font-gated file is dropped from the shards during a rebalance, so it runs nowhere while CI stays green (#507)"
+}

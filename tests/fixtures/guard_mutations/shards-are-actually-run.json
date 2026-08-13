@@ -1,0 +1,8 @@
+{
+  "name": "shards-are-actually-run",
+  "file": ".github/workflows/swift.yml",
+  "find": "pytest ${{ matrix.shard.files }}",
+  "replace": "pytest tests/test_golden_frames.py",
+  "test": "tests/test_ci_runs_the_font_dependent_checks.py::test_the_shards_are_actually_run_by_the_step",
+  "breaks": "the matrix fans the job out while every shard runs the same hardcoded command, so most of the checks run nowhere (#507)"
+}

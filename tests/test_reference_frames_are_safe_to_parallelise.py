@@ -1,8 +1,9 @@
 """The reference-frame checks stay safe to run in parallel (#412).
 
-Those four files are 586 of the macOS job's 780 seconds, all of it rendering
-real reels through ffmpeg, so the job now runs them with `-n auto`. Locally four
-workers took them from 495s to 221s.
+Those four files are the whole of the macOS job's slow half, all of it rendering
+real reels through ffmpeg, so the job runs them with `-n auto` and, since #507,
+splits them across a matrix of runners as well: `-n auto` can only use the three
+cores one runner has, and the four files are about seventeen minutes of CPU.
 
 That is only safe while each test keeps its outputs to itself. Every one of them
 currently writes into pytest's `tmp_path`, which is unique per test, and reads
@@ -19,33 +20,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+from ci_workflow import reference_frame_files as _reference_frame_files
+from ci_workflow import shards, step_command
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = REPO_ROOT / "tests"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "swift.yml"
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
-
-
-def _reference_frame_step() -> str:
-    """The step's COMMAND, with its comment lines removed.
-
-    Stripping the comments is load bearing rather than tidy. The first version of
-    this read the whole block, and the comment above the command explains the
-    parallel flag by naming it, so removing the flag from the command left the
-    guard green on the prose describing it (L103). Caught by deleting the flag
-    and watching the test pass.
-    """
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    parts = workflow.split("Run the reference-frame and legibility checks", 1)
-    assert len(parts) == 2, "the reference-frame step has been renamed or removed"
-    block = parts[1].split("\n\n", 1)[0]
-    return "\n".join(
-        line for line in block.splitlines() if not line.strip().startswith("#")
-    )
-
-
-def _reference_frame_files() -> set[str]:
-    return set(re.findall(r"tests/(test_[a-z0-9_]+\.py)", _reference_frame_step()))
 
 
 def _code(path: Path) -> str:
@@ -57,11 +41,72 @@ def _code(path: Path) -> str:
 
 
 def test_the_step_still_runs_in_parallel():
-    """If this stops being true the job is back to 13 minutes, quietly."""
-    assert "-n auto" in _reference_frame_step(), (
+    """If this stops being true the job is back to 13 minutes, quietly.
+
+    Still worth asserting alongside the matrix rather than instead of it: the
+    two do different work. The matrix gives each shard its own three-core
+    runner, and `-n auto` is what uses those three cores.
+    """
+    assert "-n auto" in step_command(), (
         "the reference-frame step is no longer parallel, which puts about six "
         "minutes back on every pull request"
     )
+
+
+def test_the_files_are_still_found():
+    """Everything below measures this set, so it must not quietly become empty.
+
+    #507 moved the file names out of the pytest command and into the job's
+    matrix. A scan left pointing at the command would find nothing and every
+    check derived from it would pass having examined no file at all (L98).
+    """
+    assert len(_reference_frame_files()) >= 4, (
+        f"only found {_reference_frame_files()} across the shards")
+
+
+def test_the_shard_scan_refuses_a_job_it_cannot_read():
+    """The derivation seen failing, rather than trusted (L1).
+
+    A workflow whose shards this cannot parse has to raise, not return an empty
+    list: an empty list is indistinguishable from a job that runs nothing, and
+    it would make every check above pass.
+    """
+    unreadable = (
+        "jobs:\n"
+        "  reference-frames:\n"
+        "    runs-on: macos-15\n"
+        "    steps:\n"
+        "      - name: Run them\n"
+        "        run: pytest tests/test_golden_frames.py\n"
+    )
+
+    with pytest.raises(AssertionError, match="shards"):
+        shards(unreadable)
+
+
+def test_the_shard_scan_reads_a_matrix():
+    """The positive half: the shape the workflow actually uses is parsed."""
+    workflow = (
+        "jobs:\n"
+        "  reference-frames:\n"
+        "    strategy:\n"
+        "      matrix:\n"
+        "        shard:\n"
+        "          - name: first\n"
+        "            files: tests/test_golden_frames.py\n"
+        "          - name: second\n"
+        "            files: tests/test_gallery_alignment.py tests/test_a.py\n"
+        "    steps:\n"
+        "      - run: pytest ${{ matrix.shard.files }}\n"
+        "  another-job:\n"
+        "    steps:\n"
+        "      - run: pytest tests/test_not_a_shard.py\n"
+    )
+
+    assert shards(workflow) == [
+        ("first", ["tests/test_golden_frames.py"]),
+        ("second", ["tests/test_gallery_alignment.py", "tests/test_a.py"]),
+    ]
 
 
 def test_xdist_is_pinned():

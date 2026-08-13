@@ -8,11 +8,14 @@ break gets found after a push rather than before.
 So there is a fast target that skips those four. Two things have to stay true or
 it becomes a way of not running the tests:
 
-* The slow set is DERIVED from the workflow step that already names those files,
-  not kept as a second list beside it. A hand-kept registry checks only what it
+* The slow set is DERIVED from the macOS job that already names those files, not
+  kept as a second list beside it. A hand-kept registry checks only what it
   lists, so the file missing from it is exempt from the very check meant to catch
   it (L96), and this repo has already been bitten by exactly that in
-  `test_ci_runs_the_font_dependent_checks.py`.
+  `test_ci_runs_the_font_dependent_checks.py`. Since #507 the names live in that
+  job's matrix rather than in its pytest command, and the reading of it is shared
+  with the other two guards in `ci_workflow.py` so the three cannot disagree
+  about which files are the expensive ones.
 * CI still runs everything. The fast target is for the loop between edits; it is
   not the gate.
 """
@@ -23,9 +26,11 @@ import re
 from pathlib import Path
 
 
+from ci_workflow import reference_frame_files as _reference_frame_files
+
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = REPO_ROOT / "tests"
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "swift.yml"
 MAKEFILE = REPO_ROOT / "Makefile"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 
@@ -33,22 +38,10 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 SLOW = "pytest.mark.slow"
 
 
-def _reference_frame_files() -> set[str]:
-    """The test files the macOS job runs in its reference-frame step.
-
-    Read out of the workflow rather than restated here, so the two cannot
-    disagree about which files are the expensive ones.
-    """
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    step = workflow.split("Run the reference-frame and legibility checks", 1)
-    assert len(step) == 2, "the reference-frame step has been renamed or removed"
-    return set(re.findall(r"tests/(test_[a-z0-9_]+\.py)", step[1]))
-
-
 def test_the_workflow_still_names_the_expensive_files():
     """If this finds nothing, every check below is measuring an empty set."""
     files = _reference_frame_files()
-    assert len(files) >= 4, f"only found {files} in the reference-frame step"
+    assert len(files) >= 4, f"only found {files} across the macOS job's shards"
 
 
 def test_every_expensive_file_is_marked_slow():
