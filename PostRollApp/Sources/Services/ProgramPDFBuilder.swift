@@ -172,14 +172,26 @@ struct ProgramPDFBuilder {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let stem = url.deletingPathExtension().lastPathComponent
 
-        let retainedSource = dir.appendingPathComponent(retainedSourceName(stem: stem))
-        if !FileManager.default.fileExists(atPath: retainedSource.path) {
-            try? FileManager.default.copyItem(at: url, to: retainedSource)
-        }
-
         // Recorded before the loop, from the document rather than from what the
         // loop managed to do, so the two can disagree (#373).
         var result = ProgramImport.Rasterisation(declaredPageCount: doc.pageCount)
+
+        // Keeping the original is what lets a later build embed its crisp
+        // vector pages verbatim instead of laying OCR text over a raster. The
+        // failure used to be discarded, in a function that deliberately returns
+        // a failures list, so every later program PDF quietly degraded with
+        // nothing anywhere saying why (#454).
+        let retainedSource = dir.appendingPathComponent(retainedSourceName(stem: stem))
+        if !FileManager.default.fileExists(atPath: retainedSource.path) {
+            do {
+                try FileManager.default.copyItem(at: url, to: retainedSource)
+            } catch {
+                NSLog("ProgramPDFBuilder: could not retain \(stem).pdf beside its pages: "
+                      + error.localizedDescription)
+                result.failures.append(
+                    .couldNotRetainSource(reason: error.localizedDescription))
+            }
+        }
         for i in 0..<doc.pageCount {
             let number = i + 1
             guard let page = doc.page(at: i) else {

@@ -704,6 +704,10 @@ def generate_media(
                         scroll_duration=scroll_duration,
                         seed=seed,
                         crop_offsets=crop_offsets,
+                        # The reel rendered, and settled for something other
+                        # than what was asked for. That belongs in the run's
+                        # warnings rather than nowhere (#450).
+                        on_warning=lambda m: _record_warning(warnings, "thursday", m),
                     )
                     # Also write a fast preview PNG + layout sidecar so the
                     # caption-review step can open the per-cell editor without

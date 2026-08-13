@@ -230,13 +230,15 @@ def fetch_audio_candidates(
     picks = filtered[:count]
 
     results: list[dict[str, Any]] = []
+    failed: list[str] = []
     for track in picks:
         track_id = str(track["id"])
         cached = cache / f"{track_id}.mp3"
         if not cached.exists():
             try:
                 _download(track["audiodownload"], cached)
-            except Exception:
+            except Exception as e:
+                failed.append(f"{track_id} ({e})")
                 continue
         results.append({
             "id": track_id,
@@ -246,6 +248,7 @@ def fetch_audio_candidates(
             "tags": tags,
             "local_path": str(cached),
         })
+    _report_failed_downloads(failed, kept=len(results), what="tag-matched")
     return results
 
 
@@ -331,6 +334,36 @@ class JamendoUnavailable(RuntimeError):
     two are different problems: one is retryable and says nothing about the
     tags, the other means the search genuinely matched nothing (#93).
     """
+
+
+def _report_failed_downloads(failed: list[str], *, kept: int, what: str) -> None:
+    """Say how many candidates never downloaded, and refuse to report a total
+    washout as a search that matched nothing (#453).
+
+    Both fetchers dropped a failed download and carried on, so three of six
+    candidates presented as a complete answer and six of six returned an empty
+    list, which is exactly what "your tags matched nothing" looks like. A batch
+    that partly fails has to record the attempt on the items it failed, or the
+    work is silently selected and paid for again and the partial result reports
+    as a clean run (L47).
+
+    Nothing is printed on a run where everything downloaded: a warning that
+    appears on healthy runs is one nobody reads (L36).
+    """
+    if not failed:
+        return
+    if kept == 0:
+        raise JamendoUnavailable(
+            f"None of the {len(failed)} {what} tracks could be downloaded, so this is "
+            f"the music service or the connection rather than nothing matching. "
+            f"Tried: {', '.join(failed)}."
+        )
+    print(
+        f"warning: {len(failed)} of {len(failed) + kept} {what} tracks could not be "
+        f"downloaded and are missing from the choices: {', '.join(failed)}.",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def _raise_for_envelope(data: dict[str, Any], *, what: str) -> None:
@@ -678,6 +711,7 @@ def fetch_program_audio_candidates(
         rng.shuffle(matched)
 
     results: list[dict[str, Any]] = []
+    failed: list[str] = []
     for track, score, label in matched:
         if len(results) >= count:
             break
@@ -686,7 +720,8 @@ def fetch_program_audio_candidates(
         if not cached.exists():
             try:
                 _download(track["audiodownload"], cached)
-            except Exception:
+            except Exception as e:
+                failed.append(f"{track_id} ({e})")
                 continue
         results.append({
             "id": track_id,
@@ -699,6 +734,7 @@ def fetch_program_audio_candidates(
             "match_label": label,
             "match_score": score,
         })
+    _report_failed_downloads(failed, kept=len(results), what="program-matched")
     return results
 
 

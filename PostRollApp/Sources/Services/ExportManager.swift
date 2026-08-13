@@ -444,11 +444,28 @@ final class ExportManager {
             // (#184). A run that was interrupted, or one missing files, leaves
             // no manifest, which is the honest state.
             if mediaError == nil {
-                ExportManifest.write(
-                    ExportManifest.build(folder: folder,
-                                         preset: ev.effectivePostingPreset,
-                                         event: ev.name),
-                    to: folder)
+                let contents = ExportManifest.build(folder: folder,
+                                                    preset: ev.effectivePostingPreset,
+                                                    event: ev.name)
+                // The answer is not discarded. Its absence is what every later
+                // reader uses to conclude the export never finished, so a write
+                // that failed leaves a good export bannered forever as one that
+                // did not happen, with advice to run it again and nothing
+                // saying it was the record rather than the export that failed
+                // (#452).
+                let extra: String?
+                if ExportManifest.write(contents, to: folder) {
+                    extra = ExportManifest.unreadableNotice(contents)
+                } else {
+                    extra = ExportManifest.writeFailureNotice
+                }
+                if let extra {
+                    let combined = [mediaWarning, extra].compactMap { $0 }
+                        .joined(separator: "\n\n")
+                    tracker.update(eventID) {
+                        $0.phase = .done(folder, mediaError: nil, mediaWarning: combined)
+                    }
+                }
             }
         }
         NotificationService.shared.notifyExportComplete(

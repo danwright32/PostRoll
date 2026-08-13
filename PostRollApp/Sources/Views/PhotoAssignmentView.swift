@@ -475,8 +475,25 @@ struct PhotoAssignmentView: View {
         let audioExts = Set(["m4a", "mp3", "aiff", "aif", "aac"])
 
 
+        // Folders this import could not read at all, so a permissions problem
+        // stops arriving as "no photos found" with advice about renaming
+        // folders, which is the one thing that cannot fix it (#451).
+        var unreadable: [String: String] = [:]
+
+        /// One read per folder, remembered, so a folder is listed once and a
+        /// failure is reported once however many times it is asked for.
+        var listings: [URL: DirectoryListing] = [:]
+        func listing(of dir: URL) -> [URL] {
+            let found = listings[dir] ?? DirectoryListing.of(dir, fileManager: fm)
+            listings[dir] = found
+            if let reason = found.failureReason {
+                unreadable[dir.lastPathComponent] = reason
+            }
+            return found.entriesIgnoringFailure
+        }
+
         func imageFiles(in dir: URL) -> [URL] {
-            ((try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+            listing(of: dir)
                 .filter { imageExts.contains($0.pathExtension.lowercased()) }
                 .sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending }
         }
@@ -525,7 +542,10 @@ struct PhotoAssignmentView: View {
                 dayPhotos[day] = list
             }
 
-            let contents = (try? fm.contentsOfDirectory(at: dayDir, includingPropertiesForKeys: nil)) ?? []
+            // Not listed a second time: imageFiles has already read this
+            // folder, and reporting the same permissions failure twice would
+            // put the day in the message twice.
+            let contents = listing(of: dayDir)
 
             switch day {
             case .tuesday:
@@ -560,6 +580,11 @@ struct PhotoAssignmentView: View {
         if !failures.isEmpty {
             let imported = totalImported == 0 ? "" : "Imported \(totalImported) photo\(totalImported == 1 ? "" : "s"). "
             importResultMessage = imported + ImportFailureText.message(failures)
+            importResultIsError = true
+        } else if !unreadable.isEmpty {
+            // Named before the folder-naming advice, because renaming a folder
+            // macOS will not let the app open changes nothing.
+            importResultMessage = ImportFailureText.unreadableFolders(unreadable)
             importResultIsError = true
         } else if totalImported == 0 {
             importResultMessage = "No photos found. Expected subfolders named sunday to friday, or day 1 to day 6."

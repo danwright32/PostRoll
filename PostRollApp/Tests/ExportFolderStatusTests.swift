@@ -146,4 +146,49 @@ final class ExportFolderStatusTests: XCTestCase {
         XCTAssertTrue(message.contains("Vocal Colors"), message)
         XCTAssertTrue(message.lowercased().contains("export again"), message)
     }
+
+    // MARK: - #451: a folder that cannot be read is not one that never finished
+
+    func testAnUnreadableFolderIsNotReportedAsAnUnfinishedExport() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("unreadable-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000],
+                                              ofItemAtPath: folder.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                   ofItemAtPath: folder.path)
+            try? FileManager.default.removeItem(at: folder)
+        }
+
+        guard case .unreadable = ExportFolderStatus.of(folder: folder) else {
+            return XCTFail("an unreadable folder read as \(ExportFolderStatus.of(folder: folder))")
+        }
+    }
+
+    func testTheUnreadableMessageDoesNotTellDanToExportAgain() {
+        guard let message = ExportFolderStatus.unreadable("Permission denied").message else {
+            return XCTFail("an unreadable folder says nothing")
+        }
+        XCTAssertTrue(message.contains("Permission denied"), message)
+        XCTAssertTrue(message.lowercased().contains("privacy"),
+                      "the message does not name the fix that would work: \(message)")
+    }
+
+    func testAnUnreadableFolderIsWorthShowing() {
+        XCTAssertTrue(ExportFolderStatus.unreadable("Permission denied").needsAttention)
+    }
+
+    /// An empty folder is a real answer: that export genuinely never finished.
+    func testAnEmptyReadableFolderStillReadsAsUnfinished() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("empty-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        guard case .unfinished(let count, _, _) = ExportFolderStatus.of(folder: folder) else {
+            return XCTFail("an empty folder did not read as unfinished")
+        }
+        XCTAssertEqual(count, 0)
+    }
 }

@@ -64,10 +64,6 @@ final class DiscardedFileWriteGuardTests: XCTestCase {
             + "being absent, and every reader falls back to the copy packaged in the app, "
             + "so a failure means Dan cannot edit it yet rather than that it is missing.",
 
-        "ProgramPDFBuilder.swift|FileManager.default.copyItem(at: url, to: retainedSource)":
-            "Retaining the original PDF beside its rasterised pages. The pages are the "
-            + "return value and do not depend on it; a failure costs the ability to "
-            + "re-rasterise later from the retained copy.",
     ]
 
     private static var sourcesDir: URL {

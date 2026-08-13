@@ -353,6 +353,53 @@ def build_reel_preview(
     return str(output)
 
 
+def resolve_reel_audio(
+    *,
+    audio_path: str | None,
+    pieces: list[dict] | None,
+    audio_tags: str,
+    on_warning=None,
+) -> str | None:
+    """Which track the Thursday reel uses, and a word when it is not the one
+    the programme asked for (#450).
+
+    The programme match degraded to generic tag music on a bare
+    `except Exception`: no line on stderr and no entry in the warnings channel
+    the pipeline has carried since #265, so a Jamendo outage or a bug in
+    `fetch_audio_by_program` turned every Thursday reel's programme-matched
+    track into mood music while the run reported clean. `audio.py` built the
+    distinct `JamendoUnavailable` type precisely so callers could tell that
+    apart from a programme nothing matched, and this caller erased it.
+
+    A programme that genuinely matched nothing stays silent. That is the
+    ordinary outcome for repertoire Jamendo does not carry, and a warning on an
+    ordinary outcome is one nobody reads (L36).
+    """
+    if audio_path is not None:
+        return audio_path
+
+    from postroll import audio as audio_module
+
+    def warn(message: str) -> None:
+        print(f"warning: {message}", file=sys.stderr, flush=True)
+        if on_warning is not None:
+            on_warning(message)
+
+    if pieces:
+        try:
+            audio_path = audio_module.fetch_audio_by_program(pieces)
+        except audio_module.JamendoUnavailable as e:
+            warn(f"The programme-matched music could not be fetched: {e} "
+                 "This reel uses generic tag-matched music instead.")
+        except Exception as e:
+            warn(f"Searching the programme for music failed: {e}. "
+                 "This reel uses generic tag-matched music instead.")
+
+    if audio_path is None:
+        audio_path = audio_module.fetch_audio(audio_tags)
+    return audio_path
+
+
 def generate_reel_scroll(
     photo_paths: list[str],
     audio_path: str | None,   # None = auto-fetch from Jamendo
@@ -368,6 +415,7 @@ def generate_reel_scroll(
     audio_tags: str | None = None,  # override default Jamendo search tags
     pieces: list[dict] | None = None,  # OCR program pieces — for piece-match auto-fetch
     crop_offsets: list[tuple[float, float, float]] | None = None,
+    on_warning=None,  # called with a sentence when the reel had to settle for less
 ) -> str:
     """Generate a photo scroll reel with masonry collage layout.
 
@@ -378,16 +426,16 @@ def generate_reel_scroll(
             back to the tag-based search.
     crop_offsets: optional per-photo (x, y, zoom) triples — lets the Thursday
                   editor override the default centred fill on a per-photo basis.
+    on_warning: called with one sentence when the reel rendered but had to
+                settle for something other than what was asked for, so the
+                caller can put it in the run's warnings rather than the reel
+                degrading in silence (#450).
     """
-    if audio_path is None:
-        from postroll.audio import fetch_audio, fetch_audio_by_program
-        if pieces:
-            try:
-                audio_path = fetch_audio_by_program(pieces)
-            except Exception:
-                audio_path = None
-        if audio_path is None:
-            audio_path = fetch_audio(audio_tags or _DEFAULT_AUDIO_TAGS)
+    audio_path = resolve_reel_audio(
+        audio_path=audio_path, pieces=pieces,
+        audio_tags=audio_tags or _DEFAULT_AUDIO_TAGS,
+        on_warning=on_warning,
+    )
 
     # photo_paths is the source of truth — sorted once at import time on the
     # Swift side. Do NOT re-sort here: any user reorder (e.g. the Thursday
