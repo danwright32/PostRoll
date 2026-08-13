@@ -1117,9 +1117,9 @@ private struct CroppablePhotoThumb: View {
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .task {
-            let loaded = await Task.detached { NSImage(contentsOf: url) }.value
-            image = loaded
-            loadFailed = (loaded == nil)
+            let load = await ImageLoad.read(url)
+            image = load.image
+            loadFailed = load.isMissing
         }
     }
 
@@ -1568,9 +1568,9 @@ private struct PhotoTaggingSheet: View {
         // about work the person can no longer see.
         applyResult = nil
         tagUndo.clear()
-        let loaded = await Task.detached { NSImage(contentsOf: url) }.value
-        image = loaded
-        loadFailed = (loaded == nil)
+        let load = await ImageLoad.read(url)
+        image = load.image
+        loadFailed = load.isMissing
     }
 }
 
@@ -2153,13 +2153,7 @@ private struct BeforeAfterThumb: View {
         }
         .buttonStyle(.plain)
         .help(isSelected ? "Tap to clear" : "Tap to assign")
-        .task {
-            let captured = url
-            image = await Task.detached {
-                guard FileManager.default.fileExists(atPath: captured.path) else { return nil }
-                return NSImage(contentsOf: captured)
-            }.value
-        }
+        .task { image = await ImageLoad.read(url).image }
     }
 }
 
@@ -2303,9 +2297,9 @@ private struct PhotoThumb: View {
             .padding(3)
         }
         .task {
-            let loaded = await Task.detached { NSImage(contentsOf: url) }.value
-            image = loaded
-            loadFailed = (loaded == nil)
+            let load = await ImageLoad.read(url)
+            image = load.image
+            loadFailed = load.isMissing
         }
     }
 }

@@ -554,13 +554,11 @@ private struct ProgramThumbnail: View {
             .padding(4)
         }
         .task {
-            let captured = url
-            let result: LoadState = await Task.detached {
-                guard FileManager.default.fileExists(atPath: captured.path) else { return .missing }
-                if let img = NSImage(contentsOf: captured) { return .loaded(img) }
-                return .missing
-            }.value
-            state = result
+            // Through ImageLoad so the BYTES cross the actor boundary rather
+            // than an NSImage, which is not Sendable and does not compile under
+            // strict concurrency.
+            let load = await ImageLoad.read(url)
+            state = load.isMissing ? .missing : (load.image.map(LoadState.loaded) ?? .missing)
         }
     }
 }

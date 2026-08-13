@@ -21,9 +21,16 @@ enum ImageLoad: Equatable {
     case missing
 
     /// Read `url` off the main thread and say which of the three happened.
+    ///
+    /// The BYTES cross the actor boundary, not the image. `NSImage` is not
+    /// Sendable, so handing one back from a detached task is an error under
+    /// strict concurrency, and the app has never compiled on the Xcode CI runs
+    /// because several loaders did exactly that. `Data` is Sendable, and
+    /// decoding it here costs nothing that reading the file did not already.
     static func read(_ url: URL) async -> ImageLoad {
-        let loaded = await Task.detached { NSImage(contentsOf: url) }.value
-        return loaded.map(ImageLoad.loaded) ?? .missing
+        let data = await Task.detached { try? Data(contentsOf: url) }.value
+        guard let data, let image = NSImage(data: data) else { return .missing }
+        return .loaded(image)
     }
 
     /// For call sites that already loaded the image alongside something else.

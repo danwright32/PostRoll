@@ -4180,9 +4180,7 @@ private struct InstagramMockup: View {
             // Keep the previous image on screen while loading the next so
             // carousel swaps don't flash a placeholder (and don't reflow the
             // left column via a transient square frame).
-            if let loaded = await Task.detached(priority: .userInitiated, operation: {
-                NSImage(contentsOf: url)
-            }).value {
+            if let loaded = await ImageLoad.read(url).image {
                 photo = loaded
             }
         }
@@ -4823,7 +4821,7 @@ private struct CollagePreviewThumbnail: View {
         // MainActor.run so SwiftUI fires exactly one render — no intermediate flash
         // where the PNG is visible but the cell overlays haven't appeared yet.
         .task(id: url) {
-            async let img     = Task.detached { NSImage(contentsOf: url) }.value
+            async let img     = ImageLoad.read(url).image
             async let decoded = Task.detached {
                 LayoutSidecar.read(at: layoutURL).cells
             }.value
@@ -4841,7 +4839,7 @@ private struct CollagePreviewThumbnail: View {
         .onChange(of: isRegenerating) { _, nowRegenerating in
             if !nowRegenerating {
                 Task {
-                    async let img     = Task.detached { NSImage(contentsOf: url) }.value
+                    async let img     = ImageLoad.read(url).image
                     async let decoded = Task.detached {
                         LayoutSidecar.read(at: layoutURL).cells
                     }.value
@@ -5169,7 +5167,7 @@ private struct ReelStripPreviewThumbnail: View {
             }
         }
         .task(id: url) {
-            async let img = Task.detached { NSImage(contentsOf: url) }.value
+            async let img = ImageLoad.read(url).image
             async let decoded = Task.detached {
                 (try? JSONDecoder().decode(ReelStripLayout.self, from: Data(contentsOf: layoutURL)))
             }.value
@@ -5186,7 +5184,7 @@ private struct ReelStripPreviewThumbnail: View {
         .onChange(of: isRegenerating) { _, nowRegenerating in
             if !nowRegenerating {
                 Task {
-                    async let img = Task.detached { NSImage(contentsOf: url) }.value
+                    async let img = ImageLoad.read(url).image
                     async let decoded = Task.detached {
                         (try? JSONDecoder().decode(ReelStripLayout.self, from: Data(contentsOf: layoutURL)))
                     }.value
@@ -5428,7 +5426,7 @@ private struct CollageCellOverlay: View {
         )
         .task(id: photoURL) {
             photo = nil  // clear stale image before loading so old photo never renders at new crop offset
-            photo = await Task.detached { NSImage(contentsOf: photoURL) }.value
+            photo = await ImageLoad.read(photoURL).image
         }
     }
 }
