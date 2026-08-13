@@ -1,8 +1,8 @@
 {
   "name": "one-thursday-editor-build-at-a-time",
   "file": "PostRollApp/Sources/Services/PreviewGraphicsManager.swift",
-  "find": "        buildingThursdayEditor.insert(eventID).inserted",
-  "replace": "        buildingThursdayEditor.insert(eventID)\n        return true",
+  "find": "        guard buildingThursdayEditor.insert(eventID).inserted else { return false }",
+  "replace": "        buildingThursdayEditor.insert(eventID)",
   "test": "PostRollTests/CaptionReviewOwnershipTests/testASecondThursdayEditorBuildIsRefusedWhileOneIsRunning",
   "breaks": "a remount mid-build starts a second one writing the same PNG and layout JSON as the first (#456)"
 }
