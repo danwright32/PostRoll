@@ -1,0 +1,8 @@
+{
+  "name": "restore-unreadable-folder-is-not-no-backup",
+  "file": "PostRollApp/Sources/Services/StoreBackups.swift",
+  "find": "            return .unknown(error.localizedDescription)",
+  "replace": "            return .none",
+  "test": "PostRollTests/StoreRestoreTests/testAFolderThatCannotBeListedIsNotReportedAsHavingNoBackup",
+  "breaks": "a data folder that could not be read is reported as holding no backup, so Dan is told the copies are gone when they are sitting behind a permission denial (L11)"
+}

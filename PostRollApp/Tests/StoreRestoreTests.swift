@@ -177,6 +177,31 @@ final class StoreRestoreTests: XCTestCase {
                        .noBackup)
     }
 
+    func testAFolderThatCannotBeListedIsNotReportedAsHavingNoBackup() throws {
+        try XCTSkipIf(getuid() == 0, "permission based tests are meaningless as root")
+        let real = anEvent("Show")
+        try saveGeneration([real], at: 1)
+        try saveGeneration([real], at: 2)
+        XCTAssertFalse(backupNames().isEmpty, "setup: there must be a backup to fail to see")
+
+        // A TCC denial on the data folder is an ordinary way to get here, and
+        // the backups are sitting right there behind it. Telling Dan there is
+        // nothing to put back would be a claim nothing measured (L11).
+        try FileManager.default.setAttributes([.posixPermissions: 0o000],
+                                              ofItemAtPath: dir.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                   ofItemAtPath: dir.path)
+        }
+
+        guard case .unknown = StoreBackups.availableRestore(for: store) else {
+            return XCTFail("an unreadable folder reported \(StoreBackups.availableRestore(for: store))")
+        }
+        guard case .failed = StoreBackups.restore(store: store, isValid: EventStore.decodes) else {
+            return XCTFail("an unreadable folder was reported as having no backup")
+        }
+    }
+
     func testAnUnwritableStoreReportsFailureRatherThanClaimingARestore() throws {
         // Permission bits mean nothing to root, which would load the file
         // happily and pass this test for the wrong reason.

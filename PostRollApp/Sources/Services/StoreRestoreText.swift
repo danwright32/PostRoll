@@ -44,14 +44,23 @@ enum StoreRestoreText {
     /// consequence is not stated is one nobody presses when the consequence is
     /// "replace everything I can see".
     static func corruptStore(_ reason: String?,
-                             offering backup: RestorableBackup?) -> String? {
+                             offering available: StoreBackups.Availability,
+                             named backup: RestorableBackup?) -> String? {
         guard let reason else { return nil }
-        guard let backup else {
+        switch available {
+        case .backup where backup != nil:
+            return reason
+                + " A copy saved on \(describe(backup!)) can be put back, replacing what "
+                + "is on screen now."
+        case .none, .backup:
             return reason + " There is no earlier backup to put back."
+        // Not the same sentence as "there is none". The backups may be sitting
+        // right there behind a permission denial, and saying they are gone
+        // would be a claim nothing measured (L11).
+        case .unknown(let why):
+            return reason
+                + " PostRoll could not check for an earlier backup: \(Sentence.closed(why))"
         }
-        return reason
-            + " A copy saved on \(describe(backup)) can be put back, replacing what is "
-            + "on screen now."
     }
 
     /// The button was pressed and there was nothing to restore. Only reachable

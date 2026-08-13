@@ -113,12 +113,15 @@ final class AppState {
             storeUnavailable = nil
             restorableBackup = nil
         case .corrupt:
-            restorableBackup = StoreBackups.restorable(for: storeURL).map {
-                RestorableBackup(fileName: $0.lastPathComponent,
-                                 takenAt: StoreBackups.takenAt($0, of: storeURL))
-            }
+            let available = StoreBackups.availableRestore(for: storeURL)
+            restorableBackup = {
+                guard case .backup(let url) = available else { return nil }
+                return RestorableBackup(fileName: url.lastPathComponent,
+                                        takenAt: StoreBackups.takenAt(url, of: storeURL))
+            }()
             dataLoadWarning = StoreRestoreText.corruptStore(loaded.recoveryMessage,
-                                                            offering: restorableBackup)
+                                                            offering: available,
+                                                            named: restorableBackup)
             storeUnavailable = nil
         case .unreadable:
             dataLoadWarning = nil

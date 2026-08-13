@@ -65,8 +65,23 @@ enum StoreBackups {
     /// fixed-width and big-endian. Never by modification date, which a copy or
     /// a restore can rewrite.
     static func existing(for store: URL) -> [URL] {
+        // Empty is the safe answer for every caller of THIS one: pruning
+        // nothing, and protecting nothing that is not there. A caller whose
+        // answer reaches a person goes through `listing` instead, because to
+        // them "none" and "could not look" are different sentences (L11).
+        (try? listing(for: store)) ?? []
+    }
+
+    /// Every backup belonging to `store`, or a thrown error when the folder
+    /// could not be listed at all.
+    ///
+    /// Split out because an unreadable folder and a folder with no backups in
+    /// it are indistinguishable from an empty array, and one of them turns
+    /// "there is no backup to put back" into a claim nothing measured. A TCC
+    /// denial on the data folder is an ordinary way to get here.
+    static func listing(for store: URL) throws -> [URL] {
         let dir = store.deletingLastPathComponent()
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
         return names
             .filter { $0.hasPrefix(prefix(for: store)) && $0.hasSuffix(".bak") }
             .sorted()
@@ -115,8 +130,37 @@ enum StoreBackups {
     /// person is trying to undo, and restoring it would look like the button
     /// worked while putting the emptiness back.
     static func restorable(for store: URL) -> URL? {
-        if lastCorruptionStamp(for: store) != nil { return protected(for: store).last }
-        return newest(for: store)
+        if case .backup(let url) = availableRestore(for: store) { return url }
+        return nil
+    }
+
+    /// What a restore has available, with "we could not look" kept separate
+    /// from "there is nothing there".
+    enum Availability: Equatable {
+        case backup(URL)
+        /// The folder was read and holds no backup for this store.
+        case none
+        /// The folder could not be read, so whether a backup exists is unknown.
+        /// Telling somebody there is nothing to put back when nothing looked is
+        /// the failure this case exists to prevent (L11).
+        case unknown(String)
+    }
+
+    static func availableRestore(for store: URL) -> Availability {
+        let all: [URL]
+        do {
+            all = try listing(for: store)
+        } catch {
+            return .unknown(error.localizedDescription)
+        }
+        guard let cutoff = lastCorruptionStamp(for: store) else {
+            return all.last.map(Availability.backup) ?? .none
+        }
+        let beforeTheCorruption = all.filter {
+            guard let stamp = stampField(of: $0.lastPathComponent, for: store) else { return false }
+            return stamp <= cutoff
+        }
+        return beforeTheCorruption.last.map(Availability.backup) ?? .none
     }
 
     /// When a backup was taken, for saying so on screen.
@@ -149,7 +193,15 @@ enum StoreBackups {
     static func restore(store: URL,
                         isValid: (Data) -> Bool,
                         now: () -> Date = Date.init) -> RestoreOutcome {
-        guard let source = restorable(for: store) else { return .noBackup }
+        let source: URL
+        switch availableRestore(for: store) {
+        case .backup(let url): source = url
+        case .none: return .noBackup
+        // A folder we could not read is a failure to report, never a quiet
+        // "there is nothing here" (L11, L95): the backups may be sitting right
+        // there behind a permission denial.
+        case .unknown(let reason): return .failed(reason)
+        }
 
         let data: Data
         do {
