@@ -1072,8 +1072,7 @@ struct CaptionReviewView: View {
                                  preset: live.effectivePostingPreset,
                                  stats: { AccountBook.shared.stats(for: $0) },
                                  asOf: suggestionsAsOf,
-                                 notes: AccountBook.shared.loadStatus == .unreadable
-                                        ? [AccountBook.unreadableNote] : [])
+                                 notes: [AccountBook.shared.recoveryNote].compactMap { $0 })
     }
 
     private func applyCollageLayout(day: DayName, seed: Int) {

@@ -187,12 +187,24 @@ enum AccountNumbersEntry {
 final class AccountBook {
 
     /// Why a load did or did not produce the real list.
+    ///
+    /// Two failures, not one (#505). They call for opposite handling, and
+    /// collapsing them meant the recoverable one was treated as the
+    /// unrecoverable one: a file that decoded as nonsense switched saving off
+    /// for that session and every session after it, forever, because nothing
+    /// ever moved the bad bytes out of the way. EventStore and AnalyticsStore
+    /// have told the two apart since #88 and #439.
     enum LoadStatus: Equatable {
         /// Read, or genuinely not there yet (a first launch).
         case ok
-        /// The bytes are present but are not account data. Saving is blocked:
-        /// writing over them would destroy the numbers precisely because we
-        /// could not read them.
+        /// The bytes are there and are not account data. They are moved aside
+        /// so saving can resume; `setAsideAs` is the name they were kept under,
+        /// or nil when even that move failed, in which case saving stays off.
+        case corrupt(setAsideAs: String?)
+        /// The file could not be read at all (a permission denial, an I/O
+        /// error). Its contents are unknown and untouched, and saving is
+        /// refused: writing over them would destroy the numbers precisely
+        /// because we could not read them.
         case unreadable
     }
 
@@ -203,11 +215,46 @@ final class AccountBook {
     /// goes entirely unranked, and nothing on screen distinguishes a file
     /// nobody has filled in from one that failed to load. An error state and an
     /// empty state are different screens.
-    nonisolated static let unreadableNote =
+    ///
+    /// It names the file and the folder because the only fix is a file on disk,
+    /// and a note that says "the file" identifies nothing to somebody standing
+    /// in Finder (#505).
+    nonisolated static func unreadableNote(file: String, folder: String) -> String {
         "Could not read the saved account numbers, so everything reads as not counted. "
-        + "The file has been left alone rather than overwritten."
+        + "\(file) in \(folder) has been left alone rather than overwritten, and no new "
+        + "numbers will be saved until it can be read."
+    }
 
-    static let shared = AccountBook(fileURL: AppPaths.root.appendingPathComponent("accounts.json"))
+    /// The same situation, except the bytes were readable and turned out not to
+    /// be account data. Distinct wording because the consequence is distinct:
+    /// the numbers that were in there are gone, and new ones will be saved.
+    nonisolated static func corruptNote(setAsideAs name: String?,
+                                        file: String, folder: String) -> String {
+        guard let name else {
+            return "\(file) in \(folder) is not account data, and it could not be moved "
+                 + "out of the way either, so everything reads as not counted and no new "
+                 + "numbers will be saved over it."
+        }
+        return "\(file) in \(folder) is not account data, so everything reads as not "
+             + "counted. Nothing was deleted: it was set aside as \(name), and new "
+             + "numbers are being saved again."
+    }
+
+    /// What the caption and export surfaces should say, or nil when the book
+    /// loaded properly.
+    var recoveryNote: String? {
+        let file = fileURL.lastPathComponent
+        let folder = (fileURL.deletingLastPathComponent().path as NSString)
+            .abbreviatingWithTildeInPath
+        switch loadStatus {
+        case .ok: return nil
+        case .unreadable: return Self.unreadableNote(file: file, folder: folder)
+        case .corrupt(let name):
+            return Self.corruptNote(setAsideAs: name, file: file, folder: folder)
+        }
+    }
+
+    static let shared = AccountBook(fileURL: AppPaths.accountsFile)
 
     private let fileURL: URL
     private var records: [String: AccountRecord] = [:]
@@ -319,6 +366,19 @@ final class AccountBook {
         }
     }
 
+    private static func decoder() -> JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }
+
+    /// True when `data` is a readable account book. The one predicate deciding
+    /// both what is worth keeping as a backup and what a load will accept, so
+    /// the backup ring cannot fill up with files this store would reject.
+    private static func decodes(_ data: Data) -> Bool {
+        (try? decoder().decode(Wrapper.self, from: data)) != nil
+    }
+
     private func load() {
         let data: Data
         do {
@@ -330,31 +390,48 @@ final class AccountBook {
             // Through the shared classification rather than an inline copy of it
             // (#439): three stores were each deciding "is this file merely
             // absent" for themselves, and one of them had it wrong.
-            if !(error as NSError).isFileNotFound {
+            if (error as NSError).isFileNotFound {
+                StoreSaveGate.shared.unblock(fileURL)
+            } else {
                 NSLog("AccountBook: could not read \(fileURL.lastPathComponent): \(error)")
+                StoreSaveGate.shared.block(fileURL)
                 loadStatus = .unreadable
             }
             return
         }
         do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let wrapper = try decoder.decode(Wrapper.self, from: data)
+            let wrapper = try Self.decoder().decode(Wrapper.self, from: data)
             records = Dictionary(uniqueKeysWithValues:
                 wrapper.records.filter { !Self.key($0.handle).isEmpty }
                     .map { (Self.key($0.handle), $0) })
             loadStatus = .ok
+            StoreSaveGate.shared.unblock(fileURL)
         } catch {
+            // The bytes are there and they are not account data. Move them out
+            // of the way so saving can resume (#505): leaving them in place
+            // switched saving off permanently, and these numbers are typed in
+            // by hand and come from nowhere else, so silently never saving them
+            // again is the expensive failure.
             NSLog("AccountBook: \(fileURL.lastPathComponent) is not account data: \(error)")
-            loadStatus = .unreadable
+            let setAside = StoreRecovery.setAside(fileURL)
+            if setAside == nil {
+                // The original could not be preserved, so it is still the only
+                // copy of whatever it held. Saving would erode it.
+                StoreSaveGate.shared.block(fileURL)
+            } else {
+                StoreSaveGate.shared.unblock(fileURL)
+            }
+            loadStatus = .corrupt(setAsideAs: setAside?.lastPathComponent)
         }
     }
 
     private func save() {
-        guard loadStatus == .ok else {
-            // The bytes on disk are the only copy of every number Dan entered.
-            // Overwriting them because we could not read them is exactly how
-            // that data gets destroyed.
+        // The shared gate rather than `loadStatus == .ok` (#505). The two are
+        // different questions: after a corrupt file has been set aside the load
+        // did NOT produce the real list, and saving is nevertheless the right
+        // thing to do, because the bytes it would have overwritten are now
+        // safely under another name.
+        guard !StoreSaveGate.shared.isBlocked(fileURL) else {
             NSLog("AccountBook: refusing to save over unreadable \(fileURL.lastPathComponent)")
             return
         }
@@ -365,6 +442,12 @@ final class AccountBook {
             let data = try encoder.encode(Wrapper(records: all))
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // The same generations events.json and analytics.json have kept
+            // since #102 and #88 (#440). This was the only hand-entered store
+            // with no backup at all, and it is the one whose contents exist
+            // nowhere else: one bad byte and every follower and engagement
+            // figure Dan has typed was gone with nothing to fall back to.
+            StoreBackups.rotate(store: fileURL, isValid: Self.decodes)
             try data.write(to: fileURL, options: .atomic)
         } catch {
             NSLog("AccountBook: could not save \(fileURL.lastPathComponent): \(error)")

@@ -20,10 +20,17 @@ Inside it:
 | `events.json.<date>.bak` | Recent verified-good copies of the above | Copies |
 | `analytics.json` | Imported Instagram history and reports | Only by re-exporting from Meta |
 | `analytics.json.<date>.bak` | Recent verified-good copies of the above | Copies |
+| `accounts.json` | Follower and engagement numbers you typed in by hand | No, only by looking them up again |
+| `brand-voice.md` | Your brand voice notes, including everything the app has learned | No, unless you still have the copy in the project folder |
 | `photos/` | Every photo you imported | No, unless you still have the originals |
+| `clips/` | Every video clip you imported | No, unless you still have the originals |
 | `programs/` | Program scans and the searchable program PDFs | No. The sites they came from block re-download. |
-| `preview/`, `output/` | Generated collages, reels and exports | Yes, regenerated on demand |
+| `audio/` | Music you picked for a reel | Yes, re-downloadable |
+| `audio_cache/` | Downloaded music the app keeps so it does not fetch a track twice | Yes, re-downloaded on demand |
+| `preview/` | Generated collages, reels and story graphics | Yes, regenerated on demand |
+| `progress/` | Which step a running generation is on | Yes, scratch files |
 | `logs/` | Diagnostic logs | Yes |
+| `usage.jsonl` | What each paid AI call cost, for the spend figures in the app | No, but it is a record rather than something the app needs |
 
 The project folder in `~/Documents/PostRoll` is **code only**. It holds no data
 and does not need backing up.

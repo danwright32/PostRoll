@@ -25,6 +25,14 @@ final class AppState {
     /// starting from an empty list is safe.
     var dataLoadWarning: String?
 
+    /// The backup the corrupt-store alert can put back, when one exists.
+    ///
+    /// Set alongside `dataLoadWarning`, because a restore anyone can reach only
+    /// from a terminal is not a restore path for Dan: five verified-good
+    /// generations sat beside the bad file with nothing in the app able to
+    /// offer them (#441).
+    private(set) var restorableBackup: RestorableBackup?
+
     /// Set when events.json could not be read at all (a permission denial, an
     /// I/O error). The file is intact and untouched, its contents are unknown,
     /// and saving is refused, so the app must not let the user work in what
@@ -55,6 +63,14 @@ final class AppState {
     /// live events.json (L2).
     private let storeURL: URL
 
+    /// Where the media the launch sweeps delete actually lives.
+    ///
+    /// Threaded rather than each sweep reaching for `AppPaths.root` itself, so a
+    /// test can drive the real `loadStore` (including the restore path) against
+    /// a temp tree and be structurally unable to delete live photos (L2). The
+    /// sweeps below delete files for every event NOT in the list they are given.
+    private let layout: AppPaths.Layout
+
     #if POSTROLL_TESTS
     /// Test seam: an AppState holding exactly these events, with no read of the
     /// on-disk store and none of the launch sweeps. Tests must be structurally
@@ -64,14 +80,18 @@ final class AppState {
     /// Compiled only into the test bundle. The shipping app cannot call this
     /// even by accident, and an accident here would not look like one: it would
     /// open showing an empty library while the real events sat on disk.
-    init(events: [Event], storeURL: URL = EventStore.storeURL) {
+    init(events: [Event],
+         storeURL: URL = EventStore.storeURL,
+         dataRoot: URL = AppPaths.root) {
         self.events = events
         self.storeURL = storeURL
+        self.layout = AppPaths.Layout(root: dataRoot)
     }
     #endif
 
     init() {
         storeURL = EventStore.storeURL
+        layout = AppPaths.layout
         // Data lives under AppPaths.root, which is ~/Library/Application Support
         // /PostRoll once the `.migrated` marker is present (the move was done
         // out-of-band, deliberately NOT on launch), otherwise the legacy
@@ -91,12 +111,19 @@ final class AppState {
         case .ok:
             dataLoadWarning = nil
             storeUnavailable = nil
+            restorableBackup = nil
         case .corrupt:
-            dataLoadWarning = loaded.recoveryMessage
+            restorableBackup = StoreBackups.restorable(for: storeURL).map {
+                RestorableBackup(fileName: $0.lastPathComponent,
+                                 takenAt: StoreBackups.takenAt($0, of: storeURL))
+            }
+            dataLoadWarning = StoreRestoreText.corruptStore(loaded.recoveryMessage,
+                                                            offering: restorableBackup)
             storeUnavailable = nil
         case .unreadable:
             dataLoadWarning = nil
             storeUnavailable = loaded.recoveryMessage
+            restorableBackup = nil
         }
 
         guard loaded.isAuthoritative else { return }
@@ -117,7 +144,7 @@ final class AppState {
         }
 
         // Reclaim disk space from shoots archived more than ArchiveCleanup.archiveAgeDays ago.
-        if ArchiveCleanup.sweep(events: &events, dataRoot: AppPaths.root) {
+        if ArchiveCleanup.sweep(events: &events, dataRoot: layout.root) {
             dirty = true
         }
 
@@ -125,7 +152,11 @@ final class AppState {
         // picked from ~/Downloads/~/Desktop before the import-copy fix) into the
         // app's folder, so collage edits and exports stop re-triggering the
         // macOS permission prompt on every interaction.
-        if MediaReclaim.reclaim(events: &events) {
+        if MediaReclaim.reclaim(events: &events,
+                                photosDir: layout.photosDir,
+                                audioDir: layout.audioDir,
+                                clipsDir: layout.clipsDir,
+                                storageRoot: layout.root) {
             dirty = true
         }
 
@@ -135,12 +166,48 @@ final class AppState {
         // reachable on an authoritative load (guarded above): against an
         // empty or partial events array this would orphan, and delete, every
         // media file on disk.
-        OrphanedMediaCleanup.sweep(events: events)
+        sweepOrphanedMedia()
 
         // Same guard, same reason: the per-event progress files a deleted event
         // leaves behind. Housekeeping rather than space, so that the app has one
         // answer to who clears up per-event scratch files (#235).
-        ProgressFileCleanup.sweep(events: events)
+        ProgressFileCleanup.sweep(events: events, progressDir: layout.progressDir)
+    }
+
+    /// The orphan sweep, against this AppState's data root rather than the
+    /// live one. One helper because three call sites ran it and each passed a
+    /// different (defaulted) set of folders (L16).
+    private func sweepOrphanedMedia() {
+        OrphanedMediaCleanup.sweep(events: events,
+                                   photosDir: layout.photosDir,
+                                   audioDir: layout.audioDir,
+                                   programsDir: layout.programsDir,
+                                   clipsDir: layout.clipsDir)
+    }
+
+    /// Put the newest verified-good backup of the store back, for the button on
+    /// the corrupt-store alert.
+    ///
+    /// Reports what actually happened rather than assuming: a restore that
+    /// could not write is the moment the person most needs to be told, and a
+    /// silent one would leave them looking at the same empty list believing it
+    /// had worked (L12).
+    @discardableResult
+    func restoreLatestBackup() -> StoreBackups.RestoreOutcome {
+        let outcome = StoreBackups.restore(store: storeURL, isValid: EventStore.decodes)
+        switch outcome {
+        case .restored:
+            // Through the ordinary load, so the restored list gets the same
+            // launch treatment every other list gets, rather than a second
+            // path that reads the store its own way.
+            loadStore()
+        case .noBackup:
+            dataLoadWarning = StoreRestoreText.noBackup
+            restorableBackup = nil
+        case .failed(let reason):
+            dataLoadWarning = StoreRestoreText.failed(reason)
+        }
+        return outcome
     }
 
     /// Every write of the store goes through here, so what happened to it cannot
@@ -257,7 +324,11 @@ final class AppState {
         // Anything else the delete orphaned is reclaimed now; the event itself
         // still counts as an owner of its files until the window closes.
         OrphanedMediaCleanup.sweep(
-            events: DeletionPolicy.mediaOwners(events: events, pendingDeletion: event)
+            events: DeletionPolicy.mediaOwners(events: events, pendingDeletion: event),
+            photosDir: layout.photosDir,
+            audioDir: layout.audioDir,
+            programsDir: layout.programsDir,
+            clipsDir: layout.clipsDir
         )
 
         let work = DispatchWorkItem { [weak self] in self?.finalizePendingDeletion() }
@@ -282,7 +353,7 @@ final class AppState {
         finalizeDeletionWork = nil
         guard pendingDeletion != nil else { return }
         pendingDeletion = nil
-        OrphanedMediaCleanup.sweep(events: events)
+        sweepOrphanedMedia()
     }
 
     /// Duplicate an event: copies metadata and OCR result, clears photos and
