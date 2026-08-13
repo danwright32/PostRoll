@@ -1,0 +1,8 @@
+{
+  "name": "picker-storage-not-satisfied-by-a-comment",
+  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "find": "        let outcome = ImportedPicks.copy(panel.urls)",
+  "replace": "        // ImportedPicks.copy(panel.urls) used to be here\n        let outcome = ImportedPicks.Outcome(stored: panel.urls, failures: [])",
+  "test": "PostRollTests/PickerStorageHygieneTests/testEveryPickerRoutesItsPickIntoAppStorage",
+  "breaks": "a picker stores raw picked URLs while a comment naming the copy keeps the guard green, so prose stands in for the storage step (#437)"
+}

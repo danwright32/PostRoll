@@ -34,6 +34,8 @@ from postroll.ai.vision_cross_check import (
     cross_check_against_vision,
 )
 
+from tests.source_text import swift_without_comments
+
 
 # The shape of a real page as Vision reads it: correct spellings, but the order
 # is scrambled across columns and a name is split over two lines.
@@ -210,7 +212,10 @@ def test_the_swift_mirror_of_the_thinness_rule_agrees():
 
     from postroll.ai.vision_cross_check import MIN_VISION_WORDS
 
-    swift = (Path(__file__).resolve().parent.parent / "PostRollApp" / "Sources"
-             / "Services" / "VisionTextLayer.swift").read_text()
+    # Read without comments, so a doc comment quoting the old number cannot
+    # keep this green while the real constant drifts (#436, L103).
+    swift = swift_without_comments(
+        (Path(__file__).resolve().parent.parent / "PostRollApp" / "Sources"
+         / "Services" / "VisionTextLayer.swift").read_text())
     assert f"static let minimumWords = {MIN_VISION_WORDS}" in swift, (
         f"Swift no longer mirrors MIN_VISION_WORDS ({MIN_VISION_WORDS})")

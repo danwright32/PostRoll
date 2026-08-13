@@ -105,3 +105,84 @@ def test_the_same_method_name_in_two_classes_is_not_a_duplicate():
     )
 
     assert duplicate_test_names(source) == []
+
+
+# ── an assertion that cannot fail (#435) ─────────────────────────────────────
+#
+# `tests/test_top_anchored_crop.py` carried an assertion ending in `or True`.
+# Both of its disjuncts were false for the fixture it ran against, so somebody
+# had silenced a wrong assertion instead of deleting it. It sat permanently
+# green, and it told every later reader the opposite of what the code under it
+# actually does.
+#
+# Deleting that line would leave the class alone (L30), and the class is exactly
+# the kind that hides: the file passes, the line reads like a check, and a guard
+# is only real once it has been seen to fail (L1). So the question gets asked of
+# every assertion in the suite instead.
+
+
+def _statically_true(node: ast.expr) -> bool:
+    """Whether this expression is true no matter what the code does."""
+    if isinstance(node, ast.Constant):
+        return bool(node.value)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        # `assert (a, b)` is the classic one: a non-empty tuple is always true,
+        # so the comparison inside it is never made.
+        return len(node.elts) > 0
+    if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
+        return any(_statically_true(value) for value in node.values)
+    if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
+        return all(_statically_true(value) for value in node.values)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return isinstance(node.operand, ast.Constant) and not node.operand.value
+    return False
+
+
+def vacuous_assertions(source: str) -> list[int]:
+    """Line numbers of assertions in `source` that cannot fail."""
+    return sorted(
+        node.lineno
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Assert) and _statically_true(node.test)
+    )
+
+
+def test_no_test_module_holds_an_assertion_that_cannot_fail():
+    offenders: list[str] = []
+    scanned = 0
+    for path in _test_files():
+        scanned += 1
+        for line in vacuous_assertions(path.read_text(encoding="utf-8")):
+            offenders.append(f"{path.name}:{line}")
+
+    assert scanned > 50, "the scan read almost no files, so it proves nothing"
+    assert not offenders, (
+        "These assertions are true whatever the code does, so they are green "
+        "forever while reading like checks:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_the_or_true_shape_is_caught():
+    assert vacuous_assertions("def t():\n    assert a == b or True\n") == [2]
+
+
+def test_a_bare_true_is_caught():
+    assert vacuous_assertions("def t():\n    assert True\n") == [2]
+
+
+def test_an_always_true_tuple_is_caught():
+    # `assert (x == y, "message")` reads as an assertion with a message and is
+    # a non-empty tuple, so it passes for any x and y.
+    assert vacuous_assertions('def t():\n    assert (a == b, "why")\n') == [2]
+
+
+def test_a_real_assertion_is_left_alone():
+    source = (
+        "def t():\n"
+        "    assert a == b\n"
+        "    assert a or b\n"
+        '    assert value in ("x", "y")\n'
+        "    assert not found\n"
+    )
+
+    assert vacuous_assertions(source) == []

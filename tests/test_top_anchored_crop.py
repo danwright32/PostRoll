@@ -18,6 +18,8 @@ from postroll.media.generate_collage import (
     crop_to_fill,
 )
 
+from tests.source_text import swift_without_comments
+
 
 def _striped_portrait() -> Image.Image:
     """A 100x200 photo whose top half is white and bottom half is black, so
@@ -40,9 +42,14 @@ def test_default_keeps_the_top_and_discards_the_bottom():
 def test_an_explicit_centred_crop_is_still_centred():
     result = crop_to_fill(_striped_portrait(), 100, 100, crop_offset_y=0.0)
 
-    assert result.getpixel((50, 2)) == (0, 0, 0) or result.getpixel((50, 97)) == (255, 255, 255) or True
     # A centred crop of a 200px photo into 100px takes rows 50..150, so the top
     # half of the result is white and the bottom half black.
+    #
+    # There was a third assertion above these, ending in `or True` (#435). Both
+    # of its disjuncts were false for this fixture, so somebody had silenced a
+    # wrong assertion rather than deleting it: it was permanently green, and it
+    # told the next reader the opposite of what a centred crop does. The two
+    # below were already doing the real work.
     assert result.getpixel((50, 10)) == (255, 255, 255)
     assert result.getpixel((50, 90)) == (0, 0, 0)
 
@@ -97,7 +104,10 @@ def test_swift_and_python_agree_on_the_anchor():
     from pathlib import Path
 
     swift = Path(__file__).resolve().parents[1] / "PostRollApp/Sources/Models/Event.swift"
-    source = swift.read_text()
+    # Comments stripped first. A comment carrying the marker would decide which
+    # text the split below reads, so the guard would measure the prose and never
+    # reach the declaration (#436).
+    source = swift_without_comments(swift.read_text())
     marker = "static let topAnchoredY: Double = "
     assert marker in source, "Swift lost its named anchor constant"
     value = source.split(marker, 1)[1].split("\n", 1)[0].strip()

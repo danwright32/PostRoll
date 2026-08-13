@@ -26,6 +26,7 @@ import pytest
 
 from postroll.ai import transport
 from postroll.ai.transport import Request
+from tests.source_text import swift_without_comments
 
 
 @pytest.fixture(autouse=True)
@@ -194,8 +195,10 @@ def test_the_swift_mirror_of_the_switch_name_agrees():
     """
     from pathlib import Path
 
-    swift = (Path(__file__).resolve().parent.parent
-             / "PostRollApp" / "Sources" / "Services" / "HaltedWeek.swift").read_text()
+    # Without comments: prose naming the variable is not the export (#436).
+    swift = swift_without_comments(
+        (Path(__file__).resolve().parent.parent
+         / "PostRollApp" / "Sources" / "Services" / "HaltedWeek.swift").read_text())
     assert f'static let subscriptionEnv = "{transport.SUBSCRIPTION_ENV}"' in swift, (
         f"Swift no longer mirrors {transport.SUBSCRIPTION_ENV}; the paid-path "
         f"override would export a name Python does not read")

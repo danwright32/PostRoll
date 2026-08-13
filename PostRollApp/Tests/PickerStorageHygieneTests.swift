@@ -54,7 +54,11 @@ final class PickerStorageHygieneTests: XCTestCase {
     static func functionsThatStore(in text: String, helpers: [String],
                                    lookahead: Int = 60) -> Set<String> {
         var found: Set<String> = []
-        let lines = text.components(separatedBy: .newlines)
+        // Comments blanked here too, not only at the call site, so a note
+        // naming a helper cannot make a function that stores nothing count as
+        // one that does (#437).
+        let lines = SwiftSourceText.withoutComments(text)
+            .components(separatedBy: .newlines)
 
         for (index, line) in lines.enumerated() {
             guard let range = line.range(of: "func ") else { continue }
@@ -85,7 +89,14 @@ final class PickerStorageHygieneTests: XCTestCase {
 
         for file in try viewSources() {
             let name = file.lastPathComponent
-            guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            // Comments blanked first. This is a PRESENCE guard, so prose makes
+            // it pass: a TODO naming `storedPicks` within sight of an
+            // `NSOpenPanel()` counted as the storage step having happened, and
+            // a picker that stored nothing at all went unreported (#437, L103).
+            // Blanking keeps the line count, so offenders still report where
+            // they are.
+            guard let raw = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            let text = SwiftSourceText.withoutComments(raw)
             let lines = text.components(separatedBy: .newlines)
 
             // Functions in this file that DO store, so a picker handing its
@@ -143,6 +154,23 @@ final class PickerStorageHygieneTests: XCTestCase {
         """
         let storing = Self.functionsThatStore(in: source, helpers: storageHelpers)
         XCTAssertTrue(storing.contains("handlePickedFiles"), "\(storing)")
+    }
+
+    /// The dangerous direction of L103, at the level of the guard rather than
+    /// the stripper: this is a PRESENCE check, so prose makes it PASS. A
+    /// commented-out call, or a note saying the copy should be added one day,
+    /// used to count as the copy having happened.
+    func testACommentNamingAStorageHelperDoesNotCountAsStoring() {
+        let source = """
+        func pickIt() {
+            let panel = NSOpenPanel()
+            // TODO: route this through AppPaths.storedPhoto before shipping
+            event.path = panel.url
+        }
+        """
+        let storing = Self.functionsThatStore(in: source, helpers: storageHelpers)
+        XCTAssertTrue(storing.isEmpty,
+                      "a comment about the storage helper counted as the helper: \(storing)")
     }
 
     func testAnExemptionMustCarryAReason() {
