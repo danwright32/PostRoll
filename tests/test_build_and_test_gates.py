@@ -246,3 +246,33 @@ def test_the_install_script_uses_no_bsd_only_shell_forms():
         "XXXXXX template, so use ${TMPDIR:-/tmp}/name.XXXXXX instead")
     assert "sed -i ''" not in text, (
         "`sed -i ''` is BSD-only; GNU sed reads the '' as a script")
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_the_install_gate_runs_the_fast_subset_and_ci_still_runs_everything():
+    """#432: installs stop paying for the four reel-rendering files.
+
+    This is a deliberate relaxation of #98's full-suite install gate, and it is
+    only defensible while the full suite still gates every merge. Both halves are
+    asserted here, because the second is what makes the first safe: if CI ever
+    started deselecting the slow files too, nothing anywhere would run them and
+    this test would be the only place that could have said so.
+    """
+    script = "\n".join(
+        line for line in BUILD_INSTALL.read_text().splitlines()
+        if not line.strip().startswith("#")
+    )
+
+    assert "test-python-fast" in script, (
+        "the install gate no longer runs the fast subset, so either it is back to "
+        "the full suite or it runs nothing")
+
+    workflow = REPO_ROOT / ".github" / "workflows" / "tests.yml"
+    ci = "\n".join(
+        line for line in workflow.read_text().splitlines()
+        if not line.strip().startswith("#")
+    )
+    assert "not slow" not in ci, (
+        "CI is deselecting the slow files as well, so the four files that render "
+        "real reels now run nowhere: the install gate was relaxed on the promise "
+        "that every merge still runs them")
