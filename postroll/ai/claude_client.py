@@ -40,6 +40,21 @@ BRAND_VOICE_PATH = ASSETS_DIR / "brand-voice.md"
 # in transport, so the resolver and the error message below cannot disagree.
 _CLI_ONLY_TOOLS = transport.CLI_ONLY_TOOLS
 
+# The floating names are the KEYS, and resolving them is the pinning (#472).
+#
+# Do not append a date to the values. It is tempting, because haiku's value
+# carries one and the other two do not, and that reads as an oversight. It is
+# not: Anthropic publishes no dated snapshot for `claude-sonnet-4-6` or
+# `claude-opus-4-6`, states those ids are complete as written, and a date
+# appended to one 404s the request. A new snapshot arrives as a new version
+# number (`claude-opus-4-7`), which is a different id rather than a silent
+# re-point of this one, so these values are already pinned as tightly as the
+# vendor allows.
+#
+# Every consumer resolves through `_resolve_model` before the model reaches a
+# request, on BOTH transports. One of them did not, and the CLI decided the
+# model for the entire subscription path; `tests/test_model_pinning.py` holds
+# the two sides together now.
 _MODEL_ALIASES: dict[str, str] = {
     "sonnet": "claude-sonnet-4-6",
     "opus":   "claude-opus-4-6",
@@ -507,7 +522,14 @@ def _run_cli(
 
         cmd = transport.cli_command(
             binary=_cli_binary(),
-            model=model,
+            # Resolved here, not passed raw (#472). The SDK path has always
+            # resolved the alias; this one handed "sonnet" to the installed
+            # Claude Code CLI and let IT decide which model that meant. The
+            # subscription switch routes every call through here, so flipping
+            # it silently changed the model behind the whole pipeline, and the
+            # compare-transports harness built to judge that switch was
+            # comparing two different models while reporting on one.
+            model=_resolve_model(model),
             settings_path=settings_path,
             allowed_dirs=list(allowed_dirs) if allowed_dirs else None,
             allowed_tools=list(allowed_tools) if allowed_tools else None,

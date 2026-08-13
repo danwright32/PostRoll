@@ -288,7 +288,11 @@ def test_run_prompt_omits_permission_flags_when_unspecified():
     # --settings is NOT a permission flag and is always present: it isolates the
     # call from the user's own Claude Code hooks, which otherwise write into the
     # output this app parses (#212).
-    assert cmd[:4] == [cmd[0], "-p", "--model", "sonnet"]
+    # The RESOLVED model, not the alias (#472). This line used to assert
+    # "sonnet", which is the defect rather than the contract: handing the bare
+    # word to the CLI let the installed Claude Code decide which model answered,
+    # and the subscription switch routes every call through here.
+    assert cmd[:4] == [cmd[0], "-p", "--model", "claude-sonnet-4-6"]
     assert cmd[4] == "--settings"
     assert len(cmd) == 6, f"unexpected extra flags: {cmd[6:]}"
     assert captured["input"] == "the prompt"
