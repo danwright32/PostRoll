@@ -115,7 +115,9 @@ final class BlogMetaCopyTests: XCTestCase {
         // Same rule the draft and CAPTIONS.txt already follow: a single-day
         // export must not rewrite files that describe the whole week.
         let event = makeEvent()
-        _ = try EventExporter.export(event: event, to: root)
+        // Committed, because a scoped re-export starts from the export that is
+        // actually on disk and an uncommitted one is not there yet (#442).
+        try EventExporter.export(event: event, to: root).staging.commit()
         let blogDir = try EventExporter.export(event: event, to: root, days: [.sunday])
             .folder.appendingPathComponent("0. Blog")
         XCTAssertTrue(FileManager.default.fileExists(

@@ -18,18 +18,38 @@ struct EventExporter {
     /// it means the folder is short a file, which used to be invisible because
     /// every copy went through `try?` (#79).
     struct Outcome {
+        /// Where the files are right now, which is the staging folder until the
+        /// run commits. Every later step of the export writes here.
         let folder: URL
         let dropped: [DroppedAsset]
+
+        /// The staging this export is being built in (#442). The caller commits
+        /// it once the whole run has finished, or abandons it on a failure, so
+        /// the export already on disk survives a run that dies partway.
+        let staging: ExportStaging
+
+        /// Where the finished export will be, for anything that has to name it
+        /// before the swap.
+        var destination: URL { staging.finalFolder }
 
         var isComplete: Bool { dropped.isEmpty }
 
         /// What to show the user, or nil when nothing was dropped.
-        var warning: String? {
-            guard !dropped.isEmpty else { return nil }
-            let lines = dropped.map { "\($0.label) (\($0.source.lastPathComponent)): \($0.reason)" }
-            let count = dropped.count
-            return "\(count) file\(count == 1 ? "" : "s") couldn't be copied into the export folder, so \(count == 1 ? "it is" : "they are") missing from it:\n" + lines.joined(separator: "\n")
-        }
+        var warning: String? { EventExporter.warning(for: dropped) }
+    }
+
+    /// What to show the user about files that could not be copied, or nil when
+    /// none were.
+    ///
+    /// A function over the list rather than a property on `Outcome`, so a
+    /// caller that has only accumulated some dropped assets does not have to
+    /// fabricate an Outcome (and a staging folder) around them to get a
+    /// sentence out.
+    static func warning(for dropped: [DroppedAsset]) -> String? {
+        guard !dropped.isEmpty else { return nil }
+        let lines = dropped.map { "\($0.label) (\($0.source.lastPathComponent)): \($0.reason)" }
+        let count = dropped.count
+        return "\(count) file\(count == 1 ? "" : "s") couldn't be copied into the export folder, so \(count == 1 ? "it is" : "they are") missing from it:\n" + lines.joined(separator: "\n")
     }
 
     /// Export one event. Pass `days = nil` (the default) to export the whole week;
@@ -63,25 +83,23 @@ struct EventExporter {
         }
 
         let folderName = "\(slug(event.org))_\(slug(event.name))_\(event.isoDate)"
-        let folder = root.appendingPathComponent(folderName)
+        let destination = root.appendingPathComponent(folderName)
 
         let result = event.weekResult
         let isFullExport = (days == nil)
 
-        // A re-export must not inherit anything from the previous one:
-        // FileManager.copyItem never overwrites (so re-exported photos keep
-        // stale content), and trimmed sets leave orphans (carousel 11.jpg
-        // after cutting to 10) that would get uploaded. Full exports rebuild
-        // the folder from scratch; scoped exports clear just their days.
-        if isFullExport {
-            try? FileManager.default.removeItem(at: folder)
-        } else if let days {
-            for day in days {
-                try? FileManager.default.removeItem(at: folder.appendingPathComponent(day.folderName))
-            }
-        }
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // Built beside the previous export and swapped in by the caller once
+        // the whole run has finished, rather than deleting the previous one
+        // first (#442, L5). A full export starts from nothing; a scoped one
+        // starts from a copy of what is there and clears only its own days, so
+        // the days it is not rebuilding, the blog and CAPTIONS.txt survive.
+        let staging = try ExportStaging.begin(
+            finalFolder: destination,
+            rebuilding: isFullExport ? nil : Set((days ?? []).map(\.folderName))
+        )
+        let folder = staging.workingFolder
 
+        do {
         // Per-day folders — for collage-carousel days the assigned photos are
         // copied directly by Swift (in the user's order) into a carousel/
         // subfolder. Wednesday is always collage-carousel; Sunday/Monday are
@@ -149,7 +167,15 @@ struct EventExporter {
                                       atomically: true, encoding: .utf8)
         }
 
-        return Outcome(folder: folder, dropped: dropped)
+        } catch {
+            // A staged export that will never be committed is debris in the
+            // person's chosen folder, and the export already on disk is the one
+            // thing this whole arrangement exists to protect.
+            staging.abandon()
+            throw error
+        }
+
+        return Outcome(folder: folder, dropped: dropped, staging: staging)
     }
 
     // MARK: - Text generators

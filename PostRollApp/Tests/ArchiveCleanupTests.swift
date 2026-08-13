@@ -81,8 +81,15 @@ final class ArchiveCleanupTests: XCTestCase {
     func testUnstampedExportedEventIsStampedNotSwept() throws {
         // An event exported before archivedAt existed must get the full
         // grace period from now, not be swept based on its old shoot date.
+        //
+        // It carries an exportPath, because that is what makes it an export at
+        // all: an event with neither stamp nor path is one Dan approved and
+        // never exported, and stamping THAT starts the clock that deletes the
+        // media for an export he still owes (#455). That case is
+        // `AwaitingExportTests`.
         var events = [makeArchivedEvent()]
         events[0].archivedAt = nil
+        events[0].exportPath = URL(fileURLWithPath: "/tmp/an-export-that-ran")
         events[0].previewMediaPaths = ["sunday": ["story": "/x"]]
         let dir = try previewDir(for: events[0])
 

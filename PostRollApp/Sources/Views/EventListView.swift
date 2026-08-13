@@ -19,11 +19,11 @@ struct EventListView: View {
     @Namespace private var selectionNamespace
 
     private var exportedCount: Int {
-        appState.events.filter { $0.stage == .exported }.count
+        appState.events.filter(\.isExported).count
     }
 
     private var filteredEvents: [Event] {
-        let base = showExported ? appState.events : appState.events.filter { $0.stage != .exported }
+        let base = showExported ? appState.events : appState.events.filter { !$0.isExported }
         let searched: [Event]
         if searchText.isEmpty {
             searched = base

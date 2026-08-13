@@ -1,0 +1,8 @@
+{
+  "name": "scoped-re-export-clears-its-own-days",
+  "file": "PostRollApp/Sources/Services/ExportStaging.swift",
+  "find": "                for folderName in rebuilding {\n                    try? fm.removeItem(at: working.appendingPathComponent(folderName))\n                }",
+  "replace": "                _ = rebuilding",
+  "test": "PostRollTests/ExportStagingTests/testAScopedReExportKeepsEveryDayItIsNotRebuilding",
+  "breaks": "a re-exported day inherits the previous run's files, so a trimmed carousel keeps its orphans and stale photos are uploaded (#442)"
+}
