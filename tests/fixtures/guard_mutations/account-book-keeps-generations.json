@@ -1,0 +1,8 @@
+{
+  "name": "account-book-keeps-generations",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "            StoreBackups.rotate(store: fileURL, isValid: Self.decodes)\n",
+  "replace": "",
+  "test": "PostRollTests/AccountBookRecoveryTests/testEachSaveKeepsTheGenerationItIsAboutToReplace",
+  "breaks": "accounts.json is overwritten with no earlier generation kept, and the numbers in it exist nowhere else (#440)"
+}

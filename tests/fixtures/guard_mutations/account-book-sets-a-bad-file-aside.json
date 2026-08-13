@@ -1,0 +1,8 @@
+{
+  "name": "account-book-sets-a-bad-file-aside",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "            let setAside = StoreRecovery.setAside(fileURL)",
+  "replace": "            let setAside: URL? = nil",
+  "test": "PostRollTests/AccountBookRecoveryTests/testABadFileIsSetAsideSoSavingResumes",
+  "breaks": "a bad accounts.json stays in place, so saving the hand-entered numbers is switched off for that session and every session after it (#505)"
+}

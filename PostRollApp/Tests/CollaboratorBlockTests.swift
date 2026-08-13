@@ -195,10 +195,10 @@ final class CollaboratorBlockTests: XCTestCase {
         let exported = try EventExporter.export(
             event: event(), to: folder, preset: .balanced,
             collaboratorStats: { _ in nil }, asOf: now,
-            collaboratorNotes: [AccountBook.unreadableNote])
+            collaboratorNotes: [AccountBook.unreadableNote(file: "accounts.json", folder: "~/Library/Application Support/PostRoll")])
         let captions = try String(
             contentsOf: exported.folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
 
-        XCTAssertTrue(captions.contains(AccountBook.unreadableNote), captions)
+        XCTAssertTrue(captions.contains(AccountBook.unreadableNote(file: "accounts.json", folder: "~/Library/Application Support/PostRoll")), captions)
     }
 }

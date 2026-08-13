@@ -174,8 +174,7 @@ final class ExportManager {
         // An unreadable book looks exactly like an empty one from the export's
         // side: every account comes back not counted. Carried so CAPTIONS.txt
         // says which of the two it is.
-        let accountNotes = AccountBook.shared.loadStatus == .unreadable
-            ? [AccountBook.unreadableNote] : []
+        let accountNotes = [AccountBook.shared.recoveryNote].compactMap { $0 }
 
         // Held outside the do so the failure paths can throw the staged work
         // away: a staging folder nobody commits is debris in Dan's own folder.

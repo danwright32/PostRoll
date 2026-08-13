@@ -397,16 +397,20 @@ final class CollaboratorPickTests: XCTestCase {
         // nobody has filled in. So the reason is carried rather than inferred.
         let result = CollaboratorPick.suggest(
             handles: ["a", "b", "c", "d", "e", "f"], firstPhoto: nil,
-            stats: lookup([:]), asOf: now, notes: [AccountBook.unreadableNote])
-        XCTAssertTrue(result?.notes.contains(AccountBook.unreadableNote) ?? false)
+            stats: lookup([:]), asOf: now, notes: [AccountBook.unreadableNote(file: "accounts.json", folder: "~/Library/Application Support/PostRoll")])
+        XCTAssertTrue(result?.notes.contains(AccountBook.unreadableNote(file: "accounts.json", folder: "~/Library/Application Support/PostRoll")) ?? false)
     }
 
     func testTheUnreadableNoteSaysWhatIsWrongRatherThanThatSomethingIs() {
-        // "The suggestion is wrong" is not an actionable message.
-        XCTAssertTrue(AccountBook.unreadableNote.lowercased().contains("could not"),
-                      AccountBook.unreadableNote)
-        XCTAssertTrue(AccountBook.unreadableNote.lowercased().contains("not counted"),
-                      AccountBook.unreadableNote)
+        // "The suggestion is wrong" is not an actionable message. It must also
+        // name the file and the folder, because the only fix is on disk and
+        // "the file" identifies nothing to somebody standing in Finder (#505).
+        let note = AccountBook.unreadableNote(file: "accounts.json",
+                                              folder: "~/Library/Application Support/PostRoll")
+        XCTAssertTrue(note.lowercased().contains("could not"), note)
+        XCTAssertTrue(note.lowercased().contains("not counted"), note)
+        XCTAssertTrue(note.contains("accounts.json"), note)
+        XCTAssertTrue(note.contains("~/Library/Application Support/PostRoll"), note)
     }
 
     func testTheSortCannotDefaultAMissingFigureToZero() {

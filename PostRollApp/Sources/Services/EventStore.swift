@@ -6,11 +6,14 @@ import Foundation
 /// overwrite it. Returns the backup URL, or nil if the move failed.
 enum StoreRecovery {
     @discardableResult
-    static func setAside(_ url: URL) -> URL? {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyyMMdd-HHmmss"
-        let backup = url.appendingPathExtension("corrupt-\(f.string(from: Date()))")
+    static func setAside(_ url: URL, now: () -> Date = Date.init) -> URL? {
+        // `StoreBackups.stamp`, not a formatter of its own: this name is
+        // compared against the backup names to work out which generations
+        // predate the corruption and must therefore be protected, and two
+        // formatters in different zones make that comparison quietly wrong for
+        // several hours a day (L39).
+        let backup = url.appendingPathExtension(
+            StoreBackups.corruptMarker + StoreBackups.stamp.string(from: now()))
         do {
             try FileManager.default.moveItem(at: url, to: backup)
             return backup
@@ -79,7 +82,11 @@ enum EventStore {
     // so tests can exercise the recovery and backup paths against a temp
     // directory without ever touching live data.
 
-    static func load(from url: URL = storeURL) -> LoadResult {
+    /// `now` names the moment the corruption was found, which is what the
+    /// set-aside file is stamped with and what decides which backups predate it.
+    /// Injectable for the same reason `url` is: a test cannot otherwise place a
+    /// corruption between two generations without waiting on the clock.
+    static func load(from url: URL = storeURL, now: () -> Date = Date.init) -> LoadResult {
         let data: Data
         do {
             data = try Data(contentsOf: url)
@@ -107,7 +114,7 @@ enum EventStore {
             NSLog("EventStore: failed to decode \(url.lastPathComponent): \(error)")
             let folder = (url.deletingLastPathComponent().path as NSString)
                 .abbreviatingWithTildeInPath
-            guard let backup = StoreRecovery.setAside(url) else {
+            guard let backup = StoreRecovery.setAside(url, now: now) else {
                 // The original could not be preserved, so it is still the only
                 // copy. Saving now would erode it one generation at a time.
                 saveGate.block(url)
@@ -136,10 +143,11 @@ enum EventStore {
         }
     }
 
-    /// True when saving to this store is currently refused, because the last
-    /// load could not read it.
-    static func savesAreBlocked(for url: URL = storeURL) -> Bool {
-        saveGate.isBlocked(url)
+    /// True when `data` is a readable event list. The one predicate that decides
+    /// whether a file is worth keeping as a backup and whether a backup is safe
+    /// to restore, so the two cannot disagree about what "good" means.
+    static func decodes(_ data: Data) -> Bool {
+        (try? JSONDecoder().decode([Event].self, from: data)) != nil
     }
 
     @discardableResult
@@ -160,9 +168,7 @@ enum EventStore {
             // ordinary editing and could capture an already-degraded file,
             // so the safety net could be destroyed by the failure it was for
             // (#102). Only a file that decodes is ever captured.
-            StoreBackups.rotate(store: url) { candidate in
-                (try? JSONDecoder().decode([Event].self, from: candidate)) != nil
-            }
+            StoreBackups.rotate(store: url, isValid: decodes)
             try data.write(to: url, options: .atomic)
             return .saved
         } catch {
