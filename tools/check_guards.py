@@ -195,14 +195,18 @@ def merge_base(repo_root: Path) -> str | None:
     return None
 
 
-def changed_files(repo_root: Path, base: str) -> set[str]:
+def changed_files(repo_root: Path, base: str) -> set[str] | None:
     """Everything the diff against the base touches, uncommitted work
-    included, because the moment --changed serves is mid-edit."""
-    files: set[str] = set()
-    out = _git(repo_root, "diff", "--name-only", f"{base}..HEAD") or ""
-    files.update(line for line in out.splitlines() if line.strip())
-    out = _git(repo_root, "status", "--porcelain") or ""
-    files.update(line[3:] for line in out.splitlines() if len(line) > 3)
+    included, because the moment --changed serves is mid-edit.
+
+    None when git itself failed: a failed diff must never read as an empty
+    one, or the scoped run silently skips every entry (L11)."""
+    diff = _git(repo_root, "diff", "--name-only", f"{base}..HEAD")
+    status = _git(repo_root, "status", "--porcelain")
+    if diff is None or status is None:
+        return None
+    files = {line for line in diff.splitlines() if line.strip()}
+    files.update(line[3:] for line in status.splitlines() if len(line) > 3)
     return files
 
 
@@ -319,6 +323,11 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
                 "full sweep instead")
             return 1
         touched = changed_files(repo_root, base)
+        if touched is None:
+            log(f"the diff against {base[:12]} could not be taken, and a "
+                "failed diff must not pass for an empty one; run the full "
+                "sweep instead")
+            return 1
         stale = changed_registry_names(repo_root, registry_path, base)
         selected = [e for e in entries
                     if e.file in touched or e.name in stale

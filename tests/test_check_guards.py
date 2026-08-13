@@ -496,6 +496,16 @@ def test_changed_mode_still_fails_on_a_surviving_mutation(scoped_repo: Path):
     assert any("SURVIVED" in line for line in lines)
 
 
+def test_a_failed_diff_is_none_never_an_empty_change_set(scoped_repo: Path):
+    """A diff that errors must be distinguishable from a diff that found
+    nothing, because reading a failure as no changes makes the scoped run
+    silently skip every entry (L11)."""
+    from tools.check_guards import changed_files
+
+    assert changed_files(scoped_repo, "not-a-real-ref") is None
+    assert changed_files(scoped_repo, "HEAD") == set()
+
+
 def test_changed_mode_without_a_base_refuses(tmp_path: Path):
     """With nothing to diff against, a scoped run cannot know what changed,
     and guessing would silently skip real work; it refuses instead (L11)."""
