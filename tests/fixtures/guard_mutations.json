@@ -50,14 +50,6 @@
       "breaks": "RefusalNote draws cream on cream, the invisible-type defect that has shipped three times (#389)"
     },
     {
-      "name": "ci-font-asset-trigger",
-      "file": ".github/workflows/swift.yml",
-      "find": "      - \"postroll/assets/**\"",
-      "replace": "      - \"postroll/**\"",
-      "test": "tests/test_ci_runs_the_font_dependent_checks.py::test_the_macos_job_triggers_on_the_assets_those_checks_draw_with",
-      "breaks": "the macOS job stops triggering on the assets the font checks draw with (L88)"
-    },
-    {
       "name": "fast-subset-deselects",
       "file": "Makefile",
       "find": "-m \"not slow\"",
@@ -400,6 +392,22 @@
       "replace": "@pytest.fixture(scope=\"module\")",
       "test": "tests/test_reference_frames_are_safe_to_parallelise.py::test_the_source_tree_guard_is_still_armed",
       "breaks": "the guard stops applying to every module, so the next test that rewrites a real source file is found as a flaky parallel run (#497)"
+    },
+    {
+      "name": "no-paths-filter-narrows-the-macos-checks",
+      "file": ".github/workflows/swift.yml",
+      "find": "  pull_request:\n    branches: [main]\n  workflow_dispatch:",
+      "replace": "  pull_request:\n    branches: [main]\n    paths:\n      - \"PostRollApp/**\"\n  workflow_dispatch:",
+      "test": "tests/test_ci_gates.py::test_no_paths_filter_narrows_what_a_pull_request_runs",
+      "breaks": "a paths filter comes back, so some pull requests skip the macOS checks and a skipped check reads as a passing one (#431)"
+    },
+    {
+      "name": "macos-halves-stay-separate-jobs",
+      "file": ".github/workflows/swift.yml",
+      "find": "  reference-frames:\n    runs-on: macos-15\n    steps:\n",
+      "replace": "",
+      "test": "tests/test_ci_gates.py::test_the_two_halves_run_as_separate_jobs",
+      "breaks": "the reference frames go back into the Swift job, so the quick compile signal waits on seven minutes of rendering reels (#431)"
     }
   ],
   "comment_uncovered": "Guards deliberately NOT registered, because no compile-safe one line perturbation expresses the defect they catch: UploadPageCropRemovalTests (adding a real crop control is not one line; prose would trip it but proves nothing), the absence guards test_blog_draft_text.py::test_no_module_builds_the_heading_by_hand / test_layout_sidecar.py::test_no_generator_builds_the_name_by_hand / test_blog_meta.py::test_neither_string_can_reach_the_ai_round_trip (their only one line trip is planting the banned text artificially), test_suite_hygiene.py and test_guard_mutation_registry.py (they protect the test suite and this registry themselves), test_bridge_payload_contract.py / test_manifest_contract.py (the one line rename anchor is ambiguous in PythonBridge.swift), test_brand_text.py (removing the route in one line breaks the module's own names), test_event_slug_parity.py (slug internals are not safely one line perturbable), and the measured pixel thresholds in test_golden_frames.py / test_frame_legibility.py / test_screen_reel_logo_contrast.py's contrast checks (failing them takes a rendering change, not a text edit)."
