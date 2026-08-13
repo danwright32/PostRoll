@@ -57,6 +57,14 @@ else
   echo "==> Running the Python tests before installing"
   REPO_ROOT="$(cd .. && pwd)"
   if [[ -x "${REPO_ROOT}/venv/bin/python" ]]; then
+    # Is the green suite above worth anything? If this Mac's Xcode has moved
+    # ahead of the one CI is pinned to, it can pass on code the runner cannot
+    # compile, and only a push would say so (#528). Cheap, and it refuses
+    # rather than warns, because a warning printed above three minutes of test
+    # output is a warning nobody reads.
+    echo "==> Checking this Mac's compiler against CI's"
+    "${REPO_ROOT}/venv/bin/python" "${REPO_ROOT}/tools/check_toolchain.py"
+
     # The FAST subset, not the whole suite (#432, approved 2026-08-13).
     #
     # The four files that render real reels are most of the suite's runtime and

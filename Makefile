@@ -2,7 +2,7 @@ BUILD_DIR := PostRollApp/build
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
-.PHONY: install install-force build test test-python test-python-fast check-guards clean
+.PHONY: install install-force build test test-python test-python-fast check-guards check-toolchain clean
 
 # One build-and-install implementation, not two. This used to run its own
 # xcodebuild and cp, skipping the xattr clear, the stable-identity signing and
@@ -67,6 +67,13 @@ test-python-fast:
 # tests/test_guard_mutation_registry.py.
 check-guards:
 	@venv/bin/python tools/check_guards.py
+
+# Whether a green build here still means anything (#528). Fails only when THIS
+# Mac's Xcode is newer than the one CI is pinned to, because that is the
+# direction where locally-clean code can be rejected on a runner and nothing
+# here can tell you. Run by build-install.sh before it installs.
+check-toolchain:
+	@venv/bin/python tools/check_toolchain.py
 
 clean:
 	@rm -rf "$(BUILD_DIR)"

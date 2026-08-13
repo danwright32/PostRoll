@@ -66,10 +66,47 @@ jobs:
   # does not compile, which nothing in CI did until #521, and a headless runner
   # cannot reliably drive a window (which is why the UI smoke test was deleted
   # in #509 rather than moved here).
+  #
+  # ── why this half runs on macos-26 and the other on macos-15 ────────────────
+  #
+  # It ran on macos-15, whose newest Xcode is 16.4, while the Mac this is
+  # written on runs 26.6. The older compiler rejects code the newer one accepts,
+  # so six CI round trips in one session were compile errors that build clean
+  # locally, including with SWIFT_STRICT_CONCURRENCY forced. Every one was only
+  # visible after a push (#528).
+  #
+  # macos-26 carries Xcode 26.6, build 17F113, which is the build on that Mac.
+  # The rule is one-directional and tools/check_toolchain.py enforces the other
+  # end of it: CI's compiler at or ahead of the local one is fine, because it
+  # accepts everything the local one does; CI BEHIND is the hole.
+  #
+  # reference-frames deliberately stays on macos-15. It needs the runner for its
+  # system FONTS, and the recorded frames were compared against that image's
+  # copies of them; moving it is a change to what the goldens are measured
+  # against, not a version bump.
   swift-unit:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
+
+      # Not the image default. A runner image updates its default Xcode without
+      # a commit here, which is how the compiler moved out from under the repo
+      # in the first place, so the version is read out of the file that
+      # tools/check_toolchain.py holds this Mac to (L25, L41). Absent is a hard
+      # failure naming what the image does have: falling back to the default
+      # would be the silent drift this step exists to stop.
+      - name: Select the recorded Xcode
+        run: |
+          version="$(cat PostRollApp/.ci-xcode-version)"
+          app="/Applications/Xcode_${version}.app"
+          if [ ! -d "${app}" ]; then
+            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
+            echo "on this runner image. What it has:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "${app}"
+          xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen

@@ -1,0 +1,8 @@
+{
+  "name": "discarded-write-through-a-wrapper",
+  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "find": "suggestion = try await PythonBridge.shared.runLearnFromEdits(result: result)",
+  "replace": "suggestion = try? await PythonBridge.shared.runLearnFromEdits(result: result)",
+  "test": "PostRollTests/DiscardedFileWriteGuardTests/testNoFileProducingWriteHasItsFailureThrownAway",
+  "breaks": "a throwing call that writes a file one level deeper is discarded, so a failed paid pass reads as one with nothing to say (#526)"
+}
