@@ -13,7 +13,14 @@ tree and, for the Swift guards, pay a build per entry. Run it when a guard is
 added or changed:
 
     make check-guards
-    venv/bin/python tools/check_guards.py [--only <name>]
+    venv/bin/python tools/check_guards.py [--only <name>] [--changed]
+
+`--changed` scopes the run to the entries the diff against main actually
+touches (the protected file, the guard's own test file, or the entry's
+registry record), because the full sweep pays a Swift build per Swift entry
+and a price that high is how a habit dies (#426). A scoped run says how many
+entries it skipped, since proving two guards says nothing about the other
+thirty six (L98).
 
 Three outcomes per entry, kept distinct on purpose (L11):
   KILLED    the guard went red on the broken code, which is the pass.
@@ -171,6 +178,75 @@ def classify(entry: Entry, returncode: int, output: str) -> Verdict:
     return classify_pytest(returncode)
 
 
+def _git(repo_root: Path, *args: str) -> str | None:
+    completed = subprocess.run(["git", *args], cwd=repo_root,
+                               capture_output=True, text=True)
+    if completed.returncode != 0:
+        return None
+    return completed.stdout
+
+
+def merge_base(repo_root: Path) -> str | None:
+    """What a scoped run diffs against: the branch's upstream, else main."""
+    for candidate in ("@{upstream}", "origin/main", "origin/master"):
+        out = _git(repo_root, "merge-base", candidate, "HEAD")
+        if out and out.strip():
+            return out.strip()
+    return None
+
+
+def changed_files(repo_root: Path, base: str) -> set[str] | None:
+    """Everything the diff against the base touches, uncommitted work
+    included, because the moment --changed serves is mid-edit.
+
+    None when git itself failed: a failed diff must never read as an empty
+    one, or the scoped run silently skips every entry (L11)."""
+    diff = _git(repo_root, "diff", "--name-only", f"{base}..HEAD")
+    status = _git(repo_root, "status", "--porcelain")
+    if diff is None or status is None:
+        return None
+    files = {line for line in diff.splitlines() if line.strip()}
+    files.update(line[3:] for line in status.splitlines() if len(line) > 3)
+    return files
+
+
+def changed_registry_names(repo_root: Path, registry_path: Path,
+                           base: str) -> set[str]:
+    """Names of entries that are new or edited relative to the base, so a
+    reworded perturbation re-proves itself without dragging the whole
+    registry along."""
+    try:
+        rel = registry_path.resolve().relative_to(repo_root.resolve())
+    except ValueError:
+        return set()  # registry outside the repo: no record diff to take
+    current = {e.name: e for e in load_registry(registry_path)}
+    old_text = _git(repo_root, "show", f"{base}:{rel.as_posix()}")
+    if old_text is None:
+        return set(current)  # the registry itself is new at this base
+    try:
+        old = {raw.get("name"): raw
+               for raw in json.loads(old_text).get("entries", [])}
+    except ValueError:
+        return set(current)
+    return {name for name, entry in current.items()
+            if any(old.get(name, {}).get(f) != getattr(entry, f)
+                   for f in REQUIRED_FIELDS)}
+
+
+def guard_test_path(entry: Entry, repo_root: Path) -> str | None:
+    """The file the entry's guard test lives in, repo-relative."""
+    if entry.test.startswith("tests/"):
+        return entry.test.split("::")[0]
+    class_name = entry.test.split("/")[1]
+    tests_dir = repo_root / "PostRollApp" / "Tests"
+    if tests_dir.is_dir():
+        pattern = re.compile(rf"\bclass {re.escape(class_name)}\b")
+        for path in sorted(tests_dir.glob("*.swift")):
+            if pattern.search(path.read_text()):
+                return path.relative_to(repo_root).as_posix()
+    return None
+
+
 def real_runner(cmd: list[str], cwd: Path) -> tuple[int, str]:
     # No bytecode may be written from MUTATED source. The mutation and the
     # restore can land in the same clock second with the same file size, and
@@ -227,7 +303,8 @@ def run_entry(entry: Entry, repo_root: Path, runner) -> Result:
 
 
 def check_guards(repo_root: Path, registry_path: Path, runner,
-                 only: str | None = None, log=print) -> int:
+                 only: str | None = None, changed_only: bool = False,
+                 log=print) -> int:
     entries = load_registry(registry_path)
     if only is not None:
         entries = [e for e in entries if e.name == only]
@@ -237,6 +314,33 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
     if not entries:
         log("the registry holds no guards, so nothing was proven (L98)")
         return 1
+
+    if changed_only:
+        base = merge_base(repo_root)
+        if base is None:
+            log("--changed needs a base to diff against (an upstream branch "
+                "or origin/main) and this repository has neither; run the "
+                "full sweep instead")
+            return 1
+        touched = changed_files(repo_root, base)
+        if touched is None:
+            log(f"the diff against {base[:12]} could not be taken, and a "
+                "failed diff must not pass for an empty one; run the full "
+                "sweep instead")
+            return 1
+        stale = changed_registry_names(repo_root, registry_path, base)
+        selected = [e for e in entries
+                    if e.file in touched or e.name in stale
+                    or guard_test_path(e, repo_root) in touched]
+        log(f"--changed: {len(selected)} of {len(entries)} entries affected "
+            f"by the diff against {base[:12]}; {len(entries) - len(selected)} "
+            "skipped as untouched, which proves nothing about them (run "
+            "without --changed for the full sweep)")
+        if not selected:
+            log("no registered guard is affected by this diff, so nothing "
+                "was verified")
+            return 0
+        entries = selected
 
     results = []
     for entry in entries:
@@ -262,13 +366,18 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--only", help="run a single registry entry by name")
+    parser.add_argument("--changed", action="store_true",
+                        help="run only the entries whose protected file, "
+                             "guard test file, or registry record changed "
+                             "since the merge base with main")
     parser.add_argument("--registry", type=Path, default=None,
                         help=f"registry path (default {DEFAULT_REGISTRY})")
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parent.parent
     registry = args.registry or repo_root / DEFAULT_REGISTRY
-    return check_guards(repo_root, registry, real_runner, only=args.only)
+    return check_guards(repo_root, registry, real_runner, only=args.only,
+                        changed_only=args.changed)
 
 
 if __name__ == "__main__":

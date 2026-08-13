@@ -359,3 +359,169 @@ def test_only_matching_nothing_is_a_failure(repo: Path, tmp_path: Path):
                         log=lambda _: None)
     assert code != 0
     assert runner.calls == []
+
+
+# ── The changed-only mode (#426) ──────────────────────────────────────────────
+#
+# A full sweep pays 17 app builds, so the moment a guard changes needs a run
+# scoped to what the diff touches: the protected file, the guard's own test
+# file, or the entry's registry record. Scoped means partial, and a partial
+# run must say what it skipped rather than read as a full one (L98).
+
+GUARD_TEST_SOURCE = (
+    "import XCTest\n"
+    "final class NoteTests: XCTestCase {\n"
+    "    func testInk() {}\n"
+    "}\n"
+)
+
+
+@pytest.fixture
+def scoped_repo(tmp_path: Path) -> Path:
+    """A repo shaped like this one, with its registry committed in-tree and a
+    remote-tracking main to diff against."""
+    repo = tmp_path / "scoped"
+    (repo / "Sources").mkdir(parents=True)
+    (repo / "PostRollApp" / "Tests").mkdir(parents=True)
+    (repo / "tests" / "fixtures").mkdir(parents=True)
+    (repo / "Sources" / "Note.swift").write_text(SOURCE)
+    (repo / "Sources" / "Other.swift").write_text("let other = 1\n")
+    (repo / "PostRollApp" / "Tests" / "NoteTests.swift").write_text(GUARD_TEST_SOURCE)
+    (repo / "tests" / "test_other.py").write_text("def test_other():\n    pass\n")
+    entries = [
+        registry_dict(),
+        registry_dict(name="other-guard", file="Sources/Other.swift",
+                      find="let other = 1", replace="let other = 2",
+                      test="tests/test_other.py::test_other"),
+    ]
+    write_registry(repo / "tests" / "fixtures" / "guard_mutations.json", entries)
+    git(repo, "init", "-b", "main")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "seed")
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return repo
+
+
+def scoped_registry(repo: Path) -> Path:
+    return repo / "tests" / "fixtures" / "guard_mutations.json"
+
+
+def run_changed(repo: Path, runner) -> tuple[int, list[str]]:
+    lines: list[str] = []
+    code = check_guards(repo, scoped_registry(repo), runner,
+                        changed_only=True, log=lines.append)
+    return code, lines
+
+
+def test_changed_mode_selects_an_entry_whose_protected_file_changed(scoped_repo: Path):
+    (scoped_repo / "Sources" / "Note.swift").write_text(SOURCE + "// touched\n")
+    git(scoped_repo, "add", "-A")
+    git(scoped_repo, "commit", "-m", "touch note")
+    runner = a_runner(65, SWIFT_RED)
+    code, _ = run_changed(scoped_repo, runner)
+    assert code == 0
+    assert len(runner.calls) == 1
+    assert any("NoteTests" in arg for arg in runner.calls[0])
+
+
+def test_changed_mode_selects_an_entry_whose_swift_guard_test_changed(scoped_repo: Path):
+    (scoped_repo / "PostRollApp" / "Tests" / "NoteTests.swift").write_text(
+        GUARD_TEST_SOURCE + "// tightened\n")
+    git(scoped_repo, "add", "-A")
+    git(scoped_repo, "commit", "-m", "touch guard")
+    runner = a_runner(65, SWIFT_RED)
+    code, _ = run_changed(scoped_repo, runner)
+    assert code == 0
+    assert len(runner.calls) == 1
+
+
+def test_changed_mode_selects_a_pytest_entry_whose_test_file_changed(scoped_repo: Path):
+    (scoped_repo / "tests" / "test_other.py").write_text(
+        "def test_other():\n    assert True\n")
+    git(scoped_repo, "add", "-A")
+    git(scoped_repo, "commit", "-m", "touch pytest guard")
+    runner = a_runner(1, "1 failed")
+    code, _ = run_changed(scoped_repo, runner)
+    assert code == 0
+    assert len(runner.calls) == 1
+    assert "tests/test_other.py::test_other" in runner.calls[0]
+
+
+def test_changed_mode_selects_an_edited_registry_entry_only(scoped_repo: Path):
+    registry = json.loads(scoped_registry(scoped_repo).read_text())
+    registry["entries"][1]["breaks"] = "reworded"
+    scoped_registry(scoped_repo).write_text(json.dumps(registry))
+    git(scoped_repo, "add", "-A")
+    git(scoped_repo, "commit", "-m", "edit one entry")
+    runner = a_runner(1, "1 failed")
+    code, _ = run_changed(scoped_repo, runner)
+    assert code == 0
+    assert len(runner.calls) == 1
+    assert "tests/test_other.py::test_other" in runner.calls[0]
+
+
+def test_changed_mode_counts_uncommitted_work(scoped_repo: Path):
+    (scoped_repo / "PostRollApp" / "Tests" / "NoteTests.swift").write_text(
+        GUARD_TEST_SOURCE + "// pending\n")
+    runner = a_runner(65, SWIFT_RED)
+    code, _ = run_changed(scoped_repo, runner)
+    assert code == 0
+    assert len(runner.calls) == 1
+
+
+def test_changed_mode_says_what_it_skipped(scoped_repo: Path):
+    (scoped_repo / "Sources" / "Note.swift").write_text(SOURCE + "// touched\n")
+    git(scoped_repo, "add", "-A")
+    git(scoped_repo, "commit", "-m", "touch note")
+    _, lines = run_changed(scoped_repo, a_runner(65, SWIFT_RED))
+    assert any("1 of 2" in line and "skipped" in line for line in lines), lines
+
+
+def test_changed_mode_with_nothing_affected_is_explicit(scoped_repo: Path):
+    """Zero affected entries is a true negative, not a sweep: it must say
+    nothing was verified rather than read as 38 guards passing (L98)."""
+    runner = a_runner(65, SWIFT_RED)
+    code, lines = run_changed(scoped_repo, runner)
+    assert code == 0
+    assert runner.calls == []
+    assert any("nothing was verified" in line for line in lines), lines
+
+
+def test_changed_mode_still_fails_on_a_surviving_mutation(scoped_repo: Path):
+    (scoped_repo / "Sources" / "Note.swift").write_text(SOURCE + "// touched\n")
+    git(scoped_repo, "add", "-A")
+    git(scoped_repo, "commit", "-m", "touch note")
+    code, lines = run_changed(scoped_repo, a_runner(0, SWIFT_GREEN))
+    assert code != 0
+    assert any("SURVIVED" in line for line in lines)
+
+
+def test_a_failed_diff_is_none_never_an_empty_change_set(scoped_repo: Path):
+    """A diff that errors must be distinguishable from a diff that found
+    nothing, because reading a failure as no changes makes the scoped run
+    silently skip every entry (L11)."""
+    from tools.check_guards import changed_files
+
+    assert changed_files(scoped_repo, "not-a-real-ref") is None
+    assert changed_files(scoped_repo, "HEAD") == set()
+
+
+def test_changed_mode_without_a_base_refuses(tmp_path: Path):
+    """With nothing to diff against, a scoped run cannot know what changed,
+    and guessing would silently skip real work; it refuses instead (L11)."""
+    repo = tmp_path / "baseless"
+    (repo / "Sources").mkdir(parents=True)
+    (repo / "tests" / "fixtures").mkdir(parents=True)
+    (repo / "Sources" / "Note.swift").write_text(SOURCE)
+    write_registry(repo / "tests" / "fixtures" / "guard_mutations.json",
+                   [registry_dict()])
+    git(repo, "init", "-b", "main")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "seed")
+    runner = a_runner(65, SWIFT_RED)
+    lines: list[str] = []
+    code = check_guards(repo, repo / "tests" / "fixtures" / "guard_mutations.json",
+                        runner, changed_only=True, log=lines.append)
+    assert code != 0
+    assert runner.calls == []
+    assert any("base" in line for line in lines)

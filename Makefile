@@ -46,9 +46,10 @@ test-python-fast:
 
 # Proves the registered guard tests still go red on deliberately broken code
 # (#416). Not part of `make test`: it mutates the working tree and pays a Swift
-# build per entry. Run it whenever a guard is added or changed. The registry
-# lives in tests/fixtures/guard_mutations.json and is held to the code on every
-# normal suite run by tests/test_guard_mutation_registry.py.
+# build per entry. Run it whenever a guard is added or changed; for just the
+# entries your diff touches, `venv/bin/python tools/check_guards.py --changed`
+# (#426). The registry lives in tests/fixtures/guard_mutations.json and is held
+# to the code on every normal suite run by tests/test_guard_mutation_registry.py.
 check-guards:
 	@venv/bin/python tools/check_guards.py
 

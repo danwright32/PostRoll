@@ -101,6 +101,9 @@ def test_a_guard_test_change_without_a_registry_change_reminds(repo: Path):
     note = remind(repo, "git push")
     assert "make check-guards" in note
     assert "NoteGuardTests.swift" in note
+    # The scoped run exists so the price of the full sweep is never the
+    # reason the check gets skipped (#426); the reminder names it.
+    assert "--changed" in note
 
 
 def test_a_new_source_scanning_test_reminds_even_when_unregistered(repo: Path):

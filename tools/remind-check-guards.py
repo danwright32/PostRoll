@@ -147,7 +147,9 @@ def reminder(payload_text: str) -> str | None:
     return (f"This push changes guard tests ({names}) without touching "
             f"tests/fixtures/guard_mutations.json. If a guard was added or "
             f"changed, record or refresh its mutation entry and run "
-            f"`make check-guards` so the guard is seen to fail (#416, #422).")
+            f"`venv/bin/python tools/check_guards.py --changed` (scoped to "
+            f"this diff; `make check-guards` is the full sweep) so the guard "
+            f"is seen to fail (#416, #422, #426).")
 
 
 def main() -> int:
