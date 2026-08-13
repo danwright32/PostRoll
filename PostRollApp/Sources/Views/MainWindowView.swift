@@ -51,6 +51,28 @@ struct MainWindowView: View {
                 InsightsDetailView()
             }
         }
+        // A save that has started failing (#446). Deliberately a banner pinned to
+        // the bottom of the window rather than an alert: a failing disk fails
+        // every debounced keystroke, and a modal per keystroke is unusable. It
+        // stays until a save succeeds, because the condition does.
+        //
+        // At the bottom rather than in the toolbar because a toolbar can condense
+        // and hide what it holds (L79), and this is the message that says the
+        // work on screen exists nowhere else.
+        .safeAreaInset(edge: .bottom) {
+            if let failure = appState.saveFailure {
+                BrandBanner(
+                    icon: "exclamationmark.triangle.fill",
+                    message: failure,
+                    style: .error,
+                    actions: [BrandBannerAction(label: SaveFailureNotice.retryLabel) {
+                        appState.retrySave()
+                    }]
+                )
+                .padding(Spacing.md)
+                .background(Color.cream)
+            }
+        }
         // Solid cream toolbar — no vibrancy, no blending against other windows
         .toolbarBackground(Color.creamDeep, for: .windowToolbar)
         .toolbarBackground(.visible, for: .windowToolbar)

@@ -456,6 +456,22 @@
       "replace": "            return .saved(counts + \" into this window, but nothing was saved: your \"",
       "test": "PostRollTests/ImportNoticeTests/testARefusedSaveIsNotShownAsASuccess",
       "breaks": "an import the store refused to write is drawn beside a green tick, so Dan reads it as kept and finds it gone at next launch (#439, L12)"
+    },
+    {
+      "name": "save-failure-surfaced",
+      "file": "PostRollApp/Sources/AppState.swift",
+      "find": "            saveFailure = SaveFailureNotice.message(reason: reason)",
+      "replace": "            NSLog(\"save failed: \\(reason)\")",
+      "test": "PostRollTests/AppStateSaveFailureTests/testAFailedSaveIsSurfacedRatherThanLogged",
+      "breaks": "a save that starts failing mid-session goes back to reaching NSLog and nothing else, so an evening of captions is lost by quitting (#446)"
+    },
+    {
+      "name": "save-failure-banner-offers-retry",
+      "file": "PostRollApp/Sources/Views/MainWindowView.swift",
+      "find": "                    actions: [BrandBannerAction(label: SaveFailureNotice.retryLabel) {\n                        appState.retrySave()\n                    }]",
+      "replace": "                    actions: []",
+      "test": "PostRollTests/SaveFailureBannerTests/testItOffersTheRetryThatCanClearIt",
+      "breaks": "the failure banner loses the only control that can clear it, leaving a message that names a problem with nowhere to go (L80)"
     }
   ],
   "comment_uncovered": "Guards deliberately NOT registered, because no compile-safe one line perturbation expresses the defect they catch: UploadPageCropRemovalTests (adding a real crop control is not one line; prose would trip it but proves nothing), the absence guards test_blog_draft_text.py::test_no_module_builds_the_heading_by_hand / test_layout_sidecar.py::test_no_generator_builds_the_name_by_hand / test_blog_meta.py::test_neither_string_can_reach_the_ai_round_trip (their only one line trip is planting the banned text artificially), test_suite_hygiene.py and test_guard_mutation_registry.py (they protect the test suite and this registry themselves), test_bridge_payload_contract.py / test_manifest_contract.py (the one line rename anchor is ambiguous in PythonBridge.swift), test_brand_text.py (removing the route in one line breaks the module's own names), test_event_slug_parity.py (slug internals are not safely one line perturbable), and the measured pixel thresholds in test_golden_frames.py / test_frame_legibility.py / test_screen_reel_logo_contrast.py's contrast checks (failing them takes a rendering change, not a text edit)."

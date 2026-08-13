@@ -31,6 +31,13 @@ final class AppState {
     /// looks like an empty library. Shown as a blocking alert with a retry.
     var storeUnavailable: String?
 
+    /// Set the first time a save fails, and kept until one succeeds (#446).
+    ///
+    /// Not an alert: a failing disk fails every debounced keystroke, and a modal
+    /// per keystroke is unusable. A banner that stays put is also the honest
+    /// shape, because the condition persists until something changes.
+    var saveFailure: String?
+
     /// An event that has been removed from the list but is still inside its
     /// undo window. Its media is deliberately still on disk.
     private(set) var pendingDeletion: Event?
@@ -39,6 +46,14 @@ final class AppState {
     // Analytics navigation
     var sidebarMode: SidebarMode = .events
     var insightsSection: InsightsSection = .overview
+
+    /// Where the events store is read and written.
+    ///
+    /// A property rather than `EventStore.storeURL` at each call site, so the
+    /// test seam below can point a whole AppState at a temp file and exercise the
+    /// real save path, including its failures, without being able to reach the
+    /// live events.json (L2).
+    private let storeURL: URL
 
     #if POSTROLL_TESTS
     /// Test seam: an AppState holding exactly these events, with no read of the
@@ -49,12 +64,14 @@ final class AppState {
     /// Compiled only into the test bundle. The shipping app cannot call this
     /// even by accident, and an accident here would not look like one: it would
     /// open showing an empty library while the real events sat on disk.
-    init(events: [Event]) {
+    init(events: [Event], storeURL: URL = EventStore.storeURL) {
         self.events = events
+        self.storeURL = storeURL
     }
     #endif
 
     init() {
+        storeURL = EventStore.storeURL
         // Data lives under AppPaths.root, which is ~/Library/Application Support
         // /PostRoll once the `.migrated` marker is present (the move was done
         // out-of-band, deliberately NOT on launch), otherwise the legacy
@@ -68,7 +85,7 @@ final class AppState {
     /// we failed to read would delete media for events that are still there.
     /// Also used by the retry button on the store-unavailable alert.
     func loadStore() {
-        let loaded = EventStore.load()
+        let loaded = EventStore.load(from: storeURL)
         events = loaded.events
         switch loaded.status {
         case .ok:
@@ -112,7 +129,7 @@ final class AppState {
             dirty = true
         }
 
-        if dirty { EventStore.save(events) }
+        if dirty { persist() }
 
         // Reclaim photos/audio copies left behind by deleted events. Only
         // reachable on an authoritative load (guarded above): against an
@@ -126,15 +143,69 @@ final class AppState {
         ProgressFileCleanup.sweep(events: events)
     }
 
+    /// Every write of the store goes through here, so what happened to it cannot
+    /// be reported by some edit paths and swallowed by others (#446).
+    ///
+    /// Six call sites wrote the store directly and all six discarded the outcome.
+    /// `SaveCallSiteTests` holds this to one place, because fixing five of them
+    /// would have left the sixth quietly losing work and nothing about reading
+    /// any one of them would have shown which.
+    @discardableResult
+    private func persist() -> EventStore.SaveOutcome {
+        let outcome = EventStore.save(events, to: storeURL)
+        record(outcome)
+        return outcome
+    }
+
+    /// Turn a save outcome into what the window shows.
+    ///
+    /// `blocked` deliberately raises nothing: it only happens when the store
+    /// could not be READ, which already puts a blocking alert on screen with a
+    /// retry, and a second notice would say the same thing twice.
+    private func record(_ outcome: EventStore.SaveOutcome) {
+        switch outcome {
+        case .saved:
+            saveFailure = nil
+        case .blocked:
+            break
+        case .failed(let reason):
+            saveFailure = SaveFailureNotice.message(reason: reason)
+        }
+    }
+
+    /// Save again now, for the retry on the failure banner. Clears the banner if
+    /// it works, and leaves it in place with a fresh reason if it does not.
+    func retrySave() {
+        storeWriter.flush()
+        persist()
+    }
+
     /// Coalesces per-keystroke saves. Owned here rather than by the review
     /// screen, which remounts whenever Dan switches events and would take a
     /// pending write down with it.
-    private let storeWriter = DebouncedStoreWriter<[Event]> { EventStore.save($0) }
+    ///
+    /// `lazy` so the closure can report back: the whole point of #446 is that the
+    /// debounced write was the one save whose outcome could reach nothing at all.
+    /// The report runs inline when the write already happens on the main thread,
+    /// which is every path except the writer's own deinit, so a flush and its
+    /// banner land together rather than a frame apart.
+    /// `@ObservationIgnored` because it is machinery rather than UI state, and
+    /// because @Observable cannot generate tracking for a lazy property that
+    /// captures self at all.
+    @ObservationIgnored
+    private lazy var storeWriter = DebouncedStoreWriter<[Event]> { [weak self, url = storeURL] events in
+        let outcome = EventStore.save(events, to: url)
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { self?.record(outcome) }
+        } else {
+            Task { @MainActor in self?.record(outcome) }
+        }
+    }
 
     func addEvent(_ event: Event) {
         events.append(event)
         selectedEventID = event.id
-        EventStore.save(events)
+        persist()
     }
 
     func updateEvent(_ event: Event) {
@@ -143,7 +214,7 @@ final class AppState {
         // Any pending text edit is written first, so an immediate structural
         // save can never land ahead of the typing that preceded it.
         storeWriter.flush()
-        EventStore.save(events)
+        persist()
     }
 
     /// Same as `updateEvent`, but the DISK write is coalesced (#91, #197).
@@ -180,7 +251,7 @@ final class AppState {
 
         events.removeAll { $0.id == id }
         if selectedEventID == id { selectedEventID = nil }
-        EventStore.save(events)
+        persist()
         pendingDeletion = event
 
         // Anything else the delete orphaned is reclaimed now; the event itself
@@ -237,7 +308,7 @@ final class AppState {
         }
         events.append(copy)
         selectedEventID = copy.id
-        EventStore.save(events)
+        persist()
         return copy.id
     }
 }
