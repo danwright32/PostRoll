@@ -1,0 +1,8 @@
+{
+  "name": "load-bearing-plugins-stay-enabled",
+  "file": ".claude/settings.json",
+  "find": "\"enabledPlugins\": {",
+  "replace": "\"enabledPlugins\": {\n    \"superpowers@superpowers-dev\": false,",
+  "test": "tests/test_project_plugin_settings.py::test_the_load_bearing_plugins_are_not_disabled_here[superpowers]",
+  "breaks": "a disable sweep took superpowers or swift-lsp with it, which silently removes the Swift language server and the TDD and verification skills every session here is required to use (#499)"
+}

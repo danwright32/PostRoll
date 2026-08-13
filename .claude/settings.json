@@ -1,5 +1,8 @@
 {
   "enabledPlugins": {
+    "cloudflare@cloudflare": false,
+    "figma@claude-plugins-official": false,
+    "stripe@claude-plugins-official": false,
     "vercel-plugin@vercel-vercel-plugin": false
   },
   "hooks": {

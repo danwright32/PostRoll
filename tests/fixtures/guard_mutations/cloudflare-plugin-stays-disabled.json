@@ -1,0 +1,8 @@
+{
+  "name": "cloudflare-plugin-stays-disabled",
+  "file": ".claude/settings.json",
+  "find": "\"cloudflare@cloudflare\": false",
+  "replace": "\"cloudflare@cloudflare\": true",
+  "test": "tests/test_project_plugin_settings.py::test_the_off_topic_plugins_are_disabled_for_this_repo[cloudflare]",
+  "breaks": "the Cloudflare plugin is enabled again here, so its 11 skills, 2 commands and 5 MCP servers are offered in every session in a repo with no Cloudflare anywhere in it (#499)"
+}

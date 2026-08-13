@@ -1,0 +1,8 @@
+{
+  "name": "figma-plugin-stays-disabled",
+  "file": ".claude/settings.json",
+  "find": "\"figma@claude-plugins-official\": false",
+  "replace": "\"figma@claude-plugins-official\": true",
+  "test": "tests/test_project_plugin_settings.py::test_the_off_topic_plugins_are_disabled_for_this_repo[figma]",
+  "breaks": "the Figma plugin is enabled again here, so its 14 skill entries and its MCP server are offered in every session in a repo with no Figma file in it (#499)"
+}
