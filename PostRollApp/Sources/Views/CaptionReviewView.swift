@@ -2137,9 +2137,13 @@ private struct CaptionSection: View {
                     }  // outer left column VStack
                     }  // ScrollView
                     .frame(maxWidth: .infinity, maxHeight: storyExpandedMaxHeight)
-                    .onGeometryChange(for: CGFloat.self) { proxy in
+                    // The cap is captured rather than read inside: the transform
+                    // closure is Sendable, and reading a main-actor property from
+                    // one is an error on the Swift the CI Xcode ships. A CGFloat
+                    // crosses fine; the property it came from does not.
+                    .onGeometryChange(for: CGFloat.self) { [cap = storyMockupMaxWidth] proxy in
                         // Mockup width = min(column width − padding, screen-proportional cap)
-                        min(max(proxy.size.width - Spacing.xl * 2, 200), storyMockupMaxWidth)
+                        min(max(proxy.size.width - Spacing.xl * 2, 200), cap)
                     } action: { newWidth in
                         mockupWidth = newWidth
                     }
