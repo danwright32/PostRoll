@@ -1,0 +1,8 @@
+{
+  "name": "full-local-run-includes-the-fast-tests",
+  "file": "Makefile",
+  "find": "tests/ -q -n auto",
+  "replace": "tests/ -q -n auto -m slow",
+  "test": "tests/test_fast_subset_stays_honest.py::test_the_full_target_still_runs_the_ordinary_tests_too",
+  "breaks": "the full local run drops the 1700 ordinary tests and runs only the reels (#430, #497)"
+}

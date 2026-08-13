@@ -1,0 +1,8 @@
+{
+  "name": "not-found-rule-one-copy",
+  "file": "PostRollApp/Sources/Services/DataMigration.swift",
+  "find": "        (error as NSError).isFileNotFound\n    }",
+  "replace": "        (error as NSError).code == NSFileReadNoSuchFileError\n    }",
+  "test": "PostRollTests/StoreSaveGateTests/testNoStoreKeepsItsOwnCopyOfTheNotFoundRule",
+  "breaks": "a store grows its own copy of the absent-versus-unreadable rule again, and this one misses the POSIX spelling (#439)"
+}

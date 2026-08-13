@@ -1,0 +1,8 @@
+{
+  "name": "discarded-write-allowlist",
+  "file": "PostRollApp/Sources/Services/AppPaths.swift",
+  "find": "try? fm.copyItem(at: seed, to: dest)",
+  "replace": "try? fm.copyItem(at: seed, to: dest as URL)",
+  "test": "PostRollTests/DiscardedFileWriteGuardTests/testNoFileProducingWriteHasItsFailureThrownAway",
+  "breaks": "a discarded file-write stops matching its allowlist entry (#362)"
+}

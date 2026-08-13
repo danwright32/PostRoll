@@ -1,0 +1,8 @@
+{
+  "name": "full-local-run-stays-parallel",
+  "file": "Makefile",
+  "find": "pytest tests/ -q -n auto",
+  "replace": "pytest tests/ -q",
+  "test": "tests/test_reference_frames_are_safe_to_parallelise.py::test_the_whole_suite_is_run_in_parallel",
+  "breaks": "the full local run goes back to serial, six minutes slower, with nothing saying so (#497)"
+}

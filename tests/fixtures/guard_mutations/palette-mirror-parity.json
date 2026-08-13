@@ -1,0 +1,8 @@
+{
+  "name": "palette-mirror-parity",
+  "file": "PostRollApp/Sources/DesignTokens.swift",
+  "find": "static let hairline  = Color(red: 214/255, green: 208/255, blue: 200/255)",
+  "replace": "static let hairline  = Color(red: 212/255, green: 201/255, blue: 192/255)",
+  "test": "tests/test_design_tokens.py::test_the_swift_mirror_agrees_with_the_python_tokens[hairline-HAIRLINE]",
+  "breaks": "the Swift hairline colour drifts from the Python palette"
+}

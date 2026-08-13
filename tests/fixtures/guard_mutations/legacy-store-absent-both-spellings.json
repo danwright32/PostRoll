@@ -1,0 +1,8 @@
+{
+  "name": "legacy-store-absent-both-spellings",
+  "file": "PostRollApp/Sources/Services/DataMigration.swift",
+  "find": "        (error as NSError).isFileNotFound\n    }",
+  "replace": "        (error as NSError).code == NSFileReadNoSuchFileError\n    }",
+  "test": "PostRollTests/DataMigrationTests/testAnAbsentLegacyStoreIsRecognisedInEitherSpelling",
+  "breaks": "only the Cocoa spelling of not-found counts as a fresh install, so a POSIX ENOENT read leaves the migration marker unwritten and retrying on every launch (#439)"
+}

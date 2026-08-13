@@ -1,0 +1,8 @@
+{
+  "name": "manifest-day-rule-copy",
+  "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+  "find": "var dayEntry = ManifestDay.sharedEntry(pd, day: dayName)",
+  "replace": "guard !pd.photoPaths.isEmpty || pd.rawPhotoPath != nil || !pd.clipPaths.isEmpty else { continue }; var dayEntry = ManifestDay.sharedEntry(pd, day: dayName)",
+  "test": "PostRollTests/ManifestDaySharedEntryTests/testNeitherBuilderCarriesItsOwnCopyOfTheRule",
+  "breaks": "a manifest builder grows its own copy of the day-inclusion rule"
+}

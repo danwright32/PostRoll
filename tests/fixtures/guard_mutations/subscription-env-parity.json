@@ -1,0 +1,8 @@
+{
+  "name": "subscription-env-parity",
+  "file": "PostRollApp/Sources/Services/HaltedWeek.swift",
+  "find": "static let subscriptionEnv = \"POSTROLL_USE_SUBSCRIPTION\"",
+  "replace": "static let subscriptionEnv = \"POSTROLL_USE_SUBSCRIPTIONS\"",
+  "test": "tests/test_subscription_transport.py::test_the_swift_mirror_of_the_switch_name_agrees",
+  "breaks": "Swift flips a different switch than Python reads"
+}

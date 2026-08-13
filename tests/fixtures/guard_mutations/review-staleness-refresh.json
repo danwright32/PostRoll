@@ -1,0 +1,8 @@
+{
+  "name": "review-staleness-refresh",
+  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "find": ".onAppear { refreshDesignStaleness() }",
+  "replace": ".onAppear { }",
+  "test": "PostRollTests/LayoutSidecarContentsTests/testTheReviewScreenReadsTheStampOnceRatherThanEveryRedraw",
+  "breaks": "the review screen never refreshes design staleness on appear"
+}

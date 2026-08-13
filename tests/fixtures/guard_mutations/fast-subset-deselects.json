@@ -1,0 +1,8 @@
+{
+  "name": "fast-subset-deselects",
+  "file": "Makefile",
+  "find": "-m \"not slow\"",
+  "replace": "-m \"not fast\"",
+  "test": "tests/test_fast_subset_stays_honest.py::test_there_is_a_fast_target_and_it_is_not_the_gate",
+  "breaks": "the fast target quietly stops deselecting anything"
+}

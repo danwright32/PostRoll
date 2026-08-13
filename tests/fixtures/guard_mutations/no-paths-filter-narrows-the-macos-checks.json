@@ -1,0 +1,8 @@
+{
+  "name": "no-paths-filter-narrows-the-macos-checks",
+  "file": ".github/workflows/swift.yml",
+  "find": "  pull_request:\n    branches: [main]\n  workflow_dispatch:",
+  "replace": "  pull_request:\n    branches: [main]\n    paths:\n      - \"PostRollApp/**\"\n  workflow_dispatch:",
+  "test": "tests/test_ci_gates.py::test_no_paths_filter_narrows_what_a_pull_request_runs",
+  "breaks": "a paths filter comes back, so some pull requests skip the macOS checks and a skipped check reads as a passing one (#431)"
+}

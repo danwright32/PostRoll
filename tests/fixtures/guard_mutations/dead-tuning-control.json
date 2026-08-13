@@ -1,0 +1,8 @@
+{
+  "name": "dead-tuning-control",
+  "file": "postroll/media/generate_reel_morph.py",
+  "find": "FPS = 30",
+  "replace": "RAW_DESATURATION = 0.0\nFPS = 30",
+  "test": "tests/test_no_dead_tuning_controls.py::test_the_reel_generator_declares_nothing_it_never_reads[generate_reel_morph]",
+  "breaks": "a tuning constant nothing reads lands in a reel generator (L46)"
+}

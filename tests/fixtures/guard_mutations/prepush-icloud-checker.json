@@ -1,0 +1,8 @@
+{
+  "name": "prepush-icloud-checker",
+  "file": ".githooks/pre-push",
+  "find": "check_icloud_duplicates.py",
+  "replace": "check_icloud_dupes.py",
+  "test": "tests/test_icloud_duplicates.py::test_the_pre_push_hook_runs_the_checker",
+  "breaks": "the pre-push hook stops running the iCloud duplicate checker"
+}

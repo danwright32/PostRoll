@@ -1,0 +1,8 @@
+{
+  "name": "design-fingerprint-moves",
+  "file": "postroll/media/program_plate.py",
+  "find": "PRINT_Y = 430",
+  "replace": "PRINT_Y = 431",
+  "test": "tests/test_media_design_fingerprint.py::test_the_template_still_renders_the_design_its_version_claims[reel_morph]",
+  "breaks": "a plate geometry change ships without a design version bump"
+}

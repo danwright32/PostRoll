@@ -1,0 +1,8 @@
+{
+  "name": "blog-heading-by-hand",
+  "file": "PostRollApp/Sources/Services/EventExporter.swift",
+  "find": "let md = BlogDraftText.copyText(title: blog.title, body: blog.body) + \"\\n\"",
+  "replace": "let md = \"# \\(blog.title)\\n\\n\\(blog.body)\" + \"\\n\"",
+  "test": "PostRollTests/BlogDraftTextContractTests/testNoScreenBuildsTheHeadingByHand",
+  "breaks": "a screen assembles the blog heading by hand instead of the shared renderer"
+}

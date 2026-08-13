@@ -1,0 +1,8 @@
+{
+  "name": "analytics-file-exists-precheck",
+  "file": "PostRollApp/Sources/Services/AnalyticsStore.swift",
+  "find": "        let data: Data\n        do {\n            data = try Data(contentsOf: url)",
+  "replace": "        guard FileManager.default.fileExists(atPath: url.path) else { return }\n        let data: Data\n        do {\n            data = try Data(contentsOf: url)",
+  "test": "PostRollTests/AnalyticsStoreRecoveryTests/testADeniedFolderIsNotMistakenForAFreshInstall",
+  "breaks": "the fileExists precheck returns, so a TCC-denied file reads as a fresh install (#439)"
+}

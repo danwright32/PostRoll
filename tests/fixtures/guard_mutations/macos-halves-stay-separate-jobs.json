@@ -1,0 +1,8 @@
+{
+  "name": "macos-halves-stay-separate-jobs",
+  "file": ".github/workflows/swift.yml",
+  "find": "  reference-frames:\n    runs-on: macos-15\n    steps:\n",
+  "replace": "",
+  "test": "tests/test_ci_gates.py::test_the_two_halves_run_as_separate_jobs",
+  "breaks": "the reference frames go back into the Swift job, so the quick compile signal waits on seven minutes of rendering reels (#431)"
+}

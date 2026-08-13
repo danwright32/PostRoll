@@ -1,0 +1,8 @@
+{
+  "name": "wordmark-required-cover",
+  "file": "postroll/ai/generate_cover.py",
+  "find": "logo_path=required_wordmark(",
+  "replace": "logo_path=str(",
+  "test": "tests/test_wordmark_required.py::test_no_app_call_site_turns_a_missing_wordmark_into_no_mark[generate_cover]",
+  "breaks": "a missing wordmark file becomes a cover with no mark instead of an error"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "vision-thinness-parity",
+  "file": "PostRollApp/Sources/Services/VisionTextLayer.swift",
+  "find": "static let minimumWords = 8",
+  "replace": "static let minimumWords = 9",
+  "test": "tests/test_vision_cross_check.py::test_the_swift_mirror_of_the_thinness_rule_agrees",
+  "breaks": "the Swift thinness rule drifts from the Python one"
+}

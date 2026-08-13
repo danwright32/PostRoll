@@ -1,0 +1,8 @@
+{
+  "name": "save-failure-banner-offers-retry",
+  "file": "PostRollApp/Sources/Views/MainWindowView.swift",
+  "find": "                    actions: [BrandBannerAction(label: SaveFailureNotice.retryLabel) {\n                        appState.retrySave()\n                    }]",
+  "replace": "                    actions: []",
+  "test": "PostRollTests/SaveFailureBannerTests/testItOffersTheRetryThatCanClearIt",
+  "breaks": "the failure banner loses the only control that can clear it, leaving a message that names a problem with nowhere to go (L80)"
+}

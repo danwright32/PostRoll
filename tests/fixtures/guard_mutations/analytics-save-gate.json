@@ -1,0 +1,8 @@
+{
+  "name": "analytics-save-gate",
+  "file": "PostRollApp/Sources/Services/AnalyticsStore.swift",
+  "find": "guard !StoreSaveGate.shared.isBlocked(fileURL) else {",
+  "replace": "guard !StoreSaveGate.shared.isBlocked(URL(fileURLWithPath: \"/nowhere\")) else {",
+  "test": "PostRollTests/AnalyticsStoreRecoveryTests/testSavingIsRefusedWhileTheFileCouldNotBeRead",
+  "breaks": "analytics.json is written over even though the last load could not read it (#439)"
+}

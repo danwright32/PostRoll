@@ -1,0 +1,8 @@
+{
+  "name": "macos-pr-cancellation-scoped",
+  "file": ".github/workflows/swift.yml",
+  "find": "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+  "replace": "cancel-in-progress: true",
+  "test": "tests/test_ci_caches_and_cancels.py::test_a_push_to_main_is_never_cancelled[macos]",
+  "breaks": "cancellation stops being scoped to pull requests, so a merge to main is cancelled by the next one and main is left unverified (#430)"
+}

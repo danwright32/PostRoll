@@ -1,0 +1,8 @@
+{
+  "name": "design-stamp-filename-parity",
+  "file": "PostRollApp/Sources/Services/DesignStamp.swift",
+  "find": "static let stampName = \"design.json\"",
+  "replace": "static let stampName = \"designs.json\"",
+  "test": "tests/test_media_design_version.py::test_swift_uses_the_same_stamp_filename",
+  "breaks": "Swift reads a different stamp file than Python writes"
+}

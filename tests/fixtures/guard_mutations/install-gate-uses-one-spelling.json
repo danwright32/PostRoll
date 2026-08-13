@@ -1,0 +1,8 @@
+{
+  "name": "install-gate-uses-one-spelling",
+  "file": "PostRollApp/build-install.sh",
+  "find": "    make -C \"${REPO_ROOT}\" test-python",
+  "replace": "    (cd \"${REPO_ROOT}\" && venv/bin/python -m pytest tests/ -q)",
+  "test": "tests/test_build_and_test_gates.py::test_the_install_gate_runs_the_suite_the_make_target_defines",
+  "breaks": "the install gate keeps its own copy of the pytest command, which then drifts from the Makefile's (#430)"
+}

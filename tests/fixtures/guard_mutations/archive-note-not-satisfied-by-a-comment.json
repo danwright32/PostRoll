@@ -1,0 +1,8 @@
+{
+  "name": "archive-note-not-satisfied-by-a-comment",
+  "file": "PostRollApp/Sources/Views/ExportDoneSummary.swift",
+  "find": ".fixedSize(horizontal: false, vertical: true)",
+  "replace": ".opacity(1) // .fixedSize(horizontal: false, vertical: true)",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheArchiveNoteStillDeclaresThatItWraps",
+  "breaks": "the wrap declaration is gone and a trailing comment still names it (L103)"
+}

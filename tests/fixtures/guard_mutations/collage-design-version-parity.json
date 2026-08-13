@@ -1,0 +1,8 @@
+{
+  "name": "collage-design-version-parity",
+  "file": "PostRollApp/Sources/DesignTokens.swift",
+  "find": "static let collageDesignVersion = 1",
+  "replace": "static let collageDesignVersion = 2",
+  "test": "tests/test_collage_design_version.py::test_swift_mirrors_the_same_version",
+  "breaks": "the Swift collage design version drifts from the Python one"
+}

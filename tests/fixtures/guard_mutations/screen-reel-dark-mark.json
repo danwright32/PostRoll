@@ -1,0 +1,8 @@
+{
+  "name": "screen-reel-dark-mark",
+  "file": "postroll/ai/generate_media.py",
+  "find": "# by a measured pixel test.\n                            logo_path=required_wordmark(LOGO_BLACK),",
+  "replace": "# by a measured pixel test.\n                            logo_path=required_wordmark(LOGO_WHITE),",
+  "test": "tests/test_screen_reel_logo_contrast.py::test_the_screen_reel_is_given_the_dark_mark",
+  "breaks": "the screen reel gets the white mark on a light surface, invisible again"
+}

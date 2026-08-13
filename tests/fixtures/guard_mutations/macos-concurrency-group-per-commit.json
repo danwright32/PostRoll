@@ -1,0 +1,8 @@
+{
+  "name": "macos-concurrency-group-per-commit",
+  "file": ".github/workflows/swift.yml",
+  "find": "group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}",
+  "replace": "group: ${{ github.workflow }}-${{ github.ref }}",
+  "test": "tests/test_ci_caches_and_cancels.py::test_consecutive_merges_do_not_queue_behind_one_another[macos]",
+  "breaks": "the group goes back to the ref, so back-to-back merges queue one behind the other (#430)"
+}

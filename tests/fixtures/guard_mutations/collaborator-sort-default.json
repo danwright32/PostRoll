@@ -1,0 +1,8 @@
+{
+  "name": "collaborator-sort-default",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "let followers = candidate.stats?.followers, followers > 0",
+  "replace": "let followers = Optional(candidate.stats?.followers ?? 0), followers > 0",
+  "test": "PostRollTests/CollaboratorPickTests/testTheSortCannotDefaultAMissingFigureToZero",
+  "breaks": "a missing follower figure silently scores as zero (L50)"
+}

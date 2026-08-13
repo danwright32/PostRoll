@@ -3,10 +3,17 @@
 A guard is only real once it has been seen to fail (L1). On 2026-08-12 four
 newly written guards were green against code that had been deliberately broken,
 each caught only because someone broke the code by hand and watched. This makes
-that a mechanism: `tests/fixtures/guard_mutations.json` records, per guard, a
-one line perturbation of the code it protects. For each entry this tool applies
-the perturbation, runs only that guard, requires it to FAIL, and restores the
-file byte for byte.
+that a mechanism: `tests/fixtures/guard_mutations/` records, per guard, a one
+line perturbation of the code it protects. For each entry this tool applies the
+perturbation, runs only that guard, requires it to FAIL, and restores the file
+byte for byte.
+
+The registry is a DIRECTORY, one JSON file per entry, named for the entry it
+holds, and read by globbing (#506). It was one shared file until 2026-08-13,
+when ten commits across five branches all appended to it and every rebase
+between them conflicted in the same place; each hand resolution was a chance to
+drop an entry, which would remove a guard proof with nothing noticing. One file
+per entry means two branches adding different guards never touch the same file.
 
 Deliberately not part of the normal build, because it has to modify the working
 tree and, for the Swift guards, pay a build per entry. Run it when a guard is
@@ -52,7 +59,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REQUIRED_FIELDS = ("name", "file", "find", "replace", "test", "breaks")
-DEFAULT_REGISTRY = Path("tests/fixtures/guard_mutations.json")
+DEFAULT_REGISTRY = Path("tests/fixtures/guard_mutations")
+# The one non-entry file the registry directory is allowed to hold: the prose
+# explaining the mechanism and which guards are deliberately unregistered.
+REGISTRY_README = "README.md"
 
 # The grand total xcodebuild prints after the per-suite lines; the last match
 # in the transcript is the 'All tests' total.
@@ -92,20 +102,68 @@ class Result:
     detail: str = ""
 
 
+def entry_files(registry_dir: Path) -> list[Path]:
+    """Every entry file in the registry directory, in a stable order.
+
+    Anything else in there is refused rather than skipped: a `.json.bak` or a
+    `.jsonc` globbed past is an entry silently missing from every sweep, and a
+    sweep that quietly checked one fewer guard looks exactly like a full one
+    (L100). Dotfiles are the exception, because the Finder writes .DS_Store
+    into any directory Dan opens.
+    """
+    if not registry_dir.is_dir():
+        raise RegistryError(
+            f"the guard mutation registry {registry_dir} does not exist, and a "
+            "missing registry is not an empty one (L98)")
+    files: list[Path] = []
+    for path in sorted(registry_dir.iterdir()):
+        if path.name.startswith("."):
+            continue
+        if path.name == REGISTRY_README:
+            continue
+        if path.is_dir() or path.suffix != ".json":
+            raise RegistryError(
+                f"{path.name} sits in {registry_dir} but is not an entry file. "
+                f"Every entry is one <name>.json; rename it or move it out, "
+                f"because a file globbed past is a guard nobody checks.")
+        files.append(path)
+    return files
+
+
 def load_registry(path: Path) -> list[Entry]:
-    data = json.loads(path.read_text())
+    """Every entry in the registry directory, one per file.
+
+    Each file holds a single entry object whose `name` is the file's own stem,
+    so a name can never be claimed twice and any message naming a guard names
+    the file to open.
+    """
     entries: list[Entry] = []
-    names: set[str] = set()
-    for raw in data.get("entries", []):
+    for source in entry_files(path):
+        try:
+            raw = json.loads(source.read_text())
+        except ValueError as exc:
+            raise RegistryError(
+                f"{source.name} is not valid JSON ({exc}), so it cannot be "
+                "read as an entry. A malformed entry stops the run rather "
+                "than being skipped, because a skipped entry reads exactly "
+                "like a guard nobody registered.") from exc
+        except OSError as exc:
+            raise RegistryError(f"{source.name} could not be read: {exc}") from exc
+        if not isinstance(raw, dict):
+            raise RegistryError(
+                f"{source.name} holds {type(raw).__name__}, not one entry "
+                "object. Every file in the registry is exactly one entry.")
         missing = [f for f in REQUIRED_FIELDS if f not in raw]
         if missing:
             raise RegistryError(
-                f"entry {raw.get('name', '<unnamed>')} is missing "
-                f"{', '.join(missing)}")
+                f"{source.name} is missing {', '.join(missing)}")
         entry = Entry(**{f: raw[f] for f in REQUIRED_FIELDS})
-        if entry.name in names:
-            raise RegistryError(f"two entries are named {entry.name}")
-        names.add(entry.name)
+        if entry.name != source.stem:
+            raise RegistryError(
+                f"{source.name} declares the name {entry.name!r}. Each entry "
+                f"file is named for the entry it holds, so it belongs in "
+                f"{entry.name}.json; that rule is also what stops two files "
+                f"claiming one name.")
         if entry.find == entry.replace:
             raise RegistryError(
                 f"{entry.name} changes nothing: find and replace are identical, "
@@ -220,23 +278,33 @@ def changed_registry_names(repo_root: Path, registry_path: Path,
                            base: str) -> set[str]:
     """Names of entries that are new or edited relative to the base, so a
     reworded perturbation re-proves itself without dragging the whole
-    registry along."""
-    try:
-        rel = registry_path.resolve().relative_to(repo_root.resolve())
-    except ValueError:
-        return set()  # registry outside the repo: no record diff to take
-    current = {e.name: e for e in load_registry(registry_path)}
-    old_text = _git(repo_root, "show", f"{base}:{rel.as_posix()}")
-    if old_text is None:
-        return set(current)  # the registry itself is new at this base
-    try:
-        old = {raw.get("name"): raw
-               for raw in json.loads(old_text).get("entries", [])}
-    except ValueError:
-        return set(current)
-    return {name for name, entry in current.items()
-            if any(old.get(name, {}).get(f) != getattr(entry, f)
-                   for f in REQUIRED_FIELDS)}
+    registry along.
+
+    Compared field by field rather than by file text, so reindenting an entry
+    does not select it while any change to what the perturbation actually does
+    always will."""
+    changed: set[str] = set()
+    for entry in load_registry(registry_path):
+        source = registry_path / f"{entry.name}.json"
+        try:
+            rel = source.resolve().relative_to(repo_root.resolve())
+        except ValueError:
+            continue  # registry outside the repo: no record diff to take
+        old_text = _git(repo_root, "show", f"{base}:{rel.as_posix()}")
+        if old_text is None:
+            changed.add(entry.name)  # this entry is new at this base
+            continue
+        try:
+            old = json.loads(old_text)
+        except ValueError:
+            changed.add(entry.name)
+            continue
+        if not isinstance(old, dict):
+            changed.add(entry.name)
+            continue
+        if any(old.get(f) != getattr(entry, f) for f in REQUIRED_FIELDS):
+            changed.add(entry.name)
+    return changed
 
 
 def guard_test_path(entry: Entry, repo_root: Path) -> str | None:
@@ -377,7 +445,8 @@ def main(argv: list[str] | None = None) -> int:
                              "guard test file, or registry record changed "
                              "since the merge base with main")
     parser.add_argument("--registry", type=Path, default=None,
-                        help=f"registry path (default {DEFAULT_REGISTRY})")
+                        help="registry directory, one JSON file per entry "
+                             f"(default {DEFAULT_REGISTRY})")
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parent.parent

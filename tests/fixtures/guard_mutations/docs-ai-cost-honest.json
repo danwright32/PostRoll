@@ -1,0 +1,8 @@
+{
+  "name": "docs-ai-cost-honest",
+  "file": "postroll-prd.md",
+  "find": "- Metricool: $216/year (unchanged)",
+  "replace": "- Metricool: $216/year (unchanged), Claude Code: $0",
+  "test": "tests/test_paid_default_path.py::test_the_docs_do_not_claim_the_ai_is_free",
+  "breaks": "the docs claim the AI path is free when the default path is metered"
+}

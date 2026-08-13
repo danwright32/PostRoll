@@ -1,0 +1,8 @@
+{
+  "name": "reference-frames-parallel",
+  "file": ".github/workflows/swift.yml",
+  "find": "-n auto -v -ra",
+  "replace": "-v -ra",
+  "test": "tests/test_reference_frames_are_safe_to_parallelise.py::test_the_step_still_runs_in_parallel",
+  "breaks": "the reference frame step silently goes back to serial"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "crop-anchor-python-parity",
+  "file": "postroll/media/generate_collage.py",
+  "find": "TOP_ANCHORED_CROP_Y = -1.0",
+  "replace": "TOP_ANCHORED_CROP_Y = -0.9",
+  "test": "tests/test_crop_geometry_parity.py::test_the_fixture_constants_match_the_implementation",
+  "breaks": "the Python crop anchor drifts from the shared crop fixture (#168)"
+}

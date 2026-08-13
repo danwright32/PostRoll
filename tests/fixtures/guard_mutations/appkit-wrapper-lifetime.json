@@ -1,0 +1,8 @@
+{
+  "name": "appkit-wrapper-lifetime",
+  "file": "PostRollApp/Sources/Views/MainWindowView.swift",
+  "find": "/// Lifetime, audited against #196 (#198): this hands nothing to anything that",
+  "replace": "/// This wrapper hands nothing to anything that",
+  "test": "PostRollTests/AppKitWrapperLifetimeTests/testEveryAppKitWrapperHasAnsweredTheLifetimeQuestion",
+  "breaks": "an AppKit wrapper loses its recorded answer to the lifetime question (#196)"
+}
