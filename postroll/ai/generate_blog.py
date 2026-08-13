@@ -1320,7 +1320,7 @@ Photo placement rules:
   what somebody felt or who an expression was aimed at. BANNED: "in
   intense concentration", "with focused expression", "grinning toward
   the audience". A grin is visible; who it was for is not. Example:
-    [PHOTO: 003_DSC4821.jpg | Conductor leading a full chorus from the
+    [PHOTO: DSC4821.jpg | Conductor leading a full chorus from the
     podium at Carnegie Hall, arms raised mid-phrase, blue stage light
     behind the choir risers]
 - Use ALL {photo_count} photos. Spread them through the post — not
@@ -1817,7 +1817,8 @@ def generate_blog(
     # replaces an invented one, and alt text cannot be rewritten without seeing
     # the photograph. Reported loudly so a draft is never quietly shipped with
     # them, and returned so the review screen can show exactly what to fix.
-    findings = check_blog(final_body, program=program, venue=venue)
+    findings = check_blog(final_body, program=program, venue=venue,
+                          photo_filenames=photo_filenames)
     for f in findings:
         print(f"[generate_blog] CHECK {f.code}: {f.message} ({f.detail})",
               flush=True, file=sys.stderr)

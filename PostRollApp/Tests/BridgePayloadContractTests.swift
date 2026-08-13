@@ -174,7 +174,7 @@ final class BridgePayloadContractTests: XCTestCase {
     func testBlogOutputReadsEveryDeclaredKey() throws {
         var blog = BlogOutput(title: "t", body: "b")
         blog.photoCount = 3
-        blog.findings = [BlogFinding(code: "c", message: "m", detail: "d")]
+        blog.findings = [QualityFinding(code: "c", message: "m", detail: "d")]
         blog.generatedBody = "b"
         blog.findingsBody = "b"
 
@@ -188,7 +188,7 @@ final class BridgePayloadContractTests: XCTestCase {
     func testRevisedBlogReadsEveryDeclaredKey() throws {
         var blog = BlogOutput(title: "t", body: "b")
         blog.photoCount = 1
-        blog.findings = [BlogFinding(code: "c", message: "m", detail: "d")]
+        blog.findings = [QualityFinding(code: "c", message: "m", detail: "d")]
         try assertCovers("revised_blog",
                          try encodedKeys(blog).subtracting(["generated_body", "findings_body"]))
     }
@@ -448,11 +448,11 @@ final class BridgePayloadContractTests: XCTestCase {
     }
 
     func testABlogFindingReadsEveryDeclaredKey() throws {
-        let finding = BlogFinding(code: "c", message: "m", detail: "d")
+        let finding = QualityFinding(code: "c", message: "m", detail: "d")
         try assertCovers("blog_finding", try encodedKeys(finding))
 
         let back = try JSONDecoder().decode(
-            BlogFinding.self, from: try JSONEncoder().encode(finding))
+            QualityFinding.self, from: try JSONEncoder().encode(finding))
         XCTAssertEqual(back, finding)
     }
 

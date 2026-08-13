@@ -34,7 +34,7 @@ final class BlogFindingsDecodeTests: XCTestCase {
         // They are stored on the event, so a finding must still be on screen
         // after the app is relaunched, not only in the run that produced it.
         var blog = BlogOutput(title: "T", body: "B")
-        blog.findings = [BlogFinding(code: "alt_text_length",
+        blog.findings = [QualityFinding(code: "alt_text_length",
                                      message: "Alt text must be 15 to 25 words.",
                                      detail: "a.jpg: 34 words.")]
 

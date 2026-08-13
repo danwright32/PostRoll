@@ -10,12 +10,35 @@ struct DayCaption: Codable, Hashable {
     /// The caption exactly as it came out of generation — never overwritten by edits.
     /// Empty until `WeekGenerationResult.stampOriginals()` is called after first decode.
     var generatedCaption: String = ""
+    /// What the deterministic credit checks caught (#475).
+    ///
+    /// Two rules the prompt states and could not enforce: every handle and
+    /// name that was asked for has to be in the caption, and no handle may
+    /// appear that was never offered, because Instagram resolves a guessed one
+    /// to a stranger's account. They report rather than repair, so this panel
+    /// is the feature.
+    var findings: [QualityFinding] = []
+    /// The exact caption `findings` were measured against.
+    ///
+    /// Its own field rather than a reuse of `generatedCaption`, for the reason
+    /// `BlogOutput.findingsBody` is: the two answer different questions.
+    /// `generatedCaption` asks whether Dan has edited this, while this asks
+    /// whether the findings still describe what is on screen. A revision
+    /// re-runs the checks without being an edit.
+    var findingsCaption: String = ""
 
     enum CodingKeys: String, CodingKey {
-        case caption, hashtags
+        case caption, hashtags, findings
         case altTexts         = "alt_texts"
         case sceneLabels      = "scene_labels"
         case generatedCaption = "generated_caption"
+        case findingsCaption  = "findings_caption"
+    }
+
+    /// Attach findings from a Python run, pinning the caption they describe.
+    mutating func applyFindings(_ found: [QualityFinding], checkedCaption: String) {
+        findings = found
+        findingsCaption = checkedCaption
     }
 
     /// Caption + hashtags as a ready-to-paste string.
@@ -43,7 +66,7 @@ struct DayCaption: Codable, Hashable {
 /// rewrite: nobody can supply the true number that replaces an invented one,
 /// and alt text cannot be rewritten without seeing the photograph, so the
 /// quoted text is what lets Dan fix it in seconds.
-struct BlogFinding: Codable, Hashable, Identifiable {
+struct QualityFinding: Codable, Hashable, Identifiable {
     var code: String = ""
     var message: String = ""
     var detail: String = ""
@@ -71,7 +94,7 @@ struct BlogOutput: Codable, Hashable {
     /// Body exactly as generated — never overwritten by edits.
     var generatedBody: String = ""
     /// What the deterministic checks caught (#201).
-    var findings: [BlogFinding] = []
+    var findings: [QualityFinding] = []
     /// The exact body `findings` were measured against.
     ///
     /// Its own field rather than a reuse of `generatedBody`, because the two
@@ -89,7 +112,7 @@ struct BlogOutput: Codable, Hashable {
     }
 
     /// Attach findings from a Python run, pinning the body they describe.
-    mutating func applyFindings(_ found: [BlogFinding], checkedBody: String) {
+    mutating func applyFindings(_ found: [QualityFinding], checkedBody: String) {
         findings = found
         findingsBody = checkedBody
     }
@@ -234,6 +257,8 @@ extension DayCaption {
         altTexts         = try c.decodeIfPresent([String].self,  forKey: .altTexts)         ?? []
         sceneLabels      = try c.decodeIfPresent([String?].self, forKey: .sceneLabels)      ?? []
         generatedCaption = try c.decodeIfPresent(String.self,    forKey: .generatedCaption) ?? ""
+        findings         = try c.decodeIfPresent([QualityFinding].self, forKey: .findings)  ?? []
+        findingsCaption  = try c.decodeIfPresent(String.self,    forKey: .findingsCaption)  ?? ""
     }
 }
 
@@ -244,7 +269,7 @@ extension BlogOutput {
         body          = try c.decodeIfPresent(String.self, forKey: .body)          ?? ""
         photoCount    = try c.decodeIfPresent(Int.self,    forKey: .photoCount)    ?? 0
         generatedBody = try c.decodeIfPresent(String.self, forKey: .generatedBody) ?? ""
-        findings      = try c.decodeIfPresent([BlogFinding].self, forKey: .findings) ?? []
+        findings      = try c.decodeIfPresent([QualityFinding].self, forKey: .findings) ?? []
         findingsBody  = try c.decodeIfPresent(String.self, forKey: .findingsBody) ?? ""
     }
 }

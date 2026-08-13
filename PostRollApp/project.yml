@@ -89,7 +89,8 @@ targets:
       - path: Sources/Services/EventHandleSuggestions.swift
       - path: Sources/Services/FridayReviewDisplay.swift
       - path: Sources/Services/CoverReviewDisplay.swift
-      - path: Sources/Services/BlogFindingsDisplay.swift
+      - path: Sources/Services/BlogDraftText.swift
+      - path: Sources/Services/FindingsDisplay.swift
       - path: Sources/Services/DebouncedStoreWriter.swift
       - path: Sources/Services/EventStageTransition.swift
       - path: Sources/Services/StoreBackups.swift
@@ -130,6 +131,7 @@ targets:
       - path: Sources/Services/PythonBridgeError.swift
       - path: Sources/Services/ProcessRunner.swift
       - path: Sources/Services/PythonBridge.swift
+      - path: Sources/Services/CaptionCreditInputs.swift
       - path: Sources/Services/TimingStore.swift
       - path: Sources/Services/KeychainStore.swift
       - path: Sources/Services/ExportManager.swift

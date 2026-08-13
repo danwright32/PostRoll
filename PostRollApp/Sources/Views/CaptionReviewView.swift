@@ -1577,6 +1577,86 @@ private struct CaptionSection: View {
         thursdayReelPreviewURL.map(LayoutSidecar.url(for:))
     }
 
+    /// The count, on the collapsed header.
+    @ViewBuilder
+    private var captionFindingsBadge: some View {
+        if let summary = caption.findingsSummary {
+            let stale = caption.findingsAreStale
+            Text(summary)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(stale ? Color.warmMid : Color.roseDeep)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule().fill((stale ? Color.warmMid : Color.roseDeep).opacity(0.12))
+                )
+                .accessibilityLabel("Caption checks: \(summary)")
+        }
+    }
+
+    /// The deterministic credit checks from #475, under the caption they
+    /// describe.
+    ///
+    /// Same shape as the blog's panel and for the same reason: these report
+    /// rather than repair, so the quoted handle IS the feature. Nothing here
+    /// knows the handle that should have been used in place of a guessed one,
+    /// and guessing a second time is the exact failure the check exists to
+    /// stop. Once Dan edits the caption the checks no longer describe it, so
+    /// the panel says so rather than going on naming a handle he has removed.
+    @ViewBuilder
+    private var captionFindingsPanel: some View {
+        if let summary = caption.findingsSummary {
+            let stale = caption.findingsAreStale
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                HStack(spacing: 6) {
+                    Image(systemName: stale ? "clock.arrow.circlepath" : "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                    Text(summary.uppercased())
+                        .font(.system(size: 10, weight: .medium))
+                        .tracking(0.8)
+                }
+                .foregroundStyle(stale ? Color.warmMid : Color.roseDeep)
+
+                if stale {
+                    Text("These ran against the caption as generated. You have edited it since, so some may already be fixed. Revise or regenerate to re-check.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warmMid)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                ForEach(FindingsDisplay.grouped(findings: caption.findings), id: \.code) { group in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(group.message)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.warmDark)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(group.details, id: \.self) { detail in
+                            Text(detail)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.warmMid)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm)
+                    .fill((stale ? Color.warmMid : Color.roseDeep).opacity(0.07))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.sm)
+                            .stroke((stale ? Color.warmMid : Color.roseDeep).opacity(0.45),
+                                    lineWidth: 1.5)
+                    )
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Caption checks: \(summary)")
+        }
+    }
+
     private var splitPreviewIsCollage: Bool { isCollageCarouselDay }
 
     private var splitPreviewLabel: String {
@@ -1610,6 +1690,10 @@ private struct CaptionSection: View {
                     }
 
                     Spacer()
+                    // Visible while collapsed, so a caption tagging a handle
+                    // nobody offered is not something Dan has to open the day
+                    // to discover (#475).
+                    captionFindingsBadge
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.warmMid)
@@ -1708,6 +1792,7 @@ private struct CaptionSection: View {
                             VStack(alignment: .leading, spacing: Spacing.md) {
                                 ReviewTextArea(label: "Caption", text: $caption.caption, minHeight: 60)
                                     .frame(maxHeight: 120)
+                                captionFindingsPanel
                                 HashtagsEditor(hashtags: $caption.hashtags)
 
                                 FridayClipEditor(
@@ -1859,6 +1944,7 @@ private struct CaptionSection: View {
                             VStack(alignment: .leading, spacing: Spacing.md) {
                                 ReviewTextArea(label: "Caption", text: $caption.caption, minHeight: 60)
                                     .frame(maxHeight: 120)
+                                captionFindingsPanel
 
                                 HStack(spacing: Spacing.sm) {
                                     Spacer()
@@ -1963,6 +2049,7 @@ private struct CaptionSection: View {
                             // Editing controls below the mockup
                             VStack(alignment: .leading, spacing: Spacing.md) {
                             ReviewTextArea(label: "Caption", text: $caption.caption, minHeight: 60)
+                            captionFindingsPanel
 
                             HStack(spacing: Spacing.sm) {
                                 Spacer()
@@ -2261,6 +2348,7 @@ private struct CaptionSection: View {
                         }
 
                         ReviewTextArea(label: "Caption", text: $caption.caption, minHeight: 80)
+                        captionFindingsPanel
 
                         HStack(spacing: Spacing.sm) {
                             Spacer()
@@ -2543,8 +2631,8 @@ private struct BlogSection: View {
     /// panel says so instead of continuing to assert stale findings.
     @ViewBuilder
     private var blogFindingsPanel: some View {
-        if let summary = BlogFindingsDisplay.summary(blog: blog) {
-            let stale = BlogFindingsDisplay.isStale(blog: blog)
+        if let summary = blog.findingsSummary {
+            let stale = blog.findingsAreStale
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 HStack(spacing: 6) {
                     Image(systemName: stale ? "clock.arrow.circlepath" : "exclamationmark.triangle")
@@ -2562,7 +2650,7 @@ private struct BlogSection: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                ForEach(BlogFindingsDisplay.grouped(findings: blog.findings), id: \.code) { group in
+                ForEach(FindingsDisplay.grouped(findings: blog.findings), id: \.code) { group in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(group.message)
                             .font(.system(size: 11, weight: .medium))
@@ -2612,16 +2700,16 @@ private struct BlogSection: View {
                     Spacer()
                     // Visible while collapsed, so the checks are not something
                     // Dan has to open the section to discover (#201).
-                    if let summary = BlogFindingsDisplay.summary(blog: blog) {
+                    if let summary = blog.findingsSummary {
                         Text(summary)
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(BlogFindingsDisplay.isStale(blog: blog)
+                            .foregroundStyle(blog.findingsAreStale
                                              ? Color.warmMid : Color.roseDeep)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(
                                 Capsule().fill(
-                                    (BlogFindingsDisplay.isStale(blog: blog)
+                                    (blog.findingsAreStale
                                      ? Color.warmMid : Color.roseDeep).opacity(0.12))
                             )
                             .accessibilityLabel("Blog checks: \(summary)")

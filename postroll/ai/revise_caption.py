@@ -51,9 +51,15 @@ from .ai_tells import (
     load_humanizer_rules,
     strip_em_dashes,
 )
+from .blog_quality import finding_entry
+from .caption_credits import credit_findings
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .performer_hashtags import strip_performer_hashtags
-from .generate_captions import _format_performers
+from .generate_captions import (
+    _enforce_caption_bans,
+    _format_performers,
+    dedupe_credit_stack,
+)
 
 
 REVISE_PROMPT = """\
@@ -88,8 +94,16 @@ The alt texts and scene labels are LOCKED — do NOT modify them.
 Return JSON in this exact shape (no markdown fences, no commentary):
 {{
   "caption": "<revised caption>",
-  "hashtags": ["#dwphotony", ...]
+  "hashtags": ["#dwphotony", ...],
+  "famous_people": ["<any performer above you judge genuinely famous>", ...]
 }}
+
+`famous_people` is how a genuinely famous performer keeps their hashtag: list
+only people who are household names or major figures in their field, and leave
+it empty otherwise. It is not shown to anyone; it is read by the check that
+removes ordinary performers' name tags. Leaving it out of your answer strips
+those tags, so answer it on every revision even when nothing about the
+hashtags changed.
 """
 
 
@@ -105,6 +119,9 @@ def revise_caption(
     existing: dict[str, Any],
     feedback: str,
     venue_context: str = "",
+    tag_handles: list[str] | None = None,
+    name_mentions: list[str] | None = None,
+    photo_tags: dict[str, list[str]] | None = None,
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
 ) -> dict[str, Any]:
@@ -143,7 +160,8 @@ def revise_caption(
     if not isinstance(data, dict):
         raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 
-    output_shape = "{caption: string, hashtags: list of strings}"
+    output_shape = ("{caption: string, hashtags: list of strings, "
+                    "famous_people: list of strings}")
 
     # Humanizer pass — same rules as generation
     if not skip_humanizer and is_humanizer_available(humanizer_path):
@@ -156,19 +174,41 @@ def revise_caption(
         )
         data = run_review_pass(review_prompt, data, label="humanizer", timeout=180, runner=run_json_prompt)
 
+    # Every deterministic pass generation applies, in the same order (#476).
+    # A revision is a live route back into the caption, and "add a call to
+    # action" or "add more tags" is exactly the request that reintroduces what
+    # these gates exist to remove. Running one of the three here meant the
+    # other two only ever held on a caption Dan never asked to change.
+    revised_caption = dedupe_credit_stack(_enforce_caption_bans(
+        strip_em_dashes(data.get("caption", caption_text).strip()),
+        tag_handles=tag_handles, name_mentions=name_mentions))
+
     # Merge revised text with locked photo-derived fields
     return {
-        "caption":      strip_em_dashes(data.get("caption", caption_text).strip()),
-        # A revision is a live path back into the caption, and "add more tags"
-        # is exactly the request most likely to reintroduce a performer's name
-        # as a hashtag, so it runs the same gate the first pass does (#199).
+        "caption":      revised_caption,
+        # The same gate the first pass runs (#199), with the same inputs. It
+        # judged against the program alone while the manifest withheld the
+        # other three, so a person credited by plain name or tagged on a photo
+        # could keep a hashtag the generation path would have removed.
         "hashtags":     strip_performer_hashtags(
             data.get("hashtags", hashtags),
             program=program,
+            name_mentions=name_mentions,
+            photo_tags=photo_tags,
+            tag_handles=tag_handles,
             famous=data.get("famous_people") or [],
         ),
         "alt_texts":    existing.get("alt_texts", []),
         "scene_labels": existing.get("scene_labels", []),
+        # The handle and name rules, checked here too (#475). A revision is
+        # where a handle is most likely to be invented, because "add @someone"
+        # is a thing Dan types.
+        "findings": [
+            finding_entry(f) for f in credit_findings(
+                revised_caption, tag_handles=tag_handles,
+                name_mentions=name_mentions)
+        ],
+        "findings_caption": revised_caption,
     }
 
 
@@ -195,6 +235,9 @@ if __name__ == "__main__":
         program=m["program"],
         existing=m["existing"],
         feedback=m["feedback"],
+        tag_handles=m.get("tag_handles") or None,
+        name_mentions=m.get("name_mentions") or None,
+        photo_tags=m.get("photo_tags") or None,
     )
     Path(args.output).write_text(
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"

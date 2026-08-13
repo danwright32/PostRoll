@@ -118,6 +118,53 @@ def _markers(body: str) -> list[tuple[str, str]]:
     return [(m.group(1).strip(), m.group(2).strip()) for m in _PHOTO_MARKER.finditer(body)]
 
 
+def _marker_filename_findings(markers: list[tuple[str, str]],
+                              photo_filenames: list[str] | None) -> list[Finding]:
+    """Markers naming a photo that was never sent, and photos never placed (#477).
+
+    The prompt's hardest photo rule is the filename one, and it had no check at
+    all: the pass 2 and pass 3 validator only pins those passes to whatever
+    pass 1 produced, so a name invented in pass 1 was preserved faithfully to
+    the review screen.
+
+    Both directions are reported because both lose a photograph. A name that
+    was never sent matches no file when the app lines markers up against the
+    real photos, so that image silently does not appear in the post; a photo
+    with no marker is one Dan picked for the post and never sees in it.
+
+    Compared without case: a case difference is not a different photo on this
+    filesystem, and reporting it would be the check crying wolf (L36).
+    """
+    if not photo_filenames:
+        return []
+
+    sent = {str(name).strip().casefold(): str(name).strip()
+            for name in photo_filenames if str(name).strip()}
+    if not sent:
+        return []
+
+    findings: list[Finding] = []
+    placed: set[str] = set()
+    for name, _alt in markers:
+        key = name.casefold()
+        if key in sent:
+            placed.add(key)
+            continue
+        findings.append(Finding(
+            "blog_marker_unknown_photo",
+            "A photo marker names a file that was not one of the photos sent, "
+            "so no image will appear there.",
+            name))
+
+    for key, name in sent.items():
+        if key not in placed:
+            findings.append(Finding(
+                "blog_marker_missing_photo",
+                "A photo chosen for this post was never placed in it.",
+                name))
+    return findings
+
+
 def _prose_paragraphs(body: str) -> list[str]:
     out = []
     for block in body.split("\n\n"):
@@ -229,10 +276,19 @@ def names_a_group(alt: str) -> bool:
 
 
 def check_blog(body: str, *, program: dict[str, Any] | None = None,
-               venue: str = "") -> list[Finding]:
-    """Every objectively checkable rule the corrected draft broke."""
+               venue: str = "",
+               photo_filenames: list[str] | None = None) -> list[Finding]:
+    """Every objectively checkable rule the corrected draft broke.
+
+    `photo_filenames` is the list of names the model was actually shown, in
+    the exact spelling its `Photo N:` labels used. Without it the filename
+    rules below are skipped rather than guessed at: a caller with no list
+    (a revision re-checking an existing body) must not have every marker
+    reported as naming an unknown photo.
+    """
     findings: list[Finding] = []
     markers = _markers(body)
+    findings += _marker_filename_findings(markers, photo_filenames)
     performers = [str(p.get("name", "")).strip()
                   for p in (program or {}).get("performers") or []
                   if str(p.get("name", "")).strip()]

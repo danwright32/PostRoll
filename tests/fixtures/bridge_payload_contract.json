@@ -131,7 +131,9 @@
       "scene_labels": "swift",
       "skipped_photos": {
         "python_only": "generate_week hoists this onto the week payload's `warnings`, which is where the app reads it and where it can be shown per day. DayCaption deliberately does not carry a second copy: two homes for one fact is how it goes missing in exactly one direction (L83)."
-      }
+      },
+      "findings": "swift",
+      "findings_caption": "swift"
     }
   },
   "blog_output": {
@@ -169,7 +171,9 @@
       "caption": "swift",
       "hashtags": "swift",
       "alt_texts": "swift",
-      "scene_labels": "swift"
+      "scene_labels": "swift",
+      "findings": "swift",
+      "findings_caption": "swift"
     }
   },
   "revised_blog": {
@@ -1002,7 +1006,10 @@
         "existing": "always",
         "feedback": "always",
         "shoot_type": "always",
-        "venue_context": "always"
+        "venue_context": "always",
+        "tag_handles": "always",
+        "name_mentions": "always",
+        "photo_tags": "always"
       }
     },
     "blog_revision": {
