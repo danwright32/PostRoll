@@ -496,6 +496,30 @@ def test_changed_mode_still_fails_on_a_surviving_mutation(scoped_repo: Path):
     assert any("SURVIVED" in line for line in lines)
 
 
+def test_changed_mode_measures_against_main_not_the_pushed_branch(scoped_repo: Path):
+    """Right after a push, the branch's own upstream already holds the change,
+    and a scoped run based there reports nothing to verify while the work is
+    still unmerged; main is the base that never under-selects."""
+    git(scoped_repo, "remote", "add", "origin", str(scoped_repo))
+    git(scoped_repo, "checkout", "-b", "feature")
+    (scoped_repo / "Sources" / "Note.swift").write_text(SOURCE + "// touched\n")
+    git(scoped_repo, "add", "-A")
+    git(scoped_repo, "commit", "-m", "touch note")
+    git(scoped_repo, "update-ref", "refs/remotes/origin/feature", "HEAD")
+    git(scoped_repo, "config", "branch.feature.remote", "origin")
+    git(scoped_repo, "config", "branch.feature.merge", "refs/heads/feature")
+    # Prove the upstream actually resolves, or this test is checking nothing.
+    upstream = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        cwd=scoped_repo, capture_output=True, text=True)
+    assert upstream.returncode == 0, upstream.stderr
+    assert upstream.stdout.strip() == "origin/feature"
+    runner = a_runner(65, SWIFT_RED)
+    code, _ = run_changed(scoped_repo, runner)
+    assert code == 0
+    assert len(runner.calls) == 1
+
+
 def test_a_failed_diff_is_none_never_an_empty_change_set(scoped_repo: Path):
     """A diff that errors must be distinguishable from a diff that found
     nothing, because reading a failure as no changes makes the scoped run
