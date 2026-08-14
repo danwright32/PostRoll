@@ -263,7 +263,14 @@ def expected_checks(workflows: Path = WORKFLOWS) -> set[ExpectedCheck]:
         workflow = _unwrap(titled.group(1)) if titled else str(
             path.relative_to(workflows.parent.parent)
             if workflows.parent.parent in path.parents else path.name)
-        for job, body in _job_blocks(text):
+        jobs = _job_blocks(text)
+        if not jobs:
+            raise UnreadableWorkflow(
+                f"{path.name} runs on pull requests but no jobs could be read "
+                "out of it, so the bar silently drops by however many checks "
+                "it produces and the wait reports green having waited for none "
+                "of them")
+        for job, body in jobs:
             skips = _skips_on_pull_request(job, body)
             for name in _check_names(job, body):
                 expected.add(ExpectedCheck(workflow, name, skips))

@@ -144,6 +144,21 @@ def test_a_matrix_this_cannot_expand_refuses_to_answer(tmp_path: Path) -> None:
         expected_checks(workflows)
 
 
+def test_a_pull_request_workflow_declaring_no_jobs_refuses_to_answer(tmp_path: Path) -> None:
+    """A file this cannot read jobs out of contributes nothing, silently.
+
+    Which is the same defect one level down: the bar quietly drops by however
+    many checks that workflow produces, and the wait then reports green having
+    waited for none of them.
+    """
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "tests.yml").write_text(
+        "name: Tests\non:\n  pull_request:\njobs:\n\n", encoding="utf-8")
+    with pytest.raises(UnreadableWorkflow, match="no jobs"):
+        expected_checks(workflows)
+
+
 def test_no_workflows_at_all_refuses_to_answer(tmp_path: Path) -> None:
     """An empty bar would make every reply green, including no reply at all."""
     empty = tmp_path / "workflows"
