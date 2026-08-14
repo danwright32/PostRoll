@@ -563,6 +563,39 @@ final class BannerLegibilityTests: XCTestCase {
         }
     }
 
+    /// Every stage pill state, taken from the type rather than from a list
+    /// here, so an eighth stage cannot arrive with nobody reading its colours
+    /// (#582, L113).
+    ///
+    /// This is per state and not per family on purpose. The pill's wash is its
+    /// own colour, so each state is a different measurement: the seven stages
+    /// ran from 2.42:1 to 3.67:1, and judging the family on one sample would
+    /// have reported whichever one was picked.
+    func testEveryStagePillStateIsCovered() {
+        for state in StagePillState.allPillStates {
+            XCTAssertTrue(PaintedSurfaces.all.contains { $0.surface == "stage pill \(state)" },
+                          "the \(state) pill draws a wash with its own label on it and "
+                          + "nothing checks the two against each other")
+        }
+    }
+
+    /// The pill's wash and its ink are two different colours (#582).
+    ///
+    /// They were one, drawn as both the fill and the type on that fill, which
+    /// is the shape this whole file exists for. If a state ever returns the
+    /// same colour twice the ratio walk still passes at 1:1 for the pair
+    /// composited over the row, because a 14% wash of a colour is not that
+    /// colour, so the walk alone cannot say this went back.
+    func testNoStagePillDrawsItsLabelInItsOwnWash() {
+        for state in StagePillState.allPillStates {
+            let pill = PaintedSurfaces.stagePill(state)
+            XCTAssertNotEqual(NSColor(pill.wash.composited(over: PaintedSurfaces.eventRowAtRest)),
+                              NSColor(pill.ink),
+                              "the \(state) pill draws its label in the colour of its "
+                              + "own wash")
+        }
+    }
+
     /// The measurement has to be able to fail, or every ratio above is
     /// decoration (L1). Type drawn in the colour behind it is exactly 1:1, and
     /// that is the defect this whole file exists for.
@@ -597,16 +630,24 @@ final class BannerLegibilityTests: XCTestCase {
     /// self-confirming check the pairs exist to avoid. Comments are stripped,
     /// because these files explain the naming in prose right beside the code
     /// (L103), and each assertion is scoped to the file it is about (L135).
+    ///
+    /// Every view file, not the five #574 named (#582). A list of the files
+    /// somebody had thought about is exactly the list a new painted surface is
+    /// missing from, and seventeen other files were painting fills nothing
+    /// could read the words against, including the stage pill: seven washes of
+    /// a colour with that same colour as the label on them, between 2.42:1 and
+    /// 3.67:1, under a design note claiming they were calibrated for it (L96).
     func testEveryPaintedFileDrawsFromTheNamedColours() throws {
-        let files = [
-            "Sources/Views/BrandBanner.swift",
-            "Sources/Views/SharedChrome.swift",
-            "Sources/Views/GenerationScreenBodies.swift",
-            "Sources/Views/PhotoAssignmentBodies.swift",
-            "Sources/Views/Insights/AnalyticsStalenessNotice.swift",
-        ]
+        let files = try everyViewFile()
+
+        // A sweep that reads nothing objects to nothing (L98). The five-file
+        // version of this could not have told you it had gone blind either.
+        XCTAssertGreaterThan(files.count, 20,
+                             "the sweep read \(files.count) view files, so it is proving "
+                             + "nothing about the ones it did not open")
+
         for relative in files {
-            let code = try viewSource(relative)
+            let code = try viewSource("Sources/Views/\(relative)")
             XCTAssertFalse(code.contains(".background(Color."), """
                 \(relative) paints a background from a colour written at the point of \
                 use. Nothing can check the words against it, because nothing else can \
@@ -631,14 +672,8 @@ final class BannerLegibilityTests: XCTestCase {
     /// goes through `pageAccentText` or `iconAccent`, the pair walk above holds
     /// each of them to its own level.
     func testTheAccentIsNeverDrawnUnnamed() throws {
-        let views = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // PostRollApp
-            .appendingPathComponent("Sources/Views")
-        let files = try FileManager.default
-            .subpathsOfDirectory(atPath: views.path)
-            .filter { $0.hasSuffix(".swift") }
-            .filter { !$0.hasSuffix("PaintedSurfaces.swift") }
+        let views = viewsDir
+        let files = try everyViewFile()
 
         // Finding nothing to look at is not a pass (L98). If this walk ever
         // stops seeing the view tree it would report every screen as clean.
@@ -693,6 +728,26 @@ final class BannerLegibilityTests: XCTestCase {
                 and stays green whatever it is drawn in.
                 """)
         }
+    }
+
+    private var viewsDir: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // PostRollApp
+            .appendingPathComponent("Sources/Views")
+    }
+
+    /// Every view file, at any depth, minus the one that holds the names.
+    ///
+    /// One walk shared by both sweeps rather than a copy each, so widening the
+    /// tree cannot reach one of them and leave the other reading a subset
+    /// nobody notices (L16).
+    private func everyViewFile() throws -> [String] {
+        try FileManager.default
+            .subpathsOfDirectory(atPath: viewsDir.path)
+            .filter { $0.hasSuffix(".swift") }
+            .filter { !$0.hasSuffix("PaintedSurfaces.swift") }
+            .sorted()
     }
 
     private func viewSource(_ relative: String) throws -> String {

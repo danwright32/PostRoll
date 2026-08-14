@@ -82,7 +82,7 @@ struct ExportView: View {
                 }
             }
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         .onAppear {
             if let path = UserDefaults.standard.string(forKey: "lastExportFolder") {
                 let candidate = URL(fileURLWithPath: path)
@@ -502,12 +502,12 @@ private struct ExportSummaryCard: View {
                 }
             }
             if result?.blog != nil {
-                Divider().background(Color.creamEdge)
+                Divider().background(PaintedSurfaces.edgeRule)
                 ExportBlogRow(blog: result?.blog)
             }
         }
         .padding(Spacing.md)
-        .background(Color.creamDeep)
+        .background(PaintedSurfaces.deepPage)
         .clipShape(RoundedRectangle(cornerRadius: Radius.md))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.md)

@@ -51,7 +51,7 @@ struct ProgramUploadView: View {
                         .padding(.vertical, 6)
                         .background(
                             RoundedRectangle(cornerRadius: Radius.xs)
-                                .fill(Color.creamDeep)
+                                .fill(PaintedSurfaces.deepPage)
                                 .overlay(RoundedRectangle(cornerRadius: Radius.xs)
                                     .strokeBorder(Color.creamEdge, lineWidth: 1))
                         )
@@ -115,7 +115,7 @@ struct ProgramUploadView: View {
             }
             .padding(Spacing.xl)
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         .fileImporter(
             isPresented: $showingFilePicker,
             allowedContentTypes: [.pdf, .image],
@@ -431,7 +431,7 @@ private struct ProgramDropZone: View {
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: 180)
-        .background(Color.creamDeep)
+        .background(PaintedSurfaces.deepPage)
         .overlay(
             RoundedRectangle(cornerRadius: Radius.lg)
                 .strokeBorder(Color.roseGold.opacity(0.3),
@@ -460,7 +460,7 @@ private struct ProgramDropZone: View {
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: 180)
-        .background(Color.creamDeep)
+        .background(PaintedSurfaces.deepPage)
         .overlay(
             RoundedRectangle(cornerRadius: Radius.lg)
                 .strokeBorder(
@@ -603,7 +603,7 @@ struct StageStepBar: View {
                 ForEach(Array(StageNavigation.steps.enumerated()), id: \.element) { index, stage in
                     if index > 0 {
                         Rectangle()
-                            .fill(Color.creamEdge)
+                            .fill(PaintedSurfaces.edgeRule)
                             .frame(width: 12, height: 1)
                     }
                     step(stage)

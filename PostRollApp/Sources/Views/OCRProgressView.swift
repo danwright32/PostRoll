@@ -70,7 +70,7 @@ struct OCRProgressView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         // start() is synchronous and idempotent: it kicks off the app-scoped run
         // (a no-op if one is already in flight) so remounting on an event switch
         // resumes showing the same run instead of launching a duplicate.
@@ -211,7 +211,7 @@ private struct OCRShimmerLine: View {
             ZStack(alignment: .leading) {
                 // Dim track
                 Capsule()
-                    .fill(Color.roseGold.opacity(0.15))
+                    .fill(PaintedSurfaces.shimmerTrack)
 
                 // Travelling highlight
                 Capsule()

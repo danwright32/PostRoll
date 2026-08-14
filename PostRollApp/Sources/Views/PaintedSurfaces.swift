@@ -162,6 +162,166 @@ enum PaintedSurfaces {
     /// both roles and so the one the accent has to clear.
     static let deepPage = Color.creamDeep
 
+    // MARK: - The rest of the app's painted surfaces (#582)
+    //
+    // #574 named the surfaces the notices paint. Seventeen other view files
+    // still painted a fill from a colour written at the point of use, where
+    // nothing can name it and so nothing can read the words against it. These
+    // are those, by the role each one plays rather than by the colour it
+    // happens to be, so a pair says which surface it is about.
+
+    /// A hairline rule between two areas. A border, not a surface: nothing is
+    /// drawn on it, so it is judged by the same reasoning as the banner
+    /// hairlines below.
+    static let edgeRule = Color.creamEdge
+
+    // The event list.
+
+    /// The row at rest. `EventRowBackground` paints this opaque so the system
+    /// accent selection cannot bleed through.
+    static let eventRow = Color.creamDeep
+    static let eventRowSelectedFill = Color.roseGold.opacity(0.12)
+    static let eventRowSelectedSpine = Color.roseGold
+    static let eventRowHoverFill = Color.roseGold.opacity(0.05)
+
+    /// The two row backgrounds a stage pill's wash is composited over. A
+    /// selected row is a third, and the pill drops its own colour there in
+    /// favour of the system label colour, so it is not one of these.
+    static var eventRowAtRest: Color { eventRow }
+    static var eventRowHovered: Color { eventRowHoverFill.composited(over: eventRow) }
+
+    /// The count of hidden exported events, on the archive toggle.
+    static let exportedCountBadge = Color.warmMid
+    static let exportedCountText = Color.cream
+
+    // Photo assignment.
+
+    /// A tag already on a photo, and the accounts the event suggests.
+    static let tagChipFill = Color.roseGold.opacity(0.14)
+    static let tagChipText = Color.warmDark
+    static let tagChipRemoveIcon = Color.warmMid
+    static let suggestionChipFill = Color.roseGold.opacity(0.10)
+
+    /// How many photos are on a day, drawn over the photo itself.
+    ///
+    /// Opaque, and deeper than the accent. It used to be `roseGold` at 65% over
+    /// whatever the photograph happened to be: over a bright frame that put
+    /// its label at 2.35:1, and no fill that lets the picture through can
+    /// promise anything, because the picture is the half nobody controls
+    /// (#582).
+    static let photoCountBadge = Color.roseButton
+    static let photoCountText = Color.cream
+
+    /// The section washes that separate the assignment panes.
+    static let sectionWash = Color.roseGold.opacity(0.02)
+
+    /// The button that moves to the next step, hand-rolled rather than styled.
+    /// Drawn from the button style's own fill, which #569 deepened for exactly
+    /// this reason: `roseGold` under a cream label is 4.31:1.
+    static var nextStepFill: Color { BrandButtonStyle.fill }
+    static var nextStepLabel: Color { BrandButtonStyle.label }
+
+    // Controls drawn on top of a photograph.
+    //
+    // The background here is a photograph, which is the one surface the app
+    // does not choose. So these are measured against the worst case a
+    // photograph can be, a white frame, and the scrim has to be dark enough on
+    // its own to carry the icon. It was 0.4, which put a 90% white glyph at
+    // 2.61:1 over a bright picture, under the 3:1 an icon needs. One strength
+    // now, at the 0.55 the carousel counter already used, rather than three.
+
+    /// What a photograph is measured as when it could be anything.
+    static let brightestPhoto = Color.white
+    static let photoScrim = Color.black.opacity(0.55)
+    static let photoScrimIcon = Color.white.opacity(0.9)
+    static let photoScrimText = Color.white
+
+    /// The panel that explains why cell editing is off, over the collage.
+    static let photoHintPanel = Color.black.opacity(0.65)
+
+    // OCR review.
+
+    /// A suggested correction, and the control that dismisses it. The icon was
+    /// `warmMid` at half strength, which is 1.98:1 on this row (#582).
+    static let suggestionRowFill = Color.warmDark.opacity(0.03)
+    static let suggestionRowDismissIcon = Color.warmMid
+    /// The panel offering to reflow a page.
+    static let reflowPanelFill = Color.roseGold.opacity(0.05)
+    /// A flag whose correction has been accepted, faded back.
+    static let resolvedFlagFill = Color.cream.opacity(0.5)
+
+    /// The track the OCR shimmer travels along.
+    ///
+    /// Deliberately not a pair. It is the rail behind the moving highlight, and
+    /// the highlight is what says the run is alive; nothing is drawn on the
+    /// rail and no meaning rests on it alone, which is the same reasoning the
+    /// hairlines below are exempt under. What reviews it instead is the ink
+    /// measurement, which a track that stopped drawing would move (L129).
+    static let shimmerTrack = Color.roseGold.opacity(0.15)
+
+    /// Caption review's brand-note field and its tagged-accounts strip.
+    static let noteFieldFill = Color.roseGold.opacity(0.06)
+    static let taggedAccountsFill = Color.roseGold.opacity(0.10)
+    /// The tile that adds a black-and-white treatment, and the placeholder
+    /// where a collage has not rendered yet.
+    static let addTreatmentFill = Color.warmFaint.opacity(0.3)
+    static let imagePlaceholderFill = Color.warmMid.opacity(0.1)
+    /// A cell the drag is over.
+    static let dropTargetFill = Color.roseGold.opacity(0.18)
+    static let dropTargetMarker = Color.roseGold
+
+    /// The Instagram post preview.
+    ///
+    /// Deliberately not pairs. This card is a drawing of somebody else's
+    /// product, so it is white because Instagram is white, and holding it to
+    /// this app's palette would be holding a photograph of a thing to the
+    /// thing's own rules. Named for the same reason `mastheadWordmark` is: so
+    /// the exemption is a decision somebody made rather than a gap the check
+    /// cannot see (L129).
+    static let instagramCard = Color.white
+    static let instagramAvatarRing = Color.white
+    static let instagramOverlayButton = Color.white.opacity(0.92)
+
+    /// The wash the pill draws behind its label, and the ink on it, for one
+    /// state (#582).
+    ///
+    /// One place decides both, so a state cannot get a wash without getting
+    /// the ink that was measured against it. The pill used to return a single
+    /// colour used as fill AND as type, which is the shape #580 took apart for
+    /// the accent: a colour that clears the level for a wash does not thereby
+    /// clear it for the words on that wash.
+    ///
+    /// The wash comes back at the strength it is drawn at, not as the colour it
+    /// is made from, so the view has no opacity of its own to apply and the
+    /// check cannot be measuring a different number from the one that ships.
+    static func stagePill(_ state: StagePillState) -> (wash: Color, ink: Color) {
+        let (colour, ink) = stagePillColours(state)
+        return (colour.opacity(0.14), ink)
+    }
+
+    private static func stagePillColours(_ state: StagePillState) -> (Color, Color) {
+        switch state {
+        case .reading, .generating, .exporting, .finishingMedia:
+            return (Color.roseGold, Color.stageBusyInk)
+        case .readingFailed, .generationFailed:
+            return (Color.roseDeep, Color.stageFailedInk)
+        case .awaitingGeneration:
+            return (Color.stagePhotosAssigned, Color.stagePhotosAssignedInk)
+        case .awaitingExport:
+            return (Color.stageCaptionsReviewed, Color.stageCaptionsReviewedInk)
+        case .stage(let stage):
+            switch stage {
+            case .created:          return (.stageCreated, .stageCreatedInk)
+            case .programUploaded:  return (.stageProgramUploaded, .stageProgramUploadedInk)
+            case .ocrDone:          return (.stageOCRDone, .stageOCRDoneInk)
+            case .photosAssigned:   return (.stagePhotosAssigned, .stagePhotosAssignedInk)
+            case .assetsGenerated:  return (.stageAssetsGenerated, .stageAssetsGeneratedInk)
+            case .captionsReviewed: return (.stageCaptionsReviewed, .stageCaptionsReviewedInk)
+            case .exported:         return (.stageExported, .stageExportedInk)
+            }
+        }
+    }
+
     /// Every colour named here, keyed by the name a call site writes.
     ///
     /// Naming these moved them out of reach of the checks that read source and
@@ -197,6 +357,43 @@ enum PaintedSurfaces {
         "pageAccentText": pageAccentText,
         "iconAccent": iconAccent,
         "mastheadWordmark": mastheadWordmark,
+        "edgeRule": edgeRule,
+        "eventRow": eventRow,
+        "eventRowSelectedFill": eventRowSelectedFill,
+        "eventRowSelectedSpine": eventRowSelectedSpine,
+        "eventRowHoverFill": eventRowHoverFill,
+        "eventRowAtRest": eventRowAtRest,
+        "eventRowHovered": eventRowHovered,
+        "exportedCountBadge": exportedCountBadge,
+        "exportedCountText": exportedCountText,
+        "tagChipFill": tagChipFill,
+        "tagChipText": tagChipText,
+        "tagChipRemoveIcon": tagChipRemoveIcon,
+        "suggestionChipFill": suggestionChipFill,
+        "photoCountBadge": photoCountBadge,
+        "photoCountText": photoCountText,
+        "sectionWash": sectionWash,
+        "nextStepFill": nextStepFill,
+        "nextStepLabel": nextStepLabel,
+        "brightestPhoto": brightestPhoto,
+        "photoScrim": photoScrim,
+        "photoScrimIcon": photoScrimIcon,
+        "photoScrimText": photoScrimText,
+        "photoHintPanel": photoHintPanel,
+        "suggestionRowFill": suggestionRowFill,
+        "suggestionRowDismissIcon": suggestionRowDismissIcon,
+        "reflowPanelFill": reflowPanelFill,
+        "resolvedFlagFill": resolvedFlagFill,
+        "shimmerTrack": shimmerTrack,
+        "noteFieldFill": noteFieldFill,
+        "taggedAccountsFill": taggedAccountsFill,
+        "addTreatmentFill": addTreatmentFill,
+        "imagePlaceholderFill": imagePlaceholderFill,
+        "dropTargetFill": dropTargetFill,
+        "dropTargetMarker": dropTargetMarker,
+        "instagramCard": instagramCard,
+        "instagramAvatarRing": instagramAvatarRing,
+        "instagramOverlayButton": instagramOverlayButton,
     ]
 
     /// Not a surface anybody sees. The outline button is a border and a label,
@@ -281,6 +478,61 @@ enum PaintedSurfaces {
             pairs.append(Pair(name, "on the page", colour, on: page, kind))
             pairs.append(Pair(name, "on the deeper page", colour, on: deepPage, kind))
         }
+
+        // Every stage pill, on both of the row backgrounds it can sit on
+        // (#582). Per state rather than one sample of the family: the wash is
+        // the pill's own colour, so each state is a different measurement and
+        // the seven stages ran from 2.42:1 to 3.67:1 while nothing looked.
+        for state in StagePillState.allPillStates {
+            let pill = stagePill(state)
+            for (where_, row) in [("at rest", eventRowAtRest), ("hovered", eventRowHovered)] {
+                let wash = pill.wash.composited(over: row)
+                pairs.append(Pair("stage pill \(state)", "label, row \(where_)",
+                                  pill.ink, on: wash, .bodyText))
+            }
+        }
+
+        pairs.append(Pair("exported count badge", "count",
+                          exportedCountText, on: exportedCountBadge, .bodyText))
+
+        let tagChip = tagChipFill.composited(over: page)
+        pairs.append(Pair("tag chip", "tag", tagChipText, on: tagChip, .bodyText))
+        pairs.append(Pair("tag chip", "remove icon",
+                          tagChipRemoveIcon, on: tagChip, .interfaceElement))
+        pairs.append(Pair("suggestion chip", "account",
+                          pageAccentText, on: suggestionChipFill.composited(over: page),
+                          .bodyText))
+
+        // Measured over the brightest a photograph can be, which is the only
+        // honest worst case for a surface drawn on top of a picture.
+        pairs.append(Pair("photo count badge", "count",
+                          photoCountText, on: photoCountBadge, .bodyText))
+        let scrim = photoScrim.composited(over: brightestPhoto)
+        pairs.append(Pair("photo scrim", "icon", photoScrimIcon, on: scrim, .interfaceElement))
+        pairs.append(Pair("photo scrim", "counter", photoScrimText, on: scrim, .bodyText))
+        pairs.append(Pair("photo hint panel", "sentence", photoScrimText,
+                          on: photoHintPanel.composited(over: brightestPhoto), .bodyText))
+
+        pairs.append(Pair("next step button", "label",
+                          nextStepLabel, on: nextStepFill, .bodyText))
+
+        let suggestionRow = suggestionRowFill.composited(over: page)
+        pairs.append(Pair("suggestion row", "sentence",
+                          Color.warmDark, on: suggestionRow, .bodyText))
+        pairs.append(Pair("suggestion row", "dismiss icon",
+                          suggestionRowDismissIcon, on: suggestionRow, .interfaceElement))
+        pairs.append(Pair("reflow panel", "sentence", Color.warmDark,
+                          on: reflowPanelFill.composited(over: page), .bodyText))
+        pairs.append(Pair("resolved flag", "sentence", Color.warmDark,
+                          on: resolvedFlagFill.composited(over: deepPage), .bodyText))
+        pairs.append(Pair("section wash", "sentence", Color.warmDark,
+                          on: sectionWash.composited(over: page), .bodyText))
+        pairs.append(Pair("brand note field", "the note", Color.warmDark,
+                          on: noteFieldFill.composited(over: page), .bodyText))
+        pairs.append(Pair("tagged accounts strip", "handle", pageAccentText,
+                          on: taggedAccountsFill.composited(over: page), .bodyText))
+        pairs.append(Pair("add treatment tile", "label", pageAccentText,
+                          on: addTreatmentFill.composited(over: page), .bodyText))
 
         return pairs
     }

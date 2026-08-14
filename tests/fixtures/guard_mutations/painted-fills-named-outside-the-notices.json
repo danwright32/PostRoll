@@ -1,0 +1,8 @@
+{
+  "name": "painted-fills-named-outside-the-notices",
+  "file": "PostRollApp/Sources/Views/CollaboratorPanel.swift",
+  "find": "                .fill(PaintedSurfaces.deepPage)",
+  "replace": "                .fill(Color.creamDeep)",
+  "test": "PostRollTests/BannerLegibilityTests/testEveryPaintedFileDrawsFromTheNamedColours",
+  "breaks": "a view file outside the five the notices live in paints an unnamed fill again, which is the state seventeen files were in while the check read only those five and reported a clean sweep (#582)"
+}

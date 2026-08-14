@@ -84,7 +84,7 @@ struct InsightsSidebarView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.creamDeep)
+        .background(PaintedSurfaces.deepPage)
         .navigationTitle("")
     }
 }

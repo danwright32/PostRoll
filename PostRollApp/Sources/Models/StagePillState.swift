@@ -24,6 +24,20 @@ enum StagePillState: Equatable {
     case awaitingExport
     case stage(EventStage)
 
+    /// Every state the pill can be in, including one per stage.
+    ///
+    /// The pill is coloured per state and its label is drawn on a wash of that
+    /// same colour, so the legibility of each one is its own measurement rather
+    /// than something the family can be judged on from a single sample (#582).
+    /// Derived from `EventStage.allCases` rather than listed again, because a
+    /// hand-written copy is exactly the entry a new stage would be missing from
+    /// while the walk still reported a clean run (L96).
+    static var allPillStates: [StagePillState] {
+        [.reading, .readingFailed, .generating, .generationFailed,
+         .exporting, .finishingMedia, .awaitingGeneration, .awaitingExport]
+        + EventStage.allCases.map { .stage($0) }
+    }
+
     /// True for any in-flight background work — drives the pulsing dot.
     var isBusy: Bool {
         switch self {

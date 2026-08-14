@@ -40,10 +40,10 @@ struct InsightsOrgsView: View {
                     }
                 }
                 .scrollContentBackground(.hidden)
-                .background(Color.cream)
+                .background(PaintedSurfaces.page)
             }
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
     }
 }
 
@@ -106,6 +106,6 @@ private struct OrgsEmptyState: View {
                 .frame(maxWidth: 260)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
     }
 }

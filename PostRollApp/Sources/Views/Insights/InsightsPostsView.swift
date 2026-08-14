@@ -46,7 +46,7 @@ struct InsightsPostsView: View {
             }
             .padding(.horizontal, Spacing.lg)
             .padding(.vertical, Spacing.md)
-            .background(Color.creamDeep)
+            .background(PaintedSurfaces.deepPage)
 
             Color.creamEdge.frame(height: 0.5)
 
@@ -71,7 +71,7 @@ struct InsightsPostsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.cream)
+                .background(PaintedSurfaces.page)
             } else {
                 List {
                     ForEach(filteredPosts) { post in
@@ -82,10 +82,10 @@ struct InsightsPostsView: View {
                     }
                 }
                 .scrollContentBackground(.hidden)
-                .background(Color.cream)
+                .background(PaintedSurfaces.page)
             }
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         // Attached to the screen, never to the non-empty branch. Inside that
         // branch the List and the toolbar's search field both leave the
         // hierarchy the moment a query matches nothing, so the state Dan is
@@ -208,6 +208,6 @@ private struct PostsEmptyState: View {
                 .frame(maxWidth: 260)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
     }
 }

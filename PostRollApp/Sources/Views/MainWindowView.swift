@@ -22,7 +22,7 @@ struct MainWindowView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .frame(maxWidth: .infinity)
-                .background(Color.creamDeep)
+                .background(PaintedSurfaces.deepPage)
 
                 Color.creamEdge.frame(height: 0.5)
 
@@ -40,7 +40,7 @@ struct MainWindowView: View {
                 if let id = appState.selectedEventID,
                    let event = appState.events.first(where: { $0.id == id }) {
                     EventDetailView(event: event)
-                        .background(Color.cream)
+                        .background(PaintedSurfaces.page)
                 } else {
                     WelcomeDetailView(
                         hasEvents: !appState.events.isEmpty,
@@ -70,7 +70,7 @@ struct MainWindowView: View {
                     }]
                 )
                 .padding(Spacing.md)
-                .background(Color.cream)
+                .background(PaintedSurfaces.page)
             }
         }
         // Solid cream toolbar — no vibrancy, no blending against other windows
@@ -190,7 +190,7 @@ private struct WelcomeDetailView: View {
         }
         .frame(maxWidth: 340)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
     }
 }
 
