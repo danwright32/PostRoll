@@ -1,0 +1,8 @@
+{
+  "name": "green-run-log-survives-xcbeautify",
+  "file": "PostRollApp/build-install.sh",
+  "find": "    (command -v xcbeautify >/dev/null && xcbeautify < \"${SWIFT_LOG}\" || cat \"${SWIFT_LOG}\")\n    rm -f \"${SWIFT_LOG}\"\n  else",
+  "replace": "    (command -v xcbeautify >/dev/null && xcbeautify < /dev/null || cat \"${SWIFT_LOG}\")\n    rm -f \"${SWIFT_LOG}\"\n  else",
+  "test": "tests/test_build_and_test_gates.py::test_the_swift_output_reaches_the_operator_through_xcbeautify",
+  "breaks": "the Swift log is captured to classify it and then swallowed on the branch that runs wherever xcbeautify is installed, which is every machine the app is actually built on, so a green run tells the operator nothing about what ran (#510)"
+}
