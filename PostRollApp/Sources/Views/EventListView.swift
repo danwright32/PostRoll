@@ -132,7 +132,7 @@ struct EventListView: View {
                             ZStack(alignment: .topTrailing) {
                                 Image(systemName: "archivebox")
                                     .font(.system(size: 14))
-                                    .foregroundStyle(showExported ? Color.roseGold : Color.warmMid)
+                                    .foregroundStyle(showExported ? PaintedSurfaces.iconAccent : Color.warmMid)
                                     .frame(width: 18, height: 18)
                                 if !showExported {
                                     Text("\(exportedCount)")
@@ -156,7 +156,7 @@ struct EventListView: View {
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.iconAccent)
                             .frame(width: 18, height: 18)
                     }
                     .buttonStyle(.plain)
@@ -184,7 +184,7 @@ struct EventListView: View {
                     Button("Clear Search") { searchText = "" }
                         .buttonStyle(.plain)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                         .padding(.top, Spacing.xs)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -199,7 +199,7 @@ struct EventListView: View {
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.creamDeep)
@@ -489,7 +489,7 @@ private struct UndoBanner: View {
             Spacer()
             Button("Undo", action: onUndo)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
                 .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
@@ -522,7 +522,7 @@ struct HashtagSettingsSheet: View {
                 Button("Done") { saveGlobal(); dismiss() }
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
             .padding(Spacing.lg)
 
@@ -535,7 +535,7 @@ struct HashtagSettingsSheet: View {
                         Text("GLOBAL HASHTAGS")
                             .font(.system(size: 10, weight: .medium))
                             .tracking(0.8)
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                         Text("Added to every caption automatically.")
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
@@ -558,7 +558,7 @@ struct HashtagSettingsSheet: View {
                         Text("PRESETS")
                             .font(.system(size: 10, weight: .medium))
                             .tracking(0.8)
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                         Text("Apply a saved group of hashtags to any caption with one tap.")
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
@@ -647,7 +647,7 @@ struct HashtagSettingsSheet: View {
                             Button("Add preset…") { showingAddPreset = true }
                                 .buttonStyle(.plain)
                                 .font(.system(size: 12))
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.pageAccentText)
                                 .padding(.top, 2)
                         }
                     }

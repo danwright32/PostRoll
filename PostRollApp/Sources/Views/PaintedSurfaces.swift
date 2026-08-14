@@ -127,6 +127,78 @@ enum PaintedSurfaces {
     static let refusalNoteText = Color.warmMid
     static let outlineButtonLabel = Color.roseDeep
 
+    // MARK: - The accent in its two roles (#580)
+    //
+    // A colour that clears the level for an icon does not thereby clear it for
+    // TEXT: an interface component needs 3:1 and body text needs 4.5:1. Measured,
+    // `roseGold` is 4.31:1 on the page and 3.68:1 on `creamDeep`, which is fine
+    // for a rule or a symbol and under the line for a label, and it was drawn as
+    // both in about ninety places. Nothing could report it: ink measures whether
+    // type DREW, and this type draws perfectly well, it is simply too pale.
+    //
+    // So the two roles are two names. Which one a call site uses says what it is
+    // drawing, `testTheAccentIsNeverDrawnUnnamed` refuses the raw colour in any
+    // foreground, and both names are held against the two backgrounds this app
+    // has, at the level their own role asks for.
+
+    /// The accent as TYPE: a label, a link-styled button, a tracked heading.
+    static let pageAccentText = Color.roseDeep
+
+    /// The accent as an ICON, a rule or a symbol, where 3:1 is the level and
+    /// `roseGold` clears it on both backgrounds. Unchanged, so nothing that was
+    /// drawn as a mark rather than as words moves.
+    static let iconAccent = Color.roseGold
+
+    /// The window's wordmark, at 44pt.
+    ///
+    /// Deliberately not in the pair list. A logotype is exempt from the contrast
+    /// requirement, and this one is drawn faint on purpose as the backdrop to an
+    /// empty window rather than as something to read. Named anyway so the raw
+    /// accent cannot come back through here, and named separately so the
+    /// exemption is a decision somebody made rather than a gap (L129).
+    static let mastheadWordmark = Color.roseGold
+
+    /// The deeper of the two page colours, which is the harder background for
+    /// both roles and so the one the accent has to clear.
+    static let deepPage = Color.creamDeep
+
+    /// Every colour named here, keyed by the name a call site writes.
+    ///
+    /// Naming these moved them out of reach of the checks that read source and
+    /// recognise `Color.<token>`: `VisibleControlGuardTests` decides whether a
+    /// plain button is drawn in a body-text colour that way, and a name it
+    /// cannot resolve reads as "no colour set", which can never offend. A guard
+    /// that has gone blind is indistinguishable from one that is passing, so
+    /// this is how a name is turned back into the colour it draws.
+    ///
+    /// `testEveryNamedColourIsResolvable` holds this to the declarations in this
+    /// file, so a name added without an entry fails there rather than silently
+    /// exempting whatever it is put on (L96).
+    static let byName: [String: Color] = [
+        "page": page,
+        "deepPage": deepPage,
+        "runNotePanel": runNotePanel,
+        "runNoteText": runNoteText,
+        "failureCardPanel": failureCardPanel,
+        "failureCardLabel": failureCardLabel,
+        "failureCardMessage": failureCardMessage,
+        "summaryPanel": summaryPanel,
+        "summaryBorder": summaryBorder,
+        "summaryValue": summaryValue,
+        "summaryLabel": summaryLabel,
+        "missingMediaPanel": missingMediaPanel,
+        "missingMediaBorder": missingMediaBorder,
+        "missingMediaIcon": missingMediaIcon,
+        "missingMediaMessage": missingMediaMessage,
+        "missingMediaAction": missingMediaAction,
+        "refusalNoteText": refusalNoteText,
+        "outlineButtonLabel": outlineButtonLabel,
+        "outlineButtonHitArea": outlineButtonHitArea,
+        "pageAccentText": pageAccentText,
+        "iconAccent": iconAccent,
+        "mastheadWordmark": mastheadWordmark,
+    ]
+
     /// Not a surface anybody sees. The outline button is a border and a label,
     /// and a shape with no fill takes no clicks in its middle, so this is the
     /// hit area, drawn at an alpha low enough to be invisible. Named anyway,
@@ -198,6 +270,17 @@ enum PaintedSurfaces {
 
         pairs.append(Pair("refusal note", "sentence",
                           refusalNoteText, on: page, .bodyText))
+
+        // Both roles of the accent, on both of the app's page colours, each at
+        // the level its own role asks for. The deeper page is the harder one,
+        // and it is where the accent as type was furthest under.
+        for (name, colour, kind) in [
+            ("accent text", pageAccentText, Kind.bodyText),
+            ("accent icon", iconAccent, Kind.interfaceElement),
+        ] {
+            pairs.append(Pair(name, "on the page", colour, on: page, kind))
+            pairs.append(Pair(name, "on the deeper page", colour, on: deepPage, kind))
+        }
 
         return pairs
     }

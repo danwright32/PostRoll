@@ -1,0 +1,8 @@
+{
+  "name": "accent-is-never-drawn-unnamed",
+  "file": "PostRollApp/Sources/Views/ExportDoneSummary.swift",
+  "find": "                    .foregroundStyle(PaintedSurfaces.pageAccentText)",
+  "replace": "                    .foregroundStyle(Color.roseGold)",
+  "test": "PostRollTests/BannerLegibilityTests/testTheAccentIsNeverDrawnUnnamed",
+  "breaks": "a screen draws a foreground in the raw accent, which does not say whether it is type or a symbol, so nothing can hold it to the level its role asks for (#580)"
+}

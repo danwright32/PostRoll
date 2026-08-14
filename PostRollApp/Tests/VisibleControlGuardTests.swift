@@ -1,4 +1,6 @@
 import XCTest
+import SwiftUI
+import AppKit
 
 /// #395: an action that IS the decision on its screen has to look like a
 /// control at rest.
@@ -53,7 +55,63 @@ final class VisibleControlGuardTests: XCTestCase {
 
     /// Colours that are the same as ordinary text, so a control wearing one is
     /// indistinguishable from a label.
-    private static let labelColours = ["warmMid", "warmDark", "warmFaint"]
+    private static let labelColours: [Color] = [.warmMid, .warmDark, .warmFaint]
+
+    /// Whether a colour written at a call site is one of those.
+    ///
+    /// Two spellings reach here: the token itself, and a name from
+    /// `PaintedSurfaces`, which is how every accent is written since #580.
+    /// Resolving only the first would read a named colour as "nothing set",
+    /// which can never offend, so this guard would go quietly blind on exactly
+    /// the sites the naming moved. A name that resolves to nothing is a failure
+    /// rather than a pass, for the same reason (L42).
+    private func isLabelColour(_ written: String) throws -> Bool {
+        if let colour = Self.resolve(written) {
+            return Self.labelColours.contains { same($0, colour) }
+        }
+        if written == "unset" { return false }
+        XCTFail("""
+            \(written) is drawn on a plain button and this check cannot resolve it to a \
+            colour, so it cannot tell whether that button looks like a label. Add it to \
+            PaintedSurfaces.byName.
+            """)
+        return false
+    }
+
+    /// A colour as written at a call site, or nil when this cannot say.
+    ///
+    /// Nil is what the caller turns into a failure. Kept separate from the
+    /// judgement so the nil path can be exercised: a fail-closed branch nobody
+    /// has watched behave is a branch nobody knows works (L1).
+    static func resolve(_ written: String) -> Color? {
+        if written.hasPrefix("PaintedSurfaces.") {
+            return PaintedSurfaces.byName[String(written.dropFirst("PaintedSurfaces.".count))]
+        }
+        if written.hasPrefix("Color.") {
+            return token(named: String(written.dropFirst("Color.".count)))
+        }
+        return nil
+    }
+
+    /// The palette tokens this rule is about, by the name a call site writes.
+    /// Only the ones that matter here: anything else resolves through
+    /// `PaintedSurfaces.byName` or fails above.
+    private static func token(named name: String) -> Color? {
+        ["warmMid": Color.warmMid, "warmDark": .warmDark, "warmFaint": .warmFaint,
+         "roseGold": .roseGold, "roseDeep": .roseDeep, "roseButton": .roseButton,
+         "cream": .cream, "creamDeep": .creamDeep, "creamEdge": .creamEdge,
+         "hairline": .hairline, "white": .white, "black": .black,
+         "primary": .primary, "secondary": .secondary, "clear": .clear][name]
+    }
+
+    private func same(_ a: Color, _ b: Color) -> Bool {
+        guard let one = NSColor(a).usingColorSpace(.sRGB),
+              let two = NSColor(b).usingColorSpace(.sRGB) else { return false }
+        return abs(one.redComponent - two.redComponent) < 0.001
+            && abs(one.greenComponent - two.greenComponent) < 0.001
+            && abs(one.blueComponent - two.blueComponent) < 0.001
+            && abs(one.alphaComponent - two.alphaComponent) < 0.001
+    }
 
     private var viewsDir: URL {
         URL(fileURLWithPath: #filePath)
@@ -93,8 +151,15 @@ final class VisibleControlGuardTests: XCTestCase {
                 while end + 1 < lines.count, lines[end + 1].trimmingCharacters(in: .whitespaces).hasPrefix(".") { end += 1 }
                 let chain = lines[start...end].joined(separator: "\n")
                 var colour = "unset"
-                if let r = chain.range(of: #"foregroundStyle\(\s*Color\.\w+"#, options: .regularExpression) {
-                    colour = String(chain[r]).components(separatedBy: "Color.").last ?? "unset"
+                // Both spellings: the palette token, and a name from
+                // PaintedSurfaces, which is how the accent is written since
+                // #580. Matching only the first left every renamed site reading
+                // as "unset", which no rule below can ever object to.
+                if let r = chain.range(of: #"foregroundStyle\(\s*(Color|PaintedSurfaces)\.\w+"#,
+                                       options: .regularExpression) {
+                    colour = String(chain[r])
+                        .replacingOccurrences(of: #"foregroundStyle\(\s*"#, with: "",
+                                              options: .regularExpression)
                 }
                 sites.append((url.lastPathComponent, label, colour))
             }
@@ -118,6 +183,20 @@ final class VisibleControlGuardTests: XCTestCase {
                    + "text, so the only way to discover them is to click words and find out")
     }
 
+    /// The resolver decides whether this whole file can see anything, so its
+    /// answers are checked rather than assumed. A name it cannot resolve has to
+    /// come back nil, which the caller turns into a failure: reading it as "no
+    /// colour set" instead is how a guard goes green while blind (#580).
+    func testTheColourResolverAnswersForBothSpellingsAndRefusesTheRest() {
+        XCTAssertEqual(Self.resolve("PaintedSurfaces.pageAccentText"),
+                       PaintedSurfaces.pageAccentText)
+        XCTAssertEqual(Self.resolve("Color.warmMid"), Color.warmMid)
+        XCTAssertNil(Self.resolve("PaintedSurfaces.aNameNobodyDeclared"),
+                     "an unresolvable name has to be reported as unresolvable, not as "
+                     + "some colour this check is then happy about")
+        XCTAssertNil(Self.resolve("someLocal"))
+    }
+
     func testEveryListedDecisionStillExists() throws {
         try assertNothingIsStale(Self.decisions)
     }
@@ -138,10 +217,12 @@ final class VisibleControlGuardTests: XCTestCase {
                              "the scan found almost no plain buttons, so it has stopped working",
                              file: file, line: line)
 
-        let offenders = sites.filter { site in
-            registry.contains("\(site.file)|\(site.label)")
-                && Self.labelColours.contains(site.colour)
-        }.map { "\($0.file): \($0.label) is \($0.colour)" }
+        var offenders: [String] = []
+        for site in sites where registry.contains("\(site.file)|\(site.label)") {
+            if try isLabelColour(site.colour) {
+                offenders.append("\(site.file): \(site.label) is \(site.colour)")
+            }
+        }
 
         XCTAssertTrue(offenders.isEmpty, """
             \(reason):

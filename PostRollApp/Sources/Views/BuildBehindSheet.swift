@@ -33,7 +33,7 @@ struct BuildBehindSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         Image(systemName: "clock.arrow.circlepath")
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.iconAccent)
                         Text("PostRoll is out of date")
                             .font(.signPainter(28))
                             .foregroundStyle(Color.warmDark)

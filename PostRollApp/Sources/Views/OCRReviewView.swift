@@ -521,11 +521,11 @@ private struct ReviewSectionRow<Content: View>: View {
                     Text(title.uppercased())
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.iconAccent : Color.warmMid)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .contentShape(Rectangle())
@@ -631,7 +631,7 @@ private struct PerformersEditor: View {
                     } label: {
                         Label("Look up handles", systemImage: "magnifyingglass")
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
                     .buttonStyle(.plain)
 
@@ -660,7 +660,7 @@ private struct PerformersEditor: View {
                         } label: {
                             Label("Replace from website", systemImage: "globe")
                                 .font(.system(size: 12))
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.pageAccentText)
                         }
                         .buttonStyle(.plain)
 
@@ -816,7 +816,7 @@ private struct HandleSuggestionRow: View {
                 if let handle = suggestion.handle {
                     Text(handle)
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
             }
 
@@ -990,7 +990,7 @@ private struct PiecesEditor: View {
                                 systemImage: "globe"
                             )
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                         }
                         .buttonStyle(.plain)
 
@@ -1242,7 +1242,7 @@ private struct BrandAddButton: View {
         Button(action: action) {
             Label(label, systemImage: "plus.circle")
                 .font(.system(size: 12))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
         }
         .buttonStyle(.plain)
         .padding(.top, 2)
@@ -1277,7 +1277,7 @@ private struct OCRUndoBanner: View {
             Spacer()
             Button("Undo", action: onUndo)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
                 .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
@@ -1372,13 +1372,13 @@ private struct FlagReviewSection: View {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.iconAccent)
                 Text(unresolvedCount > 0
                      ? "\(unresolvedCount) ISSUE\(unresolvedCount == 1 ? "" : "S") TO REVIEW"
                      : "ALL ISSUES RESOLVED")
                     .font(.system(size: 10, weight: .medium))
                     .tracking(1.2)
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
             Text("Claude flagged these items as possibly wrong. Edit the value, keep the OCR text, or describe the correction in your own words.")
                 .font(.light(11))
@@ -1462,7 +1462,7 @@ private struct FlagRow: View {
                 HStack(alignment: .top, spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 10))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.iconAccent)
                     Text(confirmation)
                         .font(.light(11))
                         .foregroundStyle(Color.warmDark)
@@ -1492,7 +1492,7 @@ private struct FlagRow: View {
                 if let err = reflowError {
                     Text(err)
                         .font(.light(10))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: 8) {
@@ -1565,7 +1565,7 @@ private struct FlagRow: View {
                     Text(pathLabel.uppercased())
                         .font(.system(size: 9, weight: .medium))
                         .tracking(1.1)
-                        .foregroundStyle(Color.roseGold.opacity(0.7))
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                     Text(flag.concern)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmDark)
@@ -1604,7 +1604,7 @@ private struct FlagRow: View {
                         HStack(spacing: 4) {
                             Text("Claude suggests:")
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(Color.roseGold.opacity(0.8))
+                                .foregroundStyle(PaintedSurfaces.pageAccentText)
                             Text(flag.suggestedValue)
                                 .font(.system(size: 10))
                                 .foregroundStyle(Color.warmDark)
@@ -1648,7 +1648,7 @@ private struct FlagRow: View {
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(draftIsChange ? Color.roseGold : Color.warmFaint)
+                        .foregroundStyle(draftIsChange ? PaintedSurfaces.pageAccentText : Color.warmFaint)
                         .disabled(!draftIsChange)
                         .help("Replace the \(fieldName) value with what you typed.")
 
@@ -1660,7 +1660,7 @@ private struct FlagRow: View {
                     if let err = applyError {
                         Text(err)
                             .font(.light(10))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {

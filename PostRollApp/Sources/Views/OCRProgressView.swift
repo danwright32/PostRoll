@@ -90,7 +90,7 @@ struct OCRProgressView: View {
                 Text("Reading Program")
                     .font(.system(size: 10, weight: .medium))
                     .tracking(1.4)
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
 
             // Shimmer line — the alive signal, replaces the system spinner
@@ -124,7 +124,7 @@ struct OCRProgressView: View {
                     // anything is happening.
                     Text(elapsedText)
                         .font(.system(size: 22, weight: .light, design: .monospaced))
-                        .foregroundStyle(Color.roseGold.opacity(0.6))
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                         .monospacedDigit()
 
                     if footer.isStalled {
@@ -159,7 +159,7 @@ struct OCRProgressView: View {
         VStack(spacing: Spacing.lg) {
             Image(systemName: "exclamationmark.circle")
                 .font(.system(size: 44))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.iconAccent)
 
             VStack(spacing: 6) {
                 Text("OCR Failed")

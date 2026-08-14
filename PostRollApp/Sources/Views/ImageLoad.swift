@@ -78,7 +78,7 @@ struct MissingPhotoBadge: View {
             VStack(spacing: 2) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: iconSize))
-                    .foregroundStyle(Color.roseGold.opacity(0.85))
+                    .foregroundStyle(PaintedSurfaces.iconAccent.opacity(0.85))
                 Text("missing")
                     .font(.system(size: labelSize, weight: .medium))
                     .foregroundStyle(Color.warmMid)
