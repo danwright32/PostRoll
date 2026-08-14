@@ -33,8 +33,13 @@ from postroll.media import generate_reel_slider as slider_mod
 from postroll.media import program_plate as plate_mod
 from postroll.media import text_regions
 from postroll.media.frame_legibility import MovingTextRegion, TextRegion
-from postroll.media.generate_before_after import generate_before_after
+from reel_render_fixtures import LOGO, PHOTO_SIZE, SAMPLES
 
+# The Thursday scrolling reel's checks live in
+# `test_thursday_reel_legibility.py` since #512: this file was a shard on its
+# own and nothing could divide it further while it was one file. What is left
+# here is the measurement itself, the template registry, and the Tuesday reel.
+#
 # Every check in this file renders a real reel and reads pixels back, which is
 # where the suite's time goes. `make test-python-fast` deselects it; CI and
 # `make test-python` still run it (#413).
@@ -43,17 +48,6 @@ pytestmark = pytest.mark.slow
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LOGO = str(REPO_ROOT / "postroll" / "assets" / "logo-black.png")
-
-#: How many frames each reel is read at. Spread across the whole file, because
-#: the placards crossfade and the labels slide: an element that is only wrong
-#: halfway through is exactly what one frame cannot show.
-SAMPLES = 12
-
-#: The size every photo fixture here is built at. The morph's print rectangle
-#: is a function of it, so the bands are derived from this rather than read back
-#: off the module after a render (L70, #323).
-PHOTO_SIZE = (2000, 1332)
 
 
 # ── the measurement ──────────────────────────────────────────────────────────
@@ -361,70 +355,6 @@ def test_the_colophon_search_starts_below_the_header():
 # ── the reels themselves, read back out of the encoded file ──────────────────
 
 
-def _structured_photo(path: Path, seed: int) -> str:
-    """A structured stand-in, not flat colour: a flat photo makes every band it
-    touches trivially uniform and hides a placement regression."""
-    img = Image.new("RGB", PHOTO_SIZE)
-    pixels = img.load()
-    for y in range(0, PHOTO_SIZE[1], 2):
-        for x in range(0, PHOTO_SIZE[0], 4):
-            shade = ((x // 40) + (y // 40) + seed) % 3
-            colour = [(150, 96, 74), (66, 52, 48), (196, 158, 120)][shade]
-            for dx in range(4):
-                pixels[x + dx, y] = colour
-                pixels[x + dx, y + 1] = colour
-    img.save(path, "JPEG", quality=92)
-    return str(path)
-
-
-@pytest.fixture
-def photos(tmp_path) -> list[str]:
-    return [_structured_photo(tmp_path / f"p{seed}.jpg", seed) for seed in range(10)]
-
-
-#: Enough photographs that the strip is genuinely taller than the canvas.
-#:
-#: Measured rather than guessed: at ten the generator prints "strip shorter than
-#: canvas, scroll collapsed to a hold" and the colophon sits in one place for the
-#: whole file. A moving-band check recorded against that would be a check of a
-#: still, passing forever while the thing it exists to follow never moved (L84).
-SCROLLING_PHOTOS = 16
-
-
-@pytest.fixture
-def many_photos(tmp_path) -> list[str]:
-    return [_structured_photo(tmp_path / f"m{seed}.jpg", seed)
-            for seed in range(SCROLLING_PHOTOS)]
-
-
-@pytest.fixture
-def silent_audio(tmp_path) -> str:
-    """A local silent track: handed no audio the generators fetch from Jamendo,
-    so a test that passed None would call a third-party service on every run."""
-    path = tmp_path / "silence.m4a"
-    subprocess.run(
-        ["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-         "-t", "45", "-c:a", "aac", str(path)],
-        check=True, capture_output=True)
-    return str(path)
-
-
-@pytest.fixture
-def closing_graphic(photos, tmp_path) -> str:
-    """The before/after graphic every Tuesday reel ends on.
-
-    Rendered by the shipped generator rather than stood in for, because the
-    reel dissolves into THIS image and holds on it for three seconds: a
-    stand-in would put a different design in the window under test.
-    """
-    path = tmp_path / "closing.png"
-    generate_before_after(
-        raw_path=photos[0], edit_path=photos[1], output_path=str(path),
-        event_name="Reference Event", org="Reference Org",
-        venue="Reference Venue", logo_path=LOGO)
-    return str(path)
-
-
 @needs_ffmpeg
 @needs_mac_fonts
 def test_the_tuesday_reel_reads_all_the_way_through(
@@ -617,120 +547,6 @@ def test_the_reel_ends_holding_the_closing_graphic(
     assert worst < SAME_PICTURE, (
         f"the {which} reel's closing hold differs from the graphic it was "
         f"given by {worst:.1f} of 255, so it is holding on something else")
-
-
-def assert_the_strip_really_scrolls(photo_paths, seed):
-    """The fixture must build a strip taller than the canvas.
-
-    Below that the generator prints "strip shorter than canvas, scroll
-    collapsed to a hold", pads the strip and renders a still. Every Thursday
-    reel test used to run in that state, so nothing about the scroll was ever
-    checked and the tests read as though it was (#319, L101).
-
-    Asserted from the strip rather than from the photo count, because the count
-    at which a strip clears the canvas moves with the row rhythm, the gaps and
-    the colophon. A number pinned here would silently stop meaning what it says.
-    """
-    strip = scroll_mod.build_collage_strip(list(photo_paths), seed=seed, logo_path=LOGO)
-    assert strip.height > scroll_mod.CANVAS_H, (
-        f"this fixture builds a {strip.width}x{strip.height} strip against a "
-        f"{scroll_mod.CANVAS_W}x{scroll_mod.CANVAS_H} canvas, so the generator "
-        "collapses the scroll to a static hold and the reel never moves. "
-        "Whatever this test believes it is checking about a scrolling reel, it "
-        "is not.")
-
-
-@needs_ffmpeg
-@needs_mac_fonts
-def test_the_thursday_reel_header_reads_all_the_way_through(
-        many_photos, silent_audio, tmp_path):
-    # A short scroll rather than the shipping 40 seconds. `scroll_duration` is a
-    # real parameter of the generator, not a seam opened for the test, and the
-    # header chrome under test does not change with the duration.
-    #
-    # The header is pinned to the frame, so it does not move with the strip, but
-    # the reel still has to be a scrolling one: a still cannot show a header
-    # sitting over photographs passing beneath it.
-    assert_the_strip_really_scrolls(many_photos, seed=298)
-
-    video = scroll_mod.generate_reel_scroll(
-        photo_paths=many_photos, audio_path=silent_audio,
-        output_path=str(tmp_path / "scroll.mp4"),
-        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
-        seed=298, scroll_duration=4.0, logo_path=LOGO)
-
-    frames = legibility.sample_frames(video, SAMPLES)
-
-    assert legibility.illegible(frames, text_regions.scroll_regions()) == []
-
-
-@needs_ffmpeg
-@needs_mac_fonts
-def test_the_thursday_reel_colophon_reads_wherever_it_scrolls_to(
-        many_photos, silent_audio, tmp_path):
-    """#306: the mark is found in each frame rather than declared.
-
-    `tests/test_gallery_alignment.py` checks the colophon in the STRIP, before
-    any of it is animated or encoded. This is the same element read back out of
-    the file that gets uploaded, which is where the pixel format, the colour
-    range and the compression have had their say.
-
-    Also asserts the sample really did straddle the mark going off screen. Any
-    band the search could match on every single frame would be something other
-    than a colophon travelling with the strip, and the check would be following
-    the wrong thing while reporting a clean reading.
-    """
-    assert_the_strip_really_scrolls(many_photos, seed=306)
-
-    video = scroll_mod.generate_reel_scroll(
-        photo_paths=many_photos, audio_path=silent_audio,
-        output_path=str(tmp_path / "scroll-colophon.mp4"),
-        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
-        seed=306, scroll_duration=4.0, logo_path=LOGO)
-
-    frames = legibility.sample_frames(video, SAMPLES)
-    regions = text_regions.scroll_moving_regions(LOGO)
-    assert regions, "the colophon has to be checked, not skipped"
-
-    assert legibility.illegible_moving(frames, regions) == []
-
-    bands = [legibility.find_ink_band(frame, regions[0]) for frame in frames]
-    assert any(b is not None for b in bands), "the render never showed the mark"
-    assert any(b is None for b in bands), (
-        "the mark was found on every frame of a scrolling strip, so the search "
-        "is matching something that does not travel with it")
-
-
-@needs_ffmpeg
-@needs_mac_fonts
-def test_a_white_wordmark_on_the_cream_mat_fails_the_thursday_colophon(
-        many_photos, silent_audio, tmp_path):
-    """The guard seen refusing on a real encoded render (LESSONS.md L1).
-
-    The wrong mark file, which is the defect that has shipped on this element
-    more than once: white ink on the cream mat, invisible, with the render
-    otherwise completely normal.
-    """
-    white = tmp_path / "logo-white.png"
-    with Image.open(LOGO) as source:
-        rgba = source.convert("RGBA")
-    pixels = rgba.load()
-    for y in range(rgba.height):
-        for x in range(rgba.width):
-            pixels[x, y] = (255, 255, 255, pixels[x, y][3])
-    rgba.save(white)
-
-    video = scroll_mod.generate_reel_scroll(
-        photo_paths=many_photos, audio_path=silent_audio,
-        output_path=str(tmp_path / "scroll-white.mp4"),
-        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
-        seed=306, scroll_duration=4.0, logo_path=str(white))
-
-    frames = legibility.sample_frames(video, SAMPLES)
-    failures = legibility.illegible_moving(
-        frames, text_regions.scroll_moving_regions(str(white)))
-
-    assert any("colophon" in f for f in failures), failures
 
 
 @needs_ffmpeg

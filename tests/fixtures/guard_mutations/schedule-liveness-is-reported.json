@@ -1,0 +1,8 @@
+{
+  "name": "schedule-liveness-is-reported",
+  "file": ".github/workflows/guards.yml",
+  "find": "        run: python tools/check_guard_sweep_freshness.py",
+  "replace": "        run: echo skipped",
+  "test": "tests/test_ci_gates.py::test_the_guard_job_says_whether_the_schedule_is_still_alive",
+  "breaks": "nothing asks whether the weekly sweep is still firing, so GitHub disabling the schedule after 60 days without a push stops the guards being re-proved and reports it nowhere (#554)"
+}

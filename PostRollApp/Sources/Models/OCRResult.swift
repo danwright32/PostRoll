@@ -21,8 +21,19 @@ struct OCRResult: Codable, Hashable, Sendable {
     /// on none of them (#262).
     var other: String = ""
 
+    /// Pages the scan could not read, named by the path they were sent under
+    /// (#518).
+    ///
+    /// Empty means the run read everything. A large programme is read in
+    /// several paid calls, and a call that dies takes its pages with it while
+    /// the rest are kept; before this the pages it lost existed only in a log
+    /// line, so closing the gap meant re-running the whole scan and paying
+    /// again for every page that had already been read.
+    var unreadPages: [String] = []
+
     enum CodingKeys: String, CodingKey {
         case performers, pieces, scenes, other
+        case unreadPages       = "unread_pages"
         case organizationNotes = "organization_notes"
         case programNotes      = "program_notes"
         case venueNotes        = "venue_notes"
@@ -43,6 +54,7 @@ extension OCRResult {
         venueNotes        = try c.decodeIfPresent(String.self,         forKey: .venueNotes)        ?? ""
         productionDetails = try c.decodeIfPresent(String.self,         forKey: .productionDetails) ?? ""
         other             = try c.decodeIfPresent(String.self,         forKey: .other)             ?? ""
+        unreadPages       = try c.decodeIfPresent([String].self,       forKey: .unreadPages)       ?? []
     }
 }
 

@@ -9,6 +9,11 @@ import pytest
 from pathlib import Path
 from PIL import Image, ImageFont
 
+#: The rendered-reel fixtures, shared by the two frame-legibility files since
+#: #512 split them apart. Registered here rather than imported by each file, so
+#: neither has to know where the other's inputs come from.
+pytest_plugins = ["reel_render_fixtures"]
+
 
 # ── ffmpeg gate (#106) ────────────────────────────────────────────────────────
 #

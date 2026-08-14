@@ -169,3 +169,19 @@ jobs:
 
       - name: Re-prove every guard
         run: python tools/check_guards.py
+
+      # Whether the SCHEDULED sweep is still happening at all (#554). The weekly
+      # trigger's failure mode is silence: GitHub disables a repository's
+      # schedules after 60 days with no push and reports that nowhere, so
+      # without this the guards could stop being re-proved with nothing saying
+      # so.
+      #
+      # `always()` on purpose. This is an independent check that happens to
+      # share a job, and letting a red sweep above it skip the question of
+      # whether the schedule is alive would make the two failures hide each
+      # other (L73).
+      - name: Say whether the scheduled sweep is still running
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/check_guard_sweep_freshness.py

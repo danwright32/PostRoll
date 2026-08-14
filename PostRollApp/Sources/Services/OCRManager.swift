@@ -188,6 +188,27 @@ final class OCRManager {
     /// clears it instead, in `finishSuccess`, so it cannot outlive the fix.
     static let partialReadNoteKey = "This scan"
 
+    /// What to say about the pages a finished run could not read, or nil when
+    /// it read them all (#518).
+    ///
+    /// Names the pages rather than saying part of the programme is missing,
+    /// because "check the whole cast list against the printed programme" is a
+    /// job and "page 4 is missing" is a glance. A message that names its target
+    /// is also the thing a re-scan of just those pages can hang off (L80).
+    // nonisolated: it is a pure function of its argument, and the message it
+    // builds is worth checking without standing up the manager.
+    nonisolated static func unreadPagesNote(_ unread: [String]) -> String? {
+        guard !unread.isEmpty else { return nil }
+        let names = unread.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let list = names.joined(separator: ", ")
+        let subject = names.count == 1 ? "This page could not be read"
+                                       : "These pages could not be read"
+        return "\(subject): \(list). Everything else in the programme was read "
+             + "and is below. Scan again to fill the gap, or check the cast list "
+             + "and notes against the printed programme for what those "
+             + "\(names.count == 1 ? "page holds" : "pages hold")."
+    }
+
 
     private func finishSuccess(eventID: Event.ID, snapshot ev: Event, result: OCRResult,
                                flags: [OCRFlag], flagError: String?,
@@ -206,8 +227,16 @@ final class OCRManager {
         // flag pass and the vision check, which have their own fields: one
         // status field shared by two checks lets a pass from one erase the
         // other's failure (L53).
-        if let partialRead {
-            updated.partialProgramNotes[Self.partialReadNoteKey] = partialRead
+        //
+        // Both partial paths decide it here, through one rule (L16). A run that
+        // DIES partway arrives with `partialRead` set by the catch above. A run
+        // that FINISHES with one of its paid calls having failed arrives here
+        // normally, and used to say nothing at all: the cast list was short by
+        // whatever those pages held and the screen looked like a clean read
+        // (#518).
+        let note = partialRead ?? Self.unreadPagesNote(result.unreadPages)
+        if let note {
+            updated.partialProgramNotes[Self.partialReadNoteKey] = note
         } else {
             updated.partialProgramNotes.removeValue(forKey: Self.partialReadNoteKey)
         }
