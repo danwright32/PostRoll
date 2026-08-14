@@ -1,0 +1,142 @@
+name: Guard proofs
+
+# Re-running the recorded proof that each guard actually goes red (#541).
+#
+# The registry holds one entry per guard: a one line perturbation that breaks
+# the thing the guard protects, and the test that has to fail when it does.
+# `tests/test_guard_mutation_registry.py` runs on every suite and checks the
+# cheap half, that every anchor still matches its file exactly once and every
+# named test exists. The expensive half, actually applying each perturbation and
+# requiring the guard to fail, only ran when somebody typed `make check-guards`.
+#
+# A guard is only real once it has been seen to fail (L1), so a proof nothing
+# re-runs decays into a claim while the registry keeps reporting itself
+# consistent. These two jobs are the re-running.
+#
+# macOS because half the entries perturb Swift and are proved by xcodebuild,
+# and macos-26 specifically because that is the image carrying the Xcode that
+# PostRollApp/.ci-xcode-version pins. The step selecting it refuses rather than
+# falling back to whatever the image ships, which is how this job failed the
+# first time it ran on the wrong image: loudly, listing what was there.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Every pull request re-proves the entries its OWN diff touches. Cheap,
+  # because a diff usually touches none or one, and it is the half that catches
+  # the case that matters most: a guard edited into uselessness in the same
+  # change that edits it.
+  changed:
+    if: github.event_name == 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      # Full history: --changed diffs against the merge base with origin/main,
+      # and a shallow checkout has no merge base to find.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Select the recorded Xcode
+        run: |
+          version="$(cat PostRollApp/.ci-xcode-version)"
+          app="/Applications/Xcode_${version}.app"
+          if [ ! -d "${app}" ]; then
+            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
+            echo "on this runner image. What it has:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "${app}"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: PostRollApp
+        run: xcodegen generate
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Prints what it skipped and why, because "0 entries affected" is a real
+      # answer here and has to be told apart from a run that found nothing to do
+      # because it was broken (L98).
+      - name: Re-prove the guards this diff touches
+        run: python tools/check_guards.py --changed
+
+  # The whole registry, on every merge to main.
+  #
+  # The pull request leg above re-proves an entry when the code it guards, its
+  # own record, or its own test file changes. What it cannot know about is what
+  # sits UNDERNEATH those tests: the shared conftest nearly every test imports,
+  # or a shared fixture module. A change there can quietly stop a guard failing
+  # on broken code while touching neither the guarded file nor the guard's test,
+  # so no pull request would re-prove it (L88, a filtered job skipping the very
+  # change that breaks it).
+  #
+  # On merges rather than on a schedule, deliberately. It costs nothing on a day
+  # with no merges, it runs within minutes of the shared change actually
+  # landing, and a scheduled job has two failure modes this one does not: its
+  # failures are only as visible as GitHub's own email, and GitHub disables a
+  # repository's schedules after 60 days without a push, which reports nothing
+  # at all rather than reporting that it stopped (L13).
+  #
+  # Measured before choosing: 60 entries are proved by xcodebuild at about 13s
+  # each with a warm cache and 57 by pytest at under a second, so the sweep is
+  # roughly 15 minutes of proving plus one build. The timeout is a backstop at
+  # four times that, not an expectation.
+  full:
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Select the recorded Xcode
+        run: |
+          version="$(cat PostRollApp/.ci-xcode-version)"
+          app="/Applications/Xcode_${version}.app"
+          if [ ! -d "${app}" ]; then
+            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
+            echo "on this runner image. What it has:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "${app}"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: PostRollApp
+        run: xcodegen generate
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Re-prove every guard
+        run: python tools/check_guards.py

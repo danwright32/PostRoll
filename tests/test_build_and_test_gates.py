@@ -20,6 +20,7 @@ from conftest import ffmpeg_required, should_skip_ffmpeg_tests
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_INSTALL = REPO_ROOT / "PostRollApp" / "build-install.sh"
+CACHE_PATH_FILE = REPO_ROOT / "PostRollApp" / "derived-data-path.sh"
 
 
 # ── #106: the ffmpeg gate ─────────────────────────────────────────────────────
@@ -126,6 +127,9 @@ def test_a_missing_venv_is_refused_rather_than_counted_as_a_pass(tmp_path, monke
     fake_repo = tmp_path / "repo"
     (fake_repo / "PostRollApp").mkdir(parents=True)
     shutil.copy2(BUILD_INSTALL, fake_repo / "PostRollApp" / "build-install.sh")
+    # The script sources this for the shared build-cache location (#485), so a
+    # copy of the script without it cannot run at all.
+    shutil.copy2(CACHE_PATH_FILE, fake_repo / "PostRollApp" / "derived-data-path.sh")
     # No venv/ in fake_repo at all.
 
     env = dict(os.environ)
@@ -188,6 +192,9 @@ def test_the_swift_output_still_reaches_the_operator_on_a_green_run(tmp_path):
     fake_repo = tmp_path / "repo"
     (fake_repo / "PostRollApp").mkdir(parents=True)
     shutil.copy2(BUILD_INSTALL, fake_repo / "PostRollApp" / "build-install.sh")
+    # The script sources this for the shared build-cache location (#485), so a
+    # copy of the script without it cannot run at all.
+    shutil.copy2(CACHE_PATH_FILE, fake_repo / "PostRollApp" / "derived-data-path.sh")
 
     env = dict(os.environ)
     env["PATH"] = f"{stubs}:{env['PATH']}"

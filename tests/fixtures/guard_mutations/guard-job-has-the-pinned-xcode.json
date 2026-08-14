@@ -1,0 +1,8 @@
+{
+  "name": "guard-job-has-the-pinned-xcode",
+  "file": ".github/workflows/guards.yml",
+  "find": "  changed:\n    if: github.event_name == 'pull_request'\n    runs-on: macos-26",
+  "replace": "  changed:\n    if: github.event_name == 'pull_request'\n    runs-on: macos-15",
+  "test": "tests/test_ci_gates.py::test_the_guard_job_runs_on_the_image_that_has_the_pinned_xcode",
+  "breaks": "the guard proofs run on an image without the Xcode the repo pins, so the job can never pass and the proofs stop being re-run at all (#541)"
+}

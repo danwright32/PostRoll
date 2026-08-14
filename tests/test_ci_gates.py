@@ -26,6 +26,7 @@ worth it, and the strings below are the exact ones that were wrong.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -259,3 +260,244 @@ def test_the_requirements_file_is_not_empty():
     lines = [ln for ln in REQUIREMENTS.read_text().splitlines()
              if ln.strip() and not ln.strip().startswith("#")]
     assert len(lines) >= 4, f"only {len(lines)} dependencies listed, so the scan proves little"
+
+
+# ── the suite also runs on the platform the app runs on (#510) ────────────────
+
+
+def test_the_suite_runs_on_a_mac_as_well_as_linux():
+    """Everything but four font-dependent files ran on Linux only, while the app
+    that calls this pipeline runs on Dan's Mac. Path handling, the ffmpeg build
+    and its codecs, font fallbacks and filesystem case all differ, and every one
+    of those stayed invisible until it was hit locally."""
+    text = TESTS.read_text()
+    assert "macos" in text.lower(), "the Mac leg is gone, so the suite is Linux only again"
+
+
+def test_the_mac_leg_runs_the_same_command_as_the_linux_one():
+    """A narrower command here would make this a different check wearing the
+    same name, and a platform difference is exactly what a subset drops. This is
+    the no-silent-caps rule: if the Mac leg ever runs less, it has to say so
+    here rather than quietly cover less."""
+    runs = re.findall(r"run: (pytest[^\n]*)", TESTS.read_text())
+    assert len(runs) >= 2, f"expected a pytest command per leg, found {runs}"
+    assert len(set(runs)) == 1, (
+        f"the legs run different commands, so one of them covers less than its "
+        f"name suggests: {sorted(set(runs))}")
+
+
+def test_ci_builds_the_configuration_that_ships(swift):
+    """`make install` builds Release, so Release is what reaches Dan's machine.
+
+    CI used to build without naming a configuration, which means Debug, and the
+    two compile differently: a data race error Release refuses and Debug accepts
+    sat on main for three merges with every check green (#485).
+    """
+    build_step = swift.split("Build the app", 1)[1].split("- name:", 1)[0]
+    assert "-configuration Release" in build_step, (
+        "the app build does not name Release, so the configuration Dan actually "
+        "installs is never compiled by CI")
+
+
+# ── the guard proofs are re-run rather than only recorded (#541) ──────────────
+
+GUARDS = REPO_ROOT / ".github" / "workflows" / "guards.yml"
+
+
+@pytest.fixture
+def guards() -> str:
+    return GUARDS.read_text(encoding="utf-8")
+
+
+def test_the_guard_proofs_have_a_workflow_at_all(guards):
+    assert "check_guards.py" in guards, (
+        "nothing re-runs the recorded proofs, so they decay into a claim while "
+        "the registry keeps reporting itself consistent (L1)")
+
+
+def test_every_pull_request_reproves_the_entries_it_touches(guards):
+    """The half that catches a guard edited into uselessness by the same change
+    that edits it."""
+    assert "pull_request:" in guards
+    assert "--changed" in guards, (
+        "no leg scopes the proof to the diff, so a pull request re-proves "
+        "nothing of its own")
+
+
+def test_the_whole_registry_is_reproved_on_every_merge(guards):
+    """The half that catches a guard broken by something UNDERNEATH it.
+
+    The diff-scoped leg re-proves an entry when the code it guards, its record,
+    or its own test file changes. It cannot know about the shared conftest
+    nearly every test imports, or a shared fixture module: a change there can
+    stop a guard failing on broken code while touching none of the three, so no
+    pull request would re-prove it (L88).
+    """
+    assert re.search(r"push:\s*\n\s*branches:\s*\[main\]", guards), (
+        "nothing runs the full sweep, so the expensive half only happens when "
+        "somebody remembers to type it")
+
+    # It has to be the FULL sweep. Scoping this one to a diff would report green
+    # on every merge while proving nothing, because a merge commit's diff
+    # against main is empty (L98).
+    full = guards.split("  full:", 1)[1]
+    assert "--changed" not in full, (
+        "the merge run is scoped to a diff, and a merge has no diff against "
+        "main, so it would prove nothing while reporting green")
+
+    # A backstop, not an expectation: measured at roughly 15 minutes of proving
+    # plus one build. An hour-plus timeout on a job this size hides a hang.
+    timeout = re.search(r"  full:.*?timeout-minutes:\s*(\d+)", guards, re.S)
+    assert timeout and int(timeout.group(1)) <= 120, (
+        "the timeout is far above the measured runtime, so a wedged run bills "
+        "for hours before anything says so")
+
+
+def test_it_can_be_run_by_hand(guards):
+    assert "workflow_dispatch:" in guards
+
+
+def test_the_changed_leg_can_find_a_merge_base(guards):
+    """`--changed` diffs against the merge base with origin/main, and a shallow
+    checkout has none, which the tool reports as an error rather than as an
+    empty result."""
+    changed = guards.split("changed:", 1)[1].split("nightly:", 1)[0]
+    assert "fetch-depth: 0" in changed, (
+        "the diff-scoped leg checks out shallow, so it cannot find a merge base")
+
+
+# ── the failure paths of the thing that workflow runs ─────────────────────────
+#
+# The config assertions above prove the workflow says the right words. These
+# prove the command behind those words fails loudly on the two ways a scoped
+# run can come up empty, because "0 entries affected" is a legitimate answer
+# here and has to be distinguishable from a run that found nothing because it
+# was broken (L98).
+
+
+def _scratch_repo(tmp_path: Path) -> Path:
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for args in (["init", "-q", "-b", "main"],
+                 ["config", "user.email", "t@example.com"],
+                 ["config", "user.name", "T"]):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+    (repo / "a.txt").write_text("x\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "first"], cwd=repo, check=True, capture_output=True)
+    return repo
+
+
+def test_a_scoped_run_with_nothing_to_diff_against_refuses(tmp_path):
+    """A checkout with no origin/main and no upstream, which is what a shallow
+    clone in CI looks like. It must refuse rather than report that no guard
+    needed proving: those two look identical from the outside, and only one of
+    them means the guards were checked."""
+    import shutil
+    import subprocess
+
+    repo = _scratch_repo(tmp_path)
+    (repo / "tools").mkdir()
+    shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    (repo / "tests" / "fixtures" / "guard_mutations").mkdir(parents=True)
+    shutil.copy(
+        next((REPO_ROOT / "tests" / "fixtures" / "guard_mutations").glob("*.json")),
+        repo / "tests" / "fixtures" / "guard_mutations")
+
+    result = subprocess.run(
+        ["python3", "tools/check_guards.py", "--changed"],
+        cwd=repo, capture_output=True, text=True)
+
+    assert result.returncode != 0, (
+        "a scoped run with no base to diff against exited 0, so a shallow "
+        f"checkout in CI would report green having proven nothing:\n{result.stdout}")
+    assert "base" in (result.stdout + result.stderr).lower(), (
+        "it failed without saying that the missing base is why")
+
+
+def test_an_empty_registry_refuses_rather_than_passing(tmp_path):
+    """The other empty: a registry with no entries at all. Every assertion a
+    sweep makes would pass vacuously."""
+    import shutil
+    import subprocess
+
+    repo = _scratch_repo(tmp_path)
+    (repo / "tools").mkdir()
+    shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    (repo / "tests" / "fixtures" / "guard_mutations").mkdir(parents=True)
+
+    result = subprocess.run(
+        ["python3", "tools/check_guards.py"],
+        cwd=repo, capture_output=True, text=True)
+
+    assert result.returncode != 0, (
+        f"an empty registry proved nothing and said it passed:\n{result.stdout}")
+
+
+def test_the_guard_job_runs_on_the_image_that_has_the_pinned_xcode(guards):
+    """Half the entries are proved by xcodebuild, and the step that selects the
+    recorded Xcode refuses rather than falling back to whatever the image
+    ships. On the wrong image that is a job that can never pass."""
+    swift_runner = re.search(r"runs-on:\s*(macos-\S+)", SWIFT.read_text(encoding="utf-8"))
+    assert swift_runner, "the Swift workflow names no macOS image"
+
+    images = set(re.findall(r"runs-on:\s*(macos-\S+)", guards))
+    assert images, "the guard workflow names no macOS image"
+    assert images == {swift_runner.group(1)}, (
+        f"the guard jobs run on {sorted(images)} while the Xcode pin is only on "
+        f"{swift_runner.group(1)}")
+
+
+def test_the_guard_runner_does_not_insist_on_a_venv(tmp_path):
+    """The failure path that took the whole guard job down the first time it ran
+    off Dan's Mac.
+
+    Every Python entry reported "the runner failed: no such file" because the
+    interpreter was a hardcoded `venv/bin/python`, which a CI runner does not
+    have. The job went red rather than reporting the guards proven, which is the
+    tool being honest, but it could never pass.
+
+    Driven through the CLI in a checkout with no venv, which is exactly the
+    shape CI checks out, rather than by importing the tool: what has to be true
+    is what the runner gets.
+    """
+    import json as _json
+    import shutil
+    import subprocess
+
+    repo = _scratch_repo(tmp_path)
+    (repo / "tools").mkdir()
+    shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    registry = repo / "tests" / "fixtures" / "guard_mutations"
+    registry.mkdir(parents=True)
+
+    # One entry whose test passes on unbroken code and fails on broken code, so
+    # the run has something real to do without needing this repo's suite.
+    (repo / "guarded.py").write_text("VALUE = 1\n")
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_guarded.py").write_text(
+        "import sys\nsys.path.insert(0, '.')\n"
+        "from guarded import VALUE\n\ndef test_value():\n    assert VALUE == 1\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "guarded"], cwd=repo,
+                   check=True, capture_output=True)
+    (registry / "value-is-one.json").write_text(_json.dumps({
+        "name": "value-is-one",
+        "file": "guarded.py",
+        "find": "VALUE = 1",
+        "replace": "VALUE = 2",
+        "test": "tests/test_guarded.py::test_value",
+        "breaks": "the value changes and nothing notices",
+    }))
+
+    result = subprocess.run(
+        [sys.executable, "tools/check_guards.py", "--only", "value-is-one"],
+        cwd=repo, capture_output=True, text=True, timeout=300)
+
+    combined = result.stdout + result.stderr
+    assert "venv/bin/python" not in combined, (
+        f"the runner still insists on a venv this checkout does not have:\n{combined}")
+    assert "KILLED" in combined, (
+        f"the guard was not proven, so the run did not actually happen:\n{combined}")
+    assert result.returncode == 0, combined

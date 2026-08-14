@@ -272,11 +272,31 @@ def test_a_swift_spec_builds_an_only_testing_xcodebuild(repo: Path):
     assert "test" in cmd
 
 
-def test_a_pytest_spec_runs_through_the_venv(repo: Path):
+def test_a_pytest_spec_runs_through_the_repos_venv_when_there_is_one(repo: Path):
+    venv = repo / "venv" / "bin"
+    venv.mkdir(parents=True, exist_ok=True)
+    (venv / "python").write_text("#!/bin/sh\n")
+
     cmd = command_for(entry(test="tests/test_note.py::test_ink"), repo)
-    assert cmd[0].endswith("venv/bin/python")
+
+    assert cmd[0] == str(venv / "python"), (
+        "this project's pytest and its dependencies live in the venv, so a "
+        "checkout that has one has to be run through it")
     assert "pytest" in cmd
     assert "tests/test_note.py::test_ink" in cmd
+
+
+def test_a_checkout_with_no_venv_uses_the_interpreter_it_is_running_under(repo: Path):
+    """The rule, not the path. This asserted `endswith("venv/bin/python")`,
+    which is true only on a machine that has one: CI checks out without a venv,
+    so every Python guard reported "the runner failed: no such file" and the
+    whole job could never pass (#541).
+    """
+    assert not (repo / "venv").exists()
+
+    cmd = command_for(entry(test="tests/test_note.py::test_ink"), repo)
+
+    assert cmd[0] == sys.executable
 
 
 # ── Reading the verdict ───────────────────────────────────────────────────────

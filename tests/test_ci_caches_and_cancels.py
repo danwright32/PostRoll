@@ -169,14 +169,24 @@ def test_the_swift_tests_build_into_the_folder_that_is_cached(macos):
     cached = re.search(r"path:\s*(\S*derived-data\S*)", macos)
     assert cached, "no derived-data folder is cached"
 
-    built_into = re.search(r"-derivedDataPath\s+(\S+)", macos)
-    assert built_into, (
-        "xcodebuild is not given -derivedDataPath, so it writes to the shared "
-        "default and the cached folder stays empty")
+    # EVERY invocation, not the first one. This read `re.search` until #485,
+    # which only ever looked at the app build, so dropping the flag from the
+    # test step left the guard green: it was checking one call and reporting on
+    # all of them. An invocation without the flag does not fail or warn, it
+    # quietly builds into the shared default and the cached folder stays cold.
+    calls = [c for c in re.findall(r"xcodebuild(?:.*\\\n)*.*", macos)
+             if "-scheme" in c]  # `xcodebuild -version` asks a question, it builds nothing
+    assert len(calls) >= 2, f"the scan found {len(calls)} invocations, so it proves little"
 
-    assert cached.group(1).rstrip("/") == built_into.group(1).rstrip("/"), (
-        f"the cache holds {cached.group(1)} but xcodebuild builds into "
-        f"{built_into.group(1)}, so the cache is never read")
+    for call in calls:
+        built_into = re.search(r"-derivedDataPath\s+(\S+)", call)
+        first_line = call.splitlines()[0].strip()
+        assert built_into, (
+            f"this xcodebuild is not given -derivedDataPath, so it writes to the "
+            f"shared default and the cached folder stays empty: {first_line}")
+        assert cached.group(1).rstrip("/") == built_into.group(1).rstrip("/"), (
+            f"the cache holds {cached.group(1)} but this xcodebuild builds into "
+            f"{built_into.group(1)}, so the cache is never read: {first_line}")
 
 
 def test_the_restore_and_the_save_spell_the_key_one_way(macos):
@@ -214,8 +224,22 @@ def test_the_build_cache_is_measured_against_a_cap_before_it_is_uploaded(macos):
 
 
 def test_the_python_workflow_caches_its_wheels(linux):
-    assert re.search(r"cache:\s*pip", linux), (
-        "every run re-downloads the same pinned wheels")
+    """Every leg, not just whichever one appears first.
+
+    This read `re.search` until the Mac leg arrived in #510 and made two, at
+    which point dropping the setting from one of them left the guard green on
+    the other's. The same shape as the derivedDataPath guard above: a check
+    written when there was one of something, still reporting on all of them
+    once there are two.
+    """
+    setups = re.findall(r"uses:\s*actions/setup-python.*?(?=\n      - |\Z)", linux, re.S)
+    assert len(setups) >= 2, (
+        f"found {len(setups)} Python setups, so this proves less than it claims")
+
+    missing = [i for i, block in enumerate(setups) if not re.search(r"cache:\s*pip", block)]
+    assert not missing, (
+        f"setup-python block(s) {missing} do not cache pip, so those legs "
+        "re-download the same pinned wheels on every run")
 
 
 def test_the_ffmpeg_package_cache_key_carries_the_runner_image(linux):

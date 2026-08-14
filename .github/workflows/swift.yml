@@ -147,11 +147,20 @@ jobs:
       # views: a missing brace in InsightsOverviewView sat on main with every
       # check green, and the app could not be built at all (L3, L88). This is
       # the job that has to notice, because it is the only one with an Xcode.
+      #
+      # Release, which is the configuration `make install` builds and therefore
+      # the only one that reaches Dan's Applications folder. Without naming it
+      # this built Debug, and the two compile differently: a data race error
+      # that Release refuses and Debug accepts sat on main for three merges with
+      # every check green, and was found only when a stale local build cache was
+      # deleted and the first clean Release build in weeks failed (#485).
+      # Debug still gets compiled either way, by the test scheme below.
       - name: Build the app
         run: |
           xcodebuild \
             -project PostRollApp/PostRoll.xcodeproj \
             -scheme PostRoll \
+            -configuration Release \
             -destination 'platform=macOS' \
             -derivedDataPath PostRollApp/.derived-data \
             build
