@@ -317,9 +317,26 @@ def _convert_heic_to_jpeg(src: Path, dest_dir: Path, prefix: str = "") -> Path:
     return dest
 
 
+def _ordered_unique(unread: list[str], order: list[str]) -> list[str]:
+    """The unread pages, once each, in the order the caller listed them.
+
+    A page split into bands can fail three times and is still one page to send
+    again, and the app shows this list to Dan: "pages 3, 3 and 3 could not be
+    read" is not a sentence anybody should meet. Sorted by the caller's own
+    order rather than by when the failures happened, because that is the order
+    the pages are on screen in.
+    """
+    seen = set(unread)
+    named = [page for page in order if page in seen]
+    # Anything that failed under a name the caller did not pass, which should
+    # not happen, is kept rather than dropped: losing a page from this list
+    # silently is the failure the list exists to prevent (L11).
+    return named + [page for page in unread if page not in set(order)]
+
+
 def _normalize_image_paths(
     image_paths: list[str | Path], tmp_dir: Path
-) -> list[str]:
+) -> tuple[list[str], dict[str, str]]:
     """Stage all images into one temp dir, splitting oversized pages into bands.
 
     HEIC files are converted via sips. Other formats are copied as-is.
@@ -336,10 +353,19 @@ def _normalize_image_paths(
     Splitting here rather than at each call site means every OCR prompt (the
     focused ones, the prose pass and the retry) gets it, instead of whichever
     one somebody remembered.
+
+    Returns the staged paths AND where each one came from. The mapping is not
+    positional and cannot be recovered afterwards: one page can become several
+    bands, and the staged copies live in a temp directory that is deleted when
+    the run ends. Anything the caller has to hand back, a page it could not
+    read being the case that matters, has to be named by the path the caller
+    passed in (#518, L15).
     """
     budget = image_budget_for(OCR_MODEL)
     resolved: list[str] = []
+    origins: dict[str, str] = {}
     for i, p in enumerate(image_paths):
+        original = str(p)
         path = Path(p).expanduser().resolve()
         if not path.exists():
             raise FileNotFoundError(f"Program image not found: {path}")
@@ -362,8 +388,10 @@ def _normalize_image_paths(
                   file=sys.stderr, flush=True)
             bands = [Path(staged)]
 
-        resolved.extend(str(b) for b in bands)
-    return resolved
+        for band in bands:
+            resolved.append(str(band))
+            origins[str(band)] = original
+    return resolved, origins
 
 
 def _performer_entry(raw: dict[str, Any]) -> dict[str, Any]:
@@ -646,7 +674,7 @@ def extract_program(image_paths: list[str | Path], *,
     with tempfile.TemporaryDirectory(prefix="postroll-ocr-") as tmp:
         tmp_path = Path(tmp)
         say.step("Preparing the program pages")
-        resolved = _normalize_image_paths(image_paths, tmp_path)
+        resolved, origins = _normalize_image_paths(image_paths, tmp_path)
 
         # Several requests when the program is too big for one. Merged rather
         # than last-one-wins, or the notes from the first pages would silently
@@ -659,6 +687,13 @@ def extract_program(image_paths: list[str | Path], *,
 
         per_batch: list[dict[str, Any] | None] = []
         failures: list[str] = []
+        # Which pages nobody managed to read, carried in the RESULT rather than
+        # only printed (#518). It lived in a log line, so closing the gap meant
+        # re-running the whole scan and paying again for every page that had
+        # already been read. An empty list is a real answer: it says this run
+        # read everything, which a reader has to be able to tell from a result
+        # too old to say either way (L11).
+        unread_pages: list[str] = []
         if len(batches) == 1:
             # One batch has nothing to protect and nothing to merge: it either
             # finishes or the run produced nothing at all, so it keeps the
@@ -677,21 +712,33 @@ def extract_program(image_paths: list[str | Path], *,
                 # are unrelated to the one that broke.
                 say.step("Reading the program", index=position, total=len(batches))
                 try:
-                    per_batch.append(
-                        _read_one_batch(batch, position=position,
-                                        total=len(batches)))
+                    read = _read_one_batch(batch, position=position,
+                                           total=len(batches))
+                    per_batch.append(read)
+                    if read is None:
+                        # Retried, salvaged, and still unreadable. The pages are
+                        # as unread as the ones that raised.
+                        unread_pages.extend(origins.get(b, b) for b in batch)
                 except ClaudeError as e:
                     failures.append(f"batch {position}: {e}")
                     print(f"warning: {e} (batch {position} of {len(batches)}; "
                           "the remaining pages are still being read)",
                           file=sys.stderr, flush=True)
                     per_batch.append(None)
+                    unread_pages.extend(origins.get(b, b) for b in batch)
 
                 # On disk before the next 600s call starts, so a stop from
                 # here keeps what has already been paid for (#479, #206).
                 if output_path is not None:
-                    _write_partial(output_path,
-                                   merge_program_data(per_batch))
+                    so_far = merge_program_data(per_batch)
+                    if isinstance(so_far, dict):
+                        # The same list the finished result will carry, through
+                        # the same helper: two spellings of one answer is how
+                        # the crash-recovered copy and the finished one end up
+                        # disagreeing about which pages to re-send (L16).
+                        so_far = {**so_far, "unread_pages": _ordered_unique(
+                            unread_pages, [str(page) for page in image_paths])}
+                    _write_partial(output_path, so_far)
 
             if not any(isinstance(r, dict) for r in per_batch):
                 raise ClaudeError(
@@ -814,6 +861,10 @@ def extract_program(image_paths: list[str | Path], *,
         "venue_notes": data.get("venue_notes", ""),
         "production_details": data.get("production_details", ""),
         "other": data.get("other", ""),
+        # Always present, empty when the run read everything (#518). One entry
+        # per page the caller passed, in the caller's order: several bands of
+        # one page failing is one page to re-send, not three.
+        "unread_pages": _ordered_unique(unread_pages, [str(p) for p in image_paths]),
     }
 
 

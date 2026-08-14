@@ -233,7 +233,8 @@
       "program_notes": "swift",
       "venue_notes": "swift",
       "production_details": "swift",
-      "other": "swift"
+      "other": "swift",
+      "unread_pages": "swift"
     }
   },
   "web_performers": {

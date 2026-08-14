@@ -231,3 +231,58 @@ def test_a_single_batch_run_writes_nothing_extra(pages, tmp_path):
             ocr_program.extract_program(pages(2), output_path=out)
 
     assert writes == []
+
+
+# ── #518: the pages that went unread are carried, not just logged ─────────────
+#
+# After #479 a partial scan keeps what it read and warns that part of the
+# programme is missing. Which pages were missing existed only in a log line, so
+# closing the gap meant re-running the whole scan, including every page that
+# was read successfully and paid for the first time.
+
+
+def test_the_result_names_the_pages_that_went_unread(pages):
+    made = pages(3)
+    data, _ = _run(made, ["junk", "junk still", _perf("B"), _perf("C")])
+
+    assert data["unread_pages"] == [made[0]], (
+        "the run knows which pages it could not read and keeps it to itself, so "
+        "the only way to close the gap is to pay for every page again")
+
+
+def test_a_run_that_read_everything_says_so_with_an_empty_list(pages):
+    """Absent and empty are different answers, and the reader has to be able to
+    tell "this run read everything" from "this run is too old to say" (L11)."""
+    data, _ = _run(pages(2), [_perf("A"), _perf("B")])
+
+    assert data["unread_pages"] == []
+
+
+def test_an_exception_leaves_its_pages_named_too(pages):
+    from postroll.ai.claude_client import ClaudeError
+
+    made = pages(3)
+    data, _ = _run(made, [_perf("A"), ClaudeError("timed out"), _perf("C")])
+
+    assert data["unread_pages"] == [made[1]]
+
+
+def test_the_partial_file_on_disk_names_them_as_it_goes(pages, tmp_path):
+    """The partial write is what survives a crash, so it has to carry the gap
+    too. Otherwise a run killed by the watchdog leaves a result that reads as
+    complete."""
+    made = pages(3)
+    out = tmp_path / "ocr.json"
+    _run(made, ["junk", "junk still", _perf("B"), _perf("C")], output_path=out)
+
+    saved = json.loads(out.read_text())
+    assert saved["unread_pages"] == [made[0]]
+
+
+def test_a_single_batch_run_reports_an_empty_gap(pages):
+    """The one-batch path has no per-batch bookkeeping at all, so it is the one
+    that would silently omit the field and make every reader treat a complete
+    scan as an unknown."""
+    data, _ = _run(pages(1), [_perf("Only")])
+
+    assert data["unread_pages"] == []
