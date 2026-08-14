@@ -224,8 +224,22 @@ def test_the_build_cache_is_measured_against_a_cap_before_it_is_uploaded(macos):
 
 
 def test_the_python_workflow_caches_its_wheels(linux):
-    assert re.search(r"cache:\s*pip", linux), (
-        "every run re-downloads the same pinned wheels")
+    """Every leg, not just whichever one appears first.
+
+    This read `re.search` until the Mac leg arrived in #510 and made two, at
+    which point dropping the setting from one of them left the guard green on
+    the other's. The same shape as the derivedDataPath guard above: a check
+    written when there was one of something, still reporting on all of them
+    once there are two.
+    """
+    setups = re.findall(r"uses:\s*actions/setup-python.*?(?=\n      - |\Z)", linux, re.S)
+    assert len(setups) >= 2, (
+        f"found {len(setups)} Python setups, so this proves less than it claims")
+
+    missing = [i for i, block in enumerate(setups) if not re.search(r"cache:\s*pip", block)]
+    assert not missing, (
+        f"setup-python block(s) {missing} do not cache pip, so those legs "
+        "re-download the same pinned wheels on every run")
 
 
 def test_the_ffmpeg_package_cache_key_carries_the_runner_image(linux):
