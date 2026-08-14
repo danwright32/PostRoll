@@ -1,0 +1,8 @@
+{
+  "name": "sentinel-is-not-a-page-number",
+  "file": "postroll/ai/ocr_program.py",
+  "find": "        if number <= NO_PAGE_NUMBER:",
+  "replace": "        if False:",
+  "test": "tests/test_unread_page_identity.py::test_the_sentinel_is_refused_as_a_page_number",
+  "breaks": "--page-number 0 is taken for a real position, and the merge then strikes every page of unknown position out of the gap because they all carry 0 (#576)"
+}
