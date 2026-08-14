@@ -161,3 +161,75 @@ extension UnreadProgramPagesTests {
                       + "so it would replace it instead of adding to it")
     }
 }
+
+// MARK: - The screen must not write its old copy over a finished rescan (#518)
+//
+// The review screen loads its working copy of the cast list once, at init, and
+// is keyed on the event id, so it does not reload when the event's stored
+// result changes. The rescan is the first thing that ever changes that result
+// while the screen is open.
+//
+// Without this, a successful rescan saved the newly read pages, the screen went
+// on showing the older draft (so the rescan looked like it did nothing), and the
+// next keystroke persisted that stale draft back over the merge, discarding the
+// pages just read and paid for. That is the exact loss the feature exists to
+// prevent (L14, L17).
+
+extension UnreadProgramPagesTests {
+
+    private func draft(performers: [String]) -> OCRResult {
+        var r = OCRResult()
+        r.performers = performers.map { Performer(name: $0) }
+        return r
+    }
+
+    func testTheScreenAdoptsWhatARescanMerged() {
+        let onScreen = draft(performers: ["Ana"])
+        let merged = draft(performers: ["Ana", "Bo"])
+
+        XCTAssertTrue(OCRDraftRefresh.shouldAdopt(stored: merged, draft: onScreen,
+                                                  isRunning: false),
+                      "the screen would keep showing the pre-rescan list and then "
+                      + "write it back over the merged one")
+    }
+
+    /// While the run is still going, the stored result is mid-flight and the
+    /// draft must be left alone.
+    func testNothingIsAdoptedWhileTheRescanIsStillRunning() {
+        XCTAssertFalse(OCRDraftRefresh.shouldAdopt(stored: draft(performers: ["Ana", "Bo"]),
+                                                   draft: draft(performers: ["Ana"]),
+                                                   isRunning: true))
+    }
+
+    /// The ordinary case, every keystroke: the draft is already what is stored,
+    /// so adopting would be a pointless write and a possible edit loop.
+    func testNothingIsAdoptedWhenTheyAlreadyAgree() {
+        let same = draft(performers: ["Ana"])
+        XCTAssertFalse(OCRDraftRefresh.shouldAdopt(stored: same, draft: same,
+                                                   isRunning: false))
+    }
+
+    /// An event with nothing stored must not blank the draft on screen.
+    func testAnAbsentStoredResultNeverReplacesTheDraft() {
+        XCTAssertFalse(OCRDraftRefresh.shouldAdopt(stored: nil,
+                                                   draft: draft(performers: ["Ana"]),
+                                                   isRunning: false))
+    }
+}
+
+extension UnreadProgramPagesTests {
+
+    /// Built is not wired (L3), and this rule existing while nothing calls it is
+    /// precisely the defect it was written for. Comments stripped, because the
+    /// file explains this in prose right beside the code (L103).
+    func testTheReviewScreenAdoptsAndStopsPersistingDuringARescan() throws {
+        let code = try source("Sources/Views/OCRReviewView.swift")
+
+        XCTAssertTrue(code.contains("OCRDraftRefresh.shouldAdopt"),
+                      "the screen never takes up what a rescan merged, so it will "
+                      + "write its older list back over the newly read pages")
+        XCTAssertTrue(code.contains("guard !ocrManager.isRunning(event.id) else { return }"),
+                      "the draft is still persisted while a rescan is in flight, "
+                      + "so an edit mid-run overwrites the merge that is landing")
+    }
+}
