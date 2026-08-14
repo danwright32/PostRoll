@@ -12,7 +12,18 @@ struct EventListView: View {
     @State private var undoDismissWork: DispatchWorkItem?
     @State private var searchText = ""
     @State private var showingHashtagSettings = false
-    @State private var hoveredEventID: Event.ID?
+    /// Which row the pointer is over.
+    ///
+    /// On its own object, not on this view, because this view's body derives
+    /// `filteredEvents`: a filter plus a search plus a sort over every Event,
+    /// and an Event is a large value carrying its days, its photo paths and the
+    /// whole week's generated result. Held here, every hover enter and leave
+    /// invalidated that body and paid the whole derivation again, per row
+    /// crossed by the mouse (#457, L59).
+    ///
+    /// Only `EventRowBackground` reads it, so a hover now re-renders the two
+    /// rows whose backgrounds changed and nothing else.
+    @State private var hover = EventListHover()
     @State private var showExported = false
     @State private var renamingEventID: Event.ID? = nil
     @State private var renameText = ""
@@ -42,7 +53,6 @@ struct EventListView: View {
         List(selection: $appState.selectedEventID) {
             ForEach(filteredEvents) { event in
                 let isSelected = appState.selectedEventID == event.id
-                let isHovered  = hoveredEventID == event.id && !isSelected
 
                 EventRow(
                         event: event,
@@ -54,41 +64,20 @@ struct EventListView: View {
                     )
                     .tag(event.id)
                     .listRowBackground(
-                        Group {
-                            if isSelected {
-                                // Glider + bookmark strip slide together as one unit
-                                ZStack(alignment: .leading) {
-                                    RoundedRectangle(cornerRadius: Radius.md)
-                                        .fill(Color.roseGold.opacity(0.12))
-                                    // Bookmark strip — a slim rose-gold spine at the leading edge
-                                    Capsule()
-                                        .fill(Color.roseGold)
-                                        .frame(width: 2.5)
-                                        .padding(.vertical, 8)
-                                }
-                                .matchedGeometryEffect(id: "selectionBG", in: selectionNamespace)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                            } else if isHovered {
-                                // Pre-selection warmth — the row glows before the click lands
-                                RoundedRectangle(cornerRadius: Radius.md)
-                                    .fill(Color.roseGold.opacity(0.05))
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 2)
-                            } else {
-                                // Opaque background prevents the system accent-color
-                                // selection highlight from bleeding through.
-                                Color.creamDeep
-                            }
-                        }
+                        EventRowBackground(eventID: event.id,
+                                           isSelected: isSelected,
+                                           hover: hover,
+                                           selectionNamespace: selectionNamespace)
                     )
                     .listRowInsets(EdgeInsets(top: Spacing.rowV, leading: Spacing.rowInset, bottom: Spacing.rowV, trailing: Spacing.rowInset))
                     .listRowSeparator(.visible)
                     .listRowSeparatorTint(Color.creamEdge)
                     .contentShape(Rectangle())
+                    // Writes the hover, never reads it, so this closure does
+                    // not tie the list's body to the pointer (#457).
                     .onHover { hovering in
                         withAnimation(.easeOut(duration: 0.12)) {
-                            hoveredEventID = hovering ? event.id : nil
+                            hover.eventID = hovering ? event.id : nil
                         }
                     }
                     .contextMenu {

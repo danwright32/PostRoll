@@ -95,7 +95,8 @@ final class OCRManager {
         let livePaths = (appState.events.first(where: { $0.id == eventID }) ?? ev).programImagePaths
 
         do {
-            var result = try await PythonBridge.shared.runOCR(imagePaths: livePaths)
+            var result = try await PythonBridge.shared.runOCR(imagePaths: livePaths,
+                                                              eventID: eventID)
 
             // DCINY events: the website lists conductors + group names (preferred
             // over the program, which lists every individual member).

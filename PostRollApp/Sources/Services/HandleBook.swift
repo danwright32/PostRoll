@@ -7,7 +7,19 @@ final class HandleBook: @unchecked Sendable {
     private let orgKey   = "postroll.handlebook.org.v1"
     private let venueKey = "postroll.handlebook.venue.v1"
 
-    private init() {}
+    /// Where the book is kept. A property rather than `UserDefaults.standard`
+    /// reached for inline, so a test can point it at a scratch suite: a test
+    /// that recorded handles for real would edit the book Dan has built up
+    /// across every event he has shot (L2).
+    private let defaults: UserDefaults
+
+    private init() { defaults = .standard }
+
+    #if POSTROLL_TESTS
+    /// A book on its own storage. Compiled only into the test bundle, so the
+    /// shipping app cannot end up with a second book by accident.
+    init(defaults: UserDefaults) { self.defaults = defaults }
+    #endif
 
     private func normalize(_ name: String) -> String {
         FieldText.normalized(name).lowercased()
@@ -16,8 +28,8 @@ final class HandleBook: @unchecked Sendable {
     // MARK: - Org handles
 
     private var orgBook: [String: String] {
-        get { UserDefaults.standard.dictionary(forKey: orgKey) as? [String: String] ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: orgKey) }
+        get { defaults.dictionary(forKey: orgKey) as? [String: String] ?? [:] }
+        set { defaults.set(newValue, forKey: orgKey) }
     }
 
     func handles(forOrg org: String) -> String {
@@ -35,8 +47,8 @@ final class HandleBook: @unchecked Sendable {
     // MARK: - Venue handles
 
     private var venueBook: [String: String] {
-        get { UserDefaults.standard.dictionary(forKey: venueKey) as? [String: String] ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: venueKey) }
+        get { defaults.dictionary(forKey: venueKey) as? [String: String] ?? [:] }
+        set { defaults.set(newValue, forKey: venueKey) }
     }
 
     func handles(forVenue venue: String) -> String {
@@ -56,8 +68,8 @@ final class HandleBook: @unchecked Sendable {
     private let performerKey = "postroll.handlebook.performer.v1"
 
     private var performerBook: [String: String] {
-        get { UserDefaults.standard.dictionary(forKey: performerKey) as? [String: String] ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: performerKey) }
+        get { defaults.dictionary(forKey: performerKey) as? [String: String] ?? [:] }
+        set { defaults.set(newValue, forKey: performerKey) }
     }
 
     /// Look up a saved handle for a performer name. Returns empty string if unknown.
@@ -88,15 +100,30 @@ final class HandleBook: @unchecked Sendable {
         performerBook = b
     }
 
-    /// Fill in handles from the book for any performer missing one.
-    func autoFill(performers: inout [Performer]) {
+    /// Fill in handles from the book for any performer missing one, and say
+    /// which ones came from there (#459).
+    ///
+    /// The book is keyed on a normalised NAME and is global across every org
+    /// and event, so this is a guess: the next Sarah Chen gets the last Sarah
+    /// Chen's Instagram. It arrived in the field looking exactly like a handle
+    /// read off this programme, which is the substitution L75 is about, and the
+    /// web lookup right beside it presents its finds as suggestions with a
+    /// confidence, a verify link and an explicit Accept.
+    ///
+    /// Returns performer id to the handle the book supplied, so the screen can
+    /// mark those as suggestions for as long as they are still untouched.
+    @discardableResult
+    func autoFill(performers: inout [Performer]) -> [UUID: String] {
+        var supplied: [UUID: String] = [:]
         for i in performers.indices {
             if performers[i].handle.isEmpty && !performers[i].name.isEmpty {
                 let saved = handle(forPerformer: performers[i].name)
                 if !saved.isEmpty {
                     performers[i].handle = saved
+                    supplied[performers[i].id] = saved
                 }
             }
         }
+        return supplied
     }
 }

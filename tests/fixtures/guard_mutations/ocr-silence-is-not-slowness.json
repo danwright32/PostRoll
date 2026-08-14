@@ -1,0 +1,8 @@
+{
+  "name": "ocr-silence-is-not-slowness",
+  "file": "PostRollApp/Sources/Services/OCRProgressText.swift",
+  "find": "                    + \"It may still finish; cancelling and scanning again is safe.\",\n                isStalled: true)",
+  "replace": "                    + \"It may still finish; cancelling and scanning again is safe.\",\n                isStalled: false)",
+  "test": "PostRollTests/OCRProgressTextTests/testASilentRunIsShownAsSilentRatherThanSlow",
+  "breaks": "an OCR run that has gone silent reassures exactly like one that is merely slow, until the 30 minute watchdog fires (#467)"
+}

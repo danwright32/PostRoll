@@ -36,6 +36,7 @@ from ..media.page_regions import image_budget_for, split_page
 from .stitch_notes import stitch_notes
 from .ocr_batching import batch_images, merge_program_data
 from .ocr_batching import _dedupe as _dedupe_dicts
+from .progress import ProgressWriter
 
 #: Ceiling for one OCR request's images, in base64 bytes. The API refuses a
 #: request over 32 MB outright; the headroom covers the prompt and envelope.
@@ -622,19 +623,29 @@ def _read_one_batch(batch: list[str], *, position: int, total: int) -> dict[str,
 
 
 def extract_program(image_paths: list[str | Path], *,
-                    output_path: Path | None = None) -> dict[str, Any]:
+                    output_path: Path | None = None,
+                    progress_path: str | Path | None = None) -> dict[str, Any]:
     """Run OCR on one or more program images and return structured data.
 
     Accepts JPEG, PNG, and HEIC paths. HEIC files are auto-converted to
     JPEG via macOS `sips` (HEIC support requires macOS). All images are
     staged into a single temp directory which is granted to Claude via
     --add-dir.
+
+    `progress_path` is where this run reports what it is doing (#467). The
+    screen watching it used to assert "still working" from a wall clock that
+    ticks whether or not this process is alive, so a hung read looked exactly
+    like a slow one until the 30 minute watchdog fired. A step file is the
+    run's own report, and its timestamp is what tells the two apart.
     """
     if not image_paths:
         raise ValueError("At least one image path is required")
 
+    say = ProgressWriter(progress_path)
+
     with tempfile.TemporaryDirectory(prefix="postroll-ocr-") as tmp:
         tmp_path = Path(tmp)
+        say.step("Preparing the program pages")
         resolved = _normalize_image_paths(image_paths, tmp_path)
 
         # Several requests when the program is too big for one. Merged rather
@@ -654,6 +665,7 @@ def extract_program(image_paths: list[str | Path], *,
             # existing whole-run retry and salvage below, which needs the raw
             # non-dict response, and pays no extra write.
             image_list = "\n".join(f"- {p}" for p in batches[0])
+            say.step("Reading the program", index=1, total=1)
             data = run_json_prompt(PROMPT_TEMPLATE.format(image_list=image_list),
                                    timeout=600, image_paths=batches[0],
                                    step="ocr:focused", model=OCR_MODEL)
@@ -663,6 +675,7 @@ def extract_program(image_paths: list[str | Path], *,
                 # pages sharing one try block would make every page's fate
                 # depend on every other page's worst case, and the ones lost
                 # are unrelated to the one that broke.
+                say.step("Reading the program", index=position, total=len(batches))
                 try:
                     per_batch.append(
                         _read_one_batch(batch, position=position,
@@ -733,6 +746,7 @@ def extract_program(image_paths: list[str | Path], *,
         # focused single-purpose call recovers them. Done inside the temp-dir
         # block so the resolved (possibly HEIC-converted) paths are still valid.
         if not data.get("pieces"):
+            say.step("Looking again for the works")
             try:
                 recovered = _extract_pieces_only(resolved)
                 if recovered:
@@ -750,6 +764,7 @@ def extract_program(image_paths: list[str | Path], *,
         # program truly has no performers (rare), the fallback returns [] and
         # nothing changes.
         if not data.get("performers"):
+            say.step("Looking again for the performers")
             try:
                 recovered = _extract_performers_only(resolved)
                 if recovered:
@@ -783,6 +798,9 @@ def extract_program(image_paths: list[str | Path], *,
             except ClaudeError as e:
                 print(f"warning: prose fallback failed: {e}", file=sys.stderr)
 
+    # The run is over, so the last step stops reading as in flight.
+    say.finish()
+
     # Fill in any missing keys with empty defaults so downstream code is safe
     return {
         # The nested entries are shaped explicitly, not passed through: a field
@@ -812,6 +830,11 @@ def main() -> int:
         type=Path,
         help="Where to write the JSON output (defaults to stdout)",
     )
+    parser.add_argument(
+        "--progress",
+        type=Path,
+        help="Where to record what this run is doing, for the app to read (#467)",
+    )
     args = parser.parse_args()
 
     try:
@@ -819,7 +842,8 @@ def main() -> int:
         # programme is a 600s paid call, and passing the destination is what
         # lets a run stopped partway leave the batches it already read where
         # the app can find them, instead of paying for them all again.
-        data = extract_program(args.image, output_path=args.output)
+        data = extract_program(args.image, output_path=args.output,
+                               progress_path=args.progress)
     except (ClaudeError, FileNotFoundError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

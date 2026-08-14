@@ -29,12 +29,13 @@ struct LongRunIndicator: View {
     var run: Run = .captions
 
     enum Run {
-        case captions, media
+        case captions, media, ocr
 
         func file(forEventID id: UUID) -> URL {
             switch self {
             case .captions: return AppPaths.progressFile(forEventID: id)
             case .media:    return AppPaths.mediaProgressFile(forEventID: id)
+            case .ocr:      return AppPaths.ocrProgressFile(forEventID: id)
             }
         }
     }
