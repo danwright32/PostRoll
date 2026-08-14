@@ -1,0 +1,8 @@
+{
+  "name": "icon-only-control-named",
+  "file": "PostRollApp/Sources/Views/ClipboardCopyButton.swift",
+  "find": "        .accessibilityLabel(copied ? \"\\(what) copied\" : \"Copy \\(what)\")",
+  "replace": "        .help(copied ? \"Copied\" : \"Copy \\(what)\")",
+  "test": "PostRollTests/IconOnlyControlLabelTests/testEveryIconOnlyControlCarriesAName",
+  "breaks": "an icon-only control ships with no name, so VoiceOver can only announce it as \"button\" (#465)"
+}

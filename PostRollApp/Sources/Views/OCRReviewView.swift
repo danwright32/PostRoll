@@ -772,6 +772,7 @@ private struct HandleSuggestionRow: View {
                     .foregroundStyle(Color.green.opacity(0.8))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Apply this handle")
             .help("Apply this handle")
 
             Button { onDismiss() } label: {
@@ -780,6 +781,7 @@ private struct HandleSuggestionRow: View {
                     .foregroundStyle(Color.warmMid.opacity(0.5))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss this suggestion")
             .help("Dismiss this suggestion")
         }
         .padding(.vertical, 4)
@@ -819,6 +821,7 @@ private struct PerformerRow: View {
             .buttonStyle(.plain)
             .padding(.top, 6)
             .disabled(performer.name.isEmpty)
+            .accessibilityLabel("Search Instagram for this performer")
             .help("Search Instagram")
             BrandDeleteButton(action: onDelete)
         }

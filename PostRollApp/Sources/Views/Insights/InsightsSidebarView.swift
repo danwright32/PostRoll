@@ -17,6 +17,13 @@ struct InsightsSidebarView: View {
             // Fixed navigation rows
             ForEach(sections, id: \.0) { section, label, icon in
                 let isSelected = appState.insightsSection == section
+                // A real Button, not a tap gesture on a stack (#464). Every
+                // other navigational control in the app is one (the stage step
+                // bar, the day headers, the event rows), and a gesture carries
+                // no button trait, so VoiceOver does not announce it as
+                // something to press and the keyboard cannot reach it at all
+                // (L20).
+                Button { appState.insightsSection = section } label: {
                 HStack(spacing: 8) {
                     Image(systemName: icon)
                         .imageScale(.small)
@@ -44,7 +51,13 @@ struct InsightsSidebarView: View {
                 }
                 .padding(.vertical, 3)
                 .contentShape(Rectangle())
-                .onTapGesture { appState.insightsSection = section }
+                }
+                // Plain, so the row keeps the styling it already had: the
+                // selected background is drawn by listRowBackground below and a
+                // bordered button would put a second surface over it.
+                .buttonStyle(.plain)
+                .accessibilityLabel(label)
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                 .listRowBackground(
                     RoundedRectangle(cornerRadius: Radius.md)
                         .fill(isSelected ? Color.roseGold.opacity(0.12) : Color.clear)

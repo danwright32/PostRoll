@@ -591,6 +591,12 @@ struct HashtagSettingsSheet: View {
                                         .font(.system(size: 14))
                                 }
                                 .buttonStyle(.plain)
+                                // Names WHAT it deletes, not just that it
+                                // deletes: several of these sit in a row and
+                                // "Delete" on each says nothing about which
+                                // (#465, L20).
+                                .accessibilityLabel("Delete the \(preset.name) hashtag preset")
+                                .help("Delete the \(preset.name) hashtag preset")
                             }
                             .padding(.vertical, 4)
                             RoseGoldDivider(opacity: 0.3)
