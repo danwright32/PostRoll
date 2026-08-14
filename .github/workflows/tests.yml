@@ -110,3 +110,51 @@ jobs:
         # so the precondition is enforced rather than assumed. Proven by two clean
         # full-suite parallel runs before this landed.
         run: pytest -v -n auto
+
+  # The same suite on a Mac, which is the platform the app that calls it runs
+  # on (#510). Everything above this runs on Linux only, so anything that
+  # differs between the two stays invisible until it is hit locally: path and
+  # filename handling, the ffmpeg build and its codecs, font fallbacks, and a
+  # case insensitive filesystem. The repo has been bitten in the other
+  # direction already, by a BSD only shell form that passed on Dan's Mac and
+  # failed on every Linux run.
+  #
+  # Pushes to main only, deliberately, and this is the half worth arguing
+  # with. A job that does not run on a pull request cannot block one, and a
+  # skipped job reads exactly like a passing one, which this repo has been
+  # burned by twice. The trade accepted here is that a Mac-only break is
+  # caught on main within minutes rather than never, at roughly a tenth of
+  # the runner cost of putting it on every pull request. The first runs are
+  # the measurement the issue asked for; move it to pull requests if it earns
+  # its keep and the wall clock is tolerable.
+  macos:
+    if: github.event_name != 'pull_request'
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Same reason as the Linux leg: a silent skip for want of ffmpeg is
+      # indistinguishable from a pass, so it is installed rather than hoped for.
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      - name: Confirm ffmpeg is actually here
+        run: ffmpeg -version && ffprobe -version
+
+      # The SAME command as the Linux leg. A narrower one here would make this
+      # job a different check wearing the same name, and the platform
+      # differences it exists to catch are exactly the ones a subset drops.
+      - name: Run tests
+        env:
+          POSTROLL_REQUIRE_FFMPEG: "1"
+        run: pytest -v -n auto

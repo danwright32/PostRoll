@@ -1,0 +1,8 @@
+{
+  "name": "the-suite-runs-on-a-mac",
+  "file": ".github/workflows/tests.yml",
+  "find": "        run: pytest -v -n auto\n\n  # The same suite on a Mac",
+  "replace": "        run: pytest -v -n auto -k \"not reel\"\n\n  # The same suite on a Mac",
+  "test": "tests/test_ci_gates.py::test_the_mac_leg_runs_the_same_command_as_the_linux_one",
+  "breaks": "one leg quietly runs a narrower command than the other while both report under the same name, so the platform differences the Mac leg exists to catch are exactly what the subset drops (#510)"
+}

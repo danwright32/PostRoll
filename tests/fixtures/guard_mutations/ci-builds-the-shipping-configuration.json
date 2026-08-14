@@ -1,0 +1,8 @@
+{
+  "name": "ci-builds-the-shipping-configuration",
+  "file": ".github/workflows/swift.yml",
+  "find": "            -configuration Release \\\\\n",
+  "replace": "",
+  "test": "tests/test_ci_gates.py::test_ci_builds_the_configuration_that_ships",
+  "breaks": "CI goes back to compiling only Debug while make install builds Release, so an error that only Release refuses can sit on main with every check green (#485)"
+}

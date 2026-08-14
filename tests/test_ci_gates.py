@@ -259,3 +259,40 @@ def test_the_requirements_file_is_not_empty():
     lines = [ln for ln in REQUIREMENTS.read_text().splitlines()
              if ln.strip() and not ln.strip().startswith("#")]
     assert len(lines) >= 4, f"only {len(lines)} dependencies listed, so the scan proves little"
+
+
+# ── the suite also runs on the platform the app runs on (#510) ────────────────
+
+
+def test_the_suite_runs_on_a_mac_as_well_as_linux():
+    """Everything but four font-dependent files ran on Linux only, while the app
+    that calls this pipeline runs on Dan's Mac. Path handling, the ffmpeg build
+    and its codecs, font fallbacks and filesystem case all differ, and every one
+    of those stayed invisible until it was hit locally."""
+    text = TESTS.read_text()
+    assert "macos" in text.lower(), "the Mac leg is gone, so the suite is Linux only again"
+
+
+def test_the_mac_leg_runs_the_same_command_as_the_linux_one():
+    """A narrower command here would make this a different check wearing the
+    same name, and a platform difference is exactly what a subset drops. This is
+    the no-silent-caps rule: if the Mac leg ever runs less, it has to say so
+    here rather than quietly cover less."""
+    runs = re.findall(r"run: (pytest[^\n]*)", TESTS.read_text())
+    assert len(runs) >= 2, f"expected a pytest command per leg, found {runs}"
+    assert len(set(runs)) == 1, (
+        f"the legs run different commands, so one of them covers less than its "
+        f"name suggests: {sorted(set(runs))}")
+
+
+def test_ci_builds_the_configuration_that_ships(swift):
+    """`make install` builds Release, so Release is what reaches Dan's machine.
+
+    CI used to build without naming a configuration, which means Debug, and the
+    two compile differently: a data race error Release refuses and Debug accepts
+    sat on main for three merges with every check green (#485).
+    """
+    build_step = swift.split("Build the app", 1)[1].split("- name:", 1)[0]
+    assert "-configuration Release" in build_step, (
+        "the app build does not name Release, so the configuration Dan actually "
+        "installs is never compiled by CI")
