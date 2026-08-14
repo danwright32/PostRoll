@@ -122,6 +122,24 @@ a headless runner cannot reliably drive a window, and a test nothing runs is
 indistinguishable from no test, so it was removed rather than left to rot
 (#524).
 
+## Waiting for a pull request's checks
+
+```
+python tools/wait_for_checks.py <pr-number>
+```
+
+Do not read `gh pr checks` by hand before merging. In the window between a push
+and the checks being registered it reports nothing at all, which is
+indistinguishable from everything passing, and twice on 2026-08-14 that was
+nearly merged on (#564).
+
+The tool derives the checks it is waiting for from the workflow files, so
+adding a job raises the bar with no edit to the tool, and it exits `0` only
+when every one of them has settled green. `1` means red, `2` means a check
+never appeared, `3` means the deadline passed with something still running, and
+`4` means it could not read the workflows or reach `gh`. Only `0` may be merged
+on.
+
 ## Layout
 
 ```
