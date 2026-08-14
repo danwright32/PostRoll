@@ -207,11 +207,16 @@ final class AccountBook {
         /// so saving can resume; `setAsideAs` is the name they were kept under,
         /// or nil when even that move failed, in which case saving stays off.
         case corrupt(setAsideAs: String?)
-        /// The file could not be read at all (a permission denial, an I/O
-        /// error). Its contents are unknown and untouched, and saving is
-        /// refused: writing over them would destroy the numbers precisely
-        /// because we could not read them.
+        /// The file could not be read at all (an I/O error, a failing volume).
+        /// Its contents are unknown and untouched, and saving is refused:
+        /// writing over them would destroy the numbers precisely because we
+        /// could not read them.
         case unreadable
+        /// The file is there and this process was refused it. Same consequence
+        /// as `unreadable`, different cause and different sentence (#563): the
+        /// numbers are intact behind a permissions problem, so there is nothing
+        /// to restore and nothing to rebuild.
+        case refused
     }
 
     /// Said out loud when the store could not be read.
@@ -229,6 +234,26 @@ final class AccountBook {
         "Could not read the saved account numbers, so everything reads as not counted. "
         + "\(file) in \(folder) has been left alone rather than overwritten, and no new "
         + "numbers will be saved until it can be read."
+    }
+
+    /// The same situation, except PostRoll was refused the file rather than
+    /// failing to make sense of it (#563).
+    ///
+    /// Distinct wording because the two need different things from Dan. A
+    /// refusal means the numbers are sitting there intact behind a permissions
+    /// problem on PostRoll's own storage, so there is nothing to restore and
+    /// nothing to rebuild. Reported in the same words as an I/O error, it reads
+    /// as a damaged file and sends him looking for a backup he does not need.
+    ///
+    /// No settings pane is named, for the reason #557 recorded: this file lives
+    /// under Application Support, which System Settings does not list under
+    /// Privacy & Security > Files and Folders, so naming that pane sends him to
+    /// look for a switch that is not there (L111).
+    nonisolated static func refusedNote(file: String, folder: String) -> String {
+        "\(file) in \(folder) is still there and PostRoll was refused when it tried to "
+        + "read it, so everything reads as not counted. Nothing in it was changed or "
+        + "overwritten, and no new numbers will be saved until it can be read. This is a "
+        + "permissions problem, not a damaged file."
     }
 
     /// The same situation, except the bytes were readable and turned out not to
@@ -255,6 +280,7 @@ final class AccountBook {
         switch loadStatus {
         case .ok: return nil
         case .unreadable: return Self.unreadableNote(file: file, folder: folder)
+        case .refused: return Self.refusedNote(file: file, folder: folder)
         case .corrupt(let name):
             return Self.corruptNote(setAsideAs: name, file: file, folder: folder)
         }
@@ -407,7 +433,10 @@ final class AccountBook {
             } else {
                 NSLog("AccountBook: could not read \(fileURL.lastPathComponent): \(error)")
                 StoreSaveGate.shared.block(fileURL)
-                loadStatus = .unreadable
+                // Same refusal to write either way. Only the sentence differs,
+                // because a refusal and a damaged file need different things
+                // from Dan (#563).
+                loadStatus = (error as NSError).isPermissionDenied ? .refused : .unreadable
             }
             return
         }
