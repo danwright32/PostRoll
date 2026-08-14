@@ -2213,7 +2213,7 @@ private struct CaptionSection: View {
 
                                     // Draggable photo thumbnails for swapping cells
                                     if let pd = postingDay, !pd.photoPaths.isEmpty {
-                                        ScrollView(.horizontal, showsIndicators: false) {
+                                        FadingScrollView(axis: .horizontal) {
                                             HStack(spacing: 8) {
                                                 ForEach(pd.photoPaths, id: \.self) { photoURL in
                                                     ReviewThumb(url: photoURL) { onPreview?(photoURL) }
@@ -3479,7 +3479,7 @@ private struct ReviewMediaStrip: View {
 
             // Uploaded source photos (all days — plain thumbnails for preview/tap only)
             if !postingDay.photoPaths.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
+                FadingScrollView(axis: .horizontal) {
                     HStack(spacing: 8) {
                         ForEach(postingDay.photoPaths, id: \.self) { url in
                             ReviewThumb(url: url) { onPreview?(url) }
@@ -3784,20 +3784,35 @@ private struct FridayClipCropPopover: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("HORIZONTAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(Color.warmMid)
                 HStack(spacing: 4) {
-                    Text("◄").font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                    // Symbols rather than typed arrow characters (#538): a glyph
+                    // renders at whatever size and weight the font decides, and
+                    // is announced by its unicode name. Hidden, because they are
+                    // decoration either side of the slider and the slider itself
+                    // now carries the meaning.
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .accessibilityHidden(true)
                     Slider(value: $cropOffset.x, in: -1...1)
                         .tint(Color.roseGold)
-                    Text("►").font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .accessibilityLabel("Horizontal crop position")
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .accessibilityHidden(true)
                 }
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("VERTICAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(Color.warmMid)
                 HStack(spacing: 4) {
-                    Text("▲").font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .accessibilityHidden(true)
                     Slider(value: $cropOffset.y, in: -1...1)
                         .tint(Color.roseGold)
-                    Text("▼").font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .accessibilityLabel("Vertical crop position")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .accessibilityHidden(true)
                 }
             }
 
@@ -4687,7 +4702,12 @@ private struct CollagePreviewThumbnail: View {
                             Image(systemName: "arrow.clockwise.circle.fill")
                                 .font(.system(size: 22))
                                 .foregroundStyle(Color.roseGold)
-                            Text("Click ↺ below to enable\ncell editing")
+                            // Names the control rather than drawing it (#538).
+                            // Drawn, this sentence said nothing at all to anyone
+                            // who cannot see the glyph, and nothing connected the
+                            // two (L80). "Reset zoom" is exactly what that button
+                            // is called on the row below.
+                            Text("Click Reset zoom below\nto enable cell editing")
                                 .font(.system(size: 10, weight: .medium))
                                 .multilineTextAlignment(.center)
                                 .foregroundStyle(.white)
@@ -4839,14 +4859,22 @@ private struct CollagePreviewThumbnail: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmMid)
                     if hasAdjust {
-                        Button("↺") {
+                        // A symbol rather than a typed glyph, and named, because
+                        // this is a control: nothing else on the row says what it
+                        // does, and the instruction over the collage points at it
+                        // by this name (#538).
+                        Button {
                             var o = cropOffsets[photoKey] ?? CropOffset()
                             o.scale = 1.0
                             cropOffsets[photoKey] = o
+                        } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.roseGold)
                         }
                         .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.roseGold)
+                        .accessibilityLabel("Reset zoom")
+                        .help("Reset zoom")
                     }
                 }
             }
@@ -5181,14 +5209,22 @@ private struct ReelStripPreviewThumbnail: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmMid)
                     if hasAdjust {
-                        Button("↺") {
+                        // A symbol rather than a typed glyph, and named, because
+                        // this is a control: nothing else on the row says what it
+                        // does, and the instruction over the collage points at it
+                        // by this name (#538).
+                        Button {
                             var o = cropOffsets[photoKey] ?? CropOffset()
                             o.scale = 1.0
                             cropOffsets[photoKey] = o
+                        } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.roseGold)
                         }
                         .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.roseGold)
+                        .accessibilityLabel("Reset zoom")
+                        .help("Reset zoom")
                     }
                 }
             }
