@@ -435,4 +435,27 @@ final class ProgramImportTests: XCTestCase {
         // not make the rest of the program unusable (L54).
         XCTAssertEqual(incomplete.pagesThatWorked, arrived)
     }
+
+    // MARK: - #454: a source PDF that could not be kept is recorded
+
+    func testTheRetentionFailureSaysWhatItCosts() {
+        let message = ProgramImport.Failure
+            .couldNotRetainSource(reason: "No space left on device").message
+
+        XCTAssertTrue(message.contains("No space left on device"), message)
+        XCTAssertTrue(message.lowercased().contains("every page was read"),
+                      "the message reads as though pages were lost: \(message)")
+    }
+
+    /// It is not about one page, so it must not claim to be.
+    func testTheRetentionFailureIsNotAboutAPage() {
+        XCTAssertNil(ProgramImport.Failure.couldNotRetainSource(reason: "x").page)
+    }
+
+    func testTheReasonIsClosedBeforeTheNextSentence() {
+        let message = ProgramImport.Failure
+            .couldNotRetainSource(reason: "No space left on device").message
+
+        XCTAssertFalse(message.contains("device The"), message)
+    }
 }

@@ -289,6 +289,23 @@ enum ImportFailureText {
         let names = failures.map(\.fileName).joined(separator: ", ")
         return "\(failures.count) files were not imported: PostRoll couldn't copy them into its own storage. Files: \(names)."
     }
+
+    /// Folders a folder import could not read at all, keyed by name (#451).
+    ///
+    /// Its own message rather than the no-photos-found one, because the two
+    /// need opposite responses: that one coaches Dan through renaming his day
+    /// folders, and renaming a folder macOS will not let the app open changes
+    /// nothing (L11). Sorted so the same failure reads the same way twice.
+    static func unreadableFolders(_ folders: [String: String]) -> String {
+        let named = folders.keys.sorted()
+            .map { "\($0) (\(folders[$0] ?? ""))" }
+            .joined(separator: ", ")
+        let one = folders.count == 1
+        return "\(one ? "This folder" : "These folders") could not be read, so nothing in "
+             + "\(one ? "it" : "them") was imported: \(named). This is usually a "
+             + "permissions problem rather than a naming one: grant PostRoll access under "
+             + "System Settings > Privacy & Security > Files and Folders, then import again."
+    }
 }
 
 /// One place every "the user picked some files" path goes through, so a picked

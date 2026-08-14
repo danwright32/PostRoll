@@ -39,6 +39,11 @@ enum ProgramImport {
         case couldNotWritePage(Int, reason: String)
         /// An uploaded image could not be copied into the program folder.
         case couldNotStoreFile(reason: String)
+        /// The original PDF could not be kept beside its rasterised pages
+        /// (#454). Not a lost page: every page is there, and the downloadable
+        /// program PDF is rebuilt from rasters with an OCR text layer over them
+        /// rather than from the original's crisp vector pages.
+        case couldNotRetainSource(reason: String)
 
         /// The 1-based page this is about, when it is about a single page.
         var page: Int? {
@@ -47,7 +52,7 @@ enum ProgramImport {
                 return page
             case .couldNotWritePage(let page, _):
                 return page
-            case .unreadableDocument, .couldNotStoreFile:
+            case .unreadableDocument, .couldNotStoreFile, .couldNotRetainSource:
                 return nil
             }
         }
@@ -66,6 +71,11 @@ enum ProgramImport {
             case .couldNotStoreFile(let reason):
                 return "The file couldn't be copied into PostRoll's program folder: "
                     + Failure.sentence(reason)
+            case .couldNotRetainSource(let reason):
+                return "Every page was read, but the original PDF couldn't be kept "
+                    + "alongside them: " + Failure.sentence(reason)
+                    + " The downloadable program will be built from the page images "
+                    + "instead, so its text will be a scan rather than the original's."
             }
         }
 

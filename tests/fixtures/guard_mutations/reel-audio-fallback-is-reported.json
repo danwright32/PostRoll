@@ -1,0 +1,8 @@
+{
+  "name": "reel-audio-fallback-is-reported",
+  "file": "postroll/media/generate_reel_scroll.py",
+  "find": "        except audio_module.JamendoUnavailable as e:\n            warn(f\"The programme-matched music could not be fetched: {e} \"\n                 \"This reel uses generic tag-matched music instead.\")",
+  "replace": "        except audio_module.JamendoUnavailable:\n            pass",
+  "test": "tests/test_audio_download_failures.py::test_the_reel_reports_a_failed_program_match",
+  "breaks": "a Jamendo outage silently turns every Thursday reel's programme-matched track into generic mood music while the run reports clean (#450)"
+}

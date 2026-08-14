@@ -74,7 +74,7 @@ final class ExportFolderStatusTests: XCTestCase {
         try makeDay("5. Thursday", files: [])
         try makeDay("6. Friday", files: [])
 
-        guard case .unfinished(_, let empties, _) = ExportFolderStatus.of(folder: folder) else {
+        guard case .unfinished(_, let empties, _, _) = ExportFolderStatus.of(folder: folder) else {
             return XCTFail("expected unfinished")
         }
         XCTAssertEqual(empties, ["5. Thursday", "6. Friday"],
@@ -85,7 +85,7 @@ final class ExportFolderStatusTests: XCTestCase {
     func testItNoticesTheCaptionsFileIsAbsent() throws {
         try makeDay("1. Sunday", files: ["story.png"])
 
-        guard case .unfinished(_, _, let hasCaptions) = ExportFolderStatus.of(folder: folder) else {
+        guard case .unfinished(_, _, let hasCaptions, _) = ExportFolderStatus.of(folder: folder) else {
             return XCTFail("expected unfinished")
         }
         XCTAssertFalse(hasCaptions)
@@ -97,7 +97,7 @@ final class ExportFolderStatusTests: XCTestCase {
         try makeDay("1. Sunday", files: ["story.png", "cover.png"])
         try Data("captions".utf8).write(to: folder.appendingPathComponent("CAPTIONS.txt"))
 
-        guard case .unfinished(let count, _, let hasCaptions) = ExportFolderStatus.of(folder: folder) else {
+        guard case .unfinished(let count, _, let hasCaptions, _) = ExportFolderStatus.of(folder: folder) else {
             return XCTFail("expected unfinished")
         }
         XCTAssertEqual(count, 3, "nearly-done and nearly-empty are different situations")
@@ -145,5 +145,87 @@ final class ExportFolderStatusTests: XCTestCase {
         let message = try XCTUnwrap(ExportFolderStatus.of(folder: gone).message)
         XCTAssertTrue(message.contains("Vocal Colors"), message)
         XCTAssertTrue(message.lowercased().contains("export again"), message)
+    }
+
+    // MARK: - #451: a folder that cannot be read is not one that never finished
+
+    func testAnUnreadableFolderIsNotReportedAsAnUnfinishedExport() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("unreadable-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000],
+                                              ofItemAtPath: folder.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                   ofItemAtPath: folder.path)
+            try? FileManager.default.removeItem(at: folder)
+        }
+
+        guard case .unreadable = ExportFolderStatus.of(folder: folder) else {
+            return XCTFail("an unreadable folder read as \(ExportFolderStatus.of(folder: folder))")
+        }
+    }
+
+    func testTheUnreadableMessageDoesNotTellDanToExportAgain() {
+        guard let message = ExportFolderStatus.unreadable("Permission denied").message else {
+            return XCTFail("an unreadable folder says nothing")
+        }
+        XCTAssertTrue(message.contains("Permission denied"), message)
+        XCTAssertTrue(message.lowercased().contains("privacy"),
+                      "the message does not name the fix that would work: \(message)")
+    }
+
+    func testAnUnreadableFolderIsWorthShowing() {
+        XCTAssertTrue(ExportFolderStatus.unreadable("Permission denied").needsAttention)
+    }
+
+    /// An empty folder is a real answer: that export genuinely never finished.
+    func testAnEmptyReadableFolderStillReadsAsUnfinished() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("empty-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        guard case .unfinished(let count, _, _, _) = ExportFolderStatus.of(folder: folder) else {
+            return XCTFail("an empty folder did not read as unfinished")
+        }
+        XCTAssertEqual(count, 0)
+    }
+
+    /// The same defect one level down: a day folder that cannot be listed
+    /// would otherwise be counted as zero files and reported as a day the
+    /// export lost, which is a different problem with a different fix (#451).
+    func testADayFolderThatCannotBeReadIsNotReportedAsAnEmptyOne() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("partly-unreadable-\(UUID().uuidString)")
+        let day = folder.appendingPathComponent("sunday")
+        try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: day.appendingPathComponent("story.png"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000],
+                                              ofItemAtPath: day.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                   ofItemAtPath: day.path)
+            try? FileManager.default.removeItem(at: folder)
+        }
+
+        guard case .unfinished(_, let empties, _, let unreadable) =
+                ExportFolderStatus.of(folder: folder) else {
+            return XCTFail("expected an unfinished export")
+        }
+
+        XCTAssertEqual(unreadable, ["sunday"])
+        XCTAssertFalse(empties.contains("sunday"),
+                       "a day nothing could look inside was reported as an empty one")
+    }
+
+    func testTheMessageKeepsUnreadableDaysApartFromEmptyOnes() {
+        let status = ExportFolderStatus.unfinished(
+            fileCount: 3, emptyDayFolders: ["monday"], hasCaptions: true,
+            unreadableDayFolders: ["sunday"])
+
+        guard let message = status.message else { return XCTFail("no message") }
+        XCTAssertTrue(message.contains("monday is empty"), message)
+        XCTAssertTrue(message.contains("sunday could not be read"), message)
     }
 }

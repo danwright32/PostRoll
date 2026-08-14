@@ -211,14 +211,20 @@ final class ProgramPDFBuilderTests: XCTestCase {
         // And the caller is told, naming the page, rather than being handed a
         // list that is simply one shorter (#368).
         XCTAssertFalse(result.isComplete)
-        XCTAssertEqual(result.failures.count, 1)
-        XCTAssertEqual(result.failures.first?.page, 1)
-        if case .couldNotWritePage(let page, let reason) = result.failures.first {
+        // An unwritable folder also stops the original PDF being kept beside
+        // its pages, which is its own recorded failure (#454), so the page
+        // failure is looked for by name rather than by being the only one.
+        let pageFailures = result.failures.filter { $0.page != nil }
+        XCTAssertEqual(pageFailures.count, 1)
+        if case .couldNotWritePage(let page, let reason) = pageFailures.first {
             XCTAssertEqual(page, 1)
             XCTAssertFalse(reason.isEmpty, "the reason is what says whether a retry can work")
         } else {
-            XCTFail("expected a write failure naming the page, got \(String(describing: result.failures.first))")
+            XCTFail("expected a write failure naming the page, got \(String(describing: pageFailures.first))")
         }
+        XCTAssertTrue(result.failures.contains { if case .couldNotRetainSource = $0 { return true }
+                                                 else { return false } },
+                      "the original PDF could not be kept and nothing recorded it")
     }
 
     /// A file that will not open as a PDF at all used to come back as an empty

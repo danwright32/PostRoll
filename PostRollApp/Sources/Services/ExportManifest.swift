@@ -27,6 +27,38 @@ enum ExportManifest {
         /// the same folder compare equal.
         var filesByDay: [String: [String]]
         var totalFiles: Int
+        /// Folders that could not be listed while this was built, and why
+        /// (#451). A day whose listing failed used to be recorded as holding
+        /// zero files, which is a certificate of the folder's contents saying
+        /// something it never read.
+        var unreadableFolders: [String: String] = [:]
+
+        enum CodingKeys: String, CodingKey {
+            case exportedAt, preset, event, filesByDay, totalFiles, unreadableFolders
+        }
+
+        init(exportedAt: Date, preset: String, event: String,
+             filesByDay: [String: [String]], totalFiles: Int,
+             unreadableFolders: [String: String] = [:]) {
+            self.exportedAt = exportedAt
+            self.preset = preset
+            self.event = event
+            self.filesByDay = filesByDay
+            self.totalFiles = totalFiles
+            self.unreadableFolders = unreadableFolders
+        }
+
+        // Manifests written before this field existed decode without it.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            exportedAt = try c.decode(Date.self, forKey: .exportedAt)
+            preset     = try c.decode(String.self, forKey: .preset)
+            event      = try c.decode(String.self, forKey: .event)
+            filesByDay = try c.decode([String: [String]].self, forKey: .filesByDay)
+            totalFiles = try c.decode(Int.self, forKey: .totalFiles)
+            unreadableFolders =
+                try c.decodeIfPresent([String: String].self, forKey: .unreadableFolders) ?? [:]
+        }
     }
 
     /// Read what is actually on disk rather than what the export meant to
@@ -36,19 +68,23 @@ enum ExportManifest {
                       now: Date = Date()) -> Contents {
         let fm = FileManager.default
         var byDay: [String: [String]] = [:]
+        var unreadable: [String: String] = [:]
         var total = 0
 
-        let entries = (try? fm.contentsOfDirectory(at: folder,
-                                                   includingPropertiesForKeys: [.isDirectoryKey],
-                                                   options: [.skipsHiddenFiles])) ?? []
-        for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+        let listing = DirectoryListing.of(folder, keys: [.isDirectoryKey], fileManager: fm)
+        if let reason = listing.failureReason { unreadable[""] = reason }
+        for entry in listing.entriesIgnoringFailure {
             let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             if isDir {
-                let files = ((try? fm.contentsOfDirectory(at: entry,
-                                                          includingPropertiesForKeys: nil,
-                                                          options: [.skipsHiddenFiles])) ?? [])
-                    .map(\.lastPathComponent)
-                    .sorted()
+                // A day folder that could not be listed is recorded as such
+                // rather than as a day holding nothing, because this file is a
+                // certificate of what the folder contains (#451).
+                let inside = DirectoryListing.of(entry, fileManager: fm)
+                if let reason = inside.failureReason {
+                    unreadable[entry.lastPathComponent] = reason
+                    continue
+                }
+                let files = inside.entriesIgnoringFailure.map(\.lastPathComponent).sorted()
                 byDay[entry.lastPathComponent] = files
                 total += files.count
             } else if entry.lastPathComponent != filename {
@@ -61,7 +97,8 @@ enum ExportManifest {
         byDay[""]?.sort()
 
         return Contents(exportedAt: now, preset: preset.rawValue, event: event,
-                        filesByDay: byDay, totalFiles: total)
+                        filesByDay: byDay, totalFiles: total,
+                        unreadableFolders: unreadable)
     }
 
     /// Write the manifest, reporting whether it landed.
@@ -82,6 +119,33 @@ enum ExportManifest {
         } catch {
             return false
         }
+    }
+
+    /// What the export screen says when the manifest could not be written
+    /// (#452).
+    ///
+    /// The files ARE there, which is the part to say first, and the consequence
+    /// is specific rather than vague: this folder will read as unfinished every
+    /// time Dan comes back to it, because the record is what says otherwise.
+    static let writeFailureNotice =
+        "The export finished and the files are in the folder, but the small record that "
+        + "says so could not be written into it. Nothing is missing; the folder will just "
+        + "read as unfinished when you come back to it. Exporting again will write it."
+
+    /// What the export screen says when the manifest was written but part of
+    /// the folder could not be read while building it (#451).
+    ///
+    /// Returns nil when everything was readable, so nothing is shown on the
+    /// ordinary run.
+    static func unreadableNotice(_ contents: Contents) -> String? {
+        guard !contents.unreadableFolders.isEmpty else { return nil }
+        let named = contents.unreadableFolders.keys.sorted()
+            .map { $0.isEmpty ? "the export folder itself" : $0 }
+            .joined(separator: ", ")
+        return "The export finished, but the record of what is in the folder is incomplete: "
+             + "\(named) could not be read while it was written, so the file count leaves "
+             + "\(contents.unreadableFolders.count == 1 ? "it" : "them") out. Check the "
+             + "folder before posting."
     }
 
     /// Whether this folder holds a finished export.

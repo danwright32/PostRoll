@@ -140,4 +140,85 @@ final class ExportManifestTests: XCTestCase {
         XCTAssertFalse(ExportManifest.write(
             ExportManifest.build(folder: folder, preset: .balanced, event: "E"), to: missing))
     }
+
+    // MARK: - #451/#452: an unreadable folder is not an empty one
+
+    func testADayFolderThatCannotBeListedIsRecordedRatherThanCountedAsZero() throws {
+        let day = folder.appendingPathComponent("sunday")
+        try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: day.appendingPathComponent("story.png"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000],
+                                              ofItemAtPath: day.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                   ofItemAtPath: day.path)
+        }
+
+        let contents = ExportManifest.build(folder: folder, preset: .balanced, event: "E")
+
+        XCTAssertEqual(contents.unreadableFolders.keys.sorted(), ["sunday"],
+                       "the day was not recorded as unreadable: \(contents)")
+        XCTAssertNil(contents.filesByDay["sunday"],
+                     "an unreadable day was certified as holding zero files")
+    }
+
+    func testAReadableFolderRecordsNothingUnreadable() throws {
+        let day = folder.appendingPathComponent("sunday")
+        try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: day.appendingPathComponent("story.png"))
+
+        let contents = ExportManifest.build(folder: folder, preset: .balanced, event: "E")
+
+        XCTAssertTrue(contents.unreadableFolders.isEmpty)
+        XCTAssertEqual(contents.filesByDay["sunday"], ["story.png"])
+    }
+
+    /// An empty day folder is a real answer and must not be reported as one
+    /// that could not be read.
+    func testAnEmptyDayFolderIsRecordedAsEmpty() throws {
+        try FileManager.default.createDirectory(
+            at: folder.appendingPathComponent("sunday"), withIntermediateDirectories: true)
+
+        let contents = ExportManifest.build(folder: folder, preset: .balanced, event: "E")
+
+        XCTAssertEqual(contents.filesByDay["sunday"], [])
+        XCTAssertTrue(contents.unreadableFolders.isEmpty)
+    }
+
+    /// Manifests written before the field existed must still decode.
+    func testAManifestWithoutTheNewFieldStillReads() throws {
+        let json = """
+        {"event":"E","exportedAt":"2026-08-13T12:00:00Z","filesByDay":{"sunday":["a.png"]},\
+        "preset":"balanced","totalFiles":1}
+        """
+        try Data(json.utf8).write(to: folder.appendingPathComponent(ExportManifest.filename))
+
+        let read = ExportManifest.read(folder: folder)
+
+        XCTAssertEqual(read?.totalFiles, 1)
+        XCTAssertEqual(read?.unreadableFolders, [:])
+    }
+
+    func testTheFailedWriteNoticeSaysTheFilesAreThere() {
+        let notice = ExportManifest.writeFailureNotice
+
+        XCTAssertTrue(notice.lowercased().contains("files are in the folder"),
+                      "the notice reads as though the export failed: \(notice)")
+    }
+
+    func testThereIsNoUnreadableNoticeOnAnOrdinaryRun() {
+        let clean = ExportManifest.Contents(exportedAt: Date(), preset: "balanced",
+                                            event: "E", filesByDay: [:], totalFiles: 0)
+
+        XCTAssertNil(ExportManifest.unreadableNotice(clean))
+    }
+
+    func testTheUnreadableNoticeNamesTheFolder() {
+        let contents = ExportManifest.Contents(
+            exportedAt: Date(), preset: "balanced", event: "E",
+            filesByDay: [:], totalFiles: 0,
+            unreadableFolders: ["sunday": "Permission denied"])
+
+        XCTAssertTrue(ExportManifest.unreadableNotice(contents)?.contains("sunday") ?? false)
+    }
 }
