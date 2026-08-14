@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -46,10 +48,63 @@ class TestFieldIndex:
         assert "ig_permalink" not in idx
 
 
+class TestPublishTimeIsMeasured:
+    """The export's timezone against a post whose real posting time Dan knows.
+
+    Before #487 the parser treated the column as already being in the account's
+    own local time, on nothing but an assumption, and its docstring claimed the
+    opposite (ISO 8601 UTC) while returning a naive string. The column is in
+    fact Pacific, so every hour and day-of-week the posting-time analysis is
+    built on was three hours early. This holds the parser to the measurement
+    rather than to either guess (L34).
+    """
+
+    SAMPLES = json.loads(
+        (FIXTURES / "meta_publish_time_measurement.json").read_text(encoding="utf-8")
+    )["samples"]
+
+    def test_there_is_at_least_one_real_sample(self):
+        # An empty fixture would make every test below vacuously pass, which is
+        # the failure mode that leaves a measurement-backed rule protecting
+        # nothing (L1).
+        assert self.SAMPLES, "no measured samples, so nothing below is checked"
+
+    @pytest.mark.parametrize("sample", SAMPLES, ids=lambda s: s["post_id"])
+    def test_parsed_time_is_the_instant_the_post_actually_went_out(self, sample):
+        parsed = _parse_date(sample["export_publish_time"])
+        assert parsed is not None
+
+        actual = datetime.fromisoformat(sample["actual_local_time"]).replace(
+            tzinfo=ZoneInfo(sample["actual_timezone"])
+        )
+        assert datetime.fromisoformat(parsed) == actual
+
+    @pytest.mark.parametrize("sample", SAMPLES, ids=lambda s: s["post_id"])
+    def test_the_hour_the_analysis_reads_is_the_hour_dan_posted(self, sample):
+        # What _date_parts in analyze_posts derives, and therefore what every
+        # "best hour to post" recommendation rests on.
+        parsed = datetime.fromisoformat(_parse_date(sample["export_publish_time"]))
+        expected = datetime.fromisoformat(sample["actual_local_time"])
+        assert parsed.hour == expected.hour
+        assert parsed.strftime("%A") == expected.strftime("%A")
+
+
 class TestParsers:
     def test_parse_date_standard(self):
+        # 11:02 in the export's Pacific column is 14:02 where Dan posted it.
         result = _parse_date("04/09/2026 11:02")
-        assert result == "2026-04-09T11:02:00"
+        assert result == "2026-04-09T14:02:00-04:00"
+
+    def test_parse_date_carries_an_offset_so_the_zone_cannot_be_guessed_again(self):
+        # A naive string is what let the wrong zone go unnoticed for as long as
+        # it did: it reads as correct to every consumer.
+        assert _parse_date("04/09/2026 11:02").endswith(("-04:00", "-05:00"))
+
+    def test_parse_date_across_the_dst_boundary(self):
+        # Pacific and Eastern change over on the same dates, so the gap stays
+        # three hours, but the offset written into the string must follow the
+        # date rather than being pinned to whatever it was when this was built.
+        assert _parse_date("01/09/2026 11:02") == "2026-01-09T14:02:00-05:00"
 
     def test_parse_date_empty(self):
         assert _parse_date("") is None

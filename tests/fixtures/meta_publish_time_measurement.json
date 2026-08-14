@@ -1,0 +1,16 @@
+{
+  "what_this_is": "The measured answer to what timezone a Meta Business Suite content export writes its 'Publish time' column in. Every sample here is a real row from a real export paired with the time Dan knows he actually posted it. Nothing here is invented: an invented sample would let the parser agree with an assumption instead of with Meta (#487, L48).",
+  "how_to_add_a_sample": "Export Content from Meta Business Suite, find a row whose real posting time you know (a scheduled post is best, since the slot you picked is the ground truth), and record the row's Publish time verbatim beside that slot and its zone.",
+  "samples": [
+    {
+      "post_id": "18090229871645617",
+      "permalink": "https://www.instagram.com/p/Db8_LTRFlST/",
+      "post_type": "IG carousel",
+      "export_publish_time": "08/12/2026 13:08",
+      "actual_local_time": "2026-08-12T16:08",
+      "actual_timezone": "America/New_York",
+      "provenance": "Dan, 2026-08-13, asked which slot he set in the scheduler for this post. Answer: 4:08pm New York. The export writes 13:08, three hours behind, which is Pacific rather than the account's own local time or UTC.",
+      "export_file": "May-15-2026_Aug-12-2026_1053571017424308.csv"
+    }
+  ]
+}

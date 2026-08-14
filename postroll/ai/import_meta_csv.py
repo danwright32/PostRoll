@@ -24,6 +24,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +60,23 @@ OPTIONAL_METRIC_FIELDS = (
     "comments", "saves", "replies", "navigation",
     "profile_visits", "sticker_taps",
 )
+
+#: The timezone Meta writes the "Publish time" column in, MEASURED rather than
+#: assumed (#487). A scheduled carousel Dan set for 4:08pm New York on
+#: 2026-08-12 is written into the export as 13:08, three hours behind, which is
+#: neither the account's own local time (what this file used to assume) nor UTC
+#: (what its docstring used to claim). Pacific is Meta's own home timezone.
+#:
+#: The sample behind that, and instructions for adding another, live in
+#: tests/fixtures/meta_publish_time_measurement.json, which the suite holds this
+#: constant to. Change it only against a new measurement, never against a guess:
+#: three hours of error here moves every "best hour to post" number the app
+#: produces without anything looking wrong (L34).
+META_EXPORT_TIMEZONE = ZoneInfo("America/Los_Angeles")
+
+#: The zone Dan actually posts in, and therefore the one an hour or a
+#: day-of-week has to be expressed in for the analysis to mean anything.
+ACCOUNT_TIMEZONE = ZoneInfo("America/New_York")
 
 # Meta post type → normalized IGMediaType value
 MEDIA_TYPE_MAP: dict[str, str] = {
@@ -114,22 +132,32 @@ def _parse_float(raw: str | None) -> float | None:
 
 
 def _parse_date(raw: str) -> str | None:
-    """Parse Meta publish time ("MM/DD/YYYY HH:MM") → ISO 8601 UTC string."""
+    """Parse a Meta publish time into an ISO 8601 string in Dan's own timezone.
+
+    The column is Pacific (see META_EXPORT_TIMEZONE), so it is read in that zone
+    and converted to the account's, which is the frame every hour and
+    day-of-week in the posting-time analysis is then read in.
+
+    The returned string carries its UTC offset. It used to be naive, which is
+    exactly what let three hours of error sit unnoticed: a naive string reads as
+    correct to every consumer no matter which zone produced it, so there was
+    nothing to disagree with. A date with no time in it stays a bare date, since
+    inventing midnight in a zone would be asserting an hour nobody measured.
+    """
     raw = raw.strip()
     if not raw:
         return None
+
+    for fmt in (PUBLISH_TIME_FMT, "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            source = datetime.strptime(raw, fmt).replace(tzinfo=META_EXPORT_TIMEZONE)
+        except ValueError:
+            continue
+        return source.astimezone(ACCOUNT_TIMEZONE).isoformat()
+
     try:
-        dt = datetime.strptime(raw, PUBLISH_TIME_FMT)
-        # Meta exports are in the account's local timezone; assume no TZ info
-        # and treat as-is (naive datetime). Store without Z so it round-trips.
-        return dt.isoformat()
+        return datetime.strptime(raw, "%Y-%m-%d").date().isoformat()
     except ValueError:
-        # Try a few other formats Meta has used
-        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(raw, fmt).isoformat()
-            except ValueError:
-                pass
         return None
 
 
