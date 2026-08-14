@@ -58,6 +58,34 @@ struct InsightsOverviewView: View {
                                      silenceThreshold: LongRunState.localWorkSilenceThreshold)
                 }
 
+                // Numbers produced by the old timezone reading (#549). Placed
+                // directly under the Import CSV button rather than somewhere
+                // that merely describes it, because this is the one control
+                // that clears the notice, and it clears itself the moment an
+                // import lands (L111).
+                if AnalyticsStaleness.isStale(postCount: analyticsStore.posts.count,
+                                              lastImport: analyticsStore.lastImport) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "clock.badge.exclamationmark")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.roseDeep)
+                        Text(AnalyticsStaleness.notice)
+                            .font(.light(12))
+                            .foregroundStyle(Color.warmDark)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(Spacing.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.sm)
+                            .fill(Color.creamDeep)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Radius.sm)
+                                    .strokeBorder(Color.roseGold, lineWidth: 1)
+                            )
+                    )
+                }
+
                 RoseGoldDivider()
 
                 if let summary = importSummary {
