@@ -1,0 +1,8 @@
+{
+  "name": "failed-restore-is-reported",
+  "file": "tools/check_guards.py",
+  "find": "            failed.append((path, exc))",
+  "replace": "            _ = exc",
+  "test": "tests/test_check_guards.py::test_a_restore_that_fails_is_reported_rather_than_swallowed",
+  "breaks": "a file the interrupt handler could not put back is swallowed, so the sweep exits looking exactly like the clean case while the working tree still holds broken code that compiles and reads plausibly (#547)"
+}
