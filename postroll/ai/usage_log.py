@@ -24,6 +24,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -35,12 +36,7 @@ from .model_ids import base_model  # noqa: F401
 #: Published list prices, US dollars per million tokens, keyed by base model id.
 #: Source: Anthropic model pricing table as of 2026-06-24. Update alongside any
 #: model change; an id missing here reports as unpriced rather than free.
-#:
-#: Note claude-sonnet-5 carries an introductory rate ($2.00 / $10.00) through
-#: 2026-08-31. The list rate is used here, so a sonnet-5 total during the
-#: introductory window reads HIGH rather than low. The app pins sonnet-4-6
-#: today, so this does not currently affect any real number.
-PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
+_LIST_PRICES: dict[str, tuple[float, float]] = {
     "claude-fable-5":    (10.00, 50.00),
     "claude-mythos-5":   (10.00, 50.00),
     "claude-opus-5":     (5.00, 25.00),
@@ -53,6 +49,53 @@ PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "claude-sonnet-4-5": (3.00, 15.00),
     "claude-haiku-4-5":  (1.00, 5.00),
 }
+
+
+@dataclass(frozen=True)
+class PriceEra:
+    """A price table and the instant it came into force.
+
+    History is stamped at write time, and reading a past period must read that
+    period's state rather than the live present (L37, #484). `summarize` used
+    to reprice everything from one live table, so a legitimate price change
+    retroactively rewrote what every past week had cost, and there was no way
+    to ask what a given month came to.
+    """
+
+    effective_from: datetime
+    prices: dict[str, tuple[float, float]]
+
+
+def _utc(text: str) -> datetime:
+    return datetime.fromisoformat(text)
+
+
+#: Every price table this app has billed against, oldest first.
+#:
+#: The first era's date is the log's own beginning rather than a real pricing
+#: announcement: nothing older than it exists, and refusing to price the oldest
+#: records would silently shrink every historical total.
+#:
+#: The sonnet-5 introductory rate is recorded as its own era, from the note
+#: this file already carried: $2.00 / $10.00 through 2026-08-31, list rate
+#: after. The app pins sonnet-4-6, so no real number moves either way; what it
+#: buys is that the mechanism is exercised rather than shipped as a single era
+#: nobody has ever seen work (L65).
+PRICE_ERAS: list[PriceEra] = [
+    PriceEra(
+        effective_from=_utc("2026-01-01T00:00:00+00:00"),
+        prices={**_LIST_PRICES, "claude-sonnet-5": (2.00, 10.00)},
+    ),
+    PriceEra(
+        effective_from=_utc("2026-09-01T00:00:00+00:00"),
+        prices=dict(_LIST_PRICES),
+    ),
+]
+
+#: What a call made RIGHT NOW costs. One spelling, derived from the eras rather
+#: than kept beside them, because two tables that must agree drift and the one
+#: that drifts is the one nothing reads (L41).
+PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = PRICE_ERAS[-1].prices
 
 #: Cache reads bill at roughly a tenth of the input rate; writes at 1.25x.
 CACHE_READ_MULTIPLIER = 0.1
@@ -100,9 +143,33 @@ class Summary:
         return self.unpriced_calls == 0 and self.unreadable_lines == 0
 
 
-def cost_usd(usage: Usage) -> float | None:
-    """Dollars for one call, or None when the model has no published price."""
-    price = PRICES_USD_PER_MTOK.get(base_model(usage.model))
+def prices_in_force(at: datetime | None, eras: list[PriceEra] | None = None) -> dict[str, tuple[float, float]]:
+    """The price table that applied at `at`.
+
+    A record from before the earliest recorded era is priced at that earliest
+    era. Nothing older exists to price it with, and refusing would drop the
+    oldest calls out of every total, which is the same silent shrinkage this
+    whole change is about.
+    """
+    table = eras if eras is not None else PRICE_ERAS
+    if at is None:
+        return table[-1].prices
+    chosen = table[0].prices
+    for era in table:
+        if era.effective_from <= at:
+            chosen = era.prices
+    return chosen
+
+
+def cost_usd(usage: Usage, *, at: datetime | None = None,
+             eras: list[PriceEra] | None = None) -> float | None:
+    """Dollars for one call, or None when the model has no published price.
+
+    `at` is when the call was made. Omitted, it prices at today's rate, which
+    is right for a call being recorded now and wrong for one being read back
+    out of history, so `summarize` always passes it.
+    """
+    price = prices_in_force(at, eras).get(base_model(usage.model))
     if price is None:
         return None
     per_in, per_out = price
@@ -151,6 +218,10 @@ def record(
         "model": usage.model,
         "step": step,
         "event": event,
+        # When it happened, in UTC, so the same week reads the same on any Mac
+        # and history can be priced at the rate that was in force (#484, L37,
+        # L39).
+        "at": datetime.now(timezone.utc).isoformat(),
         "input_tokens": usage.input_tokens,
         "output_tokens": usage.output_tokens,
         "cache_read_tokens": usage.cache_read_tokens,
@@ -192,6 +263,33 @@ def _parse(line: str) -> dict[str, Any] | None:
     return data
 
 
+#: What `_recorded_at` found. Absent and damaged are different answers: every
+#: line written before #484 has no stamp at all, which is ordinary, while a
+#: stamp that will not parse means the line was hand edited or half written and
+#: pricing it at a guessed era would be a made-up number in a cost report (L50).
+_STAMP_UNREADABLE = "unreadable"
+
+
+def _recorded_at(data: dict[str, Any]) -> datetime | None | str:
+    """When a record says it was written.
+
+    Returns the instant, None when the record carries no stamp at all, or
+    `_STAMP_UNREADABLE` when it carries one that cannot be read.
+    """
+    if "at" not in data:
+        return None
+    raw = data.get("at")
+    if not isinstance(raw, str) or not raw.strip():
+        return _STAMP_UNREADABLE
+    try:
+        parsed = datetime.fromisoformat(raw.strip())
+    except ValueError:
+        return _STAMP_UNREADABLE
+    # A stamp with no zone cannot be compared against the eras, which carry
+    # one. Read as UTC, which is what `record` writes.
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 def summarize(
     *, path: Path | str | None = None, event: str | None = None
 ) -> Summary:
@@ -218,6 +316,14 @@ def summarize(
         if event is not None and data.get("event") != event:
             continue
 
+        # A stamp that will not parse makes this line's era unknowable, and a
+        # cost report would rather be short and say so than carry a figure
+        # priced at a guess. Counted the same way an unreadable line is (L11).
+        stamped = _recorded_at(data)
+        if stamped == _STAMP_UNREADABLE:
+            summary.unreadable_lines += 1
+            continue
+
         summary.calls += 1
         summary.input_tokens += data["input_tokens"]
         summary.output_tokens += data["output_tokens"]
@@ -228,15 +334,20 @@ def summarize(
         bucket.input_tokens += data["input_tokens"]
         bucket.output_tokens += data["output_tokens"]
 
-        # Reprice from the recorded tokens rather than trusting the stored
-        # dollar figure, so a price-table correction applies to history too.
-        priced = cost_usd(Usage(
-            model=data["model"],
-            input_tokens=data["input_tokens"],
-            output_tokens=data["output_tokens"],
-            cache_read_tokens=int(data.get("cache_read_tokens") or 0),
-            cache_write_tokens=int(data.get("cache_write_tokens") or 0),
-        ))
+        # Repriced from the recorded tokens rather than trusting the stored
+        # dollar figure, so a correction to a price table applies to history
+        # too, but priced AT THE RATE THAT WAS IN FORCE, so a genuine price
+        # change does not rewrite what past weeks cost (#484).
+        priced = cost_usd(
+            Usage(
+                model=data["model"],
+                input_tokens=data["input_tokens"],
+                output_tokens=data["output_tokens"],
+                cache_read_tokens=int(data.get("cache_read_tokens") or 0),
+                cache_write_tokens=int(data.get("cache_write_tokens") or 0),
+            ),
+            at=stamped,
+        )
         if priced is None:
             summary.unpriced_calls += 1
             continue

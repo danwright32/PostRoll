@@ -66,7 +66,7 @@ from .caption_credits import (
     rewrite_lost_a_credit,
 )
 from .caption_quality import problems_in, REWRITE_PROMPT
-from .performer_hashtags import strip_performer_hashtags
+from .performer_hashtags import ensure_brand_hashtag, strip_performer_hashtags
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
@@ -884,14 +884,18 @@ def generate_caption(
         # Deterministic backstop, not a second ask of the model: the prompt
         # above states the fame gate, and this enforces it against the program
         # data. A rule that lives only in a prompt is a hope (#199).
-        "hashtags": strip_performer_hashtags(
+        # Two deterministic backstops, both because a rule that lives only in
+        # the prompt is a hope (#199, #478). One removes what must not be
+        # there; the other puts back the one tag that must (the prompt says
+        # ALWAYS include #dwphotony, twice, and nothing checked).
+        "hashtags": ensure_brand_hashtag(strip_performer_hashtags(
             data.get("hashtags", []),
             program=program,
             name_mentions=name_mentions,
             photo_tags=photo_tags,
             tag_handles=tag_handles,
             famous=data.get("famous_people") or [],
-        ),
+        )),
         "alt_texts": [strip_em_dashes(str(a).strip()) for a in alt_texts],
         "scene_labels": scene_labels,
         # Named so the review screen can say which file was left out. Always
