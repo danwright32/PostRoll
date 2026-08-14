@@ -65,25 +65,10 @@ struct InsightsOverviewView: View {
                 // import lands (L111).
                 if AnalyticsStaleness.isStale(postCount: analyticsStore.posts.count,
                                               lastImport: analyticsStore.lastImport) {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "clock.badge.exclamationmark")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.roseDeep)
-                        Text(AnalyticsStaleness.notice)
-                            .font(.light(12))
-                            .foregroundStyle(Color.warmDark)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(Spacing.sm)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: Radius.sm)
-                            .fill(Color.creamDeep)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Radius.sm)
-                                    .strokeBorder(Color.roseGold, lineWidth: 1)
-                            )
-                    )
+                    // The notice itself is its own view so it can be rendered
+                    // and measured like every other notice (#559). What stays
+                    // here is the decision to show it, which needs the store.
+                    AnalyticsStalenessNotice()
                 }
 
                 RoseGoldDivider()

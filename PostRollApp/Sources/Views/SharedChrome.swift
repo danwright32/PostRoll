@@ -49,15 +49,28 @@ struct RefusalNote: View {
 }
 
 struct BrandButtonStyle: ButtonStyle {
+
+    /// The label colour and the fill behind it, named so a legibility check can
+    /// read the same values this style draws with (#559).
+    ///
+    /// Every primary button in the app is this style, and a filled button's ink
+    /// measurement is dominated by its own background: the words could be drawn
+    /// in the fill colour and the page would still measure as full. So the pair
+    /// is checked for contrast, and it is checked against THESE rather than
+    /// against a copy of the two colours, which would only confirm itself (L70).
+    static let label = Color.cream
+    static let fill = Color.roseGold
+    static let pressedFill = Color.roseDeep
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Color.cream)
+            .foregroundStyle(Self.label)
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: Radius.md)
-                    .fill(configuration.isPressed ? Color.roseDeep : Color.roseGold)
+                    .fill(configuration.isPressed ? Self.pressedFill : Self.fill)
             )
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
             .focusEffectDisabled()

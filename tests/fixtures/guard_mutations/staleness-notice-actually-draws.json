@@ -1,0 +1,8 @@
+{
+  "name": "staleness-notice-actually-draws",
+  "file": "PostRollApp/Sources/Views/Insights/AnalyticsStalenessNotice.swift",
+  "find": "    static let text = Color.warmDark",
+  "replace": "    static let text = Color.creamDeep",
+  "test": "PostRollTests/BannerLegibilityTests/testTheStalenessNoticeHasReadableContrastAgainstItsPanel",
+  "breaks": "the notice saying the numbers on screen predate the timezone correction draws its sentence in the colour of the panel behind it, so it is in the view tree and invisible on screen. The ink measurement does not catch this, because the panel and its border are what it is measuring (#559)"
+}

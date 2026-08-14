@@ -1,0 +1,8 @@
+{
+  "name": "rescan-label-reads-against-its-fill",
+  "file": "PostRollApp/Sources/Views/SharedChrome.swift",
+  "find": "    static let label = Color.cream",
+  "replace": "    static let label = Color.roseGold",
+  "test": "PostRollTests/BannerLegibilityTests/testTheRescanLabelHasReadableContrastAgainstItsFill",
+  "breaks": "every primary button in the app draws its words in the colour of its own fill, and the ink measurement still clears because the fill itself is what it is measuring (#559)"
+}
