@@ -23,17 +23,81 @@ enum OCRRescan {
         result.unreadPages.isEmpty ? nil : result.unreadPages
     }
 
+    /// Whether a page in the gap can be read now, and if not, why not.
+    ///
+    /// Two different faults, and only one of them is Dan's to fix by uploading
+    /// again (L11). `FileManager.fileExists` cannot separate them: it answers
+    /// false for a path this process is DENIED as well as for one that is
+    /// absent, so a folder macOS has not granted access to used to report every
+    /// page inside it as gone. Only the error from an attempted read tells them
+    /// apart, which is the same reason `AnalyticsStore.load` refuses to use
+    /// `fileExists` either (#557, #439).
+    enum PageReadability: Equatable {
+        case readable
+        /// Not on disk at all. Re-uploading is the only way back.
+        case missing
+        /// There, and this process is refused. A settings change fixes it, and
+        /// re-uploading into the same folder would not.
+        case denied
+        /// Some third thing went wrong opening it. Neither remedy is known to
+        /// apply, so the message says what happened and prescribes nothing
+        /// (L11).
+        case unreadable(String)
+    }
+
+    static func readability(ofPage path: String) -> PageReadability {
+        do {
+            let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
+            try? handle.close()
+            return .readable
+        } catch let error as NSError where error.isFileNotFound {
+            return .missing
+        } catch let error as NSError where error.isPermissionDenied {
+            return .denied
+        } catch {
+            return .unreadable(error.localizedDescription)
+        }
+    }
+
     /// Why this cannot run, or nil when it can.
     ///
-    /// A page named in the gap can have been moved or deleted since. Saying so
-    /// beats sending Python a path it will fail on, and beats a control that
-    /// looks live and cannot work: the code that finds the file missing has
+    /// A page named in the gap can have been moved or deleted since, or can be
+    /// sitting in a folder this app is not allowed to read. Saying so beats
+    /// sending Python a path it will fail on, and beats a control that looks
+    /// live and cannot work: the code that finds the page unreachable has
     /// already proved the action is impossible, so it refuses here rather than
     /// letting the attempt be made (L67).
+    ///
+    /// Each cause gets its own sentence, and a gap holding more than one gets
+    /// all of them, because a message reporting only one leaves the other pages
+    /// unaccounted for while naming a remedy that cannot fix them.
     static func refusal(forPages pages: [String]) -> String? {
-        let gone = pages.filter { !FileManager.default.fileExists(atPath: $0) }
-        guard !gone.isEmpty else { return nil }
-        let names = gone.map { URL(fileURLWithPath: $0).lastPathComponent }
+        message(for: pages.map { ($0, readability(ofPage: $0)) })
+    }
+
+    /// The wording, kept apart from the filesystem so every cause can be worded
+    /// and read cold without having to arrange a disk that produces it (L21).
+    static func message(for pages: [(path: String, readability: PageReadability)]) -> String? {
+        func names(_ keep: (PageReadability) -> Bool) -> [String] {
+            pages.filter { keep($0.readability) }
+                 .map { URL(fileURLWithPath: $0.path).lastPathComponent }
+        }
+
+        let missing = names { $0 == .missing }
+        let denied = names { $0 == .denied }
+        let broken: [(String, String)] = pages.compactMap { page in
+            guard case .unreadable(let reason) = page.readability else { return nil }
+            return (URL(fileURLWithPath: page.path).lastPathComponent, reason)
+        }
+
+        var sentences: [String] = []
+        if !missing.isEmpty { sentences.append(movedSentence(missing)) }
+        if !denied.isEmpty { sentences.append(deniedSentence(denied)) }
+        sentences.append(contentsOf: broken.map(unreadableSentence))
+        return sentences.isEmpty ? nil : sentences.joined(separator: " ")
+    }
+
+    private static func movedSentence(_ names: [String]) -> String {
         let list = names.joined(separator: ", ")
         return names.count == 1
             ? "\(list) is no longer where it was uploaded from, so it cannot be "
@@ -41,6 +105,24 @@ enum OCRRescan {
             : "These pages are no longer where they were uploaded from, so they "
               + "cannot be scanned again: \(list). Upload the programme again to "
               + "read them."
+    }
+
+    private static func deniedSentence(_ names: [String]) -> String {
+        let list = names.joined(separator: ", ")
+        let subject = names.count == 1
+            ? "\(list) is still there, and PostRoll is not allowed to read it"
+            : "These pages are still there, and PostRoll is not allowed to read "
+              + "them: \(list)"
+        return subject + ". Give PostRoll access to the folder they are in under "
+            + "System Settings > Privacy & Security > Files and Folders, then try "
+            + "again."
+    }
+
+    /// No remedy offered, because none was measured. Naming the failure lets
+    /// Dan report what actually happened instead of following advice written
+    /// for a different fault.
+    private static func unreadableSentence(name: String, reason: String) -> String {
+        "\(name) could not be opened, so it cannot be scanned again: \(reason)"
     }
 
     /// What the control says.

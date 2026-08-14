@@ -1,0 +1,8 @@
+{
+  "name": "rescan-refusal-tells-denied-from-missing",
+  "file": "PostRollApp/Sources/Services/OCRRescan.swift",
+  "find": "        do {\n            let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))",
+  "replace": "        guard FileManager.default.fileExists(atPath: path) else { return .missing }\n        do {\n            let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))",
+  "test": "PostRollTests/UnreadProgramPagesTests/testTheDeniedMessageDoesNotSayThePageMovedAndNamesTheRealFix",
+  "breaks": "fileExists answers false for a denied folder, so a page that never moved is reported as gone and Dan is sent to upload the programme again (#557)"
+}

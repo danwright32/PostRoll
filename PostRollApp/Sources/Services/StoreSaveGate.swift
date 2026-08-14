@@ -32,9 +32,41 @@ extension NSError {
     /// returns false for a path the process is denied, so under a TCC refusal it
     /// reports a first launch and the app starts empty over live data. Only the
     /// error from the read itself distinguishes them.
+    ///
+    /// One implementation for the whole app, because two would disagree about
+    /// the judgement that separates a first launch from live data nobody could
+    /// read (L16). `StoreSaveGateTests` fails any other file in Services that
+    /// spells these codes out for itself.
     var isFileNotFound: Bool {
-        (domain == NSCocoaErrorDomain && code == NSFileReadNoSuchFileError)
-            || (domain == NSPOSIXErrorDomain && code == Int(ENOENT))
+        posixCode.map { $0 == ENOENT || $0 == ENOTDIR }
+            ?? (domain == NSCocoaErrorDomain
+                && (code == NSFileReadNoSuchFileError || code == NSFileNoSuchFileError))
+    }
+
+    /// True when the file is there and this process is refused it: a TCC denial
+    /// on the folder, or permissions on the file. The actionable half of "not
+    /// absent", so a caller can say which of the two happened rather than
+    /// having to describe one as the absence of the other (L11, #557).
+    var isPermissionDenied: Bool {
+        posixCode.map { $0 == EACCES || $0 == EPERM }
+            ?? (domain == NSCocoaErrorDomain
+                && (code == NSFileReadNoPermissionError
+                    || code == NSFileWriteNoPermissionError))
+    }
+
+    /// The deepest POSIX errno inside this error, or nil when there is none.
+    ///
+    /// Read from the bottom because the same fault arrives wearing different
+    /// hats: `Data(contentsOf:)` reports an absent file as
+    /// NSFileReadNoSuchFileError, while `FileHandle(forReadingFrom:)` reports it
+    /// as NSFileNoSuchFileError wrapping ENOENT. The errno underneath is the one
+    /// thing both agree on.
+    private var posixCode: Int32? {
+        if let underlying = userInfo[NSUnderlyingErrorKey] as? NSError,
+           let deeper = underlying.posixCode {
+            return deeper
+        }
+        return domain == NSPOSIXErrorDomain ? Int32(code) : nil
     }
 }
 
