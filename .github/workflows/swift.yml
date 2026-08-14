@@ -228,6 +228,12 @@ jobs:
     # A larger runner is the other way to do it and is deliberately not used:
     # larger runners bill on a private repo, which this one becomes.
     #
+    # Three shards since #512, which split the scrolling reel's checks out of
+    # test_frame_legibility.py. That file was 580s of the 846s the four summed
+    # to, so it was a shard on its own and nothing could divide it further while
+    # it was one file. Measured after the split on a 10 core Mac with -n auto:
+    # the Tuesday half 60s, the Thursday half 141s run serially, three tests.
+    #
     # The shards are balanced by MEASURED time, not by file count. Summed
     # durations on this Mac: the legibility file 580s, the golden frames 221s,
     # the program plate 40s, the gallery alignment 5s. One file is 69% of the
@@ -252,6 +258,8 @@ jobs:
         shard:
           - name: legibility
             files: tests/test_frame_legibility.py
+          - name: thursday-reel
+            files: tests/test_thursday_reel_legibility.py
           - name: goldens
             files: tests/test_golden_frames.py tests/test_slider_program_plate.py tests/test_gallery_alignment.py
     steps:
