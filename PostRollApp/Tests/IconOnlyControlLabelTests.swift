@@ -4,7 +4,7 @@ import XCTest
 ///
 /// The fix for this class already existed in the app: the blog metadata copy
 /// button and the event list toolbar buttons carry labels. It had simply
-/// skipped its siblings, which is how a fixed class comes back (L30) — three
+/// skipped its siblings, which is how a fixed class comes back (L30): three
 /// caption copy buttons, two open-at-full-size buttons, three menu triggers,
 /// the carousel arrows and a preset delete, all icon only and all unnamed.
 ///

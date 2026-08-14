@@ -1,0 +1,8 @@
+{
+  "name": "copy-acknowledgment-goes-stale",
+  "file": "PostRollApp/Sources/Views/ClipboardCopyButton.swift",
+  "find": "        guard let copied else { return false }\n        return copied == current",
+  "replace": "        return copied != nil",
+  "test": "PostRollTests/CopyAcknowledgementTests/testEditingTheTextAfterCopyingDropsTheAcknowledgment",
+  "breaks": "the copied checkmark outlives the text it is about, so it claims the clipboard holds words that have since been edited (#466)"
+}

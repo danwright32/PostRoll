@@ -26,24 +26,58 @@ struct ClipboardCopyButton: View {
 
     var size: CGFloat = 10
 
-    @State private var copied = false
+    /// What was last put on the clipboard from this button, not whether
+    /// something was.
+    ///
+    /// The acknowledgment is then DERIVED by comparing it to the text as it
+    /// stands now, rather than being an event that has to be cancelled when the
+    /// text changes (L14). A stale checkmark is worse than none: it is an
+    /// acknowledgment of something that is no longer true (#205, L12), and
+    /// there is no path here on which it can be left standing.
+    @State private var copiedText: String? = nil
+
+    private var copied: Bool {
+        CopyAcknowledgement.stillDescribesTheClipboard(copied: copiedText, current: text)
+    }
 
     var body: some View {
         Button {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
-            copied = true
+            copiedText = text
         } label: {
-            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+            Image(systemName: CopyAcknowledgement.symbol(copied: copied))
                 .font(.system(size: size))
                 .foregroundStyle(copied ? Color.roseGold : Color.warmMid)
         }
         .buttonStyle(.plain)
-        .help(copied ? "Copied" : "Copy \(what)")
-        .accessibilityLabel(copied ? "\(what) copied" : "Copy \(what)")
-        // A stale checkmark would claim the clipboard holds text that has since
-        // been edited, which is worse than no acknowledgment at all: it is an
-        // acknowledgment of something that is no longer true (#205, L12).
-        .onChange(of: text) { copied = false }
+        .help(CopyAcknowledgement.label(copied: copied, what: what))
+        .accessibilityLabel(CopyAcknowledgement.label(copied: copied, what: what))
+    }
+}
+
+/// What a copy button shows, decided outside the view so it can be asserted.
+enum CopyAcknowledgement {
+
+    /// Whether an acknowledgment still describes what is on the clipboard.
+    ///
+    /// False the moment the text is edited, because the clipboard then holds
+    /// something other than what is on screen and a checkmark beside it would
+    /// be a claim about the wrong words.
+    static func stillDescribesTheClipboard(copied: String?, current: String) -> Bool {
+        guard let copied else { return false }
+        return copied == current
+    }
+
+    /// The icon. Two different glyphs, so the two states are not distinguished
+    /// by colour alone.
+    static func symbol(copied: Bool) -> String {
+        copied ? "checkmark" : "doc.on.doc"
+    }
+
+    /// The name, used for both the tooltip and the accessible label, so what a
+    /// sighted person reads and what VoiceOver says cannot disagree.
+    static func label(copied: Bool, what: String) -> String {
+        copied ? "\(what) copied" : "Copy \(what)"
     }
 }
