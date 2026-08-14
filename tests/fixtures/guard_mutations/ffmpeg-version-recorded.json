@@ -1,0 +1,8 @@
+{
+  "name": "ffmpeg-version-recorded",
+  "file": ".github/workflows/tests.yml",
+  "find": "      - name: Record the ffmpeg version this leg ran against\n        run: |\n          set -euo pipefail\n          {\n            echo \"### ffmpeg on ${{ runner.os }} (${{ runner.arch }})\"\n            echo '```'\n            ffmpeg -version | head -n 1\n            ffprobe -version | head -n 1\n            echo '```'\n          } >> \"${GITHUB_STEP_SUMMARY}\"\n\n      # POSTROLL_REQUIRE_FFMPEG",
+  "replace": "      # POSTROLL_REQUIRE_FFMPEG",
+  "test": "tests/test_ci_gates.py::test_both_legs_record_the_ffmpeg_version_they_ran_against",
+  "breaks": "one leg discards the ffmpeg version it ran against, so a red Mac leg cannot be attributed: our own change and ffmpeg having moved underneath us look identical (#552)"
+}

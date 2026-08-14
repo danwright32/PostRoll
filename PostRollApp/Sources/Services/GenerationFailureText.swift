@@ -60,6 +60,13 @@ enum GenerationFailureText {
             return serviceSentence(for: kind, day: day)
         case .authFailed:
             return "Claude API key is invalid or missing. Set ANTHROPIC_API_KEY and retry."
+        // No "and retry" here, unlike almost every sentence around it: this one
+        // fails the same way every time until the model id changes (#542).
+        case .modelUnavailable(let model):
+            let named = model.map { "a model called \($0)" } ?? "a model"
+            return "\(dayLabel(day)) asked Claude for \(named), which the service does not "
+                 + "have. Retrying will not help: a model id in postroll/ai/model_ids.py "
+                 + "has been retired and needs updating."
         case .beforeAfterInputsMissing(let inputDay):
             return inputDay == "friday"
                 ? "Friday's before/after story reuses Tuesday's RAW + edited. Assign them on "

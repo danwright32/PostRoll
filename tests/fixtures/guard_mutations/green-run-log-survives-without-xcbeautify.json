@@ -1,0 +1,8 @@
+{
+  "name": "green-run-log-survives-without-xcbeautify",
+  "file": "PostRollApp/build-install.sh",
+  "find": "    (command -v xcbeautify >/dev/null && xcbeautify < \"${SWIFT_LOG}\" || cat \"${SWIFT_LOG}\")\n    rm -f \"${SWIFT_LOG}\"\n  else",
+  "replace": "    (command -v xcbeautify >/dev/null && xcbeautify < \"${SWIFT_LOG}\" || cat /dev/null)\n    rm -f \"${SWIFT_LOG}\"\n  else",
+  "test": "tests/test_build_and_test_gates.py::test_the_swift_output_reaches_the_operator_with_no_xcbeautify",
+  "breaks": "the Swift log is swallowed on the fallback branch, which is the one taken on the Linux CI image and on any machine without xcbeautify, so a green run reports nothing about what ran (#510)"
+}

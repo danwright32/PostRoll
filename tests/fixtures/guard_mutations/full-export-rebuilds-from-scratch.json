@@ -2,7 +2,7 @@
   "name": "full-export-rebuilds-from-scratch",
   "file": "PostRollApp/Sources/Services/ExportStaging.swift",
   "find": "            if let rebuilding, fm.fileExists(atPath: finalFolder.path) {",
-  "replace": "            if fm.fileExists(atPath: finalFolder.path) {",
+  "replace": "            if fm.fileExists(atPath: finalFolder.path) {\n                let rebuilding = rebuilding ?? []",
   "test": "PostRollTests/EventExporterTests/testFullReexportRebuildsAndRemovesOrphans",
   "breaks": "a full export inherits the previous export's folder, so orphaned carousel photos survive into it and get uploaded (#442)"
 }

@@ -501,3 +501,76 @@ def test_the_guard_runner_does_not_insist_on_a_venv(tmp_path):
     assert "KILLED" in combined, (
         f"the guard was not proven, so the run did not actually happen:\n{combined}")
     assert result.returncode == 0, combined
+
+
+# ── the Mac leg blocks a pull request (#550) ──────────────────────────────────
+#
+# Decided on evidence rather than on principle. On 2026-08-14 the Mac leg found
+# a real platform difference on its first run, and the pull request carrying it
+# reported 5 passed / 0 failed while that was happening, because a job gated off
+# pull requests is not in the rollup a merge is judged by. It merged, and main
+# went red. A check that cannot run before the merge cannot stop the merge, and
+# a skipped job reads exactly like a passing one (L98).
+
+
+def test_the_mac_leg_is_not_gated_off_pull_requests():
+    """The whole point of the promotion: it has to be able to block."""
+    text = TESTS.read_text(encoding="utf-8")
+    assert "github.event_name != 'pull_request'" not in text, (
+        "the Mac leg is skipped on pull requests again, so a Mac-only break "
+        "cannot be caught until after it has merged, and the pull request "
+        "reports green while it happens")
+
+
+def test_both_test_legs_run_on_a_pull_request():
+    """Neither leg may carry a condition that quietly removes it from the set a
+    merge is judged by."""
+    text = TESTS.read_text(encoding="utf-8")
+    assert re.search(r"pull_request:\s*\n\s*branches:\s*\[main\]", text), (
+        "the suite does not run on pull requests at all")
+    # `if:` on a job is how a leg gets removed from the rollup while still
+    # appearing in the file, which is the shape this exists to catch.
+    job_conditions = re.findall(r"^    if: (.+)$", text, re.MULTILINE)
+    assert not job_conditions, (
+        f"a test leg is conditional, so it may not run on a pull request while "
+        f"still reading as present: {job_conditions}")
+
+
+# ── the guards are re-proved on a schedule too (#551) ─────────────────────────
+
+
+def test_the_full_sweep_also_runs_on_a_schedule(guards):
+    """The proofs depend on things no commit here touches: the runner image, the
+    Xcode the pin selects, and Homebrew packages. Any of those can move without
+    a commit, and with proofs that only run on a merge the first sign is a red
+    merge on whatever unrelated change happens to land next, which is the worst
+    moment to meet it and the hardest to attribute (L1).
+    """
+    assert re.search(r"schedule:\s*\n\s*- cron:", guards), (
+        "the full sweep runs only when something merges, so through a quiet "
+        "period nothing re-proves the guards at all")
+
+
+def test_the_scheduled_sweep_is_admitted_by_the_full_job(guards):
+    """A schedule trigger the job's own condition excludes is a trigger that
+    fires and runs nothing, which reports success (L98)."""
+    assert "if: github.event_name != 'pull_request'" in guards, (
+        "the full job's condition changed; re-check that a scheduled run still "
+        "reaches it")
+
+
+# ── what the legs actually ran against is recorded (#552) ─────────────────────
+
+
+def test_both_legs_record_the_ffmpeg_version_they_ran_against():
+    """Both legs install whatever ffmpeg is current on the day. The Mac leg
+    exists to catch differences in ffmpeg builds and codecs between platforms,
+    so an unrecorded version on either side makes its result ambiguous: when it
+    goes red there is no way to tell our own change from ffmpeg having moved,
+    and the reflex is to read the diff, which is where the answer is not.
+    """
+    text = TESTS.read_text(encoding="utf-8")
+    recorded = re.findall(r"GITHUB_STEP_SUMMARY", text)
+    assert len(recorded) >= 2, (
+        f"expected each test leg to record its ffmpeg version in the job "
+        f"summary, found {len(recorded)} such steps")

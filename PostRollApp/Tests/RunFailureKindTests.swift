@@ -217,3 +217,82 @@ final class RunFailureKindTests: XCTestCase {
                      "no advice may be given about a failure we did not recognise")
     }
 }
+
+// MARK: - A model the service does not have (#542)
+//
+// A 404 carries no needle of its own, so it used to fall through to the generic
+// service branch, whose advice is to wait a minute and retry. Retrying a model
+// the service does not have fails identically forever: a permanent failure
+// wearing a transient one's advice (L11).
+
+extension RunFailureKindTests {
+
+    private var modelNotFound: String {
+        "Anthropic API error: Error code: 404 - {'type': 'error', 'error': "
+        + "{'type': 'not_found_error', 'message': 'model: claude-opus-9'}, "
+        + "'request_id': 'req_011CTgLm4rB29WqSaMPLE'}"
+    }
+
+    func testAModelTheServiceDoesNotHaveIsItsOwnKind() {
+        XCTAssertEqual(RunFailureKind.of(modelNotFound),
+                       .modelUnavailable(model: "claude-opus-9"))
+    }
+
+    /// The whole point of separating it: no wait, because waiting cannot help.
+    func testAMissingModelIsNeverGivenAWaitToSitThrough() {
+        XCTAssertNil(RunFailureKind.of(modelNotFound).waitAdvice)
+    }
+
+    /// Nothing on the photo screen affects which model was asked for, so
+    /// offering that route would send Dan to change inputs that were fine.
+    func testAMissingModelIsNotOfferedTheRouteBackToTheInputs() {
+        XCTAssertFalse(RunFailureKind.of(modelNotFound).isFixableFromTheApp)
+    }
+
+    /// Both needles are required. `not_found_error` alone could arrive from
+    /// something other than the model, and a bare 404 could be any missing
+    /// resource; neither on its own is the shape this classifies.
+    func testOneHalfOfTheShapeIsNotEnough() {
+        let codeOnly = "Anthropic API error: Error code: 404 - {'type': 'error', "
+                     + "{'type': 'billing_error', 'message': 'nope'}}"
+        let wordOnly = "Anthropic API error: Error code: 500 - {'type': 'error', "
+                     + "{'type': 'not_found_error', 'message': 'model: x'}}"
+        XCTAssertNotEqual(RunFailureKind.of(codeOnly), .modelUnavailable(model: nil))
+        XCTAssertNotEqual(RunFailureKind.of(wordOnly), .modelUnavailable(model: "x"))
+    }
+
+    /// The id is repeated back exactly as the service spelled it, because it is
+    /// what has to be found in model_ids.py, and a lowercased copy would be a
+    /// string that is not in the file.
+    func testTheModelIdKeepsItsOwnCase() {
+        let mixed = "Anthropic API error: Error code: 404 - {'type': 'not_found_error', "
+                  + "'message': 'model: Claude-Opus-9'}"
+        XCTAssertEqual(RunFailureKind.of(mixed), .modelUnavailable(model: "Claude-Opus-9"))
+    }
+
+    /// A message naming no model must not invent one: a wrong name sends the
+    /// search somewhere the answer is not (L75).
+    func testAMissingModelWithNoNamedIdClaimsNoName() {
+        let unnamed = "Anthropic API error: Error code: 404 - {'type': 'error', 'error': "
+                    + "{'type': 'not_found_error', 'message': 'not found'}}"
+        XCTAssertEqual(RunFailureKind.of(unnamed), .modelUnavailable(model: nil))
+    }
+
+    /// What Dan actually reads. It has to name the model and must not offer a
+    /// retry, which is the advice that made this indistinguishable from an
+    /// outage.
+    func testTheRunMessageNamesTheModelAndDoesNotOfferAWait() {
+        let text = PythonBridgeError.scriptFailed(exitCode: 1, stderr: modelNotFound)
+            .errorDescription ?? ""
+        XCTAssertTrue(text.contains("claude-opus-9"), text)
+        XCTAssertFalse(text.lowercased().contains("wait"), text)
+    }
+
+    /// The same promise on the per-day path, which has its own wording.
+    func testTheDayMessageNamesTheModelAndDoesNotOfferAWait() {
+        let summary = GenerationFailureText.summary(day: "thursday", raw: modelNotFound)
+        XCTAssertTrue(summary.text.contains("claude-opus-9"), summary.text)
+        XCTAssertFalse(summary.text.lowercased().contains("wait"), summary.text)
+        XCTAssertFalse(summary.fixable)
+    }
+}

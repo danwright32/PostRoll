@@ -61,19 +61,45 @@ def test_an_unset_flag_does_not_require_ffmpeg():
 # and depend on the machine.
 
 
-def _stub_dir(tmp_path: Path, *, xcodebuild_exit: int, xcodebuild_output: str = "") -> Path:
-    """A PATH entry whose xcodebuild exits with the given code."""
+#: The marker the stub xcbeautify prints, so a test can prove the log really was
+#: piped through it rather than through the `cat` fallback wearing the same
+#: result. Two branches that produce identical output are one untested branch.
+XCBEAUTIFY_MARKER = "stub xcbeautify saw the log"
+
+#: A PATH with nothing on it but the stubs and the system tools the script
+#: needs. Used to make the ABSENCE of xcbeautify a fact of the test rather than
+#: a fact of whichever machine happens to be running it.
+BARE_PATH_DIRS = "/usr/bin:/bin"
+
+
+def _write_stub(path: Path, body: str) -> None:
+    path.write_text("#!/bin/sh\n" + body)
+    path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _stub_dir(tmp_path: Path, *, xcodebuild_exit: int, xcodebuild_output: str = "",
+              with_xcbeautify: bool = False) -> Path:
+    """A PATH entry whose xcodebuild exits with the given code.
+
+    `with_xcbeautify` adds a passthrough stub of it. The script pipes the Swift
+    log through xcbeautify when it is installed and through `cat` when it is
+    not, and which of those happens was, until #510 put this suite on a Mac,
+    decided entirely by the machine: the Linux CI image and this Mac both lack
+    xcbeautify, so the branch that actually runs on a developer machine with it
+    installed had never been exercised anywhere (L101, L102).
+    """
     d = tmp_path / "stubbin"
     d.mkdir()
-    stub = d / "xcodebuild"
     extra = f'echo "{xcodebuild_output}"\n' if xcodebuild_output else ""
-    stub.write_text(
-        "#!/bin/sh\n"
-        "echo \"stub xcodebuild $*\"\n"
-        + extra
-        + f"exit {xcodebuild_exit}\n"
+    _write_stub(
+        d / "xcodebuild",
+        "echo \"stub xcodebuild $*\"\n" + extra + f"exit {xcodebuild_exit}\n",
     )
-    stub.chmod(stub.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    if with_xcbeautify:
+        # Passthrough, not a reimplementation: what is under test is that the
+        # script hands the captured log on to the operator, not what the real
+        # xcbeautify chooses to render from it.
+        _write_stub(d / "xcbeautify", f'echo "{XCBEAUTIFY_MARKER}"\nexec cat\n')
     return d
 
 
@@ -180,15 +206,17 @@ def test_an_ordinary_red_suite_is_not_blamed_on_permissions(tmp_path):
     assert "permissions problem" not in combined, combined[-2000:]
 
 
-@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
-def test_the_swift_output_still_reaches_the_operator_on_a_green_run(tmp_path):
-    """Capturing the output to classify it must not swallow it: the run's own
-    log is how anyone reads what happened.
+def _run_green_install(tmp_path: Path, *, with_xcbeautify: bool):
+    """A green Swift run of the script, from a copy with no venv so it stops at
+    the Python step rather than going on to run the real suite (which is this
+    one) inside itself.
 
-    Run from a copy with no venv, so it stops at the Python step rather than
-    going on to run the real suite (which is this one) inside itself.
+    PATH is built from scratch rather than inherited, so whether xcbeautify is
+    found is decided here and not by the machine.
     """
-    stubs = _stub_dir(tmp_path, xcodebuild_exit=0, xcodebuild_output="Executed 927 tests")
+    stubs = _stub_dir(tmp_path, xcodebuild_exit=0,
+                      xcodebuild_output="Executed 927 tests",
+                      with_xcbeautify=with_xcbeautify)
     fake_repo = tmp_path / "repo"
     (fake_repo / "PostRollApp").mkdir(parents=True)
     shutil.copy2(BUILD_INSTALL, fake_repo / "PostRollApp" / "build-install.sh")
@@ -197,14 +225,46 @@ def test_the_swift_output_still_reaches_the_operator_on_a_green_run(tmp_path):
     shutil.copy2(CACHE_PATH_FILE, fake_repo / "PostRollApp" / "derived-data-path.sh")
 
     env = dict(os.environ)
-    env["PATH"] = f"{stubs}:{env['PATH']}"
+    env["PATH"] = f"{stubs}:{BARE_PATH_DIRS}"
     env.pop("SKIP_INSTALL_TESTS", None)
     result = subprocess.run(
         ["/bin/bash", str(fake_repo / "PostRollApp" / "build-install.sh")],
         capture_output=True, text=True, env=env, timeout=600,
     )
+    return result.stdout + result.stderr
 
-    combined = result.stdout + result.stderr
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_the_swift_output_reaches_the_operator_with_no_xcbeautify(tmp_path):
+    """Capturing the output to classify it must not swallow it: the run's own
+    log is how anyone reads what happened.
+
+    This is the `cat` fallback, pinned by a PATH that genuinely has no
+    xcbeautify on it.
+    """
+    combined = _run_green_install(tmp_path, with_xcbeautify=False)
+
+    assert XCBEAUTIFY_MARKER not in combined, (
+        "this case is meant to exercise the fallback, and xcbeautify ran")
+    assert "Executed 927 tests" in combined, combined[-2000:]
+    assert "permissions problem" not in combined, combined[-2000:]
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_the_swift_output_reaches_the_operator_through_xcbeautify(tmp_path):
+    """The same promise on the other branch, which is the one that runs on a
+    machine with xcbeautify installed.
+
+    The marker is asserted first: without it this test would pass by quietly
+    taking the `cat` fallback, which is the same way the single version of this
+    check passed everywhere for months while never once exercising the pipe
+    (L70).
+    """
+    combined = _run_green_install(tmp_path, with_xcbeautify=True)
+
+    assert XCBEAUTIFY_MARKER in combined, (
+        "the log was not piped through xcbeautify, so this proves nothing about "
+        f"that branch: {combined[-2000:]}")
     assert "Executed 927 tests" in combined, combined[-2000:]
     assert "permissions problem" not in combined, combined[-2000:]
 

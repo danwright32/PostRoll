@@ -1,0 +1,8 @@
+{
+  "name": "missing-model-is-not-an-outage",
+  "file": "PostRollApp/Sources/Services/RunFailureKind.swift",
+  "find": "        if s.contains(\"not_found_error\") && hasCode(\"404\", in: s) {",
+  "replace": "        if s.contains(\"not_found_error\") && hasCode(\"404\", in: s) && s.isEmpty {",
+  "test": "PostRollTests/RunFailureKindTests/testAModelTheServiceDoesNotHaveIsItsOwnKind",
+  "breaks": "a model id the service does not have falls through to the generic service branch, so Dan is told the service is having trouble and to wait a minute and retry something that fails identically forever (#542)"
+}

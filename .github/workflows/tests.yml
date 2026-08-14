@@ -88,8 +88,26 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
 
+      # Recorded, not just checked (#552). Both legs install whatever ffmpeg is
+      # current on the day, and the Mac leg exists specifically to catch
+      # differences in ffmpeg builds and codecs between the platforms. With the
+      # version discarded, a red run cannot be attributed: our own change and
+      # ffmpeg having moved underneath us look identical, and the reflex is to
+      # read the diff, which is where the answer will not be. The presence check
+      # already produced this text; this keeps it.
       - name: Confirm ffmpeg is actually here
         run: ffmpeg -version && ffprobe -version
+
+      - name: Record the ffmpeg version this leg ran against
+        run: |
+          set -euo pipefail
+          {
+            echo "### ffmpeg on ${{ runner.os }} (${{ runner.arch }})"
+            echo '```'
+            ffmpeg -version | head -n 1
+            ffprobe -version | head -n 1
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       # POSTROLL_REQUIRE_FFMPEG turns the skip into a hard failure, so the
       # tests cannot quietly stop running if a future image drops ffmpeg.
@@ -119,16 +137,21 @@ jobs:
   # direction already, by a BSD only shell form that passed on Dan's Mac and
   # failed on every Linux run.
   #
-  # Pushes to main only, deliberately, and this is the half worth arguing
-  # with. A job that does not run on a pull request cannot block one, and a
-  # skipped job reads exactly like a passing one, which this repo has been
-  # burned by twice. The trade accepted here is that a Mac-only break is
-  # caught on main within minutes rather than never, at roughly a tenth of
-  # the runner cost of putting it on every pull request. The first runs are
-  # the measurement the issue asked for; move it to pull requests if it earns
-  # its keep and the wall clock is tolerable.
+  # On pull requests as well as main, decided on evidence rather than on
+  # principle (#550).
+  #
+  # This ran on merges to main only for exactly one day. On 2026-08-14 it found
+  # a real platform difference on its first run, and the pull request carrying
+  # that change reported 5 passed / 0 failed the whole time, because a job gated
+  # off pull requests is not in the rollup a merge is judged by. It merged, main
+  # went red, and the failure arrived by email instead of by the check that
+  # exists to prevent it. A check that cannot run before the merge cannot stop
+  # the merge, and a skipped job reads exactly like a passing one (L98).
+  #
+  # Measured before promoting: 10m42s on the runner, against 1m55s for the Linux
+  # leg. This repository is public, so the standard runners cost nothing to run
+  # and the price is wall clock on a pull request, which is the trade taken.
   macos:
-    if: github.event_name != 'pull_request'
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -148,8 +171,23 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
 
+      # The same record as the Linux leg (#552). This is the half that makes the
+      # comparison possible: two legs whose ffmpeg versions are both unrecorded
+      # cannot tell a platform difference from a version difference, which is
+      # the one question this job exists to answer.
       - name: Confirm ffmpeg is actually here
         run: ffmpeg -version && ffprobe -version
+
+      - name: Record the ffmpeg version this leg ran against
+        run: |
+          set -euo pipefail
+          {
+            echo "### ffmpeg on ${{ runner.os }} (${{ runner.arch }})"
+            echo '```'
+            ffmpeg -version | head -n 1
+            ffprobe -version | head -n 1
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       # The SAME command as the Linux leg. A narrower one here would make this
       # job a different check wearing the same name, and the platform
