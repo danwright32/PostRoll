@@ -1,0 +1,50 @@
+[
+  {
+    "bucket": "pass",
+    "name": "changed",
+    "state": "SUCCESS",
+    "workflow": "Guard proofs"
+  },
+  {
+    "bucket": "pass",
+    "name": "swift-unit",
+    "state": "SUCCESS",
+    "workflow": "macOS"
+  },
+  {
+    "bucket": "pass",
+    "name": "macos",
+    "state": "SUCCESS",
+    "workflow": "Tests"
+  },
+  {
+    "bucket": "pass",
+    "name": "reference-frames (legibility)",
+    "state": "SUCCESS",
+    "workflow": "macOS"
+  },
+  {
+    "bucket": "pass",
+    "name": "reference-frames (thursday-reel)",
+    "state": "SUCCESS",
+    "workflow": "macOS"
+  },
+  {
+    "bucket": "pass",
+    "name": "reference-frames (goldens)",
+    "state": "SUCCESS",
+    "workflow": "macOS"
+  },
+  {
+    "bucket": "pass",
+    "name": "python",
+    "state": "SUCCESS",
+    "workflow": "Tests"
+  },
+  {
+    "bucket": "skipping",
+    "name": "full",
+    "state": "SKIPPED",
+    "workflow": "Guard proofs"
+  }
+]
