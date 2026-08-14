@@ -258,7 +258,7 @@ struct ExportView: View {
                         }
                             .buttonStyle(.plain)
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
                 } else {
                     HStack {
@@ -536,7 +536,7 @@ private struct ExportDayRow: View {
                 .frame(width: 70, alignment: .leading)
             Image(systemName: "checkmark")
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.iconAccent)
             Text(summary)
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
@@ -545,7 +545,7 @@ private struct ExportDayRow: View {
             Button("Export just this day", action: onExportJustThisDay)
                 .buttonStyle(.plain)
                 .font(.system(size: 10))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
         }
     }
 }
@@ -562,7 +562,7 @@ private struct ExportBlogRow: View {
                 .frame(width: 70, alignment: .leading)
             Image(systemName: "checkmark")
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.iconAccent)
             Text(blog?.title ?? "Draft")
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)

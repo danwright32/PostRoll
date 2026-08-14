@@ -1708,7 +1708,7 @@ private struct CaptionSection: View {
                     Text(day.displayName.uppercased())
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
 
                     if day == .friday {
                         Text("Story only")
@@ -1877,7 +1877,7 @@ private struct CaptionSection: View {
                                     Button("Revise with feedback…") { showingRevision = true }
                                         .buttonStyle(.plain)
                                         .font(.system(size: 12))
-                                        .foregroundStyle(Color.roseGold)
+                                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                                 }
                             }
                             Spacer(minLength: 0)
@@ -2035,7 +2035,7 @@ private struct CaptionSection: View {
                                         Button("Revise with feedback…") { showingRevision = true }
                                             .buttonStyle(.plain)
                                             .font(.system(size: 12))
-                                            .foregroundStyle(Color.roseGold)
+                                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                                         if undoCaption != nil {
                                             Button("Restore previous") {
                                                 caption = undoCaption!
@@ -2143,7 +2143,7 @@ private struct CaptionSection: View {
                                     Button("Revise with feedback…") { showingRevision = true }
                                         .buttonStyle(.plain)
                                         .font(.system(size: 12))
-                                        .foregroundStyle(Color.roseGold)
+                                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                                     if undoCaption != nil {
                                         Button("Restore previous") {
                                             caption = undoCaption!
@@ -2206,7 +2206,7 @@ private struct CaptionSection: View {
                                                 .font(.system(size: 12, weight: .medium))
                                         }
                                         .buttonStyle(.plain)
-                                        .foregroundStyle(Color.roseGold)
+                                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                                         .disabled(isRegeneratingGraphic)
                                         .padding(.bottom, Spacing.xs)
                                     }
@@ -2461,7 +2461,7 @@ private struct CaptionSection: View {
                                 Button("Revise with feedback…") { showingRevision = true }
                                     .buttonStyle(.plain)
                                     .font(.system(size: 12))
-                                    .foregroundStyle(Color.roseGold)
+                                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                                 if undoCaption != nil {
                                     Button("Restore previous") {
                                         caption = undoCaption!
@@ -2548,7 +2548,7 @@ private struct RevisionPanel: View {
             Text("FEEDBACK FOR REVISION")
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
 
             TextField("e.g. make it shorter, add @dciny, don't mention the scene label", text: $feedbackText)
                 .focused($focused)
@@ -2697,7 +2697,7 @@ private struct BlogSection: View {
                             }
                             .buttonStyle(.plain)
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                             .help(field.help)
                             .accessibilityLabel("Copy \(field.label)")
                         }
@@ -2787,7 +2787,7 @@ private struct BlogSection: View {
                         Text("BLOG POST")
                             .font(.system(size: 10, weight: .medium))
                             .tracking(1.2)
-                            .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                            .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
                         if !blog.title.isEmpty {
                             Text(blog.title)
                                 .font(.light(11))
@@ -2852,7 +2852,7 @@ private struct BlogSection: View {
                             }
                             .buttonStyle(.plain)
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                             .help("Copy the post with its title, ready to paste")
 
                             Button(showingPreview ? "Edit" : "Preview") {
@@ -2860,7 +2860,7 @@ private struct BlogSection: View {
                             }
                             .buttonStyle(.plain)
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                         }
                         if showingPreview {
                             ScrollView {
@@ -2913,7 +2913,7 @@ private struct BlogSection: View {
                             Button("Revise with feedback…") { showingRevision = true }
                                 .buttonStyle(.plain)
                                 .font(.system(size: 12))
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.pageAccentText)
                             if onSwapPhotos != nil {
                                 if isSwappingPhotos {
                                     HStack(spacing: 4) {
@@ -3102,7 +3102,7 @@ private struct HashtagsEditor: View {
                     } label: {
                         Image(systemName: "tag")
                             .font(.system(size: 10))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.iconAccent)
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
@@ -3519,7 +3519,7 @@ private struct ReviewMediaStrip: View {
                                         Text("Add B&W")
                                             .font(.system(size: 9))
                                     }
-                                    .foregroundStyle(Color.roseGold)
+                                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                                     .frame(width: 60, height: 80)
                                     .background(Color.warmFaint.opacity(0.3))
                                     .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
@@ -3531,7 +3531,7 @@ private struct ReviewMediaStrip: View {
                                     Button("Change") { onChangeBW() }
                                         .buttonStyle(.plain)
                                         .font(.system(size: 10))
-                                        .foregroundStyle(Color.roseGold)
+                                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                                     Button("Remove") { onRemoveBW?() }
                                         .buttonStyle(.plain)
                                         .font(.system(size: 10))
@@ -3677,7 +3677,7 @@ private struct FridayClipEditor: View {
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 10))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                         .popover(isPresented: Binding(
                             get: { cropPopoverIndex == index },
                             set: { if !$0 { cropPopoverIndex = nil } }
@@ -3693,13 +3693,13 @@ private struct FridayClipEditor: View {
                         Button(entry.included ? "Exclude" : "Include") { toggleIncluded(index) }
                             .buttonStyle(.plain)
                             .font(.system(size: 10))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
 
                         if let onSwap {
                             Button("Swap") { onSwap(entry.clipPath) }
                                 .buttonStyle(.plain)
                                 .font(.system(size: 10))
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.pageAccentText)
                         }
                     }
                 }
@@ -3820,7 +3820,7 @@ private struct FridayClipCropPopover: View {
                 Button("Reset to default") { cropOffset = (0, 0) }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
         }
         .padding(Spacing.md)
@@ -4302,7 +4302,7 @@ private struct CoverSlotView: View {
                             .font(.system(size: 10))
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                     .disabled(isRegenerating)
                 }
             }
@@ -4701,7 +4701,7 @@ private struct CollagePreviewThumbnail: View {
                         VStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise.circle.fill")
                                 .font(.system(size: 22))
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.iconAccent)
                             // Names the control rather than drawing it (#538).
                             // Drawn, this sentence said nothing at all to anyone
                             // who cannot see the glyph, and nothing connected the
@@ -4870,7 +4870,7 @@ private struct CollagePreviewThumbnail: View {
                         } label: {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(.system(size: 11))
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.iconAccent)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Reset zoom")
@@ -4892,7 +4892,7 @@ private struct CollagePreviewThumbnail: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.iconAccent)
                     Text("Frame changes saved — they'll appear in the exported collage")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.warmMid)
@@ -5004,7 +5004,7 @@ private struct ReelStripPreviewThumbnail: View {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.left.arrow.right")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.iconAccent)
                     Text(swapSourceIdx == nil
                          ? "Tap the photo you want to move"
                          : "Tap the spot you want to swap it with")
@@ -5017,7 +5017,7 @@ private struct ReelStripPreviewThumbnail: View {
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -5220,7 +5220,7 @@ private struct ReelStripPreviewThumbnail: View {
                         } label: {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(.system(size: 11))
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.iconAccent)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Reset zoom")
@@ -5251,7 +5251,7 @@ private struct ReelStripPreviewThumbnail: View {
                         } label: {
                             Label("Swap photos", systemImage: "arrow.left.arrow.right")
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.pageAccentText)
                         }
                         .buttonStyle(.plain)
                         .disabled(isRegenerating || cells.count < 2)
@@ -5733,7 +5733,7 @@ private struct ReviewMediaFileRow: View {
         HStack(spacing: Spacing.sm) {
             Image(systemName: icon)
                 .font(.system(size: 11))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.iconAccent)
             Text(label)
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
@@ -5741,7 +5741,7 @@ private struct ReviewMediaFileRow: View {
             Button("Open") { NSWorkspace.shared.open(url) }
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -5786,7 +5786,7 @@ private struct LearningSuggestionSheet: View {
                 Text("PATTERN FOUND IN YOUR EDITS")
                     .font(.system(size: 10, weight: .medium))
                     .tracking(1.2)
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
 
                 Text("Based on how you revised these captions, there may be something worth adding to your brand voice. Edit the wording below before saving if you want to refine it:")
                     .font(.light(12))
@@ -5937,7 +5937,7 @@ private struct InlineReelPhotoAssignment: View {
                         Button("Remove") { onClearBW() }
                             .buttonStyle(.plain)
                             .font(.system(size: 9))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
                 }
             }
@@ -5945,7 +5945,7 @@ private struct InlineReelPhotoAssignment: View {
             if bwPhoto != nil {
                 Text("3-photo post: reel reveals color over B&W, Friday shows all three.")
                     .font(.light(10))
-                    .foregroundStyle(Color.roseGold.opacity(0.9))
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                     .multilineTextAlignment(.center)
             }
 
@@ -6024,7 +6024,7 @@ private struct CollageLayoutGallery: View {
                 Spacer()
                 Button("Cancel") { onCancel() }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
             .padding(Spacing.lg)
 

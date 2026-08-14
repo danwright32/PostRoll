@@ -620,6 +620,81 @@ final class BannerLegibilityTests: XCTestCase {
         }
     }
 
+    /// The accent may not be drawn as a foreground without saying which role it
+    /// is in (#580).
+    ///
+    /// `roseGold` measures 4.31:1 on the page and 3.68:1 on the deeper one:
+    /// right for a symbol or a rule, under the line for a label, and it was
+    /// drawn as both in about ninety places. Ink cannot report it, because this
+    /// type draws perfectly well and is simply too pale, so the only thing that
+    /// can is the call site saying what it is drawing. Once every foreground
+    /// goes through `pageAccentText` or `iconAccent`, the pair walk above holds
+    /// each of them to its own level.
+    func testTheAccentIsNeverDrawnUnnamed() throws {
+        let views = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // PostRollApp
+            .appendingPathComponent("Sources/Views")
+        let files = try FileManager.default
+            .subpathsOfDirectory(atPath: views.path)
+            .filter { $0.hasSuffix(".swift") }
+            .filter { !$0.hasSuffix("PaintedSurfaces.swift") }
+
+        // Finding nothing to look at is not a pass (L98). If this walk ever
+        // stops seeing the view tree it would report every screen as clean.
+        XCTAssertGreaterThan(files.count, 20,
+                             "the sweep found \(files.count) view files, so it is "
+                             + "proving nothing about the ones it did not read")
+
+        for relative in files {
+            let code = SwiftSourceText.withoutComments(
+                try String(contentsOf: views.appendingPathComponent(relative),
+                           encoding: .utf8))
+            for line in code.split(separator: "\n") where line.contains("foreground") {
+                XCTAssertFalse(line.contains("Color.roseGold"), """
+                    \(relative) draws a foreground in the raw accent, which does not \
+                    say whether it is type or a symbol. As type it is 4.31:1 on the \
+                    page, under the level it needs, and nothing else can tell. Use \
+                    PaintedSurfaces.pageAccentText or PaintedSurfaces.iconAccent.
+                    """)
+            }
+        }
+    }
+
+    /// Every colour this file names can be resolved back from its name (#580).
+    ///
+    /// The checks that read source recognise `Color.<token>`. Naming a colour
+    /// moves it out of their reach, and a name they cannot resolve reads as
+    /// nothing being set, which no rule can object to: the guard goes quiet
+    /// rather than red. `byName` is what turns a name back into its colour, so
+    /// a declaration missing from it silently exempts whatever it is put on
+    /// (L96).
+    func testEveryNamedColourIsResolvable() throws {
+        let code = try viewSource("Sources/Views/PaintedSurfaces.swift")
+        let declared = code
+            .split(separator: "\n")
+            .compactMap { line -> String? in
+                guard let r = line.range(of: #"static let (\w+) = "#,
+                                         options: .regularExpression) else { return nil }
+                return String(line[r])
+                    .replacingOccurrences(of: "static let ", with: "")
+                    .replacingOccurrences(of: " = ", with: "")
+            }
+            // byName itself is the table, not an entry in it.
+            .filter { $0 != "byName" }
+
+        XCTAssertGreaterThan(declared.count, 10,
+                             "the scan read \(declared.count) declarations, so it is not "
+                             + "looking at the file it is about")
+        for name in declared {
+            XCTAssertNotNil(PaintedSurfaces.byName[name], """
+                PaintedSurfaces.\(name) cannot be resolved from its name, so any check \
+                that reads source sees a call site using it as having no colour set, \
+                and stays green whatever it is drawn in.
+                """)
+        }
+    }
+
     private func viewSource(_ relative: String) throws -> String {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // Tests

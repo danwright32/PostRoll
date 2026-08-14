@@ -873,7 +873,7 @@ private struct PhotoDaySection: View {
                             Text(label.uppercased())
                                 .font(.system(size: 10, weight: .medium))
                                 .tracking(1.2)
-                                .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                                .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
                             if !photos.isEmpty { PhotoCountBadge(count: photos.count) }
                         }
                         if let subtitle {
@@ -925,7 +925,7 @@ private struct PhotoDaySection: View {
                         Text(collageNote).font(.system(size: 10)).foregroundStyle(Color.warmMid).padding(.top, 2)
                     }
                     Button(photos.isEmpty ? "Add Photos…" : "Add more…", action: onAddPhotos)
-                        .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Color.roseGold)
+                        .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.sm)
@@ -1126,7 +1126,7 @@ private struct CroppablePhotoThumb: View {
                         Button(action: onTag) {
                             Image(systemName: hasTags ? "tag.fill" : "tag")
                                 .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(hasTags ? Color.roseGold : .white.opacity(0.85))
+                                .foregroundStyle(hasTags ? PaintedSurfaces.iconAccent : .white.opacity(0.85))
                                 .padding(3)
                                 .background(Color.black.opacity(0.35))
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
@@ -1230,7 +1230,7 @@ private struct PhotoTagEditor: View {
                     Button { commit(newTag); newTag = "" } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 16))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.iconAccent)
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.defaultAction)
@@ -1388,7 +1388,7 @@ private struct PhotoTaggingSheet: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 10))
-                                    .foregroundStyle(Color.roseGold)
+                                    .foregroundStyle(PaintedSurfaces.iconAccent)
                                 Text(applyResult)
                                     .font(.system(size: 10))
                                     .foregroundStyle(Color.warmMid)
@@ -1400,7 +1400,7 @@ private struct PhotoTaggingSheet: View {
                                     Button("Undo", action: undoApplyToAll)
                                         .buttonStyle(.plain)
                                         .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(Color.roseGold)
+                                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                                         .help("Put the tags back as they were before this was applied")
                                 }
                             }
@@ -1427,7 +1427,7 @@ private struct PhotoTaggingSheet: View {
             Text("TAG PEOPLE")
                 .font(.system(size: 10, weight: .medium))
                 .tracking(1.2)
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
             Spacer()
             Text(PhotoTagSheetNavigation.label(index: safeIndex, count: photos.count))
                 .font(.system(size: 11))
@@ -1462,7 +1462,7 @@ private struct PhotoTaggingSheet: View {
                 VStack(spacing: Spacing.sm) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 20))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.iconAccent)
                     Text("This photo could not be opened.")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.warmMid)
@@ -1629,7 +1629,7 @@ private struct TagSuggestionFlow: View {
                 } label: {
                     Text(suggestion.display)
                         .font(.system(size: 10))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                         .lineLimit(1)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -1673,15 +1673,15 @@ private struct TuesdayReelSection: View {
                 HStack(spacing: Spacing.sm) {
                     Image(systemName: hasReelInputs ? "film.fill" : "film")
                         .font(.system(size: 11))
-                        .foregroundStyle(hasReelInputs ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(hasReelInputs ? PaintedSurfaces.iconAccent : Color.warmMid)
                     Text("SPEED EDIT REEL")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
                     if hasReelInputs {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 10))
-                            .foregroundStyle(Color.roseGold.opacity(0.8))
+                            .foregroundStyle(PaintedSurfaces.iconAccent.opacity(0.8))
                     }
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
@@ -1746,7 +1746,7 @@ private struct TuesdayReelSection: View {
                                 .font(.system(size: 11))
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
 
                     // Optional B&W after. When set, the reel reveals color over
@@ -1765,7 +1765,7 @@ private struct TuesdayReelSection: View {
                     if bwPhoto != nil {
                         Text("3-photo post: reel reveals color over B&W, Friday shows all three.")
                             .font(.light(10))
-                            .foregroundStyle(Color.roseGold.opacity(0.9))
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
 
                     SingleFilePicker(label: "Screen Recording", url: screenRecording,
@@ -1784,7 +1784,7 @@ private struct TuesdayReelSection: View {
                                     let speed = dur / targetDuration
                                     Text(String(format: "%.0f× speed", speed))
                                         .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(speed > 40 ? Color.roseDeep : Color.roseGold)
+                                        .foregroundStyle(speed > 40 ? Color.roseDeep : PaintedSurfaces.pageAccentText)
                                 }
                             }
                             HStack(spacing: Spacing.sm) {
@@ -1842,7 +1842,7 @@ private struct CollageLayoutSection: View {
                     Text("COLLAGE LAYOUT")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
                     if let seed = collageSeed {
                         Text("layout \(seed % 1000)")
                             .font(.light(10))
@@ -1879,7 +1879,7 @@ private struct CollageLayoutSection: View {
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                     } else {
                         // Exactly one arrangement fits this many photos, so a
                         // reroll would redraw the identical collage. Offering
@@ -1919,11 +1919,11 @@ private struct ThursdayReelSection: View {
                 HStack(spacing: Spacing.sm) {
                     Image(systemName: audio != nil ? "music.note" : "play.rectangle")
                         .font(.system(size: 11))
-                        .foregroundStyle(audio != nil ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(audio != nil ? PaintedSurfaces.iconAccent : Color.warmMid)
                     Text("SCROLL REEL")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
@@ -1967,7 +1967,7 @@ private struct ThursdayReelSection: View {
                         Button("New layout") { reelSeed = Int.random(in: 1...99999) }
                             .buttonStyle(.plain)
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                         Text("Re-rolls the photo arrangement. Takes effect when the reel is generated.")
                             .font(.light(10))
                             .foregroundStyle(Color.warmFaint)
@@ -1999,7 +1999,7 @@ private struct FridayBeforeAfterSection: View {
                     Text("FRIDAY")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(hasPhotos ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(hasPhotos ? PaintedSurfaces.pageAccentText : Color.warmMid)
                     Text("Before/after story — reuses Tuesday's RAW + edited photos")
                         .font(.light(11))
                         .foregroundStyle(Color.warmMid)
@@ -2008,7 +2008,7 @@ private struct FridayBeforeAfterSection: View {
                 if hasPhotos {
                     Text("ready")
                         .font(.light(11))
-                        .foregroundStyle(Color.roseGold.opacity(0.7))
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
             }
             .padding(.horizontal, Spacing.xl)
@@ -2063,7 +2063,7 @@ private struct BeforeAfterPicker: View {
                     Button("Choose…", action: onPickFromFile)
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                     if selected != nil {
                         Spacer()
                         Button(action: onClear) {
@@ -2091,7 +2091,7 @@ private struct BeforeAfterPicker: View {
                         VStack(spacing: 2) {
                             Image(systemName: "plus")
                                 .font(.system(size: 14))
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.iconAccent)
                             Text("File")
                                 .font(.system(size: 8))
                                 .foregroundStyle(Color.warmMid)
@@ -2145,7 +2145,7 @@ private struct BeforeAfterThumb: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.cream, Color.roseGold)
+                        .foregroundStyle(Color.cream, PaintedSurfaces.iconAccent)
                         .font(.system(size: 14))
                         .offset(x: 4, y: -4)
                 }
@@ -2198,7 +2198,7 @@ private struct SingleFilePicker: View {
                 Button("Choose…", action: onPick)
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                 Spacer()
             }
         }
@@ -2215,11 +2215,11 @@ private struct PhotoDropZone: View {
         HStack(spacing: Spacing.md) {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 24))
-                .foregroundStyle(Color.roseGold.opacity(isTargeted ? 0.8 : 0.35))
+                .foregroundStyle(PaintedSurfaces.iconAccent.opacity(isTargeted ? 0.8 : 0.35))
             VStack(alignment: .leading, spacing: 3) {
                 Text("Drop photos here")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isTargeted ? Color.roseGold : Color.warmMid)
+                    .foregroundStyle(isTargeted ? PaintedSurfaces.pageAccentText : Color.warmMid)
                 Text("JPEG · PNG · HEIC")
                     .font(.light(10))
                     .foregroundStyle(Color.warmMid)
@@ -2335,7 +2335,7 @@ private struct AudioFilePicker: View {
                 // File set but gone from disk — mirror the missing-photo flag.
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.iconAccent)
                 Text("\(url.lastPathComponent) can't be found")
                     .font(.system(size: 11))
                     .foregroundStyle(Color.warmDark)
@@ -2345,7 +2345,7 @@ private struct AudioFilePicker: View {
                 Button("Locate…", action: onLocate)
                     .buttonStyle(.plain)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                 Button(action: { audio = nil; stopPlayback() }) {
                     Image(systemName: "xmark.circle.fill")
                         .symbolRenderingMode(.palette)
@@ -2374,7 +2374,7 @@ private struct AudioFilePicker: View {
                 } label: {
                     Image(systemName: preview.isPlaying ? "pause.circle" : "play.circle")
                         .font(.system(size: 16))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.iconAccent)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(preview.isPlaying ? "Pause the audio" : "Play the audio")
@@ -2392,7 +2392,7 @@ private struct AudioFilePicker: View {
                 Button("Choose…", action: onPick)
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                 Spacer()
             }
         }
@@ -2541,15 +2541,15 @@ private struct PerformerAssignmentSection: View {
                 HStack(alignment: .center, spacing: Spacing.sm) {
                     Image(systemName: hasContent ? "person.crop.rectangle.stack.fill" : "person.crop.rectangle.stack")
                         .font(.system(size: 11))
-                        .foregroundStyle(hasContent ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(hasContent ? PaintedSurfaces.iconAccent : Color.warmMid)
                     Text(PerformerPanelDisplay.title(isCarouselDay: isCarouselDay))
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
                     if hasContent {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 10))
-                            .foregroundStyle(Color.roseGold.opacity(0.8))
+                            .foregroundStyle(PaintedSurfaces.iconAccent.opacity(0.8))
                     }
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
@@ -2577,7 +2577,7 @@ private struct PerformerAssignmentSection: View {
                         HStack(alignment: .top, spacing: 5) {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 10))
-                                .foregroundStyle(Color.roseGold.opacity(0.8))
+                                .foregroundStyle(PaintedSurfaces.iconAccent.opacity(0.8))
                             Text("Already credited from the photos: \(creditedFromPhotos.joined(separator: ", "))")
                                 .font(.system(size: 10))
                                 .foregroundStyle(Color.warmMid)
@@ -2646,7 +2646,7 @@ private struct PerformerCheckboxGrid: View {
                 HStack(spacing: 5) {
                     Image(systemName: allSelected ? "checkmark.square.fill" : "square")
                         .font(.system(size: 12))
-                        .foregroundStyle(allSelected ? Color.roseGold : Color.warmMid.opacity(0.5))
+                        .foregroundStyle(allSelected ? PaintedSurfaces.iconAccent : Color.warmMid.opacity(0.5))
                     Text(allSelected ? "Deselect all" : "Select all")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.warmMid)
@@ -2685,7 +2685,7 @@ private struct PerformerCheckbox: View {
             HStack(spacing: 5) {
                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
                     .font(.system(size: 12))
-                    .foregroundStyle(isSelected ? Color.roseGold : Color.warmMid.opacity(0.5))
+                    .foregroundStyle(isSelected ? PaintedSurfaces.iconAccent : Color.warmMid.opacity(0.5))
                 Text(performer.name)
                     .font(.system(size: 11))
                     .foregroundStyle(isSelected ? Color.warmDark : Color.warmMid)

@@ -45,7 +45,7 @@ struct InsightsOverviewView: View {
                         importCSV()
                     } label: {
                         Label(isImporting ? "Importing…" : "Import CSV", systemImage: "square.and.arrow.down")
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
                     .buttonStyle(.plain)
                     .disabled(isImporting)
@@ -87,7 +87,7 @@ struct InsightsOverviewView: View {
                 if let error = importError {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle")
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.iconAccent)
                         Text(error)
                             .font(.light(11))
                             .foregroundStyle(Color.warmMid)
@@ -122,7 +122,7 @@ struct InsightsOverviewView: View {
                     if let genError = generationError {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
-                                .foregroundStyle(Color.roseGold)
+                                .foregroundStyle(PaintedSurfaces.iconAccent)
                             Text(genError)
                                 .font(.light(11))
                                 .foregroundStyle(Color.warmMid)
@@ -263,7 +263,7 @@ private struct InstructionRow: View {
         HStack(alignment: .top, spacing: 8) {
             Text(number)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
                 .frame(width: 14, alignment: .trailing)
             Text(text)
                 .font(.light(12))
@@ -479,7 +479,7 @@ private struct BrandVoiceSuggestionRow: View {
             }
             .buttonStyle(.plain)
             .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(applied ? Color.warmMid : Color.roseGold)
+            .foregroundStyle(applied ? Color.warmMid : PaintedSurfaces.pageAccentText)
             .disabled(applied)
         }
 
@@ -516,6 +516,6 @@ private struct SectionHeader: View {
         Text(title)
             .font(.system(size: 9, weight: .medium))
             .tracking(0.8)
-            .foregroundStyle(Color.roseGold)
+            .foregroundStyle(PaintedSurfaces.pageAccentText)
     }
 }

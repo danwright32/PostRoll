@@ -66,7 +66,7 @@ struct InsightsPostsView: View {
                         Button("Clear Search") { searchText = "" }
                             .buttonStyle(.plain)
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                             .padding(.top, Spacing.xs)
                     }
                 }
@@ -141,7 +141,7 @@ private struct PostRow: View {
                 if let org = post.org {
                     Text("@\(org)")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
                 Text(post.caption.isEmpty ? "(no caption)" : post.caption)
                     .font(.light(12))
@@ -179,7 +179,7 @@ private struct PostRow: View {
                     Button { NSWorkspace.shared.open(url) } label: {
                         Label("Open on Instagram", systemImage: "arrow.up.forward.square")
                             .font(.system(size: 10))
-                            .foregroundStyle(Color.roseGold)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
                     .buttonStyle(.plain)
                     .help("Open this post on Instagram")

@@ -88,7 +88,7 @@ struct CaptionReviewActionBar: View {
                     Button("Regenerate All…", action: onRegenerateAll)
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                     Spacer()
                     Button("Approve & Export", action: onApprove)
                         .buttonStyle(BrandButtonStyle())

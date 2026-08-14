@@ -43,7 +43,7 @@ struct ProgramUploadView: View {
                     Text("EVENT PAGE URL (OPTIONAL)")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                     TextField("https://dciny.org/events/…", text: $eventURL)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmDark)
@@ -376,7 +376,7 @@ struct EventHeader: View {
             Text(subtitle.uppercased())
                 .font(.system(size: 10, weight: .medium))
                 .tracking(1.4)
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
 
             StageStepBar(event: event)
                 .padding(.top, 8)
@@ -443,7 +443,7 @@ private struct ProgramDropZone: View {
         VStack(spacing: 14) {
             Image(systemName: "doc.viewfinder")
                 .font(.system(size: 40))
-                .foregroundStyle(Color.roseGold.opacity(0.5))
+                .foregroundStyle(PaintedSurfaces.iconAccent.opacity(0.5))
             VStack(spacing: 4) {
                 Text("Drop program photos here")
                     .font(.system(size: 14, weight: .medium))
@@ -455,7 +455,7 @@ private struct ProgramDropZone: View {
             Button("Choose Files…", action: onPickFiles)
                 .buttonStyle(.plain)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity)
@@ -480,7 +480,7 @@ private struct ProgramDropZone: View {
                 Button("Add more…", action: onPickFiles)
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
 
             // What each file brought in against what it said it held, so a PDF

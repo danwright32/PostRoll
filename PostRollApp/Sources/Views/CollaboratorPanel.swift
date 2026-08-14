@@ -111,7 +111,7 @@ struct CollaboratorPanel: View {
                         handle: candidate.handle, in: eventCounts) {
                     Text(note)
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
             }
             Spacer()

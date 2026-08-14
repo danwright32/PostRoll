@@ -177,7 +177,7 @@ private struct ShootTypeOption: View {
                 }
                 Image(systemName: type.systemImage)
                     .imageScale(.small)
-                    .foregroundStyle(isSelected ? Color.roseGold : Color.warmMid)
+                    .foregroundStyle(isSelected ? PaintedSurfaces.iconAccent : Color.warmMid)
                 Text(type.rawValue)
                     .font(.system(size: 13))
                     .foregroundStyle(isSelected ? Color.warmDark : Color.warmMid)

@@ -41,7 +41,7 @@ struct ExportDoneSummary: View {
 
             Image(systemName: isIncomplete ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                 .font(.system(size: 44))
-                .foregroundStyle(isIncomplete ? Color.roseDeep : Color.roseGold.opacity(0.7))
+                .foregroundStyle(isIncomplete ? Color.roseDeep : PaintedSurfaces.iconAccent.opacity(0.7))
                 .padding(.top, Spacing.xl)
 
             Text(isIncomplete ? "Export incomplete" : "Export complete")
@@ -82,7 +82,7 @@ struct ExportDoneSummary: View {
                 Button("Open in Finder", action: onOpenFolder)
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                 Button("Done", action: onDone)
                     .buttonStyle(BrandButtonStyle())
             }

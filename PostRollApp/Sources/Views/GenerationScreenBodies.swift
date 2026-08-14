@@ -151,7 +151,7 @@ struct GenerationErrorBody: View {
                 Button("Fix inputs", action: onFixInputs)
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                 Button("Try Again", action: onTryAgain)
                     .buttonStyle(BrandButtonStyle())
             }
@@ -239,7 +239,7 @@ struct GenerationDoneBody: View {
 
             Image(systemName: isUnqualifiedSuccess ? "checkmark.circle.fill" : "checkmark.circle")
                 .font(.system(size: 44))
-                .foregroundStyle(Color.roseGold.opacity(0.7))
+                .foregroundStyle(PaintedSurfaces.iconAccent.opacity(0.7))
                 .scaleEffect(revealed ? 1 : 0.1)
                 .opacity(revealed ? 1 : 0)
 
@@ -307,12 +307,12 @@ struct GenerationDoneBody: View {
                     Button("Fix inputs", action: onFixInputs)
                         .buttonStyle(.plain)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
                 Button("Retry \(failedDaysSummary)", action: onRetryFailures)
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
 
             if !regenerableDays.isEmpty {
@@ -323,7 +323,7 @@ struct GenerationDoneBody: View {
                 } label: {
                     Label("Regenerate one day…", systemImage: "arrow.clockwise")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -334,7 +334,7 @@ struct GenerationDoneBody: View {
                 Button(programPDFLabel, action: onDownloadProgramPDF)
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                     .disabled(programPDFDisabled)
 
                 if programPDFStartedAt != nil {
@@ -364,7 +364,7 @@ struct GenerationDoneBody: View {
                 Button("Regenerate blog post", action: onRegenerateBlog)
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
 
             Button("Regenerate all", action: onRegenerateAll)
@@ -432,10 +432,10 @@ private struct PhaseRow: View {
                 switch state {
                 case .completed:
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.roseGold.opacity(0.5))
+                        .foregroundStyle(PaintedSurfaces.iconAccent.opacity(0.5))
                 case .active:
                     Image(systemName: "circle.fill")
-                        .foregroundStyle(Color.roseGold)
+                        .foregroundStyle(PaintedSurfaces.iconAccent)
                         .symbolEffect(.pulse)
                 case .pending:
                     Image(systemName: "circle")

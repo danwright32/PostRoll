@@ -164,7 +164,7 @@ private struct WelcomeDetailView: View {
         VStack(alignment: .center, spacing: Spacing.sm) {
             Text("PostRoll")
                 .font(.signPainter(44))
-                .foregroundStyle(Color.roseGold.opacity(Opacity.subtle))
+                .foregroundStyle(PaintedSurfaces.mastheadWordmark.opacity(Opacity.subtle))
 
             RoseGoldDivider(opacity: Opacity.subtle)
                 .frame(width: 80)

@@ -27,7 +27,7 @@ struct InsightsSidebarView: View {
                 HStack(spacing: 8) {
                     Image(systemName: icon)
                         .imageScale(.small)
-                        .foregroundStyle(isSelected ? Color.roseGold : Color.warmMid)
+                        .foregroundStyle(isSelected ? PaintedSurfaces.iconAccent : Color.warmMid)
                         .frame(width: 16)
                     Text(label)
                         .font(.system(size: 13, weight: isSelected ? .medium : .regular))

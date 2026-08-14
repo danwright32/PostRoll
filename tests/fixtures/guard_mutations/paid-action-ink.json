@@ -1,7 +1,7 @@
 {
   "name": "paid-action-ink",
   "file": "PostRollApp/Sources/Views/CaptionReviewBodies.swift",
-  "find": "                        .foregroundStyle(Color.roseGold)",
+  "find": "                        .foregroundStyle(PaintedSurfaces.pageAccentText)",
   "replace": "                        .foregroundStyle(Color.warmMid)",
   "test": "PostRollTests/VisibleControlGuardTests/testNoPaidActionIsDrawnInTheBodyTextColour",
   "breaks": "a paid action is drawn in the body text colour and stops reading as a control (L49)"

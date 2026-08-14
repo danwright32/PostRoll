@@ -57,7 +57,7 @@ struct PhotoAssignmentNotices: View {
                 Button("Import from folder…", action: onImportFolder)
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.roseGold)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
         }
     }
