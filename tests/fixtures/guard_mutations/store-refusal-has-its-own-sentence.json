@@ -1,0 +1,8 @@
+{
+  "name": "store-refusal-has-its-own-sentence",
+  "file": "PostRollApp/Sources/Services/StoreSaveGate.swift",
+  "find": "        if (error as NSError).isPermissionDenied { return refused(subject, reason) }\n",
+  "replace": "",
+  "test": "PostRollTests/StorePermissionMessagesTests/testARefusalIsNotWordedAsAFileThatCouldNotBeRead",
+  "breaks": "a permissions refusal on PostRoll's own storage goes back to reading in the same words as a corrupt file or a failing disk, so the message on Dan's most important data cannot tell him whether there is anything to restore (#563)"
+}
