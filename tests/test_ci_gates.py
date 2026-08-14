@@ -574,3 +574,14 @@ def test_both_legs_record_the_ffmpeg_version_they_ran_against():
     assert len(recorded) >= 2, (
         f"expected each test leg to record its ffmpeg version in the job "
         f"summary, found {len(recorded)} such steps")
+
+
+def test_the_guard_job_says_whether_the_schedule_is_still_alive(guards):
+    """The weekly trigger's failure mode is silence, so something has to ask the
+    question out loud (#554, L13)."""
+    assert "check_guard_sweep_freshness.py" in guards, (
+        "nothing reports whether the scheduled sweep is still happening, so it "
+        "could stop with nothing saying so")
+    assert "if: always()" in guards, (
+        "the freshness check is skipped when the sweep above it goes red, so "
+        "two failures would hide each other (L73)")
