@@ -137,3 +137,31 @@ def test_the_old_locations_are_gone_from_the_checkout(stale):
     assert not (REPO_ROOT / stale).exists(), (
         f"{stale} is still in the checkout, so iCloud is still syncing a build "
         f"cache and still making conflict copies of it")
+
+
+def test_the_install_script_says_so_when_the_shared_definition_is_missing(tmp_path):
+    """The failure path of splitting the location into its own file.
+
+    A copy of the script without the file it sources used to fail as a bare
+    "No such file or directory" from bash, naming a path with no explanation,
+    and a test that copies the script into a scratch directory hit exactly that
+    (L11). Distinct causes get distinct messages, and this one has a specific
+    thing to say.
+    """
+    import shutil
+    import subprocess
+
+    scratch = tmp_path / "PostRollApp"
+    scratch.mkdir()
+    shutil.copy2(BUILD_INSTALL, scratch / "build-install.sh")
+    # Deliberately NOT copying derived-data-path.sh.
+
+    result = subprocess.run(
+        ["/bin/bash", str(scratch / "build-install.sh")],
+        capture_output=True, text=True, timeout=120)
+
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "derived-data-path.sh" in combined, combined[-500:]
+    assert "build cache" in combined, (
+        f"it failed without saying what the missing file is for:\n{combined[-500:]}")

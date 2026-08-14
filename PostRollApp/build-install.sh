@@ -14,7 +14,14 @@ DEST="/Applications/${APP_NAME}"
 # One cache location for every build this repo runs, shared with the
 # Makefile so the two cannot drift, and outside the iCloud-synced checkout
 # (#485).
-. "$(pwd)/derived-data-path.sh"
+CACHE_PATH_FILE="$(pwd)/derived-data-path.sh"
+if [[ ! -f "${CACHE_PATH_FILE}" ]]; then
+  echo "Error: ${CACHE_PATH_FILE} is missing. It holds the one build cache" >&2
+  echo "       location this script and the Makefile share, so without it there" >&2
+  echo "       is nowhere agreed to build into." >&2
+  exit 1
+fi
+. "${CACHE_PATH_FILE}"
 BUILD_DIR="${POSTROLL_DERIVED_DATA}"
 
 # Nothing ran the tests before a build reached /Applications, so a red suite
