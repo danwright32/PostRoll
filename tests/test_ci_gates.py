@@ -26,6 +26,7 @@ worth it, and the strings below are the exact ones that were wrong.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -434,3 +435,57 @@ def test_the_guard_job_runs_on_the_image_that_has_the_pinned_xcode(guards):
     assert images == {swift_runner.group(1)}, (
         f"the guard jobs run on {sorted(images)} while the Xcode pin is only on "
         f"{swift_runner.group(1)}")
+
+
+def test_the_guard_runner_does_not_insist_on_a_venv(tmp_path):
+    """The failure path that took the whole guard job down the first time it ran
+    off Dan's Mac.
+
+    Every Python entry reported "the runner failed: no such file" because the
+    interpreter was a hardcoded `venv/bin/python`, which a CI runner does not
+    have. The job went red rather than reporting the guards proven, which is the
+    tool being honest, but it could never pass.
+
+    Driven through the CLI in a checkout with no venv, which is exactly the
+    shape CI checks out, rather than by importing the tool: what has to be true
+    is what the runner gets.
+    """
+    import json as _json
+    import shutil
+    import subprocess
+
+    repo = _scratch_repo(tmp_path)
+    (repo / "tools").mkdir()
+    shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    registry = repo / "tests" / "fixtures" / "guard_mutations"
+    registry.mkdir(parents=True)
+
+    # One entry whose test passes on unbroken code and fails on broken code, so
+    # the run has something real to do without needing this repo's suite.
+    (repo / "guarded.py").write_text("VALUE = 1\n")
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_guarded.py").write_text(
+        "import sys\nsys.path.insert(0, '.')\n"
+        "from guarded import VALUE\n\ndef test_value():\n    assert VALUE == 1\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "guarded"], cwd=repo,
+                   check=True, capture_output=True)
+    (registry / "value-is-one.json").write_text(_json.dumps({
+        "name": "value-is-one",
+        "file": "guarded.py",
+        "find": "VALUE = 1",
+        "replace": "VALUE = 2",
+        "test": "tests/test_guarded.py::test_value",
+        "breaks": "the value changes and nothing notices",
+    }))
+
+    result = subprocess.run(
+        [sys.executable, "tools/check_guards.py", "--only", "value-is-one"],
+        cwd=repo, capture_output=True, text=True, timeout=300)
+
+    combined = result.stdout + result.stderr
+    assert "venv/bin/python" not in combined, (
+        f"the runner still insists on a venv this checkout does not have:\n{combined}")
+    assert "KILLED" in combined, (
+        f"the guard was not proven, so the run did not actually happen:\n{combined}")
+    assert result.returncode == 0, combined

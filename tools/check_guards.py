@@ -187,8 +187,24 @@ def command_for(entry: Entry, repo_root: Path) -> list[str]:
             f"-only-testing:{entry.test}",
             "test",
         ]
-    return [str(repo_root / "venv" / "bin" / "python"), "-m", "pytest",
-            entry.test, "-q"]
+    return [python_for(repo_root), "-m", "pytest", entry.test, "-q"]
+
+
+def python_for(repo_root: Path) -> str:
+    """Which interpreter runs the Python guards.
+
+    The repo's venv when there is one, because that is where this project's
+    pytest and its dependencies live and it is how every local run is invoked.
+    Otherwise the interpreter running this file, which is what a CI runner has:
+    the path was hardcoded, so every Python entry reported "the runner failed:
+    no such file" the first time this ran anywhere but Dan's Mac (#541).
+
+    Note that is the tool being honest rather than the tool working. An entry
+    whose command cannot start is an ERROR, not a pass, which is why the job
+    went red rather than reporting the guards proven.
+    """
+    venv = repo_root / "venv" / "bin" / "python"
+    return str(venv) if venv.exists() else sys.executable
 
 
 def classify_swift(returncode: int, output: str) -> Verdict:
