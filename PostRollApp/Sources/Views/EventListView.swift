@@ -312,7 +312,10 @@ private struct EventRow: View {
 
             HStack(spacing: 3) {
                 Text(event.org)
-                Text("·")
+                // Decoration between two facts, so it is taken out of the
+                // accessibility tree rather than read out as "middle dot"
+                // between every row's organisation and date (#538).
+                Text("·").accessibilityHidden(true)
                 Text(event.displayDate)
             }
             .font(.light(10))

@@ -344,8 +344,12 @@ private struct InsightReportView: View {
                     SectionHeader("CAVEATS")
                     ForEach(report.caveats, id: \.self) { caveat in
                         HStack(alignment: .top, spacing: 6) {
+                            // A bullet drawn beside each caveat, not a word of
+                            // it, so it is hidden rather than announced ahead of
+                            // every line (#538).
                             Text("·")
                                 .foregroundStyle(Color.warmMid)
+                                .accessibilityHidden(true)
                             Text(caveat)
                                 .font(.light(11))
                                 .foregroundStyle(Color.warmMid)

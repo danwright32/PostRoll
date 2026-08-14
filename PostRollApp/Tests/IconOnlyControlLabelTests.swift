@@ -195,4 +195,123 @@ final class IconOnlyControlLabelTests: XCTestCase {
         guard parts.count == 2 else { return false }
         return control.file.contains(parts[0]) && control.symbol == parts[1]
     }
+
+    // MARK: - #538: a control drawn as a typed character
+
+    /// The same defect one level down from an unnamed SF Symbol, and invisible
+    /// to the scan above, which only looks at `Image(systemName:)`.
+    ///
+    /// A glyph typed into a string, `Button("↺")` or a `Text("◄")` standing in
+    /// for an affordance, renders at whatever size and weight the font decides
+    /// rather than matching the symbols beside it, and VoiceOver announces it by
+    /// its unicode name. There is no label to add: the fix is to draw it as an
+    /// SF Symbol, which is why this check has no exemption list.
+    struct GlyphControl: Equatable {
+        let file: String
+        let line: Int
+        let glyph: String
+        var described: String { "\(file):\(line) (\(glyph))" }
+    }
+
+    /// Every string literal used as a view's visible content that contains no
+    /// letter or digit at all.
+    ///
+    /// Deliberately narrow. A label with any word in it is prose, however many
+    /// symbols it also carries; what this catches is the string whose ENTIRE
+    /// content is punctuation or a pictograph, which is a drawing rather than a
+    /// name. Comments are blanked first, so a comment about a glyph, including
+    /// one recording that a glyph was removed, cannot be mistaken for one
+    /// (L103).
+    static func glyphControls(in text: String, file: String) -> [GlyphControl] {
+        let lines = SwiftSourceText.withoutComments(text)
+            .components(separatedBy: .newlines)
+        var found: [GlyphControl] = []
+        let letters = CharacterSet.alphanumerics
+
+        for (index, line) in lines.enumerated() {
+            for pattern in [#"Button\("([^"]+)"\)"#, #"Text\("([^"]+)"\)"#] {
+                guard let range = line.range(of: pattern, options: .regularExpression)
+                else { continue }
+                let literal = String(line[range]).components(separatedBy: "\"")[1]
+                guard literal.rangeOfCharacter(from: letters) == nil else { continue }
+
+                // A Text glyph may be pure decoration, a separator dot between
+                // two pieces of metadata, and those are fine as long as they are
+                // taken out of the accessibility tree: the harm is a screen
+                // reader announcing "middle dot" between every field. A Button
+                // gets no such out. Whatever it draws IS the control, so it has
+                // to be a symbol that scales with the ones beside it.
+                if line.contains("Text(") {
+                    let reach = lines[index..<min(lines.count, index + 4)]
+                        .joined(separator: "\n")
+                    if reach.contains(".accessibilityHidden(true)") { continue }
+                }
+                found.append(GlyphControl(file: file, line: index + 1, glyph: literal))
+            }
+        }
+        return found
+    }
+
+    func testNoControlIsDrawnAsATypedCharacter() throws {
+        var offenders: [String] = []
+        for url in try Self.viewSources() {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            offenders += Self.glyphControls(in: text, file: url.lastPathComponent).map(\.described)
+        }
+
+        XCTAssertTrue(offenders.isEmpty, """
+            These draw a control or an affordance as a character typed into a \
+            string. A glyph renders at whatever size and weight the font decides, \
+            and VoiceOver reads it out by its unicode name.
+
+            Use an SF Symbol instead, with `.accessibilityLabel("…")` when it is a \
+            control and `.accessibilityHidden(true)` when it is decoration beside \
+            something that already carries the meaning:
+
+            \(offenders.joined(separator: "\n"))
+            """)
+    }
+
+    func testTheGlyphScannerCanStillSeeOne() {
+        // Finding none would pass the assertion above while checking nothing.
+        XCTAssertEqual(Self.glyphControls(in: #"Button("\#u{21BA}") { reset() }"#,
+                                          file: "X.swift").count, 1)
+        XCTAssertEqual(Self.glyphControls(in: #"Text("\#u{25C4}").font(.body)"#,
+                                          file: "X.swift").count, 1)
+    }
+
+    func testARealWordIsNotAGlyph() {
+        XCTAssertTrue(Self.glyphControls(in: #"Button("Reset to default") { x() }"#,
+                                         file: "X.swift").isEmpty)
+        // Prose that happens to carry a symbol is still prose.
+        XCTAssertTrue(Self.glyphControls(in: #"Text("Settings > Privacy")"#,
+                                         file: "X.swift").isEmpty)
+    }
+
+    func testADecorativeGlyphTakenOutOfTheTreeIsAllowed() {
+        let source = #"""
+        Text("\#u{00B7}")
+            .foregroundStyle(Color.warmMid)
+            .accessibilityHidden(true)
+        """#
+        XCTAssertTrue(Self.glyphControls(in: source, file: "X.swift").isEmpty)
+    }
+
+    func testAButtonGetsNoSuchOut() {
+        // Hiding a control from the accessibility tree does not name it, it
+        // removes it, so the out that applies to decoration must not apply here.
+        let source = #"""
+        Button("\#u{21BA}") { reset() }
+            .accessibilityHidden(true)
+        """#
+        XCTAssertEqual(Self.glyphControls(in: source, file: "X.swift").count, 1)
+    }
+
+    func testACommentDrawingAGlyphIsNotAControl() {
+        let source = #"""
+        // was Button("\#u{21BA}") until #538
+        Button { reset() } label: { Image(systemName: "arrow.counterclockwise") }
+        """#
+        XCTAssertTrue(Self.glyphControls(in: source, file: "X.swift").isEmpty)
+    }
 }

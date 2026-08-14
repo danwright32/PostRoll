@@ -118,6 +118,7 @@ struct MissingPhotosBanner: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Color.roseGold)
             Text("·").foregroundStyle(Color.warmMid.opacity(0.5))
+                .accessibilityHidden(true)
             Button("Remove missing", action: onRemove)
                 .buttonStyle(BrandOutlineButtonStyle())
         }

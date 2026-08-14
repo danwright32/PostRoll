@@ -11,8 +11,14 @@ import XCTest
 /// #190 fixed that for the performer suggestion list. The caption editor's left
 /// column was the same shape and had never been swept, which is the usual way a
 /// fixed class comes back (L30). So the question is asked of the whole tree:
-/// a vertical scroll region that hides its indicator has to be a
-/// `FadingScrollView`, which draws the edge itself.
+/// a scroll region that hides its indicator has to be a `FadingScrollView`,
+/// which draws the edge itself.
+///
+/// #468 scoped this to vertical regions and said so, on the reasoning that a row
+/// of thumbnails reads differently from a column of controls. It reads
+/// differently and it fails identically: a strip that continues sideways looks
+/// exactly like one that ends, and the person scrolls neither. #539 widened the
+/// scan to both axes and taught FadingScrollView the horizontal case.
 final class HiddenScrollbarGuardTests: XCTestCase {
 
     private static var viewsDir: URL {
@@ -22,24 +28,18 @@ final class HiddenScrollbarGuardTests: XCTestCase {
             .appendingPathComponent("Sources/Views")
     }
 
-    /// Lines declaring a vertical `ScrollView` with its indicator hidden.
-    ///
-    /// Horizontal regions are a different question with a different answer (a
-    /// row of thumbnails that continues sideways reads differently from a
-    /// column of controls that continues down), so they are not in scope here
-    /// and saying so is the point of the filter rather than an oversight.
-    static func hiddenVerticalScrollViews(in text: String) -> [Int] {
+    /// Lines declaring a `ScrollView` with its indicator hidden, on either axis.
+    static func hiddenScrollViews(in text: String) -> [Int] {
         SwiftSourceText.withoutComments(text)
             .components(separatedBy: .newlines)
             .enumerated()
             .filter { _, line in
                 line.contains("ScrollView(") && line.contains("showsIndicators: false")
-                    && !line.contains(".horizontal")
             }
             .map { index, _ in index + 1 }
     }
 
-    func testNoViewHidesAVerticalScrollbarWithoutDrawingTheEdge() throws {
+    func testNoViewHidesAScrollbarWithoutDrawingTheEdge() throws {
         var offenders: [String] = []
         let files = FileManager.default.enumerator(at: Self.viewsDir,
                                                    includingPropertiesForKeys: nil)
@@ -50,13 +50,13 @@ final class HiddenScrollbarGuardTests: XCTestCase {
             guard url.lastPathComponent != "FadingScrollView.swift" else { continue }
             scanned += 1
             let text = try String(contentsOf: url, encoding: .utf8)
-            offenders += Self.hiddenVerticalScrollViews(in: text)
+            offenders += Self.hiddenScrollViews(in: text)
                 .map { "\(url.lastPathComponent):\($0)" }
         }
 
         XCTAssertGreaterThan(scanned, 5, "the scan read almost no views, so it proves nothing")
         XCTAssertTrue(offenders.isEmpty, """
-            These vertical scroll regions hide their indicator, and macOS hides \
+            These scroll regions hide their indicator, and macOS hides \
             it anyway until a gesture starts, so nothing at rest says the content \
             continues past the edge and the person reads what fits.
 
@@ -76,26 +76,27 @@ final class HiddenScrollbarGuardTests: XCTestCase {
             encoding: .utf8)
         let code = SwiftSourceText.withoutComments(source)
 
-        XCTAssertTrue(code.contains("ScrollEdgeFade.showsTop"),
-                      "the top edge is not asked about, so it either never fades or always does")
-        XCTAssertTrue(code.contains("ScrollEdgeFade.showsBottom"),
-                      "the bottom edge is not asked about")
+        XCTAssertTrue(code.contains("ScrollEdgeFade.showsLeadingEdge"),
+                      "the near edge is not asked about, so it either never fades or always does")
+        XCTAssertTrue(code.contains("ScrollEdgeFade.showsTrailingEdge"),
+                      "the far edge is not asked about")
     }
 
     func testTheScannerSeesTheShapeItLooksFor() {
         XCTAssertEqual(
-            Self.hiddenVerticalScrollViews(in: "ScrollView(.vertical, showsIndicators: false) {"),
+            Self.hiddenScrollViews(in: "ScrollView(.vertical, showsIndicators: false) {"),
             [1])
     }
 
-    func testAHorizontalRegionIsNotInScope() {
-        XCTAssertTrue(Self.hiddenVerticalScrollViews(
-            in: "ScrollView(.horizontal, showsIndicators: false) {").isEmpty)
+    func testAHorizontalRegionIsInScopeToo() {
+        XCTAssertEqual(
+            Self.hiddenScrollViews(in: "ScrollView(.horizontal, showsIndicators: false) {"),
+            [1], "a strip that continues sideways fails the same way a column does (#539)")
     }
 
     /// A comment describing the shape is not the shape (L103).
     func testACommentIsNotAScrollView() {
-        XCTAssertTrue(Self.hiddenVerticalScrollViews(
+        XCTAssertTrue(Self.hiddenScrollViews(
             in: "// was ScrollView(.vertical, showsIndicators: false) once").isEmpty)
     }
 }
