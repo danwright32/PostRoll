@@ -1768,13 +1768,34 @@ actor PythonBridge {
         return hasContent ? result : nil
     }
 
-    func runOCR(imagePaths: [URL], eventID: UUID? = nil) async throws -> OCRResult {
+    /// `mergeInto` turns this into a rescan of the pages an earlier run could
+    /// not read: Python folds what comes back into the result passed here,
+    /// rather than replacing it (#518). The merge itself is Python's, beside
+    /// the one that already combines the batches of a single run, so this side
+    /// keeps no second copy of that rule.
+    func runOCR(imagePaths: [URL], eventID: UUID? = nil,
+                mergeInto previous: OCRResult? = nil) async throws -> OCRResult {
         let outputFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("postroll_ocr_\(UUID().uuidString).json")
 
         defer { try? FileManager.default.removeItem(at: outputFile) }
 
         var args = ["-m", "postroll.ai.ocr_program", "--output", outputFile.path]
+
+        var mergeFile: URL? = nil
+        if let previous {
+            let file = FileManager.default.temporaryDirectory
+                .appendingPathComponent("postroll_ocr_prev_\(UUID().uuidString).json")
+            // Written before the run and NOT with `try?`: if the stored result
+            // cannot be handed over, the rescan must not go ahead as an
+            // ordinary scan, because that would replace a programme that was
+            // read and paid for with the two pages this run happens to read
+            // (L105).
+            try JSONEncoder().encode(previous).write(to: file, options: .atomic)
+            mergeFile = file
+            args += ["--merge-into", file.path]
+        }
+        defer { if let mergeFile { try? FileManager.default.removeItem(at: mergeFile) } }
         // Cleared before the run, so the screen cannot read the previous
         // attempt's last step and call this one alive (#467).
         if let eventID {

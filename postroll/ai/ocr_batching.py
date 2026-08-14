@@ -172,3 +172,67 @@ def merge_program_data(results: list[dict[str, Any] | None]) -> dict[str, Any]:
                 merged[key] = value
 
     return merged
+
+
+def merge_rescan(previous: dict[str, Any], rescanned: dict[str, Any] | None,
+                 *, rescanned_pages: list[str]) -> dict[str, Any]:
+    """Fold a targeted rescan into the result already stored on the event (#518).
+
+    A large programme is read in several paid calls, and a call that dies takes
+    its pages with it while the rest are kept. This is what lets the gap be
+    closed by paying for only the pages that went unread, instead of re-running
+    the whole scan.
+
+    The content merge is `merge_program_data`, unchanged, so a rescan combines
+    with the first run exactly the way two batches of one run do. There is no
+    second implementation of that rule to drift from it.
+
+    `unread_pages` is the one field that cannot go through it. Every other field
+    is a collection of things found, where more is strictly better; this one is
+    a statement about the CURRENT state, and the ordinary merge would keep the
+    first non-empty value, leaving a page listed as unread by the very run that
+    read it. It is therefore computed here, deliberately:
+
+        still unread = (what was unread and was NOT looked at again)
+                     + (what was looked at again and still could not be read)
+
+    Written that way rather than as "whatever the rescan reported" so that
+    rescanning a SUBSET does not silently declare the pages nobody looked at to
+    be read. Nothing offers a subset today; it would be wrong the day something
+    does (L98).
+
+    A `rescanned` that is not a dict raises. An unusable answer must never be
+    allowed to look like an empty one, because the caller writes the result of
+    this back over the good data (L105).
+    """
+    if not isinstance(previous, dict):
+        raise ValueError("the stored result to merge into is not a dict")
+    if not isinstance(rescanned, dict):
+        raise ValueError(
+            "the rescan produced no usable result, so there is nothing to merge "
+            "and the stored result must be left alone")
+
+    merged = merge_program_data([previous, rescanned])
+
+    was_unread = [p for p in previous.get("unread_pages", []) if isinstance(p, str)]
+
+    # A rescan that reported no `unread_pages` at all made no statement about
+    # what it managed to read, so nothing here may conclude it read anything.
+    # Every completed run sets the key, including to an empty list on a clean
+    # read, so its ABSENCE means this is not a completed run: an empty result
+    # from a rescan that fell over. Reading that as "nothing left unread" would
+    # clear the warning on the strength of a failure (L98, L11).
+    if "unread_pages" not in rescanned:
+        merged["unread_pages"] = was_unread
+        return merged
+
+    looked_at = set(rescanned_pages)
+    still_unread_now = {p for p in rescanned["unread_pages"] if isinstance(p, str)}
+
+    # Order taken from the earlier report, so the gap is listed the way it was
+    # first described rather than reshuffled by which run last touched it.
+    merged["unread_pages"] = [
+        page for page in was_unread
+        if page not in looked_at or page in still_unread_now
+    ]
+    return merged

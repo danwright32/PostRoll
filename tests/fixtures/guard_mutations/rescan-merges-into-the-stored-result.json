@@ -1,0 +1,8 @@
+{
+  "name": "rescan-merges-into-the-stored-result",
+  "file": "PostRollApp/Sources/Services/OCRManager.swift",
+  "find": "                                                              mergeInto: rescan?.previous)",
+  "replace": "                                                              mergeInto: nil)",
+  "test": "PostRollTests/UnreadProgramPagesTests/testTheRescanCarriesTheStoredResultToMergeInto",
+  "breaks": "a rescan of the pages an earlier run missed replaces the whole stored programme with whatever those few pages hold, throwing away every page that was read and paid for the first time (#518)"
+}

@@ -77,6 +77,38 @@ final class OCRManager {
         tracker.update(eventID) { $0.task = task }
     }
 
+    /// Scan only the pages an earlier run could not read, and merge what comes
+    /// back into the result already on the event (#518).
+    ///
+    /// Deliberately a separate entry point rather than a flag on `start`: this
+    /// one must NOT run the programme readiness check, because a rescan is
+    /// about the pages that are still there, and it must never bounce the event
+    /// back to the upload screen, which would discard the review Dan is looking
+    /// at. What it refuses on instead is a page in the gap having gone missing,
+    /// decided by the same rule the button reads (L109).
+    func startRescanOfUnreadPages(eventID: Event.ID, appState: AppState) {
+        guard !isRunning(eventID) else { return }
+        guard let ev = appState.events.first(where: { $0.id == eventID }),
+              let stored = ev.ocrResult,
+              let pages = OCRRescan.pages(for: stored) else { return }
+
+        if let refusal = OCRRescan.refusal(forPages: pages) {
+            refusals[eventID] = refusal
+            return
+        }
+
+        refusals[eventID] = nil
+        tracker.begin(Run(status: .running, elapsedSeconds: 0, phaseOverride: "Reading the missing pages…", task: nil),
+                      for: eventID)
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.runOCR(eventID: eventID, snapshot: ev, appState: appState,
+                              rescan: Rescan(pages: pages, previous: stored))
+        }
+        tracker.update(eventID) { $0.task = task }
+    }
+
     /// User cancelled. Removes the run; the caller handles navigation. Sending
     /// SIGTERM to Python happens via Swift task cancellation in PythonBridge.
     func cancel(eventID: Event.ID) {
@@ -91,12 +123,27 @@ final class OCRManager {
 
     // MARK: - Pipeline
 
-    private func runOCR(eventID: Event.ID, snapshot ev: Event, appState: AppState) async {
-        let livePaths = (appState.events.first(where: { $0.id == eventID }) ?? ev).programImagePaths
+    /// The pages to send and the result to fold them into, carried together so
+    /// they cannot disagree: a rescan with nothing to merge into would replace a
+    /// programme that was read and paid for with the two pages it happened to
+    /// read (#518).
+    struct Rescan {
+        let pages: [String]
+        let previous: OCRResult
+    }
+
+    private func runOCR(eventID: Event.ID, snapshot ev: Event, appState: AppState,
+                        rescan: Rescan? = nil) async {
+        // The live event, not the snapshot, for the same reason the paths are
+        // read live: OCR takes minutes and an edit can land during it.
+        let liveEvent = appState.events.first(where: { $0.id == eventID }) ?? ev
+        let livePaths = rescan.map { $0.pages.map { URL(fileURLWithPath: $0) } }
+            ?? liveEvent.programImagePaths
 
         do {
             var result = try await PythonBridge.shared.runOCR(imagePaths: livePaths,
-                                                              eventID: eventID)
+                                                              eventID: eventID,
+                                                              mergeInto: rescan?.previous)
 
             // DCINY events: the website lists conductors + group names (preferred
             // over the program, which lists every individual member).
