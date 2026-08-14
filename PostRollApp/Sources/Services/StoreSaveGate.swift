@@ -116,7 +116,28 @@ final class StoreSaveGate: @unchecked Sendable {
 enum StoreRecoveryText {
     static func unreadable(_ subject: String, _ error: Error) -> String {
         let reason = Sentence.closed(error.localizedDescription)
+        if (error as NSError).isPermissionDenied { return refused(subject, reason) }
         return "\(subject) could not be read: \(reason) Nothing was changed or deleted, "
              + "and nothing new will be saved until the file can be read again."
+    }
+
+    /// The refusal, said as a refusal (#563).
+    ///
+    /// Everything that was not "absent" used to arrive in the sentence above,
+    /// so a permissions denial on PostRoll's own storage read in the same words
+    /// as a corrupt file or a failing disk. Those need different things from
+    /// Dan: the file is intact and there is nothing to restore, which the
+    /// generic wording actively argues against by describing data that could
+    /// not be read (L11).
+    ///
+    /// No settings pane is named, for the reason #557 recorded: these stores
+    /// live under Application Support, which System Settings does not list
+    /// under Privacy & Security > Files and Folders. A remedy has to name a
+    /// step that can change the state it is offered for (L111), and nothing
+    /// here measured one, so it names none.
+    private static func refused(_ subject: String, _ reason: String) -> String {
+        "\(subject) is still there, and PostRoll was refused when it tried to read it: "
+        + "\(reason) Nothing was changed or deleted, and nothing new will be saved until "
+        + "the file can be read again. This is a permissions problem, not a damaged file."
     }
 }

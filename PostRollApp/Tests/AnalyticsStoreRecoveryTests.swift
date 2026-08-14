@@ -139,7 +139,10 @@ final class AnalyticsStoreRecoveryTests: XCTestCase {
 
         let message = try XCTUnwrap(store.recoveryMessage,
                                     "a denied folder read as a fresh install")
-        XCTAssertTrue(message.contains("could not be read"), message)
+        // Named as the refusal it is since #563, rather than as the generic
+        // "could not be read" that a corrupt file and a failing disk also get.
+        XCTAssertTrue(message.contains("was refused"), message)
+        XCTAssertTrue(message.contains("nothing new will be saved"), message)
     }
 
     @MainActor

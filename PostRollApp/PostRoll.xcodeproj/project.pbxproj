@@ -190,6 +190,7 @@
 		52B8467686E7BEB15CF2D6E4 /* HashtagStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 078889A206CA41E4BA788383 /* HashtagStore.swift */; };
 		538D7F80CA3AA261C8856000 /* GeneratedOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116086AEAC5CE358E5A0272D /* GeneratedOutput.swift */; };
 		5561782EAA268E6144AEC454 /* EventFridayClipPlanWritebackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76D12DE3DE33EAF68DD7B671 /* EventFridayClipPlanWritebackTests.swift */; };
+		556D6177655EDF462A626A3A /* StorePermissionMessagesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF37957AD0AC59065CABF102 /* StorePermissionMessagesTests.swift */; };
 		55E13BA8375EA11AAF81AAFC /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8709408F930801E3507C477 /* MainWindowView.swift */; };
 		55E8526D240F703175B03FDB /* EventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8089518478AA10F4DC5A9A83 /* EventStore.swift */; };
 		5640D1F6A18F323880018030 /* AccountFreshnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33C5F5D1EA3DC82116FC76D2 /* AccountFreshnessTests.swift */; };
@@ -874,6 +875,7 @@
 		FA9E36A1293C2F0C1D658AB1 /* CoverRegenerationManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverRegenerationManifestTests.swift; sourceTree = "<group>"; };
 		FC095CA3EC9408DC5D2486B2 /* CaptionReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionReviewView.swift; sourceTree = "<group>"; };
 		FD0514CA7990CF2688E9E5ED /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		FF37957AD0AC59065CABF102 /* StorePermissionMessagesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorePermissionMessagesTests.swift; sourceTree = "<group>"; };
 		FF513C026211726925EAD399 /* DeletionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletionPolicy.swift; sourceTree = "<group>"; };
 		FFB5AA22E06BCDCFE77EBF90 /* EventListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventListView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -1267,6 +1269,7 @@
 				D5526CFCB99FC953F3946B1F /* StaleAudioLabelTests.swift */,
 				35BB14C456EB71F99A91A4D4 /* StoreBackupsTests.swift */,
 				7E88DAFB144BC95C1E6B87EA /* StoredErrorPolicyTests.swift */,
+				FF37957AD0AC59065CABF102 /* StorePermissionMessagesTests.swift */,
 				228EB2B26E2445EB991BD35C /* StoreRestoreTests.swift */,
 				476642084119287DEB101612 /* StoreSaveGateTests.swift */,
 				628FBCD088C5C5BA9089DE44 /* SwiftSourceTextTests.swift */,
@@ -1876,6 +1879,7 @@
 				5AA10F338F347217E3CD683C /* StaleAudioLabelTests.swift in Sources */,
 				38407036659EC3A2CC4E2644 /* StoreBackups.swift in Sources */,
 				C995DF43D68C788B4ED7EDC2 /* StoreBackupsTests.swift in Sources */,
+				556D6177655EDF462A626A3A /* StorePermissionMessagesTests.swift in Sources */,
 				E0FBCA8EBCE4610D975CBCED /* StoreRestoreTests.swift in Sources */,
 				5EFAD06877B2E6A95FD45147 /* StoreRestoreText.swift in Sources */,
 				9E27C5AD6938D2EED85FB6F5 /* StoreSaveGate.swift in Sources */,

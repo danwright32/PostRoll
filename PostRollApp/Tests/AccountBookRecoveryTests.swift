@@ -105,7 +105,14 @@ final class AccountBookRecoveryTests: XCTestCase {
 
         let book = AccountBook(fileURL: file)
 
-        XCTAssertEqual(book.loadStatus, .unreadable)
+        // A refusal since #563, which is the same consequence under a different
+        // name: the numbers are unknown, so nothing may be written over them.
+        // Asserted alongside the gate itself rather than instead of it, because
+        // the case name is a label and the block is the thing that protects the
+        // file (L63).
+        XCTAssertEqual(book.loadStatus, .refused)
+        XCTAssertTrue(StoreSaveGate.shared.isBlocked(file),
+                      "a file nobody could read is not protected from the next save")
         XCTAssertTrue(try setAsideFiles().isEmpty,
                       "a file we merely could not read was renamed as though it were corrupt")
     }
@@ -140,13 +147,18 @@ final class AccountBookRecoveryTests: XCTestCase {
                                                    ofItemAtPath: other.path)
             StoreSaveGate.shared.unblock(other)
         }
-        let unreadable = try XCTUnwrap(AccountBook(fileURL: other).recoveryNote)
+        let refused = try XCTUnwrap(AccountBook(fileURL: other).recoveryNote)
 
-        // Distinct causes, distinct messages (L11). One says the numbers are
-        // gone and new ones are being saved; the other says nothing was touched
-        // and nothing will be saved.
-        XCTAssertNotEqual(corrupt, unreadable)
+        // Distinct causes, distinct messages (L11). Corruption says the numbers
+        // are gone and new ones are being saved. A refusal says they are intact
+        // behind a permissions problem and nothing will be saved. An I/O error
+        // says only that it could not be read, which is all it measured.
+        let unreadable = AccountBook.unreadableNote(file: "other.json", folder: "~/Library")
+        XCTAssertEqual(Set([corrupt, refused, unreadable]).count, 3,
+                       "two of the three failures are telling Dan the same thing")
         XCTAssertTrue(corrupt.contains("set aside"), corrupt)
+        XCTAssertTrue(refused.contains("was refused"), refused)
+        XCTAssertTrue(refused.contains("Nothing in it was changed or overwritten"), refused)
         XCTAssertTrue(unreadable.contains("left alone"), unreadable)
     }
 }

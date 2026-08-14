@@ -1,0 +1,8 @@
+{
+  "name": "account-book-names-a-refusal",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "                loadStatus = (error as NSError).isPermissionDenied ? .refused : .unreadable",
+  "replace": "                loadStatus = .unreadable",
+  "test": "PostRollTests/StorePermissionMessagesTests/testAccountBookNamesARefusal",
+  "breaks": "a refused accounts.json reports as an unreadable one, so the note tells Dan the hand-typed numbers could not be read rather than that they are intact behind a permissions problem (#563)"
+}
