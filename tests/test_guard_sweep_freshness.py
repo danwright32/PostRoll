@@ -79,8 +79,36 @@ def test_an_unreadable_timestamp_is_not_silently_treated_as_recent():
     parse that lands on the permissive side of a threshold is a check that
     reports green for the one reason it should not (L50)."""
     result = verdict([{"created_at": "not a date"}], now=NOW, window=WINDOW)
-    assert result.state is not Freshness.FRESH
-    assert result.exit_code != 0 or result.state is Freshness.UNREADABLE
+    assert result.state is Freshness.UNREADABLE
+    assert result.is_alarming
+
+
+def test_one_unreadable_stamp_does_not_discard_the_readable_ones():
+    """Losing a whole history to one bad row would turn a live schedule into an
+    unreadable one, which is an alarm about the wrong thing."""
+    runs = [{"created_at": "not a date"}, run_at(NOW - timedelta(days=2))]
+    assert verdict(runs, now=NOW, window=WINDOW).state is Freshness.FRESH
+
+
+def test_only_the_states_worth_interrupting_for_raise_a_warning():
+    """A check that annotates on every run trains the reader to skip its
+    annotations (L36)."""
+    fresh = verdict([run_at(NOW - timedelta(days=1))], now=NOW, window=WINDOW)
+    not_yet = verdict([], now=NOW, window=WINDOW)
+    stale = verdict([run_at(NOW - timedelta(days=30))], now=NOW, window=WINDOW)
+
+    assert not fresh.is_alarming
+    assert not not_yet.is_alarming
+    assert stale.is_alarming
+
+
+def test_nothing_here_fails_the_build():
+    """Stated as a rule rather than left implicit: this reports, it does not
+    gate, and a reader should not have to work out which state is which."""
+    for runs in ([], [run_at(NOW - timedelta(days=99))],
+                 [{"created_at": "not a date"}],
+                 [run_at(NOW - timedelta(days=1))]):
+        assert verdict(runs, now=NOW, window=WINDOW).exit_code == 0
 
 
 def test_the_message_names_the_workflow_so_it_can_be_acted_on():

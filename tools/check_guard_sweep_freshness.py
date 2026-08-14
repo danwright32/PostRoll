@@ -70,10 +70,26 @@ class Verdict:
 
     @property
     def exit_code(self) -> int:
-        # Only an unreadable answer is worth a non-zero exit, because it means
-        # this check itself could not do its job, which must not pass silently.
-        # Staleness warns; see the module docstring.
-        return 1 if self.state is Freshness.UNREADABLE else 0
+        """Always zero. This check reports; it does not gate.
+
+        Stated as one rule for every state rather than per state, because the
+        first version had an unreadable TIMESTAMP exiting non-zero while an
+        unreadable QUERY exited zero, which are the same condition (this check
+        could not do its job) wearing two different answers. Anyone reading it
+        would have had to work out which failure mode fails the build.
+
+        Nothing here makes the change being merged wrong, so nothing here stops
+        it (L36). The visibility is the warning annotation and the job summary,
+        which is what this exists to produce. If that proves too quiet to act
+        on, escalating is a one line change here rather than a redesign.
+        """
+        return 0
+
+    @property
+    def is_alarming(self) -> bool:
+        """Whether this state needs a warning annotation rather than a line of
+        log nobody scrolls to."""
+        return self.state in (Freshness.STALE, Freshness.UNREADABLE)
 
 
 def _parsed(raw: str) -> datetime | None:
@@ -164,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
                      window=timedelta(days=args.window_days))
 
     print(result.message)
-    if result.state in (Freshness.STALE, Freshness.UNREADABLE):
+    if result.is_alarming:
         print(f"::warning::{result.message}")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
