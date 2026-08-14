@@ -93,10 +93,15 @@ final class OCRManager {
               let pages = OCRRescan.pages(for: stored,
                                           in: ev.programImagePaths) else { return }
 
-        if let refusal = OCRRescan.refusal(forPages: pages.map(\.path)) {
+        // Only the pages this can place, so one page the programme no longer has
+        // a position for does not cost the others their positions and send the
+        // whole batch back to matching on file paths (#575).
+        let plan = OCRRescan.plan(for: pages)
+        if let refusal = plan.refusal {
             refusals[eventID] = refusal
             return
         }
+        guard !plan.sendable.isEmpty else { return }
 
         refusals[eventID] = nil
         tracker.begin(Run(status: .running, elapsedSeconds: 0, phaseOverride: "Reading the missing pages…", task: nil),
@@ -105,7 +110,7 @@ final class OCRManager {
         let task = Task { [weak self] in
             guard let self else { return }
             await self.runOCR(eventID: eventID, snapshot: ev, appState: appState,
-                              rescan: Rescan(pages: pages, previous: stored))
+                              rescan: Rescan(pages: plan.sendable, previous: stored))
         }
         tracker.update(eventID) { $0.task = task }
     }
@@ -129,7 +134,11 @@ final class OCRManager {
     /// programme that was read and paid for with the two pages it happened to
     /// read (#518).
     struct Rescan {
-        let pages: [OCRRescan.Page]
+        /// Every one carries its position, because `OCRRescan.plan` only ever
+        /// puts a placed page here. A page with no position cannot be sent at
+        /// all: Python needs one number per image and the only value left to
+        /// pad with is the sentinel meaning "position unknown" (#575, #576).
+        let pages: [OCRRescan.PlacedPage]
         let previous: OCRResult
     }
 
@@ -142,8 +151,10 @@ final class OCRManager {
             ?? liveEvent.programImagePaths
         // Which page of the programme each of those is, so the merge can strike
         // the right one off after the images have moved (#558). Nil for a full
-        // scan, which is numbered 1..N by Python itself.
-        let pageNumbers = rescan.flatMap { OCRRescan.pageNumbers(of: $0.pages) }
+        // scan, which is numbered 1..N by Python itself. Taken from the same
+        // pages that supplied the paths, so the two lists cannot fall out of
+        // step with each other (L83).
+        let pageNumbers = rescan.map { $0.pages.map(\.number) }
 
         do {
             var result = try await PythonBridge.shared.runOCR(imagePaths: livePaths,

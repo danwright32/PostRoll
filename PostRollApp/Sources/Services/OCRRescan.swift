@@ -62,18 +62,95 @@ enum OCRRescan {
         }
     }
 
-    /// The positions to send with these pages, or nil when they cannot all be
-    /// named.
+    /// A page this rescan can actually read: where it sits in the programme as
+    /// it is now, and where that page is on disk.
     ///
-    /// All or none, deliberately. Python needs one number per image, so a
-    /// partial answer would have to be padded, and a padded position matches
-    /// every other page that could not be placed: the merge would then strike
-    /// off a page nobody read. Sending none falls back to matching on paths,
-    /// which is what happened before any of this and is right for a gap this
-    /// could not place anyway.
-    static func pageNumbers(of pages: [Page]) -> [Int]? {
-        let numbers = pages.compactMap(\.number)
-        return numbers.count == pages.count ? numbers : nil
+    /// The position is not optional, unlike `Page`'s. Python needs one number
+    /// per image and there is no value meaning "unknown" it could be padded
+    /// with: `NO_PAGE_NUMBER` is zero, which the merge reads as every page of
+    /// unknown position at once (#576). So a page with no position is never
+    /// sent, and the type is what says so rather than a check somewhere that
+    /// could be forgotten.
+    struct PlacedPage: Equatable {
+        let number: Int
+        let path: String
+    }
+
+    /// What a rescan of this gap would actually do: which pages go, which stay,
+    /// and what has to be said about either.
+    ///
+    /// `refusal` and `sendable` cannot disagree: a refusal always leaves nothing
+    /// to send, so a caller that reads one and not the other cannot pay for a
+    /// run this has already refused.
+    struct Plan: Equatable {
+        /// The pages to send, each with its position. Empty when nothing runs.
+        let sendable: [PlacedPage]
+        /// The pages nothing could place, left in the gap exactly as they were.
+        let unplaceable: [Page]
+        /// Why nothing can run at all, or nil when it can.
+        let refusal: String?
+        /// What this run will not read even though it is going ahead, or nil.
+        let note: String?
+    }
+
+    /// Which pages of the gap this rescan can read, and what to say about the
+    /// rest (#575).
+    ///
+    /// It used to be all or none: the positions were sent only when every page
+    /// in the gap had one, so a single unplaceable page (the programme
+    /// re-uploaded shorter, a stored path matching nothing) dropped the
+    /// positions for the whole batch and the merge fell back to matching on
+    /// file paths for pages whose position was known perfectly well. That is
+    /// the matching #558 replaced, switched off for the good pages by one odd
+    /// one, and the fallback was chosen without measuring how often it fires
+    /// (L93).
+    ///
+    /// So the pages that resolved go as their own rescan, with one number per
+    /// image and nothing padded, and the pages that did not stay in the gap.
+    /// They are named on the way past rather than quietly dropped: a page left
+    /// out with no word said would sit in the gap forever while every rescan
+    /// appeared to run cleanly (L11, L98).
+    static func plan(for pages: [Page]) -> Plan {
+        let sendable = pages.compactMap { page in
+            page.number.map { PlacedPage(number: $0, path: page.path) }
+        }
+        let unplaceable = pages.filter { $0.number == nil }
+        let cannotPlace = unplaceableSentence(unplaceable.map(\.path))
+        // Decided over the pages about to be SENT. Refusing on a page this run
+        // is not sending would be the same defect in another form: one page
+        // nothing can do anything about stopping the ones that can be read.
+        let cannotRead = refusal(forPages: sendable.map(\.path))
+
+        guard !sendable.isEmpty, cannotRead == nil else {
+            // Both causes, because a refusal naming one of them leaves the other
+            // pages unaccounted for beside a remedy that cannot fix them.
+            let both = [cannotRead, cannotPlace].compactMap { $0 }.joined(separator: " ")
+            return Plan(sendable: [], unplaceable: unplaceable,
+                        refusal: both.isEmpty ? nil : both, note: nil)
+        }
+        return Plan(sendable: sendable, unplaceable: unplaceable,
+                    refusal: nil, note: cannotPlace)
+    }
+
+    /// The pages the programme as it stands has no place for.
+    ///
+    /// Worded apart from the moved and denied sentences because it is a third
+    /// fault with a third cause: the page has not gone anywhere, the programme
+    /// is what changed under it, and re-uploading is the only thing that can
+    /// put it back in a position the merge can key to.
+    private static func unplaceableSentence(_ paths: [String]) -> String? {
+        guard !paths.isEmpty else { return nil }
+        let list = paths.map { URL(fileURLWithPath: $0).lastPathComponent }
+                        .joined(separator: ", ")
+        return paths.count == 1
+            ? "\(list) is not a page of the programme as it stands now, so there "
+              + "is no position to read it under and it will not be scanned. It "
+              + "stays listed as unread. Upload the programme again if it should "
+              + "be part of it."
+            : "These pages are not part of the programme as it stands now, so "
+              + "there is no position to read them under and they will not be "
+              + "scanned: \(list). They stay listed as unread. Upload the "
+              + "programme again if they should be part of it."
     }
 
     /// Where a stored path sits in the programme as it is now, or nil.

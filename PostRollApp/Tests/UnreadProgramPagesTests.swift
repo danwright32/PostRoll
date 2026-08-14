@@ -164,6 +164,33 @@ extension UnreadProgramPagesTests {
                       "the rescan does not hand over the result to merge into, "
                       + "so it would replace it instead of adding to it")
     }
+
+    /// Built is not wired (L3). The rule that decides which pages a rescan can
+    /// actually read exists to be the one the run uses, and a manager still
+    /// sending the whole gap would leave #575 fixed in a function nothing calls.
+    func testTheManagerSendsOnlyThePagesThePlanCanPlace() throws {
+        let code = try source("Sources/Services/OCRManager.swift")
+
+        XCTAssertTrue(code.contains("OCRRescan.plan("),
+                      "the manager does not decide with the shared rule")
+        XCTAssertTrue(code.contains("plan.sendable"),
+                      "the manager sends something other than the pages the plan "
+                      + "placed, so an unplaceable page is paid for or a placed "
+                      + "one is dropped")
+    }
+
+    /// The screen and the manager must decide the same way (L109), and the
+    /// pages left behind need somewhere to be said or they vanish from the one
+    /// surface that reports the gap.
+    func testTheScreenShowsWhatTheRescanIsLeavingBehind() throws {
+        let code = try source("Sources/Views/OCRReviewView.swift")
+
+        XCTAssertTrue(code.contains("OCRRescan.plan("),
+                      "the screen decides on its own rather than with the rule "
+                      + "the run uses")
+        XCTAssertTrue(code.contains("plan.note"),
+                      "the pages the rescan will not read are never put on screen")
+    }
 }
 
 // MARK: - The screen must not write its old copy over a finished rescan (#518)

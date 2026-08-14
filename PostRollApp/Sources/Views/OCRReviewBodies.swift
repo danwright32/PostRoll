@@ -40,6 +40,11 @@ struct OCRReviewNotices: View {
         let title: String
         /// Why it cannot run, or nil when it can.
         let refusal: String?
+        /// What it will not read even though it can run, or nil when it will
+        /// read the whole gap. Carried beside the button rather than instead of
+        /// it, because these pages do not stop the others being read and a page
+        /// left out with nothing said would sit in the gap unexplained (#575).
+        let note: String?
         let isRunning: Bool
         let action: () -> Void
     }
@@ -71,6 +76,10 @@ struct OCRReviewNotices: View {
                     BrandBanner(icon: "questionmark.folder", message: refusal,
                                 style: .warning)
                 } else {
+                    if let note = rescan.note {
+                        BrandBanner(icon: "questionmark.folder", message: note,
+                                    style: .warning)
+                    }
                     Button(action: rescan.action) {
                         Label(rescan.isRunning ? "Reading the missing pages…" : rescan.title,
                               systemImage: "arrow.clockwise")
