@@ -1,7 +1,7 @@
 {
   "name": "history-priced-at-its-own-rate",
   "file": "postroll/ai/usage_log.py",
-  "find": "            at=_recorded_at(data),",
+  "find": "            at=stamped,",
   "replace": "            at=None,",
   "test": "tests/test_usage_log_timestamps.py::test_a_summary_prices_each_line_at_its_own_era",
   "breaks": "every past week is repriced from today's table, so a price change retroactively rewrites what history cost (#484)"

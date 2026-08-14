@@ -1,8 +1,8 @@
 {
   "name": "tagged-handles-stamped-on-success",
   "file": "PostRollApp/Sources/Services/ExportManager.swift",
-  "find": "        let handlesToNote = CaptionBlocks.accountsTagged(event: capturedEvent)",
-  "replace": "        let handlesToNote = CaptionBlocks.accountsTagged(event: capturedEvent)\n        AccountBook.shared.noteTagged(handles: handlesToNote, on: exportedAt)",
+  "find": "        tagStamp?.apply(to: AccountBook.shared)",
+  "replace": "        _ = tagStamp",
   "test": "PostRollTests/TaggedHandlesStampedOnSuccessTests/testTheBookIsStampedFromTheSuccessPathOnly",
   "breaks": "the account book is stamped before the export writes anything, so a failed run leaves it recording a week of tags that never shipped (#483)"
 }

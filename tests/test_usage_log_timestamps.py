@@ -152,3 +152,22 @@ def test_the_live_table_is_the_newest_era():
     # Two spellings of "what a call costs today" would drift, and the one that
     # drifts is the one nothing reads (L41).
     assert usage_log.PRICES_USD_PER_MTOK == usage_log.PRICE_ERAS[-1].prices
+
+
+def test_a_stamp_that_will_not_parse_is_counted_rather_than_guessed(tmp_path):
+    # A hand edit or a half-written line makes the era unknowable, and a cost
+    # report would rather be short and say so than carry a guessed figure.
+    log = tmp_path / "usage.jsonl"
+    log.write_text(json.dumps({
+        "model": SONNET, "step": "captions", "event": "E", "at": "not a date",
+        "input_tokens": 1_000_000, "output_tokens": 0,
+    }) + "\n")
+
+    summary = summarize(path=log)
+
+    assert summary.unreadable_lines == 1
+    assert summary.calls == 0
+    assert summary.complete is False, (
+        "a record whose era cannot be known was folded into a total that still "
+        "reports itself as complete"
+    )

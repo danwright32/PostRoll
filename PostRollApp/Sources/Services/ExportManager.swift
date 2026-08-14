@@ -174,7 +174,8 @@ final class ExportManager {
         // recurring-account freshness stats it feeds were reading from a
         // non-event. Record intent, confirm after the effect verifiably
         // happened (L33), and here the confirmation IS the record.
-        let handlesToNote = CaptionBlocks.accountsTagged(event: capturedEvent)
+        let tagStamp = ExportTagStamp(
+            handles: CaptionBlocks.accountsTagged(event: capturedEvent), at: exportedAt)
         // Copied once rather than reached into from the detached task below:
         // the book is main-actor state (#278).
         let accountStats = AccountBook.shared.snapshot()
@@ -397,7 +398,7 @@ final class ExportManager {
                           daysNeedingPython: daysNeedingPython,
                           mediaError: errorWithSwap.isEmpty ? nil : errorWithSwap,
                           mediaWarning: combinedWarning.isEmpty ? nil : combinedWarning,
-                          taggedHandles: handlesToNote, taggedOn: exportedAt,
+                          tagStamp: tagStamp,
                           appState: appState)
         } catch is CancellationError {
             // Cancelled (skipMedia handles its own terminal state).
@@ -416,14 +417,11 @@ final class ExportManager {
     private func finishSuccess(eventID: Event.ID, folder: URL, onlyDay: DayName?,
                                daysNeedingPython: [String], mediaError: String?,
                                mediaWarning: String? = nil,
-                               taggedHandles: [String] = [], taggedOn: Date = Date(),
+                               tagStamp: ExportTagStamp? = nil,
                                appState: AppState) {
         // The export committed, so the tags genuinely shipped and the book can
-        // say so (#483). Stamped with when the run started rather than now, so
-        // the record is about the export rather than about the bookkeeping.
-        if !taggedHandles.isEmpty {
-            AccountBook.shared.noteTagged(handles: taggedHandles, on: taggedOn)
-        }
+        // say so (#483). A run that died before here never applies its stamp.
+        tagStamp?.apply(to: AccountBook.shared)
         // Only learn from full copy-only runs so the mean stays a clean signal
         // for the common fast path.
         if onlyDay == nil && daysNeedingPython.isEmpty {

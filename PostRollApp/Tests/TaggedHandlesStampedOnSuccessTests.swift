@@ -52,20 +52,25 @@ final class TaggedHandlesStampedOnSuccessTests: XCTestCase {
 
     func testTheBookIsStampedFromTheSuccessPathOnly() throws {
         let text = try source
-        let calls = text.components(separatedBy: "AccountBook.shared.noteTagged").count - 1
+        let applications = text.components(separatedBy: ".apply(to: AccountBook.shared)").count - 1
 
-        XCTAssertEqual(calls, 1, """
-            ExportManager writes the account book \(calls) times. It must write it \
-            exactly once, from the path that runs after the export has committed, \
+        XCTAssertEqual(applications, 1, """
+            ExportManager applies the tag stamp \(applications) times. It must apply \
+            it exactly once, from the path that runs after the export has committed, \
             or a failed export leaves the book recording tags that never shipped.
             """)
 
         let success = try body(of: "finishSuccess", in: text)
-        XCTAssertTrue(success.contains("AccountBook.shared.noteTagged"), """
-            The account book is stamped somewhere other than finishSuccess, so it \
+        XCTAssertTrue(success.contains(".apply(to: AccountBook.shared)"), """
+            The tag stamp is applied somewhere other than finishSuccess, so the book \
             records tags before the export has written anything. A run that dies \
             part way then leaves the book claiming a week that never shipped, and \
             nothing rolls it back (#483).
+            """)
+
+        XCTAssertFalse(text.contains("AccountBook.shared.noteTagged"), """
+            ExportManager writes the account book directly rather than through the \
+            stamp, so the write is no longer tied to the export having committed.
             """)
     }
 
@@ -75,7 +80,7 @@ final class TaggedHandlesStampedOnSuccessTests: XCTestCase {
     func testTheHandlesAreReadBeforeTheExportRuns() throws {
         let text = try source
         guard let read = text.range(of: "CaptionBlocks.accountsTagged"),
-              let written = text.range(of: "AccountBook.shared.noteTagged") else {
+              let written = text.range(of: ".apply(to: AccountBook.shared)") else {
             return XCTFail("neither the read nor the write is in ExportManager any more")
         }
 

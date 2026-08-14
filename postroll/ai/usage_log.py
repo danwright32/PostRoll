@@ -263,20 +263,28 @@ def _parse(line: str) -> dict[str, Any] | None:
     return data
 
 
-def _recorded_at(data: dict[str, Any]) -> datetime | None:
-    """When a record says it was written, or None when it does not say.
+#: What `_recorded_at` found. Absent and damaged are different answers: every
+#: line written before #484 has no stamp at all, which is ordinary, while a
+#: stamp that will not parse means the line was hand edited or half written and
+#: pricing it at a guessed era would be a made-up number in a cost report (L50).
+_STAMP_UNREADABLE = "unreadable"
 
-    Every line already on disk predates the stamp, so None is an ordinary
-    answer rather than a failure, and `prices_in_force` prices it at the
-    earliest era rather than dropping it.
+
+def _recorded_at(data: dict[str, Any]) -> datetime | None | str:
+    """When a record says it was written.
+
+    Returns the instant, None when the record carries no stamp at all, or
+    `_STAMP_UNREADABLE` when it carries one that cannot be read.
     """
+    if "at" not in data:
+        return None
     raw = data.get("at")
     if not isinstance(raw, str) or not raw.strip():
-        return None
+        return _STAMP_UNREADABLE
     try:
         parsed = datetime.fromisoformat(raw.strip())
     except ValueError:
-        return None
+        return _STAMP_UNREADABLE
     # A stamp with no zone cannot be compared against the eras, which carry
     # one. Read as UTC, which is what `record` writes.
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
@@ -308,6 +316,14 @@ def summarize(
         if event is not None and data.get("event") != event:
             continue
 
+        # A stamp that will not parse makes this line's era unknowable, and a
+        # cost report would rather be short and say so than carry a figure
+        # priced at a guess. Counted the same way an unreadable line is (L11).
+        stamped = _recorded_at(data)
+        if stamped == _STAMP_UNREADABLE:
+            summary.unreadable_lines += 1
+            continue
+
         summary.calls += 1
         summary.input_tokens += data["input_tokens"]
         summary.output_tokens += data["output_tokens"]
@@ -330,7 +346,7 @@ def summarize(
                 cache_read_tokens=int(data.get("cache_read_tokens") or 0),
                 cache_write_tokens=int(data.get("cache_write_tokens") or 0),
             ),
-            at=_recorded_at(data),
+            at=stamped,
         )
         if priced is None:
             summary.unpriced_calls += 1
