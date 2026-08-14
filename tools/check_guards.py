@@ -53,6 +53,7 @@ import enum
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -349,6 +350,69 @@ def real_runner(cmd: list[str], cwd: Path) -> tuple[int, str]:
     return completed.returncode, completed.stdout + completed.stderr
 
 
+# ── Putting the tree back when the sweep is interrupted (#547) ────────────────
+#
+# The try/finally in run_entry covers an exception and a ctrl-C, because both
+# unwind the stack. SIGTERM does not: the default disposition terminates the
+# process outright, so the finally never runs. A sweep killed to free the
+# machine on 2026-08-13 left ProgramPDFBakery.swift holding
+# `first(where: { _ in false })`, which compiles, reads plausibly, and makes the
+# bake find no event.
+#
+# What is on disk while a perturbation is applied, so a handler can put it back.
+# At most one entry is ever in flight, but this is keyed by path rather than
+# held as a single value so a restore cannot be attributed to the wrong file.
+_PENDING: dict[Path, bytes] = {}
+
+
+def _restore_pending() -> list[Path]:
+    """Put every perturbed file back. Returns what it restored."""
+    restored = []
+    for path, original in list(_PENDING.items()):
+        try:
+            path.write_bytes(original)
+        except OSError:
+            continue  # reported by the caller; the path stays pending
+        _PENDING.pop(path, None)
+        restored.append(path)
+    return restored
+
+
+def install_interrupt_restore(repo_root: Path, log=print) -> None:
+    """Restore the working tree on SIGINT and SIGTERM, then exit.
+
+    The report is not decoration. A sweep that silently puts things back is
+    indistinguishable from one that silently left them broken, and the operator
+    has no reason to look at either (L11).
+    """
+    def handler(signum, _frame):
+        name = signal.Signals(signum).name
+        restored = _restore_pending()
+        for path in restored:
+            try:
+                shown = path.relative_to(repo_root).as_posix()
+            except ValueError:
+                shown = str(path)
+            log(f"interrupted by {name}: put {shown} back")
+        if not restored:
+            log(f"interrupted by {name}: nothing was perturbed, "
+                "so nothing needed putting back")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        # Not sys.exit: this runs while the main thread is blocked in the test
+        # runner, and unwinding from there would let the ordinary finally race
+        # the restore that has already happened. The tree is right; leave now.
+        os._exit(128 + signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, handler)
+        except ValueError:
+            # Not the main thread. Nothing to install, and the caller is a
+            # library consumer rather than the command line tool.
+            return
+
+
 def _dirty(path: Path, repo_root: Path) -> bool:
     status = subprocess.run(
         ["git", "status", "--porcelain", "--", str(path)],
@@ -376,6 +440,9 @@ def run_entry(entry: Entry, repo_root: Path, runner) -> Result:
                       f"in {entry.file} instead of exactly one; the registry "
                       f"is stale. Anchor: {entry.find!r}")
 
+    # Recorded BEFORE the write, so a signal landing between the two finds the
+    # original bytes to put back rather than nothing (#547).
+    _PENDING[target] = original
     target.write_bytes(text.replace(entry.find, entry.replace).encode("utf-8"))
     try:
         code, output = runner(command_for(entry, repo_root), repo_root)
@@ -384,6 +451,7 @@ def run_entry(entry: Entry, repo_root: Path, runner) -> Result:
         verdict = Verdict(Outcome.ERROR, f"the runner failed: {exc}")
     finally:
         target.write_bytes(original)
+        _PENDING.pop(target, None)
         if target.read_bytes() != original:
             # Fail as loudly as possible: the working tree is now wrong.
             raise RuntimeError(
@@ -395,6 +463,9 @@ def run_entry(entry: Entry, repo_root: Path, runner) -> Result:
 def check_guards(repo_root: Path, registry_path: Path, runner,
                  only: str | None = None, changed_only: bool = False,
                  log=print) -> int:
+    # Installed here rather than in main() so every caller that can perturb the
+    # tree is covered, including the tests that drive this directly (#547).
+    install_interrupt_restore(repo_root, log=log)
     entries = load_registry(registry_path)
     if only is not None:
         entries = [e for e in entries if e.name == only]

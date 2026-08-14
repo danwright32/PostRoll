@@ -16,11 +16,16 @@ registry entry is trusted (L52); see the live check recorded on #416.
 from __future__ import annotations
 
 import json
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
+
+#: This repository, so a sweep driven in a subprocess can import the tool.
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 from tools.check_guards import (
     Entry,
@@ -643,3 +648,98 @@ def test_changed_mode_without_a_base_refuses(tmp_path: Path):
     assert code != 0
     assert runner.calls == []
     assert any("base" in line for line in lines)
+
+
+# ── #547: an interrupted sweep must not leave the perturbation applied ────────
+#
+# Hit live on 2026-08-13: a full sweep was killed to free the machine and left
+# ProgramPDFBakery.swift holding `first(where: { _ in false })`, which compiles,
+# reads plausibly, and makes the bake find no event. The try/finally already in
+# run_entry covers an exception and a ctrl-C, because both unwind the stack.
+# SIGTERM does not: the default handler terminates the process outright, so the
+# finally never runs and the broken line stays on disk.
+
+
+def _interruptible_repo(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A repo whose guard test blocks, so the sweep can be signalled while the
+    perturbation is applied."""
+    repo = tmp_path / "slowrepo"
+    (repo / "Sources").mkdir(parents=True)
+    (repo / "tests").mkdir(parents=True)
+    source = repo / "Sources" / "Note.swift"
+    source.write_text(SOURCE)
+    # Long enough that the signal always lands mid-run, and bounded so a stray
+    # copy cannot outlive the suite.
+    (repo / "tests" / "test_slow.py").write_text(
+        "import time\n\n\ndef test_slow():\n    time.sleep(45)\n"
+    )
+    git(repo, "init", "-b", "main")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "seed")
+    registry = write_registry(
+        repo / "registry",
+        [registry_dict(test="tests/test_slow.py::test_slow")],
+    )
+    return repo, source, registry
+
+
+def _sweep_in_a_subprocess(repo: Path, registry: Path) -> subprocess.Popen:
+    """The sweep in a process of its own, so a real signal can be sent to it."""
+    driver = (
+        "import sys\n"
+        f"sys.path.insert(0, {str(REPO_ROOT)!r})\n"
+        "from pathlib import Path\n"
+        "from tools.check_guards import check_guards, real_runner\n"
+        f"raise SystemExit(check_guards(Path({str(repo)!r}), "
+        f"Path({str(registry)!r}), real_runner))\n"
+    )
+    return subprocess.Popen(
+        [sys.executable, "-c", driver],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+
+
+def _wait_for_perturbation(source: Path, proc: subprocess.Popen) -> None:
+    for _ in range(600):  # up to 60s
+        if "Color.cream" in source.read_text():
+            return
+        if proc.poll() is not None:
+            raise AssertionError(
+                "the sweep exited before it perturbed anything, so this test "
+                f"proves nothing: {proc.communicate()[0][-2000:]}")
+        time.sleep(0.1)
+    raise AssertionError("the perturbation was never applied")
+
+
+@pytest.mark.parametrize("signum,name", [
+    (signal.SIGTERM, "SIGTERM"),
+    (signal.SIGINT, "SIGINT"),
+])
+def test_an_interrupted_sweep_puts_the_source_file_back(tmp_path: Path,
+                                                        signum, name):
+    repo, source, registry = _interruptible_repo(tmp_path)
+    proc = _sweep_in_a_subprocess(repo, registry)
+    try:
+        _wait_for_perturbation(source, proc)
+        # The mutation really is on disk at this point, which is what makes the
+        # restore below a claim about behaviour rather than about timing.
+        assert "Color.warmMid" not in source.read_text()
+
+        proc.send_signal(signum)
+        output = proc.communicate(timeout=60)[0]
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.communicate()
+
+    assert source.read_text() == SOURCE, (
+        f"{name} left the perturbation applied: {source.read_text()!r}")
+    # Deliberately not just the filename: the sweep already prints "breaking
+    # Sources/Note.swift" on its way in, so matching that would let this pass on
+    # the announcement of the damage rather than on the report of the repair
+    # (L103).
+    assert "put Sources/Note.swift back" in output, (
+        f"the restore happened silently, so nothing tells the operator the "
+        f"tree was touched and put right: {output[-2000:]}")
+    assert name in output, (
+        f"the report does not say what interrupted it: {output[-2000:]}")

@@ -1,0 +1,8 @@
+{
+  "name": "interrupted-sweep-restores-the-tree",
+  "file": "tools/check_guards.py",
+  "find": "    install_interrupt_restore(repo_root, log=log)",
+  "replace": "    pass  # handlers deliberately not installed",
+  "test": "tests/test_check_guards.py::test_an_interrupted_sweep_puts_the_source_file_back",
+  "breaks": "a sweep killed part way through leaves the perturbation applied, so the operator is left holding a source file that compiles, reads plausibly and does the wrong thing (#547)"
+}
