@@ -964,6 +964,22 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 1
 
+    # NO_PAGE_NUMBER is 0, and it means "position in the programme not known".
+    # Accepting 0 as a real position collides the two meanings inside
+    # merge_rescan: every page of unknown position carries 0, so a rescan sent
+    # under it would strike all of them out of the gap as pages this run just
+    # read. Refused rather than corrected, and named in full on screen, because
+    # the sentinel is exactly the value a hand-run reaches for when it does not
+    # know a position (#576).
+    for number in args.page_number or []:
+        if number <= NO_PAGE_NUMBER:
+            print(f"error: --page-number {number} is not a position in the "
+                  f"programme. {NO_PAGE_NUMBER} already means the position is "
+                  f"not known, and page numbers are 1-based. Leave "
+                  f"--page-number off entirely for pages whose position you "
+                  f"do not know.", file=sys.stderr)
+            return 1
+
     # Read BEFORE the paid call, so an unreadable stored result costs nothing
     # and fails before the money is spent rather than after it.
     previous = None

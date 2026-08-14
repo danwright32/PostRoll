@@ -227,3 +227,86 @@ def test_a_numbering_the_rescan_cannot_pair_up_is_refused() -> None:
         merge_rescan(previous, result(),
                      rescanned_pages=["/new/p3.jpg", "/new/p7.jpg"],
                      rescanned_page_numbers=[3])
+
+
+# ── the boundary the sentinel shares with real positions (#576) ───────────────
+
+
+def _refused_page_number(value, tmp_path, monkeypatch, capsys):
+    """Run the CLI with one --page-number and report (exit code, stderr).
+
+    `extract_program` is replaced with something that cannot be called quietly,
+    so a guard that lets the value through fails as a paid call that ran rather
+    than as a wrong number somewhere downstream.
+    """
+    from postroll.ai import ocr_program
+
+    page = tmp_path / "p1.jpg"
+    page.write_bytes(b"not really a jpeg")
+    out = tmp_path / "out.json"
+
+    def the_paid_call(*args, **kwargs):
+        raise AssertionError(
+            f"--page-number {value} reached the paid call instead of being refused")
+
+    monkeypatch.setattr(ocr_program, "extract_program", the_paid_call)
+
+    code = ocr_program.main(["--image", str(page), "--output", str(out),
+                             "--page-number", str(value)])
+
+    assert not out.exists(), "nothing may be written by a refused run"
+    return code, capsys.readouterr().err
+
+
+def test_the_sentinel_is_refused_as_a_page_number(tmp_path, monkeypatch, capsys) -> None:
+    """0 is NO_PAGE_NUMBER, "position not known", not a position.
+
+    Measured before the fix: a rescan passing 0 strikes EVERY page of unknown
+    position out of `unread_pages`, because they all carry 0 and the merge reads
+    them as pages this run just looked at. The two meanings cannot be told apart
+    downstream, so the only place to separate them is the boundary.
+    """
+    code, err = _refused_page_number(0, tmp_path, monkeypatch, capsys)
+
+    assert code != 0
+    # The reason names the sentinel, so it is on screen rather than in a
+    # constant the person running this cannot see.
+    assert "--page-number 0" in err
+    assert "not known" in err
+    assert "1-based" in err
+
+
+def test_a_page_number_below_the_sentinel_is_refused(tmp_path, monkeypatch, capsys) -> None:
+    """Negatives are no more a position than 0 is, and argparse takes any int."""
+    code, err = _refused_page_number(-3, tmp_path, monkeypatch, capsys)
+
+    assert code != 0
+    assert "--page-number -3" in err
+
+
+def test_the_first_real_page_is_still_accepted(tmp_path, monkeypatch) -> None:
+    """The guard must refuse only what cannot be a position (L54).
+
+    Page 1 sits directly against the sentinel, so an off-by-one here would
+    silently refuse every single-page rescan.
+    """
+    from postroll.ai import ocr_program
+
+    page = tmp_path / "p1.jpg"
+    page.write_bytes(b"not really a jpeg")
+    out = tmp_path / "out.json"
+
+    seen: list[list[int] | None] = []
+
+    def fake_extract(images, output_path=None, progress_path=None,
+                     page_numbers=None):
+        seen.append(page_numbers)
+        return result()
+
+    monkeypatch.setattr(ocr_program, "extract_program", fake_extract)
+
+    code = ocr_program.main(["--image", str(page), "--output", str(out),
+                             "--page-number", "1"])
+
+    assert code == 0
+    assert seen == [[1]]
