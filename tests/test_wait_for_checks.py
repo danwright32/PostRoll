@@ -262,14 +262,27 @@ def test_an_empty_json_array_reads_as_no_checks() -> None:
 
 
 def test_ghs_own_no_checks_message_reads_as_no_checks() -> None:
-    """gh reports "no checks reported" on stderr with a non-zero exit.
+    """`no checks reported on the '%s' branch`, gh's own words.
 
-    Recorded from a real run against a freshly pushed branch, so this is the
-    message the tool will actually meet rather than one remembered (L52).
+    Read out of the shipped binary (gh 2.89.0) rather than remembered, because
+    a wait calibrated on a message gh does not actually print would spend its
+    whole timeout on the unusable path (L52).
     """
     assert read_reply(
         exit_code=1, stdout="",
         stderr="no checks reported on the 'ci-check-wait-564' branch\n") == []
+
+
+def test_the_no_checks_message_is_read_on_either_stream() -> None:
+    """Which stream it lands on is gh's choice, not a fact worth depending on.
+
+    Getting it wrong in the safe direction still costs the whole registration
+    window, which is the exact window this tool exists to survive.
+    """
+    assert read_reply(
+        exit_code=0,
+        stdout="no checks reported on the 'ci-check-wait-564' branch\n",
+        stderr="") == []
 
 
 def test_gh_failing_for_any_other_reason_is_not_no_checks() -> None:

@@ -54,9 +54,14 @@ EXIT_NEVER_APPEARED = 2
 EXIT_STILL_RUNNING = 3
 EXIT_UNUSABLE = 4
 
-#: gh's own words when a branch has no checks registered yet, recorded from a
-#: real run rather than remembered (L52). Matched loosely because the branch
-#: name is interpolated into it.
+#: gh's own words when a branch has no checks registered yet, read out of the
+#: shipped binary (gh 2.89.0) rather than remembered (L52):
+#:
+#:     no checks reported on the '%s' branch
+#:
+#: Matched loosely because the branch name is interpolated into it, and on
+#: either stream because which one gh uses is its choice rather than a fact
+#: worth depending on.
 NO_CHECKS = "no checks reported"
 
 #: The two job conditions this can classify. Anything else is refused rather
@@ -289,6 +294,8 @@ def read_reply(*, exit_code: int, stdout: str, stderr: str) -> list[dict]:
     its whole timeout looking like it was working.
     """
     body = stdout.strip()
+    if NO_CHECKS in (body + stderr).lower():
+        return []
     if body:
         try:
             rows = json.loads(body)
@@ -300,8 +307,6 @@ def read_reply(*, exit_code: int, stdout: str, stderr: str) -> list[dict]:
             raise GhUnusable(f"gh returned {type(rows).__name__}, not a list of checks")
         return rows
 
-    if NO_CHECKS in stderr.lower():
-        return []
     raise GhUnusable(
         f"gh exited {exit_code} with no usable output: {stderr.strip() or '(silence)'}")
 
