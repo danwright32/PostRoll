@@ -1,0 +1,8 @@
+{
+  "name": "insights-metrics-have-no-emoji",
+  "file": "PostRollApp/Sources/Services/InsightsDisplay.swift",
+  "find": "        if let likes    { out.append(Metric(symbol: \"heart\", name: \"likes\", value: \"\\(likes)\")) }",
+  "replace": "        if let likes    { out.append(Metric(symbol: \"\\u{2665}\", name: \"likes\", value: \"\\(likes)\")) }",
+  "test": "PostRollTests/InsightsPostMetricsTests/testEveryFigureUsesASymbolRatherThanAnEmoji",
+  "breaks": "an engagement figure is drawn with a raw character instead of a symbol, so it renders at whatever the font decides and VoiceOver reads its unicode name (#469)"
+}
