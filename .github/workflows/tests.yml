@@ -158,6 +158,28 @@ jobs:
   # Measured before promoting: 10m42s on the runner, against 1m55s for the Linux
   # leg. This repository is public, so the standard runners cost nothing to run
   # and the price is wall clock on a pull request, which is the trade taken.
+  #
+  # Why this takes roughly four times the Linux leg, measured 2026-08-14 with
+  # `--durations` on both, so nobody has to guess at it again (#562):
+  #
+  # It is not slower. It runs strictly more. Linux skips 31 tests for want of
+  # HelveticaNeue and SignPainter, and those 31 are the whole reel-rendering
+  # suite: the 18 slowest of them come to 581 CPU-seconds here, against a
+  # slowest single test of 9.29s over there. On the tests BOTH legs run, this
+  # one is about 20% FASTER per test. The 3 cores against Linux's 4 is a minor
+  # part of it and the composition is nearly all of it.
+  #
+  # Those five files also run in swift.yml's `reference-frames` job, sharded
+  # across three runners, so the reel suite renders twice per pull request.
+  # That is deliberate and was decided rather than overlooked (#571). The two
+  # runs are not the same run: the sharded one exists so `-n auto` can use more
+  # than one runner's three cores, and this one exists so the Mac leg runs the
+  # SAME command as Linux, which is the property #510 and #550 were about and
+  # which two earlier attempts at narrowing already broke. The runners are free
+  # on a public repo, so the duplication costs about 200s of wall clock and
+  # nothing else, and it buys a second run of the most expensive and most
+  # visual part of the suite. Do not re-open it on the strength of the wall
+  # clock alone.
   macos:
     runs-on: macos-15
     timeout-minutes: 45

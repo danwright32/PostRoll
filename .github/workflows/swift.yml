@@ -250,6 +250,16 @@ jobs:
     # tests/ci_workflow.py, and three guards depend on it: every font-gated file
     # has to appear in exactly one shard, or it runs nowhere while CI stays
     # green.
+    #
+    # These same files ALSO run in the `macos` job of tests.yml, which runs the
+    # whole suite. That duplication is deliberate and was decided rather than
+    # overlooked (#571). The two runs are not the same run: this one shards so
+    # `-n auto` can use more than one runner's three cores, and that one exists
+    # so the Mac leg runs the SAME command as the Linux leg, which two earlier
+    # attempts at narrowing already broke. The runners are free on a public
+    # repo, so the second run costs about 200s of wall clock and nothing else.
+    # Anyone about to remove one of them should read tests.yml's comment on the
+    # `macos` job first, and #562 for where that job's time actually goes.
     strategy:
       # One shard going red says nothing about the other, and cancelling it
       # would hide a second failure until the first is fixed and re-run.

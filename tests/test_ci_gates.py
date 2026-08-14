@@ -84,9 +84,20 @@ def test_the_blanket_pull_request_skip_is_gone(swift):
 
 
 def test_it_is_not_hiding_back_in_the_python_workflow():
-    # Moving the job to its own file is only a fix while the old one stays
-    # gone. Two swift jobs would run twice and cost double.
-    assert "swift" not in TESTS.read_text().lower()
+    """Moving the job to its own file is only a fix while the old one stays
+    gone. Two Swift jobs would run twice and cost double.
+
+    Comment lines are dropped before matching. What this forbids is a Swift
+    JOB in this file, and it used to forbid the WORD, so a comment explaining
+    where the Swift half lives failed it. That is the mirror of L103: there a
+    guard passes on prose about the thing, here it fails on prose about the
+    thing, and both come from matching raw source instead of settings.
+    """
+    settings = "\n".join(line for line in TESTS.read_text().splitlines()
+                         if not line.strip().startswith("#"))
+
+    assert "swift" not in settings.lower(), (
+        "the Swift half is back in the Python workflow, so it runs twice")
 
 
 # ── every pull request runs it, whatever it touched (#431) ────────────────────
