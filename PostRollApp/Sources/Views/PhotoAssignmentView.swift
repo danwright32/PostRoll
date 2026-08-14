@@ -1101,6 +1101,8 @@ private struct CroppablePhotoThumb: View {
                     .font(.system(size: 16))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove this photo from the day")
+            .help("Remove this photo from the day")
             .padding(3)
             .opacity(isHovered ? 1 : 0)
 
@@ -1178,10 +1180,6 @@ private struct CroppablePhotoThumb: View {
 /// surfaces can't drift apart.
 private struct PhotoTagEditor: View {
     /// Measured, so the "there is more" hint only shows while it is true (#190).
-    @State private var suggestionContentHeight: CGFloat = 0
-    @State private var suggestionViewportHeight: CGFloat = 0
-    @State private var suggestionScrollOffset: CGFloat = 0
-    private let scrollSpace = "photoTagSuggestions"
 
     @Binding var tags: [String]
     var suggestions: [PhotoTagSuggestion] = []
@@ -1234,7 +1232,9 @@ private struct PhotoTagEditor: View {
                 }
             }
 
-            ScrollView {
+            // The measuring and the fade live in FadingScrollView now, one
+            // implementation rather than a copy per site (#468).
+            FadingScrollView {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     if !tags.isEmpty {
                         Text(tagsHeading)
@@ -1274,36 +1274,6 @@ private struct PhotoTagEditor: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                // Measured against the viewport below, to know whether the
-                // list actually continues past the clipped edge (#190).
-                .background(GeometryReader { proxy in
-                    Color.clear
-                        .onAppear { suggestionContentHeight = proxy.size.height }
-                        .onChange(of: proxy.size.height) { _, h in suggestionContentHeight = h }
-                        .onChange(of: proxy.frame(in: .named(scrollSpace)).minY) { _, y in
-                            suggestionScrollOffset = -y
-                        }
-                })
-            }
-            .coordinateSpace(name: scrollSpace)
-            .background(GeometryReader { proxy in
-                Color.clear
-                    .onAppear { suggestionViewportHeight = proxy.size.height }
-                    .onChange(of: proxy.size.height) { _, h in suggestionViewportHeight = h }
-            })
-            // macOS hides scrollbars until a gesture starts, so without this an
-            // overflowing list of performers reads as a complete one and
-            // everybody below the cut is unfindable (#190).
-            .overlay(alignment: .bottom) {
-                if ScrollEdgeFade.showsBottom(contentHeight: suggestionContentHeight,
-                                              viewportHeight: suggestionViewportHeight,
-                                              scrollOffset: suggestionScrollOffset) {
-                    LinearGradient(colors: [Color.cream.opacity(0), Color.cream],
-                                   startPoint: .top, endPoint: .bottom)
-                        .frame(height: 22)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
             }
         }
         .onAppear { if autoFocus { focused = true } }
@@ -2319,6 +2289,8 @@ private struct PhotoThumb: View {
                     .font(.system(size: 16))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove this photo from the blog")
+            .help("Remove this photo from the blog")
             .padding(3)
         }
         .task {
@@ -2376,7 +2348,8 @@ private struct AudioFilePicker: View {
                         .font(.system(size: 14))
                 }
                 .buttonStyle(.plain)
-                .help("Remove")
+                .accessibilityLabel("Remove the chosen audio")
+                .help("Remove the chosen audio")
             } else if let url = audio {
                 Text(url.lastPathComponent)
                     .font(.system(size: 11))
@@ -2399,6 +2372,7 @@ private struct AudioFilePicker: View {
                         .foregroundStyle(Color.roseGold)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(preview.isPlaying ? "Pause the audio" : "Play the audio")
                 .help(preview.isPlaying ? "Pause" : "Play")
                 Button(action: { audio = nil; stopPlayback() }) {
                     Image(systemName: "xmark.circle.fill")
@@ -2407,6 +2381,8 @@ private struct AudioFilePicker: View {
                         .font(.system(size: 14))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Remove the chosen audio")
+                .help("Remove the chosen audio")
             } else {
                 Button("Choose…", action: onPick)
                     .buttonStyle(.plain)
@@ -2499,6 +2475,8 @@ private struct PhotoPreviewOverlay: View {
                             .font(.system(size: 22))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Close the photo")
+                    .help("Close the photo")
                     .keyboardShortcut(.cancelAction)   // Esc dismisses the preview
                     .padding(16)
                 }

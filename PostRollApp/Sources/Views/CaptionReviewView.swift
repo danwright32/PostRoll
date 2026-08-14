@@ -1878,9 +1878,6 @@ private struct CaptionSection: View {
                                             saveToBrandVoice = false
                                             revisionError = nil
                                 brandVoiceError = nil
-                                    brandVoiceError = nil
-                                        brandVoiceError = nil
-                                            brandVoiceError = nil
                                         }
                                     )
                                 } else {
@@ -2012,16 +2009,10 @@ private struct CaptionSection: View {
                                     Text("\(caption.caption.count) chars")
                                         .font(.system(size: 10))
                                         .foregroundStyle(caption.caption.count > 2200 ? Color.roseDeep : Color.warmMid)
-                                    Button {
-                                        NSPasteboard.general.clearContents()
-                                        NSPasteboard.general.setString(caption.caption, forType: .string)
-                                    } label: {
-                                        Image(systemName: "doc.on.doc")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(Color.warmMid)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Copy caption")
+                                    // Says the copy landed, and carries a name for an icon
+                                    // that had none (#465, #466).
+                                    ClipboardCopyButton(text: caption.caption,
+                                                        what: "\(day.displayName) caption")
                                 }
 
                                 HashtagsEditor(hashtags: $caption.hashtags)
@@ -2044,9 +2035,6 @@ private struct CaptionSection: View {
                                             saveToBrandVoice = false
                                             revisionError = nil
                                 brandVoiceError = nil
-                                    brandVoiceError = nil
-                                        brandVoiceError = nil
-                                            brandVoiceError = nil
                                         }
                                     )
                                 } else {
@@ -2080,9 +2068,16 @@ private struct CaptionSection: View {
                     HStack(alignment: .top, spacing: 0) {
 
                         // Left: Instagram mockup + caption editing controls
-                        // Wrapped in ScrollView so the fixed-size mockup + controls
-                        // can't force the whole card taller than the screen budget.
-                        ScrollView(.vertical, showsIndicators: false) {
+                        // Wrapped in a scroll view so the fixed-size mockup +
+                        // controls can't force the whole card taller than the
+                        // screen budget.
+                        //
+                        // Faded rather than bare, because on a story or collage
+                        // day a tall mockup pushes the caption editor, the
+                        // hashtags and the revise field below the fold, and
+                        // macOS hides the scrollbar until a gesture starts, so
+                        // nothing at rest said the column continued (#468, L76).
+                        FadingScrollView {
                         VStack(alignment: .leading, spacing: 0) {
                             HStack {
                                 Spacer(minLength: 0)
@@ -2122,16 +2117,10 @@ private struct CaptionSection: View {
                                 Text("\(caption.caption.count) chars")
                                     .font(.system(size: 10))
                                     .foregroundStyle(caption.caption.count > 2200 ? Color.roseDeep : Color.warmMid)
-                                Button {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(caption.caption, forType: .string)
-                                } label: {
-                                    Image(systemName: "doc.on.doc")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color.warmMid)
-                                }
-                                .buttonStyle(.plain)
-                                .help("Copy caption")
+                                // Says the copy landed, and carries a name for an icon
+                                // that had none (#465, #466).
+                                ClipboardCopyButton(text: caption.caption,
+                                                    what: "\(day.displayName) caption")
                             }
 
                             HashtagsEditor(hashtags: $caption.hashtags)
@@ -2154,8 +2143,6 @@ private struct CaptionSection: View {
                                         saveToBrandVoice = false
                                         revisionError = nil
                                 brandVoiceError = nil
-                                    brandVoiceError = nil
-                                        brandVoiceError = nil
                                     }
                                 )
                             } else {
@@ -2352,6 +2339,11 @@ private struct CaptionSection: View {
                                             }
                                             .menuStyle(.borderlessButton)
                                             .menuIndicator(.hidden)
+                                            // An icon-only menu trigger with
+                                            // no name is a control VoiceOver
+                                            // can only call "button" (#465).
+                                            .accessibilityLabel("Graphic options")
+                                            .help("Graphic options")
                                             .fixedSize()
                                             .padding(10)
                                         }
@@ -2443,16 +2435,10 @@ private struct CaptionSection: View {
                             Text("\(caption.caption.count) chars")
                                 .font(.system(size: 10))
                                 .foregroundStyle(caption.caption.count > 2200 ? Color.roseDeep : Color.warmMid)
-                            Button {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(caption.caption, forType: .string)
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Color.warmMid)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Copy caption")
+                            // Says the copy landed, and carries a name for an icon
+                            // that had none (#465, #466).
+                            ClipboardCopyButton(text: caption.caption,
+                                                what: "\(day.displayName) caption")
                         }
 
                         HashtagsEditor(hashtags: $caption.hashtags)
@@ -2475,7 +2461,6 @@ private struct CaptionSection: View {
                                     saveToBrandVoice = false
                                     revisionError = nil
                                 brandVoiceError = nil
-                                    brandVoiceError = nil
                                 }
                             )
                         } else {
@@ -3128,7 +3113,9 @@ private struct HashtagsEditor: View {
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
+                    .accessibilityLabel("Apply a hashtag preset")
                     .help("Apply a hashtag preset")
+                    .accessibilityLabel("Apply a hashtag preset")
                 }
             }
             // Plain single-line TextField — TextField has its own internal
@@ -4085,6 +4072,8 @@ private struct InstagramMockup: View {
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
+                    .accessibilityLabel("Post options")
+                    .help("Post options")
                 } else {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 14, weight: .medium))
@@ -4127,7 +4116,8 @@ private struct InstagramMockup: View {
                         .frame(width: cardWidth, height: cardWidth / max(aspect, 0.01))
                         .overlay(alignment: .leading) {
                             if isCarousel && carouselIndex > 0 {
-                                CarouselArrow(systemName: "chevron.left") {
+                                CarouselArrow(systemName: "chevron.left",
+                                              label: "Previous photo") {
                                     carouselIndex -= 1
                                 }
                                 .padding(.leading, 8)
@@ -4135,7 +4125,8 @@ private struct InstagramMockup: View {
                         }
                         .overlay(alignment: .trailing) {
                             if isCarousel && carouselIndex < photoURLs.count - 1 {
-                                CarouselArrow(systemName: "chevron.right") {
+                                CarouselArrow(systemName: "chevron.right",
+                                              label: "Next photo") {
                                     carouselIndex += 1
                                 }
                                 .padding(.trailing, 8)
@@ -4251,6 +4242,9 @@ private struct InstagramMockup: View {
 
 private struct CarouselArrow: View {
     let systemName: String
+    /// What pressing it does, said as a person would: "Previous photo". An
+    /// arrow glyph with no name is announced as nothing but "button" (#465).
+    let label: String
     let action: () -> Void
 
     var body: some View {
@@ -4263,6 +4257,8 @@ private struct CarouselArrow: View {
                 .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .help(label)
     }
 }
 
@@ -4380,6 +4376,8 @@ private struct PreviewGraphicThumbnail: View {
                     .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Open the graphic at full size")
+            .help("Open the graphic at full size")
             .padding(6)
         }
         .overlay(alignment: .bottomLeading) {
@@ -4393,6 +4391,7 @@ private struct PreviewGraphicThumbnail: View {
                         .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Regenerate the graphic")
                 .disabled(isRegenerating)
                 .help("Regenerate this graphic")
                 .padding(6)
@@ -4755,6 +4754,8 @@ private struct CollagePreviewThumbnail: View {
                         .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Open the collage at full size")
+                .help("Open the collage at full size")
                 .padding(6)
             }
             .overlay(alignment: .bottomLeading) {
@@ -4768,6 +4769,7 @@ private struct CollagePreviewThumbnail: View {
                             .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Regenerate the collage")
                     .disabled(isRegenerating)
                     .help("Regenerate collage with current crop and frame adjustments")
                     .padding(6)
@@ -4796,6 +4798,7 @@ private struct CollagePreviewThumbnail: View {
                             .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Undo the layout changes")
                     .disabled(isRegenerating)
                     .help("Reset to the automatic layout, discarding your dragged arrangement")
                     .padding(6)
@@ -4812,6 +4815,7 @@ private struct CollagePreviewThumbnail: View {
                             .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Choose different photos")
                     .disabled(isRegenerating)
                     .help("Replace all collage photos with a new set")
                     .padding(6)
@@ -5153,6 +5157,8 @@ private struct ReelStripPreviewThumbnail: View {
                     }
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
+                    .accessibilityLabel("Graphic options")
+                    .help("Graphic options")
                     .fixedSize()
                     .padding(10)
                 }
@@ -5855,6 +5861,8 @@ private struct ReviewPhotoOverlay: View {
                             .font(.system(size: 22))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Close the photo")
+                    .help("Close the photo")
                     .padding(16)
                 }
                 Spacer()

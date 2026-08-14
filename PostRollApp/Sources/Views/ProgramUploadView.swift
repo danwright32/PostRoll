@@ -551,6 +551,8 @@ private struct ProgramThumbnail: View {
                     .font(.system(size: 16))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove this program page")
+            .help("Remove this program page")
             .padding(4)
         }
         .task {
