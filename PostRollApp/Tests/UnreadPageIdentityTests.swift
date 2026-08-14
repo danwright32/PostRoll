@@ -114,20 +114,173 @@ final class UnreadPageIdentityTests: XCTestCase {
                        [OCRRescan.Page(number: nil, path: "/old/p3.jpg")])
     }
 
-    // MARK: - What gets sent
+    // MARK: - What gets sent (#575)
+    //
+    // A page nothing can place used to cost the WHOLE batch its positions: the
+    // numbering was sent only when every page had one, so a single unplaceable
+    // page dropped the lot and the rescan fell back to matching on file paths
+    // for pages whose position was known perfectly well. That is the exact
+    // matching #558 replaced, switched off for the good pages by one odd one
+    // (L93). The plan now sends only the pages it can place and leaves the rest
+    // in the gap, said out loud rather than dropped.
 
-    /// All the positions or none of them. A rescan that numbered some of its
-    /// pages and not others would hand Python a numbering it has to pad, and a
-    /// padded position matches whatever else could not be placed.
-    func testPositionsAreSentOnlyWhenEveryPageHasOne() {
-        let all = [OCRRescan.Page(number: 1, path: "/new/p1.jpg"),
-                   OCRRescan.Page(number: 3, path: "/new/p3.jpg")]
-        let some = [OCRRescan.Page(number: 1, path: "/new/p1.jpg"),
-                    OCRRescan.Page(number: nil, path: "/old/appendix.jpg")]
+    /// Real pages on disk, because the plan decides its refusal by opening the
+    /// pages it is about to send. Paths, in the order asked for.
+    private func pagesOnDisk(_ names: [String]) throws -> [String] {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        return try names.map { name in
+            let page = dir.appendingPathComponent(name)
+            try Data("x".utf8).write(to: page)
+            return page.path
+        }
+    }
 
-        XCTAssertEqual(OCRRescan.pageNumbers(of: all), [1, 3])
-        XCTAssertNil(OCRRescan.pageNumbers(of: some),
-                     "a partial numbering was sent, which Python has to pad")
+    /// The defect, stated as a test.
+    func testAPageThatCannotBePlacedDoesNotCostTheOthersTheirPositions() throws {
+        let disk = try pagesOnDisk(["p1.jpg", "p3.jpg"])
+
+        let plan = OCRRescan.plan(for: [
+            OCRRescan.Page(number: 1, path: disk[0]),
+            OCRRescan.Page(number: nil, path: "/old/appendix.jpg"),
+            OCRRescan.Page(number: 3, path: disk[1]),
+        ])
+
+        XCTAssertEqual(plan.sendable,
+                       [OCRRescan.PlacedPage(number: 1, path: disk[0]),
+                        OCRRescan.PlacedPage(number: 3, path: disk[1])],
+                       "the pages that were placed lost their positions to the "
+                       + "one that was not, so the merge falls back to matching "
+                       + "on paths for pages it could have matched on position")
+        XCTAssertNil(plan.refusal,
+                     "one unplaceable page stopped the pages that can be read")
+    }
+
+    /// The pages that cannot be placed stay in the gap, and the run says so.
+    /// Dropping them from what is sent without a word would leave them listed
+    /// as unread forever with nothing on screen explaining why a rescan keeps
+    /// not reading them (L11, L98).
+    func testThePagesLeftBehindAreNamedRatherThanSilentlySkipped() throws {
+        let disk = try pagesOnDisk(["p1.jpg"])
+
+        let plan = OCRRescan.plan(for: [
+            OCRRescan.Page(number: 1, path: disk[0]),
+            OCRRescan.Page(number: nil, path: "/old/appendix.jpg"),
+        ])
+
+        XCTAssertEqual(plan.unplaceable,
+                       [OCRRescan.Page(number: nil, path: "/old/appendix.jpg")])
+        let note = try XCTUnwrap(plan.note,
+                                 "a page was quietly left out of the rescan")
+        XCTAssertTrue(note.contains("appendix.jpg"), note)
+        XCTAssertFalse(note.contains("/old/"),
+                       "the whole path is not what Dan calls that page: \(note)")
+        XCTAssertFalse(note.contains("p1.jpg"),
+                       "the page that IS being read is named as one that is not: \(note)")
+    }
+
+    /// The ordinary gap: every page placed and readable. No note, because a
+    /// notice that appears when nothing is wrong stops being read.
+    func testAGapEveryPageOfWhichCanBePlacedRunsWithNothingToReport() throws {
+        let disk = try pagesOnDisk(["p1.jpg", "p3.jpg"])
+
+        let plan = OCRRescan.plan(for: [OCRRescan.Page(number: 1, path: disk[0]),
+                                        OCRRescan.Page(number: 3, path: disk[1])])
+
+        XCTAssertEqual(plan.sendable.map(\.number), [1, 3])
+        XCTAssertNil(plan.refusal)
+        XCTAssertNil(plan.note)
+        XCTAssertEqual(plan.unplaceable, [])
+    }
+
+    /// Nothing to send is a refusal, not a run of zero pages. A button offered
+    /// on a gap none of which can be placed would spend a paid call reading
+    /// nothing, or worse, read pages the merge cannot key back to the gap.
+    func testAGapNoPageOfWhichCanBePlacedRefusesInsteadOfRunning() throws {
+        let plan = OCRRescan.plan(for: [
+            OCRRescan.Page(number: nil, path: "/old/appendix.jpg"),
+        ])
+
+        XCTAssertEqual(plan.sendable, [])
+        let refusal = try XCTUnwrap(plan.refusal)
+        XCTAssertTrue(refusal.contains("appendix.jpg"), refusal)
+        XCTAssertNil(plan.note,
+                     "the same pages are reported twice, once as a refusal and "
+                     + "once as a note")
+    }
+
+    /// A refusal means nothing is sent. Leaving pages in `sendable` beside a
+    /// refusal would let a caller that checks one and not the other pay for a
+    /// run the rule had already refused.
+    func testARefusalLeavesNothingToSend() throws {
+        let plan = OCRRescan.plan(for: [
+            OCRRescan.Page(number: 1, path: "/nowhere/at/all/p1.jpg"),
+            OCRRescan.Page(number: 3, path: "/nowhere/at/all/p3.jpg"),
+        ])
+
+        XCTAssertNotNil(plan.refusal)
+        XCTAssertEqual(plan.sendable, [])
+    }
+
+    /// A gap can hold both faults at once, and a refusal reporting only one
+    /// leaves the other pages unaccounted for while naming a remedy that cannot
+    /// fix them (the rule this file's message builder already follows).
+    func testARefusedRunStillAccountsForThePagesItCouldNotPlace() throws {
+        let plan = OCRRescan.plan(for: [
+            OCRRescan.Page(number: 1, path: "/nowhere/at/all/p1.jpg"),
+            OCRRescan.Page(number: nil, path: "/old/appendix.jpg"),
+        ])
+
+        let refusal = try XCTUnwrap(plan.refusal)
+        XCTAssertTrue(refusal.contains("p1.jpg"), refusal)
+        XCTAssertTrue(refusal.contains("appendix.jpg"),
+                      "the page nothing could place went unmentioned: \(refusal)")
+    }
+
+    /// The two causes are different faults with different remedies, so they must
+    /// not be worded as each other (L11). A page that cannot be placed is not a
+    /// page that moved: it is still where it was, and the programme is what
+    /// changed.
+    func testAPageThatCannotBePlacedIsNotReportedAsOneThatMoved() throws {
+        let plan = OCRRescan.plan(for: [
+            OCRRescan.Page(number: nil, path: "/old/appendix.jpg"),
+        ])
+        let refusal = try XCTUnwrap(plan.refusal)
+
+        XCTAssertFalse(refusal.lowercased().contains("permissions problem"), refusal)
+        XCTAssertTrue(refusal.lowercased().contains("programme"), refusal)
+    }
+
+    /// Read cold, in the state that produces it (L21). One page is the common
+    /// case and the sentence has to agree with itself about how many there are.
+    func testTheUnplaceableSentenceAgreesWithItselfAboutOnePage() throws {
+        let one = try XCTUnwrap(OCRRescan.plan(for: [
+            OCRRescan.Page(number: nil, path: "/old/appendix.jpg")]).refusal)
+        let many = try XCTUnwrap(OCRRescan.plan(for: [
+            OCRRescan.Page(number: nil, path: "/old/appendix.jpg"),
+            OCRRescan.Page(number: nil, path: "/old/insert.jpg")]).refusal)
+
+        XCTAssertFalse(one.contains("they"), one)
+        XCTAssertFalse(one.contains("them"), one)
+        XCTAssertFalse(one.contains("These pages"), one)
+        XCTAssertTrue(many.contains("insert.jpg"), many)
+    }
+
+    /// The button names the amount of work, and after this it must name what
+    /// will ACTUALLY be read rather than the size of the gap, or it promises to
+    /// read a page it is about to leave behind (L21, L118).
+    func testTheControlCountsOnlyThePagesThatWillBeRead() throws {
+        let disk = try pagesOnDisk(["p1.jpg"])
+
+        let plan = OCRRescan.plan(for: [
+            OCRRescan.Page(number: 1, path: disk[0]),
+            OCRRescan.Page(number: nil, path: "/old/appendix.jpg"),
+        ])
+        let title = OCRRescan.buttonTitle(pageCount: plan.sendable.count)
+
+        XCTAssertTrue(title.lowercased().contains("1 page"), title)
     }
 
     // MARK: - The stored field survives a round trip

@@ -82,9 +82,16 @@ struct OCRReviewView: View {
         guard let stored = live.ocrResult,
               let pages = OCRRescan.pages(for: stored,
                                           in: live.programImagePaths) else { return nil }
+        // The same rule the run itself uses, so the control and what it does
+        // cannot disagree about which pages are being read (L109). The count is
+        // what will ACTUALLY be scanned, not the size of the gap, or the button
+        // promises to read a page it is about to leave behind (#575).
+        let plan = OCRRescan.plan(for: pages)
+        guard !plan.sendable.isEmpty || plan.refusal != nil else { return nil }
         return OCRReviewNotices.RescanOffer(
-            title: OCRRescan.buttonTitle(pageCount: pages.count),
-            refusal: OCRRescan.refusal(forPages: pages.map(\.path)),
+            title: OCRRescan.buttonTitle(pageCount: plan.sendable.count),
+            refusal: plan.refusal,
+            note: plan.note,
             isRunning: ocrManager.isRunning(event.id),
             action: {
                 ocrManager.startRescanOfUnreadPages(eventID: event.id,

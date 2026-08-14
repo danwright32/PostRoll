@@ -1,0 +1,8 @@
+{
+  "name": "rescan-sends-the-pages-it-placed",
+  "file": "PostRollApp/Sources/Services/OCRRescan.swift",
+  "find": "        guard !sendable.isEmpty, cannotRead == nil else {",
+  "replace": "        guard !sendable.isEmpty, cannotRead == nil, unplaceable.isEmpty else {",
+  "test": "PostRollTests/UnreadPageIdentityTests/testAPageThatCannotBePlacedDoesNotCostTheOthersTheirPositions",
+  "breaks": "one page the programme has no position for stops the pages that were placed being read, which is the all-or-none behaviour #575 replaced (#575)"
+}

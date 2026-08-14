@@ -367,6 +367,7 @@ final class BannerLegibilityTests: XCTestCase {
                 rescan: OCRReviewNotices.RescanOffer(
                     title: OCRRescan.buttonTitle(pageCount: 2),
                     refusal: nil,
+                    note: nil,
                     isRunning: false,
                     action: {})))),
             ("ocr rescan refused", AnyView(OCRReviewNotices(
@@ -374,6 +375,20 @@ final class BannerLegibilityTests: XCTestCase {
                     title: OCRRescan.buttonTitle(pageCount: 1),
                     refusal: OCRRescan.message(
                         for: [("/programs/Gala_p3.png", .missing)]),
+                    note: nil,
+                    isRunning: false,
+                    action: {})))),
+            // Running, with a page the programme no longer has a position for
+            // left out of it (#575). The note and the live button are on screen
+            // together, which is the state the pages left behind are reported
+            // in, so it has to be readable rather than only reachable.
+            ("ocr rescan leaving a page behind", AnyView(OCRReviewNotices(
+                rescan: OCRReviewNotices.RescanOffer(
+                    title: OCRRescan.buttonTitle(pageCount: 1),
+                    refusal: nil,
+                    note: OCRRescan.plan(for: [
+                        OCRRescan.Page(number: nil, path: "/programs/Gala_insert.png"),
+                    ]).refusal,
                     isRunning: false,
                     action: {})))),
         ]
