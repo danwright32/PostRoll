@@ -87,4 +87,29 @@ final class OCRReviewReadinessTests: XCTestCase {
                       "the extraction worked, and saying so stops this reading as total loss")
         XCTAssertTrue(message.contains("manually"))
     }
+
+    // MARK: - #449: the web performer fetch failing is not the site being empty
+
+    func testTheWebPerformersNoticeNamesTheReason() {
+        let message = OCRReviewReadiness.webPerformersSkippedMessage("the request timed out")
+
+        XCTAssertTrue(message.contains("the request timed out"), message)
+    }
+
+    /// The point of the notice is which list Dan is reading, not that something
+    /// went wrong in the abstract.
+    func testTheNoticeSaysWhereThePerformersCameFromInstead() {
+        let message = OCRReviewReadiness.webPerformersSkippedMessage("the request timed out")
+
+        XCTAssertTrue(message.lowercased().contains("program"),
+                      "the notice does not say the list came from the program: \(message)")
+    }
+
+    func testTheReasonIsClosedBeforeTheNextSentence() {
+        // A library error ending in no punctuation used to run straight into
+        // the sentence after it (#396).
+        let message = OCRReviewReadiness.webPerformersSkippedMessage("connection reset by peer")
+
+        XCTAssertFalse(message.contains("peer The"), message)
+    }
 }

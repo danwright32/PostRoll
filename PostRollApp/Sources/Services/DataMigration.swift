@@ -132,6 +132,21 @@ enum DataMigration {
     /// only the gaps instead of trusting (or wiping) what's there. Combined with
     /// the marker only being written when this returns true for every critical
     /// folder, a half-finished migration can never be stamped complete.
+    /// Whether the file already at `target` is the one at `source`.
+    ///
+    /// Size, because a partial copy is short and these are photos and program
+    /// scans: hashing every one on every launch is a permanent cost to catch a
+    /// case a completed copy cannot produce. An unreadable size on either side
+    /// answers NO, so unknown lands on the side that copies again rather than
+    /// the side that skips and leaves whatever is there (L50).
+    static func sameFile(_ source: URL, _ target: URL, fm: FileManager) -> Bool {
+        guard fm.fileExists(atPath: target.path),
+              let here = try? fm.attributesOfItem(atPath: source.path)[.size] as? Int,
+              let there = try? fm.attributesOfItem(atPath: target.path)[.size] as? Int
+        else { return false }
+        return here == there
+    }
+
     private static func copyDirVerified(
         _ sub: String, from legacyRoot: URL, to appSupportRoot: URL, fm: FileManager
     ) -> Bool {
@@ -147,7 +162,31 @@ enum DataMigration {
             guard (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
             let rel = String(file.standardizedFileURL.path.dropFirst(srcPrefix.count))
             let target = dst.appendingPathComponent(rel)
-            if fm.fileExists(atPath: target.path) { continue }  // already migrated
+            // Already migrated, judged on CONTENT rather than existence.
+            //
+            // A copy interrupted part way leaves a truncated file at the
+            // destination. Bare existence skipped it as done, the marker was
+            // stamped, and LegacyDataReclaim was then allowed to delete the
+            // intact original, leaving the truncated copy as the only one
+            // (#443, L40). Sizes are compared rather than bytes because these
+            // are photos and program scans: a partial copy is short, and
+            // reading every file in full on every launch is a cost paid
+            // forever to catch a case that cannot arise from a copy that
+            // completed.
+            if sameFile(file, target, fm: fm) { continue }
+            // Present but not the same file: a leftover from an interrupted
+            // copy. Removed rather than skipped, so the copy below is the one
+            // that decides what ends up there.
+            if fm.fileExists(atPath: target.path) {
+                do {
+                    try fm.removeItem(at: target)
+                } catch {
+                    NSLog("DataMigration: \(sub)/\(rel) is at the destination in a "
+                          + "different size and could not be replaced: \(error)")
+                    allCopied = false
+                    continue
+                }
+            }
             try? fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             do {
                 try fm.copyItem(at: file, to: target)

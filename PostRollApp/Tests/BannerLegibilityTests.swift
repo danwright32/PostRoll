@@ -293,11 +293,13 @@ final class BannerLegibilityTests: XCTestCase {
                     message: "Tuesday: the chosen black and white photo has moved")]))),
 
             // OCR review's notices and the bar that ends it (#396).
-            ("ocr notices, all four", AnyView(OCRReviewNotices(
+            ("ocr notices, all five", AnyView(OCRReviewNotices(
                 detectedIssues: ocrIssues,
                 partialProgramNotes: [ProgramShortfall.acceptanceNote(for: incomplete)],
                 visionSkippedMessage: OCRReviewReadiness.visionSkippedMessage(
                     "The program pages were too large to read."),
+                webPerformersSkippedMessage:
+                    OCRReviewReadiness.webPerformersSkippedMessage("the request timed out"),
                 flagErrorMessage: OCRReviewReadiness.flagErrorMessage(
                     "connection reset by peer")))),
             // The bar that refuses, with its reason drawn rather than only in a

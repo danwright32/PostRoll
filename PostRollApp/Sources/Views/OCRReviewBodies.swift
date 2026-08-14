@@ -22,6 +22,9 @@ struct OCRReviewNotices: View {
     var partialProgramNotes: [String] = []
     /// Why names were not spell-checked, already worded by the readiness type.
     var visionSkippedMessage: String? = nil
+    /// Why the event's website was not read for performers, already worded by
+    /// the readiness type (#449).
+    var webPerformersSkippedMessage: String? = nil
     /// Auto-flagging failed, already worded by the readiness type.
     var flagErrorMessage: String? = nil
 
@@ -41,6 +44,11 @@ struct OCRReviewNotices: View {
             // explained rather than as all there is (#378).
             ForEach(partialProgramNotes, id: \.self) { note in
                 BrandBanner(icon: "doc.badge.ellipsis", message: note, style: .warning)
+            }
+
+            if let webPerformersSkippedMessage {
+                BrandBanner(icon: "globe",
+                            message: webPerformersSkippedMessage, style: .warning)
             }
 
             if let visionSkippedMessage {

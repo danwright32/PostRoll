@@ -197,4 +197,49 @@ final class KeychainStoreTests: XCTestCase {
 
         XCTAssertEqual(written, "sk-ant-abc")
     }
+
+    // MARK: - #448: a refused DELETE must not report as gone
+
+    /// The unswept twin of #112. `saveAPIKey` reports a refusal; the delete
+    /// threw its status away, so Settings flipped to the green Saved state
+    /// while the key was still in the keychain and the next run kept billing
+    /// against it (L12, L30).
+
+    func testAnAcceptedDeleteReportsSuccess() {
+        let probe = KeychainStore.Deleter(delete: { _ in errSecSuccess })
+
+        XCTAssertTrue(KeychainStore.deleteAPIKey(using: probe))
+    }
+
+    /// Nothing there to remove is the state the caller asked for, so it is a
+    /// success rather than a failure to report.
+    func testNoKeyStoredCountsAsRemoved() {
+        let probe = KeychainStore.Deleter(delete: { _ in errSecItemNotFound })
+
+        XCTAssertTrue(KeychainStore.deleteAPIKey(using: probe))
+    }
+
+    func testARefusedDeleteIsReportedRatherThanReadingAsGone() {
+        let probe = KeychainStore.Deleter(delete: { _ in errSecAuthFailed })
+
+        XCTAssertFalse(KeychainStore.deleteAPIKey(using: probe),
+                       "a refused delete reported as done, so the key is still "
+                       + "stored while the screen says it is not")
+    }
+
+    func testTheDeleteActuallyAsksForTheAppsOwnItem() {
+        // A query that named nothing in particular would delete whatever it
+        // matched, or nothing at all, and report the same either way.
+        var query: [CFString: Any]?
+        let probe = KeychainStore.Deleter(delete: { q in
+            query = (q as! [CFString: Any])
+            return errSecSuccess
+        })
+
+        _ = KeychainStore.deleteAPIKey(using: probe)
+
+        XCTAssertEqual(query?[kSecClass] as! CFString?, kSecClassGenericPassword)
+        XCTAssertNotNil(query?[kSecAttrService])
+        XCTAssertNotNil(query?[kSecAttrAccount])
+    }
 }

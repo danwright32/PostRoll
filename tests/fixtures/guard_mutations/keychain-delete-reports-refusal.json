@@ -1,0 +1,8 @@
+{
+  "name": "keychain-delete-reports-refusal",
+  "file": "PostRollApp/Sources/Services/KeychainStore.swift",
+  "find": "        return status == errSecSuccess || status == errSecItemNotFound",
+  "replace": "        return true",
+  "test": "PostRollTests/KeychainStoreTests/testARefusedDeleteIsReportedRatherThanReadingAsGone",
+  "breaks": "a refused delete reports as done, so Settings says the key is gone while it is still stored and the next run keeps billing against it (#448)"
+}

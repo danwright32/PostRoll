@@ -1,0 +1,8 @@
+{
+  "name": "migration-skips-on-content-not-existence",
+  "file": "PostRollApp/Sources/Services/DataMigration.swift",
+  "find": "            if sameFile(file, target, fm: fm) { continue }",
+  "replace": "            if fm.fileExists(atPath: target.path) { continue }",
+  "test": "PostRollTests/DataMigrationTests/testAPartialCopyAtTheDestinationIsReplacedRatherThanSkipped",
+  "breaks": "a truncated file left by an interrupted copy counts as migrated, the marker is stamped, and the intact original becomes free to reclaim (#443)"
+}

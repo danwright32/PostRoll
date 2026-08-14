@@ -64,11 +64,6 @@ final class DiscardedFileWriteGuardTests: XCTestCase {
             + "being absent, and every reader falls back to the copy packaged in the app, "
             + "so a failure means Dan cannot edit it yet rather than that it is missing.",
 
-        "ArchiveCleanup.swift|Data(line.utf8).write(to: url)":
-            "The fallback branch of an audit-log append, taken only when the file could "
-            + "not be opened for writing. Nothing reads the audit log to decide anything; "
-            + "it exists for Dan to read by hand.",
-
         "ProgramPDFBuilder.swift|FileManager.default.copyItem(at: url, to: retainedSource)":
             "Retaining the original PDF beside its rasterised pages. The pages are the "
             + "return value and do not depend on it; a failure costs the ability to "

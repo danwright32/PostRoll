@@ -241,4 +241,82 @@ final class DataMigrationTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: dataRoot.appendingPathComponent("events.json").path),
                        "a redirected data dir (tests/automation) must skip migration")
     }
+
+    // MARK: - #443: a truncated copy is not a migrated file
+
+    /// The migration is idempotent by skipping files already at the
+    /// destination, which is right, but it judged that on EXISTENCE. A copy
+    /// interrupted part way leaves a short file there; the re-run skipped it as
+    /// done, the completion marker was stamped, and LegacyDataReclaim was then
+    /// free to delete the intact original, leaving the truncated copy as the
+    /// only one (L40).
+
+    func testAPartialCopyAtTheDestinationIsReplacedRatherThanSkipped() throws {
+        let fm = FileManager.default
+        let base = try tmpDir()
+        defer { try? fm.removeItem(at: base) }
+        let legacyRoot = base.appendingPathComponent("Documents/PostRoll")
+        let dataRoot = base.appendingPathComponent("AppSupport/PostRoll")
+
+        let photos = legacyRoot.appendingPathComponent("photos")
+        try fm.createDirectory(at: photos, withIntermediateDirectories: true)
+        let whole = "the whole photo, every byte of it"
+        try Data(whole.utf8).write(to: photos.appendingPathComponent("shot.jpg"))
+        try "{}".write(to: legacyRoot.appendingPathComponent("events.json"),
+                       atomically: true, encoding: .utf8)
+
+        // What an interrupted copy leaves behind.
+        let landed = dataRoot.appendingPathComponent("photos/shot.jpg")
+        try fm.createDirectory(at: landed.deletingLastPathComponent(),
+                               withIntermediateDirectories: true)
+        try Data("the whol".utf8).write(to: landed)
+
+        DataMigration.migrateIfNeeded(appSupportRoot: dataRoot, legacyRoot: legacyRoot,
+                                      environment: [:])
+
+        XCTAssertEqual(try String(contentsOf: landed, encoding: .utf8), whole,
+                       "the truncated copy was accepted as already migrated, and the "
+                       + "intact original is now free to be reclaimed")
+    }
+
+    func testAFileAlreadyFullyCopiedIsLeftAlone() throws {
+        let fm = FileManager.default
+        let base = try tmpDir()
+        defer { try? fm.removeItem(at: base) }
+        let legacyRoot = base.appendingPathComponent("Documents/PostRoll")
+        let dataRoot = base.appendingPathComponent("AppSupport/PostRoll")
+
+        let photos = legacyRoot.appendingPathComponent("photos")
+        try fm.createDirectory(at: photos, withIntermediateDirectories: true)
+        try Data("same length!".utf8).write(to: photos.appendingPathComponent("shot.jpg"))
+        try "{}".write(to: legacyRoot.appendingPathComponent("events.json"),
+                       atomically: true, encoding: .utf8)
+
+        let landed = dataRoot.appendingPathComponent("photos/shot.jpg")
+        try fm.createDirectory(at: landed.deletingLastPathComponent(),
+                               withIntermediateDirectories: true)
+        try Data("same length!".utf8).write(to: landed)
+        let before = try fm.attributesOfItem(atPath: landed.path)[.modificationDate] as? Date
+
+        DataMigration.migrateIfNeeded(appSupportRoot: dataRoot, legacyRoot: legacyRoot,
+                                      environment: [:])
+
+        let after = try fm.attributesOfItem(atPath: landed.path)[.modificationDate] as? Date
+        XCTAssertEqual(before, after,
+                       "a file already migrated was copied again, so every launch "
+                       + "would rewrite the whole library")
+    }
+
+    func testAnUnreadableSizeCountsAsNotYetCopied() throws {
+        // Unknown must land on the side that copies again, never the side that
+        // skips and leaves whatever is there (L50).
+        let fm = FileManager.default
+        let base = try tmpDir()
+        defer { try? fm.removeItem(at: base) }
+        let source = base.appendingPathComponent("a.jpg")
+        try Data("x".utf8).write(to: source)
+
+        XCTAssertFalse(DataMigration.sameFile(source, base.appendingPathComponent("nope.jpg"),
+                                              fm: fm))
+    }
 }

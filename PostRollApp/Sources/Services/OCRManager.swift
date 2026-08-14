@@ -100,11 +100,27 @@ final class OCRManager {
             // DCINY events: the website lists conductors + group names (preferred
             // over the program, which lists every individual member).
             let url = ev.eventURL
+            var webPerformersSkipped: String? = nil
             if !url.isEmpty, url.lowercased().contains("dciny.org") {
                 tracker.update(eventID) { $0.phaseOverride = "Fetching performers from website…" }
-                if let webPerformers = try? await PythonBridge.shared.fetchWebPerformers(eventURL: url),
-                   !webPerformers.isEmpty {
-                    result.performers = webPerformers
+                // Not `try?`. A network or script failure used to be
+                // indistinguishable from the site listing nothing, and the run
+                // shipped the program's list, which the comment above says is
+                // the less preferred source, with nothing saying so (#449).
+                // Same shape as visionSkipped five lines below, which records
+                // its reason for exactly this reason.
+                var fetched: [Performer]? = nil
+                var failure: String? = nil
+                do {
+                    fetched = try await PythonBridge.shared.fetchWebPerformers(eventURL: url)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    failure = error.localizedDescription
+                }
+                switch WebPerformersOutcome.decide(fetched: fetched, failure: failure) {
+                case .use(let performers):        result.performers = performers
+                case .keepProgramList(let reason): webPerformersSkipped = reason
                 }
             }
 
@@ -139,7 +155,9 @@ final class OCRManager {
 
             finishSuccess(eventID: eventID, snapshot: ev, result: result,
                           flags: flags, flagError: flagError,
-                          visionSkipped: visionSkipped, appState: appState)
+                          visionSkipped: visionSkipped,
+                          webPerformersSkipped: webPerformersSkipped,
+                          appState: appState)
         } catch is CancellationError {
             // User cancelled — cancel() already cleaned up state and navigation.
         } catch PythonBridgeError.partialOCR(let salvaged, let reason) {
@@ -151,6 +169,7 @@ final class OCRManager {
             finishSuccess(
                 eventID: eventID, snapshot: ev, result: salvaged,
                 flags: [], flagError: nil, visionSkipped: nil,
+                webPerformersSkipped: nil,
                 appState: appState,
                 partialRead: "Only part of the programme was read before the "
                     + "scan stopped. Check the cast list and notes against the "
@@ -171,7 +190,8 @@ final class OCRManager {
 
     private func finishSuccess(eventID: Event.ID, snapshot ev: Event, result: OCRResult,
                                flags: [OCRFlag], flagError: String?,
-                               visionSkipped: String?, appState: AppState,
+                               visionSkipped: String?, webPerformersSkipped: String?,
+                               appState: AppState,
                                partialRead: String? = nil) {
         tracker.remove(eventID)
 
@@ -193,6 +213,7 @@ final class OCRManager {
         updated.pendingFlags = flags
         updated.pendingFlagsError = flagError
         updated.visionCheckSkipped = visionSkipped
+        updated.webPerformersSkipped = webPerformersSkipped
         updated.stage = .ocrDone
         appState.updateEvent(updated)
         NotificationService.shared.notifyOCRComplete(eventName: ev.name)
