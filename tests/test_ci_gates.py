@@ -286,6 +286,24 @@ def test_the_mac_leg_runs_the_same_command_as_the_linux_one():
         f"name suggests: {sorted(set(runs))}")
 
 
+def test_both_legs_report_where_their_time_went():
+    """#562: the Mac leg takes four times the Linux one, and until this landed
+    neither leg said where any of it went.
+
+    `-v` prints a line per test and no timings, so answering "why is the Mac
+    slow" meant guessing at causes or pushing a throwaway commit to measure.
+    Both legs carry `--durations` so the comparison can be made off any run,
+    and it stays on for the same reason the ffmpeg version is recorded: a
+    number nobody can reproduce is not evidence.
+    """
+    runs = re.findall(r"run: (pytest[^\n]*)", TESTS.read_text())
+    assert runs, "no pytest command in the workflow at all"
+    for command in runs:
+        assert "--durations" in command, (
+            f"this leg reports no per-test timings, so the next person asking "
+            f"where its time goes has to push a commit to find out: {command}")
+
+
 def test_ci_builds_the_configuration_that_ships(swift):
     """`make install` builds Release, so Release is what reaches Dan's machine.
 
