@@ -59,7 +59,7 @@ struct BrandButtonStyle: ButtonStyle {
     /// is checked for contrast, and it is checked against THESE rather than
     /// against a copy of the two colours, which would only confirm itself (L70).
     static let label = Color.cream
-    static let fill = Color.roseGold
+    static let fill = Color.roseButton
     static let pressedFill = Color.roseDeep
 
     func makeBody(configuration: Configuration) -> some View {

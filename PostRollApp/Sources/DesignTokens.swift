@@ -74,6 +74,19 @@ extension Color {
     /// Pressed / active rose gold
     static let roseDeep  = Color(red: 125/255, green:  78/255, blue:  68/255)
 
+    /// The fill behind a primary button's label, and only that (#569).
+    ///
+    /// Deeper than `roseGold` because it is the one place the accent has cream
+    /// TEXT on it rather than sitting beside text. At `roseGold` that pair
+    /// measures 4.31:1, just under the 4.5:1 WCAG AA asks for at the label's
+    /// 13pt; here it measures 5.05:1. `roseGold` itself is unchanged, because
+    /// its other 240-odd uses are borders, icons and rules, where the level
+    /// that matters is the 3:1 for interface components and it clears that.
+    ///
+    /// `BannerLegibilityTests.testTheRescanLabelHasReadableContrastAgainstItsFill`
+    /// holds the pair at 4.5:1, so this cannot drift back.
+    static let roseButton = Color(red: 146/255, green:  95/255, blue:  86/255)
+
     /// Primary text — warm near-black
     static let warmDark  = Color(red:  60/255, green:  55/255, blue:  50/255)
     /// Secondary text — warm mid-tone

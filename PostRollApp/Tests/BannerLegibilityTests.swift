@@ -487,16 +487,14 @@ final class BannerLegibilityTests: XCTestCase {
     /// read, and both come from the shipping style rather than from numbers
     /// typed in here.
     ///
-    /// The floor is 3:1, which is the WCAG AA level for large text and for user
-    /// interface components. The measured ratio is 4.31:1, which clears that
-    /// comfortably and sits just under the 4.5:1 AA asks for body-sized text.
-    /// The label is 13pt medium, so it is body-sized: that gap is real and it
-    /// belongs to `BrandButtonStyle`, which every primary button in the app
-    /// uses. It is filed rather than fixed by lowering anything here.
+    /// The floor is 4.5:1, which is what WCAG AA asks for body-sized text, and
+    /// the label is 13pt medium. It measures 5.05:1, so the margin above the
+    /// floor is real rather than a rounding: a later wording or weight change
+    /// cannot quietly drop it back under (#569).
     func testTheRescanLabelHasReadableContrastAgainstItsFill() throws {
         let ratio = contrastRatio(BrandButtonStyle.label, BrandButtonStyle.fill)
 
-        XCTAssertGreaterThan(ratio, 3.0, """
+        XCTAssertGreaterThan(ratio, 4.5, """
             The primary button draws its label at \(String(format: "%.2f", ratio)):1 \
             against its own fill, which is below the level at which a control's \
             text can be relied on to be readable. A button whose words match the \
