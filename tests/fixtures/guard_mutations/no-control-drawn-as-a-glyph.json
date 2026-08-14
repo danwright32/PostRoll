@@ -1,0 +1,8 @@
+{
+  "name": "no-control-drawn-as-a-glyph",
+  "file": "PostRollApp/Sources/Views/EventListView.swift",
+  "find": "                Text(\"·\").accessibilityHidden(true)",
+  "replace": "                Text(\"·\")",
+  "test": "PostRollTests/IconOnlyControlLabelTests/testNoControlIsDrawnAsATypedCharacter",
+  "breaks": "a glyph goes back into the accessibility tree, so a screen reader reads out \"middle dot\" between every event's organisation and date, and the same hole lets a control be drawn as a typed character again (#538)"
+}
