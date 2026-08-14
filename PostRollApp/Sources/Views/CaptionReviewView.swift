@@ -362,7 +362,7 @@ struct CaptionReviewView: View {
                 }
             }
             }
-            .background(Color.cream)
+            .background(PaintedSurfaces.page)
             .onAppear {
                 mergeGlobalTags()
                 // Which accounts keep coming back, so the panel can ask for
@@ -2325,9 +2325,9 @@ private struct CaptionSection: View {
                                             } label: {
                                                 Image(systemName: "ellipsis")
                                                     .font(.system(size: 13, weight: .medium))
-                                                    .foregroundStyle(Color.white.opacity(0.9))
+                                                    .foregroundStyle(PaintedSurfaces.photoScrimIcon)
                                                     .padding(8)
-                                                    .background(Color.black.opacity(0.4))
+                                                    .background(PaintedSurfaces.photoScrim)
                                                     .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                                             }
                                             .menuStyle(.borderlessButton)
@@ -2559,7 +2559,7 @@ private struct RevisionPanel: View {
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.xs)
-                        .fill(Color.creamDeep)
+                        .fill(PaintedSurfaces.deepPage)
                         .overlay(
                             RoundedRectangle(cornerRadius: Radius.xs)
                                 .strokeBorder(
@@ -2614,7 +2614,7 @@ private struct RevisionPanel: View {
             }
         }
         .padding(Spacing.md)
-        .background(Color.roseGold.opacity(0.05))
+        .background(PaintedSurfaces.reflowPanelFill)
         .clipShape(RoundedRectangle(cornerRadius: Radius.md))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.md)
@@ -2714,7 +2714,7 @@ private struct BlogSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm)
-                    .fill(Color.creamDeep)
+                    .fill(PaintedSurfaces.deepPage)
                     .overlay(
                         RoundedRectangle(cornerRadius: Radius.sm)
                             .strokeBorder(Color.creamEdge, lineWidth: 1)
@@ -2879,7 +2879,7 @@ private struct BlogSection: View {
                             .frame(minHeight: 280)
                             .background(
                                 RoundedRectangle(cornerRadius: Radius.sm)
-                                    .fill(Color.creamDeep)
+                                    .fill(PaintedSurfaces.deepPage)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: Radius.sm)
                                             .strokeBorder(Color.creamEdge, lineWidth: 1)
@@ -3053,7 +3053,7 @@ private struct BlogBodyEditor: View {
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm)
-                    .fill(Color.creamDeep)
+                    .fill(PaintedSurfaces.deepPage)
                     .overlay(
                         RoundedRectangle(cornerRadius: Radius.sm)
                             .strokeBorder(
@@ -3127,7 +3127,7 @@ private struct HashtagsEditor: View {
                 .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: Radius.xs)
-                    .fill(Color.creamDeep)
+                    .fill(PaintedSurfaces.deepPage)
                     .overlay(
                         RoundedRectangle(cornerRadius: Radius.xs)
                             .strokeBorder(
@@ -3219,7 +3219,7 @@ private struct AltTextRow: View {
                 .padding(6)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.xs)
-                        .fill(Color.creamDeep)
+                        .fill(PaintedSurfaces.deepPage)
                         .overlay(
                             RoundedRectangle(cornerRadius: Radius.xs)
                                 .strokeBorder(
@@ -3255,7 +3255,7 @@ private struct ReviewTextArea: View {
                 .padding(8)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.sm)
-                        .fill(Color.creamDeep)
+                        .fill(PaintedSurfaces.deepPage)
                         .overlay(
                             RoundedRectangle(cornerRadius: Radius.sm)
                                 .strokeBorder(
@@ -3521,7 +3521,7 @@ private struct ReviewMediaStrip: View {
                                     }
                                     .foregroundStyle(PaintedSurfaces.pageAccentText)
                                     .frame(width: 60, height: 80)
-                                    .background(Color.warmFaint.opacity(0.3))
+                                    .background(PaintedSurfaces.addTreatmentFill)
                                     .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
                                 }
                                 .buttonStyle(.plain)
@@ -3825,7 +3825,7 @@ private struct FridayClipCropPopover: View {
         }
         .padding(Spacing.md)
         .frame(width: 260)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         .task(id: "\(clipPath)-\(trimIn)-\(trimOut)") {
             await loadFrames()
         }
@@ -3969,7 +3969,7 @@ private struct InstagramMockup: View {
                                      Color(red: 0.98, green: 0.28, blue: 0.50),
                                      Color(red: 0.62, green: 0.18, blue: 0.82)],
                             startPoint: .topLeading, endPoint: .bottomTrailing))
-                    Circle().fill(Color.white).padding(2)
+                    Circle().fill(PaintedSurfaces.instagramAvatarRing).padding(2)
                     Image("DWAvatar")
                         .resizable()
                         .interpolation(.high)
@@ -4148,7 +4148,7 @@ private struct InstagramMockup: View {
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
                                     .background(
-                                        Capsule().fill(Color.black.opacity(0.55))
+                                        Capsule().fill(PaintedSurfaces.photoScrim)
                                     )
                                     .padding(8)
                             }
@@ -4229,7 +4229,7 @@ private struct InstagramMockup: View {
             .padding(.bottom, 12)
         }
         .frame(width: cardWidth)
-        .background(Color.white)
+        .background(PaintedSurfaces.instagramCard)
         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -4261,7 +4261,7 @@ private struct CarouselArrow: View {
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Color(white: 0.2))
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(Color.white.opacity(0.92)))
+                .background(Circle().fill(PaintedSurfaces.instagramOverlayButton))
                 .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
         }
         .buttonStyle(.plain)
@@ -4378,9 +4378,9 @@ private struct PreviewGraphicThumbnail: View {
             Button { NSWorkspace.shared.open(url) } label: {
                 Image(systemName: "arrow.up.forward.square")
                     .font(.system(size: 13))
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .foregroundStyle(PaintedSurfaces.photoScrimIcon)
                     .padding(8)
-                    .background(Color.black.opacity(0.4))
+                    .background(PaintedSurfaces.photoScrim)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
             }
             .buttonStyle(.plain)
@@ -4393,9 +4393,9 @@ private struct PreviewGraphicThumbnail: View {
                 Button(action: onRegenerate) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 13))
-                        .foregroundStyle(Color.white.opacity(0.9))
+                        .foregroundStyle(PaintedSurfaces.photoScrimIcon)
                         .padding(8)
-                        .background(Color.black.opacity(0.4))
+                        .background(PaintedSurfaces.photoScrim)
                         .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                 }
                 .buttonStyle(.plain)
@@ -4713,7 +4713,7 @@ private struct CollagePreviewThumbnail: View {
                                 .foregroundStyle(.white)
                         }
                         .padding(12)
-                        .background(Color.black.opacity(0.65).clipShape(RoundedRectangle(cornerRadius: 8)))
+                        .background(PaintedSurfaces.photoHintPanel.clipShape(RoundedRectangle(cornerRadius: 8)))
                         .allowsHitTesting(false)
                     }
                 }
@@ -4761,9 +4761,9 @@ private struct CollagePreviewThumbnail: View {
                 Button { openComposited() } label: {
                     Image(systemName: "arrow.up.forward.square")
                         .font(.system(size: 13))
-                        .foregroundStyle(Color.white.opacity(0.9))
+                        .foregroundStyle(PaintedSurfaces.photoScrimIcon)
                         .padding(7)
-                        .background(Color.black.opacity(0.4))
+                        .background(PaintedSurfaces.photoScrim)
                         .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                 }
                 .buttonStyle(.plain)
@@ -4776,9 +4776,9 @@ private struct CollagePreviewThumbnail: View {
                     Button(action: onRegenerate) {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 13))
-                            .foregroundStyle(Color.white.opacity(0.9))
+                            .foregroundStyle(PaintedSurfaces.photoScrimIcon)
                             .padding(7)
-                            .background(Color.black.opacity(0.4))
+                            .background(PaintedSurfaces.photoScrim)
                             .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                     }
                     .buttonStyle(.plain)
@@ -4805,9 +4805,9 @@ private struct CollagePreviewThumbnail: View {
                     } label: {
                         Image(systemName: "arrow.uturn.backward")
                             .font(.system(size: 13))
-                            .foregroundStyle(Color.white.opacity(0.9))
+                            .foregroundStyle(PaintedSurfaces.photoScrimIcon)
                             .padding(7)
-                            .background(Color.black.opacity(0.4))
+                            .background(PaintedSurfaces.photoScrim)
                             .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                     }
                     .buttonStyle(.plain)
@@ -4822,9 +4822,9 @@ private struct CollagePreviewThumbnail: View {
                     Button(action: onChangePhotos) {
                         Image(systemName: "photo.on.rectangle.angled")
                             .font(.system(size: 13))
-                            .foregroundStyle(Color.white.opacity(0.9))
+                            .foregroundStyle(PaintedSurfaces.photoScrimIcon)
                             .padding(7)
-                            .background(Color.black.opacity(0.4))
+                            .background(PaintedSurfaces.photoScrim)
                             .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                     }
                     .buttonStyle(.plain)
@@ -5021,7 +5021,7 @@ private struct ReelStripPreviewThumbnail: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Color.roseGold.opacity(0.1))
+                .background(PaintedSurfaces.taggedAccountsFill)
                 .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -5171,9 +5171,9 @@ private struct ReelStripPreviewThumbnail: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.9))
+                            .foregroundStyle(PaintedSurfaces.photoScrimIcon)
                             .padding(8)
-                            .background(Color.black.opacity(0.4))
+                            .background(PaintedSurfaces.photoScrim)
                             .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                     }
                     .menuStyle(.borderlessButton)
@@ -5475,13 +5475,13 @@ private struct CollageCellOverlay: View {
                 .overlay {
                     if isDragTarget {
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(Color.roseGold.opacity(0.18))
+                            .fill(PaintedSurfaces.dropTargetFill)
                             .allowsHitTesting(false)
                     }
                 }
                 .overlay(alignment: .topTrailing) {
                     if isMoved && !isSelected && !isDragging && !isDragTarget {
-                        Circle().fill(Color.roseGold).frame(width: 7, height: 7).padding(4)
+                        Circle().fill(PaintedSurfaces.dropTargetMarker).frame(width: 7, height: 7).padding(4)
                     }
                 }
         }
@@ -5747,7 +5747,7 @@ private struct ReviewMediaFileRow: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: Radius.xs)
-                .fill(Color.creamDeep)
+                .fill(PaintedSurfaces.deepPage)
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.xs)
                         .strokeBorder(Color.creamEdge, lineWidth: 0.5)
@@ -5801,7 +5801,7 @@ private struct LearningSuggestionSheet: View {
                 .frame(minHeight: 120, maxHeight: 220)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.md)
-                        .fill(Color.roseGold.opacity(0.06))
+                        .fill(PaintedSurfaces.noteFieldFill)
                         .overlay(
                             RoundedRectangle(cornerRadius: Radius.md)
                                 .strokeBorder(Color.roseGold.opacity(0.2), lineWidth: 1)
@@ -5837,7 +5837,7 @@ private struct LearningSuggestionSheet: View {
         }
         .padding(Spacing.xl)
         .frame(width: 460)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
     }
 }
 
@@ -5976,7 +5976,7 @@ private struct InlineReelPhotoAssignment: View {
                         .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
                 } else {
                     RoundedRectangle(cornerRadius: Radius.sm)
-                        .fill(Color.warmFaint.opacity(0.3))
+                        .fill(PaintedSurfaces.addTreatmentFill)
                         .frame(width: 120, height: 80)
                         .overlay {
                             VStack(spacing: 4) {
@@ -6060,7 +6060,7 @@ private struct CollageLayoutGallery: View {
             }
         }
         .frame(width: 580, height: 660)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         .task { await load() }
     }
 
@@ -6078,7 +6078,7 @@ private struct CollageLayoutGallery: View {
                 )
         } else {
             RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .fill(Color.warmMid.opacity(0.1))
+                .fill(PaintedSurfaces.imagePlaceholderFill)
                 .frame(height: 220)
         }
     }

@@ -164,7 +164,7 @@ struct AssetGenerationView: View {
                 )
             }
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
     }
 
     // MARK: - Running
@@ -184,7 +184,7 @@ struct AssetGenerationView: View {
             )
             .frame(maxWidth: 380)
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         .onAppear { phasesVisible = true }
         .onDisappear { phasesVisible = false }
     }
@@ -266,7 +266,7 @@ struct AssetGenerationView: View {
                 )
             }
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
     }
 
     // MARK: - Done
@@ -415,7 +415,7 @@ struct AssetGenerationView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.62)) {

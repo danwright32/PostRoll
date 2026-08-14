@@ -46,10 +46,10 @@ struct EventRowBackground: View {
                 // Glider + bookmark strip slide together as one unit
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: Radius.md)
-                        .fill(Color.roseGold.opacity(0.12))
+                        .fill(PaintedSurfaces.eventRowSelectedFill)
                     // Bookmark strip: a slim rose-gold spine at the leading edge
                     Capsule()
-                        .fill(Color.roseGold)
+                        .fill(PaintedSurfaces.eventRowSelectedSpine)
                         .frame(width: 2.5)
                         .padding(.vertical, 8)
                 }
@@ -59,13 +59,13 @@ struct EventRowBackground: View {
             } else if isHovered {
                 // Pre-selection warmth: the row glows before the click lands
                 RoundedRectangle(cornerRadius: Radius.md)
-                    .fill(Color.roseGold.opacity(0.05))
+                    .fill(PaintedSurfaces.eventRowHoverFill)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
             } else {
                 // Opaque background prevents the system accent-color
                 // selection highlight from bleeding through.
-                Color.creamDeep
+                PaintedSurfaces.eventRow
             }
         }
     }

@@ -144,7 +144,7 @@ struct BrandTextField: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm)
-                    .fill(Color.creamDeep)
+                    .fill(PaintedSurfaces.deepPage)
                     .overlay(
                         RoundedRectangle(cornerRadius: Radius.sm)
                             .strokeBorder(
@@ -171,7 +171,7 @@ private struct ShootTypeOption: View {
                         .frame(width: 18, height: 18)
                     if isSelected {
                         Circle()
-                            .fill(Color.roseGold)
+                            .fill(PaintedSurfaces.iconAccent)
                             .frame(width: 10, height: 10)
                     }
                 }

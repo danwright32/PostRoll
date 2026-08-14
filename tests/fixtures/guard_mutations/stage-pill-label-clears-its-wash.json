@@ -1,0 +1,8 @@
+{
+  "name": "stage-pill-label-clears-its-wash",
+  "file": "PostRollApp/Sources/DesignTokens.swift",
+  "find": "    static let stageExportedInk      = Color(red:  67/255, green:  99/255, blue:  47/255)",
+  "replace": "    static let stageExportedInk      = Color(red:  85/255, green: 125/255, blue:  60/255)",
+  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
+  "breaks": "the Exported pill goes back to drawing its label in the colour of its own wash, 3.35:1 against the 4.5:1 its 10pt label needs, which ink cannot report because the pill is mostly its own fill (#582, L141)"
+}

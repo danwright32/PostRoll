@@ -179,7 +179,7 @@ struct OCRReviewView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         .animation(.easeOut(duration: 0.2), value: undoMessage != nil)
         // Draft persistence: all review edits live in @State, and the .id(event.id)
         // remount in EventDetailView discards that state the moment another event
@@ -847,7 +847,7 @@ private struct HandleSuggestionRow: View {
             Button { onDismiss() } label: {
                 Image(systemName: "xmark.circle")
                     .font(.system(size: 14))
-                    .foregroundStyle(Color.warmMid.opacity(0.5))
+                    .foregroundStyle(PaintedSurfaces.suggestionRowDismissIcon)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss this suggestion")
@@ -855,7 +855,7 @@ private struct HandleSuggestionRow: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
-        .background(Color.warmDark.opacity(0.03))
+        .background(PaintedSurfaces.suggestionRowFill)
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
@@ -1072,7 +1072,7 @@ private struct PieceRow: View {
         .overlay(alignment: .top) {
             if isReorderTarget {
                 Rectangle()
-                    .fill(Color.roseGold)
+                    .fill(PaintedSurfaces.dropTargetMarker)
                     .frame(height: 2)
                     .offset(y: -3)
             }
@@ -1176,7 +1176,7 @@ private struct BrandTextArea: View {
                 .scrollContentBackground(.hidden)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.sm)
-                        .fill(Color.creamDeep)
+                        .fill(PaintedSurfaces.deepPage)
                         .overlay(
                             RoundedRectangle(cornerRadius: Radius.sm)
                                 .strokeBorder(
@@ -1221,7 +1221,7 @@ private struct BrandField: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: Radius.xs)
-                .fill(Color.creamDeep)
+                .fill(PaintedSurfaces.deepPage)
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.xs)
                         .strokeBorder(
@@ -1282,8 +1282,8 @@ private struct OCRUndoBanner: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, Spacing.sm)
-        .background(Color.creamDeep)
-        .overlay(Rectangle().fill(Color.creamEdge).frame(height: 0.5), alignment: .top)
+        .background(PaintedSurfaces.deepPage)
+        .overlay(Rectangle().fill(PaintedSurfaces.edgeRule).frame(height: 0.5), alignment: .top)
     }
 }
 
@@ -1342,7 +1342,7 @@ private struct HandleRow: View {
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: Radius.xs)
-                    .fill(Color.creamDeep)
+                    .fill(PaintedSurfaces.deepPage)
                     .overlay(
                         RoundedRectangle(cornerRadius: Radius.xs)
                             .strokeBorder(
@@ -1397,7 +1397,7 @@ private struct FlagReviewSection: View {
             }
         }
         .padding(Spacing.md)
-        .background(Color.roseGold.opacity(0.05))
+        .background(PaintedSurfaces.reflowPanelFill)
         .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.sm)
@@ -1484,7 +1484,7 @@ private struct FlagRow: View {
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: Radius.xs)
-                            .fill(Color.cream)
+                            .fill(PaintedSurfaces.page)
                             .overlay(RoundedRectangle(cornerRadius: Radius.xs)
                                 .strokeBorder(Color.creamEdge, lineWidth: 1))
                     )
@@ -1635,7 +1635,7 @@ private struct FlagRow: View {
                             .padding(.vertical, 6)
                             .background(
                                 RoundedRectangle(cornerRadius: Radius.xs)
-                                    .fill(Color.cream)
+                                    .fill(PaintedSurfaces.page)
                                     .overlay(RoundedRectangle(cornerRadius: Radius.xs)
                                         .strokeBorder(Color.creamEdge, lineWidth: 1))
                             )
@@ -1681,7 +1681,7 @@ private struct FlagRow: View {
             }
         }
         .padding(Spacing.sm)
-        .background(Color.cream.opacity(flag.resolved ? 0.5 : 1.0))
+        .background(flag.resolved ? PaintedSurfaces.resolvedFlagFill : PaintedSurfaces.page)
         .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
         .opacity(flag.resolved ? 0.6 : 1.0)
         .onAppear {

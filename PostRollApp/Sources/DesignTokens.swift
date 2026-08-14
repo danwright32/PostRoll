@@ -95,23 +95,55 @@ extension Color {
     static let warmFaint = Color(red: 175/255, green: 160/255, blue: 152/255)
 
     // MARK: Stage pill colors
-    // Warm editorial progression — all calibrated as foreground at 0.14 opacity on creamDeep.
+    //
+    // Warm editorial progression, each drawn as a 0.14 wash behind the pill.
     // Rule: every color must lean warm (R ≥ B). No cool blues or hospital greens.
+    //
+    // These are the WASH. They are not the words on it: measured against their
+    // own wash on an event row, the seven of them run from 2.42:1 to 3.67:1,
+    // every one under the 4.5:1 the pill's 10pt label needs (#582). This block
+    // used to say they were "calibrated as foreground at 0.14 opacity on
+    // creamDeep", which is what the design intends and what nothing held them
+    // to, so the calibration was a claim rather than a measurement.
+    //
+    // The ink beside each one is that same hue carried down until the label
+    // clears its own wash, on the plain row and on the warmer hovered one. The
+    // wash is untouched, so the progression a person reads across the list is
+    // the same; only the words on it moved. Same shape as the accent's two
+    // roles (#580): one colour cannot answer for both a fill and the type on it.
+    //
+    // PaintedSurfaces.stagePill pairs each wash with its ink and is what the
+    // pill draws from, and BannerLegibilityTests walks every state.
 
     /// Step 1 — Event Created
     static let stageCreated          = warmMid
+    static let stageCreatedInk       = Color(red: 102/255, green:  87/255, blue:  81/255)
     /// Step 2 — Program Uploaded: warm rose, one step past neutral
     static let stageProgramUploaded  = Color(red: 175/255, green: 130/255, blue: 120/255)
+    static let stageProgramUploadedInk = Color(red: 115/255, green:  86/255, blue:  79/255)
     /// Step 3 — OCR Done: rose gold (primary accent marks this milestone)
     static let stageOCRDone          = roseGold
+    static let stageOCRDoneInk       = Color(red: 122/255, green:  80/255, blue:  72/255)
     /// Step 4 — Photos Assigned: warm amber
     static let stagePhotosAssigned   = Color(red: 165/255, green: 120/255, blue:  85/255)
+    static let stagePhotosAssignedInk = Color(red: 117/255, green:  85/255, blue:  60/255)
     /// Step 5 — Assets Generated: warm olive gold
     static let stageAssetsGenerated  = Color(red: 150/255, green: 125/255, blue:  70/255)
+    static let stageAssetsGeneratedInk = Color(red: 106/255, green:  89/255, blue:  50/255)
     /// Step 6 — Captions Reviewed: warm sage (R ≈ B keeps it from going clinical)
     static let stageCaptionsReviewed = Color(red: 115/255, green: 140/255, blue: 105/255)
+    static let stageCaptionsReviewedInk = Color(red:  79/255, green:  97/255, blue:  72/255)
     /// Step 7 — Exported: warm forest green (R > B — yellow-green, not blue-green)
     static let stageExported         = Color(red:  85/255, green: 125/255, blue:  60/255)
+    static let stageExportedInk      = Color(red:  67/255, green:  99/255, blue:  47/255)
+
+    /// The accent and the deep accent as pill ink, for the states that are not
+    /// a stage: the four that report work in flight wear `roseGold`, and the
+    /// two failures wear `roseDeep`. `roseDeep` on its own wash measures
+    /// 4.44:1 on a hovered row, just under, so both get carried down the same
+    /// way rather than one of them being left as the exception nobody rechecks.
+    static let stageBusyInk          = Color(red: 122/255, green:  80/255, blue:  72/255)
+    static let stageFailedInk        = Color(red: 122/255, green:  76/255, blue:  67/255)
 }
 
 // MARK: - Fonts

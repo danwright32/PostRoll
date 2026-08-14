@@ -137,7 +137,7 @@ struct InsightsOverviewView: View {
             }
             .padding(Spacing.lg)
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
     }
 
     // MARK: - Actions
@@ -246,7 +246,7 @@ private struct InsightsEmptyState: View {
         .padding(Spacing.lg)
         .background(
             RoundedRectangle(cornerRadius: Radius.md)
-                .fill(Color.creamDeep)
+                .fill(PaintedSurfaces.deepPage)
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.md)
                         .strokeBorder(Color.creamEdge, lineWidth: 1)
@@ -443,7 +443,7 @@ private struct FindingRow: View {
         .padding(8)
         .background(
             RoundedRectangle(cornerRadius: Radius.sm)
-                .fill(Color.creamDeep)
+                .fill(PaintedSurfaces.deepPage)
         )
     }
 }
@@ -498,7 +498,7 @@ private struct BrandVoiceSuggestionRow: View {
         .padding(8)
         .background(
             RoundedRectangle(cornerRadius: Radius.sm)
-                .fill(Color.creamDeep)
+                .fill(PaintedSurfaces.deepPage)
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.sm)
                         .strokeBorder(Color.creamEdge, lineWidth: 1)

@@ -60,7 +60,7 @@ struct BuildBehindSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: Radius.sm)
-                            .fill(Color.creamDeep)
+                            .fill(PaintedSurfaces.deepPage)
                             .overlay(
                                 RoundedRectangle(cornerRadius: Radius.sm)
                                     .strokeBorder(Color.creamEdge, lineWidth: 1)

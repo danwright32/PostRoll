@@ -305,7 +305,7 @@ struct PhotoAssignmentView: View {
                                            onContinue: { advance() })
             }
         }
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
 
         // Full-screen photo preview overlay
         if let url = previewURL {
@@ -1126,9 +1126,9 @@ private struct CroppablePhotoThumb: View {
                         Button(action: onTag) {
                             Image(systemName: hasTags ? "tag.fill" : "tag")
                                 .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(hasTags ? PaintedSurfaces.iconAccent : .white.opacity(0.85))
+                                .foregroundStyle(PaintedSurfaces.photoScrimIcon)
                                 .padding(3)
-                                .background(Color.black.opacity(0.35))
+                                .background(PaintedSurfaces.photoScrim)
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
                         }
                         .buttonStyle(.plain)
@@ -1219,7 +1219,7 @@ private struct PhotoTagEditor: View {
                     .padding(8)
                     .background(
                         RoundedRectangle(cornerRadius: Radius.xs)
-                            .fill(Color.creamDeep)
+                            .fill(PaintedSurfaces.deepPage)
                             .overlay(
                                 RoundedRectangle(cornerRadius: Radius.xs)
                                     .strokeBorder(focused ? Color.roseGold : Color.creamEdge,
@@ -1251,19 +1251,19 @@ private struct PhotoTagEditor: View {
                                 HStack(spacing: 3) {
                                     Text(tag)
                                         .font(.system(size: 10))
-                                        .foregroundStyle(Color.warmDark)
+                                        .foregroundStyle(PaintedSurfaces.tagChipText)
                                         .lineLimit(1)
                                     Button { tags.removeAll { $0 == tag } } label: {
                                         Image(systemName: "xmark")
                                             .font(.system(size: 7, weight: .bold))
-                                            .foregroundStyle(Color.warmMid)
+                                            .foregroundStyle(PaintedSurfaces.tagChipRemoveIcon)
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("Remove \(tag)")
                                 }
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
-                                .background(Capsule().fill(Color.roseGold.opacity(0.14)))
+                                .background(Capsule().fill(PaintedSurfaces.tagChipFill))
                             }
                         }
                     }
@@ -1418,7 +1418,7 @@ private struct PhotoTaggingSheet: View {
             footer
         }
         .frame(width: 800, height: 560)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         .task(id: currentURL) { await loadCurrent() }
     }
 
@@ -1450,7 +1450,7 @@ private struct PhotoTaggingSheet: View {
     @ViewBuilder
     private var photoPane: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: Radius.md).fill(Color.creamDeep)
+            RoundedRectangle(cornerRadius: Radius.md).fill(PaintedSurfaces.deepPage)
             if let image {
                 Image(nsImage: image)
                     .resizable()
@@ -1510,12 +1510,12 @@ private struct PhotoTaggingSheet: View {
                         Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
                     }
                 }
-                .foregroundStyle(Color.cream)
+                .foregroundStyle(PaintedSurfaces.nextStepLabel)
                 .padding(.horizontal, Spacing.md)
                 .padding(.vertical, 7)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.xs)
-                        .fill(Color.roseGold)
+                        .fill(PaintedSurfaces.nextStepFill)
                 )
             }
             .buttonStyle(.plain)
@@ -1634,7 +1634,7 @@ private struct TagSuggestionFlow: View {
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(
-                            Capsule().fill(Color.roseGold.opacity(0.10))
+                            Capsule().fill(PaintedSurfaces.suggestionChipFill)
                                 .overlay(Capsule().strokeBorder(Color.roseGold.opacity(0.3), lineWidth: 0.5))
                         )
                 }
@@ -1812,7 +1812,7 @@ private struct TuesdayReelSection: View {
 
             RoseGoldDivider(opacity: 0.15)
         }
-        .background(Color.roseGold.opacity(0.02))
+        .background(PaintedSurfaces.sectionWash)
         .task(id: screenRecording) {
             guard let url = screenRecording else { recordingSeconds = nil; return }
             recordingSeconds = await loadVideoDuration(url: url)
@@ -1897,7 +1897,7 @@ private struct CollageLayoutSection: View {
 
             RoseGoldDivider(opacity: 0.15)
         }
-        .background(Color.roseGold.opacity(0.02))
+        .background(PaintedSurfaces.sectionWash)
     }
 }
 
@@ -1979,7 +1979,7 @@ private struct ThursdayReelSection: View {
 
             RoseGoldDivider(opacity: 0.15)
         }
-        .background(Color.roseGold.opacity(0.02))
+        .background(PaintedSurfaces.sectionWash)
     }
 }
 
@@ -2097,7 +2097,7 @@ private struct BeforeAfterPicker: View {
                                 .foregroundStyle(Color.warmMid)
                         }
                         .frame(width: 40, height: 40)
-                        .background(Color.creamDeep)
+                        .background(PaintedSurfaces.deepPage)
                         .overlay(
                             RoundedRectangle(cornerRadius: 4)
                                 .strokeBorder(Color.creamEdge, lineWidth: 1)
@@ -2228,7 +2228,7 @@ private struct PhotoDropZone: View {
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity)
-        .background(Color.creamDeep)
+        .background(PaintedSurfaces.deepPage)
         .overlay(
             RoundedRectangle(cornerRadius: Radius.md)
                 .strokeBorder(
@@ -2247,10 +2247,10 @@ private struct PhotoCountBadge: View {
     var body: some View {
         Text("\(count)")
             .font(.system(size: 9, weight: .medium))
-            .foregroundStyle(Color.cream)
+            .foregroundStyle(PaintedSurfaces.photoCountText)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
-            .background(Color.roseGold.opacity(0.65))
+            .background(PaintedSurfaces.photoCountBadge)
             .clipShape(Capsule())
     }
 }
@@ -2622,7 +2622,7 @@ private struct PerformerAssignmentSection: View {
 
             RoseGoldDivider(opacity: 0.15)
         }
-        .background(Color.roseGold.opacity(0.02))
+        .background(PaintedSurfaces.sectionWash)
     }
 }
 
@@ -2749,7 +2749,7 @@ private struct HandleField: View {
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.xs)
-                        .fill(Color.creamDeep)
+                        .fill(PaintedSurfaces.deepPage)
                         .overlay(
                             RoundedRectangle(cornerRadius: Radius.xs)
                                 .strokeBorder(

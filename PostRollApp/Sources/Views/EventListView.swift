@@ -105,7 +105,7 @@ struct EventListView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.creamDeep)
+        .background(PaintedSurfaces.deepPage)
         .animation(.spring(response: 0.32, dampingFraction: 0.76), value: appState.selectedEventID)
         .navigationTitle("")
         .searchable(text: $searchText, placement: .sidebar, prompt: "Search events")
@@ -137,10 +137,10 @@ struct EventListView: View {
                                 if !showExported {
                                     Text("\(exportedCount)")
                                         .font(.system(size: 8, weight: .bold))
-                                        .foregroundStyle(Color.cream)
+                                        .foregroundStyle(PaintedSurfaces.exportedCountText)
                                         .padding(.horizontal, 3)
                                         .padding(.vertical, 0.5)
-                                        .background(Capsule().fill(Color.warmMid))
+                                        .background(Capsule().fill(PaintedSurfaces.exportedCountBadge))
                                         .offset(x: 4, y: -2)
                                 }
                             }
@@ -188,7 +188,7 @@ struct EventListView: View {
                         .padding(.top, Spacing.xs)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.creamDeep)
+                .background(PaintedSurfaces.deepPage)
             } else if filteredEvents.isEmpty && exportedCount > 0 {
                 VStack(spacing: Spacing.sm) {
                     Text("All events are archived.")
@@ -202,7 +202,7 @@ struct EventListView: View {
                     .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.creamDeep)
+                .background(PaintedSurfaces.deepPage)
             }
         }
         .overlay(alignment: .bottom) {
@@ -395,28 +395,12 @@ struct StagePill: View {
         )
     }
 
-    private var pillColor: Color {
-        switch state {
-        case .reading:            return .roseGold
-        case .readingFailed:      return .roseDeep
-        case .generating:         return .roseGold
-        case .generationFailed:   return .roseDeep
-        case .exporting:          return .roseGold
-        case .finishingMedia:     return .roseGold
-        case .awaitingGeneration: return .stagePhotosAssigned
-        case .awaitingExport:     return .stageCaptionsReviewed
-        case .stage(let s):
-            switch s {
-            case .created:          return .stageCreated
-            case .programUploaded:  return .stageProgramUploaded
-            case .ocrDone:          return .stageOCRDone
-            case .photosAssigned:   return .stagePhotosAssigned
-            case .assetsGenerated:  return .stageAssetsGenerated
-            case .captionsReviewed: return .stageCaptionsReviewed
-            case .exported:         return .stageExported
-            }
-        }
-    }
+    /// The wash behind the pill and the ink on it, from the one place that
+    /// decides both (#582). The switch that used to live here returned a single
+    /// colour drawn as the fill AND as the words on that fill, which is how
+    /// every stage's label ended up between 2.42:1 and 3.67:1 against its own
+    /// wash while the design note said they were calibrated as foreground.
+    private var pill: (wash: Color, ink: Color) { PaintedSurfaces.stagePill(state) }
 
     private var tooltipText: String {
         switch state {
@@ -445,7 +429,11 @@ struct StagePill: View {
         HStack(spacing: 4) {
             if state.isBusy {
                 Circle()
-                    .fill(pillColor)
+                    // The dot is drawn in the ink, not the wash: the two sit
+                    // inside the same capsule, and the wash colour on its own
+                    // wash is 3.01:1, which is the floor for a symbol with
+                    // nothing to spare.
+                    .fill(pill.ink)
                     .frame(width: 5, height: 5)
                     .opacity(pulse ? 0.35 : 1)
             }
@@ -454,8 +442,8 @@ struct StagePill: View {
         .font(.system(size: 10, weight: .medium))
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
-        .background(isSelected ? Color.primary.opacity(0.15) : pillColor.opacity(0.14))
-        .foregroundStyle(isSelected ? Color.primary : pillColor)
+        .background(isSelected ? Color.primary.opacity(0.15) : pill.wash)
+        .foregroundStyle(isSelected ? Color.primary : pill.ink)
         .clipShape(Capsule())
         .help(tooltipText)
         // Announce as "Stage, Photos Assigned" — not the "3 ·" prefix
@@ -494,8 +482,8 @@ private struct UndoBanner: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, Spacing.sm)
-        .background(Color.creamDeep)
-        .overlay(Rectangle().fill(Color.creamEdge).frame(height: 0.5), alignment: .top)
+        .background(PaintedSurfaces.deepPage)
+        .overlay(Rectangle().fill(PaintedSurfaces.edgeRule).frame(height: 0.5), alignment: .top)
     }
 }
 
@@ -546,7 +534,7 @@ struct HashtagSettingsSheet: View {
                             .padding(.vertical, 6)
                             .background(
                                 RoundedRectangle(cornerRadius: Radius.xs)
-                                    .fill(Color.creamDeep)
+                                    .fill(PaintedSurfaces.deepPage)
                                     .overlay(RoundedRectangle(cornerRadius: Radius.xs)
                                         .strokeBorder(Color.creamEdge, lineWidth: 1))
                             )
@@ -603,7 +591,7 @@ struct HashtagSettingsSheet: View {
                                     .padding(.vertical, 6)
                                     .background(
                                         RoundedRectangle(cornerRadius: Radius.xs)
-                                            .fill(Color.creamDeep)
+                                            .fill(PaintedSurfaces.deepPage)
                                             .overlay(RoundedRectangle(cornerRadius: Radius.xs)
                                                 .strokeBorder(Color.creamEdge, lineWidth: 1))
                                     )
@@ -614,7 +602,7 @@ struct HashtagSettingsSheet: View {
                                     .padding(.vertical, 6)
                                     .background(
                                         RoundedRectangle(cornerRadius: Radius.xs)
-                                            .fill(Color.creamDeep)
+                                            .fill(PaintedSurfaces.deepPage)
                                             .overlay(RoundedRectangle(cornerRadius: Radius.xs)
                                                 .strokeBorder(Color.creamEdge, lineWidth: 1))
                                     )
@@ -656,7 +644,7 @@ struct HashtagSettingsSheet: View {
             }
         }
         .frame(width: 440)
-        .background(Color.cream)
+        .background(PaintedSurfaces.page)
         .onAppear { globalRaw = hashtagStore.globalTags.joined(separator: " ") }
     }
 
@@ -686,6 +674,6 @@ private struct EmptySidebarView: View {
                 .foregroundStyle(Color.warmMid)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.creamDeep)
+        .background(PaintedSurfaces.deepPage)
     }
 }
