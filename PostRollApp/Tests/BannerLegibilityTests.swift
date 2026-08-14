@@ -21,10 +21,15 @@ final class BannerLegibilityTests: XCTestCase {
     /// the message to count as drawn.
     ///
     /// Measured, not guessed, and re-measured every time surfaces were added
-    /// (#391, #396). With the four stage screens in, the thirty-one real states
-    /// render between 0.022 and 0.130, and a page with nothing legible on it
-    /// renders at 0.001. This sits below the thinnest real one (a single line of
-    /// text) and far above blank.
+    /// (#391, #396, #559). With the staleness notice and the rescan offer in,
+    /// the thirty-seven real states render between 0.022 and 0.248, and a page
+    /// with nothing legible on it renders at 0.001. This sits below the
+    /// thinnest real one (a single line of text) and far above blank.
+    ///
+    /// Ink alone is not the whole answer for a surface that paints a fill: the
+    /// rescan offer's 0.248 is mostly its button background, which is there
+    /// whatever the label does. `testTheRescanLabelHasReadableContrastAgainstItsFill`
+    /// is what covers that half.
     ///
     /// `testTheThinnestRealSurfaceStillClearsTheThresholdWithRoom` is what keeps
     /// that true: adding a surface thinner than this is a failure rather than a
@@ -342,6 +347,35 @@ final class BannerLegibilityTests: XCTestCase {
                               date: Date(), shootType: .fullShow)) ?? ""))),
             ("new event refusal, nothing filled in", AnyView(RefusalNote(
                 message: NewEventValidation.refusal(name: "", org: "") ?? ""))),
+
+            // Two surfaces that shipped with nothing rendering them (#559).
+            // Both had a source scan asserting the screen references the shared
+            // rule, which proves the call site exists and cannot notice a
+            // control drawn off screen, at zero height, or in the colour behind
+            // it.
+            //
+            // The staleness notice says the numbers on screen predate the
+            // timezone correction (#549). Its sentence comes from
+            // AnalyticsStaleness, so a rewording moves what is measured here
+            // rather than leaving this asserting a stale copy.
+            ("insights staleness notice", AnyView(AnalyticsStalenessNotice())),
+
+            // The rescan offer (#518), in both of its states. The refusal is
+            // the one that matters most: it is the branch Dan meets when a page
+            // in the gap has gone, and it is a different view from the button.
+            ("ocr rescan offer", AnyView(OCRReviewNotices(
+                rescan: OCRReviewNotices.RescanOffer(
+                    title: OCRRescan.buttonTitle(pageCount: 2),
+                    refusal: nil,
+                    isRunning: false,
+                    action: {})))),
+            ("ocr rescan refused", AnyView(OCRReviewNotices(
+                rescan: OCRReviewNotices.RescanOffer(
+                    title: OCRRescan.buttonTitle(pageCount: 1),
+                    refusal: OCRRescan.message(
+                        for: [("/programs/Gala_p3.png", .missing)]),
+                    isRunning: false,
+                    action: {})))),
         ]
     }
 
@@ -403,6 +437,108 @@ final class BannerLegibilityTests: XCTestCase {
     /// reader nothing. This proves that is what happens, which is why the two
     /// affected states are built without their menu and why the one that keeps its
     /// spinner carries real sentences beside it.
+    /// The other half of that, and the one #559 turns on: a `Button` IS drawn,
+    /// so measuring one means something.
+    ///
+    /// Checked rather than assumed, because the rescan offer is a button and
+    /// nothing else. If `ImageRenderer` substituted a placeholder for it the way
+    /// it does for `Menu`, that state would clear every threshold above while
+    /// showing no words, and the check would report hardest on the surface it
+    /// could see least of (L115).
+    ///
+    /// The proof is the same one the metric itself gets: one view rendered
+    /// twice, differing only in whether its type is visible. A placeholder
+    /// cannot tell those apart, so equal readings would mean this harness is
+    /// not reading the button's words at all.
+    func testABareButtonIsDrawnRatherThanSubstituted() throws {
+        func button(_ colour: Color) -> some View {
+            ZStack {
+                Color.cream
+                Button("Scan the 2 pages that were missed") {}
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(colour)
+            }
+            .frame(height: 60)
+        }
+
+        let invisible = inkCoverage(try render(button(.cream)))
+        let legible = inkCoverage(try render(button(.warmDark)))
+
+        XCTAssertLessThan(invisible, 0.001, """
+            A button whose label is drawn in its own background colour measured \
+            \(String(format: "%.4f", invisible)), so something other than its words \
+            is putting ink on the page. If ImageRenderer has started substituting a \
+            placeholder for Button the way it does for Menu, the rescan offer below \
+            is being measured on that block rather than on anything readable.
+            """)
+        XCTAssertGreaterThan(legible, invisible * 10,
+                             "the same button label in a readable colour has to measure "
+                             + "as far more ink, or its words are not being drawn")
+    }
+
+    /// Ink is not the whole answer for a control that paints a fill (#559).
+    ///
+    /// The rescan offer measures 0.2475, and almost all of that is the button's
+    /// rose gold background, which is on the page whatever the label does. So
+    /// the ink check would clear on a button whose words were drawn in the fill
+    /// colour, which is the defect that has shipped here three times. The
+    /// contrast between the two colours is the part that says the label can be
+    /// read, and both come from the shipping style rather than from numbers
+    /// typed in here.
+    ///
+    /// The floor is 3:1, which is the WCAG AA level for large text and for user
+    /// interface components. The measured ratio is 4.31:1, which clears that
+    /// comfortably and sits just under the 4.5:1 AA asks for body-sized text.
+    /// The label is 13pt medium, so it is body-sized: that gap is real and it
+    /// belongs to `BrandButtonStyle`, which every primary button in the app
+    /// uses. It is filed rather than fixed by lowering anything here.
+    func testTheRescanLabelHasReadableContrastAgainstItsFill() throws {
+        let ratio = contrastRatio(BrandButtonStyle.label, BrandButtonStyle.fill)
+
+        XCTAssertGreaterThan(ratio, 3.0, """
+            The primary button draws its label at \(String(format: "%.2f", ratio)):1 \
+            against its own fill, which is below the level at which a control's \
+            text can be relied on to be readable. A button whose words match the \
+            colour behind them still measures as ink, because the fill is what is \
+            being measured.
+            """)
+    }
+
+    /// WCAG relative luminance, on the two colours as they will actually be
+    /// drawn, so a token change moves this rather than leaving it asserting a
+    /// pair of numbers that no longer ship.
+    private func contrastRatio(_ a: Color, _ b: Color) -> Double {
+        func luminance(_ colour: Color) -> Double {
+            let rgb = NSColor(colour).usingColorSpace(.sRGB) ?? .white
+            func channel(_ value: CGFloat) -> Double {
+                let v = Double(value)
+                return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * channel(rgb.redComponent)
+                 + 0.7152 * channel(rgb.greenComponent)
+                 + 0.0722 * channel(rgb.blueComponent)
+        }
+        let one = luminance(a), two = luminance(b)
+        return (Swift.max(one, two) + 0.05) / (Swift.min(one, two) + 0.05)
+    }
+
+    /// The same question for the staleness notice, whose type sits on its own
+    /// panel rather than on the page (#559).
+    func testTheStalenessNoticeHasReadableContrastAgainstItsPanel() throws {
+        let text = contrastRatio(AnalyticsStalenessNotice.text,
+                                 AnalyticsStalenessNotice.panel)
+        let icon = contrastRatio(AnalyticsStalenessNotice.icon,
+                                 AnalyticsStalenessNotice.panel)
+
+        XCTAssertGreaterThan(text, 4.5,
+                             "the notice's sentence is at \(String(format: "%.2f", text)):1 "
+                             + "against the panel it sits on")
+        XCTAssertGreaterThan(icon, 3.0,
+                             "the notice's icon is at \(String(format: "%.2f", icon)):1 "
+                             + "against the panel it sits on")
+    }
+
     func testTheUnrenderableControlsAreNamedRatherThanMeasured() throws {
         let spinnerOnly = inkCoverage(try render(ProgressView().frame(height: 40)))
         XCTAssertGreaterThan(spinnerOnly, Self.legibleInk, """

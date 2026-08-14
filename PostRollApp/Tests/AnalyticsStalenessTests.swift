@@ -96,17 +96,36 @@ final class AnalyticsStalenessTests: XCTestCase {
     /// about the thing is indistinguishable from one satisfied by the thing
     /// (L103).
     func testTheInsightsScreenCallsTheStalenessRule() throws {
-        let overview = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // PostRollApp
-            .appendingPathComponent("Sources/Views/Insights/InsightsOverviewView.swift")
-        let code = SwiftSourceText.withoutComments(
-            try String(contentsOf: overview, encoding: .utf8))
+        let code = try source("Sources/Views/Insights/InsightsOverviewView.swift")
 
         XCTAssertTrue(code.contains("AnalyticsStaleness.isStale"),
                       "The Insights screen must decide with the shared rule.")
+        XCTAssertTrue(code.contains("AnalyticsStalenessNotice()"),
+                      "The Insights screen must show the notice, not its own copy of it.")
+    }
+
+    /// The wording lives with the notice that draws it (#559).
+    ///
+    /// Split from the check above when the notice became its own view, so this
+    /// says where the sentence comes from and that one says the screen shows
+    /// it. Neither says it can be READ: that is
+    /// `BannerLegibilityTests`, which renders this notice and measures the ink
+    /// on it, because a source scan cannot notice a notice drawn off screen or
+    /// in the colour behind it.
+    func testTheNoticeRendersTheSharedWording() throws {
+        let code = try source("Sources/Views/Insights/AnalyticsStalenessNotice.swift")
+
         XCTAssertTrue(code.contains("AnalyticsStaleness.notice"),
-                      "The Insights screen must render the shared wording, not its own copy.")
+                      "The notice must render the shared wording, not its own copy.")
+    }
+
+    private func source(_ relative: String) throws -> String {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // PostRollApp
+            .appendingPathComponent(relative)
+        return SwiftSourceText.withoutComments(
+            try String(contentsOf: url, encoding: .utf8))
     }
 
     /// House style: no dashes as punctuation, and no emoji.
