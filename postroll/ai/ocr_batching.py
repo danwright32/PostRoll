@@ -20,6 +20,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+
+#: The position recorded for a page whose place in the uploaded programme is not
+#: known: a gap stored before #558, or a page the caller never listed. Zero
+#: rather than a guess or a dropped entry, because it is not a page number any
+#: programme has, so a reader cannot mistake it for one.
+NO_PAGE_NUMBER = 0
+
 #: Prose fields in the OCR schema. Enumerated on purpose: a field left out of
 #: the merge silently becomes whichever batch happened to mention it.
 PROSE_FIELDS = (
@@ -175,7 +182,8 @@ def merge_program_data(results: list[dict[str, Any] | None]) -> dict[str, Any]:
 
 
 def merge_rescan(previous: dict[str, Any], rescanned: dict[str, Any] | None,
-                 *, rescanned_pages: list[str]) -> dict[str, Any]:
+                 *, rescanned_pages: list[str],
+                 rescanned_page_numbers: list[int] | None = None) -> dict[str, Any]:
     """Fold a targeted rescan into the result already stored on the event (#518).
 
     A large programme is read in several paid calls, and a call that dies takes
@@ -211,10 +219,22 @@ def merge_rescan(previous: dict[str, Any], rescanned: dict[str, Any] | None,
         raise ValueError(
             "the rescan produced no usable result, so there is nothing to merge "
             "and the stored result must be left alone")
+    if rescanned_page_numbers is not None and \
+            len(rescanned_page_numbers) != len(rescanned_pages):
+        raise ValueError(
+            f"one page number per page: {len(rescanned_page_numbers)} numbers "
+            f"for {len(rescanned_pages)} rescanned pages")
 
     merged = merge_program_data([previous, rescanned])
 
     was_unread = [p for p in previous.get("unread_pages", []) if isinstance(p, str)]
+    was_numbered = [n for n in previous.get("unread_page_numbers", [])
+                    if isinstance(n, int)]
+    # Paired by index or not paired at all. A pair of lists of different lengths
+    # would put one page's number against another page's path, which is worse
+    # than carrying no numbers (L83).
+    if len(was_numbered) != len(was_unread):
+        was_numbered = []
 
     # A rescan that reported no `unread_pages` at all made no statement about
     # what it managed to read, so nothing here may conclude it read anything.
@@ -224,15 +244,40 @@ def merge_rescan(previous: dict[str, Any], rescanned: dict[str, Any] | None,
     # clear the warning on the strength of a failure (L98, L11).
     if "unread_pages" not in rescanned:
         merged["unread_pages"] = was_unread
+        merged["unread_page_numbers"] = was_numbered or [
+            NO_PAGE_NUMBER for _ in was_unread]
         return merged
 
-    looked_at = set(rescanned_pages)
-    still_unread_now = {p for p in rescanned["unread_pages"] if isinstance(p, str)}
+    # Position beats path wherever both sides can supply it (#558). Matching on
+    # the path is what breaks the moment the programme images are moved, and it
+    # breaks silently: the page just paid for stays listed as unread, and the
+    # only route left is re-uploading the whole programme.
+    by_number = bool(was_numbered) and rescanned_page_numbers is not None
+
+    if by_number:
+        looked_at = set(rescanned_page_numbers)
+        still_unread_now = {n for n in rescanned.get("unread_page_numbers", [])
+                            if isinstance(n, int)}
+        # Where the rescan touched a page, its path is the one to keep: it just
+        # proved where that page is, and the stored one has been proved wrong.
+        now_at = dict(zip(rescanned_page_numbers, rescanned_pages))
+        kept = [(number, now_at.get(number, path))
+                for path, number in zip(was_unread, was_numbered)
+                if number not in looked_at or number in still_unread_now]
+    else:
+        looked_at = set(rescanned_pages)
+        still_unread_now = {p for p in rescanned["unread_pages"]
+                            if isinstance(p, str)}
+        # No numbers to match on, so this is a gap stored before #558 or a
+        # caller that named none. The rescan still knows which page each path it
+        # was handed turned out to be, so what survives comes back numbered and
+        # the NEXT rescan of this programme is not path-matched all over again.
+        numbers = dict(zip(rescanned_pages, rescanned_page_numbers or []))
+        kept = [(numbers.get(page, NO_PAGE_NUMBER), page) for page in was_unread
+                if page not in looked_at or page in still_unread_now]
 
     # Order taken from the earlier report, so the gap is listed the way it was
     # first described rather than reshuffled by which run last touched it.
-    merged["unread_pages"] = [
-        page for page in was_unread
-        if page not in looked_at or page in still_unread_now
-    ]
+    merged["unread_pages"] = [path for _, path in kept]
+    merged["unread_page_numbers"] = [number for number, _ in kept]
     return merged

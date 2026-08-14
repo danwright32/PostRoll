@@ -1,0 +1,8 @@
+{
+  "name": "rescan-merges-on-position",
+  "file": "postroll/ai/ocr_batching.py",
+  "find": "    by_number = bool(was_numbered) and rescanned_page_numbers is not None",
+  "replace": "    by_number = False",
+  "test": "tests/test_unread_page_identity.py::test_a_rescan_after_the_pages_moved_still_closes_the_gap",
+  "breaks": "the merge falls back to matching paths, so a rescan run after the programme images moved finds nothing in common with the stored gap and the page just paid for stays listed as unread forever (#558)"
+}

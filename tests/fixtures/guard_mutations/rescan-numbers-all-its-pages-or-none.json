@@ -1,0 +1,8 @@
+{
+  "name": "rescan-numbers-all-its-pages-or-none",
+  "file": "PostRollApp/Sources/Services/OCRRescan.swift",
+  "find": "        return numbers.count == pages.count ? numbers : nil",
+  "replace": "        return numbers",
+  "test": "PostRollTests/UnreadPageIdentityTests/testPositionsAreSentOnlyWhenEveryPageHasOne",
+  "breaks": "a rescan that could place only some of its pages sends a short numbering, which Python has to pad, and a padded position matches every other page that could not be placed, so the merge strikes off a page nobody read (#558)"
+}

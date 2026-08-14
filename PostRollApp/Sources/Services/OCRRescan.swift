@@ -14,13 +14,78 @@ import Foundation
 /// there is no second implementation of it on this side (L16).
 enum OCRRescan {
 
+    /// One page of the gap: which page of the programme it is, and where that
+    /// page is right now (#558).
+    ///
+    /// `number` is 1-based, and nil when nothing could place the page: the
+    /// programme no longer runs that far, or a path stored before positions
+    /// existed matches nothing in it. Nil is carried rather than papered over,
+    /// because a page with no position must not be numbered by guesswork and
+    /// then struck off in place of a real one.
+    struct Page: Equatable {
+        let number: Int?
+        let path: String
+    }
+
     /// The pages to send, or nil when there is no gap to close.
     ///
-    /// Exactly the strings the earlier run named, not basenames and not the
-    /// whole programme: the merge matches the answer against these same
-    /// strings, so anything else breaks the match without erroring.
-    static func pages(for result: OCRResult) -> [String]? {
-        result.unreadPages.isEmpty ? nil : result.unreadPages
+    /// Resolved against the programme as it is NOW rather than trusted as
+    /// stored. The stored paths were exactly what the earlier run named, which
+    /// held only while nothing moved them, and `rebasePaths` exists in this app
+    /// precisely because things do move: the gap then named files nothing could
+    /// find, every page in it read as missing, and the only route left was
+    /// paying to read the whole programme again (L15).
+    ///
+    /// Two ways in, because gaps recorded before #558 carry no positions at
+    /// all. Those are placed by matching what was stored against the current
+    /// programme, exact path first and then filename, so an old gap is
+    /// recovered rather than left unresolvable. A page nothing can place keeps
+    /// what was stored and goes on to be refused honestly.
+    static func pages(for result: OCRResult, in programme: [URL]) -> [Page]? {
+        guard !result.unreadPages.isEmpty else { return nil }
+        let current = programme.map(\.path)
+        // Paired by index or not paired at all. Lists of different lengths
+        // would put one page's number against another page's path, which is
+        // worse than carrying no numbers (L83).
+        let recorded = result.unreadPageNumbers.count == result.unreadPages.count
+            ? result.unreadPageNumbers : []
+
+        return result.unreadPages.enumerated().map { index, stored in
+            let number = recorded.isEmpty ? 0 : recorded[index]
+            if number >= 1, number <= current.count {
+                return Page(number: number, path: current[number - 1])
+            }
+            if let found = place(stored, in: current) {
+                return Page(number: found + 1, path: current[found])
+            }
+            return Page(number: nil, path: stored)
+        }
+    }
+
+    /// The positions to send with these pages, or nil when they cannot all be
+    /// named.
+    ///
+    /// All or none, deliberately. Python needs one number per image, so a
+    /// partial answer would have to be padded, and a padded position matches
+    /// every other page that could not be placed: the merge would then strike
+    /// off a page nobody read. Sending none falls back to matching on paths,
+    /// which is what happened before any of this and is right for a gap this
+    /// could not place anyway.
+    static func pageNumbers(of pages: [Page]) -> [Int]? {
+        let numbers = pages.compactMap(\.number)
+        return numbers.count == pages.count ? numbers : nil
+    }
+
+    /// Where a stored path sits in the programme as it is now, or nil.
+    ///
+    /// Filename after full path, because a rebase changes the folder and keeps
+    /// the name. Every programme image is copied into `AppPaths.programsDir` on
+    /// import, so the names within one event's programme are unique and this
+    /// cannot pick the wrong page out of two folders.
+    private static func place(_ stored: String, in current: [String]) -> Int? {
+        if let exact = current.firstIndex(of: stored) { return exact }
+        let name = URL(fileURLWithPath: stored).lastPathComponent
+        return current.firstIndex { URL(fileURLWithPath: $0).lastPathComponent == name }
     }
 
     /// Whether a page in the gap can be read now, and if not, why not.

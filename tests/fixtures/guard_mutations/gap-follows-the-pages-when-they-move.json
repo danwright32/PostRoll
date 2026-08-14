@@ -1,0 +1,8 @@
+{
+  "name": "gap-follows-the-pages-when-they-move",
+  "file": "PostRollApp/Sources/Services/OCRRescan.swift",
+  "find": "            if number >= 1, number <= current.count {\n                return Page(number: number, path: current[number - 1])\n            }\n            if let found = place(stored, in: current) {\n                return Page(number: found + 1, path: current[found])\n            }\n            return Page(number: nil, path: stored)",
+  "replace": "            return Page(number: nil, path: stored)",
+  "test": "PostRollTests/UnreadPageIdentityTests/testAGapKeyedOnPositionFollowsThePagesToWhereTheyAreNow",
+  "breaks": "the recorded gap goes back to naming the paths the pages had when the scan ran, so moving or rebasing the programme images makes every unread page read as missing and the only way to close the gap is paying to read the whole programme again (#558)"
+}

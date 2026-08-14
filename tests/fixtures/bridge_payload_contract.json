@@ -234,7 +234,8 @@
       "venue_notes": "swift",
       "production_details": "swift",
       "other": "swift",
-      "unread_pages": "swift"
+      "unread_pages": "swift",
+      "unread_page_numbers": "swift"
     }
   },
   "web_performers": {

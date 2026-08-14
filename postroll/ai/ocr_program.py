@@ -34,7 +34,8 @@ from typing import Any
 from .claude_client import run_json_prompt, ClaudeError
 from ..media.page_regions import image_budget_for, split_page
 from .stitch_notes import stitch_notes
-from .ocr_batching import batch_images, merge_program_data, merge_rescan
+from .ocr_batching import (NO_PAGE_NUMBER, batch_images, merge_program_data,
+                           merge_rescan)
 from .ocr_batching import _dedupe as _dedupe_dicts
 from .progress import ProgressWriter
 
@@ -332,6 +333,36 @@ def _ordered_unique(unread: list[str], order: list[str]) -> list[str]:
     # not happen, is kept rather than dropped: losing a page from this list
     # silently is the failure the list exists to prevent (L11).
     return named + [page for page in unread if page not in set(order)]
+
+
+def unread_gap(unread: list[str], order: list[str],
+               numbers: list[int] | None = None) -> tuple[list[str], list[int]]:
+    """The gap as paths AND as positions in the uploaded programme (#558).
+
+    The paths alone cannot survive the programme images being moved or rebased,
+    which this repo does do, and a gap keyed on them then names files nothing
+    can find: the rescan refuses every page as missing, and the only way back is
+    re-uploading the whole programme and paying for it again. The position is
+    the part a move cannot break (L15).
+
+    `numbers` runs alongside `order`, one per page, and is what makes a RESCAN
+    honest: it is handed a subset, so counting its own images would renumber
+    page 7 as page 1 and the merge would strike the wrong page off. Defaults to
+    1..N for a run that was given the whole programme.
+
+    Returns two lists of equal length, paired by index, so a reader may take
+    entry i of each and know they describe one page.
+    """
+    if numbers is None:
+        numbers = list(range(1, len(order) + 1))
+    if len(numbers) != len(order):
+        raise ValueError(
+            f"one page number per page: {len(numbers)} numbers for "
+            f"{len(order)} pages")
+
+    position = {path: number for path, number in zip(order, numbers)}
+    paths = _ordered_unique(unread, order)
+    return paths, [position.get(path, NO_PAGE_NUMBER) for path in paths]
 
 
 def _normalize_image_paths(
@@ -652,13 +683,20 @@ def _read_one_batch(batch: list[str], *, position: int, total: int) -> dict[str,
 
 def extract_program(image_paths: list[str | Path], *,
                     output_path: Path | None = None,
-                    progress_path: str | Path | None = None) -> dict[str, Any]:
+                    progress_path: str | Path | None = None,
+                    page_numbers: list[int] | None = None) -> dict[str, Any]:
     """Run OCR on one or more program images and return structured data.
 
     Accepts JPEG, PNG, and HEIC paths. HEIC files are auto-converted to
     JPEG via macOS `sips` (HEIC support requires macOS). All images are
     staged into a single temp directory which is granted to Claude via
     --add-dir.
+
+    `page_numbers` says where each passed image sits in the whole uploaded
+    programme, one per image, and is what the recorded gap is keyed to (#558).
+    A RESCAN is handed a subset, so without it page 7 would be numbered 1 and a
+    later merge would strike the wrong page off. Defaults to 1..N, which is
+    right for a run given the whole programme.
 
     `progress_path` is where this run reports what it is doing (#467). The
     screen watching it used to assert "still working" from a wall clock that
@@ -736,8 +774,11 @@ def extract_program(image_paths: list[str | Path], *,
                         # the same helper: two spellings of one answer is how
                         # the crash-recovered copy and the finished one end up
                         # disagreeing about which pages to re-send (L16).
-                        so_far = {**so_far, "unread_pages": _ordered_unique(
-                            unread_pages, [str(page) for page in image_paths])}
+                        gap_paths, gap_numbers = unread_gap(
+                            unread_pages, [str(page) for page in image_paths],
+                            page_numbers)
+                        so_far = {**so_far, "unread_pages": gap_paths,
+                                  "unread_page_numbers": gap_numbers}
                     _write_partial(output_path, so_far)
 
             if not any(isinstance(r, dict) for r in per_batch):
@@ -848,6 +889,9 @@ def extract_program(image_paths: list[str | Path], *,
     # The run is over, so the last step stops reading as in flight.
     say.finish()
 
+    gap_paths, gap_numbers = unread_gap(
+        unread_pages, [str(p) for p in image_paths], page_numbers)
+
     # Fill in any missing keys with empty defaults so downstream code is safe
     return {
         # The nested entries are shaped explicitly, not passed through: a field
@@ -864,7 +908,11 @@ def extract_program(image_paths: list[str | Path], *,
         # Always present, empty when the run read everything (#518). One entry
         # per page the caller passed, in the caller's order: several bands of
         # one page failing is one page to re-send, not three.
-        "unread_pages": _ordered_unique(unread_pages, [str(p) for p in image_paths]),
+        "unread_pages": gap_paths,
+        # The same gap, keyed to where each page sits in the uploaded programme,
+        # which is the part a move or a rebase cannot break (#558). Paired with
+        # the list above by index.
+        "unread_page_numbers": gap_numbers,
     }
 
 
@@ -875,6 +923,17 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         required=True,
         help="Path to a program photo (repeat for multi-page programs)",
+    )
+    parser.add_argument(
+        "--page-number",
+        action="append",
+        type=int,
+        dest="page_number",
+        help="Where the matching --image sits in the whole uploaded programme, "
+             "1-based, repeated once per --image (#558). This is what the "
+             "recorded gap is keyed to, so a rescan of pages 3 and 7 must say "
+             "so rather than letting them be counted as 1 and 2. Omit it and "
+             "the images are numbered in the order they were given.",
     )
     parser.add_argument(
         "--output",
@@ -894,6 +953,16 @@ def main(argv: list[str] | None = None) -> int:
              "run replaces whatever the caller had.",
     )
     args = parser.parse_args(argv)
+
+    # Refused rather than padded or truncated, and BEFORE the paid call. A
+    # numbering that does not line up with the images cannot be repaired by
+    # guessing: it would silently record one page's gap against another page's
+    # position, and every rescan after that strikes off the wrong page.
+    if args.page_number is not None and len(args.page_number) != len(args.image):
+        print(f"error: one page number per page: {len(args.page_number)} "
+              f"--page-number values for {len(args.image)} --image values",
+              file=sys.stderr)
+        return 1
 
     # Read BEFORE the paid call, so an unreadable stored result costs nothing
     # and fails before the money is spent rather than after it.
@@ -920,7 +989,8 @@ def main(argv: list[str] | None = None) -> int:
         # lets a run stopped partway leave the batches it already read where
         # the app can find them, instead of paying for them all again.
         data = extract_program(args.image, output_path=args.output,
-                               progress_path=args.progress)
+                               progress_path=args.progress,
+                               page_numbers=args.page_number)
     except (ClaudeError, FileNotFoundError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -930,7 +1000,8 @@ def main(argv: list[str] | None = None) -> int:
         # there is no second implementation to drift from it (#518).
         try:
             data = merge_rescan(previous, data,
-                                rescanned_pages=[str(p) for p in args.image])
+                                rescanned_pages=[str(p) for p in args.image],
+                                rescanned_page_numbers=args.page_number)
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1

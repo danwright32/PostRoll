@@ -1773,7 +1773,11 @@ actor PythonBridge {
     /// rather than replacing it (#518). The merge itself is Python's, beside
     /// the one that already combines the batches of a single run, so this side
     /// keeps no second copy of that rule.
-    func runOCR(imagePaths: [URL], eventID: UUID? = nil,
+    /// `pageNumbers`, when given, says where each image sits in the whole
+    /// uploaded programme, one per image (#558). A rescan is handed a subset,
+    /// so without it Python would number page 7 as page 1 and the merge would
+    /// strike the wrong page off the gap. Nil for a full scan.
+    func runOCR(imagePaths: [URL], pageNumbers: [Int]? = nil, eventID: UUID? = nil,
                 mergeInto previous: OCRResult? = nil) async throws -> OCRResult {
         let outputFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("postroll_ocr_\(UUID().uuidString).json")
@@ -1804,6 +1808,17 @@ actor PythonBridge {
             args += ["--progress", progressFile.path]
         }
         for path in imagePaths { args += ["--image", path.path] }
+        // Refused here rather than sent short: Python takes one number per
+        // image and a mismatched pair would record one page's gap against
+        // another page's position, which every later rescan then acts on.
+        if let pageNumbers {
+            guard pageNumbers.count == imagePaths.count else {
+                throw PythonBridgeError.invalidOutput(
+                    "\(pageNumbers.count) page numbers for \(imagePaths.count) "
+                    + "pages, so the rescan cannot say which page is which")
+            }
+            for number in pageNumbers { args += ["--page-number", String(number)] }
+        }
 
         do {
             try await runProcess(args: args)
