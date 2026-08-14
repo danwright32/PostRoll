@@ -36,10 +36,19 @@ final class ProgramPDFBakery {
     /// `deletingScansOnSuccess` runs the page-scan cleanup only after the PDF
     /// has been written AND verified to be on disk, so the program cannot be
     /// destroyed before its replacement exists.
-    func bake(event: Event, appState: AppState, deletingScansOnSuccess: Bool = false) {
+    /// Bakes the program PDF for `eventID`.
+    ///
+    /// Takes an id and reads the pages off the LIVE event rather than off a
+    /// snapshot a caller happened to be holding (#492). Every neighbour in
+    /// these screens already re-reads the live event before acting (#103), and
+    /// this one did not while being the one that DELETES the page scans on
+    /// success: a page added between the screen being drawn and the button
+    /// being pressed would have been left behind by the bake and then filtered
+    /// out of the event anyway.
+    func bake(eventID: Event.ID, appState: AppState, deletingScansOnSuccess: Bool = false) {
+        guard let event = appState.events.first(where: { $0.id == eventID }) else { return }
         let pages = event.programImagePaths
-        guard !pages.isEmpty, !baking.contains(event.id) else { return }
-        let eventID = event.id
+        guard !pages.isEmpty, !baking.contains(eventID) else { return }
         let dest = AppPaths.programPDFFile(eventID: eventID)
         let fingerprint = ProgramPDFBuilder.fingerprint(of: pages)
 

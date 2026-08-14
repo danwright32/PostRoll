@@ -1,0 +1,8 @@
+{
+  "name": "bake-reads-the-live-event",
+  "file": "PostRollApp/Sources/Services/ProgramPDFBakery.swift",
+  "find": "        guard let event = appState.events.first(where: { $0.id == eventID }) else { return }",
+  "replace": "        guard let event = appState.events.first(where: { _ in false }) else { return }",
+  "test": "PostRollTests/ProgramPDFBakeryLiveEventTests/testItReadsThePagesOffTheStoreRatherThanACallersCopy",
+  "breaks": "the program PDF bake takes its page list from a captured snapshot and then deletes those scans on success (#492)"
+}

@@ -39,7 +39,7 @@ Font.light(size)         // HelveticaNeue-Light — labels, metadata, captions
 
 | Context | Font | Size |
 |---|---|---|
-| Event name (sidebar row) | SignPainter | 16 |
+| Event name (sidebar row) | SignPainter | 19 |
 | Event name (detail header) | SignPainter | 28–36 |
 | Section labels (UPPERCASE) | SF Pro Medium | 10, tracking 1.2–1.4 |
 | Body / input text | SF Pro | 13 |
@@ -86,9 +86,9 @@ All reusable components are defined inline in the view file where they first app
 | `BrandTextField` | `NewEventSheet.swift` | cream bg, roseGold focus ring, `focusEffectDisabled()` |
 | `BrandField` | `OCRReviewView.swift` | Compact version of BrandTextField for dense forms |
 | `BrandTextArea` | `OCRReviewView.swift` | TextEditor variant, same styling |
-| `BrandButtonStyle` | `MainWindowView.swift` | roseGold fill, cream text, 8pt radius |
+| `BrandButtonStyle` | `SharedChrome.swift` | roseGold fill, cream text, 8pt radius |
 | `BrandSectionLabel` | `NewEventSheet.swift` | Uppercase tracking label |
-| `BrandBanner` | `ProgramUploadView.swift` | Rose-gold left-border info block |
+| `BrandBanner` | `BrandBanner.swift` | Rose-gold left-border info block |
 | `BrandAddButton` | `OCRReviewView.swift` | `plus.circle` icon, roseGold |
 | `BrandDeleteButton` | `OCRReviewView.swift` | `minus.circle` icon, warmMid |
 | `StagePill` | `EventListView.swift` | Warm palette capsule tag |
@@ -114,10 +114,10 @@ Handled in `WindowConfigurator` (`MainWindowView.swift`), a `NSViewRepresentable
 
 ## List Selection
 
-`List(selection:)` was removed from `EventListView` because it draws a system blue highlight that ignores the app accent color. Selection is handled manually:
+`EventListView` uses `List(selection:)` bound to `appState.selectedEventID`, and paints the selected row itself so the system highlight never shows:
 
-- Tap gesture sets `appState.selectedEventID`
-- `listRowBackground` conditionally fills the row with `roseGold.opacity(0.12)` on a `RoundedRectangle(cornerRadius: Radius.md)`
+- `listRowBackground` draws the selection, in `EventRowBackground`: `roseGold.opacity(0.12)` on a `RoundedRectangle(cornerRadius: Radius.md)`, with a rose-gold spine at the leading edge, and an opaque `creamDeep` fill on every other row so the system highlight cannot bleed through
+- The accent colour is rose-gold app wide (see Window Setup), so what the system does draw is already the brand colour rather than the default blue this note was originally written about
 
 ---
 
@@ -129,7 +129,7 @@ All custom text inputs suppress the macOS system focus ring with `.focusEffectDi
 
 ## PDF Upload
 
-`ProgramUploadView` accepts both PDFs and images. PDFs are rasterised page-by-page using CoreGraphics (`CGPDFDocument` → `CGContext` → `CGImageDestination`) at 2× resolution, saved as PNGs to `~/Documents/PostRoll/programs/`. This runs in a detached background task since CoreGraphics is thread-safe.
+`ProgramUploadView` accepts both PDFs and images. PDFs are rasterised page-by-page using CoreGraphics (`CGPDFDocument` → `CGContext` → `CGImageDestination`) at 2× resolution, saved as PNGs to the app's data root, `~/Library/Application Support/PostRoll/programs/` (`AppPaths.programsDir`). It moved out of `~/Documents` with the data root, because that folder is TCC protected and the app was being re-prompted for access to its own files. This runs in a detached background task since CoreGraphics is thread-safe.
 
 ---
 
@@ -162,19 +162,19 @@ Apply these consistently as new views are built.
 
 ### No blue anywhere
 - Never use `.accentColor(.blue)` or system blue explicitly
-- Never use `List(selection:)` — use manual tap + custom background
+- Paint list selection yourself with `listRowBackground`, and give unselected rows an opaque fill, so no system highlight shows through
 - Always add `focusEffectDisabled()` to inputs
 - The accent color is set globally; trust it
 
 ---
 
-## Phases Remaining (Phase 4)
+## Phase 4 (shipped)
 
-| Step | Description | Status |
-|---|---|---|
-| 1 | App shell, NavigationSplitView, event CRUD | Done |
-| 2 | OCR upload, progress, review loop | Done |
-| 3 | Photo assignment — drag photos to posting days, pick blog photos | Next |
-| 4 | Asset generation (captions, blog, social copy) | Pending |
-| 5 | Caption / blog review with feedback loop | Pending |
-| 6 | Export | Pending |
+Every step of the GUI phase this document was written during has shipped: the
+app shell and event CRUD, program upload and the OCR review loop, photo
+assignment, asset generation, caption and blog review, and export.
+
+Deliberately not a status table any more. It listed shipped work as Pending for
+months, which is a document stating a fact the code contradicts (L32), and a
+table nothing generates goes stale the day after it is written. What is
+outstanding lives in GitHub issues, which is the one place it is maintained.

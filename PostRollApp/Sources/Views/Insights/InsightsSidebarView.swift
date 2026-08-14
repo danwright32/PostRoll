@@ -109,6 +109,13 @@ private struct ReportHistoryRow: View {
                 .font(.light(11))
                 .foregroundStyle(Color.warmMid)
             Spacer()
+            // Which weeks this report is about. Written by every analysis and
+            // shown nowhere, so two saved reports were told apart only by when
+            // they were generated (#490).
+            Text(InsightsDisplay.reportRange(from: report.dateRangeStart,
+                                             to: report.dateRangeEnd))
+                .font(.system(size: 10))
+                .foregroundStyle(Color.warmMid)
             Text("\(report.postCount) posts")
                 .font(.system(size: 10))
                 .foregroundStyle(Color.warmMid)

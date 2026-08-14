@@ -376,7 +376,7 @@ Local Mac desktop application with GUI. Not a web app. Runs on Dan's machine.
 - **AI engine:** Anthropic API via the Python SDK, with the Claude Code CLI as a fallback (no key set, or a call needing WebSearch/WebFetch/Bash)
 - **Media pipeline:** Python + Pillow (static images) + ffmpeg (video/audio)
 - **Scheduling:** API client modules per platform (or single Metricool client)
-- **Data storage:** Local SQLite database for event data, scheduled posts, account cache
+- **Data storage:** JSON files under `~/Library/Application Support/PostRoll` (`events.json`, `accounts.json`, `analytics.json`). The SQLite database this section used to name was never built; the app has always used files, and this line was describing something that does not exist.
 - **OCR:** Claude vision, plus macOS `sips` and Apple Vision. Not Tesseract.
 
 ### 8.3 Workflow

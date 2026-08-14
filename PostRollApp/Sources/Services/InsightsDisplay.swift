@@ -98,6 +98,82 @@ enum InsightsDisplay {
                  + Sentence.closed(reason) + " It will be gone when you quit."
         }
     }
+
+    // MARK: - What a post row says (#469, #490)
+
+    /// One engagement figure, as an SF Symbol plus a number.
+    ///
+    /// Symbols rather than emoji: emoji are forbidden in this app's copy, they
+    /// render at whatever size and weight the font decides, and VoiceOver reads
+    /// them as their unicode names. The name is what the accessible label uses,
+    /// so the row can be read aloud as "likes 412" rather than "black heart
+    /// suit 412" (#469).
+    struct Metric: Equatable {
+        let symbol: String
+        let name: String
+        let value: String
+    }
+
+    /// The figures a post row shows, in a fixed order so two posts read the
+    /// same way, and skipping anything the export did not carry.
+    ///
+    /// `follows` and `durationSec` were persisted on every import and read by
+    /// nothing, which is a field that looks alive to any is-this-used check
+    /// while the purpose it was added for never happens (#490, L46). They are
+    /// read here: follows is the figure that says a post brought someone in
+    /// rather than merely being liked, and a reel's length is the thing Dan
+    /// changes between one week and the next.
+    static func metrics(likes: Int?, comments: Int?, saves: Int?, replies: Int?,
+                        reach: Int?, follows: Int?, durationSec: Double?) -> [Metric] {
+        var out: [Metric] = []
+        if let likes    { out.append(Metric(symbol: "heart", name: "likes", value: "\(likes)")) }
+        if let comments { out.append(Metric(symbol: "bubble.right", name: "comments",
+                                            value: "\(comments)")) }
+        if let saves    { out.append(Metric(symbol: "bookmark", name: "saves", value: "\(saves)")) }
+        if let replies  { out.append(Metric(symbol: "arrowshape.turn.up.left", name: "replies",
+                                            value: "\(replies)")) }
+        if let reach    { out.append(Metric(symbol: "eye", name: "reach", value: "\(reach)")) }
+        if let follows, follows > 0 {
+            out.append(Metric(symbol: "person.badge.plus", name: "new followers",
+                              value: "\(follows)"))
+        }
+        if let durationSec, durationSec > 0 {
+            out.append(Metric(symbol: "timer", name: "length",
+                              value: formattedDuration(durationSec)))
+        }
+        return out
+    }
+
+    /// A reel's length as a length of time rather than a number to decode.
+    static func formattedDuration(_ seconds: Double) -> String {
+        let whole = Int(seconds.rounded())
+        return whole < 60 ? "\(whole)s" : "\(whole / 60)m \(whole % 60)s"
+    }
+
+    /// The whole row read as one sentence, for VoiceOver, because a row of
+    /// glyphs and numbers is announced as noise otherwise.
+    static func metricsLabel(_ metrics: [Metric]) -> String {
+        metrics.map { "\($0.name) \($0.value)" }.joined(separator: ", ")
+    }
+
+    /// The window a saved report covers (#490).
+    ///
+    /// `dateRangeStart` and `dateRangeEnd` were written by every analysis and
+    /// rendered nowhere, so a saved report could not say which weeks it was
+    /// about, which is the only thing that tells two reports apart once there
+    /// are several.
+    static func reportRange(from start: Date, to end: Date,
+                            calendar: Calendar = .current,
+                            formatter: DateFormatter? = nil) -> String {
+        let f = formatter ?? {
+            let f = DateFormatter()
+            f.dateFormat = "d MMM"
+            return f
+        }()
+        let sameDay = calendar.isDate(start, inSameDayAs: end)
+        return sameDay ? f.string(from: start)
+                       : "\(f.string(from: start)) to \(f.string(from: end))"
+    }
 }
 
 /// What the Posts list says when it has nothing to show (#463).

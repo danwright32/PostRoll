@@ -223,7 +223,6 @@ def parse_csv(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
                 "ig_permalink":  get(row, "ig_permalink") or "",
                 "published_at":  published_at,
                 "media_type":    media_type,
-                "raw_post_type": raw_type,
                 "caption":       caption,
                 "hashtags":      hashtags,
                 "org":           org,

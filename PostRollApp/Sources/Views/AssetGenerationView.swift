@@ -400,7 +400,7 @@ struct AssetGenerationView: View {
                     },
                     onDownloadProgramPDF: { downloadProgramPDF() },
                     onRetryProgramBake: {
-                        ProgramPDFBakery.shared.bake(event: event, appState: appState,
+                        ProgramPDFBakery.shared.bake(eventID: event.id, appState: appState,
                                                      deletingScansOnSuccess: true)
                     },
                     onRegenerateBlog: { startGeneration(retryDays: Set(["blog"])) },

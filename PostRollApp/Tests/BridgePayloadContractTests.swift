@@ -404,7 +404,7 @@ final class BridgePayloadContractTests: XCTestCase {
         let post = IGPost(
             igPostID: "1", igPermalink: "https://example.com/p/1",
             publishedAt: Date(timeIntervalSince1970: 1_800_000_000),
-            mediaType: .reel, rawPostType: "IG reel", caption: "a caption",
+            mediaType: .reel, caption: "a caption",
             hashtags: ["#one"], views: 1, reach: 2, likes: 3, shares: 4, follows: 5,
             comments: 6, saves: 7, replies: 8, navigation: 9, profileVisits: 10,
             stickerTaps: 11, durationSec: 12.5, org: "@dciny", isPersonal: false)
