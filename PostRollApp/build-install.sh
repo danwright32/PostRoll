@@ -11,7 +11,11 @@ SCHEME="PostRoll"
 CONFIG="Release"
 APP_NAME="PostRoll.app"
 DEST="/Applications/${APP_NAME}"
-BUILD_DIR="$(pwd)/build"
+# One cache location for every build this repo runs, shared with the
+# Makefile so the two cannot drift, and outside the iCloud-synced checkout
+# (#485).
+. "$(pwd)/derived-data-path.sh"
+BUILD_DIR="${POSTROLL_DERIVED_DATA}"
 
 # Nothing ran the tests before a build reached /Applications, so a red suite
 # could be installed and used without anyone noticing (#98). The gate lives
@@ -34,7 +38,11 @@ else
   # BSD-only, GNU mktemp refuses it, and it broke every Linux CI run while
   # working perfectly on this Mac.
   SWIFT_LOG="$(mktemp "${TMPDIR:-/tmp}/postroll-swift-tests.XXXXXX")"
-  if xcodebuild -project "${PROJECT}" -scheme PostRollTests -destination 'platform=macOS' test \
+  # Same cache as the build below. Without -derivedDataPath this step minted
+  # a SECOND full cache under Xcode's default location, on every install,
+  # that nothing here ever reclaimed (#485).
+  if xcodebuild -project "${PROJECT}" -scheme PostRollTests \
+       -derivedDataPath "${BUILD_DIR}" -destination 'platform=macOS' test \
        > "${SWIFT_LOG}" 2>&1; then
     (command -v xcbeautify >/dev/null && xcbeautify < "${SWIFT_LOG}" || cat "${SWIFT_LOG}")
     rm -f "${SWIFT_LOG}"

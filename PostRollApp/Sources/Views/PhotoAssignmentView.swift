@@ -469,7 +469,10 @@ struct PhotoAssignmentView: View {
         let accessed = root.startAccessingSecurityScopedResource()
         defer { if accessed { root.stopAccessingSecurityScopedResource() } }
 
-        let fm = FileManager.default
+        // FileManager.default at each point of use rather than one captured
+        // local. A captured instance is task-isolated while these nested
+        // helpers are main actor isolated, which a Release build refuses
+        // outright: "sending 'fm' risks causing data races" (#485).
         let imageExts = Set(["jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "webp"])
         let videoExts = Set(["mov", "mp4", "m4v"])
         let audioExts = Set(["m4a", "mp3", "aiff", "aif", "aac"])
@@ -484,7 +487,7 @@ struct PhotoAssignmentView: View {
         /// failure is reported once however many times it is asked for.
         var listings: [URL: DirectoryListing] = [:]
         func listing(of dir: URL) -> [URL] {
-            let found = listings[dir] ?? DirectoryListing.of(dir, fileManager: fm)
+            let found = listings[dir] ?? DirectoryListing.of(dir)
             listings[dir] = found
             if let reason = found.failureReason {
                 unreadable[dir.lastPathComponent] = reason
@@ -530,7 +533,9 @@ struct PhotoAssignmentView: View {
                 root.appendingPathComponent("Day \(n)"),
                 root.appendingPathComponent("day\(n)"),
             ]
-            guard let dayDir = candidates.first(where: { fm.fileExists(atPath: $0.path) }) else { continue }
+            guard let dayDir = candidates.first(where: {
+                FileManager.default.fileExists(atPath: $0.path)
+            }) else { continue }
 
             let images = imageFiles(in: dayDir)
             if !images.isEmpty {

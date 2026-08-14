@@ -1,4 +1,6 @@
-BUILD_DIR := PostRollApp/build
+# The one cache location, taken from the shared definition rather than
+# spelled here as well (#485). Outside the iCloud-synced checkout.
+BUILD_DIR := $(shell . PostRollApp/derived-data-path.sh; printf %s "$$POSTROLL_DERIVED_DATA")
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
@@ -32,7 +34,8 @@ build:
 
 # The Swift model/service suite. Excludes the UI tests, which drive the real GUI.
 test:
-	@xcodebuild -project "$(PROJECT)" -scheme PostRollTests -destination 'platform=macOS' test
+	@xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
+		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' test
 
 # The full local suite, in ONE parallel pass (#497).
 #
@@ -78,4 +81,4 @@ check-toolchain:
 
 clean:
 	@rm -rf "$(BUILD_DIR)"
-	@echo "Build cache cleared."
+	@echo "Build cache cleared: $(BUILD_DIR)"
