@@ -324,21 +324,33 @@ def test_every_pull_request_reproves_the_entries_it_touches(guards):
         "nothing of its own")
 
 
-def test_the_whole_registry_is_reproved_on_a_schedule(guards):
-    """The half that catches a guard rotting for a reason no single diff
-    touched: a renamed test, a refactor that moved what the perturbation
-    targets."""
-    assert "schedule:" in guards and "cron:" in guards, (
-        "there is no scheduled run, so the expensive half only happens when "
+def test_the_whole_registry_is_reproved_on_every_merge(guards):
+    """The half that catches a guard broken by something UNDERNEATH it.
+
+    The diff-scoped leg re-proves an entry when the code it guards, its record,
+    or its own test file changes. It cannot know about the shared conftest
+    nearly every test imports, or a shared fixture module: a change there can
+    stop a guard failing on broken code while touching none of the three, so no
+    pull request would re-prove it (L88).
+    """
+    assert re.search(r"push:\s*\n\s*branches:\s*\[main\]", guards), (
+        "nothing runs the full sweep, so the expensive half only happens when "
         "somebody remembers to type it")
 
-    # The nightly leg has to run the FULL sweep. A schedule that quietly runs
-    # --changed would report green nightly while proving nothing, because a
-    # scheduled run's diff against main is empty (L98).
-    nightly = guards.split("nightly:", 1)[1]
-    assert "--changed" not in nightly, (
-        "the scheduled run is scoped to a diff, and a scheduled run has no "
-        "diff, so it would prove nothing while reporting green")
+    # It has to be the FULL sweep. Scoping this one to a diff would report green
+    # on every merge while proving nothing, because a merge commit's diff
+    # against main is empty (L98).
+    full = guards.split("  full:", 1)[1]
+    assert "--changed" not in full, (
+        "the merge run is scoped to a diff, and a merge has no diff against "
+        "main, so it would prove nothing while reporting green")
+
+    # A backstop, not an expectation: measured at roughly 15 minutes of proving
+    # plus one build. An hour-plus timeout on a job this size hides a hang.
+    timeout = re.search(r"  full:.*?timeout-minutes:\s*(\d+)", guards, re.S)
+    assert timeout and int(timeout.group(1)) <= 120, (
+        "the timeout is far above the measured runtime, so a wedged run bills "
+        "for hours before anything says so")
 
 
 def test_it_can_be_run_by_hand(guards):

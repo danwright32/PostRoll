@@ -22,19 +22,8 @@ name: Guard proofs
 on:
   pull_request:
     branches: [main]
-  schedule:
-    # 04:00 New York, give or take the hour DST moves it. Nothing else is
-    # running then, and a nightly failure is read the next morning.
-    #
-    # Two things about a scheduled job are worth being honest about rather than
-    # assumed (L13). A failure is only as visible as GitHub's own notification
-    # to the account that owns the repo: nothing here pages anybody. And the
-    # ABSENCE of a run is invisible by construction, because GitHub disables a
-    # repository's schedules after 60 days without a push, and a disabled
-    # schedule reports nothing at all rather than reporting that it stopped.
-    # Neither is solved here; both are why the pull request leg exists as well,
-    # since that one cannot silently stop while pull requests keep merging.
-    - cron: "0 8 * * *"
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -91,14 +80,31 @@ jobs:
       - name: Re-prove the guards this diff touches
         run: python tools/check_guards.py --changed
 
-  # The whole registry, nightly. This is the half that catches a guard which
-  # rotted for a reason unrelated to any one diff: a renamed test, a refactor
-  # that moved the code the perturbation targets, a fixture that stopped being
-  # loaded.
-  nightly:
+  # The whole registry, on every merge to main.
+  #
+  # The pull request leg above re-proves an entry when the code it guards, its
+  # own record, or its own test file changes. What it cannot know about is what
+  # sits UNDERNEATH those tests: the shared conftest nearly every test imports,
+  # or a shared fixture module. A change there can quietly stop a guard failing
+  # on broken code while touching neither the guarded file nor the guard's test,
+  # so no pull request would re-prove it (L88, a filtered job skipping the very
+  # change that breaks it).
+  #
+  # On merges rather than on a schedule, deliberately. It costs nothing on a day
+  # with no merges, it runs within minutes of the shared change actually
+  # landing, and a scheduled job has two failure modes this one does not: its
+  # failures are only as visible as GitHub's own email, and GitHub disables a
+  # repository's schedules after 60 days without a push, which reports nothing
+  # at all rather than reporting that it stopped (L13).
+  #
+  # Measured before choosing: 60 entries are proved by xcodebuild at about 13s
+  # each with a warm cache and 57 by pytest at under a second, so the sweep is
+  # roughly 15 minutes of proving plus one build. The timeout is a backstop at
+  # four times that, not an expectation.
+  full:
     if: github.event_name != 'pull_request'
     runs-on: macos-26
-    timeout-minutes: 360
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
         with:
