@@ -296,3 +296,58 @@ def test_ci_builds_the_configuration_that_ships(swift):
     assert "-configuration Release" in build_step, (
         "the app build does not name Release, so the configuration Dan actually "
         "installs is never compiled by CI")
+
+
+# ── the guard proofs are re-run rather than only recorded (#541) ──────────────
+
+GUARDS = REPO_ROOT / ".github" / "workflows" / "guards.yml"
+
+
+@pytest.fixture
+def guards() -> str:
+    return GUARDS.read_text(encoding="utf-8")
+
+
+def test_the_guard_proofs_have_a_workflow_at_all(guards):
+    assert "check_guards.py" in guards, (
+        "nothing re-runs the recorded proofs, so they decay into a claim while "
+        "the registry keeps reporting itself consistent (L1)")
+
+
+def test_every_pull_request_reproves_the_entries_it_touches(guards):
+    """The half that catches a guard edited into uselessness by the same change
+    that edits it."""
+    assert "pull_request:" in guards
+    assert "--changed" in guards, (
+        "no leg scopes the proof to the diff, so a pull request re-proves "
+        "nothing of its own")
+
+
+def test_the_whole_registry_is_reproved_on_a_schedule(guards):
+    """The half that catches a guard rotting for a reason no single diff
+    touched: a renamed test, a refactor that moved what the perturbation
+    targets."""
+    assert "schedule:" in guards and "cron:" in guards, (
+        "there is no scheduled run, so the expensive half only happens when "
+        "somebody remembers to type it")
+
+    # The nightly leg has to run the FULL sweep. A schedule that quietly runs
+    # --changed would report green nightly while proving nothing, because a
+    # scheduled run's diff against main is empty (L98).
+    nightly = guards.split("nightly:", 1)[1]
+    assert "--changed" not in nightly, (
+        "the scheduled run is scoped to a diff, and a scheduled run has no "
+        "diff, so it would prove nothing while reporting green")
+
+
+def test_it_can_be_run_by_hand(guards):
+    assert "workflow_dispatch:" in guards
+
+
+def test_the_changed_leg_can_find_a_merge_base(guards):
+    """`--changed` diffs against the merge base with origin/main, and a shallow
+    checkout has none, which the tool reports as an error rather than as an
+    empty result."""
+    changed = guards.split("changed:", 1)[1].split("nightly:", 1)[0]
+    assert "fetch-depth: 0" in changed, (
+        "the diff-scoped leg checks out shallow, so it cannot find a merge base")

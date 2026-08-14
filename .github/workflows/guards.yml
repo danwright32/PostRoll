@@ -21,6 +21,15 @@ on:
   schedule:
     # 04:00 New York, give or take the hour DST moves it. Nothing else is
     # running then, and a nightly failure is read the next morning.
+    #
+    # Two things about a scheduled job are worth being honest about rather than
+    # assumed (L13). A failure is only as visible as GitHub's own notification
+    # to the account that owns the repo: nothing here pages anybody. And the
+    # ABSENCE of a run is invisible by construction, because GitHub disables a
+    # repository's schedules after 60 days without a push, and a disabled
+    # schedule reports nothing at all rather than reporting that it stopped.
+    # Neither is solved here; both are why the pull request leg exists as well,
+    # since that one cannot silently stop while pull requests keep merging.
     - cron: "0 8 * * *"
   workflow_dispatch:
 
