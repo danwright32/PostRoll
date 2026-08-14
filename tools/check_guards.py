@@ -365,17 +365,25 @@ def real_runner(cmd: list[str], cwd: Path) -> tuple[int, str]:
 _PENDING: dict[Path, bytes] = {}
 
 
-def _restore_pending() -> list[Path]:
-    """Put every perturbed file back. Returns what it restored."""
-    restored = []
+def _restore_pending() -> tuple[list[Path], list[tuple[Path, OSError]]]:
+    """Put every perturbed file back.
+
+    Returns what it restored AND what it could not. A restore that fails is the
+    single worst outcome this whole mechanism exists to prevent, so it is never
+    swallowed: reporting only the successes would leave a broken file on disk
+    looking exactly like a clean exit (L11).
+    """
+    restored: list[Path] = []
+    failed: list[tuple[Path, OSError]] = []
     for path, original in list(_PENDING.items()):
         try:
             path.write_bytes(original)
-        except OSError:
-            continue  # reported by the caller; the path stays pending
+        except OSError as exc:
+            failed.append((path, exc))
+            continue  # stays pending, and is reported
         _PENDING.pop(path, None)
         restored.append(path)
-    return restored
+    return restored, failed
 
 
 def install_interrupt_restore(repo_root: Path, log=print) -> None:
@@ -385,24 +393,37 @@ def install_interrupt_restore(repo_root: Path, log=print) -> None:
     indistinguishable from one that silently left them broken, and the operator
     has no reason to look at either (L11).
     """
+    def shown(path: Path) -> str:
+        try:
+            return path.relative_to(repo_root).as_posix()
+        except ValueError:
+            return str(path)
+
     def handler(signum, _frame):
         name = signal.Signals(signum).name
-        restored = _restore_pending()
+        restored, failed = _restore_pending()
         for path in restored:
-            try:
-                shown = path.relative_to(repo_root).as_posix()
-            except ValueError:
-                shown = str(path)
-            log(f"interrupted by {name}: put {shown} back")
-        if not restored:
+            log(f"interrupted by {name}: put {shown(path)} back")
+        if not restored and not failed:
             log(f"interrupted by {name}: nothing was perturbed, "
                 "so nothing needed putting back")
+        # As loud as this can be made. The working tree is now holding broken
+        # code that compiles and reads plausibly, which is the whole condition
+        # this handler exists to prevent, and a quiet exit here would look
+        # exactly like the clean one above.
+        for path, exc in failed:
+            log(f"interrupted by {name}: FAILED to put {shown(path)} back ({exc}). "
+                f"It still holds the perturbation. Recover it with: "
+                f"git checkout -- {shown(path)}")
         sys.stdout.flush()
         sys.stderr.flush()
         # Not sys.exit: this runs while the main thread is blocked in the test
         # runner, and unwinding from there would let the ordinary finally race
         # the restore that has already happened. The tree is right; leave now.
-        os._exit(128 + signum)
+        #
+        # A failed restore gets its own code, so a caller can tell "interrupted,
+        # tree clean" from "interrupted, tree broken" without parsing the log.
+        os._exit(1 if failed else 128 + signum)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:

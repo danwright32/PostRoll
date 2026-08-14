@@ -743,3 +743,26 @@ def test_an_interrupted_sweep_puts_the_source_file_back(tmp_path: Path,
         f"tree was touched and put right: {output[-2000:]}")
     assert name in output, (
         f"the report does not say what interrupted it: {output[-2000:]}")
+
+
+def test_a_restore_that_fails_is_reported_rather_than_swallowed():
+    """The worst outcome this mechanism has: the tree is left holding broken
+    code that compiles and reads plausibly.
+
+    Reporting only what was successfully put back would make that case look
+    exactly like the clean one, which is the failure the handler exists to
+    prevent, moved one step along (L11).
+    """
+    from tools.check_guards import _PENDING, _restore_pending
+
+    unwritable = Path("/nonexistent-directory-for-this-test/Note.swift")
+    _PENDING[unwritable] = b"original"
+    try:
+        restored, failed = _restore_pending()
+    finally:
+        _PENDING.pop(unwritable, None)
+
+    assert restored == []
+    assert [p for p, _ in failed] == [unwritable], (
+        "a restore that could not happen was not reported, so an interrupted "
+        "sweep would exit looking clean while the file is still perturbed")
