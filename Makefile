@@ -44,8 +44,9 @@ test:
 # fails any module that writes into the source tree at all, so the property this
 # depends on is enforced rather than remembered.
 #
-# Measured twice on 2026-08-13 against a clean tree, both green: 1787 tests in
-# 3m24s and 3m34s, against 9m53s serial.
+# Deliberately no measured timings written here. They were, and a number nobody
+# generates or asserts is stale the moment the suite grows, while reading as a
+# current fact (L32). `pytest -q` prints the real one at the end of every run.
 test-python:
 	@venv/bin/python -m pytest tests/ -q -n auto
 

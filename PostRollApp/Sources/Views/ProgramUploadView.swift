@@ -310,7 +310,7 @@ struct ProgramUploadView: View {
     /// failure has to be recorded rather than dropped by a `try?`, and a second
     /// bake must not start while one is in flight (#80).
     private func buildProgramPDF(for ev: Event) {
-        ProgramPDFBakery.shared.bake(event: ev, appState: appState)
+        ProgramPDFBakery.shared.bake(eventID: ev.id, appState: appState)
     }
 
     private func skipProgram() {

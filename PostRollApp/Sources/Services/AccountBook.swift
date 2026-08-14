@@ -123,8 +123,14 @@ struct AccountRecord: Codable, Equatable, Identifiable, Sendable {
     /// that identifies the record is folded.
     var handle: String
     var stats: AccountStats
-    /// When this account was last tagged on an event. Makes the book browsable
-    /// as "everyone ever tagged" rather than only "everyone ever counted".
+    /// When this account was last tagged on an event.
+    ///
+    /// Read by `all`, which orders the book newest tag first, so the accounts
+    /// Dan has worked with most recently come up first in the collaborator
+    /// panel. That ordering is the whole of what it does today; the comment
+    /// here used to promise a browsable "everyone ever tagged" screen that has
+    /// never existed, which is a field reading as wired to something it is not
+    /// (#490, L46).
     var lastTaggedOn: Date?
 
     /// Keyed on the bare username, folded, so `@name`, `name` and a pasted
@@ -278,6 +284,12 @@ final class AccountBook {
     // MARK: - Reading
 
     /// Every account, newest tag first, then alphabetically.
+    ///
+    /// This ordering is what `lastTaggedOn` is FOR (#490). The comment on that
+    /// field used to promise a browsable book with a screen behind it, which
+    /// does not exist; what the stamp genuinely does is put the accounts Dan
+    /// tagged most recently at the top of this list, and saying only that is
+    /// what stops the field reading as wired to something it is not (L46).
     var all: [AccountRecord] {
         records.values.sorted {
             switch ($0.lastTaggedOn, $1.lastTaggedOn) {

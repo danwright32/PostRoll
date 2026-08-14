@@ -420,7 +420,7 @@ struct OCRReviewView: View {
         case .nothingToDelete:
             break
         case .keepScans:
-            ProgramPDFBakery.shared.bake(event: ev, appState: appState,
+            ProgramPDFBakery.shared.bake(eventID: ev.id, appState: appState,
                                          deletingScansOnSuccess: true)
         }
 

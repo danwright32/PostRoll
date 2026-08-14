@@ -330,12 +330,4 @@ struct SkippedPhoto: Codable, Hashable {
 
 // MARK: - GeneratedOutput (kept for future per-field editing in Step 5)
 
-struct GeneratedOutput: Identifiable, Codable, Hashable {
-    var id: UUID = UUID()
-    var suggestedText: String
-    var finalText: String?
-    var createdAt: Date = Date()
 
-    var displayText: String { finalText ?? suggestedText }
-    var hasFinal: Bool { finalText != nil }
-}

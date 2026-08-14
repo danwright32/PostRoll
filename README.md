@@ -109,14 +109,18 @@ make test          # Swift model and service suites
 make test-python   # the Python pipeline suites
 ```
 
-Both run in CI on every push to `main` (`.github/workflows/tests.yml`). The
-Swift job is scoped to `main` and manual runs because macOS runner minutes bill
-at ten times the Linux rate on a private repo.
+The Python suite runs in `.github/workflows/tests.yml` and the Swift half in
+`.github/workflows/swift.yml`, and BOTH run on every pull request as well as
+every push to `main`, whatever the change touched. macOS runner minutes do bill
+at ten times the Linux rate on a private repo, and that cost is accepted
+deliberately (#431): the two attempts at narrowing it, first skipping the Swift
+job on pull requests and then filtering it by path, each hid a real failure.
 
-The Swift unit tests compile the model and service layer directly into the test
-bundle, with no app host, so they cannot reach the live data store. The UI tests
-(`PostRollApp/UITests`) drive the real app against a sandboxed
-`POSTROLL_DATA_DIR` and are excluded from CI.
+The Swift unit tests compile `Sources` directly into the test bundle, with no
+app host, so they cannot reach the live data store. There is no UI test target:
+a headless runner cannot reliably drive a window, and a test nothing runs is
+indistinguishable from no test, so it was removed rather than left to rot
+(#524).
 
 ## Layout
 

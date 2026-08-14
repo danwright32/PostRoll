@@ -35,7 +35,6 @@ struct IGPost: Codable, Hashable {
     var igPermalink: String
     var publishedAt: Date
     var mediaType: IGMediaType
-    var rawPostType: String           // original Meta label for debugging
     var caption: String
     var hashtags: [String]            // parsed from caption by Python
 
@@ -65,7 +64,6 @@ struct IGPost: Codable, Hashable {
         case igPermalink    = "ig_permalink"
         case publishedAt    = "published_at"
         case mediaType      = "media_type"
-        case rawPostType    = "raw_post_type"
         case caption
         case hashtags
         case views
@@ -101,7 +99,6 @@ extension IGPost {
         publishedAt   = try c.decodeIfPresent(Date.self,     forKey: .publishedAt)   ?? .distantPast
         let rawMedia  = try c.decodeIfPresent(String.self,   forKey: .mediaType)     ?? ""
         mediaType     = IGMediaType(rawValue: rawMedia)                              ?? .unknown
-        rawPostType   = try c.decodeIfPresent(String.self,   forKey: .rawPostType)   ?? ""
         caption       = try c.decodeIfPresent(String.self,   forKey: .caption)       ?? ""
         hashtags      = try c.decodeIfPresent([String].self, forKey: .hashtags)      ?? []
         views         = try c.decodeIfPresent(Int.self,      forKey: .views)

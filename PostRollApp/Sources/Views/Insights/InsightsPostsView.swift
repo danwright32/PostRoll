@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct InsightsPostsView: View {
     @Environment(AnalyticsStore.self) private var analyticsStore
@@ -116,14 +117,11 @@ private struct PostRow: View {
         }
     }
 
-    private var engagementSummary: String {
-        var parts: [String] = []
-        if let v = post.likes      { parts.append("♥ \(v)") }
-        if let v = post.comments   { parts.append("💬 \(v)") }
-        if let v = post.saves      { parts.append("🔖 \(v)") }
-        if let v = post.replies    { parts.append("↩ \(v)") }  // story replies
-        if let v = post.reach      { parts.append("👁 \(v)") }
-        return parts.joined(separator: "  ")
+    private var metrics: [InsightsDisplay.Metric] {
+        InsightsDisplay.metrics(likes: post.likes, comments: post.comments,
+                                saves: post.saves, replies: post.replies,
+                                reach: post.reach, follows: post.follows,
+                                durationSec: post.durationSec)
     }
 
     var body: some View {
@@ -157,10 +155,34 @@ private struct PostRow: View {
                         .lineLimit(1)
                 }
 
-                if !engagementSummary.isEmpty {
-                    Text(engagementSummary)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.warmMid)
+                if !metrics.isEmpty {
+                    // Symbols rather than emoji (#469), and read aloud as one
+                    // sentence rather than as a row of glyph names.
+                    HStack(spacing: 10) {
+                        ForEach(metrics, id: \.name) { metric in
+                            HStack(spacing: 3) {
+                                Image(systemName: metric.symbol)
+                                    .font(.system(size: 9))
+                                Text(metric.value)
+                                    .font(.system(size: 10))
+                            }
+                        }
+                    }
+                    .foregroundStyle(Color.warmMid)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(InsightsDisplay.metricsLabel(metrics))
+                }
+
+                // The post itself, which the import has always stored the link
+                // to and nothing ever offered (#490).
+                if let url = URL(string: post.igPermalink), !post.igPermalink.isEmpty {
+                    Button { NSWorkspace.shared.open(url) } label: {
+                        Label("Open on Instagram", systemImage: "arrow.up.forward.square")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.roseGold)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open this post on Instagram")
                 }
             }
         }
