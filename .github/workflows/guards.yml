@@ -112,10 +112,24 @@ jobs:
   # repository's schedules after 60 days without a push, which reports nothing
   # at all rather than reporting that it stopped (L13).
   #
-  # Measured before choosing: 60 entries are proved by xcodebuild at about 13s
-  # each with a warm cache and 57 by pytest at under a second, so the sweep is
-  # roughly 15 minutes of proving plus one build. The timeout is a backstop at
-  # four times that, not an expectation.
+  # Measured before choosing, locally: 60 entries proved by xcodebuild at about
+  # 13s each with a warm cache and 57 by pytest at under a second, so roughly 15
+  # minutes of proving plus one build.
+  #
+  # Then measured on the runner, which is the number that decides this (#548):
+  # 24m57s for 119 entries on the first sweep after a merge, cold. Kept whole
+  # rather than thinned, on three grounds. It fits inside the 60 minute backstop
+  # with room. This repository is public, so the standard runners cost nothing
+  # and the price is wall clock on a branch nobody is waiting behind, since this
+  # runs after the merge rather than before it. And the first sweep immediately
+  # paid for itself by finding an entry whose mutation could not compile, which
+  # had sat in the registry unprovable because the scoped run never selected it.
+  #
+  # The alternatives are recorded rather than taken: scoping to entries whose
+  # guarded files changed since the last successful sweep would reintroduce
+  # exactly the blind spot that hid that entry, and splitting across a matrix
+  # buys wall clock this job does not need. Revisit if the registry roughly
+  # doubles, at which point the timeout is the thing that will say so.
   full:
     if: github.event_name != 'pull_request'
     runs-on: macos-26
