@@ -1,0 +1,8 @@
+{
+  "name": "failure-needle-has-a-producer",
+  "file": "PostRollApp/Sources/Services/RunFailureKind.swift",
+  "find": "        if s.contains(\"jamendo\") { return .audioServiceUnreachable }",
+  "replace": "        if s.contains(\"jamendo music library\") { return .audioServiceUnreachable }",
+  "test": "tests/test_failure_needles_have_producers.py::test_every_needle_has_something_that_could_produce_it",
+  "breaks": "a needle drifts to wording nothing writes, so the kind behind it is unreachable and the hint hanging off it can never be shown, while the classifier still reads as careful (#493, #522)"
+}

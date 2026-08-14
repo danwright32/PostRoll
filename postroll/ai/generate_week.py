@@ -265,9 +265,9 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
             # (the visual asset is generated locally by ffmpeg), but Claude only
             # needs a representative sample to write the caption. Wednesday's
             # collage photos are already a curated sample of the event (4 or 10
-            # depending on the posting preset), so reuse them as Claude's context —
-            # same event, same shoot, no extra selection step, never blows past
-            # Claude's request size limit.
+            # depending on the posting preset), so reuse them as Claude's
+            # context: same event, same shoot, no extra selection step, never
+            # blows past Claude's request size limit.
             if day_name == "thursday" and post_type == "scroll_reel":
                 # Look up Wednesday's photos from either the days dict (when
                 # Wednesday is included in this run) OR from the dedicated
@@ -286,8 +286,8 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
                     )
                     photos = list(wed_photos)
                 elif len(photos) >= REEL_SELECTION_THRESHOLD:
-                    # Fallback: no Wednesday photos available — fall back to the
-                    # old representative-selection path.
+                    # Fallback: no Wednesday photos available, so fall back to
+                    # the old representative-selection path.
                     print(
                         f"[generate_week] thursday: no wednesday photos; selecting "
                         f"best {DEFAULT_MAX_REEL_PHOTOS} from {len(photos)} for caption",
