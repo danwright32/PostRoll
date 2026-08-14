@@ -66,10 +66,8 @@ final class VisibleControlGuardTests: XCTestCase {
     /// the sites the naming moved. A name that resolves to nothing is a failure
     /// rather than a pass, for the same reason (L42).
     private func isLabelColour(_ written: String) throws -> Bool {
-        if let token = written.hasPrefix("PaintedSurfaces.")
-            ? PaintedSurfaces.byName[String(written.dropFirst("PaintedSurfaces.".count))]
-            : Self.token(named: String(written.dropFirst("Color.".count))) {
-            return Self.labelColours.contains { same($0, token) }
+        if let colour = Self.resolve(written) {
+            return Self.labelColours.contains { same($0, colour) }
         }
         if written == "unset" { return false }
         XCTFail("""
@@ -78,6 +76,21 @@ final class VisibleControlGuardTests: XCTestCase {
             PaintedSurfaces.byName.
             """)
         return false
+    }
+
+    /// A colour as written at a call site, or nil when this cannot say.
+    ///
+    /// Nil is what the caller turns into a failure. Kept separate from the
+    /// judgement so the nil path can be exercised: a fail-closed branch nobody
+    /// has watched behave is a branch nobody knows works (L1).
+    static func resolve(_ written: String) -> Color? {
+        if written.hasPrefix("PaintedSurfaces.") {
+            return PaintedSurfaces.byName[String(written.dropFirst("PaintedSurfaces.".count))]
+        }
+        if written.hasPrefix("Color.") {
+            return token(named: String(written.dropFirst("Color.".count)))
+        }
+        return nil
     }
 
     /// The palette tokens this rule is about, by the name a call site writes.
@@ -168,6 +181,20 @@ final class VisibleControlGuardTests: XCTestCase {
             Self.paidActions,
             because: "These buttons SPEND MONEY and are drawn in the same colour as ordinary "
                    + "text, so the only way to discover them is to click words and find out")
+    }
+
+    /// The resolver decides whether this whole file can see anything, so its
+    /// answers are checked rather than assumed. A name it cannot resolve has to
+    /// come back nil, which the caller turns into a failure: reading it as "no
+    /// colour set" instead is how a guard goes green while blind (#580).
+    func testTheColourResolverAnswersForBothSpellingsAndRefusesTheRest() {
+        XCTAssertEqual(Self.resolve("PaintedSurfaces.pageAccentText"),
+                       PaintedSurfaces.pageAccentText)
+        XCTAssertEqual(Self.resolve("Color.warmMid"), Color.warmMid)
+        XCTAssertNil(Self.resolve("PaintedSurfaces.aNameNobodyDeclared"),
+                     "an unresolvable name has to be reported as unresolvable, not as "
+                     + "some colour this check is then happy about")
+        XCTAssertNil(Self.resolve("someLocal"))
     }
 
     func testEveryListedDecisionStillExists() throws {
