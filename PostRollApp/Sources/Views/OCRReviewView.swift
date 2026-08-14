@@ -3,6 +3,8 @@ import SwiftUI
 struct OCRReviewView: View {
     let event: Event
     @Environment(AppState.self) private var appState
+    /// For the rescan of pages an earlier run could not read (#518).
+    @Environment(OCRManager.self) private var ocrManager
     @State private var ocr: OCRResult
     @State private var orgHandles: String
     @State private var venueHandles: String
@@ -69,6 +71,27 @@ struct OCRReviewView: View {
             .map(\.value)
     }
 
+    /// The offer to read just the pages the earlier scan could not (#518), or
+    /// nil when there is no gap.
+    ///
+    /// Read live for the same reason the notices are: the rescan writes back to
+    /// the event, and a copy captured at init would keep offering to read pages
+    /// that have just been read.
+    private var rescanOffer: OCRReviewNotices.RescanOffer? {
+        let live = appState.events.first(where: { $0.id == event.id }) ?? event
+        guard let stored = live.ocrResult,
+              let pages = OCRRescan.pages(for: stored) else { return nil }
+        return OCRReviewNotices.RescanOffer(
+            title: OCRRescan.buttonTitle(pageCount: pages.count),
+            refusal: OCRRescan.refusal(forPages: pages),
+            isRunning: ocrManager.isRunning(event.id),
+            action: {
+                ocrManager.startRescanOfUnreadPages(eventID: event.id,
+                                                    appState: appState)
+            }
+        )
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
@@ -96,7 +119,8 @@ struct OCRReviewView: View {
                         },
                         flagErrorMessage: liveFlagsError.map {
                             OCRReviewReadiness.flagErrorMessage($0)
-                        }
+                        },
+                        rescan: rescanOffer
                     )
                     .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.md)

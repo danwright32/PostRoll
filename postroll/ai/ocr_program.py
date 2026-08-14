@@ -34,7 +34,7 @@ from typing import Any
 from .claude_client import run_json_prompt, ClaudeError
 from ..media.page_regions import image_budget_for, split_page
 from .stitch_notes import stitch_notes
-from .ocr_batching import batch_images, merge_program_data
+from .ocr_batching import batch_images, merge_program_data, merge_rescan
 from .ocr_batching import _dedupe as _dedupe_dicts
 from .progress import ProgressWriter
 
@@ -868,7 +868,7 @@ def extract_program(image_paths: list[str | Path], *,
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extract structured data from program photos")
     parser.add_argument(
         "--image",
@@ -886,7 +886,33 @@ def main() -> int:
         type=Path,
         help="Where to record what this run is doing, for the app to read (#467)",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--merge-into",
+        type=Path,
+        help="A stored OCR result to fold this run into, for rescanning only "
+             "the pages an earlier run could not read (#518). Without it, the "
+             "run replaces whatever the caller had.",
+    )
+    args = parser.parse_args(argv)
+
+    # Read BEFORE the paid call, so an unreadable stored result costs nothing
+    # and fails before the money is spent rather than after it.
+    previous = None
+    if args.merge_into is not None:
+        try:
+            previous = json.loads(args.merge_into.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            # Unreadable is not empty. Merging into {} would write a result
+            # built from nothing back over a programme that was read and paid
+            # for (L105).
+            print(f"error: --merge-into {args.merge_into} could not be read, so "
+                  f"there is nothing to merge into and the stored result must be "
+                  f"left alone: {e}", file=sys.stderr)
+            return 1
+        if not isinstance(previous, dict):
+            print(f"error: --merge-into {args.merge_into} does not hold an OCR "
+                  f"result", file=sys.stderr)
+            return 1
 
     try:
         # The output path goes IN, not just out (#479). Each batch of a large
@@ -898,6 +924,16 @@ def main() -> int:
     except (ClaudeError, FileNotFoundError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+
+    if previous is not None:
+        # One merge rule, the same one that combines batches within a run, so
+        # there is no second implementation to drift from it (#518).
+        try:
+            data = merge_rescan(previous, data,
+                                rescanned_pages=[str(p) for p in args.image])
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
 
     text = json.dumps(data, indent=2, ensure_ascii=False)
     if args.output:

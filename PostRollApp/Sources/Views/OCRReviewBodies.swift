@@ -27,6 +27,22 @@ struct OCRReviewNotices: View {
     var webPerformersSkippedMessage: String? = nil
     /// Auto-flagging failed, already worded by the readiness type.
     var flagErrorMessage: String? = nil
+    /// Closing the gap a partial scan left, when there is one (#518).
+    var rescan: RescanOffer? = nil
+
+    /// The offer to read just the pages that went unread.
+    ///
+    /// Carries its own refusal rather than only a disabled flag, because a
+    /// control that is greyed out with the reason computed somewhere else
+    /// leaves Dan with a dead button and nothing on screen connecting the two
+    /// (L109).
+    struct RescanOffer {
+        let title: String
+        /// Why it cannot run, or nil when it can.
+        let refusal: String?
+        let isRunning: Bool
+        let action: () -> Void
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -44,6 +60,26 @@ struct OCRReviewNotices: View {
             // explained rather than as all there is (#378).
             ForEach(partialProgramNotes, id: \.self) { note in
                 BrandBanner(icon: "doc.badge.ellipsis", message: note, style: .warning)
+            }
+
+            // Directly under the notice it acts on, because an action that
+            // names a target has to be reachable from the surface naming it,
+            // and a durable condition needs a durable control rather than one
+            // hanging off a message that clears (L80, L126).
+            if let rescan {
+                if let refusal = rescan.refusal {
+                    BrandBanner(icon: "questionmark.folder", message: refusal,
+                                style: .warning)
+                } else {
+                    Button(action: rescan.action) {
+                        Label(rescan.isRunning ? "Reading the missing pages…" : rescan.title,
+                              systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(BrandButtonStyle())
+                    .disabled(rescan.isRunning)
+                    .help("Reads only the pages the earlier scan could not, and "
+                          + "adds them to what is already here.")
+                }
             }
 
             if let webPerformersSkippedMessage {

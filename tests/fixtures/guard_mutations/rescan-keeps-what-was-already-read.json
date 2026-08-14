@@ -1,0 +1,8 @@
+{
+  "name": "rescan-keeps-what-was-already-read",
+  "file": "postroll/ai/ocr_batching.py",
+  "find": "    if \"unread_pages\" not in rescanned:\n        merged[\"unread_pages\"] = was_unread\n        return merged",
+  "replace": "    if False:\n        merged[\"unread_pages\"] = was_unread\n        return merged",
+  "test": "tests/test_ocr_rescan_merge.py::test_a_rescan_that_read_nothing_at_all_loses_none_of_the_first_run",
+  "breaks": "a rescan that fell over and reported nothing is read as having read everything, so the warning naming the missing pages is cleared on the strength of a failure and Dan is told the programme is complete when it is not (#518)"
+}
