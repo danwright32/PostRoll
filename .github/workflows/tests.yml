@@ -119,6 +119,13 @@ jobs:
         # and points pytest at tests/, so a local run and a CI run are the same
         # command (#114).
         #
+        # `--durations=25` prints the slowest tests of every run on both legs
+        # (#562). The Mac leg takes roughly four times the Linux one, and with
+        # `-v` alone neither leg said where any of that went, so answering it
+        # meant pushing a throwaway commit to measure. It stays on for the same
+        # reason the ffmpeg version is recorded above: a number nobody can
+        # reproduce off an ordinary run is not evidence.
+        #
         # `-n auto` on a 4 vCPU runner takes this from 169s to roughly 70 to 100s
         # (#431). Only safe since #497: the design fingerprint guards used to
         # write perturbed copies of real modules into the source tree and restore
@@ -127,7 +134,7 @@ jobs:
         # `tests/conftest.py` fails any module that writes into the source tree,
         # so the precondition is enforced rather than assumed. Proven by two clean
         # full-suite parallel runs before this landed.
-        run: pytest -v -n auto
+        run: pytest -v -n auto --durations=25
 
   # The same suite on a Mac, which is the platform the app that calls it runs
   # on (#510). Everything above this runs on Linux only, so anything that
@@ -195,4 +202,4 @@ jobs:
       - name: Run tests
         env:
           POSTROLL_REQUIRE_FFMPEG: "1"
-        run: pytest -v -n auto
+        run: pytest -v -n auto --durations=25
