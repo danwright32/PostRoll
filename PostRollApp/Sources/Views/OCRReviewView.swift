@@ -22,10 +22,15 @@ struct OCRReviewView: View {
         case notes      = "Notes"
     }
 
+    /// Handles the book guessed from a name match, so the screen can mark them
+    /// as guesses for as long as they are untouched (#459).
+    @State private var bookSupplied: [UUID: String]
+
     init(event: Event) {
         self.event = event
         var ocrData = event.ocrResult ?? OCRResult()
-        HandleBook.shared.autoFill(performers: &ocrData.performers)
+        _bookSupplied = State(initialValue: HandleBook.shared.autoFill(
+            performers: &ocrData.performers))
         _ocr = State(initialValue: ocrData)
         _orgHandles = State(initialValue: HandleBook.shared.handles(forOrg: event.org))
         _venueHandles = State(initialValue: HandleBook.shared.handles(forVenue: event.venue))
@@ -219,6 +224,7 @@ struct OCRReviewView: View {
                 org: event.org,
                 venue: event.venue,
                 eventName: event.name,
+                suppliedByBook: bookSupplied,
                 onDeleted: { performer, idx in
                     scheduleUndo(message: "Performer removed") {
                         ocr.performers.insert(performer, at: min(idx, ocr.performers.count))
@@ -487,6 +493,9 @@ private struct PerformersEditor: View {
     var org: String = ""
     var venue: String = ""
     var eventName: String = ""
+    /// Handles the handle book guessed from a name match, so a guess is not
+    /// shown as something read off this programme (#459).
+    var suppliedByBook: [UUID: String] = [:]
     let onDeleted: (Performer, Int) -> Void
     var onReplacedFromWeb: (([Performer]) -> Void)?
 
@@ -519,7 +528,8 @@ private struct PerformersEditor: View {
     var body: some View {
         VStack(spacing: Spacing.sm) {
             ForEach(performers) { performer in
-                PerformerRow(performer: performerBinding(id: performer.id, fallback: performer)) {
+                PerformerRow(performer: performerBinding(id: performer.id, fallback: performer),
+                             suppliedByBook: suppliedByBook[performer.id]) {
                     if let idx = performers.firstIndex(where: { $0.id == performer.id }) {
                         let snapshot = performers[idx]
                         performers.remove(at: idx)
@@ -793,7 +803,15 @@ private struct HandleSuggestionRow: View {
 
 private struct PerformerRow: View {
     @Binding var performer: Performer
+    /// The handle the handle book guessed for this performer, if it did (#459).
+    var suppliedByBook: String? = nil
     let onDelete: () -> Void
+
+    /// Only while the field still holds what the book put there. Once Dan has
+    /// typed over it, it is his answer rather than a guess.
+    private var isGuessed: Bool {
+        HandleBookMark.isFromTheBook(supplied: suppliedByBook, current: performer.handle)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.sm) {
@@ -801,8 +819,17 @@ private struct PerformerRow: View {
                 BrandField("Name", text: $performer.name)
                 BrandField("Description (optional)", text: $performer.voiceOrInstrument)
                     .frame(maxWidth: 200)
-                BrandField("@handle", text: $performer.handle)
-                    .frame(maxWidth: 150)
+                VStack(alignment: .leading, spacing: 2) {
+                    BrandField("@handle", text: $performer.handle)
+                    if isGuessed {
+                        Label(HandleBookMark.note, systemImage: "questionmark.circle")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.warmMid)
+                            .help(HandleBookMark.explanation)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: 150)
             }
             Button {
                 let parts = ["instagram", performer.name, performer.voiceOrInstrument]

@@ -1,0 +1,8 @@
+{
+  "name": "guessed-handle-is-marked",
+  "file": "PostRollApp/Sources/Services/HandleBook.swift",
+  "find": "                    supplied[performers[i].id] = saved",
+  "replace": "                    _ = saved",
+  "test": "PostRollTests/HandleBookMarkTests/testItSaysWhichHandlesItFilledIn",
+  "breaks": "a handle guessed from a name match in an earlier event is shown as one read off this programme (#459)"
+}

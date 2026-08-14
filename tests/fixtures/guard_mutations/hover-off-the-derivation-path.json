@@ -1,0 +1,8 @@
+{
+  "name": "hover-off-the-derivation-path",
+  "file": "PostRollApp/Sources/Views/EventListView.swift",
+  "find": "                let isSelected = appState.selectedEventID == event.id",
+  "replace": "                let isSelected = appState.selectedEventID == event.id\n                let _ = hover.eventID == event.id",
+  "test": "PostRollTests/EventRowBackgroundTests/testTheListBodyNeverReadsTheHover",
+  "breaks": "the event list's body reads the hover, so every mouse move across a row re-derives the filtered, searched and sorted event list (#457)"
+}

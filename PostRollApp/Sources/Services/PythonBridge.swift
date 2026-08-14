@@ -1768,13 +1768,20 @@ actor PythonBridge {
         return hasContent ? result : nil
     }
 
-    func runOCR(imagePaths: [URL]) async throws -> OCRResult {
+    func runOCR(imagePaths: [URL], eventID: UUID? = nil) async throws -> OCRResult {
         let outputFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("postroll_ocr_\(UUID().uuidString).json")
 
         defer { try? FileManager.default.removeItem(at: outputFile) }
 
         var args = ["-m", "postroll.ai.ocr_program", "--output", outputFile.path]
+        // Cleared before the run, so the screen cannot read the previous
+        // attempt's last step and call this one alive (#467).
+        if let eventID {
+            let progressFile = AppPaths.ocrProgressFile(forEventID: eventID)
+            try? FileManager.default.removeItem(at: progressFile)
+            args += ["--progress", progressFile.path]
+        }
         for path in imagePaths { args += ["--image", path.path] }
 
         do {

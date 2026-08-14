@@ -213,8 +213,23 @@ struct WeekGenerationResult: Codable, Hashable {
         blog != nil || DayName.allCases.contains { self[$0] != nil }
     }
 
-    var daysWithContent: [DayName] {
-        DayName.allCases.filter { self[$0] != nil }
+    /// The days a week has something to show, as the screens actually judge it
+    /// (#458).
+    ///
+    /// Takes the event, because Friday is the exception: its before-and-after
+    /// reel is built from photos on the day rather than from a caption, so a
+    /// Friday with photos and no caption still has content. There used to be
+    /// three answers to this question, two byte-identical hand copies in the
+    /// review and export screens carrying that Friday case, and a third here on
+    /// the model, without it, that nothing called. The screens agreed by
+    /// convention, the next rule change had to find both copies, and the
+    /// version wearing the shared name was the wrong one (L16).
+    func daysWithContent(in event: Event) -> [DayName] {
+        DayName.allCases.filter { day in
+            if self[day] != nil { return true }
+            guard day == .friday, let pd = event.days[day.rawValue] else { return false }
+            return pd.rawPhotoPath != nil || pd.editedPhotoPath != nil || !pd.photoPaths.isEmpty
+        }
     }
 
     var errorCount: Int { errors.count }

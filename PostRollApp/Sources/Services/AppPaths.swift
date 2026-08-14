@@ -105,6 +105,15 @@ enum AppPaths {
     static func mediaProgressFile(forEventID id: UUID) -> URL {
         progressDir.appendingPathComponent("\(id.uuidString)-media.json")
     }
+
+    /// Where the program OCR run reports its step (#467).
+    ///
+    /// Its own file for the same reason as the media one: OCR is a different
+    /// run with a different lifetime, and sharing a path would have each
+    /// overwrite the other's label.
+    static func ocrProgressFile(forEventID id: UUID) -> URL {
+        progressDir.appendingPathComponent("\(id.uuidString)-ocr.json")
+    }
     static var logFile: URL { logsDir.appendingPathComponent("postroll.log") }
 
     /// The logs folder as it should appear in a message to Dan.

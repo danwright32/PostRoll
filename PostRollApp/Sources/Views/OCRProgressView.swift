@@ -42,16 +42,21 @@ struct OCRProgressView: View {
         String(format: "%d:%02d", elapsed / 60, elapsed % 60)
     }
 
-    private var footerText: String {
-        if let est = TimingStore.shared.ocrEstimate {
-            let overrun = Double(elapsed) > est * 1.4
-            return overrun
-                ? "Taking longer than usual. Still working."
-                : "Usually \(TimingStore.formatEstimate(est))."
-        }
-        return elapsed >= 45
-            ? "Taking a little longer than usual. Still working."
-            : "Usually 1 to 2 minutes."
+    /// When this run started, for measuring silence against.
+    private var startedAt: Date? {
+        run == nil ? nil : Date().addingTimeInterval(-Double(elapsed))
+    }
+
+    /// What the run itself last reported, read fresh (#467).
+    private func liveStatus(now: Date) -> LongRunStatus {
+        LongRunState.status(
+            startedAt: startedAt,
+            step: LongRunState.readStep(at: AppPaths.ocrProgressFile(forEventID: event.id)),
+            now: now,
+            failedMessage: nil,
+            // OCR is Claude calls of up to 600s each, so it is held to the
+            // threshold sized for that rather than the local-work one.
+            silenceThreshold: LongRunState.defaultSilenceThreshold)
     }
 
     var body: some View {
@@ -93,27 +98,52 @@ struct OCRProgressView: View {
                 .frame(width: 260, height: 1.5)
                 .padding(.vertical, 4)
 
-            // Phase label — crossfades between stages
-            Text(currentPhase)
-                .font(.light(13))
-                .foregroundStyle(Color.warmMid)
-                .contentTransition(.opacity)
-                .animation(.easeInOut(duration: 0.5), value: currentPhase)
+            // Phase label and footer both come from what the run last
+            // reported, re-read every second (#467). The elapsed timer below
+            // proves only that this app is running, so on its own it is a
+            // liveness signal for the wrong process (L106).
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let status = liveStatus(now: context.date)
+                let step = LongRunState.readStep(
+                    at: AppPaths.ocrProgressFile(forEventID: event.id))
+                let label = OCRProgressText.phase(step: step, fallback: currentPhase)
+                let footer = OCRProgressText.footer(
+                    status: status,
+                    estimate: TimingStore.shared.ocrEstimate,
+                    formattedEstimate: TimingStore.shared.ocrEstimate
+                        .map(TimingStore.formatEstimate))
 
-            // Elapsed timer — hard proof it hasn't stalled
-            Text(elapsedText)
-                .font(.system(size: 22, weight: .light, design: .monospaced))
-                .foregroundStyle(Color.roseGold.opacity(0.6))
-                .monospacedDigit()
+                VStack(spacing: Spacing.lg) {
+                    Text(label)
+                        .font(.light(13))
+                        .foregroundStyle(Color.warmMid)
+                        .contentTransition(.opacity)
+                        .animation(.easeInOut(duration: 0.5), value: label)
 
-            // Footer — softens after 45s
-            Text(footerText)
-                .font(.light(11))
-                .foregroundStyle(Color.warmFaint)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 300)
-                .contentTransition(.opacity)
-                .animation(.easeInOut(duration: 0.6), value: footerText)
+                    // Elapsed timer, which says how long rather than whether
+                    // anything is happening.
+                    Text(elapsedText)
+                        .font(.system(size: 22, weight: .light, design: .monospaced))
+                        .foregroundStyle(Color.roseGold.opacity(0.6))
+                        .monospacedDigit()
+
+                    if footer.isStalled {
+                        Label(footer.text, systemImage: "exclamationmark.triangle")
+                            .font(.light(11))
+                            .foregroundStyle(Color.roseDeep)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 300)
+                    } else {
+                        Text(footer.text)
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmFaint)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 300)
+                            .contentTransition(.opacity)
+                            .animation(.easeInOut(duration: 0.6), value: footer.text)
+                    }
+                }
+            }
 
             Button("Cancel") { cancelOCR() }
                 .buttonStyle(.plain)

@@ -488,15 +488,10 @@ private struct ExportSummaryCard: View {
     let result: WeekGenerationResult?
     let onExportDay: (DayName) -> Void
 
+    /// The same implementation the review screen uses (#458). A week with no
+    /// result at all has no days, which is what an empty list says.
     private var daysWithContent: [DayName] {
-        DayName.allCases.filter { day in
-            if result?[day] != nil { return true }
-            if day == .friday, let pd = event.days[day.rawValue],
-               (pd.rawPhotoPath != nil || pd.editedPhotoPath != nil || !pd.photoPaths.isEmpty) {
-                return true
-            }
-            return false
-        }
+        result?.daysWithContent(in: event) ?? []
     }
 
     var body: some View {

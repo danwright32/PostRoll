@@ -57,16 +57,9 @@ struct CaptionReviewView: View {
         _dayFridayClipOverride = State(initialValue: clipOverrides)
     }
 
-    var daysWithContent: [DayName] {
-        DayName.allCases.filter { day in
-            if result[day] != nil { return true }
-            if day == .friday, let pd = event.days[day.rawValue],
-               (pd.rawPhotoPath != nil || pd.editedPhotoPath != nil || !pd.photoPaths.isEmpty) {
-                return true
-            }
-            return false
-        }
-    }
+    /// One implementation, on the model, so this screen and the export screen
+    /// cannot disagree about which days a week has (#458).
+    var daysWithContent: [DayName] { result.daysWithContent(in: event) }
 
     @State private var previewURL: URL? = nil
 

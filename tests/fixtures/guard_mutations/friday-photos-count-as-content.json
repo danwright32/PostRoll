@@ -1,0 +1,8 @@
+{
+  "name": "friday-photos-count-as-content",
+  "file": "PostRollApp/Sources/Models/GeneratedOutput.swift",
+  "find": "            guard day == .friday, let pd = event.days[day.rawValue] else { return false }",
+  "replace": "            guard false, let pd = event.days[day.rawValue] else { return false }",
+  "test": "PostRollTests/DaysWithContentTests/testAFridayWithARawPhotoCountsWithNoCaption",
+  "breaks": "a Friday carrying its before-and-after photos but no caption drops off the review and export screens entirely (#458)"
+}
