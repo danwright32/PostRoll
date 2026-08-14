@@ -319,8 +319,23 @@ extension UnreadProgramPagesTests {
         XCTAssertFalse(refusal.lowercased().contains("upload the programme again"),
                        "the remedy offered cannot fix a permissions refusal: \(refusal)")
         XCTAssertTrue(refusal.contains("page3.jpg"), refusal)
-        XCTAssertTrue(refusal.lowercased().contains("privacy & security"),
-                      "the one thing that would fix this is not named: \(refusal)")
+        XCTAssertTrue(refusal.lowercased().contains("permissions problem"),
+                      "the message does not say which of the two faults this "
+                      + "is, so it cannot be told from a page that moved: "
+                      + "\(refusal)")
+    }
+
+    /// The remedy must name a step that can change the state it is offered for
+    /// (L111). Every page is copied into PostRoll's own folder under
+    /// Application Support on import, and System Settings does not list that
+    /// folder under Privacy & Security > Files and Folders, so an earlier draft
+    /// sent Dan hunting for a switch that would not be there.
+    func testTheDeniedMessageDoesNotSendDanToASettingsPaneThatCannotListThisFolder() throws {
+        let refusal = try XCTUnwrap(OCRRescan.message(
+            for: [("/x/page3.jpg", .denied)]))
+
+        XCTAssertFalse(refusal.lowercased().contains("files and folders"), refusal)
+        XCTAssertFalse(refusal.lowercased().contains("system settings"), refusal)
     }
 
     /// The absent case must keep its own message, or the fix has merely moved
@@ -332,9 +347,9 @@ extension UnreadProgramPagesTests {
         XCTAssertTrue(refusal.lowercased().contains("no longer where"), refusal)
         XCTAssertTrue(refusal.lowercased().contains("upload the programme again"),
                       refusal)
-        XCTAssertFalse(refusal.lowercased().contains("privacy & security"),
-                       "a page that really is gone must not send Dan to settings: "
-                       + "\(refusal)")
+        XCTAssertFalse(refusal.lowercased().contains("permissions problem"),
+                       "a page that really is gone must not be reported as a "
+                       + "permissions problem: \(refusal)")
     }
 
     /// A gap can hold both at once, and a message that reports only one of them
@@ -348,7 +363,7 @@ extension UnreadProgramPagesTests {
 
         XCTAssertTrue(refusal.contains("page3.jpg"), refusal)
         XCTAssertTrue(refusal.contains("page9.jpg"), refusal)
-        XCTAssertTrue(refusal.lowercased().contains("privacy & security"), refusal)
+        XCTAssertTrue(refusal.lowercased().contains("permissions problem"), refusal)
         XCTAssertTrue(refusal.lowercased().contains("upload the programme again"),
                       refusal)
     }
@@ -366,7 +381,9 @@ extension UnreadProgramPagesTests {
                       "the message does not say what actually happened: \(refusal)")
         XCTAssertFalse(refusal.lowercased().contains("upload the programme again"),
                        refusal)
-        XCTAssertFalse(refusal.lowercased().contains("privacy & security"), refusal)
+        XCTAssertFalse(refusal.lowercased().contains("permissions problem"),
+                       "a fault that was never classified is being reported as "
+                       + "one that was: \(refusal)")
     }
 
     /// Read cold, in the state that produces it (L21). One page is the common

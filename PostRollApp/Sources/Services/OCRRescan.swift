@@ -107,19 +107,26 @@ enum OCRRescan {
               + "read them."
     }
 
+    /// No settings pane is named here, deliberately.
+    ///
+    /// Every programme page is copied into `AppPaths.programsDir` on import, so
+    /// a refused page is one inside PostRoll's own storage under Application
+    /// Support. That is not a location System Settings lists under Privacy &
+    /// Security > Files and Folders, which covers Documents, Desktop, Downloads
+    /// and removable volumes, so an earlier draft of this sentence sent Dan to
+    /// look for a switch that would not be there. A remedy has to name a step
+    /// that can actually change the state it is offered for (L111), and the
+    /// only thing measured here is the refusal itself.
     private static func deniedSentence(_ names: [String]) -> String {
         let list = names.joined(separator: ", ")
-        // "where it is kept" rather than "the folder it is in", because several
-        // pages in one gap need not share a folder and a message naming one
-        // sends Dan to grant access in a place that fixes only some of them.
         return names.count == 1
-            ? "\(list) is still there, and PostRoll is not allowed to read it. "
-              + "Give PostRoll access to where it is kept, under System Settings "
-              + "> Privacy & Security > Files and Folders, then try again."
-            : "These pages are still there, and PostRoll is not allowed to read "
-              + "them: \(list). Give PostRoll access to where they are kept, "
-              + "under System Settings > Privacy & Security > Files and Folders, "
-              + "then try again."
+            ? "\(list) is still there in PostRoll's own program folder, and "
+              + "PostRoll was refused when it tried to read it. Nothing was "
+              + "scanned. This is a permissions problem, not a missing page."
+            : "These pages are still there in PostRoll's own program folder, "
+              + "and PostRoll was refused when it tried to read them: \(list). "
+              + "Nothing was scanned. This is a permissions problem, not a set "
+              + "of missing pages."
     }
 
     /// No remedy offered, because none was measured. Naming the failure lets
