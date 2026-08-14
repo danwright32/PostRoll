@@ -24,6 +24,21 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Weekly, because the proofs depend on things no commit here touches: the
+  # macos-26 runner image, the Xcode that PostRollApp/.ci-xcode-version pins,
+  # and Homebrew packages (#551). Any of those can move without a commit, and
+  # with the sweep running only on a merge the first sign is a red merge on
+  # whatever unrelated change happens to land next, which is the worst moment to
+  # meet it and the hardest to attribute.
+  #
+  # The two known weaknesses of a schedule are recorded rather than pretended
+  # away. Its failures are only as visible as GitHub's own email, and GitHub
+  # disables a repository's schedules after 60 days with no push, reporting
+  # nothing at all rather than reporting that it stopped (L13). Neither is a
+  # reason to have no schedule; both are reasons this is the SECOND cadence and
+  # not the only one, with the merge sweep still the cadence that gates.
+  schedule:
+    - cron: "0 7 * * 1"
   workflow_dispatch:
 
 concurrency:

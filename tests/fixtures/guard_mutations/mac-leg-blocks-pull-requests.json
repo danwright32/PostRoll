@@ -1,0 +1,8 @@
+{
+  "name": "mac-leg-blocks-pull-requests",
+  "file": ".github/workflows/tests.yml",
+  "find": "  macos:\n    runs-on: macos-15",
+  "replace": "  macos:\n    if: github.event_name != 'pull_request'\n    runs-on: macos-15",
+  "test": "tests/test_ci_gates.py::test_the_mac_leg_is_not_gated_off_pull_requests",
+  "breaks": "the Mac leg is skipped on pull requests again, so a Mac-only break cannot be caught until it has already merged while the pull request reports green throughout (#550)"
+}
