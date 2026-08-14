@@ -96,6 +96,62 @@ final class StoreSaveGateTests: XCTestCase {
                                              ofItemAtPath: denied.path)
     }
 
+    /// `FileHandle` reports an absent path differently from `Data(contentsOf:)`:
+    /// NSFileNoSuchFileError with the ENOENT buried in an underlying error,
+    /// rather than NSFileReadNoSuchFileError on top. The rule looked only at the
+    /// top, so the first caller to open a file this way had every missing one
+    /// classified as some unexplained failure (#557).
+    func testAMissingFileIsReportedAsMissingWhicheverWayItWasOpened() throws {
+        let missing = dir.appendingPathComponent("not-there.json")
+
+        do {
+            _ = try FileHandle(forReadingFrom: missing)
+            XCTFail("opening a file that is not there has to throw")
+        } catch {
+            XCTAssertTrue((error as NSError).isFileNotFound,
+                          "an absent file read as an unexplained failure: \(error)")
+        }
+    }
+
+    /// The other half of the same judgement, and the one the rescan's message
+    /// hangs off: a page that is there and refused must be nameable as refused,
+    /// not merely as "not absent" (#557).
+    func testADeniedFileIsReportedAsDenied() throws {
+        try XCTSkipIf(getuid() == 0, "permission bits mean nothing to root")
+        let denied = dir.appendingPathComponent("denied-2.json")
+        try Data("{}".utf8).write(to: denied)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000],
+                                             ofItemAtPath: denied.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644],
+                                                   ofItemAtPath: denied.path)
+        }
+
+        do {
+            _ = try FileHandle(forReadingFrom: denied)
+            XCTFail("a file with no read permission has to throw")
+        } catch {
+            XCTAssertTrue((error as NSError).isPermissionDenied,
+                          "a refusal was not recognised as one: \(error)")
+            XCTAssertFalse((error as NSError).isFileNotFound,
+                           "a denied file read as absent: \(error)")
+        }
+    }
+
+    /// The two answers must not both be yes for one error, or a caller
+    /// branching on them gets whichever it happens to ask first.
+    func testAMissingFileIsNotAlsoReportedAsDenied() throws {
+        let missing = dir.appendingPathComponent("not-there-either.json")
+
+        do {
+            _ = try Data(contentsOf: missing)
+            XCTFail("reading a file that is not there has to throw")
+        } catch {
+            XCTAssertFalse((error as NSError).isPermissionDenied,
+                           "an absent file read as a refusal: \(error)")
+        }
+    }
+
     // MARK: - One implementation of the rule
 
     func testNoStoreKeepsItsOwnCopyOfTheNotFoundRule() throws {

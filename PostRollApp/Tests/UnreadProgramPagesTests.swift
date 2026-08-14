@@ -233,3 +233,208 @@ extension UnreadProgramPagesTests {
                       + "so an edit mid-run overwrites the merge that is landing")
     }
 }
+
+// MARK: - A denied folder is not a page that moved (#557)
+//
+// The refusal used to be decided by `FileManager.fileExists`, which answers
+// false for a path the process is DENIED as well as for one that is absent. A
+// macOS permissions refusal therefore reported the pages as gone and sent Dan
+// to upload a programme that had never moved, while the one thing that would
+// have fixed it, a settings change, went unmentioned (L11). The stores in this
+// repo already refuse to use `fileExists` for exactly this reason; this brings
+// the rescan's check into line with them.
+
+extension UnreadProgramPagesTests {
+
+    /// A directory whose permissions are stripped, so the page inside it is
+    /// present on disk and unreadable by this process. Returns the page path.
+    ///
+    /// This is the real mechanism the bug reports wrongly: with the folder
+    /// unsearchable, `fileExists` on the page answers false while the file is
+    /// perfectly intact.
+    private func pageInsideADeniedFolder() throws -> (page: String, cleanup: () -> Void) {
+        try XCTSkipIf(getuid() == 0,
+                      "root bypasses the permission this test depends on")
+
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let page = dir.appendingPathComponent("page3.jpg")
+        try Data("x".utf8).write(to: page)
+
+        let cleanup = {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                   ofItemAtPath: dir.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o000],
+                                              ofItemAtPath: dir.path)
+
+        // The premise of the whole test, asserted rather than assumed: if the
+        // platform stopped denying this, every case below would pass for the
+        // wrong reason (L1).
+        guard !FileManager.default.fileExists(atPath: page.path) else {
+            cleanup()
+            throw XCTSkip("this filesystem does not enforce directory permissions")
+        }
+        return (page.path, cleanup)
+    }
+
+    func testAPageInADeniedFolderIsSeenAsUnreadableRatherThanAbsent() throws {
+        let (page, cleanup) = try pageInsideADeniedFolder()
+        defer { cleanup() }
+
+        XCTAssertEqual(OCRRescan.readability(ofPage: page), .denied,
+                       "a page the process cannot read was classified as one that "
+                       + "is no longer on disk")
+    }
+
+    func testAPageThatIsGenuinelyGoneIsSeenAsAbsent() {
+        XCTAssertEqual(OCRRescan.readability(ofPage: "/nowhere/at/all/page3.jpg"),
+                       .missing)
+    }
+
+    func testAReadablePageIsSeenAsReadable() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let page = dir.appendingPathComponent("page3.jpg")
+        try Data("x".utf8).write(to: page)
+
+        XCTAssertEqual(OCRRescan.readability(ofPage: page.path), .readable)
+    }
+
+    /// The defect as Dan met it: the message named the wrong cause and the wrong
+    /// remedy.
+    func testTheDeniedMessageDoesNotSayThePageMovedAndNamesTheRealFix() throws {
+        let (page, cleanup) = try pageInsideADeniedFolder()
+        defer { cleanup() }
+
+        let refusal = try XCTUnwrap(OCRRescan.refusal(forPages: [page]))
+
+        XCTAssertFalse(refusal.lowercased().contains("no longer where"),
+                       "a permissions refusal still reads as a page that moved, so "
+                       + "Dan is sent to re-upload work that was never lost: \(refusal)")
+        XCTAssertFalse(refusal.lowercased().contains("upload the programme again"),
+                       "the remedy offered cannot fix a permissions refusal: \(refusal)")
+        XCTAssertTrue(refusal.contains("page3.jpg"), refusal)
+        XCTAssertTrue(refusal.lowercased().contains("permissions problem"),
+                      "the message does not say which of the two faults this "
+                      + "is, so it cannot be told from a page that moved: "
+                      + "\(refusal)")
+    }
+
+    /// The remedy must name a step that can change the state it is offered for
+    /// (L111). Every page is copied into PostRoll's own folder under
+    /// Application Support on import, and System Settings does not list that
+    /// folder under Privacy & Security > Files and Folders, so an earlier draft
+    /// sent Dan hunting for a switch that would not be there.
+    func testTheDeniedMessageDoesNotSendDanToASettingsPaneThatCannotListThisFolder() throws {
+        let refusal = try XCTUnwrap(OCRRescan.message(
+            for: [("/x/page3.jpg", .denied)]))
+
+        XCTAssertFalse(refusal.lowercased().contains("files and folders"), refusal)
+        XCTAssertFalse(refusal.lowercased().contains("system settings"), refusal)
+    }
+
+    /// The absent case must keep its own message, or the fix has merely moved
+    /// the wrong diagnosis onto the other cause.
+    func testTheAbsentMessageStillSaysThePageMovedAndSaysToUploadAgain() throws {
+        let refusal = try XCTUnwrap(
+            OCRRescan.refusal(forPages: ["/nowhere/at/all/page3.jpg"]))
+
+        XCTAssertTrue(refusal.lowercased().contains("no longer where"), refusal)
+        XCTAssertTrue(refusal.lowercased().contains("upload the programme again"),
+                      refusal)
+        XCTAssertFalse(refusal.lowercased().contains("permissions problem"),
+                       "a page that really is gone must not be reported as a "
+                       + "permissions problem: \(refusal)")
+    }
+
+    /// A gap can hold both at once, and a message that reports only one of them
+    /// leaves the other page silently unaccounted for.
+    func testAGapHoldingBothCausesReportsBoth() throws {
+        let (denied, cleanup) = try pageInsideADeniedFolder()
+        defer { cleanup() }
+
+        let refusal = try XCTUnwrap(
+            OCRRescan.refusal(forPages: [denied, "/nowhere/at/all/page9.jpg"]))
+
+        XCTAssertTrue(refusal.contains("page3.jpg"), refusal)
+        XCTAssertTrue(refusal.contains("page9.jpg"), refusal)
+        XCTAssertTrue(refusal.lowercased().contains("permissions problem"), refusal)
+        XCTAssertTrue(refusal.lowercased().contains("upload the programme again"),
+                      refusal)
+    }
+
+    /// A page that opens for some third reason neither remedy covers must not
+    /// be filed under either of them. This one is worded through the same
+    /// message builder the app uses, because a disk that produces an arbitrary
+    /// open failure on demand cannot be arranged in a unit test.
+    func testAnUnexplainedFailureClaimsNeitherRemedy() throws {
+        let refusal = try XCTUnwrap(OCRRescan.message(
+            for: [("/x/page3.jpg", .unreadable("Too many open files"))]))
+
+        XCTAssertTrue(refusal.contains("page3.jpg"), refusal)
+        XCTAssertTrue(refusal.contains("Too many open files"),
+                      "the message does not say what actually happened: \(refusal)")
+        XCTAssertFalse(refusal.lowercased().contains("upload the programme again"),
+                       refusal)
+        XCTAssertFalse(refusal.lowercased().contains("permissions problem"),
+                       "a fault that was never classified is being reported as "
+                       + "one that was: \(refusal)")
+    }
+
+    /// Read cold, in the state that produces it (L21). One page is the common
+    /// case and the sentence has to agree with itself about how many there are.
+    func testTheDeniedSentenceAgreesWithItselfAboutOnePage() throws {
+        let refusal = try XCTUnwrap(OCRRescan.message(
+            for: [("/x/page3.jpg", .denied)]))
+
+        XCTAssertFalse(refusal.contains("they"), refusal)
+        XCTAssertFalse(refusal.contains("them"), refusal)
+        XCTAssertFalse(refusal.contains("These pages"), refusal)
+    }
+
+    /// A gap's pages need not share a folder, so the remedy must not send Dan
+    /// to one place as though granting it there covered all of them.
+    func testTheDeniedSentenceDoesNotPromiseTheyShareAFolder() throws {
+        let refusal = try XCTUnwrap(OCRRescan.message(
+            for: [("/one/page3.jpg", .denied), ("/another/page4.jpg", .denied)]))
+
+        XCTAssertFalse(refusal.lowercased().contains("the folder they are in"),
+                       "the pages are in two different folders: \(refusal)")
+    }
+
+    /// A reason arrives punctuated or not depending on who wrote it, and an
+    /// unclosed one runs into whatever the next sentence is.
+    func testTheUnexplainedFailureReadsAsWholeSentences() throws {
+        let unpunctuated = try XCTUnwrap(OCRRescan.message(
+            for: [("/x/page3.jpg", .unreadable("input/output error"))]))
+        let punctuated = try XCTUnwrap(OCRRescan.message(
+            for: [("/x/page3.jpg", .unreadable("The volume could not be found."))]))
+
+        XCTAssertTrue(unpunctuated.hasSuffix("."), unpunctuated)
+        XCTAssertFalse(punctuated.hasSuffix(".."), punctuated)
+    }
+
+    /// Every page readable is the ordinary case, and it must leave the control
+    /// live rather than refusing with an empty sentence.
+    func testNothingIsRefusedWhenEveryPageOpens() {
+        XCTAssertNil(OCRRescan.message(for: [("/x/page3.jpg", .readable),
+                                             ("/x/page4.jpg", .readable)]))
+    }
+
+    /// Built is not wired (L3). The classification has to be what the shipped
+    /// refusal is decided by, and `fileExists` must be gone from this file, or
+    /// the old answer is still reachable. Comments stripped, because the file
+    /// explains the ban in prose right beside the code (L103).
+    func testTheRefusalNoLongerDecidesWithFileExists() throws {
+        let code = try source("Sources/Services/OCRRescan.swift")
+
+        XCTAssertFalse(code.contains("fileExists"),
+                       "the check that cannot tell a denied folder from a missing "
+                       + "page is still deciding the refusal")
+    }
+}
