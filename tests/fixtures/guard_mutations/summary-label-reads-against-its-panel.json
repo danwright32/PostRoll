@@ -1,0 +1,8 @@
+{
+  "name": "summary-label-reads-against-its-panel",
+  "file": "PostRollApp/Sources/Views/PaintedSurfaces.swift",
+  "find": "    static let summaryLabel = Color.warmDark.opacity(0.8)",
+  "replace": "    static let summaryLabel = Color.warmMid",
+  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
+  "breaks": "the counts row's labels go back to 4.33:1 on their own panel, under the 4.5:1 a 9pt label needs, on a row that is mostly panel and so measures as full whatever the label does (#574)"
+}

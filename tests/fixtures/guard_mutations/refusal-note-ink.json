@@ -1,7 +1,7 @@
 {
   "name": "refusal-note-ink",
   "file": "PostRollApp/Sources/Views/SharedChrome.swift",
-  "find": ".fixedSize(horizontal: false, vertical: true)\n        }\n        .foregroundStyle(Color.warmMid)",
+  "find": ".fixedSize(horizontal: false, vertical: true)\n        }\n        .foregroundStyle(PaintedSurfaces.refusalNoteText)",
   "replace": ".fixedSize(horizontal: false, vertical: true)\n        }\n        .foregroundStyle(Color.cream)",
   "test": "PostRollTests/BannerLegibilityTests/testEveryBannerActuallyDrawsItsMessage",
   "breaks": "RefusalNote draws cream on cream, the invisible-type defect that has shipped three times (#389)"

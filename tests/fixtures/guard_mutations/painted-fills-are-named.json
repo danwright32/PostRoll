@@ -1,0 +1,8 @@
+{
+  "name": "painted-fills-are-named",
+  "file": "PostRollApp/Sources/Views/PhotoAssignmentBodies.swift",
+  "find": "                .fill(PaintedSurfaces.missingMediaPanel)",
+  "replace": "                .fill(Color.roseGold.opacity(0.08))",
+  "test": "PostRollTests/BannerLegibilityTests/testEveryPaintedFileDrawsFromTheNamedColours",
+  "breaks": "a surface paints a fill written at the point of use, which no legibility check can name or read the words against, and the list of pairs falls behind the code with nothing noticing (#574)"
+}

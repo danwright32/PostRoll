@@ -507,15 +507,126 @@ final class BannerLegibilityTests: XCTestCase {
     /// floor is real rather than a rounding: a later wording or weight change
     /// cannot quietly drop it back under (#569).
     func testTheRescanLabelHasReadableContrastAgainstItsFill() throws {
-        let ratio = contrastRatio(BrandButtonStyle.label, BrandButtonStyle.fill)
+        let pair = try surface("primary button", "label")
+        let ratio = contrastRatio(pair.foreground, pair.background)
 
-        XCTAssertGreaterThan(ratio, 4.5, """
+        XCTAssertGreaterThan(ratio, pair.kind.floor, """
             The primary button draws its label at \(String(format: "%.2f", ratio)):1 \
             against its own fill, which is below the level at which a control's \
             text can be relied on to be readable. A button whose words match the \
             colour behind them still measures as ink, because the fill is what is \
             being measured.
             """)
+    }
+
+    /// The pair for one element of one surface, from the shipping list.
+    private func surface(_ name: String, _ element: String) throws -> PaintedSurfaces.Pair {
+        try XCTUnwrap(PaintedSurfaces.all.first { $0.surface == name && $0.element == element },
+                      "\(name) / \(element) is not in PaintedSurfaces.all, so nothing "
+                      + "is reading its colours against what is behind them")
+    }
+
+    // MARK: - Every surface, not just two (#574)
+    //
+    // Ink over a whole surface is answered by whatever that surface paints for
+    // ITSELF: a panel, a border, a button fill. So the words it exists to check
+    // can be drawn in the colour behind them while the measurement barely moves.
+    // Proved by mutation during #559, where the Insights staleness notice's
+    // sentence drawn in its own panel colour still measured 0.0799 against a
+    // 0.01 threshold and the guard SURVIVED (L141).
+    //
+    // #559 closed that for two surfaces. This closes it for the rest: every
+    // surface that paints something behind its type names the pair in
+    // PaintedSurfaces, the views draw from those names, and this reads the same
+    // values rather than a copy that could only confirm itself (L70).
+
+    func testEverySurfaceIsReadableAgainstWhatIsBehindIt() throws {
+        for pair in PaintedSurfaces.all {
+            let ratio = contrastRatio(pair.foreground, pair.background)
+            XCTAssertGreaterThan(ratio, pair.kind.floor, """
+                The "\(pair.surface)" \(pair.element) is drawn at \
+                \(String(format: "%.2f", ratio)):1 against the colour behind it, \
+                under the \(pair.kind.floor):1 it needs. Ink on that surface cannot \
+                report this: the fill, the panel and the border are marks on the \
+                page whatever the words do.
+                """)
+        }
+    }
+
+    /// Every banner style, taken from the type rather than from a list here, so
+    /// a fourth one cannot arrive with nobody reading its colours (L113).
+    func testEveryBannerStyleIsCovered() {
+        for style in BrandBannerStyle.allCases {
+            XCTAssertTrue(PaintedSurfaces.all.contains { $0.surface == "banner \(style)" },
+                          "banner \(style) paints a fill that nothing checks the "
+                          + "words against")
+        }
+    }
+
+    /// The measurement has to be able to fail, or every ratio above is
+    /// decoration (L1). Type drawn in the colour behind it is exactly 1:1, and
+    /// that is the defect this whole file exists for.
+    func testTheRatioReportsTypeDrawnInItsOwnBackgroundAsUnreadable() {
+        for pair in PaintedSurfaces.all {
+            XCTAssertEqual(contrastRatio(pair.background, pair.background), 1.0,
+                           accuracy: 0.0001,
+                           "the ratio does not report \"\(pair.surface)\" drawn in its "
+                           + "own background colour as unreadable, so it cannot fail "
+                           + "for the one reason it exists")
+        }
+    }
+
+    /// A translucent fill is not the colour behind the words, so a pair judged
+    /// against the fill as DECLARED is judged against a colour nothing draws.
+    /// The banner fills are washes at 7% to 10%; read raw they are almost the
+    /// accent itself, and the ratios would come out on the wrong side.
+    func testATranslucentFillIsJudgedAsItLandsRatherThanAsItIsDeclared() {
+        let declared = contrastRatio(BrandBanner.text, BrandBanner.fill(.warning))
+        let asDrawn = contrastRatio(BrandBanner.text, BrandBanner.background(.warning))
+
+        XCTAssertNotEqual(declared, asDrawn, accuracy: 0.01,
+                          "the banner's fill is being read raw, so every banner ratio "
+                          + "is computed against a colour that is never drawn")
+        XCTAssertGreaterThan(asDrawn, declared,
+                             "compositing the wash over the page has to lighten what is "
+                             + "behind the words, or the composite is wrong")
+    }
+
+    /// Built is not wired (L3). Names that the views do not draw from would let
+    /// this file assert a palette the app has stopped using, which is the same
+    /// self-confirming check the pairs exist to avoid. Comments are stripped,
+    /// because these files explain the naming in prose right beside the code
+    /// (L103), and each assertion is scoped to the file it is about (L135).
+    func testEveryPaintedFileDrawsFromTheNamedColours() throws {
+        let files = [
+            "Sources/Views/BrandBanner.swift",
+            "Sources/Views/SharedChrome.swift",
+            "Sources/Views/GenerationScreenBodies.swift",
+            "Sources/Views/PhotoAssignmentBodies.swift",
+            "Sources/Views/Insights/AnalyticsStalenessNotice.swift",
+        ]
+        for relative in files {
+            let code = try viewSource(relative)
+            XCTAssertFalse(code.contains(".background(Color."), """
+                \(relative) paints a background from a colour written at the point of \
+                use. Nothing can check the words against it, because nothing else can \
+                name it. Add it to PaintedSurfaces and draw from there.
+                """)
+            XCTAssertFalse(code.contains(".fill(Color."), """
+                \(relative) fills a shape from a colour written at the point of use. \
+                Same problem: an unnamed fill is a surface no legibility check can \
+                reach.
+                """)
+        }
+    }
+
+    private func viewSource(_ relative: String) throws -> String {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // PostRollApp
+            .appendingPathComponent(relative)
+        return SwiftSourceText.withoutComments(
+            try String(contentsOf: url, encoding: .utf8))
     }
 
     /// WCAG relative luminance, on the two colours as they will actually be
@@ -539,15 +650,15 @@ final class BannerLegibilityTests: XCTestCase {
     /// The same question for the staleness notice, whose type sits on its own
     /// panel rather than on the page (#559).
     func testTheStalenessNoticeHasReadableContrastAgainstItsPanel() throws {
-        let text = contrastRatio(AnalyticsStalenessNotice.text,
-                                 AnalyticsStalenessNotice.panel)
-        let icon = contrastRatio(AnalyticsStalenessNotice.icon,
-                                 AnalyticsStalenessNotice.panel)
+        let sentence = try surface("insights staleness notice", "sentence")
+        let symbol = try surface("insights staleness notice", "icon")
+        let text = contrastRatio(sentence.foreground, sentence.background)
+        let icon = contrastRatio(symbol.foreground, symbol.background)
 
-        XCTAssertGreaterThan(text, 4.5,
+        XCTAssertGreaterThan(text, sentence.kind.floor,
                              "the notice's sentence is at \(String(format: "%.2f", text)):1 "
                              + "against the panel it sits on")
-        XCTAssertGreaterThan(icon, 3.0,
+        XCTAssertGreaterThan(icon, symbol.kind.floor,
                              "the notice's icon is at \(String(format: "%.2f", icon)):1 "
                              + "against the panel it sits on")
     }

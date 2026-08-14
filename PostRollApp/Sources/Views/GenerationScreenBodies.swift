@@ -252,12 +252,12 @@ struct GenerationDoneBody: View {
             if let unfamiliarNote {
                 Text(unfamiliarNote)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmDark.opacity(0.75))
+                    .foregroundStyle(PaintedSurfaces.runNoteText)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: 460, alignment: .leading)
                     .padding(Spacing.sm)
-                    .background(Color.roseGold.opacity(0.08))
+                    .background(PaintedSurfaces.runNotePanel)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                     .opacity(revealed ? 1 : 0)
             }
@@ -269,15 +269,15 @@ struct GenerationDoneBody: View {
                             Text(info.label.uppercased())
                                 .font(.system(size: 9, weight: .medium))
                                 .tracking(1.1)
-                                .foregroundStyle(Color.roseDeep)
+                                .foregroundStyle(PaintedSurfaces.failureCardLabel)
                             Text(info.message)
                                 .font(.system(size: 12))
-                                .foregroundStyle(Color.warmDark)
+                                .foregroundStyle(PaintedSurfaces.failureCardMessage)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Spacing.sm)
-                        .background(Color.roseDeep.opacity(0.08))
+                        .background(PaintedSurfaces.failureCardPanel)
                         .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                     }
                 }
@@ -390,11 +390,11 @@ private struct GenerationSummaryRow: View {
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.creamDeep)
+        .background(PaintedSurfaces.summaryPanel)
         .clipShape(RoundedRectangle(cornerRadius: Radius.md))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(Color.creamEdge, lineWidth: 1)
+                .strokeBorder(PaintedSurfaces.summaryBorder, lineWidth: 1)
         )
     }
 }
@@ -407,11 +407,11 @@ private struct SummaryStat: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
                 .font(.signPainter(26))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.summaryValue)
             Text(label)
                 .font(.system(size: 9, weight: .medium))
                 .tracking(1.2)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.summaryLabel)
         }
     }
 }

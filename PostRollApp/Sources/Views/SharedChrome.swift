@@ -44,7 +44,7 @@ struct RefusalNote: View {
                 .font(.light(10))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .foregroundStyle(Color.warmMid)
+        .foregroundStyle(PaintedSurfaces.refusalNoteText)
     }
 }
 
@@ -85,7 +85,7 @@ struct BrandOutlineButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(Color.roseDeep)
+            .foregroundStyle(PaintedSurfaces.outlineButtonLabel)
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
             .background(
@@ -93,7 +93,8 @@ struct BrandOutlineButtonStyle: ButtonStyle {
                     .strokeBorder(Color.roseDeep.opacity(0.55), lineWidth: 1)
                     .background(
                         RoundedRectangle(cornerRadius: Radius.sm)
-                            .fill(Color.cream.opacity(configuration.isPressed ? 0.0 : 0.001)))
+                            .fill(configuration.isPressed
+                                  ? Color.clear : PaintedSurfaces.outlineButtonHitArea))
             )
             .opacity(configuration.isPressed ? 0.6 : 1)
     }

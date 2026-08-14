@@ -1,0 +1,8 @@
+{
+  "name": "banner-action-reads-against-its-fill",
+  "file": "PostRollApp/Sources/Views/BrandBanner.swift",
+  "find": "    static let actionLabel = Color.roseDeep",
+  "replace": "    static let actionLabel = Color.roseGold",
+  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
+  "breaks": "every banner's action buttons go back to 3.83:1 to 3.97:1 against the fill behind them, which the ink measurement cannot see because the fill is most of what it reads (#574)"
+}

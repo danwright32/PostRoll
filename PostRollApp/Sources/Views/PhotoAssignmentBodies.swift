@@ -106,17 +106,17 @@ struct MissingPhotosBanner: View {
         HStack(spacing: Spacing.sm) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 12))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.missingMediaIcon)
             Text(MissingMediaBannerText.message(photoCount: photoCount,
                                                 standaloneNames: standaloneNames))
                 .font(.system(size: 11))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.missingMediaMessage)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
             Button("Locate…", action: onLocate)
                 .buttonStyle(.plain)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.roseGold)
+                .foregroundStyle(PaintedSurfaces.missingMediaAction)
             Text("·").foregroundStyle(Color.warmMid.opacity(0.5))
                 .accessibilityHidden(true)
             Button("Remove missing", action: onRemove)
@@ -126,9 +126,9 @@ struct MissingPhotosBanner: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: Radius.sm)
-                .fill(Color.roseGold.opacity(0.08))
+                .fill(PaintedSurfaces.missingMediaPanel)
                 .overlay(RoundedRectangle(cornerRadius: Radius.sm)
-                    .strokeBorder(Color.roseGold.opacity(0.25), lineWidth: 0.5))
+                    .strokeBorder(PaintedSurfaces.missingMediaBorder, lineWidth: 0.5))
         )
     }
 }
