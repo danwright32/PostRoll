@@ -22,7 +22,16 @@ enum ExportFolderStatus: Equatable {
     case folderGone(URL)
 
     /// The folder holds a finished export.
-    case finished(exportedAt: Date, fileCount: Int)
+    ///
+    /// `unreadableDayFolders` are the days the export run itself could not list,
+    /// carried from the manifest's own record of them (#451). Empty is the
+    /// ordinary case. When it is not empty the run finished, but `fileCount` is
+    /// a count of what it could see rather than of what is there, and it says
+    /// so: a certificate that cannot mention its own gap is a certificate
+    /// claiming something it never read, which is what recording the field was
+    /// for. It was written and shown at write time and ignored on the way back
+    /// in until #540.
+    case finished(exportedAt: Date, fileCount: Int, unreadableDayFolders: [String] = [])
 
     /// The folder exists and has no manifest, so the run that made it did not
     /// finish. `emptyDayFolders` and `hasCaptions` are read off the folder
@@ -49,7 +58,9 @@ enum ExportFolderStatus: Equatable {
         else { return .folderGone(folder) }
 
         if let contents = ExportManifest.read(folder: folder) {
-            return .finished(exportedAt: contents.exportedAt, fileCount: contents.totalFiles)
+            return .finished(exportedAt: contents.exportedAt,
+                             fileCount: contents.totalFiles,
+                             unreadableDayFolders: contents.unreadableFolders.keys.sorted())
         }
 
         // No manifest, so what follows is read off the folder. A folder that
@@ -93,7 +104,12 @@ enum ExportFolderStatus: Equatable {
     /// state and does not need a banner on every visit.
     var needsAttention: Bool {
         switch self {
-        case .neverExported, .finished:              return false
+        case .neverExported:                         return false
+        // A finished export is the expected state and does not need a banner on
+        // every visit. One whose own record admits it could not read a day is a
+        // different thing: the count Dan would otherwise trust is missing that
+        // day, and nothing else on the screen would ever say so.
+        case .finished(_, _, let unreadable):        return !unreadable.isEmpty
         case .folderGone, .unfinished, .unreadable:  return true
         }
     }
@@ -114,9 +130,22 @@ enum ExportFolderStatus: Equatable {
                  + "It may have been moved or renamed, or be on a drive that is not connected. "
                  + "Export again to make a fresh one."
 
-        case .finished(let at, let count):
+        case .finished(let at, let count, let unreadable):
             let when = DateFormatter.exportStamp.string(from: at)
-            return "Exported \(when): \(count) \(count == 1 ? "file" : "files") in the folder."
+            let noun = count == 1 ? "file" : "files"
+            guard !unreadable.isEmpty else {
+                return "Exported \(when): \(count) \(noun) in the folder."
+            }
+            // The count stops presenting as the whole export, because the day it
+            // could not read is exactly the part it did not count. Same wording
+            // as the unfinished case uses for the same fact, and the same route
+            // out, since exporting again lands in the same unreadable folder.
+            return "Exported \(when): \(count) \(noun) counted. "
+                 + "\(unreadable.joined(separator: ", ")) could not be read during the "
+                 + "export, so \(unreadable.count == 1 ? "that day is" : "those days are") "
+                 + "not in that count and there is no telling what is in "
+                 + "\(unreadable.count == 1 ? "it" : "them"). Grant access under System "
+                 + "Settings > Privacy & Security > Files and Folders, then export again."
 
         case .unreadable(let reason):
             return "That export folder is there but PostRoll cannot read it, so there is "

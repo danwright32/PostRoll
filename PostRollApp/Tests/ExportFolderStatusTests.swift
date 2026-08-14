@@ -43,7 +43,7 @@ final class ExportFolderStatusTests: XCTestCase {
         let when = Date(timeIntervalSince1970: 1_800_000_000)
         writeManifest(now: when)
 
-        guard case .finished(let at, let count) = ExportFolderStatus.of(folder: folder) else {
+        guard case .finished(let at, let count, _) = ExportFolderStatus.of(folder: folder) else {
             return XCTFail("a folder holding a manifest is a finished export")
         }
         XCTAssertEqual(at.timeIntervalSince1970, when.timeIntervalSince1970, accuracy: 1)
@@ -227,5 +227,58 @@ final class ExportFolderStatusTests: XCTestCase {
         guard let message = status.message else { return XCTFail("no message") }
         XCTAssertTrue(message.contains("monday is empty"), message)
         XCTAssertTrue(message.contains("sunday could not be read"), message)
+    }
+
+    // MARK: - #540: the manifest's own record of what it could not read
+
+    /// The field was written and shown at write time and ignored on the way back
+    /// in, so an export whose own record says a day could not be listed still
+    /// reported as finished with a clean file count. That is the write-only
+    /// field class #490 closed, reintroduced by the fix for its sibling (L46).
+    func testAFinishedExportCarriesTheDaysItsManifestCouldNotRead() throws {
+        try makeDay("1. Sunday", files: ["story.png"])
+        let contents = ExportManifest.Contents(
+            exportedAt: Date(), preset: "balanced", event: "Test",
+            filesByDay: ["1. Sunday": ["story.png"]], totalFiles: 1,
+            unreadableFolders: ["2. Monday": "Permission denied"])
+        ExportManifest.write(contents, to: folder)
+
+        guard case .finished(_, _, let unreadable) = ExportFolderStatus.of(folder: folder) else {
+            return XCTFail("a folder holding a manifest is a finished export")
+        }
+        XCTAssertEqual(unreadable, ["2. Monday"])
+    }
+
+    /// A count that is missing a day is worth interrupting for. The whole point
+    /// of recording the folder was that a certificate must not say something it
+    /// never read, and a certificate nobody is shown says it anyway.
+    func testAFinishedExportWithAnUnreadDayAsksForAttention() {
+        let clean = ExportFolderStatus.finished(exportedAt: Date(), fileCount: 4)
+        XCTAssertFalse(clean.needsAttention)
+
+        let partial = ExportFolderStatus.finished(exportedAt: Date(), fileCount: 4,
+                                                  unreadableDayFolders: ["2. Monday"])
+        XCTAssertTrue(partial.needsAttention,
+                      "an export whose own record admits a gap reads as a clean one")
+    }
+
+    func testTheFinishedMessageNamesTheDayItCouldNotRead() {
+        let status = ExportFolderStatus.finished(exportedAt: Date(), fileCount: 4,
+                                                 unreadableDayFolders: ["2. Monday"])
+        guard let message = status.message else { return XCTFail("no message") }
+
+        XCTAssertTrue(message.contains("2. Monday"), message)
+        XCTAssertTrue(message.lowercased().contains("could not be read"), message)
+        // The count has to stop claiming to be the whole export, since the day
+        // it could not read is exactly the part it did not count.
+        XCTAssertFalse(message.contains("4 files in the folder."),
+                       "the count still presents as complete: \(message)")
+    }
+
+    func testACleanFinishedExportStillReadsExactlyAsBefore() {
+        let status = ExportFolderStatus.finished(exportedAt: Date(), fileCount: 4)
+        guard let message = status.message else { return XCTFail("no message") }
+        XCTAssertTrue(message.contains("4 files in the folder."), message)
+        XCTAssertFalse(message.lowercased().contains("could not be read"), message)
     }
 }
