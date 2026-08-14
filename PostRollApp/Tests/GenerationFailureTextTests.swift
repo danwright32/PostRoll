@@ -33,7 +33,9 @@ final class GenerationFailureTextTests: XCTestCase {
             "jamendo_client_id is not set",
             "anthropic api error: rate_limit_error",
             "HTTP 429 too many requests",
-            "invalid_api_key",
+            // The service's own spelling. This row read "invalid_api_key" until
+            // #522, which is an OpenAI code and could never have arrived here.
+            "authentication_error",
             "HTTP 401 unauthorized",
             "overloaded_error",
         ]
