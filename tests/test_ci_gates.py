@@ -351,3 +351,72 @@ def test_the_changed_leg_can_find_a_merge_base(guards):
     changed = guards.split("changed:", 1)[1].split("nightly:", 1)[0]
     assert "fetch-depth: 0" in changed, (
         "the diff-scoped leg checks out shallow, so it cannot find a merge base")
+
+
+# ── the failure paths of the thing that workflow runs ─────────────────────────
+#
+# The config assertions above prove the workflow says the right words. These
+# prove the command behind those words fails loudly on the two ways a scoped
+# run can come up empty, because "0 entries affected" is a legitimate answer
+# here and has to be distinguishable from a run that found nothing because it
+# was broken (L98).
+
+
+def _scratch_repo(tmp_path: Path) -> Path:
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for args in (["init", "-q", "-b", "main"],
+                 ["config", "user.email", "t@example.com"],
+                 ["config", "user.name", "T"]):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+    (repo / "a.txt").write_text("x\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "first"], cwd=repo, check=True, capture_output=True)
+    return repo
+
+
+def test_a_scoped_run_with_nothing_to_diff_against_refuses(tmp_path):
+    """A checkout with no origin/main and no upstream, which is what a shallow
+    clone in CI looks like. It must refuse rather than report that no guard
+    needed proving: those two look identical from the outside, and only one of
+    them means the guards were checked."""
+    import shutil
+    import subprocess
+
+    repo = _scratch_repo(tmp_path)
+    (repo / "tools").mkdir()
+    shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    (repo / "tests" / "fixtures" / "guard_mutations").mkdir(parents=True)
+    shutil.copy(
+        next((REPO_ROOT / "tests" / "fixtures" / "guard_mutations").glob("*.json")),
+        repo / "tests" / "fixtures" / "guard_mutations")
+
+    result = subprocess.run(
+        ["python3", "tools/check_guards.py", "--changed"],
+        cwd=repo, capture_output=True, text=True)
+
+    assert result.returncode != 0, (
+        "a scoped run with no base to diff against exited 0, so a shallow "
+        f"checkout in CI would report green having proven nothing:\n{result.stdout}")
+    assert "base" in (result.stdout + result.stderr).lower(), (
+        "it failed without saying that the missing base is why")
+
+
+def test_an_empty_registry_refuses_rather_than_passing(tmp_path):
+    """The other empty: a registry with no entries at all. Every assertion a
+    sweep makes would pass vacuously."""
+    import shutil
+    import subprocess
+
+    repo = _scratch_repo(tmp_path)
+    (repo / "tools").mkdir()
+    shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    (repo / "tests" / "fixtures" / "guard_mutations").mkdir(parents=True)
+
+    result = subprocess.run(
+        ["python3", "tools/check_guards.py"],
+        cwd=repo, capture_output=True, text=True)
+
+    assert result.returncode != 0, (
+        f"an empty registry proved nothing and said it passed:\n{result.stdout}")
