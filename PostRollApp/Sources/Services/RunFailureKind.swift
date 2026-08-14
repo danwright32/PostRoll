@@ -30,6 +30,14 @@ enum RunFailureKind: Equatable {
     case authFailed
     case aiServiceError
 
+    /// The service rejected what was ASKED FOR, outright and permanently: a
+    /// model id it does not have (#542). Its own case rather than folded into
+    /// `aiServiceError`, because that one's advice is to wait a minute and
+    /// retry, and retrying a model the service does not have fails identically
+    /// forever. Carries the id when the message named one, so the message can
+    /// say which (L11, L80).
+    case modelUnavailable(model: String?)
+
     // The run produced something unusable.
     case outputUnreadable
 
@@ -93,6 +101,19 @@ enum RunFailureKind: Equatable {
             // thing that fixes it is sending less (#403).
             || s.contains("prompt is too long") {
             return .requestTooLarge
+        }
+        // Before the generic service branch, for the same reason 413 is: a 404
+        // is also "an anthropic api error", and the generic reading tells Dan to
+        // wait a minute and retry something that will fail identically every
+        // time. The only thing that fixes it is asking for a model that exists
+        // (#542).
+        //
+        // Both needles required. `not_found_error` on its own could arrive from
+        // something other than the model, and a bare 404 could be any missing
+        // resource; together they are the shape the service sends for a model id
+        // it does not have.
+        if s.contains("not_found_error") && hasCode("404", in: s) {
+            return .modelUnavailable(model: modelID(in: text))
         }
         if s.contains("rate_limit") || s.contains("rate limit") || hasCode("429", in: s) {
             return .rateLimited
@@ -166,8 +187,12 @@ enum RunFailureKind: Equatable {
     /// what went wrong, which is why it is not folded into a neighbour.
     var isFixableFromTheApp: Bool {
         switch self {
+        // modelUnavailable is not fixable from the app on purpose: nothing Dan
+        // can change on the photo screen affects which model was asked for, and
+        // offering that route would send him to change inputs that were never
+        // the problem. It is fixed in postroll/ai/model_ids.py.
         case .ffmpegMissing, .audioServiceUnreachable, .rateLimited, .overloaded,
-             .authFailed, .aiServiceError:
+             .authFailed, .aiServiceError, .modelUnavailable:
             return false
         case .requestTooLarge, .outputUnreadable, .fileMissing, .beforeAfterInputsMissing,
              .reelPhotosMissing, .storyFallbackFailed, .unknown:
@@ -185,6 +210,27 @@ enum RunFailureKind: Equatable {
         case .overloaded, .aiServiceError: return "a minute"
         default: return nil
         }
+    }
+
+    /// The model id out of the service's message, or nil when it named none.
+    ///
+    /// Read from the ORIGINAL text rather than the lowercased copy, because a
+    /// model id is what has to be repeated back to Dan and lowercasing it would
+    /// hand him a string that is not the one in the file he has to edit.
+    ///
+    /// nil rather than a guess when nothing matches: a message naming the wrong
+    /// model is worse than one naming none, since it sends the search somewhere
+    /// the answer is not (L75).
+    static func modelID(in text: String) -> String? {
+        guard let range = text.range(of: #"model:\s*([A-Za-z0-9._-]+)"#,
+                                     options: [.regularExpression, .caseInsensitive]) else {
+            return nil
+        }
+        let matched = text[range]
+        guard let colon = matched.firstIndex(of: ":") else { return nil }
+        let id = matched[matched.index(after: colon)...]
+            .trimmingCharacters(in: .whitespaces)
+        return id.isEmpty ? nil : id
     }
 
     /// A three digit status code, bounded so it is not read out of the middle of

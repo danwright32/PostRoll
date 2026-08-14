@@ -75,6 +75,15 @@ enum PythonBridgeError: LocalizedError {
         case .aiServiceError:
             return waitSentence("Generation failed: the AI service returned an error.",
                                 .aiServiceError)
+        // Deliberately no wait and no retry: this fails identically every time
+        // until the model id is changed, so offering a wait would send Dan round
+        // a loop that cannot end (#542).
+        case .modelUnavailable(let model):
+            let named = model.map { "a model called \($0)" } ?? "a model"
+            return "Generation failed: PostRoll asked the AI service for \(named), which it "
+                 + "does not have. This is a PostRoll configuration problem rather than "
+                 + "something to retry: the model ids live in postroll/ai/model_ids.py and "
+                 + "one of them has been retired."
         case .outputUnreadable:
             return "Generation failed: the output could not be read. This is usually a "
                  + "temporary issue. Try again."

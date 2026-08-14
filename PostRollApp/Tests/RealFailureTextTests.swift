@@ -42,6 +42,7 @@ final class RealFailureTextTests: XCTestCase {
         case .overloaded:               return "overloaded"
         case .authFailed:               return "authFailed"
         case .aiServiceError:           return "aiServiceError"
+        case .modelUnavailable:         return "modelUnavailable"
         case .outputUnreadable:         return "outputUnreadable"
         case .fileMissing:              return "fileMissing"
         case .beforeAfterInputsMissing: return "beforeAfterInputsMissing"

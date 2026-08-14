@@ -36,7 +36,6 @@
     "That closed set is what let the guard in test_failure_needles_have_producers.py",
     "drop its marker split and start covering the whole classifier."
   ],
-
   "cases": [
     {
       "name": "a rejected API key",
@@ -135,6 +134,13 @@
       "expected": "unknown",
       "note": "Must stay unknown. Nothing may be claimed about a failure we do not recognise, and the raw text is shown on its own.",
       "text": "KeyError: 'performers'"
+    },
+    {
+      "name": "a model id the service does not have",
+      "provenance": "sdk-formatter",
+      "expected": "modelUnavailable",
+      "note": "Reached by postroll/ai/model_ids.py going stale after a deprecation, which is rare but real. A 404 carries no needle of its own, so it fell through to the generic service branch and Dan was told the service was having trouble and to wait a minute. Retrying a model the service does not have fails identically forever, which is the same defect #403 fixed for 413 and for a prompt past the context window: a permanent failure wearing a transient one's advice.",
+      "text": "Anthropic API error: Error code: 404 - {'type': 'error', 'error': {'type': 'not_found_error', 'message': 'model: claude-opus-9'}, 'request_id': 'req_011CTgLm4rB29WqSaMPLE'}"
     }
   ]
 }
