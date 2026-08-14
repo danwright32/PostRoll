@@ -33,6 +33,10 @@ final class VisibleControlGuardTests: XCTestCase {
         "OCRReviewView.swift|Keep OCR Text",
         "PhotoAssignmentBodies.swift|Remove missing",
         "ProgramUploadView.swift|No program",
+        // Came into view with the subfolder walk (#583). It is the only thing
+        // offered when a search empties the post list, so it is that state's
+        // whole way out.
+        "InsightsPostsView.swift|Clear Search",
     ]
 
     /// `file|button label` for every control that SPENDS MONEY.
@@ -120,6 +124,21 @@ final class VisibleControlGuardTests: XCTestCase {
             .appendingPathComponent("Sources/Views")
     }
 
+    /// Every view file, at any depth (#583).
+    ///
+    /// This used to be `contentsOfDirectory`, which does not descend, so
+    /// `Sources/Views/Insights/` was outside every rule in this file and any
+    /// screen put in a new subfolder was exempt on arrival. Nothing reported
+    /// it: a scan that reads fewer files simply finds fewer subjects, and
+    /// finding nothing to object to is what passing looks like (L98).
+    private func viewFiles() throws -> [URL] {
+        try FileManager.default
+            .subpathsOfDirectory(atPath: viewsDir.path)
+            .filter { $0.hasSuffix(".swift") }
+            .sorted()
+            .map { viewsDir.appendingPathComponent($0) }
+    }
+
     /// Every `.buttonStyle(.plain)` site, as `file|label|colour`.
     ///
     /// Reads the whole modifier chain around the style, both directions: the
@@ -128,8 +147,7 @@ final class VisibleControlGuardTests: XCTestCase {
     /// before the style rather than after.
     private func plainButtonSites() throws -> [(file: String, label: String, colour: String)] {
         var sites: [(String, String, String)] = []
-        for url in try FileManager.default.contentsOfDirectory(at: viewsDir, includingPropertiesForKeys: nil)
-            .filter({ $0.pathExtension == "swift" }).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+        for url in try viewFiles() {
             let lines = try String(contentsOf: url, encoding: .utf8)
                 .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
             for (i, line) in lines.enumerated() {
@@ -197,6 +215,76 @@ final class VisibleControlGuardTests: XCTestCase {
         XCTAssertNil(Self.resolve("someLocal"))
     }
 
+    /// The scan reads the whole view tree, not just its top level (#583).
+    ///
+    /// Both rules above are only as wide as what this walk hands them, and a
+    /// walk that stops descending reports every screen it never opened as
+    /// clean. The count floor inside the rules cannot catch that: 56 of the 57
+    /// labelled sites are at the top level, so dropping a subfolder moves the
+    /// number by one and every floor still holds.
+    ///
+    /// The expected side is enumerated separately from the walk under test,
+    /// because a check whose two halves come from one lookup can only prove
+    /// that lookup agrees with itself (L70).
+    func testTheScanReadsEveryViewFileIncludingTheSubfolders() throws {
+        let expected = try expectedViewFiles()
+
+        // Finding nothing to compare against is not a pass (L98). If the
+        // expected side ever went blind this test would agree with any walk.
+        XCTAssertTrue(expected.contains { $0.hasPrefix("Insights/") }, """
+            the expected file list contains nothing under a subfolder, so it \
+            cannot tell a walk that descends from one that does not. Either \
+            Sources/Views has no subfolders any more, or this enumeration has \
+            stopped working.
+            """)
+
+        let read = Set(try viewFiles().map { $0.path })
+        let missing = expected
+            .filter { !read.contains(viewsDir.appendingPathComponent($0).path) }
+            .sorted()
+
+        XCTAssertTrue(missing.isEmpty, """
+            The scan behind every rule in this file never opens these view \
+            files, so whatever they draw is exempt from all of them and \
+            nothing says so:
+
+            \(missing.joined(separator: "\n"))
+            """)
+    }
+
+    /// Two files sharing a name would be one entry to every registry here,
+    /// because a site is keyed by `lastPathComponent`. Harmless while the walk
+    /// read one folder; once it descends, the second file silently inherits
+    /// the first one's listing and can never be found stale.
+    func testNoTwoViewFilesShareAName() throws {
+        var seen: [String: [String]] = [:]
+        for relative in try expectedViewFiles() {
+            seen[(relative as NSString).lastPathComponent, default: []].append(relative)
+        }
+        let collisions = seen.values.filter { $0.count > 1 }.map { $0.sorted().joined(separator: " and ") }
+
+        XCTAssertTrue(collisions.isEmpty, """
+            These view files share a name, and every registry in this file \
+            keys on the name alone, so one of them silently answers for the \
+            other:
+
+            \(collisions.sorted().joined(separator: "\n"))
+            """)
+    }
+
+    /// Every view file, enumerated by a different route from `viewFiles()`.
+    private func expectedViewFiles() throws -> [String] {
+        guard let walker = FileManager.default.enumerator(
+            at: viewsDir, includingPropertiesForKeys: nil) else {
+            XCTFail("Sources/Views could not be enumerated")
+            return []
+        }
+        let root = viewsDir.standardizedFileURL.path
+        return walker.compactMap { $0 as? URL }
+            .filter { $0.pathExtension == "swift" }
+            .map { String($0.standardizedFileURL.path.dropFirst(root.count + 1)) }
+    }
+
     func testEveryListedDecisionStillExists() throws {
         try assertNothingIsStale(Self.decisions)
     }
@@ -213,6 +301,11 @@ final class VisibleControlGuardTests: XCTestCase {
                                            file: StaticString = #filePath,
                                            line: UInt = #line) throws {
         let sites = try plainButtonSites()
+        // A backstop only. It cannot tell whether the walk covers the tree,
+        // because all but one of the labelled sites sit at the top level, so a
+        // subfolder dropping out of view moves this by one (#583). What proves
+        // the coverage is testTheScanReadsEveryViewFileIncludingTheSubfolders,
+        // which compares the files read against a separate enumeration.
         XCTAssertGreaterThan(sites.count, 40,
                              "the scan found almost no plain buttons, so it has stopped working",
                              file: file, line: line)
@@ -253,8 +346,7 @@ final class VisibleControlGuardTests: XCTestCase {
     /// `file|label` for buttons wearing one of the app's real control styles.
     private func filledButtonLabels() throws -> Set<String> {
         var found: Set<String> = []
-        for url in try FileManager.default.contentsOfDirectory(at: viewsDir, includingPropertiesForKeys: nil)
-            .filter({ $0.pathExtension == "swift" }) {
+        for url in try viewFiles() {
             let lines = try String(contentsOf: url, encoding: .utf8)
                 .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
             for (i, line) in lines.enumerated() {

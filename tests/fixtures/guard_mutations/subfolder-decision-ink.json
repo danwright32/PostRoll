@@ -1,0 +1,8 @@
+{
+  "name": "subfolder-decision-ink",
+  "file": "PostRollApp/Sources/Views/Insights/InsightsPostsView.swift",
+  "find": "                        Button(\"Clear Search\") { searchText = \"\" }\n                            .buttonStyle(.plain)\n                            .font(.system(size: 11, weight: .medium))\n                            .foregroundStyle(PaintedSurfaces.pageAccentText)",
+  "replace": "                        Button(\"Clear Search\") { searchText = \"\" }\n                            .buttonStyle(.plain)\n                            .font(.system(size: 11, weight: .medium))\n                            .foregroundStyle(Color.warmMid)",
+  "test": "PostRollTests/VisibleControlGuardTests/testNoDecisionIsDrawnInTheBodyTextColour",
+  "breaks": "the only way out of an emptied post list is drawn in the body text colour, and nothing says it can be pressed (#583, L49)"
+}
