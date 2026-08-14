@@ -109,6 +109,7 @@
 		2EE48A29BD315183830AA78C /* OCRProgressText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 556458B1970487AADC80E125 /* OCRProgressText.swift */; };
 		2F5402723F35301E1A46AB66 /* MediaPresenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08425C03BB53CA6388F5DB0A /* MediaPresenceTests.swift */; };
 		30476B7134C8601B46454EBE /* StageNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA4C2101069AFA077F90537 /* StageNavigation.swift */; };
+		306C0EA9D8AC38FDF707ADF0 /* OCRDraftRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAFA6F39D81E0F25B838C95 /* OCRDraftRefresh.swift */; };
 		321111B96E14606FD062F804 /* OCRManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A4A3E9D72712D4166FFCE7 /* OCRManager.swift */; };
 		32388054577B5C231271A428 /* DayStateMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE5B174E1C9527180BFF2E2 /* DayStateMerger.swift */; };
 		3254F3271D9AF27805A87B52 /* SentenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E897FCBC5F77FA4BD3F78831 /* SentenceTests.swift */; };
@@ -298,6 +299,7 @@
 		8DC797DA9ECB7DFA37307C68 /* PhotoAssignmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89580BC6221599F5163857E3 /* PhotoAssignmentView.swift */; };
 		8E35CB15F5A3CC7CAA77F7FE /* SpeculativeReelRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4E5793E295B675C8F8B89F /* SpeculativeReelRenderer.swift */; };
 		8E521865E80DB569006CE742 /* ImportNoticeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87657D10867B60F8F073E82C /* ImportNoticeTests.swift */; };
+		8E62C2EC43AC06FDEBBF122D /* OCRDraftRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAFA6F39D81E0F25B838C95 /* OCRDraftRefresh.swift */; };
 		8F1A8B439F55E0CF806903F2 /* PreviewRunStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BBB18CA53E26EBA86CA6A39 /* PreviewRunStateTests.swift */; };
 		8F611D6B8804AEF3B772F58B /* RunOutcomeNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B524993A4030A56888BD84D3 /* RunOutcomeNotice.swift */; };
 		8F65B5D601661074242754FA /* RunOutcomeNoticeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77CF62B9827D5DDDE4885FA1 /* RunOutcomeNoticeTests.swift */; };
@@ -664,6 +666,7 @@
 		67DBCC41F23BCD37CD1B842C /* ExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportView.swift; sourceTree = "<group>"; };
 		6837F113B3F60592CED0241D /* ExportReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportReadinessTests.swift; sourceTree = "<group>"; };
 		6B123A7C2CBCBA4D6DF63E12 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		6BAFA6F39D81E0F25B838C95 /* OCRDraftRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRDraftRefresh.swift; sourceTree = "<group>"; };
 		6BD025AADE68A58F67848071 /* Event.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Event.swift; sourceTree = "<group>"; };
 		6CA6B85D74EE270B12145A9B /* HandleBookMarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleBookMarkTests.swift; sourceTree = "<group>"; };
 		6CF7EA2968AC825EB23C875C /* WeekResultPartialRunDecodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeekResultPartialRunDecodeTests.swift; sourceTree = "<group>"; };
@@ -1018,6 +1021,7 @@
 				5AB7862A6D2A0E45C2E8EB36 /* MissingMediaScan.swift */,
 				7CFA748B1154864A42C2D276 /* NewEventValidation.swift */,
 				3090D877CEFCB9583146E70C /* NotificationService.swift */,
+				6BAFA6F39D81E0F25B838C95 /* OCRDraftRefresh.swift */,
 				C8A4A3E9D72712D4166FFCE7 /* OCRManager.swift */,
 				556458B1970487AADC80E125 /* OCRProgressText.swift */,
 				D5ACBC848CD34992E2FBBC34 /* OCRRescan.swift */,
@@ -1476,6 +1480,7 @@
 				784592B291E62A1B0547187C /* NewEventSheet.swift in Sources */,
 				D29A5916AF5D2A23889EE19D /* NewEventValidation.swift in Sources */,
 				F7287FF02FF430AADD4D5853 /* NotificationService.swift in Sources */,
+				8E62C2EC43AC06FDEBBF122D /* OCRDraftRefresh.swift in Sources */,
 				321111B96E14606FD062F804 /* OCRManager.swift in Sources */,
 				782EC37761BF38DD0CE1023A /* OCRProgressText.swift in Sources */,
 				F374CE5C96FDA2893D4E3FFF /* OCRProgressView.swift in Sources */,
@@ -1756,6 +1761,7 @@
 				7590E8DCC6E7C893554F90CA /* NewEventValidation.swift in Sources */,
 				3FC7E40BB353A106C966AF11 /* NewEventValidationTests.swift in Sources */,
 				B2072833161405FCE8D10D75 /* NotificationService.swift in Sources */,
+				306C0EA9D8AC38FDF707ADF0 /* OCRDraftRefresh.swift in Sources */,
 				1EB4EE23647260954F2BE2BF /* OCRManager.swift in Sources */,
 				CCA8B43FDED74849797AD095 /* OCROtherFieldTests.swift in Sources */,
 				18FA4689F6E8344E613A009F /* OCRPartialSalvageTests.swift in Sources */,

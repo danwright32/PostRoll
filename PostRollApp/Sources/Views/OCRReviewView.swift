@@ -179,6 +179,16 @@ struct OCRReviewView: View {
         // survive event switches and app quits before "Looks Good".
         .onChange(of: ocr) { persistDraft() }
         .onChange(of: flags) { persistDraft() }
+        // Take up what a rescan merged underneath this screen (#518).
+        //
+        // The draft above is written OUT on every edit, and the .id(event.id)
+        // remount only reloads it when a different event is selected, so
+        // nothing brought a change to the stored result back IN. The rescan is
+        // the first thing that makes one while this screen is open: without
+        // this the newly read pages were saved, the screen kept showing the
+        // older list, and the next keystroke persisted that list back over the
+        // merge and discarded them.
+        .onChange(of: ocrManager.isRunning(event.id)) { adoptStoredResultIfNeeded() }
         .onChange(of: orgHandles) {
             HandleBook.shared.record(org: event.org, handles: orgHandles)
         }
@@ -193,9 +203,26 @@ struct OCRReviewView: View {
     private func persistDraft() {
         guard var live = appState.events.first(where: { $0.id == event.id }),
               live.stage == .ocrDone else { return }
+        // Never while a rescan is in flight. The draft on screen predates the
+        // pages that run is reading, so persisting it now would write the older
+        // list over a merge that is about to land, or has just landed (#518).
+        guard !ocrManager.isRunning(event.id) else { return }
         live.ocrResult = ocr
         live.pendingFlags = flags
         appState.updateEvent(live)
+    }
+
+    /// Bring a result written underneath this screen into the draft it shows.
+    ///
+    /// The decision is `OCRDraftRefresh`, so the rule and this call site cannot
+    /// disagree about when it is safe (#518).
+    private func adoptStoredResultIfNeeded() {
+        let live = appState.events.first(where: { $0.id == event.id }) ?? event
+        guard OCRDraftRefresh.shouldAdopt(stored: live.ocrResult, draft: ocr,
+                                          isRunning: ocrManager.isRunning(event.id))
+        else { return }
+        ocr = live.ocrResult ?? ocr
+        flags = live.pendingFlags
     }
 
     // MARK: - Undo
