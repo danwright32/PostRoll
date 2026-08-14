@@ -169,14 +169,24 @@ def test_the_swift_tests_build_into_the_folder_that_is_cached(macos):
     cached = re.search(r"path:\s*(\S*derived-data\S*)", macos)
     assert cached, "no derived-data folder is cached"
 
-    built_into = re.search(r"-derivedDataPath\s+(\S+)", macos)
-    assert built_into, (
-        "xcodebuild is not given -derivedDataPath, so it writes to the shared "
-        "default and the cached folder stays empty")
+    # EVERY invocation, not the first one. This read `re.search` until #485,
+    # which only ever looked at the app build, so dropping the flag from the
+    # test step left the guard green: it was checking one call and reporting on
+    # all of them. An invocation without the flag does not fail or warn, it
+    # quietly builds into the shared default and the cached folder stays cold.
+    calls = [c for c in re.findall(r"xcodebuild(?:.*\\\n)*.*", macos)
+             if "-scheme" in c]  # `xcodebuild -version` asks a question, it builds nothing
+    assert len(calls) >= 2, f"the scan found {len(calls)} invocations, so it proves little"
 
-    assert cached.group(1).rstrip("/") == built_into.group(1).rstrip("/"), (
-        f"the cache holds {cached.group(1)} but xcodebuild builds into "
-        f"{built_into.group(1)}, so the cache is never read")
+    for call in calls:
+        built_into = re.search(r"-derivedDataPath\s+(\S+)", call)
+        first_line = call.splitlines()[0].strip()
+        assert built_into, (
+            f"this xcodebuild is not given -derivedDataPath, so it writes to the "
+            f"shared default and the cached folder stays empty: {first_line}")
+        assert cached.group(1).rstrip("/") == built_into.group(1).rstrip("/"), (
+            f"the cache holds {cached.group(1)} but this xcodebuild builds into "
+            f"{built_into.group(1)}, so the cache is never read: {first_line}")
 
 
 def test_the_restore_and_the_save_spell_the_key_one_way(macos):
