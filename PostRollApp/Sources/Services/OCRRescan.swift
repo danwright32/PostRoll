@@ -25,13 +25,13 @@ enum OCRRescan {
 
     /// Whether a page in the gap can be read now, and if not, why not.
     ///
-    /// Two different faults, and only one of them is Dan's to fix by uploading
-    /// again (L11). `FileManager.fileExists` cannot separate them: it answers
-    /// false for a path this process is DENIED as well as for one that is
-    /// absent, so a folder macOS has not granted access to used to report every
-    /// page inside it as gone. Only the error from an attempted read tells them
-    /// apart, which is the same reason `AnalyticsStore.load` refuses to use
-    /// `fileExists` either (#557, #439).
+    /// Three ways it can fail, and only one of them is fixed by uploading
+    /// again, so they are kept apart (L11). `FileManager.fileExists` cannot
+    /// separate absent from refused: it answers false for a path this process
+    /// is DENIED as well as for one that is gone, so a folder macOS has not
+    /// granted access to used to report every page inside it as gone. Only the
+    /// error from an attempted read tells them apart, which is the same reason
+    /// `AnalyticsStore.load` refuses to use `fileExists` either (#557, #439).
     enum PageReadability: Equatable {
         case readable
         /// Not on disk at all. Re-uploading is the only way back.
@@ -109,20 +109,27 @@ enum OCRRescan {
 
     private static func deniedSentence(_ names: [String]) -> String {
         let list = names.joined(separator: ", ")
-        let subject = names.count == 1
-            ? "\(list) is still there, and PostRoll is not allowed to read it"
+        // "where it is kept" rather than "the folder it is in", because several
+        // pages in one gap need not share a folder and a message naming one
+        // sends Dan to grant access in a place that fixes only some of them.
+        return names.count == 1
+            ? "\(list) is still there, and PostRoll is not allowed to read it. "
+              + "Give PostRoll access to where it is kept, under System Settings "
+              + "> Privacy & Security > Files and Folders, then try again."
             : "These pages are still there, and PostRoll is not allowed to read "
-              + "them: \(list)"
-        return subject + ". Give PostRoll access to the folder they are in under "
-            + "System Settings > Privacy & Security > Files and Folders, then try "
-            + "again."
+              + "them: \(list). Give PostRoll access to where they are kept, "
+              + "under System Settings > Privacy & Security > Files and Folders, "
+              + "then try again."
     }
 
     /// No remedy offered, because none was measured. Naming the failure lets
     /// Dan report what actually happened instead of following advice written
-    /// for a different fault.
+    /// for a different fault. Closed through `Sentence` so the reason, which
+    /// arrives punctuated or not depending on who wrote it, cannot leave this
+    /// running into whatever follows.
     private static func unreadableSentence(name: String, reason: String) -> String {
-        "\(name) could not be opened, so it cannot be scanned again: \(reason)"
+        "\(name) could not be opened, so it cannot be scanned again. "
+            + Sentence.closed(reason)
     }
 
     /// What the control says.

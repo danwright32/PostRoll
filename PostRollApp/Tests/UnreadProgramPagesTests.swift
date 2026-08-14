@@ -369,6 +369,39 @@ extension UnreadProgramPagesTests {
         XCTAssertFalse(refusal.lowercased().contains("privacy & security"), refusal)
     }
 
+    /// Read cold, in the state that produces it (L21). One page is the common
+    /// case and the sentence has to agree with itself about how many there are.
+    func testTheDeniedSentenceAgreesWithItselfAboutOnePage() throws {
+        let refusal = try XCTUnwrap(OCRRescan.message(
+            for: [("/x/page3.jpg", .denied)]))
+
+        XCTAssertFalse(refusal.contains("they"), refusal)
+        XCTAssertFalse(refusal.contains("them"), refusal)
+        XCTAssertFalse(refusal.contains("These pages"), refusal)
+    }
+
+    /// A gap's pages need not share a folder, so the remedy must not send Dan
+    /// to one place as though granting it there covered all of them.
+    func testTheDeniedSentenceDoesNotPromiseTheyShareAFolder() throws {
+        let refusal = try XCTUnwrap(OCRRescan.message(
+            for: [("/one/page3.jpg", .denied), ("/another/page4.jpg", .denied)]))
+
+        XCTAssertFalse(refusal.lowercased().contains("the folder they are in"),
+                       "the pages are in two different folders: \(refusal)")
+    }
+
+    /// A reason arrives punctuated or not depending on who wrote it, and an
+    /// unclosed one runs into whatever the next sentence is.
+    func testTheUnexplainedFailureReadsAsWholeSentences() throws {
+        let unpunctuated = try XCTUnwrap(OCRRescan.message(
+            for: [("/x/page3.jpg", .unreadable("input/output error"))]))
+        let punctuated = try XCTUnwrap(OCRRescan.message(
+            for: [("/x/page3.jpg", .unreadable("The volume could not be found."))]))
+
+        XCTAssertTrue(unpunctuated.hasSuffix("."), unpunctuated)
+        XCTAssertFalse(punctuated.hasSuffix(".."), punctuated)
+    }
+
     /// Every page readable is the ordinary case, and it must leave the control
     /// live rather than refusing with an empty sentence.
     func testNothingIsRefusedWhenEveryPageOpens() {
