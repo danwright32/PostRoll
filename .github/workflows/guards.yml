@@ -13,7 +13,11 @@ name: Guard proofs
 # re-runs decays into a claim while the registry keeps reporting itself
 # consistent. These two jobs are the re-running.
 #
-# macOS because half the entries perturb Swift and are proved by xcodebuild.
+# macOS because half the entries perturb Swift and are proved by xcodebuild,
+# and macos-26 specifically because that is the image carrying the Xcode that
+# PostRollApp/.ci-xcode-version pins. The step selecting it refuses rather than
+# falling back to whatever the image ships, which is how this job failed the
+# first time it ran on the wrong image: loudly, listing what was there.
 
 on:
   pull_request:
@@ -44,7 +48,7 @@ jobs:
   # change that edits it.
   changed:
     if: github.event_name == 'pull_request'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       # Full history: --changed diffs against the merge base with origin/main,
@@ -93,7 +97,7 @@ jobs:
   # loaded.
   nightly:
     if: github.event_name != 'pull_request'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v5

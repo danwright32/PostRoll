@@ -420,3 +420,17 @@ def test_an_empty_registry_refuses_rather_than_passing(tmp_path):
 
     assert result.returncode != 0, (
         f"an empty registry proved nothing and said it passed:\n{result.stdout}")
+
+
+def test_the_guard_job_runs_on_the_image_that_has_the_pinned_xcode(guards):
+    """Half the entries are proved by xcodebuild, and the step that selects the
+    recorded Xcode refuses rather than falling back to whatever the image
+    ships. On the wrong image that is a job that can never pass."""
+    swift_runner = re.search(r"runs-on:\s*(macos-\S+)", SWIFT.read_text(encoding="utf-8"))
+    assert swift_runner, "the Swift workflow names no macOS image"
+
+    images = set(re.findall(r"runs-on:\s*(macos-\S+)", guards))
+    assert images, "the guard workflow names no macOS image"
+    assert images == {swift_runner.group(1)}, (
+        f"the guard jobs run on {sorted(images)} while the Xcode pin is only on "
+        f"{swift_runner.group(1)}")
