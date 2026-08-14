@@ -142,7 +142,7 @@ def _slug(text: str) -> str:
     return result.strip("_")
 
 
-from ..media.ffmpeg_check import ffmpeg_status  # noqa: E402
+from ..media.ffmpeg_check import ffmpeg_status, ffmpeg_version_line  # noqa: E402
 
 
 def _has_ffmpeg() -> bool:
@@ -415,6 +415,14 @@ def generate_media(
 
     tools = ffmpeg_status()
     ffmpeg_available = tools.available
+
+    # Which toolchain produced this run's renders, said once, up front (#474).
+    # Every reel goes through ffmpeg and this codebase has already measured
+    # version-dependent behaviour from it, so a brew upgrade changes what the
+    # renders look like with nothing recording what the last good ones came
+    # from. Printed rather than returned: the reader is whoever is holding a
+    # bad render and the run log beside it (L25).
+    print(f"[generate_media] {ffmpeg_version_line()}", flush=True)
 
     for day_name in DAY_ORDER:
         if only_days is not None and day_name not in only_days:

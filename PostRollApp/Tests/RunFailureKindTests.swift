@@ -16,15 +16,21 @@ final class RunFailureKindTests: XCTestCase {
         ("RuntimeError: ffmpeg not found on PATH", .ffmpegMissing),
         ("JAMENDO_CLIENT_ID is not set", .audioServiceUnreachable),
         ("anthropic api error: request_too_large", .requestTooLarge),
-        ("HTTP 413 payload too large", .requestTooLarge),
+        // Was "HTTP 413 payload too large" until #522 removed the "payload too
+        // large" needle, which the service never writes. The status code is the
+        // half that was doing the work, so that is what this row asserts now.
+        ("HTTP 413", .requestTooLarge),
         ("request exceeds the maximum size", .requestTooLarge),
         ("anthropic api error: rate_limit_error", .rateLimited),
         ("HTTP 429 too many requests", .rateLimited),
         ("hit the rate limit", .rateLimited),
         ("anthropic api error: overloaded_error", .overloaded),
         ("HTTP 529", .overloaded),
-        ("invalid_api_key", .authFailed),
+        // "invalid_api_key" used to be a row here. It is an OpenAI error code,
+        // not one this service writes, and #522 removed the needle; a 401 from
+        // Anthropic says "authentication_error", which the row below covers.
         ("HTTP 401 unauthorized", .authFailed),
+        ("HTTP 403 forbidden", .authFailed),
         ("authentication failed", .authFailed),
         ("no api key configured", .authFailed),
         ("anthropic api error: something new", .aiServiceError),

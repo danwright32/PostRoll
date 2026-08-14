@@ -54,6 +54,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -72,7 +73,7 @@ REEL_SELECTION_THRESHOLD = 50
 
 
 def _extract_clip_plan_frames(
-    selections: list[dict[str, Any]], tmp_dir: str | Path | None = None
+    selections: list[dict[str, Any]], *, tmp_dir: str | Path
 ) -> list[str]:
     """Re-extract one mid-point frame per selection in a persisted Friday
     clip plan, for the caption call's `photo_paths`.
@@ -86,8 +87,14 @@ def _extract_clip_plan_frames(
     A selection whose clip file no longer exists is skipped rather than
     failing the whole caption; raises only if NO frame could be extracted
     at all (nothing usable to caption).
+
+    `tmp_dir` is required, and deliberately has no default. It used to fall
+    back to a mkdtemp, which meant this function invented a directory whose
+    lifetime nobody owned: the caller is the only thing that knows when the
+    frames stop being needed, so the caller creates it and the caller closes
+    it (#486, L8).
     """
-    tmp = Path(tmp_dir) if tmp_dir else Path(tempfile.mkdtemp(prefix="postroll-fridaycaptionframes-"))
+    tmp = Path(tmp_dir)
     tmp.mkdir(parents=True, exist_ok=True)
 
     frames: list[str] = []
@@ -207,166 +214,173 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
     t_blog_start: float | None = None
     t_blog_end: float | None = None
 
-    for day_name in DAY_ORDER:
-        say.step(f"Writing the {day_name.capitalize()} caption",
-                 index=DAY_ORDER.index(day_name) + 1, total=step_total)
-        if day_name == "friday":
-            day_info = days_data.get("friday", {})
-            selections = ((day_info.get("clips_plan") or {}).get("selections")) or []
-            if not selections:
-                results[day_name] = None
-                print("[generate_week] friday: no clip plan, skipping caption", flush=True)
-                continue
-            try:
-                photos = _extract_clip_plan_frames(selections)
-            except Exception as e:
-                print(f"[generate_week] friday: frame extraction failed ({e}), skipping caption",
-                      flush=True, file=sys.stderr)
-                errors[day_name] = f"frame extraction failed: {e}"
-                results[day_name] = None
-                continue
-
-            post_type     = "clip_reel"
-            tag_handles   = day_info.get("tag_handles") or None
-            name_mentions = day_info.get("name_mentions") or None
-            notes         = day_info.get("notes", "")
-            photo_tags    = None  # per-photo tagging isn't meaningful for a reconstructed reel frame set
-
-        else:
-            day_info = days_data.get(day_name, {})
-            photos   = day_info.get("photos", [])
-
-            if not photos:
-                results[day_name] = None
-                print(f"[generate_week] {day_name}: no photos, skipping", flush=True)
-                continue
-
-            post_type    = day_info.get("post_type") or _auto_post_type(day_name, len(photos), preset)
-            tag_handles  = day_info.get("tag_handles") or None
-            name_mentions = day_info.get("name_mentions") or None
-            notes        = day_info.get("notes", "")
-            photo_tags   = day_info.get("photo_tags") or None
-
-        # For Thursday's scroll reel: the reel itself can have 50-200+ photos
-        # (the visual asset is generated locally by ffmpeg), but Claude only
-        # needs a representative sample to write the caption. Wednesday's
-        # collage photos are already a curated sample of the event (4 or 10
-        # depending on the posting preset), so reuse them as Claude's context —
-        # same event, same shoot, no extra selection step, never blows past
-        # Claude's request size limit.
-        if day_name == "thursday" and post_type == "scroll_reel":
-            # Look up Wednesday's photos from either the days dict (when
-            # Wednesday is included in this run) OR from the dedicated
-            # caption_context_photos field (always present, survives single-day
-            # retries that filter Wednesday out of the days dict).
-            wed_photos = (days_data.get("wednesday") or {}).get("photos") or []
-            if not wed_photos:
-                wed_photos = (
-                    manifest.get("caption_context_photos") or {}
-                ).get("wednesday") or []
-            if wed_photos:
-                print(
-                    f"[generate_week] thursday: using {len(wed_photos)} wednesday "
-                    f"photo(s) as caption context (reel uses all {len(photos)})",
-                    flush=True,
-                )
-                photos = list(wed_photos)
-            elif len(photos) >= REEL_SELECTION_THRESHOLD:
-                # Fallback: no Wednesday photos available — fall back to the
-                # old representative-selection path.
-                print(
-                    f"[generate_week] thursday: no wednesday photos; selecting "
-                    f"best {DEFAULT_MAX_REEL_PHOTOS} from {len(photos)} for caption",
-                    flush=True,
-                )
+    # One scratch directory for the whole caption pass, closed on the way
+    # out however the pass ends. Friday's frames used to go into a mkdtemp
+    # that nothing removed, so the temp volume grew with how often the
+    # workflow ran rather than with the work done (#486, L114).
+    with ExitStack() as scratch:
+        for day_name in DAY_ORDER:
+            say.step(f"Writing the {day_name.capitalize()} caption",
+                     index=DAY_ORDER.index(day_name) + 1, total=step_total)
+            if day_name == "friday":
+                day_info = days_data.get("friday", {})
+                selections = ((day_info.get("clips_plan") or {}).get("selections")) or []
+                if not selections:
+                    results[day_name] = None
+                    print("[generate_week] friday: no clip plan, skipping caption", flush=True)
+                    continue
                 try:
-                    selected = select_reel_photos(photos, count=DEFAULT_MAX_REEL_PHOTOS)
-                    photos = [str(p) for p in selected]
+                    frames_dir = scratch.enter_context(
+                        tempfile.TemporaryDirectory(prefix="postroll-fridaycaptionframes-"))
+                    photos = _extract_clip_plan_frames(selections, tmp_dir=frames_dir)
                 except Exception as e:
-                    print(
-                        f"[generate_week] thursday: photo selection failed ({e}); "
-                        f"capping at first {DEFAULT_MAX_REEL_PHOTOS} as a safeguard",
-                        flush=True, file=sys.stderr,
-                    )
-                    photos = photos[:DEFAULT_MAX_REEL_PHOTOS]
-
-        print(f"[generate_week] {day_name}: generating {len(photos)} photo(s) ({post_type})", flush=True)
-        if t_captions_start is None:
-            t_captions_start = time.time()
-
-        try:
-            result = generate_caption(
-                event=event,
-                org=org,
-                venue=venue,
-                venue_context=venue_context,
-                date=date,
-                day=day_name,
-                photo_paths=photos,
-                program=program,
-                shoot_type=shoot_type,
-                post_type=post_type,
-                tag_handles=tag_handles,
-                name_mentions=name_mentions,
-                notes=notes,
-                photo_tags=photo_tags,
-                existing_captions=existing_captions if existing_captions else None,
-                event_url=event_url,
-            )
-            results[day_name] = result
-            if result.get("skipped_photos"):
-                warnings[day_name] = result["skipped_photos"]
-                for s_ in result["skipped_photos"]:
-                    print(f"[generate_week] {day_name}: skipped {s_['file']} "
-                          f"(could not be read); the day generated from the rest",
+                    print(f"[generate_week] friday: frame extraction failed ({e}), skipping caption",
                           flush=True, file=sys.stderr)
-            if result.get("caption"):
-                existing_captions.append(result["caption"])
-            t_captions_end = time.time()
-            print(f"[generate_week] {day_name}: done", flush=True)
-        except FatalGenerationError as e:
-            # Never swallowed. Everything finished so far is already on disk
-            # from the write below; record why the run stopped and re-raise so
-            # the caller can ask Dan what to do (#206).
-            t_captions_end = time.time()
-            print(f"[generate_week] {day_name}: STOPPING: {e}", flush=True, file=sys.stderr)
-            results["errors"] = errors
-            results["warnings"] = warnings
-            _write_results(output_path, results, complete=False, stopped_reason=str(e))
-            raise
-        except Exception as e:
-            t_captions_end = time.time()
-            # A usage cap makes every remaining day fail the same way, so it is
-            # promoted out of this handler rather than filed as one bad day and
-            # hammered five more times (#211). Only a RECOGNISED cap: an
-            # unfamiliar error stays ordinary, because halting on anything we
-            # do not understand turns every new error string into a cancelled
-            # evening.
-            signal = cap_signals.classify(str(e))
-            if cap_signals.should_halt(signal):
-                reason = "Claude usage limit reached"
-                if signal.resets_at:
-                    reason += f", resets at {signal.resets_at}"
-                reason += ". Everything generated so far is saved."
-                # Persisted HERE rather than relying on the FatalGenerationError
-                # clause above: that clause is a sibling of this one, so an
-                # exception raised inside this handler is not caught by it and
-                # the partial week would be lost on the way out (#206, #211).
-                print(f"[generate_week] {day_name}: STOPPING: {reason}",
-                      flush=True, file=sys.stderr)
+                    errors[day_name] = f"frame extraction failed: {e}"
+                    results[day_name] = None
+                    continue
+
+                post_type     = "clip_reel"
+                tag_handles   = day_info.get("tag_handles") or None
+                name_mentions = day_info.get("name_mentions") or None
+                notes         = day_info.get("notes", "")
+                photo_tags    = None  # per-photo tagging isn't meaningful for a reconstructed reel frame set
+
+            else:
+                day_info = days_data.get(day_name, {})
+                photos   = day_info.get("photos", [])
+
+                if not photos:
+                    results[day_name] = None
+                    print(f"[generate_week] {day_name}: no photos, skipping", flush=True)
+                    continue
+
+                post_type    = day_info.get("post_type") or _auto_post_type(day_name, len(photos), preset)
+                tag_handles  = day_info.get("tag_handles") or None
+                name_mentions = day_info.get("name_mentions") or None
+                notes        = day_info.get("notes", "")
+                photo_tags   = day_info.get("photo_tags") or None
+
+            # For Thursday's scroll reel: the reel itself can have 50-200+ photos
+            # (the visual asset is generated locally by ffmpeg), but Claude only
+            # needs a representative sample to write the caption. Wednesday's
+            # collage photos are already a curated sample of the event (4 or 10
+            # depending on the posting preset), so reuse them as Claude's
+            # context: same event, same shoot, no extra selection step, never
+            # blows past Claude's request size limit.
+            if day_name == "thursday" and post_type == "scroll_reel":
+                # Look up Wednesday's photos from either the days dict (when
+                # Wednesday is included in this run) OR from the dedicated
+                # caption_context_photos field (always present, survives single-day
+                # retries that filter Wednesday out of the days dict).
+                wed_photos = (days_data.get("wednesday") or {}).get("photos") or []
+                if not wed_photos:
+                    wed_photos = (
+                        manifest.get("caption_context_photos") or {}
+                    ).get("wednesday") or []
+                if wed_photos:
+                    print(
+                        f"[generate_week] thursday: using {len(wed_photos)} wednesday "
+                        f"photo(s) as caption context (reel uses all {len(photos)})",
+                        flush=True,
+                    )
+                    photos = list(wed_photos)
+                elif len(photos) >= REEL_SELECTION_THRESHOLD:
+                    # Fallback: no Wednesday photos available, so fall back to
+                    # the old representative-selection path.
+                    print(
+                        f"[generate_week] thursday: no wednesday photos; selecting "
+                        f"best {DEFAULT_MAX_REEL_PHOTOS} from {len(photos)} for caption",
+                        flush=True,
+                    )
+                    try:
+                        selected = select_reel_photos(photos, count=DEFAULT_MAX_REEL_PHOTOS)
+                        photos = [str(p) for p in selected]
+                    except Exception as e:
+                        print(
+                            f"[generate_week] thursday: photo selection failed ({e}); "
+                            f"capping at first {DEFAULT_MAX_REEL_PHOTOS} as a safeguard",
+                            flush=True, file=sys.stderr,
+                        )
+                        photos = photos[:DEFAULT_MAX_REEL_PHOTOS]
+
+            print(f"[generate_week] {day_name}: generating {len(photos)} photo(s) ({post_type})", flush=True)
+            if t_captions_start is None:
+                t_captions_start = time.time()
+
+            try:
+                result = generate_caption(
+                    event=event,
+                    org=org,
+                    venue=venue,
+                    venue_context=venue_context,
+                    date=date,
+                    day=day_name,
+                    photo_paths=photos,
+                    program=program,
+                    shoot_type=shoot_type,
+                    post_type=post_type,
+                    tag_handles=tag_handles,
+                    name_mentions=name_mentions,
+                    notes=notes,
+                    photo_tags=photo_tags,
+                    existing_captions=existing_captions if existing_captions else None,
+                    event_url=event_url,
+                )
+                results[day_name] = result
+                if result.get("skipped_photos"):
+                    warnings[day_name] = result["skipped_photos"]
+                    for s_ in result["skipped_photos"]:
+                        print(f"[generate_week] {day_name}: skipped {s_['file']} "
+                              f"(could not be read); the day generated from the rest",
+                              flush=True, file=sys.stderr)
+                if result.get("caption"):
+                    existing_captions.append(result["caption"])
+                t_captions_end = time.time()
+                print(f"[generate_week] {day_name}: done", flush=True)
+            except FatalGenerationError as e:
+                # Never swallowed. Everything finished so far is already on disk
+                # from the write below; record why the run stopped and re-raise so
+                # the caller can ask Dan what to do (#206).
+                t_captions_end = time.time()
+                print(f"[generate_week] {day_name}: STOPPING: {e}", flush=True, file=sys.stderr)
                 results["errors"] = errors
                 results["warnings"] = warnings
-                _write_results(output_path, results, complete=False,
-                               stopped_reason=reason)
-                raise FatalGenerationError(reason) from e
-            print(f"[generate_week] {day_name}: ERROR: {e}", flush=True, file=sys.stderr)
-            errors[day_name] = str(e)
-            results[day_name] = None
+                _write_results(output_path, results, complete=False, stopped_reason=str(e))
+                raise
+            except Exception as e:
+                t_captions_end = time.time()
+                # A usage cap makes every remaining day fail the same way, so it is
+                # promoted out of this handler rather than filed as one bad day and
+                # hammered five more times (#211). Only a RECOGNISED cap: an
+                # unfamiliar error stays ordinary, because halting on anything we
+                # do not understand turns every new error string into a cancelled
+                # evening.
+                signal = cap_signals.classify(str(e))
+                if cap_signals.should_halt(signal):
+                    reason = "Claude usage limit reached"
+                    if signal.resets_at:
+                        reason += f", resets at {signal.resets_at}"
+                    reason += ". Everything generated so far is saved."
+                    # Persisted HERE rather than relying on the FatalGenerationError
+                    # clause above: that clause is a sibling of this one, so an
+                    # exception raised inside this handler is not caught by it and
+                    # the partial week would be lost on the way out (#206, #211).
+                    print(f"[generate_week] {day_name}: STOPPING: {reason}",
+                          flush=True, file=sys.stderr)
+                    results["errors"] = errors
+                    results["warnings"] = warnings
+                    _write_results(output_path, results, complete=False,
+                                   stopped_reason=reason)
+                    raise FatalGenerationError(reason) from e
+                print(f"[generate_week] {day_name}: ERROR: {e}", flush=True, file=sys.stderr)
+                errors[day_name] = str(e)
+                results[day_name] = None
 
-        # Persist after every day, so a kill at any point keeps what finished.
-        results["errors"] = errors
-        results["warnings"] = warnings
-        _write_results(output_path, results, complete=False)
+            # Persist after every day, so a kill at any point keeps what finished.
+            results["errors"] = errors
+            results["warnings"] = warnings
+            _write_results(output_path, results, complete=False)
 
     # Blog post
     if blog_photos:

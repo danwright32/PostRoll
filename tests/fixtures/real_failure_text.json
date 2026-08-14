@@ -22,7 +22,19 @@
     "One entry is deliberately absent. A rate limit and an overload cannot be caused",
     "to order, and the SDK is configured with max_retries=4, so by the time either",
     "reaches the app it has already backed off four times. Both are recorded here as",
-    "sdk-formatter rather than pretended to be captured."
+    "sdk-formatter rather than pretended to be captured.",
+    "",
+    "#522 completed the API half. The app has exactly ONE call site into the service,",
+    "claude_client, and it catches anthropic.APIError, which every SDK exception",
+    "including the transport ones inherits from. So the set of texts that can reach",
+    "the classifier from the service is closed, and every status in it is now here:",
+    "400, 401, 403, 413, 429, 500, 529, plus the two failures that carry no status at",
+    "all. The sdk-formatter entries were produced by handing the documented body for",
+    "each status to the installed SDK's own error constructor and taking str() of",
+    "what came back, so the wording is the SDK's rather than anyone's memory of it.",
+    "",
+    "That closed set is what let the guard in test_failure_needles_have_producers.py",
+    "drop its marker split and start covering the whole classifier."
   ],
 
   "cases": [
@@ -81,6 +93,34 @@
       "provenance": "sdk-formatter",
       "expected": "overloaded",
       "text": "Anthropic API error: Error code: 529 - {'type': 'error', 'error': {'type': 'overloaded_error', 'message': 'Overloaded'}, 'request_id': None}"
+    },
+    {
+      "name": "the key is valid but not allowed to use this",
+      "provenance": "sdk-formatter",
+      "expected": "authFailed",
+      "note": "403 is a different thing from 401: the key is real and the account cannot use what was asked for. It reaches authFailed on the words `API key`, which is the right place to send Dan, since both are fixed by looking at the key rather than by waiting.",
+      "text": "Anthropic API error: Error code: 403 - {'type': 'error', 'error': {'type': 'permission_error', 'message': 'Your API key does not have permission to use the specified resource.'}, 'request_id': 'req_011CTgLm4rB29WqSaMPLE'}"
+    },
+    {
+      "name": "the service broke on its own",
+      "provenance": "sdk-formatter",
+      "expected": "aiServiceError",
+      "note": "500 is transient in a way 400 and 413 are not, so waiting and retrying is the correct advice here and would be wrong for those.",
+      "text": "Anthropic API error: Error code: 500 - {'type': 'error', 'error': {'type': 'api_error', 'message': 'Internal server error'}, 'request_id': 'req_011CTgLm4rB29WqSaMPLE'}"
+    },
+    {
+      "name": "the request never reached the service",
+      "provenance": "sdk-formatter",
+      "expected": "aiServiceError",
+      "note": "A transport failure carries no HTTP status and no error body at all, so every status-code needle misses it and it is caught only by the words the client puts in front. Recorded because two needles, `apiconnectionerror` and `apistatuserror`, were written expecting the exception's CLASS name to appear here. It does not: claude_client raises `Anthropic API error: {e}`, and str() of an SDK exception is its message, never its type.",
+      "text": "Anthropic API error: Connection error."
+    },
+    {
+      "name": "the request timed out",
+      "provenance": "sdk-formatter",
+      "expected": "aiServiceError",
+      "note": "The other half of the no-status case. A long week batch is the realistic way to meet it.",
+      "text": "Anthropic API error: Request timed out or interrupted. This could be due to a network timeout, dropped connection, or request cancellation. See https://docs.anthropic.com/en/api/errors#long-requests for more details."
     },
     {
       "name": "a reply with no text block in it",

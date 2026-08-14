@@ -42,23 +42,21 @@ PRODUCERS = [
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "real_failure_text.json"
 
 
-# Where the per-day input-shortfall branches start. Everything above this line
-# classifies API and transport failures, whose text the SDK and the OS write and
-# whose shapes are only partly covered by the measured fixture; that half is
-# #522. Everything below it classifies text OUR pipeline writes, which is what
-# #493 is about and what this file checks.
-SHORTFALL_MARKER = "// Then the per-day input shortfalls"
-
-
 def needles() -> list[str]:
-    """Every `s.contains("…")` literal in the pipeline-text half of the file."""
+    """Every `s.contains("…")` literal in the file.
+
+    This used to stop at the marker where the per-day input shortfalls begin,
+    covering only the half that classifies text our own pipeline writes. The
+    half above it, which classifies what the API and the OS write, was left out
+    because the fixture could not yet vouch for it, and a guard that cannot
+    reach a needle is indistinguishable from one that approves it (#522).
+
+    The fixture now carries every status the one API call site can receive, so
+    the split is gone and the guard covers the whole classifier.
+    """
     source = SWIFT.read_text(encoding="utf-8")
-    assert SHORTFALL_MARKER in source, (
-        "the marker splitting API-text classification from pipeline-text "
-        "classification is gone, so this check no longer knows what it covers")
-    section = source.split(SHORTFALL_MARKER, 1)[1]
     # Comments explaining a needle are not the needle (L103).
-    lines = [ln for ln in section.splitlines() if not ln.strip().startswith("//")]
+    lines = [ln for ln in source.splitlines() if not ln.strip().startswith("//")]
     return sorted(set(re.findall(r's\.contains\("([^"]+)"\)', "\n".join(lines))))
 
 

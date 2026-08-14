@@ -86,20 +86,23 @@ enum RunFailureKind: Equatable {
         // that is too large is also "an anthropic api error", and the generic
         // reading of it tells Dan to retry something that will fail identically.
         if s.contains("request_too_large") || s.contains("request exceeds the maximum")
-            || s.contains("payload too large") || hasCode("413", in: s)
+            || hasCode("413", in: s)
             // A prompt past the context window arrives as an ordinary 400, so
             // without this it read as a generic service error and Dan was told to
             // wait and retry something that fails identically every time. The only
             // thing that fixes it is sending less (#403).
-            || s.contains("prompt is too long") || s.contains("too many tokens") {
+            || s.contains("prompt is too long") {
             return .requestTooLarge
         }
         if s.contains("rate_limit") || s.contains("rate limit") || hasCode("429", in: s) {
             return .rateLimited
         }
         if s.contains("overloaded") || hasCode("529", in: s) { return .overloaded }
-        if s.contains("invalid_api_key") || s.contains("api key") || s.contains("apikey")
-            || s.contains("authentication") || hasCode("401", in: s) {
+        // Also where 403 lands, on the words "API key": the key is real and the
+        // account is not allowed to use what was asked for, and both are fixed
+        // by looking at the key rather than by waiting.
+        if s.contains("api key") || s.contains("authentication")
+            || hasCode("401", in: s) || hasCode("403", in: s) {
             return .authFailed
         }
         // The service's own error markers, not a bare mention of its name.
@@ -116,8 +119,17 @@ enum RunFailureKind: Equatable {
         // back carrying no text block at all, and those used to fall through to
         // the unrecognised fallback (#403). Still narrow enough that a traceback
         // through the library, "/x/anthropic/client.py", does not match.
-        if s.contains("anthropic api") || s.contains("openai api")
-            || s.contains("apistatuserror") || s.contains("apiconnectionerror") {
+        //
+        // Three needles were removed from this branch in #522: "openai api",
+        // which names a service the app has never called, and "apistatuserror"
+        // and "apiconnectionerror", which expected the SDK exception's CLASS
+        // name to appear in the text. It cannot. claude_client raises
+        // `Anthropic API error: {e}`, and str() of an SDK exception is its
+        // message, never its type, so those two could not have matched anything
+        // the app is able to produce. What they were reaching for, a transport
+        // failure that carries no HTTP status at all, is caught by the words in
+        // front of it and is measured in the fixture as its own case.
+        if s.contains("anthropic api") {
             return .aiServiceError
         }
 
