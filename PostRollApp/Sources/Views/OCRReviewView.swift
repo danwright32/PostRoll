@@ -80,10 +80,11 @@ struct OCRReviewView: View {
     private var rescanOffer: OCRReviewNotices.RescanOffer? {
         let live = appState.events.first(where: { $0.id == event.id }) ?? event
         guard let stored = live.ocrResult,
-              let pages = OCRRescan.pages(for: stored) else { return nil }
+              let pages = OCRRescan.pages(for: stored,
+                                          in: live.programImagePaths) else { return nil }
         return OCRReviewNotices.RescanOffer(
             title: OCRRescan.buttonTitle(pageCount: pages.count),
-            refusal: OCRRescan.refusal(forPages: pages),
+            refusal: OCRRescan.refusal(forPages: pages.map(\.path)),
             isRunning: ocrManager.isRunning(event.id),
             action: {
                 ocrManager.startRescanOfUnreadPages(eventID: event.id,

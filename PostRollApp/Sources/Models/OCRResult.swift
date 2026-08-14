@@ -31,9 +31,24 @@ struct OCRResult: Codable, Hashable, Sendable {
     /// again for every page that had already been read.
     var unreadPages: [String] = []
 
+    /// The same gap, said as positions in the uploaded programme, one per entry
+    /// in `unreadPages` and paired with it by index (#558).
+    ///
+    /// A path stops identifying a page the moment the programme images move,
+    /// which this app does do, and a gap keyed on paths then names files
+    /// nothing can find: every page reads as missing and the only way back is
+    /// paying to read the whole programme again. The position is the part a
+    /// move cannot break.
+    ///
+    /// Empty on every result written before this existed, and on any run that
+    /// could not place its pages. Empty means "no positions", never "no gap":
+    /// `unreadPages` is what says whether there is one.
+    var unreadPageNumbers: [Int] = []
+
     enum CodingKeys: String, CodingKey {
         case performers, pieces, scenes, other
         case unreadPages       = "unread_pages"
+        case unreadPageNumbers = "unread_page_numbers"
         case organizationNotes = "organization_notes"
         case programNotes      = "program_notes"
         case venueNotes        = "venue_notes"
@@ -55,6 +70,7 @@ extension OCRResult {
         productionDetails = try c.decodeIfPresent(String.self,         forKey: .productionDetails) ?? ""
         other             = try c.decodeIfPresent(String.self,         forKey: .other)             ?? ""
         unreadPages       = try c.decodeIfPresent([String].self,       forKey: .unreadPages)       ?? []
+        unreadPageNumbers = try c.decodeIfPresent([Int].self,          forKey: .unreadPageNumbers) ?? []
     }
 }
 

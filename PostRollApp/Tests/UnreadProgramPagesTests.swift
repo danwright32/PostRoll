@@ -76,22 +76,26 @@ extension UnreadProgramPagesTests {
     func testTheRescanIsOfferedOnlyWhenPagesWentUnread() {
         var clean = OCRResult()
         clean.unreadPages = []
-        XCTAssertNil(OCRRescan.pages(for: clean))
+        XCTAssertNil(OCRRescan.pages(for: clean, in: []))
 
         var partial = OCRResult()
         partial.unreadPages = ["/x/page3.jpg"]
-        XCTAssertEqual(OCRRescan.pages(for: partial), ["/x/page3.jpg"])
+        XCTAssertEqual(OCRRescan.pages(for: partial, in: [])?.map(\.path),
+                       ["/x/page3.jpg"])
     }
 
-    /// The pages sent must be exactly the ones the earlier run named, because
-    /// the merge that folds the answer back in matches on those same strings.
-    /// Sending a basename, or the whole programme, breaks the match silently.
-    func testItSendsTheExactPathsTheEarlierRunNamed() {
+    /// The pages sent must be the ones the earlier run named, resolved against
+    /// the programme as it is now (#558). Sending a basename, or the whole
+    /// programme, breaks the merge silently.
+    func testItSendsThePagesTheEarlierRunNamed() {
         var partial = OCRResult()
         partial.unreadPages = ["/photos/programme/page3.jpg",
                                "/photos/programme/page4.jpg"]
+        let live = ["page1.jpg", "page3.jpg", "page4.jpg"].map {
+            URL(fileURLWithPath: "/photos/programme/\($0)")
+        }
 
-        XCTAssertEqual(OCRRescan.pages(for: partial),
+        XCTAssertEqual(OCRRescan.pages(for: partial, in: live)?.map(\.path),
                        ["/photos/programme/page3.jpg",
                         "/photos/programme/page4.jpg"])
     }

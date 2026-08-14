@@ -159,10 +159,11 @@ def test_the_cli_merges_into_the_stored_result_it_was_given(tmp_path, monkeypatc
         "unread_pages": [str(page)],
     }))
 
-    def fake_extract(images, output_path=None, progress_path=None):
+    def fake_extract(images, output_path=None, progress_path=None,
+                     page_numbers=None):
         assert [str(i) for i in images] == [str(page)]
         return {"performers": [{"name": "Bo"}], "program_notes": "Second half.",
-                "unread_pages": []}
+                "unread_pages": [], "unread_page_numbers": []}
 
     monkeypatch.setattr(ocr_program, "extract_program", fake_extract)
     code = ocr_program.main([

@@ -90,9 +90,10 @@ final class OCRManager {
         guard !isRunning(eventID) else { return }
         guard let ev = appState.events.first(where: { $0.id == eventID }),
               let stored = ev.ocrResult,
-              let pages = OCRRescan.pages(for: stored) else { return }
+              let pages = OCRRescan.pages(for: stored,
+                                          in: ev.programImagePaths) else { return }
 
-        if let refusal = OCRRescan.refusal(forPages: pages) {
+        if let refusal = OCRRescan.refusal(forPages: pages.map(\.path)) {
             refusals[eventID] = refusal
             return
         }
@@ -128,7 +129,7 @@ final class OCRManager {
     /// programme that was read and paid for with the two pages it happened to
     /// read (#518).
     struct Rescan {
-        let pages: [String]
+        let pages: [OCRRescan.Page]
         let previous: OCRResult
     }
 
@@ -137,11 +138,16 @@ final class OCRManager {
         // The live event, not the snapshot, for the same reason the paths are
         // read live: OCR takes minutes and an edit can land during it.
         let liveEvent = appState.events.first(where: { $0.id == eventID }) ?? ev
-        let livePaths = rescan.map { $0.pages.map { URL(fileURLWithPath: $0) } }
+        let livePaths = rescan.map { $0.pages.map { URL(fileURLWithPath: $0.path) } }
             ?? liveEvent.programImagePaths
+        // Which page of the programme each of those is, so the merge can strike
+        // the right one off after the images have moved (#558). Nil for a full
+        // scan, which is numbered 1..N by Python itself.
+        let pageNumbers = rescan.flatMap { OCRRescan.pageNumbers(of: $0.pages) }
 
         do {
             var result = try await PythonBridge.shared.runOCR(imagePaths: livePaths,
+                                                              pageNumbers: pageNumbers,
                                                               eventID: eventID,
                                                               mergeInto: rescan?.previous)
 
