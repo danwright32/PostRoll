@@ -1,0 +1,8 @@
+{
+  "name": "handle-matches-its-profile",
+  "file": "postroll/ai/enrich_program.py",
+  "find": "        if not handle_matches_profile(handle, profile_url):",
+  "replace": "        if False:",
+  "test": "tests/test_enrich_step_attribution.py::test_a_mismatched_suggestion_is_dropped_rather_than_shown_as_coherent",
+  "breaks": "a suggested handle and a profile link naming different people reach Dan as one coherent suggestion with a verify link that goes somewhere else (#481)"
+}

@@ -23,6 +23,28 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+#: Dan's own tag. The one hashtag every post carries whatever the programme is,
+#: because it is how his work is found under his name (#478).
+BRAND_HASHTAG = "#dwphotony"
+
+
+def ensure_brand_hashtag(hashtags: list[str]) -> list[str]:
+    """`hashtags` with the brand tag present, first.
+
+    The prompt says ALWAYS include it, twice, and nothing checked. This module
+    only ever REMOVES tags, so a list that came back without it shipped as it
+    was, and a rule that lives only in a prompt is a hope (L27).
+
+    Matched case-insensitively and with or without the hash, because the model
+    writes it both ways and adding a second copy is its own defect.
+    """
+    wanted = BRAND_HASHTAG.lstrip("#").lower()
+    for tag in hashtags:
+        if str(tag).strip().lstrip("#").lower() == wanted:
+            return hashtags
+    return [BRAND_HASHTAG] + list(hashtags)
+
+
 #: Roles whose names must not become hashtags unless the person is famous.
 GATED_ROLES = frozenset({
     "soloist", "conductor", "ensemble", "actor", "dancer", "band_member",

@@ -1,0 +1,8 @@
+{
+  "name": "brand-hashtag-put-back",
+  "file": "postroll/ai/performer_hashtags.py",
+  "find": "    return [BRAND_HASHTAG] + list(hashtags)",
+  "replace": "    return list(hashtags)",
+  "test": "tests/test_brand_hashtag_survives.py::test_a_list_that_lost_the_brand_tag_gets_it_back",
+  "breaks": "a caption pass that dropped #dwphotony ships without it, so the post is not findable under Dan's own tag (#478)"
+}

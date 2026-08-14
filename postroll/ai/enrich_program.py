@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -406,6 +407,35 @@ def _normalise_performers(data: list) -> list[dict]:
     return out
 
 
+_PROFILE_URL = re.compile(
+    r"^https?://(?:www\.)?instagram\.com/([A-Za-z0-9._]+)/?(?:\?.*)?$", re.IGNORECASE
+)
+
+
+def handle_matches_profile(handle: str | None, profile_url: str | None) -> bool:
+    """Whether a suggested handle and the profile URL beside it name the same
+    account (#481).
+
+    The suggestion prompt asserts a verification step and grants high
+    confidence on the model's claim to have performed it, which is a rule
+    living only in a prompt (L27, L28). The one deterministic check available
+    is free: these two fields come back side by side, and a pair naming
+    different people normalised cleanly and reached Dan as one coherent
+    suggestion with a verify link that goes somewhere else.
+
+    No URL is not a mismatch. There is nothing to contradict the handle, and
+    treating absence as a failure would throw away every suggestion the model
+    did not link. A URL that is not a profile link (a post, a search) cannot
+    confirm anything either, so it does not get to stand in for verification.
+    """
+    if not handle or not profile_url:
+        return True
+    match = _PROFILE_URL.match(profile_url.strip())
+    if not match:
+        return False
+    return match.group(1).lower() == handle.strip().lstrip("@").lower()
+
+
 def _normalise_handle_suggestions(data: list) -> list[dict]:
     """Suggested social handles, keyed by the name they were searched for.
 
@@ -421,10 +451,20 @@ def _normalise_handle_suggestions(data: list) -> list[dict]:
         name = _clean(raw.get("name"))
         if not name:
             continue
+        handle = _clean(raw.get("handle"))
+        profile_url = _clean(raw.get("profile_url"))
+        # A handle and a link to somebody else is not a suggestion with a
+        # detail wrong, it is two answers that cannot both be right, and
+        # nothing downstream could tell (#481).
+        if not handle_matches_profile(handle, profile_url):
+            print(f"warning: dropped a handle suggestion for {name}: {handle} does not "
+                  f"match the profile it was given, {profile_url}.",
+                  file=sys.stderr, flush=True)
+            continue
         out.append({
             "name":        name,
-            "handle":      _clean(raw.get("handle")),
-            "profile_url": _clean(raw.get("profile_url")),
+            "handle":      handle,
+            "profile_url": profile_url,
             # Low, not high: an unstated confidence is not a confident answer,
             # and defaulting the other way presents a guess as verified.
             "confidence":  _clean(raw.get("confidence")) or "low",
@@ -568,7 +608,7 @@ def suggest_handles(
         prompt,
         timeout=600,
         allowed_tools=["WebSearch", "WebFetch"],
-        step="enrich:piece_notes",
+        step="enrich:handles",
     )
     # Claude sometimes wraps the array in an object — unwrap it
     if isinstance(data, dict):
@@ -668,7 +708,7 @@ def fetch_piece_notes(
         prompt,
         timeout=600,
         allowed_tools=["WebSearch", "WebFetch"],
-        step="enrich:handles",
+        step="enrich:piece_notes",
     )
     # Unwrap if Claude wrapped the array in an object
     if isinstance(data, dict):

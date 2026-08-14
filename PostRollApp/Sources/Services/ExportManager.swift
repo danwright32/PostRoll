@@ -166,8 +166,15 @@ final class ExportManager {
         // returning accounts are venue or org handles, so the book was keeping
         // exactly the one-offs and missing everyone who comes back.
         let exportedAt = Date()
-        AccountBook.shared.noteTagged(handles: CaptionBlocks.accountsTagged(event: capturedEvent),
-                                      on: exportedAt)
+        // Worked out now, because it reads the event as it stands at the start
+        // of the run, and WRITTEN only once the export has committed (#483).
+        //
+        // The book used to be stamped here. A failed export never rolled it
+        // back, so the book recorded tags that never shipped, and the
+        // recurring-account freshness stats it feeds were reading from a
+        // non-event. Record intent, confirm after the effect verifiably
+        // happened (L33), and here the confirmation IS the record.
+        let handlesToNote = CaptionBlocks.accountsTagged(event: capturedEvent)
         // Copied once rather than reached into from the detached task below:
         // the book is main-actor state (#278).
         let accountStats = AccountBook.shared.snapshot()
@@ -390,6 +397,7 @@ final class ExportManager {
                           daysNeedingPython: daysNeedingPython,
                           mediaError: errorWithSwap.isEmpty ? nil : errorWithSwap,
                           mediaWarning: combinedWarning.isEmpty ? nil : combinedWarning,
+                          taggedHandles: handlesToNote, taggedOn: exportedAt,
                           appState: appState)
         } catch is CancellationError {
             // Cancelled (skipMedia handles its own terminal state).
@@ -408,7 +416,14 @@ final class ExportManager {
     private func finishSuccess(eventID: Event.ID, folder: URL, onlyDay: DayName?,
                                daysNeedingPython: [String], mediaError: String?,
                                mediaWarning: String? = nil,
+                               taggedHandles: [String] = [], taggedOn: Date = Date(),
                                appState: AppState) {
+        // The export committed, so the tags genuinely shipped and the book can
+        // say so (#483). Stamped with when the run started rather than now, so
+        // the record is about the export rather than about the bookkeeping.
+        if !taggedHandles.isEmpty {
+            AccountBook.shared.noteTagged(handles: taggedHandles, on: taggedOn)
+        }
         // Only learn from full copy-only runs so the mean stays a clean signal
         // for the common fast path.
         if onlyDay == nil && daysNeedingPython.isEmpty {
