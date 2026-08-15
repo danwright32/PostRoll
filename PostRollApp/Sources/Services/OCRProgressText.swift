@@ -28,6 +28,41 @@ enum OCRProgressText {
         return step.display
     }
 
+    /// The guess, tied to elapsed seconds, last matching entry winning.
+    private static let phases: [(from: Int, label: String)] = [
+        (0,  "Converting program pages…"),
+        (5,  "Sending to Claude…"),
+        (10, "Reading the program…"),
+        (18, "Extracting performers…"),
+        (25, "Gathering program notes…"),
+        (32, "Analyzing context…"),
+        (40, "Almost there…"),
+    ]
+
+    /// What the screen says before the run has reported a step of its own.
+    ///
+    /// The thresholds scale to the estimated duration so the labels track how
+    /// long reads on this Mac actually take, rather than a shape chosen once.
+    ///
+    /// Here rather than inside the view (#607) so that the render check drawing
+    /// this screen shows the string the app shows. A phase table only the view
+    /// could reach would have left that check picking its own words, which is a
+    /// picture of a screen the app never draws (L48).
+    static func elapsedPhase(elapsedSeconds: Int, estimate: TimeInterval?) -> String {
+        let scaled: [(from: Int, label: String)] = {
+            guard let estimate else { return phases }
+            let base = Double(phases.last?.from ?? 40)
+            let scale = estimate / base
+            return phases.map { (Int((Double($0.from) * scale).rounded()), $0.label) }
+        }()
+        return scaled.last { $0.from <= elapsedSeconds }?.label ?? phases[0].label
+    }
+
+    /// The elapsed timer under the phase label.
+    static func elapsed(seconds: Int) -> String {
+        String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
     static func footer(status: LongRunStatus, estimate: TimeInterval?,
                        formattedEstimate: String?) -> Footer {
         switch status {
