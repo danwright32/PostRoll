@@ -1,0 +1,8 @@
+{
+  "name": "stage-pill-draws-its-label",
+  "file": "PostRollApp/Sources/Views/EventListView.swift",
+  "find": "            Text(state.label)",
+  "replace": "            Text(\"\")",
+  "test": "PostRollTests/HostedControlLegibilityTests/testEveryStagePillDrawsItsLabel",
+  "breaks": "the pill draws its wash and no word, which every ratio in PaintedSurfaces still passes because a ratio is between two colours and cannot see whether the label reached the screen (#592)"
+}

@@ -46,6 +46,18 @@ enum StagePillState: Equatable {
         }
     }
 
+    /// Which state the pill is in, from the event and the live work.
+    ///
+    /// - Parameter awaitingGeneration: `stage` has advanced to
+    ///   `.assetsGenerated` purely to open the generation screen, with no
+    ///   assets yet (`weekResult == nil`). The `stage` field doubles as a
+    ///   navigation router, so it flips the moment "Continue to Generation" is
+    ///   pressed; without this the pill would claim "Assets Generated" before
+    ///   anything was generated.
+    /// - Parameter awaitingExport: `stage` is `.exported` while the export has
+    ///   not run (no `exportPath` or `archivedAt`). The same guard for the same
+    ///   reason: opening the Export screen must not make the pill claim the
+    ///   folder is written.
     static func resolve(stage: EventStage,
                         isGenerating: Bool,
                         generationFailed: Bool,

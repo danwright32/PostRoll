@@ -270,7 +270,14 @@ struct EventListView: View {
 
 // MARK: - Event Row
 
-private struct EventRow: View {
+/// One row of the sidebar list.
+///
+/// Not private, so the legibility job can render the real row rather than a
+/// stand-in built to look like it (#592). It is the screen Dan spends the most
+/// time on and nothing had ever drawn one: #582 and #587 changed the colour of
+/// every stage pill on it, and a ratio cannot see a label that is clipped,
+/// behind its own capsule, or not rendering at all.
+struct EventRow: View {
     let event: Event
     let isSelected: Bool
     var isRenaming: Bool = false
@@ -338,15 +345,19 @@ private struct EventRow: View {
                     .accessibilityHidden(true)
                 Text(event.shootType.rawValue)
                 Spacer()
-                StagePill(stage: event.stage,
-                          awaitingGeneration: event.isAwaitingGeneration,
-                          awaitingExport: event.isAwaitingExport,
-                          isGenerating: genManager.isRunning(event.id),
-                          generationFailed: genManager.hasFailed(event.id),
-                          isReading: ocrManager.isRunning(event.id),
-                          readingFailed: ocrManager.hasFailed(event.id),
-                          isExporting: exportManager.isExporting(event.id),
-                          isFinishingMedia: exportManager.isFinishingMedia(event.id),
+                // Resolved here, where the managers are, and drawn there. The
+                // precedence between live work, a failure and the static stage
+                // is a pure function with its own tests (#592).
+                StagePill(state: StagePillState.resolve(
+                              stage: event.stage,
+                              isGenerating: genManager.isRunning(event.id),
+                              generationFailed: genManager.hasFailed(event.id),
+                              isReading: ocrManager.isRunning(event.id),
+                              readingFailed: ocrManager.hasFailed(event.id),
+                              isExporting: exportManager.isExporting(event.id),
+                              isFinishingMedia: exportManager.isFinishingMedia(event.id),
+                              awaitingGeneration: event.isAwaitingGeneration,
+                              awaitingExport: event.isAwaitingExport),
                           isSelected: isSelected)
             }
             .font(.system(size: 10))
@@ -368,43 +379,21 @@ private struct EventRow: View {
 // MARK: - Stage Pill
 
 struct StagePill: View {
-    let stage: EventStage
-    /// True when `stage` has advanced to `.assetsGenerated` purely to open the
-    /// generation screen, but no assets exist yet (`weekResult == nil`). The
-    /// `stage` field doubles as a navigation router, so it flips the moment the
-    /// user hits "Continue to Generation"; without this guard the pill would
-    /// claim "Assets Generated" before anything is generated.
-    var awaitingGeneration: Bool = false
-    /// True when `stage` is `.exported` but the export hasn't actually run yet
-    /// (no `exportPath`/`archivedAt`). Like `awaitingGeneration`, this keeps the
-    /// pill from claiming "Exported" the instant the user opens the Export screen.
-    var awaitingExport: Bool = false
-    /// Background work in flight for this event — possibly while the user is off
-    /// working on a different event. These override the static stage labels.
-    var isGenerating: Bool = false
-    var generationFailed: Bool = false
-    var isReading: Bool = false
-    var readingFailed: Bool = false
-    var isExporting: Bool = false
-    var isFinishingMedia: Bool = false
+
+    /// What the pill announces, already resolved.
+    ///
+    /// The nine flags this used to take were resolved inside the view, so the
+    /// only way to draw a given state was to work out which combination of
+    /// flags produced it, and a test would have been holding a second copy of
+    /// the precedence rule (L107). The rule is a pure function with its own
+    /// tests; the row that has the managers calls it, and this draws the answer.
+    /// That is what lets the legibility job render every state the pill can be
+    /// in rather than the ones somebody could reconstruct (#592).
+    let state: StagePillState
     var isSelected: Bool = false
 
     /// Subtle alive-signal pulse while any background work runs.
     @State private var pulse = false
-
-    private var state: StagePillState {
-        StagePillState.resolve(
-            stage: stage,
-            isGenerating: isGenerating,
-            generationFailed: generationFailed,
-            isReading: isReading,
-            readingFailed: readingFailed,
-            isExporting: isExporting,
-            isFinishingMedia: isFinishingMedia,
-            awaitingGeneration: awaitingGeneration,
-            awaitingExport: awaitingExport
-        )
-    }
 
     /// The wash behind the pill and the ink on it, from the one place that
     /// decides both (#582). The switch that used to live here returned a single
