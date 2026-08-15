@@ -2,6 +2,42 @@ import XCTest
 import SwiftUI
 import AppKit
 
+/// One row of the sidebar, assembled the way `EventListView` assembles it
+/// (#592): the shipping row, over the shipping background, with the insets the
+/// list gives it.
+///
+/// A view rather than an expression in the test because the background needs a
+/// `Namespace` and the hover object, which is what the list holds for it. Both
+/// halves are the app's own, so a change to either moves what is measured here
+/// rather than leaving this drawing a picture of a list that has moved on.
+@MainActor
+private struct EventListRowPreview: View {
+    let event: Event
+    let isSelected: Bool
+
+    @Namespace private var selectionNamespace
+    /// Nobody is pointing at a rendered row, which is the state every row but
+    /// one is in at any moment.
+    private let hover = EventListHover()
+
+    /// The row with its words, or the same row's chrome with nothing in it.
+    ///
+    /// One view drawing both, so what the words are measured against is this
+    /// row's own background rather than a second copy of it built here (L70).
+    var wordless = false
+
+    var body: some View {
+        EventRow(event: event, isSelected: isSelected, renameText: .constant(""))
+            .opacity(wordless ? 0 : 1)
+            .padding(.horizontal, Spacing.rowInset)
+            .padding(.vertical, Spacing.rowV)
+            .background(EventRowBackground(eventID: event.id,
+                                           isSelected: isSelected,
+                                           hover: hover,
+                                           selectionNamespace: selectionNamespace))
+    }
+}
+
 /// #404: the two controls `BannerLegibilityTests` cannot draw.
 ///
 /// `ImageRenderer` has no AppKit host, so `Menu` and `ProgressView` come out as a
@@ -10,6 +46,14 @@ import AppKit
 /// every check over there while showing no words. Two things Dan interacts with
 /// were therefore unverifiable, and one of them matters more than it sounds: the
 /// spinner in the caption review bar is what stops him exporting a stale file.
+///
+/// A third thing it cannot draw turned up here (#592): the TEXT of any view
+/// carrying a repeating animation. The stage pill starts one in `onAppear` while
+/// a run is in flight, and through `ImageRenderer` the four busy pills come out
+/// as an empty capsule with the pulsing dot and no word on it, while the same
+/// pill hosted through AppKit reads "Generating…" perfectly. Measured both ways
+/// below, because the difference is a property of the renderers and not of the
+/// app.
 ///
 /// These render through a real `NSHostingView` instead, which lays out and draws
 /// the actual AppKit controls.
@@ -167,6 +211,239 @@ final class HostedControlLegibilityTests: XCTestCase {
                 see is not on the page.
                 """)
         }
+    }
+
+    // MARK: - The event list, drawn at last (#592)
+
+    /// A show a week out, with a program uploaded and nothing generated yet.
+    ///
+    /// A pinned date rather than `Date()`: this row is rendered and measured,
+    /// and a fixture whose date moves with the clock is a picture of a
+    /// different row every day (L130).
+    private var sampleEvent: Event {
+        Event(name: "Spring Gala", org: "City Ballet", venue: "City Center",
+              date: Date(timeIntervalSince1970: 1_775_000_000), shootType: .fullShow)
+    }
+
+    /// The widths the sidebar can actually be, from the one place that sets
+    /// them (`MainWindowView` opens the column at min 230, ideal 265). A row
+    /// measured at the 520pt a detail pane gets would be a picture of a
+    /// column this app never draws.
+    private static let sidebarWidths: [(name: String, width: CGFloat)] =
+        [("at its narrowest", 230), ("at its usual width", 265)]
+
+    /// One row, at a column width, on the background the list gives it.
+    ///
+    /// Not through `render` above: that one puts the view on a cream page with
+    /// a margin around it, which is what a notice in the detail pane sits on
+    /// and is nothing like a sidebar row. The list's background is `deepPage`
+    /// and the row fills the column, so a cream margin here would be a colour
+    /// the screen does not have, and on a selected row it differs from the
+    /// selection fill by just over the threshold, which put a band of it into
+    /// the measurement as though it were type.
+    private func renderRow(isSelected: Bool,
+                           width: CGFloat,
+                           wordless: Bool) throws -> NSBitmapImageRep {
+        let row = EventListRowPreview(event: sampleEvent,
+                                      isSelected: isSelected,
+                                      wordless: wordless)
+            .environment(GenerationManager())
+            .environment(OCRManager())
+            .environment(ExportManager())
+            .background(PaintedSurfaces.deepPage)
+            .frame(width: width)
+
+        let host = NSHostingView(rootView: row)
+        host.frame = NSRect(x: 0, y: 0, width: width, height: host.fittingSize.height)
+        host.layoutSubtreeIfNeeded()
+
+        XCTAssertGreaterThan(host.frame.height, 30,
+                             "the row laid out \(host.frame.height)pt tall, which is "
+                             + "not a row; the measurement would be of nothing")
+        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
+                                "AppKit produced no bitmap for the row")
+        host.cacheDisplay(in: host.bounds, to: rep)
+        return rep
+    }
+
+    /// One row of the list, drawn.
+    ///
+    /// The whole point of #592: `PaintedSurfaces` holds every colour on this
+    /// row against the colour behind it, and a ratio cannot see a word that is
+    /// clipped, drawn behind something else, or not on the page at all. This is
+    /// the screen Dan spends the most time on and nothing had ever rendered it.
+    ///
+    /// Measured against the SAME ROW WITH NO WORDS IN IT, not against a fixed
+    /// floor. A selected row paints a rose gold spine and a warm fill of its
+    /// own, and those are marks on the page whatever the type does: the first
+    /// version of this used the flat threshold and a row with every word
+    /// switched off still cleared it on its spine alone, which is L141 in the
+    /// one place this file exists to catch it.
+    func testTheEventRowDrawsItsWordsAtEveryWidthTheSidebarHas() throws {
+        for (where_, width) in Self.sidebarWidths {
+            for isSelected in [false, true] {
+                let state = isSelected ? "selected" : "at rest"
+
+                let words = inkCoverage(try renderRow(isSelected: isSelected,
+                                                     width: width, wordless: false))
+                let chrome = inkCoverage(try renderRow(isSelected: isSelected,
+                                                       width: width, wordless: true))
+                print(String(format: "  %.4f words, %.4f chrome   row %@, %@",
+                             words, chrome, state, where_))
+
+                XCTAssertGreaterThan(words, Self.legibleInk, """
+                    A row \(state), \(where_) (\(Int(width))pt), rendered almost \
+                    nothing but its own background \
+                    (\(String(format: "%.4f", words))). The name, the organisation, \
+                    the date and the stage are in the view tree and are not on the \
+                    screen.
+                    """)
+                XCTAssertGreaterThan(words, chrome * 3, """
+                    A row \(state), \(where_), measures \
+                    \(String(format: "%.4f", words)) with its words and \
+                    \(String(format: "%.4f", chrome)) with every one of them switched \
+                    off. The words have to be worth far more ink than the fill and \
+                    the spine the row paints for itself, or this check is reading the \
+                    decoration and would pass on a row showing nothing.
+                    """)
+            }
+        }
+    }
+
+    /// One pill, at its own size, on the row behind it.
+    ///
+    /// No page around it: the image IS the pill, so the only things that can put
+    /// ink on its wash are its label and its busy dot. Measured inside a whole
+    /// row instead, a pill is a few dozen pixels of a page full of type and a
+    /// label that stopped drawing would move the number by less than the
+    /// difference between one stage's wording and another's.
+    private func renderPill(_ state: StagePillState,
+                            isSelected: Bool) throws -> NSBitmapImageRep {
+        let row = isSelected ? PaintedSurfaces.eventRowSelected
+                             : PaintedSurfaces.eventRowAtRest
+        let host = NSHostingView(rootView: StagePill(state: state, isSelected: isSelected)
+            .background(row))
+        host.frame = NSRect(origin: .zero, size: host.fittingSize)
+        host.layoutSubtreeIfNeeded()
+
+        XCTAssertGreaterThan(host.frame.width, 20,
+                             "the \(state) pill laid out at \(host.frame.width)pt wide, "
+                             + "which is not a pill; the measurement below would be of "
+                             + "nothing")
+        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
+                                "AppKit produced no bitmap for the \(state) pill")
+        host.cacheDisplay(in: host.bounds, to: rep)
+        return rep
+    }
+
+    /// Every state the pill can be in, drawn, on both of the rows it sits on.
+    ///
+    /// Per state rather than one sample of the family, for the reason the pair
+    /// walk is: each state is its own wording on its own wash. Taken from
+    /// `allPillStates` rather than a list here, so an eighth stage cannot
+    /// arrive with nobody drawing it (L113).
+    func testEveryStagePillDrawsItsLabel() throws {
+        var measured: [(String, Double)] = []
+        for state in StagePillState.allPillStates {
+            for isSelected in [false, true] {
+                let where_ = isSelected ? "selected" : "at rest"
+                let coverage = inkCoverage(try renderPill(state, isSelected: isSelected))
+                measured.append(("\(state), row \(where_)", coverage))
+
+                XCTAssertGreaterThan(coverage, Self.legibleInk, """
+                    The \(state) pill on a row \(where_) rendered almost nothing but \
+                    its own wash (\(String(format: "%.4f", coverage)) of pixels \
+                    differ), so its label is in the view tree and not on the screen.
+                    """)
+            }
+        }
+        for (name, coverage) in measured.sorted(by: { $0.1 < $1.1 }) {
+            print(String(format: "  %.4f  %@", coverage, name))
+        }
+    }
+
+    /// The pill measurement can fail, or the walk above is decoration (L1).
+    ///
+    /// A capsule whose label is drawn in its own wash is the defect in bare
+    /// form, and it is the one the ratio walk exists for. Proving the picture
+    /// can see it too is what makes the two checks independent rather than one
+    /// check counted twice.
+    func testThePillMeasurementTellsALabelFromAnEmptyCapsule() throws {
+        let pill = PaintedSurfaces.stagePill(.awaitingExport)
+        func capsule(_ ink: Color) -> some View {
+            Text(StagePillState.awaitingExport.label)
+                .font(.system(size: 10, weight: .medium))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(pill.wash)
+                .foregroundStyle(ink)
+                .clipShape(Capsule())
+                .background(PaintedSurfaces.eventRowAtRest)
+        }
+
+        let invisible = inkCoverage(try hostedAtItsOwnSize(capsule(
+            pill.wash.composited(over: PaintedSurfaces.eventRowAtRest))))
+        let legible = inkCoverage(try hostedAtItsOwnSize(capsule(pill.ink)))
+
+        XCTAssertLessThan(invisible, Self.legibleInk, """
+            A pill label drawn in the colour of its own wash measured \
+            \(String(format: "%.4f", invisible)), above the threshold the walk above \
+            uses, so that walk would pass on a pill showing no words.
+            """)
+        XCTAssertGreaterThan(legible, invisible * 10,
+                             "the same label in its real ink has to measure as far more "
+                             + "ink, or the pill render is not reading the type at all")
+    }
+
+    /// What ImageRenderer does to a view that is animating, measured (#592).
+    ///
+    /// The stage pill starts a `repeatForever` pulse in `onAppear` while a run
+    /// is in flight. Through `ImageRenderer` that pill loses its LABEL: the
+    /// capsule and the pulsing dot are drawn and the word is not, which is why
+    /// the pills are rendered in this file rather than beside the notices.
+    ///
+    /// Recorded as a measurement rather than a note, for the reason
+    /// `testInkCannotJudgeASpinnerInEitherRenderer` is: if the renderer ever
+    /// learns to draw these, the reasoning here needs redoing, and nothing else
+    /// would say so.
+    func testImageRendererLosesTheLabelOfAnAnimatingPill() throws {
+        let hosted = inkCoverage(try renderPill(.generating, isSelected: false))
+
+        let imageRendered: Double = try {
+            let renderer = ImageRenderer(content: ZStack {
+                PaintedSurfaces.eventRowAtRest
+                StagePill(state: .generating)
+            })
+            renderer.scale = 2
+            let image = try XCTUnwrap(renderer.nsImage)
+            let tiff = try XCTUnwrap(image.tiffRepresentation)
+            return inkCoverage(try XCTUnwrap(NSBitmapImageRep(data: tiff)))
+        }()
+
+        print(String(format: "  busy pill ink: AppKit %.4f, ImageRenderer %.4f",
+                     hosted, imageRendered))
+
+        XCTAssertGreaterThan(hosted, imageRendered * 3, """
+            A hosted busy pill measured \(String(format: "%.4f", hosted)) and the same \
+            pill through ImageRenderer \(String(format: "%.4f", imageRendered)). The \
+            hosted one is meant to be far the bolder, because ImageRenderer draws the \
+            capsule and the dot and drops the word. If these have converged, \
+            ImageRenderer has learned to draw an animating view and the pills can be \
+            measured beside the notices again.
+            """)
+        XCTAssertGreaterThan(hosted, Self.legibleInk,
+                             "the hosted busy pill has to draw its label, or this "
+                             + "comparison is between two blank images")
+    }
+
+    /// A view rendered at exactly the size it asks for.
+    private func hostedAtItsOwnSize(_ view: some View) throws -> NSBitmapImageRep {
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(origin: .zero, size: host.fittingSize)
+        host.layoutSubtreeIfNeeded()
+        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: rep)
+        return rep
     }
 
     // MARK: - Fits, rather than merely inks

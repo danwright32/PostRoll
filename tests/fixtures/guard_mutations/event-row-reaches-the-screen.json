@@ -1,0 +1,8 @@
+{
+  "name": "event-row-reaches-the-screen",
+  "file": "PostRollApp/Sources/Views/EventListView.swift",
+  "find": "        .padding(.vertical, 5)",
+  "replace": "        .opacity(0)",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheEventRowDrawsItsWordsAtEveryWidthTheSidebarHas",
+  "breaks": "the row keeps every word in the view tree and puts none of them on the screen, which is the failure the ink measurement exists for and the one no contrast ratio can report (#592)"
+}
