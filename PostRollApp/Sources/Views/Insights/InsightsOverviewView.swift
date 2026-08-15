@@ -76,7 +76,7 @@ struct InsightsOverviewView: View {
                 if let summary = importSummary {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Color(red: 110/255, green: 140/255, blue: 110/255))
+                            .foregroundStyle(PaintedSurfaces.insightConfidenceHigh)
                         Text(summary)
                             .font(.light(12))
                             .foregroundStyle(Color.warmDark)
@@ -406,7 +406,7 @@ private struct FindingRow: View {
         switch finding.confidence {
         case .low:    return Color.warmMid
         case .medium: return Color.roseGold
-        case .high:   return Color(red: 110/255, green: 140/255, blue: 110/255)
+        case .high:   return PaintedSurfaces.insightConfidenceHigh
         }
     }
 

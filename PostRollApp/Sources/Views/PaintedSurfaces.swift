@@ -452,9 +452,60 @@ enum PaintedSurfaces {
     /// thing's own rules. Named for the same reason `mastheadWordmark` is: so
     /// the exemption is a decision somebody made rather than a gap the check
     /// cannot see (L129).
+    ///
+    /// The whole mock is here now, not just the three that happened to be
+    /// written as `Color.<token>` (#600). The other thirteen were built from
+    /// literal components, which is a spelling the unnamed fill rule cannot
+    /// see, so they were exempt by accident rather than by the decision above.
+    /// That is the difference this block is about: `instagramCard` was chosen
+    /// to be exempt and `Color(white: 0.45)` simply was not looked at.
     static let instagramCard = Color.white
     static let instagramAvatarRing = Color.white
     static let instagramOverlayButton = Color.white.opacity(0.92)
+    /// The story ring around the avatar.
+    static let instagramRingWarm = Color(red: 1.0, green: 0.78, blue: 0.22)
+    static let instagramRingPink = Color(red: 0.98, green: 0.28, blue: 0.50)
+    static let instagramRingViolet = Color(red: 0.62, green: 0.18, blue: 0.82)
+    /// Its greys, in the shades Instagram uses them: the audio line under the
+    /// handle, the glyphs, the placeholder square and the photo mark on it, the
+    /// caption placeholder, the comments line, the date, and the card's edge.
+    static let instagramSecondaryText = Color(white: 0.45)
+    static let instagramGlyph = Color(white: 0.2)
+    static let instagramPlaceholder = Color(white: 0.92)
+    static let instagramPlaceholderMark = Color(white: 0.7)
+    static let instagramCaptionPlaceholder = Color(white: 0.65)
+    static let instagramCommentsLine = Color(white: 0.55)
+    static let instagramDate = Color(white: 0.6)
+    static let instagramCardEdge = Color(white: 0.82)
+    /// Instagram's link blue, which is the one colour on this card that is not
+    /// this app's to choose at all.
+    static let instagramLink = Color(red: 0.07, green: 0.31, blue: 0.78)
+
+    /// A rating this app is confident about, drawn as a dot and as a tick.
+    ///
+    /// A mark rather than words, so 3:1 is its level and it measures 3.57:1 on
+    /// the page. Named because it was written from literal components at two
+    /// call sites, where nothing could say which of those two levels applied
+    /// (#600). It satisfies the palette's warm rule exactly, R equal to B.
+    static let insightConfidenceHigh = Color(red: 110/255, green: 140/255, blue: 110/255)
+
+    /// The caption findings badge and the panel under it, in both states (#600).
+    ///
+    /// One place decides the wash and the ink, the shape #582 gave the stage
+    /// pill and for the same reason: this drew its count in the colour of its
+    /// own wash, chosen by a ternary at the point of use, which is a spelling
+    /// the unnamed fill rule cannot see either. Measured, the stale badge was
+    /// `warmMid` on a 12% `warmMid` wash at 4.35:1, under the 4.5:1 its 10pt
+    /// count needs, so the stale ink is carried down the way the pills' were.
+    /// The fresh one measured 5.56:1 and is unchanged.
+    static func captionFindings(stale: Bool)
+    -> (badge: Color, panel: Color, border: Color, ink: Color) {
+        let hue = stale ? Color.warmMid : Color.roseDeep
+        return (badge: hue.opacity(0.12),
+                panel: hue.opacity(0.07),
+                border: hue.opacity(0.45),
+                ink: stale ? Color.warmDark.opacity(0.8) : Color.roseDeep)
+    }
 
     /// The wash the pill draws behind its label, and the ink on it, for one
     /// state (#582).
@@ -577,6 +628,19 @@ enum PaintedSurfaces {
         "instagramCard": instagramCard,
         "instagramAvatarRing": instagramAvatarRing,
         "instagramOverlayButton": instagramOverlayButton,
+        "instagramRingWarm": instagramRingWarm,
+        "instagramRingPink": instagramRingPink,
+        "instagramRingViolet": instagramRingViolet,
+        "instagramSecondaryText": instagramSecondaryText,
+        "instagramGlyph": instagramGlyph,
+        "instagramPlaceholder": instagramPlaceholder,
+        "instagramPlaceholderMark": instagramPlaceholderMark,
+        "instagramCaptionPlaceholder": instagramCaptionPlaceholder,
+        "instagramCommentsLine": instagramCommentsLine,
+        "instagramDate": instagramDate,
+        "instagramCardEdge": instagramCardEdge,
+        "instagramLink": instagramLink,
+        "insightConfidenceHigh": insightConfidenceHigh,
         "dividerRule": dividerRule,
         "photoPlaceholder": photoPlaceholder,
         "photoPlaceholderSpinner": photoPlaceholderSpinner,
@@ -756,6 +820,22 @@ enum PaintedSurfaces {
                           lightboxCloseIcon,
                           on: lightboxCloseIconDisc.composited(over: backdrop),
                           .interfaceElement))
+
+        // The caption findings badge and its panel, in both states (#600).
+        for stale in [false, true] {
+            let findings = captionFindings(stale: stale)
+            let state = stale ? "stale" : "fresh"
+            pairs.append(Pair("caption findings badge, \(state)", "count",
+                              findings.ink, on: findings.badge.composited(over: page),
+                              .bodyText))
+            pairs.append(Pair("caption findings panel, \(state)", "sentence",
+                              findings.ink, on: findings.panel.composited(over: page),
+                              .bodyText))
+        }
+
+        // A confident rating, as the dot and the tick it is drawn as.
+        pairs.append(Pair("insight confidence", "high",
+                          insightConfidenceHigh, on: page, .interfaceElement))
 
         // The divider handle, in both of its states, over the worst a photo can
         // be underneath it.
