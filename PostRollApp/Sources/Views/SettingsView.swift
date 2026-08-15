@@ -32,7 +32,7 @@ struct SettingsView: View {
 
                 if let warning = KeychainStore.formatWarning(for: apiKey) {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(PaintedSurfaces.stateWarningText)
                         .font(.system(size: 11))
                         .frame(width: 380, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -78,14 +78,14 @@ struct SettingsView: View {
 
                     if saved {
                         Label("Saved", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(PaintedSurfaces.stateSuccessText)
                             .font(.system(size: 13))
                     }
                 }
 
                 if let saveError {
                     Label(saveError, systemImage: "xmark.octagon.fill")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(PaintedSurfaces.stateErrorText)
                         .font(.system(size: 11))
                         .frame(width: 380, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)

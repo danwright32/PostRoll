@@ -391,11 +391,58 @@ enum PaintedSurfaces {
     static let missingPhotoIcon = Color.roseGold
     static let missingPhotoLabel = Color.warmDark.opacity(0.8)
 
-    /// The backdrop behind a photo opened at full size. Deliberately not a
-    /// pair: the photograph is drawn on top of it and nothing else is, so
-    /// there are no words to read against it. Named so it cannot be mistaken
-    /// for the scrim above, which does carry a label.
+    /// The backdrop behind a photo opened at full size.
+    ///
+    /// It DOES carry words after all: when the file has gone, the lightbox says
+    /// so on this backdrop rather than showing a photo, and those three lines
+    /// were white at three different strengths written at the point of use, in
+    /// two files, with nothing measuring any of them (#598).
     static let lightboxBackdrop = Color.black.opacity(0.78)
+    static let lightboxLabel = Color.white.opacity(0.85)
+    /// The file name under it, quieter on purpose.
+    static let lightboxDetail = Color.white.opacity(0.6)
+    /// The close button, a two tone symbol: the mark and the disc behind it.
+    static let lightboxCloseIcon = Color.white.opacity(0.9)
+    static let lightboxCloseIconDisc = Color.warmDark.opacity(0.5)
+
+    // MARK: - The dark surfaces the previews sit on (#598)
+
+    /// The panel a story or reel preview is drawn on.
+    ///
+    /// Near black on purpose: a phone story is a bright thing and the panel is
+    /// what stops the page glowing around it. It was written as literal colour
+    /// components at two call sites, which is a third way past the rule that a
+    /// painted fill must be named: `testEveryPaintedFileDrawsFromTheNamedColours`
+    /// recognises `Color.<token>`, and a colour built from numbers is not that,
+    /// so it read as no fill at all.
+    static let storyPanel = Color(red: 0.10, green: 0.09, blue: 0.08)
+    static let storyPanelLabel = Color.white.opacity(0.85)
+    static let storyPanelDetail = Color.white.opacity(0.8)
+
+    /// The handle on a collage divider, and the fill behind it while it is
+    /// being dragged. Written as a ternary at the point of use, which is a
+    /// fourth way past the same rule, since the check looks for `Color.` right
+    /// after the bracket and a condition sits in between.
+    static let dragHandleFill = Color.black.opacity(0.65)
+    static let dragHandleActiveFill = Color.roseGold
+    static let dragHandleIcon = Color.white
+
+    // MARK: - What a state label is drawn in (#598)
+    //
+    // Three labels reported success, a refusal and a warning in `.green`,
+    // `.red` and `.orange`, the platform's own state colours. As TYPE those
+    // measure 2.22:1, 3.57:1 and 2.31:1 on the white a system form is drawn on,
+    // against the 4.5:1 body text needs, and the warning is the sentence that
+    // says a pasted API key is the wrong shape.
+    //
+    // Taken from the palette's own ink family rather than deepened by hand.
+    // Those are the colours already calibrated to be read at small sizes, they
+    // keep the rule that every colour leans warm, and they measure 6.4:1 to
+    // 6.9:1 on both backgrounds this app puts a state label on.
+
+    static let stateWarningText = Color.stagePhotosAssignedInk
+    static let stateSuccessText = Color.stageExportedInk
+    static let stateErrorText = Color.roseDeep
 
     /// The Instagram post preview.
     ///
@@ -536,6 +583,19 @@ enum PaintedSurfaces {
         "missingPhotoIcon": missingPhotoIcon,
         "missingPhotoLabel": missingPhotoLabel,
         "lightboxBackdrop": lightboxBackdrop,
+        "lightboxLabel": lightboxLabel,
+        "lightboxDetail": lightboxDetail,
+        "lightboxCloseIcon": lightboxCloseIcon,
+        "lightboxCloseIconDisc": lightboxCloseIconDisc,
+        "storyPanel": storyPanel,
+        "storyPanelLabel": storyPanelLabel,
+        "storyPanelDetail": storyPanelDetail,
+        "dragHandleFill": dragHandleFill,
+        "dragHandleActiveFill": dragHandleActiveFill,
+        "dragHandleIcon": dragHandleIcon,
+        "stateWarningText": stateWarningText,
+        "stateSuccessText": stateSuccessText,
+        "stateErrorText": stateErrorText,
     ]
 
     /// Not a surface anybody sees. The outline button is a border and a label,
@@ -664,6 +724,46 @@ enum PaintedSurfaces {
         // named either half of it.
         pairs.append(Pair("settings form", "section footers",
                           readableSecondaryLabel, on: systemFormBackground, .bodyText))
+
+        // The three state labels, on both backgrounds the app reports a state
+        // on: the system form in Settings, and its own page in caption review
+        // (#598).
+        for (name, colour) in [("warning", stateWarningText),
+                               ("success", stateSuccessText),
+                               ("refusal", stateErrorText)] {
+            pairs.append(Pair("state label", "\(name), on a system form",
+                              colour, on: systemFormBackground, .bodyText))
+            pairs.append(Pair("state label", "\(name), on the page",
+                              colour, on: page, .bodyText))
+        }
+
+        // The dark panel a preview sits on, and the two lines it shows when the
+        // preview could not be built (#598).
+        pairs.append(Pair("story panel", "headline", storyPanelLabel,
+                          on: storyPanel, .bodyText))
+        pairs.append(Pair("story panel", "sentence", storyPanelDetail,
+                          on: storyPanel, .bodyText))
+
+        // The lightbox, measured over the brightest thing its backdrop can be
+        // laid on, for the same reason the photo scrim is: what is behind it is
+        // whatever was on screen when the photo was opened.
+        let backdrop = lightboxBackdrop.composited(over: brightestPhoto)
+        pairs.append(Pair("lightbox", "missing file headline",
+                          lightboxLabel, on: backdrop, .bodyText))
+        pairs.append(Pair("lightbox", "file name",
+                          lightboxDetail, on: backdrop, .bodyText))
+        pairs.append(Pair("lightbox", "close button",
+                          lightboxCloseIcon,
+                          on: lightboxCloseIconDisc.composited(over: backdrop),
+                          .interfaceElement))
+
+        // The divider handle, in both of its states, over the worst a photo can
+        // be underneath it.
+        pairs.append(Pair("divider handle", "icon", dragHandleIcon,
+                          on: dragHandleFill.composited(over: brightestPhoto),
+                          .interfaceElement))
+        pairs.append(Pair("divider handle, dragging", "icon", dragHandleIcon,
+                          on: dragHandleActiveFill, .interfaceElement))
 
         pairs.append(Pair("exported count badge", "count",
                           exportedCountText, on: exportedCountBadge, .bodyText))
