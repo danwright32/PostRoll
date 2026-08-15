@@ -48,7 +48,7 @@ struct InsightsPostsView: View {
             .padding(.vertical, Spacing.md)
             .background(PaintedSurfaces.deepPage)
 
-            Color.creamEdge.frame(height: 0.5)
+            PaintedSurfaces.edgeRule.frame(height: 0.5)
 
             if analyticsStore.posts.isEmpty {
                 PostsEmptyState()

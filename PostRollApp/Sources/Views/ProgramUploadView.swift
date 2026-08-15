@@ -518,23 +518,15 @@ private struct ProgramThumbnail: View {
             Group {
                 switch state {
                 case .loading:
-                    Color.creamDeep
+                    PaintedSurfaces.photoPlaceholder
                         .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
                 case .loaded(let image):
                     Image(nsImage: image)
                         .resizable()
                         .scaledToFill()
                 case .missing:
-                    Color.creamDeep.overlay {
-                        VStack(spacing: 4) {
-                            Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 18))
-                                .foregroundStyle(Color.roseDeep)
-                            Text("File missing")
-                                .font(.system(size: 10))
-                                .foregroundStyle(Color.warmMid)
-                        }
-                    }
+                    MissingPhotoBadge(iconSize: 18, labelSize: 10,
+                                      label: "File missing")
                 }
             }
             .frame(height: 96)

@@ -1080,7 +1080,7 @@ private struct CroppablePhotoThumb: View {
                 } else if loadFailed {
                     MissingPhotoBadge()
                 } else {
-                    Color.creamDeep
+                    PaintedSurfaces.photoPlaceholder
                         .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
                 }
             }
@@ -2128,7 +2128,7 @@ private struct BeforeAfterThumb: View {
                             .resizable()
                             .scaledToFill()
                     } else {
-                        Color.creamDeep
+                        PaintedSurfaces.photoPlaceholder
                     }
                 }
                 .frame(width: 40, height: 40)
@@ -2273,7 +2273,7 @@ private struct PhotoThumb: View {
                 } else if loadFailed {
                     MissingPhotoBadge()
                 } else {
-                    Color.creamDeep.overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
+                    LoadingPhotoPlaceholder()
                 }
             }
             .frame(width: 80, height: 80)
@@ -2439,7 +2439,7 @@ private struct PhotoPreviewOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.78)
+            PaintedSurfaces.lightboxBackdrop
                 .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
 

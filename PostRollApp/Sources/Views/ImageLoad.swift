@@ -72,16 +72,22 @@ struct MissingPhotoBadge: View {
     /// full-width preview.
     var iconSize: CGFloat = 14
     var labelSize: CGFloat = 8
+    /// What it is that has gone. A parameter because the program upload screen
+    /// had grown its own copy of this badge saying "File missing", with a
+    /// different icon colour and a label under the level (#586); taking the
+    /// wording rather than overwriting it means one implementation without
+    /// changing a sentence anybody reads.
+    var label: String = "missing"
 
     var body: some View {
-        Color.creamDeep.overlay {
+        PaintedSurfaces.photoPlaceholder.overlay {
             VStack(spacing: 2) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: iconSize))
-                    .foregroundStyle(PaintedSurfaces.iconAccent.opacity(0.85))
-                Text("missing")
+                    .foregroundStyle(PaintedSurfaces.missingPhotoIcon)
+                Text(label)
                     .font(.system(size: labelSize, weight: .medium))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.missingPhotoLabel)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -93,8 +99,9 @@ struct MissingPhotoBadge: View {
 /// neither can quietly become the other.
 struct LoadingPhotoPlaceholder: View {
     var body: some View {
-        Color.creamDeep
-            .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
+        PaintedSurfaces.photoPlaceholder
+            .overlay { ProgressView().controlSize(.small)
+                .tint(PaintedSurfaces.photoPlaceholderSpinner) }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Loading")
     }

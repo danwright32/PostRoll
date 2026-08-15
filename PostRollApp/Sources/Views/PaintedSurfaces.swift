@@ -175,6 +175,16 @@ enum PaintedSurfaces {
     /// hairlines below.
     static let edgeRule = Color.creamEdge
 
+    /// The accent hairline `RoseGoldDivider` draws, at whatever strength its
+    /// call site asks for.
+    ///
+    /// This was the app's last raw fill, and it was exempt for no better
+    /// reason than living in `DesignTokens.swift` rather than in a view file
+    /// (#586). A rule with nothing drawn on it is genuinely exempt from the
+    /// level, but that has to be a decision written down, not a side effect of
+    /// which folder the check happened to walk (L129).
+    static let dividerRule = Color.roseGold
+
     // The event list.
 
     /// The row at rest. `EventRowBackground` paints this opaque so the system
@@ -269,6 +279,28 @@ enum PaintedSurfaces {
     /// A cell the drag is over.
     static let dropTargetFill = Color.roseGold.opacity(0.18)
     static let dropTargetMarker = Color.roseGold
+
+    // What stands in for a photograph that is not on screen yet (#586).
+    //
+    // Nine places painted this, all of them by using a colour as a view, which
+    // is the one spelling neither fill check could express. Two of them carry
+    // marks with meaning on top: the spinner that says the file is still
+    // loading, and the badge that says it is gone.
+
+    static let photoPlaceholder = Color.creamDeep
+    static let photoPlaceholderSpinner = Color.roseGold
+    /// The mark on the badge for a photo that has moved or been deleted. It was
+    /// the accent at 85%, which is 2.93:1 on the placeholder, just under the
+    /// 3:1 a symbol needs, and its label was `warmMid` at 4.33:1 against the
+    /// 4.5:1 its own asks for. Same remedy #574 used on the summary row.
+    static let missingPhotoIcon = Color.roseGold
+    static let missingPhotoLabel = Color.warmDark.opacity(0.8)
+
+    /// The backdrop behind a photo opened at full size. Deliberately not a
+    /// pair: the photograph is drawn on top of it and nothing else is, so
+    /// there are no words to read against it. Named so it cannot be mistaken
+    /// for the scrim above, which does carry a label.
+    static let lightboxBackdrop = Color.black.opacity(0.78)
 
     /// The Instagram post preview.
     ///
@@ -394,6 +426,12 @@ enum PaintedSurfaces {
         "instagramCard": instagramCard,
         "instagramAvatarRing": instagramAvatarRing,
         "instagramOverlayButton": instagramOverlayButton,
+        "dividerRule": dividerRule,
+        "photoPlaceholder": photoPlaceholder,
+        "photoPlaceholderSpinner": photoPlaceholderSpinner,
+        "missingPhotoIcon": missingPhotoIcon,
+        "missingPhotoLabel": missingPhotoLabel,
+        "lightboxBackdrop": lightboxBackdrop,
     ]
 
     /// Not a surface anybody sees. The outline button is a border and a label,
@@ -533,6 +571,20 @@ enum PaintedSurfaces {
                           on: taggedAccountsFill.composited(over: page), .bodyText))
         pairs.append(Pair("add treatment tile", "label", pageAccentText,
                           on: addTreatmentFill.composited(over: page), .bodyText))
+
+        // What stands in for a photo that has not arrived (#586).
+        pairs.append(Pair("photo placeholder", "loading spinner",
+                          photoPlaceholderSpinner, on: photoPlaceholder, .interfaceElement))
+        pairs.append(Pair("missing photo badge", "icon",
+                          missingPhotoIcon, on: photoPlaceholder, .interfaceElement))
+        pairs.append(Pair("missing photo badge", "label",
+                          missingPhotoLabel, on: photoPlaceholder, .bodyText))
+
+        // The busy scrim covers the picture while it is being remade, and says
+        // so in words, so it is measured against the brightest a photo can be
+        // like every other surface drawn on one.
+        pairs.append(Pair("busy scrim", "label", photoScrimText,
+                          on: photoScrim.composited(over: brightestPhoto), .bodyText))
 
         return pairs
     }
