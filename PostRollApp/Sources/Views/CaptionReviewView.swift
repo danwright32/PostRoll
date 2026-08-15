@@ -1913,7 +1913,7 @@ private struct CaptionSection: View {
                             Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, maxHeight: storyExpandedMaxHeight)
-                        .background(Color(red: 0.10, green: 0.09, blue: 0.08))
+                        .background(PaintedSurfaces.storyPanel)
                         .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                         .padding(.horizontal, Spacing.xl)
                         .padding(.vertical, Spacing.md)
@@ -2254,17 +2254,17 @@ private struct CaptionSection: View {
                                             if let failure = thursdayEditorFailure {
                                                 Image(systemName: "exclamationmark.triangle.fill")
                                                     .font(.system(size: 14))
-                                                    .foregroundStyle(.white.opacity(0.85))
+                                                    .foregroundStyle(PaintedSurfaces.storyPanelLabel)
                                                 Text("The per photo editor could not be prepared. \(Sentence.closed(failure))")
                                                     .font(.system(size: 10, weight: .medium))
-                                                    .foregroundStyle(.white.opacity(0.8))
+                                                    .foregroundStyle(PaintedSurfaces.storyPanelDetail)
                                                     .multilineTextAlignment(.center)
                                                     .fixedSize(horizontal: false, vertical: true)
                                             } else {
-                                                ProgressView().controlSize(.small).tint(.white)
+                                                ProgressView().controlSize(.small).tint(PaintedSurfaces.storyPanelLabel)
                                                 Text(isBuildingThursdayEditor ? "Preparing editor…" : "Loading…")
                                                     .font(.system(size: 10, weight: .medium))
-                                                    .foregroundStyle(.white.opacity(0.8))
+                                                    .foregroundStyle(PaintedSurfaces.storyPanelDetail)
                                             }
                                         }
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2372,7 +2372,7 @@ private struct CaptionSection: View {
                                 Spacer(minLength: 0)
                             }
                             .frame(maxWidth: .infinity, maxHeight: storyExpandedMaxHeight)
-                            .background(Color(red: 0.10, green: 0.09, blue: 0.08))
+                            .background(PaintedSurfaces.storyPanel)
                             .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                             .padding(.horizontal, Spacing.xl)
                             .padding(.vertical, Spacing.md)
@@ -2944,7 +2944,7 @@ private struct BlogSection: View {
                         if let err = photoSwapError {
                             Text(err)
                                 .font(.system(size: 11))
-                                .foregroundStyle(.red)
+                                .foregroundStyle(PaintedSurfaces.stateErrorText)
                         }
                     }
                 }
@@ -4112,7 +4112,7 @@ private struct InstagramMockup: View {
                                             .colorScheme(.dark)
                                         Text("Regenerating…")
                                             .font(.system(size: 11, weight: .medium))
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(PaintedSurfaces.photoScrimText)
                                     }
                                 }
                             }
@@ -4144,7 +4144,7 @@ private struct InstagramMockup: View {
                             if isCarousel {
                                 Text("\(carouselIndex + 1)/\(photoURLs.count)")
                                     .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(PaintedSurfaces.photoScrimText)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
                                     .background(
@@ -4365,10 +4365,10 @@ private struct PreviewGraphicThumbnail: View {
                 ZStack {
                     PaintedSurfaces.photoScrim
                     VStack(spacing: 6) {
-                        ProgressView().controlSize(.small).tint(.white)
+                        ProgressView().controlSize(.small).tint(PaintedSurfaces.photoScrimText)
                         Text("Regenerating…")
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(PaintedSurfaces.photoScrimText)
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: Radius.md))
@@ -4688,10 +4688,10 @@ private struct CollagePreviewThumbnail: View {
                         PaintedSurfaces.photoScrim
                             .overlay {
                                 VStack(spacing: 6) {
-                                    ProgressView().controlSize(.small).tint(.white)
+                                    ProgressView().controlSize(.small).tint(PaintedSurfaces.photoScrimText)
                                     Text("Regenerating…")
                                         .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(PaintedSurfaces.photoScrimText)
                                 }
                             }
                     }
@@ -4710,7 +4710,7 @@ private struct CollagePreviewThumbnail: View {
                             Text("Click Reset zoom below\nto enable cell editing")
                                 .font(.system(size: 10, weight: .medium))
                                 .multilineTextAlignment(.center)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(PaintedSurfaces.photoScrimText)
                         }
                         .padding(12)
                         .background(PaintedSurfaces.photoHintPanel.clipShape(RoundedRectangle(cornerRadius: 8)))
@@ -5080,10 +5080,10 @@ private struct ReelStripPreviewThumbnail: View {
                                 .frame(width: geo.size.width, height: displayH)
                                 .overlay {
                                     VStack(spacing: 6) {
-                                        ProgressView().controlSize(.small).tint(.white)
+                                        ProgressView().controlSize(.small).tint(PaintedSurfaces.photoScrimText)
                                         Text("Regenerating…")
                                             .font(.system(size: 10, weight: .medium))
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(PaintedSurfaces.photoScrimText)
                                     }
                                 }
                         }
@@ -5675,10 +5675,10 @@ private struct CollageDividerHandle: View {
             if isDragging || isHovering {
                 Image(systemName: isH ? "arrow.up.arrow.down" : "arrow.left.arrow.right")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(PaintedSurfaces.dragHandleIcon)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(isDragging ? Color.roseGold : Color.black.opacity(0.65))
+                    .background(isDragging ? PaintedSurfaces.dragHandleActiveFill : PaintedSurfaces.dragHandleFill)
                     .clipShape(Capsule())
             }
         }
@@ -5862,7 +5862,7 @@ private struct ReviewPhotoOverlay: View {
                     .padding(48)
                     .shadow(color: .black.opacity(0.5), radius: 24, y: 6)
             case .loading:
-                ProgressView().tint(.white)
+                ProgressView().tint(PaintedSurfaces.lightboxLabel)
             case .missing:
                 // Opened from a thumbnail, so the file was there when the list
                 // was drawn. A spinner here reads as a slow load of a photo
@@ -5870,13 +5870,13 @@ private struct ReviewPhotoOverlay: View {
                 VStack(spacing: Spacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 28))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(PaintedSurfaces.lightboxLabel)
                     Text("This file is missing")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(PaintedSurfaces.lightboxLabel)
                     Text(url.lastPathComponent)
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(PaintedSurfaces.lightboxDetail)
                 }
             }
 
@@ -5886,7 +5886,7 @@ private struct ReviewPhotoOverlay: View {
                     Button(action: onDismiss) {
                         Image(systemName: "xmark.circle.fill")
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white.opacity(0.9), Color.warmDark.opacity(0.5))
+                            .foregroundStyle(PaintedSurfaces.lightboxCloseIcon, PaintedSurfaces.lightboxCloseIconDisc)
                             .font(.system(size: 22))
                     }
                     .buttonStyle(.plain)

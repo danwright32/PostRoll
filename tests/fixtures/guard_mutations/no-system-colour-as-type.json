@@ -1,0 +1,8 @@
+{
+  "name": "no-system-colour-as-type",
+  "file": "PostRollApp/Sources/Views/SettingsView.swift",
+  "find": "                        .foregroundStyle(PaintedSurfaces.stateErrorText)",
+  "replace": "                        .foregroundStyle(.red)",
+  "test": "PostRollTests/BannerLegibilityTests/testNoScreenDrawsTypeInASystemColour",
+  "breaks": "a screen goes back to drawing type in one of the platform's own colours, which this app's palette cannot name and no pair can measure; three issues in a row were exactly that and all three were under the level (#598)"
+}

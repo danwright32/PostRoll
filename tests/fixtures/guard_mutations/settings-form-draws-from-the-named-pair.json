@@ -1,8 +1,8 @@
 {
   "name": "settings-form-draws-from-the-named-pair",
   "file": "PostRollApp/Sources/Views/SettingsView.swift",
-  "find": "                            Text(\"Reclaiming…\").foregroundStyle(PaintedSurfaces.readableSecondaryLabel)",
-  "replace": "                            Text(\"Reclaiming…\").foregroundStyle(.secondary)",
+  "find": "                            .foregroundStyle(PaintedSurfaces.stateSuccessText)",
+  "replace": "                            .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)",
   "test": "PostRollTests/BannerLegibilityTests/testTheSettingsFormDrawsItsWordsFromANamedPair",
-  "breaks": "the Settings window goes back to drawing type in a system colour, which sits outside the palette, so no pair names it and the ratio walk has nothing to measure it against (#596)"
+  "breaks": "the Settings window stops drawing from one of the four names measured against it, so that pair is measuring a colour the window does not use. The earlier version of this entry mutated one of five sites using the same name, which the remaining four answered for, and it SURVIVED on CI (#596, #598, L135)"
 }

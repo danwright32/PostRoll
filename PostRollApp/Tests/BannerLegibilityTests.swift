@@ -625,25 +625,15 @@ final class BannerLegibilityTests: XCTestCase {
     /// colour is exactly what nothing here can reach: it is not in the palette,
     /// so no pair covers it and the ratio walk has nothing to say.
     ///
-    /// Both spellings, because SwiftUI takes either and a matcher that sees one
-    /// of them reads as clean on the other (#586). Scoped to the row's own
-    /// declaration rather than the file, so a legitimate system colour
-    /// somewhere else in it cannot answer for this one (L135), and comments are
-    /// stripped, because the row explains this rule in prose right beside the
-    /// code it is about (L103).
+    /// What this asserts is the WIRING half only. Banning the system colours it
+    /// went back to is now one rule over the whole tree
+    /// (`testNoScreenDrawsTypeInASystemColour`, #598) rather than a copy per
+    /// screen, since a scoped copy leaves the next screen exempt by default
+    /// (L96). Scoped to the row's own declaration for the half that is still
+    /// about the row (L135), and comments are stripped, because the row
+    /// explains this rule in prose right beside the code (L103).
     func testTheEventRowDrawsEveryWordFromANamedPair() throws {
         let row = try eventRowDeclaration()
-
-        for spelling in ["Color.secondary", "Color.primary", ".foregroundStyle(.secondary)",
-                         ".foregroundStyle(.primary)"] {
-            XCTAssertFalse(row.contains(spelling), """
-                EventRow draws a foreground in \(spelling), a system colour outside \
-                this app's palette. Nothing can measure it against the row behind it, \
-                which is how its two detail lines sat at 3.68:1 on a selected row with \
-                every check green. Use PaintedSurfaces.eventRowName / eventRowDetail \
-                and their selected pairs.
-                """)
-        }
 
         for name in ["eventRowName", "eventRowNameSelected",
                      "eventRowDetail", "eventRowDetailSelected"] {
@@ -664,29 +654,22 @@ final class BannerLegibilityTests: XCTestCase {
     /// 11pt line needs. Nothing could report it, because a system colour on
     /// system chrome is named by neither side.
     ///
-    /// What this deliberately does NOT cover, said out loud rather than left as
-    /// a gap (L129): the same file draws `.orange`, `.red` and `.green` on
-    /// three state labels, which are system colours in the same position and
-    /// are not measured by anything either. They are a class of their own,
-    /// filed as #598 rather than folded in here, so the exclusion has an owner
-    /// rather than being forgotten the moment this reads as done (L65).
+    /// The three state labels in the same window went the same way (#598), so
+    /// this asserts the wiring for all four names. The ban on going back to the
+    /// platform's colours is one rule over the whole tree rather than a copy
+    /// here, for the reason above.
     func testTheSettingsFormDrawsItsWordsFromANamedPair() throws {
         let code = try appSource("Sources/Views/SettingsView.swift")
 
-        for spelling in [".foregroundStyle(.secondary)", "Color.secondary",
-                         ".foregroundStyle(.primary)", "Color.primary"] {
-            XCTAssertFalse(code.contains(spelling), """
-                SettingsView draws type in \(spelling), the platform's label colour at \
-                half strength, which is 3.95:1 on the white a form is drawn on. Use \
-                PaintedSurfaces.readableSecondaryLabel, which is measured against that \
-                surface.
+        for name in ["readableSecondaryLabel", "stateWarningText",
+                     "stateSuccessText", "stateErrorText"] {
+            XCTAssertTrue(code.contains("PaintedSurfaces.\(name)"), """
+                SettingsView no longer draws from PaintedSurfaces.\(name), so the pair \
+                for that window is measuring a colour it does not use. That window is \
+                where the app says a pasted key is the wrong shape, whether it saved, \
+                and why it refused.
                 """)
         }
-
-        XCTAssertTrue(code.contains("PaintedSurfaces.readableSecondaryLabel"), """
-            SettingsView no longer draws from PaintedSurfaces.readableSecondaryLabel, \
-            so the pair for that window is measuring a colour it does not use.
-            """)
     }
 
     /// The source of `EventRow` alone, comments stripped.
@@ -985,6 +968,102 @@ final class BannerLegibilityTests: XCTestCase {
                 the check reports \(line.trimmingCharacters(in: .whitespaces)) as the raw \
                 accent, which it is not. A rule that fires on correct code is the rule \
                 people learn to work around
+                """)
+        }
+    }
+
+    /// Lines drawing a system colour as type or as a control's tint.
+    ///
+    /// The platform's palette is the one this app's rules could never reach.
+    /// `PaintedSurfaces` names what this app paints, and a system colour is
+    /// named by neither side: not by the palette, and not by anything that
+    /// could say which surface it lands on. Three issues in a row turned out to
+    /// be exactly that, and all three were genuinely under the level once
+    /// somebody measured them: the event row's detail lines at 3.68:1 (#590),
+    /// the Settings footers at 3.95:1 (#596), and the state labels at 2.22:1,
+    /// 2.31:1 and 3.57:1 (#598).
+    ///
+    /// Matched on the bare leading dot, which is the spelling that means "the
+    /// system's", so `PaintedSurfaces.photoScrimText` and `Color.warmDark` pass
+    /// and `.white` does not.
+    private func systemColourForegrounds(in code: String) -> [String] {
+        let pattern = #"(foregroundStyle|foregroundColor|tint)\(\s*\."# +
+            #"(white|black|red|orange|yellow|green|blue|purple|pink|brown|"# +
+            #"gray|grey|mint|teal|cyan|indigo|secondary|primary|accentColor)\b"#
+        return code.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.range(of: pattern, options: .regularExpression) != nil }
+    }
+
+    /// No screen draws type in a system colour (#598).
+    ///
+    /// One rule over the whole tree rather than a scoped copy per screen. #590
+    /// and #596 each banned these inside one declaration, which leaves the next
+    /// screen exempt by default and makes the guard's reach a list of the
+    /// places somebody had already thought about (L96).
+    func testNoScreenDrawsTypeInASystemColour() throws {
+        let sources = sourcesDir
+        let files = try everySourceFile()
+
+        // Finding nothing to look at is not a pass (L98).
+        XCTAssertGreaterThan(files.count, 20,
+                             "the sweep found \(files.count) source files, so it is "
+                             + "proving nothing about the ones it did not read")
+
+        for relative in files {
+            let code = SwiftSourceText.withoutComments(
+                try String(contentsOf: sources.appendingPathComponent(relative),
+                           encoding: .utf8))
+            for line in systemColourForegrounds(in: code) {
+                XCTFail("""
+                    \(relative) draws type in one of the platform's own colours. Nothing \
+                    can measure it: it is not in this app's palette, so no pair names \
+                    it, and the surface it lands on is not named either. Add the pair to \
+                    PaintedSurfaces and draw from there.
+
+                    \(line)
+                    """)
+            }
+        }
+    }
+
+    /// The matcher is asked directly what it can see (#598, L1).
+    ///
+    /// Once the tree is clean, a matcher that reads `.white` and one that reads
+    /// nothing give the same silent pass, so what has to be seen to fail is the
+    /// matcher rather than the codebase around it (#586).
+    func testTheSystemColourMatcherSeesEverySpelling() {
+        let mustCatch = [
+            ".foregroundStyle(.white)",
+            ".foregroundStyle(.white.opacity(0.85))",
+            ".foregroundStyle(.secondary)",
+            ".foregroundColor(.red)",
+            "ProgressView().controlSize(.small).tint(.white)",
+            ".foregroundStyle(.orange)",
+            ".foregroundStyle( .green )",
+            ".foregroundStyle(.white.opacity(0.9), Color.warmDark.opacity(0.5))",
+        ]
+        for line in mustCatch {
+            XCTAssertEqual(systemColourForegrounds(in: line).count, 1, """
+                the check cannot see \(line) as a system colour, so type drawn that way \
+                is exempt from the rule and reads exactly like a screen with none
+                """)
+        }
+
+        let mustAllow = [
+            ".foregroundStyle(PaintedSurfaces.photoScrimText)",
+            ".foregroundStyle(Color.warmDark)",
+            ".tint(PaintedSurfaces.iconAccent)",
+            ".background(Color.black.opacity(0.65))",
+            ".shadow(color: .black.opacity(0.5), radius: 24, y: 6)",
+            ".symbolRenderingMode(.palette)",
+            "ProgressView().progressViewStyle(.circular)",
+            ".foregroundStyle(PaintedSurfaces.stateWarningText)",
+        ]
+        for line in mustAllow {
+            XCTAssertEqual(systemColourForegrounds(in: line).count, 0, """
+                the check reports \(line) as a system colour, which it is not. A rule \
+                that fires on correct code is the rule people learn to work around
                 """)
         }
     }

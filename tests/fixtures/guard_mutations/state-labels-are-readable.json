@@ -1,0 +1,8 @@
+{
+  "name": "state-labels-are-readable",
+  "file": "PostRollApp/Sources/Views/PaintedSurfaces.swift",
+  "find": "    static let stateWarningText = Color.stagePhotosAssignedInk",
+  "replace": "    static let stateWarningText = Color.orange",
+  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
+  "breaks": "a state label goes back to the platform's own colour, which as type is 2.31:1 on the white a system form is drawn on against the 4.5:1 body text needs, and that label is the sentence saying a pasted API key is the wrong shape (#598)"
+}

@@ -2451,7 +2451,7 @@ private struct PhotoPreviewOverlay: View {
                     .padding(48)
                     .shadow(color: .black.opacity(0.5), radius: 24, y: 6)
             case .loading:
-                ProgressView().tint(.white)
+                ProgressView().tint(PaintedSurfaces.lightboxLabel)
             case .missing:
                 // Opened from a thumbnail, so the file was there when the list
                 // was drawn. A spinner here reads as a slow load of a photo
@@ -2459,13 +2459,13 @@ private struct PhotoPreviewOverlay: View {
                 VStack(spacing: Spacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 28))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(PaintedSurfaces.lightboxLabel)
                     Text("This file is missing")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(PaintedSurfaces.lightboxLabel)
                     Text(url.lastPathComponent)
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(PaintedSurfaces.lightboxDetail)
                 }
             }
 
@@ -2476,7 +2476,7 @@ private struct PhotoPreviewOverlay: View {
                     Button(action: onDismiss) {
                         Image(systemName: "xmark.circle.fill")
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white.opacity(0.9), Color.warmDark.opacity(0.5))
+                            .foregroundStyle(PaintedSurfaces.lightboxCloseIcon, PaintedSurfaces.lightboxCloseIconDisc)
                             .font(.system(size: 22))
                     }
                     .buttonStyle(.plain)
