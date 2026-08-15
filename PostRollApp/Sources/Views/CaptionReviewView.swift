@@ -1638,54 +1638,10 @@ private struct CaptionSection: View {
     @ViewBuilder
     private var captionFindingsPanel: some View {
         if let summary = caption.findingsSummary {
-            let stale = caption.findingsAreStale
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack(spacing: 6) {
-                    Image(systemName: stale ? "clock.arrow.circlepath" : "exclamationmark.triangle")
-                        .font(.system(size: 11))
-                    Text(summary.uppercased())
-                        .font(.system(size: 10, weight: .medium))
-                        .tracking(0.8)
-                }
-                .foregroundStyle(PaintedSurfaces.captionFindings(stale: stale).ink)
-
-                if stale {
-                    Text("These ran against the caption as generated. You have edited it since, so some may already be fixed. Revise or regenerate to re-check.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                ForEach(FindingsDisplay.grouped(findings: caption.findings), id: \.code) { group in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(group.message)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.warmDark)
-                            .fixedSize(horizontal: false, vertical: true)
-                        ForEach(group.details, id: \.self) { detail in
-                            Text(detail)
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color.warmMid)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(Spacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: Radius.sm)
-                    .fill(PaintedSurfaces.captionFindings(stale: stale).panel)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Radius.sm)
-                            .stroke(PaintedSurfaces.captionFindings(stale: stale).border,
-                                    lineWidth: 1.5)
-                    )
-            )
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Caption checks: \(summary)")
+            FindingsPanel(summary: summary,
+                          findings: caption.findings,
+                          isStale: caption.findingsAreStale,
+                          subject: "caption")
         }
     }
 
@@ -2730,52 +2686,10 @@ private struct BlogSection: View {
     @ViewBuilder
     private var blogFindingsPanel: some View {
         if let summary = blog.findingsSummary {
-            let stale = blog.findingsAreStale
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack(spacing: 6) {
-                    Image(systemName: stale ? "clock.arrow.circlepath" : "exclamationmark.triangle")
-                        .font(.system(size: 11))
-                    Text(summary.uppercased())
-                        .font(.system(size: 10, weight: .medium))
-                        .tracking(0.8)
-                }
-                .foregroundStyle(PaintedSurfaces.captionFindings(stale: stale).ink)
-
-                if stale {
-                    Text("These ran against the draft as generated. You have edited it since, so some may already be fixed. Regenerate or revise to re-check.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                ForEach(FindingsDisplay.grouped(findings: blog.findings), id: \.code) { group in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(group.message)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.warmDark)
-                            .fixedSize(horizontal: false, vertical: true)
-                        ForEach(group.details, id: \.self) { detail in
-                            Text(detail)
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color.warmMid)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(Spacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: Radius.sm)
-                    .fill(PaintedSurfaces.captionFindings(stale: stale).panel)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Radius.sm)
-                            .stroke(PaintedSurfaces.captionFindings(stale: stale).border,
-                                    lineWidth: 1.5)
-                    )
-            )
+            FindingsPanel(summary: summary,
+                          findings: blog.findings,
+                          isStale: blog.findingsAreStale,
+                          subject: "draft")
         }
     }
 

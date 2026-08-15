@@ -1,0 +1,8 @@
+{
+  "name": "stale-note-names-its-subject",
+  "file": "PostRollApp/Sources/Services/FindingsDisplay.swift",
+  "find": "        \"These ran against the \\(subject) as generated. You have edited it since, \"",
+  "replace": "        \"These ran against the text as generated. You have edited it since, \"",
+  "test": "PostRollTests/FindingsPanelTests/testTheStaleNoteNamesWhatTheChecksRanAgainst",
+  "breaks": "the stale note stops naming what the checks ran against, so it reads as though something else on screen is out of date (#603)"
+}

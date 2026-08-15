@@ -1,0 +1,8 @@
+{
+  "name": "findings-panel-is-one-labelled-group",
+  "file": "PostRollApp/Sources/Views/FindingsPanel.swift",
+  "find": "        .accessibilityLabel(FindingsDisplay.spokenLabel(subject: subject,\n                                                        summary: summary))",
+  "replace": "        .accessibilityIdentifier(\"findings\")",
+  "test": "PostRollTests/FindingsPanelTests/testThePanelIsOneLabelledGroup",
+  "breaks": "the panel stops saying whether these checks are about the caption or the draft, which is the state the blog's copy of it shipped in (#603)"
+}
