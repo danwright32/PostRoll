@@ -442,8 +442,8 @@ struct StagePill: View {
         .font(.system(size: 10, weight: .medium))
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
-        .background(isSelected ? Color.primary.opacity(0.15) : pill.wash)
-        .foregroundStyle(isSelected ? Color.primary : pill.ink)
+        .background(isSelected ? PaintedSurfaces.selectedPillFill : pill.wash)
+        .foregroundStyle(isSelected ? PaintedSurfaces.selectedPillLabel : pill.ink)
         .clipShape(Capsule())
         .help(tooltipText)
         // Announce as "Stage, Photos Assigned" — not the "3 ·" prefix

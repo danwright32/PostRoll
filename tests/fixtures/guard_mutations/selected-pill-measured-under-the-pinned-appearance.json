@@ -1,0 +1,8 @@
+{
+  "name": "selected-pill-measured-under-the-pinned-appearance",
+  "file": "PostRollApp/Sources/Views/PaintedSurfaces.swift",
+  "find": "        NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {",
+  "replace": "        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {",
+  "test": "PostRollTests/BannerLegibilityTests/testTheSelectedPillIsMeasuredUnderTheAppearanceTheAppPins",
+  "breaks": "the selected row's pill is measured under an appearance the app never runs in, so its label resolves to near-white and the ratio is computed against a colour nothing draws (#587, L70)"
+}

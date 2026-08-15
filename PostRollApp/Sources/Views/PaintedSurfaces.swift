@@ -194,11 +194,43 @@ enum PaintedSurfaces {
     static let eventRowSelectedSpine = Color.roseGold
     static let eventRowHoverFill = Color.roseGold.opacity(0.05)
 
-    /// The two row backgrounds a stage pill's wash is composited over. A
-    /// selected row is a third, and the pill drops its own colour there in
-    /// favour of the system label colour, so it is not one of these.
+    /// The three row backgrounds a stage pill can sit on.
     static var eventRowAtRest: Color { eventRow }
     static var eventRowHovered: Color { eventRowHoverFill.composited(over: eventRow) }
+    static var eventRowSelected: Color { eventRowSelectedFill.composited(over: eventRow) }
+
+    /// The pill on a selected row, which drops its stage colour and wears the
+    /// system label colour instead, so the whole row reads as one selected
+    /// unit (#587).
+    ///
+    /// Resolved rather than assumed. `Color.primary` is whatever the current
+    /// appearance says it is, and a check reading it under the appearance a
+    /// test process happens to have would be measuring a colour the app never
+    /// draws. The app pins itself to light (`PostRollApp.swift`) and forces the
+    /// aqua appearance on its window (`MainWindowView.swift`), so that is the
+    /// one this is resolved under.
+    ///
+    /// What this does NOT cover, said out loud rather than left as a gap
+    /// (L129): AppKit can draw a focused selected row EMPHASIZED, which
+    /// substitutes white for the label colour. This app gives every row an
+    /// opaque background of its own precisely to keep the system selection out
+    /// (`EventRowBackground`), so the emphasized path should not arise, and
+    /// "should not" is the honest strength of that claim. It cannot be settled
+    /// from here: it needs the running app.
+    static var selectedPillLabel: Color { inPinnedAppearance(.primary) }
+    static var selectedPillFill: Color { inPinnedAppearance(.primary).opacity(0.15) }
+
+    /// A dynamic system colour as it lands under the appearance the app pins
+    /// itself to, rather than under whatever is current where this is read.
+    private static func inPinnedAppearance(_ colour: Color) -> Color {
+        var resolved = colour
+        NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
+            if let sRGB = NSColor(colour).usingColorSpace(.sRGB) {
+                resolved = Color(nsColor: sRGB)
+            }
+        }
+        return resolved
+    }
 
     /// The count of hidden exported events, on the archive toggle.
     static let exportedCountBadge = Color.warmMid
@@ -396,6 +428,9 @@ enum PaintedSurfaces {
         "eventRowHoverFill": eventRowHoverFill,
         "eventRowAtRest": eventRowAtRest,
         "eventRowHovered": eventRowHovered,
+        "eventRowSelected": eventRowSelected,
+        "selectedPillLabel": selectedPillLabel,
+        "selectedPillFill": selectedPillFill,
         "exportedCountBadge": exportedCountBadge,
         "exportedCountText": exportedCountText,
         "tagChipFill": tagChipFill,
@@ -529,6 +564,13 @@ enum PaintedSurfaces {
                                   pill.ink, on: wash, .bodyText))
             }
         }
+
+        // The third row state (#587). One pair, not one per stage: a selected
+        // pill wears the system label colour whatever stage it is reporting.
+        pairs.append(Pair("stage pill, row selected", "label",
+                          selectedPillLabel,
+                          on: selectedPillFill.composited(over: eventRowSelected),
+                          .bodyText))
 
         pairs.append(Pair("exported count badge", "count",
                           exportedCountText, on: exportedCountBadge, .bodyText))
