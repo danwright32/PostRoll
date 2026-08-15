@@ -3843,7 +3843,7 @@ private struct FridayClipCropPopover: View {
                     .frame(width: previewW, height: previewH)
                     .clipped()
             } else {
-                Color.creamDeep
+                PaintedSurfaces.photoPlaceholder
                     .frame(width: previewW, height: previewH)
             }
         }
@@ -4104,7 +4104,7 @@ private struct InstagramMockup: View {
                         .overlay {
                             if isRegenerating {
                                 ZStack {
-                                    Color.black.opacity(0.4)
+                                    PaintedSurfaces.photoScrim
                                     VStack(spacing: 8) {
                                         ProgressView()
                                             .progressViewStyle(.circular)
@@ -4363,7 +4363,7 @@ private struct PreviewGraphicThumbnail: View {
         .overlay {
             if isRegenerating {
                 ZStack {
-                    Color.black.opacity(0.45)
+                    PaintedSurfaces.photoScrim
                     VStack(spacing: 6) {
                         ProgressView().controlSize(.small).tint(.white)
                         Text("Regenerating…")
@@ -4553,7 +4553,7 @@ private struct CollagePreviewThumbnail: View {
                         if let image {
                             Image(nsImage: image).resizable().scaledToFill()
                         } else {
-                            Color.creamDeep
+                            PaintedSurfaces.photoPlaceholder
                                 .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
                         }
                     }
@@ -4685,7 +4685,7 @@ private struct CollagePreviewThumbnail: View {
 
                     // Regenerating overlay
                     if isRegenerating {
-                        Color.black.opacity(0.45)
+                        PaintedSurfaces.photoScrim
                             .overlay {
                                 VStack(spacing: 6) {
                                     ProgressView().controlSize(.small).tint(.white)
@@ -5037,7 +5037,7 @@ private struct ReelStripPreviewThumbnail: View {
                                     .resizable()
                                     .scaledToFit()
                             } else {
-                                Color.creamDeep
+                                PaintedSurfaces.photoPlaceholder
                                     .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
                             }
                         }
@@ -5076,7 +5076,7 @@ private struct ReelStripPreviewThumbnail: View {
                         }
 
                         if isRegenerating {
-                            Color.black.opacity(0.45)
+                            PaintedSurfaces.photoScrim
                                 .frame(width: geo.size.width, height: displayH)
                                 .overlay {
                                     VStack(spacing: 6) {
@@ -5850,7 +5850,7 @@ private struct ReviewPhotoOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.78)
+            PaintedSurfaces.lightboxBackdrop
                 .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
 

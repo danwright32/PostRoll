@@ -26,7 +26,7 @@ struct OutdatedDesignsSheet: View {
 
     var body: some View {
         ZStack {
-            Color.cream.ignoresSafeArea()
+            PaintedSurfaces.page.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: Spacing.lg) {
                 header
@@ -104,7 +104,7 @@ struct OutdatedDesignsSheet: View {
                     }
                 }
                 .padding(.vertical, 4)
-                Color.creamEdge.frame(height: 0.5)
+                PaintedSurfaces.edgeRule.frame(height: 0.5)
             }
         }
     }

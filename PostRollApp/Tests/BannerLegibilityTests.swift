@@ -638,16 +638,16 @@ final class BannerLegibilityTests: XCTestCase {
     /// a colour with that same colour as the label on them, between 2.42:1 and
     /// 3.67:1, under a design note claiming they were calibrated for it (L96).
     func testEveryPaintedFileDrawsFromTheNamedColours() throws {
-        let files = try everyViewFile()
+        let files = try everySourceFile()
 
         // A sweep that reads nothing objects to nothing (L98). The five-file
         // version of this could not have told you it had gone blind either.
         XCTAssertGreaterThan(files.count, 20,
-                             "the sweep read \(files.count) view files, so it is proving "
+                             "the sweep read \(files.count) source files, so it is proving "
                              + "nothing about the ones it did not open")
 
         for relative in files {
-            let code = try viewSource("Sources/Views/\(relative)")
+            let code = try appSource("Sources/\(relative)")
             XCTAssertFalse(code.contains(".background(Color."), """
                 \(relative) paints a background from a colour written at the point of \
                 use. Nothing can check the words against it, because nothing else can \
@@ -658,7 +658,41 @@ final class BannerLegibilityTests: XCTestCase {
                 Same problem: an unnamed fill is a surface no legibility check can \
                 reach.
                 """)
+
+            // The third spelling (#586). A colour is a view in its own right, so
+            // it paints an area with no modifier around it at all, and neither
+            // check above can express that. Seven placeholders were drawn this
+            // way while this file reported a clean sweep over the same screens,
+            // which is worse than not checking them: an unreadable spelling and
+            // an absent surface look identical from here.
+            for (number, line) in bareColourViews(in: code) {
+                XCTFail("""
+                    \(relative):\(number) paints an area by using a colour as a view, \
+                    which is the same unnamed surface the two checks above refuse in \
+                    their own spellings. Add it to PaintedSurfaces and draw from there.
+
+                    \(line)
+                    """)
+            }
         }
+    }
+
+    /// Lines where a colour is used as a view, with its 1-based line number.
+    ///
+    /// `Color.clear` is excluded because it paints nothing: it is a spacer and
+    /// a hit area, and there is no surface behind any words. Excluded here by
+    /// name rather than by the caller skipping it, so the exemption is one
+    /// decision written down once (L129).
+    private func bareColourViews(in code: String) -> [(Int, String)] {
+        code.split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated()
+            .compactMap { index, raw in
+                let line = raw.trimmingCharacters(in: .whitespaces)
+                guard line.range(of: #"^Color\.[A-Za-z][A-Za-z0-9]*$"#,
+                                 options: .regularExpression) != nil,
+                      line != "Color.clear" else { return nil }
+                return (index + 1, line)
+            }
     }
 
     /// The accent may not be drawn as a foreground without saying which role it
@@ -672,18 +706,18 @@ final class BannerLegibilityTests: XCTestCase {
     /// goes through `pageAccentText` or `iconAccent`, the pair walk above holds
     /// each of them to its own level.
     func testTheAccentIsNeverDrawnUnnamed() throws {
-        let views = viewsDir
-        let files = try everyViewFile()
+        let sources = sourcesDir
+        let files = try everySourceFile()
 
         // Finding nothing to look at is not a pass (L98). If this walk ever
         // stops seeing the view tree it would report every screen as clean.
         XCTAssertGreaterThan(files.count, 20,
-                             "the sweep found \(files.count) view files, so it is "
+                             "the sweep found \(files.count) source files, so it is "
                              + "proving nothing about the ones it did not read")
 
         for relative in files {
             let code = SwiftSourceText.withoutComments(
-                try String(contentsOf: views.appendingPathComponent(relative),
+                try String(contentsOf: sources.appendingPathComponent(relative),
                            encoding: .utf8))
             for line in code.split(separator: "\n") where line.contains("foreground") {
                 XCTAssertFalse(line.contains("Color.roseGold"), """
@@ -705,7 +739,7 @@ final class BannerLegibilityTests: XCTestCase {
     /// a declaration missing from it silently exempts whatever it is put on
     /// (L96).
     func testEveryNamedColourIsResolvable() throws {
-        let code = try viewSource("Sources/Views/PaintedSurfaces.swift")
+        let code = try appSource("Sources/Views/PaintedSurfaces.swift")
         let declared = code
             .split(separator: "\n")
             .compactMap { line -> String? in
@@ -737,20 +771,30 @@ final class BannerLegibilityTests: XCTestCase {
             .appendingPathComponent("Sources/Views")
     }
 
-    /// Every view file, at any depth, minus the one that holds the names.
+    private var sourcesDir: URL {
+        viewsDir.deletingLastPathComponent()
+    }
+
+    /// Every source file, at any depth, minus the one that holds the names.
+    ///
+    /// Rooted at `Sources` rather than `Sources/Views` (#586). Which folder a
+    /// painted surface is declared in says nothing about whether it is painted:
+    /// the app's one remaining raw fill was a rule in `DesignTokens.swift`,
+    /// exempt purely because of where it lived, and nothing stopped the next
+    /// panel being written there too.
     ///
     /// One walk shared by both sweeps rather than a copy each, so widening the
     /// tree cannot reach one of them and leave the other reading a subset
     /// nobody notices (L16).
-    private func everyViewFile() throws -> [String] {
+    private func everySourceFile() throws -> [String] {
         try FileManager.default
-            .subpathsOfDirectory(atPath: viewsDir.path)
+            .subpathsOfDirectory(atPath: sourcesDir.path)
             .filter { $0.hasSuffix(".swift") }
             .filter { !$0.hasSuffix("PaintedSurfaces.swift") }
             .sorted()
     }
 
-    private func viewSource(_ relative: String) throws -> String {
+    private func appSource(_ relative: String) throws -> String {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // Tests
             .deletingLastPathComponent()   // PostRollApp

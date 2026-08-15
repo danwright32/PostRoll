@@ -22,7 +22,7 @@ struct NewEventSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.cream.ignoresSafeArea()
+                PaintedSurfaces.page.ignoresSafeArea()
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spacing.xl) {

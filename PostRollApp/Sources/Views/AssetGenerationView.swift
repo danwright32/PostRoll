@@ -171,7 +171,7 @@ struct AssetGenerationView: View {
 
     private var runningView: some View {
         ZStack {
-            Color.cream.ignoresSafeArea()
+            PaintedSurfaces.page.ignoresSafeArea()
             GenerationRunningBody(
                 eventName: event.name,
                 subtitle: runningSubtitle,

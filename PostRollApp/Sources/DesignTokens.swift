@@ -199,7 +199,7 @@ struct RoseGoldDivider: View {
     var opacity: Double = 0.6
     var body: some View {
         Rectangle()
-            .fill(Color.roseGold.opacity(opacity))
+            .fill(PaintedSurfaces.dividerRule.opacity(opacity))
             .frame(height: 0.5)
     }
 }

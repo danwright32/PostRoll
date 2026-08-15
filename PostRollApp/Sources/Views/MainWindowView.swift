@@ -24,7 +24,7 @@ struct MainWindowView: View {
                 .frame(maxWidth: .infinity)
                 .background(PaintedSurfaces.deepPage)
 
-                Color.creamEdge.frame(height: 0.5)
+                PaintedSurfaces.edgeRule.frame(height: 0.5)
 
                 Group {
                     if appState.sidebarMode == .events {

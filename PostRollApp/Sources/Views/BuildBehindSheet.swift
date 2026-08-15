@@ -27,7 +27,7 @@ struct BuildBehindSheet: View {
 
     var body: some View {
         ZStack {
-            Color.cream.ignoresSafeArea()
+            PaintedSurfaces.page.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: Spacing.lg) {
                 VStack(alignment: .leading, spacing: 6) {
