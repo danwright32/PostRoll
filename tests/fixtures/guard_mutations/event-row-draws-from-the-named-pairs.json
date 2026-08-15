@@ -1,0 +1,8 @@
+{
+  "name": "event-row-draws-from-the-named-pairs",
+  "file": "PostRollApp/Sources/Views/EventListView.swift",
+  "find": "                    .foregroundStyle(isSelected ? PaintedSurfaces.eventRowNameSelected",
+  "replace": "                    .foregroundStyle(isSelected ? Color.primary",
+  "test": "PostRollTests/BannerLegibilityTests/testTheEventRowDrawsEveryWordFromANamedPair",
+  "breaks": "the row goes back to drawing a word in a system colour, which sits outside this app's palette, so no pair can name it and the ratio walk has nothing to measure it against; that is how its detail lines sat at 3.68:1 on a selected row with every check green (#590)"
+}

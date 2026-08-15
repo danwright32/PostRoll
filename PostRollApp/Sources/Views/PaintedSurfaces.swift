@@ -220,6 +220,40 @@ enum PaintedSurfaces {
     static var selectedPillLabel: Color { inPinnedAppearance(.primary) }
     static var selectedPillFill: Color { inPinnedAppearance(.primary).opacity(0.15) }
 
+    /// The event's name, the first line of the row.
+    ///
+    /// Measured at 11.61:1 on a selected row, so this moves nothing. Named
+    /// because it was the only foreground on the row nothing could read: the
+    /// two lines under it were 3.68:1 in the same state and no pair covered
+    /// either of them, which is the gap rather than the colour (#590).
+    static let eventRowName = Color.warmDark
+    static var eventRowNameSelected: Color { inPinnedAppearance(.primary) }
+
+    /// The second and third lines of a row: the organisation and date, and the
+    /// shoot type beside the pill (#590).
+    ///
+    /// That line is what confirms the right show was clicked, and it was the
+    /// palest thing on the row in exactly the state where the row is being
+    /// read: 4.33:1 at rest, 4.10:1 hovered and 3.68:1 selected, against the
+    /// 4.5:1 a 10pt line needs. Nothing reported it because the selected value
+    /// was `Color.secondary`, a system colour sitting outside the palette, so
+    /// no pair covered it, and the name above it measures 11.61:1 whatever
+    /// these do.
+    ///
+    /// Deeper than the `warmMid` it was, which is the same remedy #574 used on
+    /// the summary row's label against the same background.
+    static let eventRowDetail = Color.warmDark.opacity(0.8)
+
+    /// The same lines on a selected row, which keeps the adaptation
+    /// `EventListView` records as deliberate rather than dropping it: the row
+    /// still warms towards the system label colour when it is picked, at three
+    /// quarters strength so the name above stays the stronger of the two.
+    ///
+    /// Resolved under the appearance the app pins itself to, for the reason
+    /// `selectedPillLabel` is: read under whatever a test process happens to
+    /// have, this would be measuring a colour the app never draws.
+    static var eventRowDetailSelected: Color { inPinnedAppearance(.primary).opacity(0.75) }
+
     /// A dynamic system colour as it lands under the appearance the app pins
     /// itself to, rather than under whatever is current where this is read.
     private static func inPinnedAppearance(_ colour: Color) -> Color {
@@ -431,6 +465,10 @@ enum PaintedSurfaces {
         "eventRowSelected": eventRowSelected,
         "selectedPillLabel": selectedPillLabel,
         "selectedPillFill": selectedPillFill,
+        "eventRowName": eventRowName,
+        "eventRowNameSelected": eventRowNameSelected,
+        "eventRowDetail": eventRowDetail,
+        "eventRowDetailSelected": eventRowDetailSelected,
         "exportedCountBadge": exportedCountBadge,
         "exportedCountText": exportedCountText,
         "tagChipFill": tagChipFill,
@@ -571,6 +609,22 @@ enum PaintedSurfaces {
                           selectedPillLabel,
                           on: selectedPillFill.composited(over: eventRowSelected),
                           .bodyText))
+
+        // Every word on the row, on all three of its states (#590). The pill
+        // was covered above and the type beside it was not, because a system
+        // colour sits outside the palette and so no pair could name it: the
+        // two lines that confirm which show was clicked were 3.68:1 on the
+        // state they are read in.
+        for (where_, row) in [("at rest", eventRowAtRest), ("hovered", eventRowHovered)] {
+            pairs.append(Pair("event row \(where_)", "name",
+                              eventRowName, on: row, .largeText))
+            pairs.append(Pair("event row \(where_)", "detail lines",
+                              eventRowDetail, on: row, .bodyText))
+        }
+        pairs.append(Pair("event row selected", "name",
+                          eventRowNameSelected, on: eventRowSelected, .largeText))
+        pairs.append(Pair("event row selected", "detail lines",
+                          eventRowDetailSelected, on: eventRowSelected, .bodyText))
 
         pairs.append(Pair("exported count badge", "count",
                           exportedCountText, on: exportedCountBadge, .bodyText))

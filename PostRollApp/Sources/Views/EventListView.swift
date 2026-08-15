@@ -303,9 +303,13 @@ private struct EventRow: View {
                 // Larger size and bottom padding create a clear hierarchy break.
                 Text(event.name)
                     .font(.signPainter(19))
-                    // Color.primary adapts to selection: white on focused selected rows,
-                    // dark on unfocused. Custom warm color only when unselected.
-                    .foregroundStyle(isSelected ? Color.primary : Color.warmDark)
+                    // Warms towards the system label colour on selection, and
+                    // stays the custom warm colour otherwise. Named rather
+                    // than written here, so the pair walk can say what it
+                    // measures: 11.61:1 selected, which is why this one moved
+                    // nowhere while the lines below it did (#590).
+                    .foregroundStyle(isSelected ? PaintedSurfaces.eventRowNameSelected
+                                                : PaintedSurfaces.eventRowName)
                     .lineLimit(1)
                     .padding(.bottom, 2)
             }
@@ -319,7 +323,13 @@ private struct EventRow: View {
                 Text(event.displayDate)
             }
             .font(.light(10))
-            .foregroundStyle(isSelected ? Color.secondary : Color.warmMid)
+            // Named rather than typed in, and deeper than the pair they were
+            // (#590). `Color.secondary` put this line at 3.68:1 on a selected
+            // row, and no check could say so: a system colour is outside the
+            // palette, so no pair covered the one line that confirms the right
+            // show was clicked.
+            .foregroundStyle(isSelected ? PaintedSurfaces.eventRowDetailSelected
+                                        : PaintedSurfaces.eventRowDetail)
             .lineLimit(1)
 
             HStack(spacing: 5) {
@@ -340,7 +350,8 @@ private struct EventRow: View {
                           isSelected: isSelected)
             }
             .font(.system(size: 10))
-            .foregroundStyle(isSelected ? Color.secondary : Color.warmMid)
+            .foregroundStyle(isSelected ? PaintedSurfaces.eventRowDetailSelected
+                                        : PaintedSurfaces.eventRowDetail)
             .padding(.top, 2)
         }
         .padding(.vertical, 5)

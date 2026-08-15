@@ -587,26 +587,107 @@ final class BannerLegibilityTests: XCTestCase {
     /// happens to have, agree with itself, and say nothing about the app. So
     /// the same colour is resolved under the opposite appearance and the two
     /// have to differ, which they only can if the pin binds (L70).
+    /// Every name built from a system colour, not just the pill's (#590). The
+    /// row's detail lines are resolved the same way and would fail the same
+    /// way, so they are held to the same proof rather than trusted to the
+    /// helper they share.
     func testTheSelectedPillIsMeasuredUnderTheAppearanceTheAppPins() throws {
-        let pinned = try XCTUnwrap(NSColor(PaintedSurfaces.selectedPillLabel)
-            .usingColorSpace(.sRGB))
-
         var underDark: NSColor?
         NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
             underDark = NSColor(Color.primary).usingColorSpace(.sRGB)
         }
         let dark = try XCTUnwrap(underDark, "the opposite appearance did not resolve")
 
-        XCTAssertNotEqual(pinned.brightnessComponent, dark.brightnessComponent,
-                          accuracy: 0.01,
-                          "the selected pill's label resolves to the same colour under "
-                          + "both appearances, so it is not pinned to the one the app "
-                          + "forces and this pair is measuring whatever is current here")
-        XCTAssertLessThan(pinned.brightnessComponent, 0.5,
-                          "the app pins itself to light, where the label colour is dark. "
-                          + "A light one here means this resolved under the wrong "
-                          + "appearance and the ratio is against a colour the app never "
-                          + "draws")
+        for (name, colour) in [("selected pill label", PaintedSurfaces.selectedPillLabel),
+                               ("selected row detail lines",
+                                PaintedSurfaces.eventRowDetailSelected)] {
+            let pinned = try XCTUnwrap(NSColor(colour).usingColorSpace(.sRGB))
+
+            XCTAssertNotEqual(pinned.brightnessComponent, dark.brightnessComponent,
+                              accuracy: 0.01,
+                              "the \(name) resolves to the same colour under both "
+                              + "appearances, so it is not pinned to the one the app "
+                              + "forces and this pair is measuring whatever is current "
+                              + "here")
+            XCTAssertLessThan(pinned.brightnessComponent, 0.5,
+                              "the app pins itself to light, where the \(name) is dark. "
+                              + "A light one here means this resolved under the wrong "
+                              + "appearance and the ratio is against a colour the app "
+                              + "never draws")
+        }
+    }
+
+    /// The event row draws every word from a named pair (#590).
+    ///
+    /// Built is not wired (L3). The three pairs above are read from
+    /// `PaintedSurfaces`, so a row that went back to `Color.secondary` would
+    /// leave them measuring a palette the list had stopped using, and a system
+    /// colour is exactly what nothing here can reach: it is not in the palette,
+    /// so no pair covers it and the ratio walk has nothing to say.
+    ///
+    /// Both spellings, because SwiftUI takes either and a matcher that sees one
+    /// of them reads as clean on the other (#586). Scoped to the row's own
+    /// declaration rather than the file, so a legitimate system colour
+    /// somewhere else in it cannot answer for this one (L135), and comments are
+    /// stripped, because the row explains this rule in prose right beside the
+    /// code it is about (L103).
+    func testTheEventRowDrawsEveryWordFromANamedPair() throws {
+        let row = try eventRowDeclaration()
+
+        for spelling in ["Color.secondary", "Color.primary", ".foregroundStyle(.secondary)",
+                         ".foregroundStyle(.primary)"] {
+            XCTAssertFalse(row.contains(spelling), """
+                EventRow draws a foreground in \(spelling), a system colour outside \
+                this app's palette. Nothing can measure it against the row behind it, \
+                which is how its two detail lines sat at 3.68:1 on a selected row with \
+                every check green. Use PaintedSurfaces.eventRowName / eventRowDetail \
+                and their selected pairs.
+                """)
+        }
+
+        for name in ["eventRowName", "eventRowNameSelected",
+                     "eventRowDetail", "eventRowDetailSelected"] {
+            XCTAssertTrue(row.contains("PaintedSurfaces.\(name)"), """
+                EventRow no longer draws from PaintedSurfaces.\(name), so that pair is \
+                measuring a colour the list does not use and says nothing about what is \
+                on screen.
+                """)
+        }
+    }
+
+    /// The source of `EventRow` alone, comments stripped.
+    ///
+    /// Bounded by the next type declaration rather than by a line count, so
+    /// adding a line to the row cannot quietly push half of it out of the
+    /// scope this reads.
+    private func eventRowDeclaration() throws -> String {
+        let code = try appSource("Sources/Views/EventListView.swift")
+        let start = try XCTUnwrap(code.range(of: "struct EventRow: View {"),
+                                  "EventRow has been renamed or moved out of "
+                                  + "EventListView.swift, so this guard is reading a "
+                                  + "declaration that no longer exists")
+        let rest = code[start.upperBound...]
+        let end = rest.range(of: "\nstruct ") ?? rest.range(of: "\nprivate struct ")
+        return String(rest[..<(end?.lowerBound ?? rest.endIndex)])
+    }
+
+    /// The scope above really is the row and not the whole file (#590).
+    ///
+    /// A range that silently ran to the end of the file would be answered by
+    /// any of the other views in it, which is the failure L135 is about, and it
+    /// would look exactly like this one passing.
+    func testTheEventRowScopeStopsAtTheRow() throws {
+        let row = try eventRowDeclaration()
+        let file = try appSource("Sources/Views/EventListView.swift")
+
+        XCTAssertTrue(row.contains("event.displayDate"),
+                      "the scope no longer holds the row's own lines, so the guard "
+                      + "above is reading the wrong region")
+        XCTAssertFalse(row.contains("struct UndoBanner"),
+                       "the scope runs past the row into the rest of the file, so any "
+                       + "other view in it can answer for the row")
+        XCTAssertLessThan(row.count, file.count / 2,
+                          "the scope is most of the file rather than one declaration")
     }
 
     /// The pill's wash and its ink are two different colours (#582).
