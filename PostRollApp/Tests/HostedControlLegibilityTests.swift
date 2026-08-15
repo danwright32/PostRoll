@@ -446,6 +446,184 @@ final class HostedControlLegibilityTests: XCTestCase {
         return rep
     }
 
+    // MARK: - The screen a program is read on (#607)
+
+    /// What the reading screen says, from the code that says it.
+    ///
+    /// Nothing here is typed copy. The phase comes from `OCRProgressText.phase`
+    /// over a step the run could really write, the footer from
+    /// `OCRProgressText.footer` over a real `LongRunStatus`, and the timer from
+    /// the app's own formatter, so this draws the screen the app shows rather
+    /// than one invented beside it (L48).
+    ///
+    /// A pinned `updatedAt` rather than the clock: the step is half of a pair
+    /// whose meaning is its distance from now, and leaving the other half live
+    /// walks the fixture into a state nobody chose (L130). The status is stated
+    /// outright for the same reason, instead of being derived from a threshold
+    /// against the moment the test happens to run.
+    private static var readingStates: [(name: String, live: OCRProgressBody.Live)] {
+        let step = GenerationStep(label: "Reading the program", index: 2, total: 3,
+                                  updatedAt: 1_760_000_000)
+        let estimate: Double = 95
+
+        func live(_ status: LongRunStatus, step: GenerationStep?,
+                  seconds: Int) -> OCRProgressBody.Live {
+            OCRProgressBody.Live(
+                phase: OCRProgressText.phase(
+                    step: step,
+                    fallback: OCRProgressText.elapsedPhase(elapsedSeconds: seconds,
+                                                           estimate: estimate)),
+                elapsedText: OCRProgressText.elapsed(seconds: seconds),
+                footer: OCRProgressText.footer(
+                    status: status, estimate: estimate,
+                    formattedEstimate: TimingStore.formatEstimate(estimate)))
+        }
+
+        return [
+            ("before the run has reported anything",
+             live(.working(elapsedSeconds: 4, step: nil), step: nil, seconds: 4)),
+            ("part way through",
+             live(.working(elapsedSeconds: 67, step: step), step: step, seconds: 67)),
+            ("gone quiet",
+             live(.stalled(elapsedSeconds: 900, step: step), step: step, seconds: 900)),
+        ]
+    }
+
+    /// The reading screen at the size the detail pane gives it.
+    ///
+    /// Hosted rather than image-rendered, and that is the whole reason this
+    /// lives in this file: the shimmer rail runs a `repeatForever` animation,
+    /// and #592 measured what `ImageRenderer` does to a view carrying one. It
+    /// draws the shape and drops the TEXT, so added to the harness next door
+    /// this screen would have passed while showing no words at all.
+    private func renderReadingScreen(_ live: OCRProgressBody.Live,
+                                     wordless: Bool,
+                                     width: CGFloat = 520) throws -> NSBitmapImageRep {
+        let view = OCRProgressBody(eventName: "Spring Gala",
+                                   live: { _ in live },
+                                   onCancel: {},
+                                   wordless: wordless)
+            .frame(width: width, height: 400)
+            .background(PaintedSurfaces.page)
+
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(x: 0, y: 0, width: width, height: 400)
+        host.layoutSubtreeIfNeeded()
+        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
+                                "AppKit produced no bitmap for the reading screen")
+        host.cacheDisplay(in: host.bounds, to: rep)
+        return rep
+    }
+
+    /// A lower floor than the 0.01 the rest of this file uses, and the reason is
+    /// the surface rather than a weaker standard.
+    ///
+    /// This is a whole detail pane holding a name, two short lines, a timer and
+    /// a footer, centred in a great deal of empty page, where a notice is a
+    /// small box that is almost all type. Measured, the three states render
+    /// between 0.0138 and 0.0256, and the same screen with every word switched
+    /// off renders 0.0007. So this sits comfortably between drawn and blank,
+    /// and the ratio below is what makes either number mean anything. The same
+    /// call `PhotoLightboxTests` made, for the same shape of screen.
+    private static let readingScreenInk = 0.005
+
+    /// The screen Dan watches for minutes while a program is read, drawn (#607).
+    ///
+    /// Every notice, every stage pill and the whole event list are rendered and
+    /// measured, and this one never was, so nothing had ever confirmed its
+    /// words reach the screen.
+    ///
+    /// Measured against the SAME SCREEN WITH ITS WORDS SWITCHED OFF rather than
+    /// a flat threshold. The shimmer rail is a mark on the page whatever the
+    /// type does, and a floor alone would let it answer for the type (L141).
+    /// What that comparison establishes here is that the rail is worth 0.0007
+    /// and could not have answered for it, which is a measurement rather than
+    /// the assumption it replaced.
+    func testTheReadingScreenDrawsItsWords() throws {
+        for state in Self.readingStates {
+            let words = inkCoverage(try renderReadingScreen(state.live, wordless: false))
+            let chrome = inkCoverage(try renderReadingScreen(state.live, wordless: true))
+            print(String(format: "  %.4f words, %.4f shimmer only   reading, %@",
+                         words, chrome, state.name))
+
+            XCTAssertGreaterThan(words, Self.readingScreenInk, """
+                The reading screen "\(state.name)" rendered almost nothing but its own \
+                page (\(String(format: "%.4f", words))). The show's name, the phase, \
+                the timer and the footer are in the view tree and are not on the \
+                screen, which is the state Dan sits in front of for minutes at a time.
+                """)
+            XCTAssertGreaterThan(words, chrome * 3, """
+                The reading screen "\(state.name)" measures \
+                \(String(format: "%.4f", words)) with its words and \
+                \(String(format: "%.4f", chrome)) with every one of them switched off. \
+                The words have to be worth far more ink than the shimmer rail the \
+                screen paints for itself, or this check is reading the decoration and \
+                would pass on a screen showing nothing (L141).
+                """)
+        }
+    }
+
+    /// The screen still draws when the window is dragged narrow.
+    func testTheReadingScreenStillDrawsWhenNarrow() throws {
+        for state in Self.readingStates {
+            let coverage = inkCoverage(try renderReadingScreen(state.live,
+                                                               wordless: false,
+                                                               width: 300))
+            XCTAssertGreaterThan(coverage, Self.readingScreenInk,
+                                 "the reading screen \"\(state.name)\" lost its content "
+                                 + "at 300pt wide")
+        }
+    }
+
+    /// Where the animation trap actually reaches, measured rather than assumed.
+    ///
+    /// #607 was filed expecting this screen to be the stage pill's case again:
+    /// it carries a `repeatForever` shimmer, and #592 measured `ImageRenderer`
+    /// drawing an animating pill's capsule and dropping its word. It is not.
+    /// Through `ImageRenderer` this screen measures 0.0111 with its words and
+    /// 0.0003 without them, so the words are drawn.
+    ///
+    /// The difference is WHERE the animation is declared. `StagePill` starts
+    /// its pulse in an `onAppear` on the pill, so the transaction covers the
+    /// label as well; `OCRShimmerLine` starts its own inside itself, and the
+    /// type is in a sibling of it rather than under it.
+    ///
+    /// Recorded rather than deleted, because that distinction is the thing a
+    /// future reader needs and no comment can keep honest. Lifting the shimmer's
+    /// animation onto the `VStack` above it would take the words of this whole
+    /// screen with it, and this is the only check that would say so.
+    func testTheAnimationTrapHasNotReachedThisScreensWords() throws {
+        let live = try XCTUnwrap(Self.readingStates.first).live
+
+        func imageRendered(wordless: Bool) throws -> Double {
+            let renderer = ImageRenderer(content: OCRProgressBody(
+                eventName: "Spring Gala", live: { _ in live }, onCancel: {},
+                wordless: wordless)
+                .frame(width: 520, height: 400)
+                .background(PaintedSurfaces.page))
+            renderer.scale = 2
+            let image = try XCTUnwrap(renderer.nsImage)
+            let tiff = try XCTUnwrap(image.tiffRepresentation)
+            return inkCoverage(try XCTUnwrap(NSBitmapImageRep(data: tiff)))
+        }
+
+        let words = try imageRendered(wordless: false)
+        let chrome = try imageRendered(wordless: true)
+        print(String(format: "  reading screen through ImageRenderer: %.4f words, "
+                     + "%.4f shimmer only", words, chrome))
+
+        XCTAssertGreaterThan(words, chrome * 3, """
+            Through ImageRenderer the reading screen measures \
+            \(String(format: "%.4f", words)) with its words and \
+            \(String(format: "%.4f", chrome)) with them switched off, which means the \
+            words are no longer being drawn. #592's animation trap has reached this \
+            screen: something has moved the shimmer's repeating animation up to a view \
+            the type sits under. The hosted checks above still see it, so nothing is \
+            unguarded, but any surface added to BannerLegibilityTests near this one is \
+            now measuring its own decoration.
+            """)
+    }
+
     // MARK: - Fits, rather than merely inks
 
     /// The width AppKit says this content requires.

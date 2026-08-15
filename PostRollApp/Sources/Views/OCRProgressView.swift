@@ -15,31 +15,11 @@ struct OCRProgressView: View {
     private var elapsed: Int { run?.elapsedSeconds ?? 0 }
     private var phaseOverride: String? { run?.phaseOverride }
 
-    // Phases are tied to elapsed seconds — last matching entry wins
-    private static let phases: [(from: Int, label: String)] = [
-        (0,  "Converting program pages…"),
-        (5,  "Sending to Claude…"),
-        (10, "Reading the program…"),
-        (18, "Extracting performers…"),
-        (25, "Gathering program notes…"),
-        (32, "Analyzing context…"),
-        (40, "Almost there…"),
-    ]
-
-    // Scale phase thresholds to the estimated OCR duration so labels track reality.
-    private var scaledPhases: [(from: Int, label: String)] {
-        guard let est = TimingStore.shared.ocrEstimate else { return Self.phases }
-        let base = Double(Self.phases.last?.from ?? 40)
-        let scale = est / base
-        return Self.phases.map { (Int((Double($0.from) * scale).rounded()), $0.label) }
-    }
-
+    /// The guess shown until the run reports a step of its own. The table and
+    /// the scaling live in `OCRProgressText` (#607).
     private var currentPhase: String {
-        phaseOverride ?? (scaledPhases.last { $0.from <= elapsed }?.label ?? Self.phases[0].label)
-    }
-
-    private var elapsedText: String {
-        String(format: "%d:%02d", elapsed / 60, elapsed % 60)
+        phaseOverride ?? OCRProgressText.elapsedPhase(elapsedSeconds: elapsed,
+                                                      estimate: TimingStore.shared.ocrEstimate)
     }
 
     /// When this run started, for measuring silence against.
@@ -80,77 +60,25 @@ struct OCRProgressView: View {
     // MARK: - Progress state
 
     private var progressView: some View {
-        VStack(spacing: Spacing.lg) {
-            // Event identity
-            VStack(spacing: 6) {
-                Text(event.name)
-                    .font(.signPainter(28))
-                    .foregroundStyle(Color.warmDark)
-
-                Text("Reading Program")
-                    .font(.system(size: 10, weight: .medium))
-                    .tracking(1.4)
-                    .foregroundStyle(PaintedSurfaces.pageAccentText)
-            }
-
-            // Shimmer line — the alive signal, replaces the system spinner
-            OCRShimmerLine()
-                .frame(width: 260, height: 1.5)
-                .padding(.vertical, 4)
-
-            // Phase label and footer both come from what the run last
-            // reported, re-read every second (#467). The elapsed timer below
+        OCRProgressBody(
+            eventName: event.name,
+            // Phase, timer and footer all come from what the run last
+            // reported, re-read every second (#467). The elapsed timer alone
             // proves only that this app is running, so on its own it is a
             // liveness signal for the wrong process (L106).
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                let status = liveStatus(now: context.date)
+            live: { now in
                 let step = LongRunState.readStep(
                     at: AppPaths.ocrProgressFile(forEventID: event.id))
-                let label = OCRProgressText.phase(step: step, fallback: currentPhase)
-                let footer = OCRProgressText.footer(
-                    status: status,
-                    estimate: TimingStore.shared.ocrEstimate,
-                    formattedEstimate: TimingStore.shared.ocrEstimate
-                        .map(TimingStore.formatEstimate))
-
-                VStack(spacing: Spacing.lg) {
-                    Text(label)
-                        .font(.light(13))
-                        .foregroundStyle(Color.warmMid)
-                        .contentTransition(.opacity)
-                        .animation(.easeInOut(duration: 0.5), value: label)
-
-                    // Elapsed timer, which says how long rather than whether
-                    // anything is happening.
-                    Text(elapsedText)
-                        .font(.system(size: 22, weight: .light, design: .monospaced))
-                        .foregroundStyle(PaintedSurfaces.pageAccentText)
-                        .monospacedDigit()
-
-                    if footer.isStalled {
-                        Label(footer.text, systemImage: "exclamationmark.triangle")
-                            .font(.light(11))
-                            .foregroundStyle(Color.roseDeep)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 300)
-                    } else {
-                        Text(footer.text)
-                            .font(.light(11))
-                            .foregroundStyle(Color.warmFaint)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 300)
-                            .contentTransition(.opacity)
-                            .animation(.easeInOut(duration: 0.6), value: footer.text)
-                    }
-                }
-            }
-
-            Button("Cancel") { cancelOCR() }
-                .buttonStyle(.plain)
-                .font(.system(size: 11))
-                .foregroundStyle(Color.warmMid)
-                .padding(.top, Spacing.sm)
-        }
+                return OCRProgressBody.Live(
+                    phase: OCRProgressText.phase(step: step, fallback: currentPhase),
+                    elapsedText: OCRProgressText.elapsed(seconds: elapsed),
+                    footer: OCRProgressText.footer(
+                        status: liveStatus(now: now),
+                        estimate: TimingStore.shared.ocrEstimate,
+                        formattedEstimate: TimingStore.shared.ocrEstimate
+                            .map(TimingStore.formatEstimate)))
+            },
+            onCancel: cancelOCR)
     }
 
     // MARK: - Error state
@@ -196,6 +124,111 @@ struct OCRProgressView: View {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         ev.stage = .created
         appState.updateEvent(ev)
+    }
+}
+
+// MARK: - The reading screen
+
+/// The screen shown while a program is being read, with nothing behind it
+/// (#607).
+///
+/// Split out of `OCRProgressView` so it can be drawn in a test. The view above
+/// reads the run from the environment and starts one in `onAppear`, so
+/// rendering it would launch a paid Claude read; this half is handed what it
+/// shows and does nothing (L2). Nothing had ever confirmed the words on this
+/// screen reach it, which is the one Dan sits in front of for minutes at a
+/// time.
+struct OCRProgressBody: View {
+
+    /// What the run last reported. Read on every tick rather than passed once,
+    /// because the timer and the footer are the two things that must not go
+    /// stale.
+    struct Live: Equatable {
+        let phase: String
+        let elapsedText: String
+        let footer: OCRProgressText.Footer
+    }
+
+    let eventName: String
+    let live: (Date) -> Live
+    let onCancel: () -> Void
+
+    #if POSTROLL_TESTS
+    /// The same screen with every word switched off, for the render check that
+    /// measures the type against what this screen paints for itself.
+    ///
+    /// Not a flat threshold, because the shimmer rail is a mark on the page
+    /// whatever the words do and would answer for them (L141). Behind the
+    /// test-only flag so the shipping app cannot reach it.
+    var wordless = false
+    private var wordOpacity: Double { wordless ? 0 : 1 }
+    #else
+    private var wordOpacity: Double { 1 }
+    #endif
+
+    var body: some View {
+        VStack(spacing: Spacing.lg) {
+            // Event identity
+            VStack(spacing: 6) {
+                Text(eventName)
+                    .font(.signPainter(28))
+                    .foregroundStyle(Color.warmDark)
+
+                Text("Reading Program")
+                    .font(.system(size: 10, weight: .medium))
+                    .tracking(1.4)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
+            }
+            .opacity(wordOpacity)
+
+            // Shimmer line: the alive signal, replacing the system spinner
+            OCRShimmerLine()
+                .frame(width: 260, height: 1.5)
+                .padding(.vertical, 4)
+
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let now = live(context.date)
+
+                VStack(spacing: Spacing.lg) {
+                    Text(now.phase)
+                        .font(.light(13))
+                        .foregroundStyle(Color.warmMid)
+                        .contentTransition(.opacity)
+                        .animation(.easeInOut(duration: 0.5), value: now.phase)
+
+                    // Elapsed timer, which says how long rather than whether
+                    // anything is happening.
+                    Text(now.elapsedText)
+                        .font(.system(size: 22, weight: .light, design: .monospaced))
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
+                        .monospacedDigit()
+
+                    if now.footer.isStalled {
+                        Label(now.footer.text, systemImage: "exclamationmark.triangle")
+                            .font(.light(11))
+                            .foregroundStyle(Color.roseDeep)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 300)
+                    } else {
+                        Text(now.footer.text)
+                            .font(.light(11))
+                            .foregroundStyle(Color.warmFaint)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 300)
+                            .contentTransition(.opacity)
+                            .animation(.easeInOut(duration: 0.6), value: now.footer.text)
+                    }
+                }
+            }
+            .opacity(wordOpacity)
+
+            Button("Cancel") { onCancel() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmMid)
+                .padding(.top, Spacing.sm)
+                .opacity(wordOpacity)
+        }
     }
 }
 

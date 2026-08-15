@@ -37,6 +37,44 @@ final class OCRProgressTextTests: XCTestCase {
                        "Analyzing context…")
     }
 
+    // MARK: - The guess shown until the run reports (#607)
+
+    /// The elapsed-derived guess advances as the read goes on.
+    ///
+    /// It lives here rather than inside the view so that the render check in
+    /// `HostedControlLegibilityTests` draws the string the app draws, instead
+    /// of one typed into a test (L48).
+    func testTheGuessAdvancesWithTheClock() {
+        XCTAssertEqual(OCRProgressText.elapsedPhase(elapsedSeconds: 0, estimate: nil),
+                       "Converting program pages…")
+        XCTAssertEqual(OCRProgressText.elapsedPhase(elapsedSeconds: 12, estimate: nil),
+                       "Reading the program…")
+        XCTAssertEqual(OCRProgressText.elapsedPhase(elapsedSeconds: 500, estimate: nil),
+                       "Almost there…")
+    }
+
+    /// The thresholds scale to how long this Mac's reads actually take, so the
+    /// labels track reality rather than a guess made once.
+    func testTheGuessStretchesToFitALongEstimate() {
+        XCTAssertEqual(OCRProgressText.elapsedPhase(elapsedSeconds: 12, estimate: 400),
+                       "Converting program pages…",
+                       "twelve seconds into a read that usually takes four hundred is "
+                       + "still the first phase")
+        XCTAssertEqual(OCRProgressText.elapsedPhase(elapsedSeconds: 120, estimate: 400),
+                       "Reading the program…")
+    }
+
+    // MARK: - The elapsed timer
+
+    /// Formatted by the app rather than by whoever reads it, for the same
+    /// reason the phases moved here.
+    func testTheElapsedTimerReadsAsMinutesAndSeconds() {
+        XCTAssertEqual(OCRProgressText.elapsed(seconds: 0), "0:00")
+        XCTAssertEqual(OCRProgressText.elapsed(seconds: 7), "0:07")
+        XCTAssertEqual(OCRProgressText.elapsed(seconds: 67), "1:07")
+        XCTAssertEqual(OCRProgressText.elapsed(seconds: 605), "10:05")
+    }
+
     // MARK: - The footer tells slow from silent
 
     func testAHealthyRunSaysHowLongItUsuallyTakes() {
