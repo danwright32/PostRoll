@@ -309,7 +309,7 @@ struct PhotoAssignmentView: View {
 
         // Full-screen photo preview overlay
         if let url = previewURL {
-            PhotoPreviewOverlay(url: url) { previewURL = nil }
+            PhotoLightbox(url: url) { previewURL = nil }
                 .transition(.opacity)
         }
         } // ZStack
@@ -2431,66 +2431,6 @@ private struct DayNotesField: View {
 }
 
 // MARK: - Photo Preview Overlay
-
-private struct PhotoPreviewOverlay: View {
-    let url: URL
-    let onDismiss: () -> Void
-    @State private var load: ImageLoad = .loading
-
-    var body: some View {
-        ZStack {
-            PaintedSurfaces.lightboxBackdrop
-                .ignoresSafeArea()
-                .onTapGesture { onDismiss() }
-
-            switch load {
-            case .loaded(let image):
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(48)
-                    .shadow(color: .black.opacity(0.5), radius: 24, y: 6)
-            case .loading:
-                ProgressView().tint(PaintedSurfaces.lightboxLabel)
-            case .missing:
-                // Opened from a thumbnail, so the file was there when the list
-                // was drawn. A spinner here reads as a slow load of a photo
-                // that is simply gone (L10).
-                VStack(spacing: Spacing.sm) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(PaintedSurfaces.lightboxLabel)
-                    Text("This file is missing")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(PaintedSurfaces.lightboxLabel)
-                    Text(url.lastPathComponent)
-                        .font(.system(size: 11))
-                        .foregroundStyle(PaintedSurfaces.lightboxDetail)
-                }
-            }
-
-            // Dismiss button — top right
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(PaintedSurfaces.lightboxCloseIcon, PaintedSurfaces.lightboxCloseIconDisc)
-                            .font(.system(size: 22))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close the photo")
-                    .help("Close the photo")
-                    .keyboardShortcut(.cancelAction)   // Esc dismisses the preview
-                    .padding(16)
-                }
-                Spacer()
-            }
-        }
-        .task { load = await ImageLoad.read(url) }
-    }
-}
 
 // MARK: - Performer Assignment Section
 
