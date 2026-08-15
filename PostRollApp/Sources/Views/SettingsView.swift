@@ -94,7 +94,7 @@ struct SettingsView: View {
                 Text("Anthropic API Key")
             } footer: {
                 Text(.init(SettingsCopy.apiKeyFooter))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)
                     .font(.system(size: 11))
             }
 
@@ -112,7 +112,7 @@ struct SettingsView: View {
                 Text("Default Posting Layout")
             } footer: {
                 Text("The layout new events start with. Balanced posts a 4 photo carousel with a collage story on Sunday, Monday, and Wednesday; Classic posts a single photo Sunday and Monday plus a 10 photo Wednesday. You can override this for any single event on its Export page.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)
                     .font(.system(size: 11))
             }
 
@@ -121,7 +121,7 @@ struct SettingsView: View {
                     HStack {
                         if isReclaiming {
                             ProgressView().controlSize(.small)
-                            Text("Reclaiming…").foregroundStyle(.secondary)
+                            Text("Reclaiming…").foregroundStyle(PaintedSurfaces.readableSecondaryLabel)
                         } else {
                             Button("Reclaim \(byteString(bytes))…", role: .destructive) {
                                 showReclaimConfirm = true
@@ -130,7 +130,7 @@ struct SettingsView: View {
                         if let reclaimResult {
                             Spacer()
                             Text(reclaimResult)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)
                                 .font(.system(size: 11))
                         }
                     }
@@ -138,7 +138,7 @@ struct SettingsView: View {
                     Text("Storage")
                 } footer: {
                     Text("Your data now lives in Application Support. The original copies in ~/Documents/PostRoll are duplicates and safe to delete. The Python project files there are left untouched.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)
                         .font(.system(size: 11))
                 }
             }

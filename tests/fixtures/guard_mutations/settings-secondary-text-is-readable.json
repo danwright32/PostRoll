@@ -1,0 +1,8 @@
+{
+  "name": "settings-secondary-text-is-readable",
+  "file": "PostRollApp/Sources/Views/PaintedSurfaces.swift",
+  "find": "    static var readableSecondaryLabel: Color { inPinnedAppearance(.primary).opacity(0.75) }",
+  "replace": "    static var readableSecondaryLabel: Color { inPinnedAppearance(.secondary) }",
+  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
+  "breaks": "secondary type goes back to the platform's half strength label colour, which is 3.95:1 on the white a system form is drawn on and 3.68:1 on a selected event row, both under the 4.5:1 body text needs (#596)"
+}
