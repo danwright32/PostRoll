@@ -679,6 +679,17 @@ final class BannerLegibilityTests: XCTestCase {
 
     /// Lines where a colour is used as a view, with its 1-based line number.
     ///
+    /// Matches the colour at the START of the line and lets anything follow,
+    /// because a painted area routinely carries its modifiers on the same line
+    /// (`Color.creamDeep.overlay { … }`, `Color.cream.ignoresSafeArea()`).
+    ///
+    /// The first version of this ended the pattern at the line break, so it saw
+    /// the ten sites written with nothing after the colour and none of the
+    /// thirteen written with a modifier. Every one of those thirteen had
+    /// already been named by hand, so the whole suite was green and the check
+    /// looked like it worked: it was `check_guards` putting one site back that
+    /// showed it had never been protecting them (L1).
+    ///
     /// `Color.clear` is excluded because it paints nothing: it is a spacer and
     /// a hit area, and there is no surface behind any words. Excluded here by
     /// name rather than by the caller skipping it, so the exemption is one
@@ -688,11 +699,50 @@ final class BannerLegibilityTests: XCTestCase {
             .enumerated()
             .compactMap { index, raw in
                 let line = raw.trimmingCharacters(in: .whitespaces)
-                guard line.range(of: #"^Color\.[A-Za-z][A-Za-z0-9]*$"#,
+                guard line.range(of: #"^Color\.[A-Za-z][A-Za-z0-9]*\b"#,
                                  options: .regularExpression) != nil,
-                      line != "Color.clear" else { return nil }
+                      !line.hasPrefix("Color.clear") else { return nil }
                 return (index + 1, line)
             }
+    }
+
+    /// The detector above is asked directly what it can see (#586).
+    ///
+    /// Running it over the real tree cannot answer this. The tree is clean, so
+    /// a detector that sees one spelling and a detector that sees both give the
+    /// same silent pass, and the narrow one shipped looking correct. A guard is
+    /// only real once it has been seen to fail, and the thing that has to fail
+    /// is the matcher, not the codebase around it (L1).
+    func testTheColourAsAViewMatcherSeesEverySpelling() {
+        let mustCatch = [
+            "        Color.creamDeep",
+            "        Color.creamDeep.overlay { Text(\"x\") }",
+            "        Color.cream.ignoresSafeArea()",
+            "        Color.creamEdge.frame(height: 0.5)",
+            "        Color.black.opacity(0.4)",
+        ]
+        for line in mustCatch {
+            XCTAssertEqual(bareColourViews(in: line).count, 1, """
+                the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as a \
+                painted area, so a surface written that way is exempt from it and \
+                reads exactly like no surface at all
+                """)
+        }
+
+        let mustAllow = [
+            "        Color.clear",
+            "        Color.clear.frame(width: 8)",
+            "        .background(PaintedSurfaces.page)",
+            "        .foregroundStyle(Color.warmDark)",
+            "        let x = Color.roseGold",
+        ]
+        for line in mustAllow {
+            XCTAssertEqual(bareColourViews(in: line).count, 0, """
+                the check reports \(line.trimmingCharacters(in: .whitespaces)) as an \
+                unnamed painted area, which it is not. A rule that fires on correct \
+                code is the rule people learn to work around
+                """)
+        }
     }
 
     /// The accent may not be drawn as a foreground without saying which role it
