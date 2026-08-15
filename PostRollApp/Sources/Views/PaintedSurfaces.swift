@@ -248,11 +248,40 @@ enum PaintedSurfaces {
     /// `EventListView` records as deliberate rather than dropping it: the row
     /// still warms towards the system label colour when it is picked, at three
     /// quarters strength so the name above stays the stronger of the two.
+    static var eventRowDetailSelected: Color { readableSecondaryLabel }
+
+    // MARK: - Secondary type, and the one window that is not ours (#596)
+
+    /// The platform's secondary label, dark enough to read.
+    ///
+    /// SwiftUI's `.secondary` is the label colour at half strength, and half of
+    /// it is not enough on either background this app puts it on: 3.68:1 on a
+    /// selected event row and 3.95:1 on the white a system form is drawn on,
+    /// against the 4.5:1 body text needs. Three quarters is 5.83:1 and 6.58:1.
+    ///
+    /// One definition rather than one per screen. Both places want the same
+    /// thing, type that is quieter than the line above it and still readable,
+    /// and two copies of that decision would drift the first time one of them
+    /// was tuned.
     ///
     /// Resolved under the appearance the app pins itself to, for the reason
     /// `selectedPillLabel` is: read under whatever a test process happens to
     /// have, this would be measuring a colour the app never draws.
-    static var eventRowDetailSelected: Color { inPinnedAppearance(.primary).opacity(0.75) }
+    static var readableSecondaryLabel: Color { inPinnedAppearance(.primary).opacity(0.75) }
+
+    /// What the Settings window is filled with.
+    ///
+    /// The one window this app does not paint. It is a system `Form` on system
+    /// chrome, and holding Apple's own controls to a cream palette would be
+    /// holding them to rules they never agreed to, which is the reasoning the
+    /// Instagram card is exempt under. The WORDS on it are still this app's, so
+    /// the type is named and measured and the surface is taken from AppKit.
+    ///
+    /// `MainWindowView` sets `NSApplication.shared.appearance` to aqua, which
+    /// covers every panel including this one, so this is resolved there too.
+    static var systemFormBackground: Color {
+        inPinnedAppearance(Color(nsColor: .windowBackgroundColor))
+    }
 
     /// A dynamic system colour as it lands under the appearance the app pins
     /// itself to, rather than under whatever is current where this is read.
@@ -469,6 +498,8 @@ enum PaintedSurfaces {
         "eventRowNameSelected": eventRowNameSelected,
         "eventRowDetail": eventRowDetail,
         "eventRowDetailSelected": eventRowDetailSelected,
+        "readableSecondaryLabel": readableSecondaryLabel,
+        "systemFormBackground": systemFormBackground,
         "exportedCountBadge": exportedCountBadge,
         "exportedCountText": exportedCountText,
         "tagChipFill": tagChipFill,
@@ -625,6 +656,14 @@ enum PaintedSurfaces {
                           eventRowNameSelected, on: eventRowSelected, .largeText))
         pairs.append(Pair("event row selected", "detail lines",
                           eventRowDetailSelected, on: eventRowSelected, .bodyText))
+
+        // The Settings window (#596). Its footers are where the app explains
+        // what a setting does, and they were the platform's `.secondary` at
+        // 3.95:1 on the white a form is drawn on. Nothing could report it: a
+        // system colour on system chrome sits outside the palette, so no pair
+        // named either half of it.
+        pairs.append(Pair("settings form", "section footers",
+                          readableSecondaryLabel, on: systemFormBackground, .bodyText))
 
         pairs.append(Pair("exported count badge", "count",
                           exportedCountText, on: exportedCountBadge, .bodyText))

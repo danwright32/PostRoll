@@ -655,6 +655,40 @@ final class BannerLegibilityTests: XCTestCase {
         }
     }
 
+    /// The Settings window's own words are named too (#596).
+    ///
+    /// The same rule as the row above, one screen further out. The footers
+    /// under each section are where the app explains what a setting does, and
+    /// they were the platform's `.secondary`, which is the label colour at half
+    /// strength: 3.95:1 on the white a form is drawn on, under the 4.5:1 an
+    /// 11pt line needs. Nothing could report it, because a system colour on
+    /// system chrome is named by neither side.
+    ///
+    /// What this deliberately does NOT cover, said out loud rather than left as
+    /// a gap (L129): the same file draws `.orange`, `.red` and `.green` on
+    /// three state labels, which are system colours in the same position and
+    /// are not measured by anything either. They are a class of their own,
+    /// filed as #598 rather than folded in here, so the exclusion has an owner
+    /// rather than being forgotten the moment this reads as done (L65).
+    func testTheSettingsFormDrawsItsWordsFromANamedPair() throws {
+        let code = try appSource("Sources/Views/SettingsView.swift")
+
+        for spelling in [".foregroundStyle(.secondary)", "Color.secondary",
+                         ".foregroundStyle(.primary)", "Color.primary"] {
+            XCTAssertFalse(code.contains(spelling), """
+                SettingsView draws type in \(spelling), the platform's label colour at \
+                half strength, which is 3.95:1 on the white a form is drawn on. Use \
+                PaintedSurfaces.readableSecondaryLabel, which is measured against that \
+                surface.
+                """)
+        }
+
+        XCTAssertTrue(code.contains("PaintedSurfaces.readableSecondaryLabel"), """
+            SettingsView no longer draws from PaintedSurfaces.readableSecondaryLabel, \
+            so the pair for that window is measuring a colour it does not use.
+            """)
+    }
+
     /// The source of `EventRow` alone, comments stripped.
     ///
     /// Bounded by the next type declaration rather than by a line count, so

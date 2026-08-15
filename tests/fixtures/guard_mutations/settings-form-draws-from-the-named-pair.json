@@ -1,0 +1,8 @@
+{
+  "name": "settings-form-draws-from-the-named-pair",
+  "file": "PostRollApp/Sources/Views/SettingsView.swift",
+  "find": "                            Text(\"Reclaiming…\").foregroundStyle(PaintedSurfaces.readableSecondaryLabel)",
+  "replace": "                            Text(\"Reclaiming…\").foregroundStyle(.secondary)",
+  "test": "PostRollTests/BannerLegibilityTests/testTheSettingsFormDrawsItsWordsFromANamedPair",
+  "breaks": "the Settings window goes back to drawing type in a system colour, which sits outside the palette, so no pair names it and the ratio walk has nothing to measure it against (#596)"
+}
