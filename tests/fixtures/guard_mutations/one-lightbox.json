@@ -1,0 +1,8 @@
+{
+  "name": "one-lightbox",
+  "file": "PostRollApp/Sources/Views/PhotoLightbox.swift",
+  "find": "                    .keyboardShortcut(.cancelAction)",
+  "replace": "                    .help(\"Close the photo\")",
+  "test": "PostRollTests/PhotoLightboxTests/testTheLightboxDismissesOnEscape",
+  "breaks": "the full size photo stops closing on Escape, which is the behaviour the two copies of this view disagreed about before they were merged and the one nobody had chosen (#602)"
+}

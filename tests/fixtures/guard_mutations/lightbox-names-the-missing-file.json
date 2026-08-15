@@ -1,0 +1,8 @@
+{
+  "name": "lightbox-names-the-missing-file",
+  "file": "PostRollApp/Sources/Views/PhotoLightbox.swift",
+  "find": "                    Text(url.lastPathComponent)",
+  "replace": "                    Text(\"\")",
+  "test": "PostRollTests/PhotoLightboxTests/testTheMissingFileStateNamesTheFile",
+  "breaks": "the lightbox stops naming the file that has gone, so the person is told something is missing and not which of their photos it was (#602)"
+}
