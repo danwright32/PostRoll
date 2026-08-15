@@ -50,7 +50,7 @@ struct NewEventSheet: View {
                                     .foregroundStyle(Color.warmMid)
                                 DatePicker("", selection: $date, displayedComponents: .date)
                                     .labelsHidden()
-                                    .tint(Color.roseGold)
+                                    .tint(PaintedSurfaces.iconAccent)
                             }
                         }
 

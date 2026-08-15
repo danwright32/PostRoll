@@ -66,7 +66,7 @@ struct LongRunIndicator: View {
 
             case .working(let seconds, let step):
                 HStack(spacing: Spacing.sm) {
-                    ProgressView().controlSize(.small).tint(Color.roseGold)
+                    ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
                     Text(step?.display ?? label)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.warmDark)

@@ -856,8 +856,7 @@ final class BannerLegibilityTests: XCTestCase {
         }
     }
 
-    /// The accent may not be drawn as a foreground without saying which role it
-    /// is in (#580).
+    /// The accent may not be drawn without saying which role it is in (#580).
     ///
     /// `roseGold` measures 4.31:1 on the page and 3.68:1 on the deeper one:
     /// right for a symbol or a rule, under the line for a label, and it was
@@ -866,6 +865,18 @@ final class BannerLegibilityTests: XCTestCase {
     /// can is the call site saying what it is drawing. Once every foreground
     /// goes through `pageAccentText` or `iconAccent`, the pair walk above holds
     /// each of them to its own level.
+    ///
+    /// Tints as well as foregrounds (#591). This read only lines containing
+    /// "foreground", so twenty five sites setting a spinner, a slider or a date
+    /// picker's colour with `.tint(Color.roseGold)` were outside it, and so was
+    /// the app-wide tint every system control inherits. Measured, the accent is
+    /// right in that role, so nothing was wrong on screen: what was wrong is
+    /// that if the accent moved the way #580 moved it for type, nothing would
+    /// have reported these. A rule that covers one of two spellings reads
+    /// exactly like a rule that holds (#586).
+    ///
+    /// Matched case-insensitively so `listRowSeparatorTint` and friends are the
+    /// same rule rather than a way round it.
     func testTheAccentIsNeverDrawnUnnamed() throws {
         let sources = sourcesDir
         let files = try everySourceFile()
@@ -880,14 +891,67 @@ final class BannerLegibilityTests: XCTestCase {
             let code = SwiftSourceText.withoutComments(
                 try String(contentsOf: sources.appendingPathComponent(relative),
                            encoding: .utf8))
-            for line in code.split(separator: "\n") where line.contains("foreground") {
-                XCTAssertFalse(line.contains("Color.roseGold"), """
-                    \(relative) draws a foreground in the raw accent, which does not \
-                    say whether it is type or a symbol. As type it is 4.31:1 on the \
-                    page, under the level it needs, and nothing else can tell. Use \
+            for line in unnamedAccentUses(in: code) {
+                XCTFail("""
+                    \(relative) draws the raw accent, which does not say whether it is \
+                    type or a symbol. As type it is 4.31:1 on the page, under the level \
+                    it needs, and nothing else can tell. Use \
                     PaintedSurfaces.pageAccentText or PaintedSurfaces.iconAccent.
+
+                    \(line)
                     """)
             }
+        }
+    }
+
+    /// Lines drawing the raw accent in a role that has a name for it.
+    ///
+    /// Both of the ways a colour reaches a control: as a foreground, and as the
+    /// tint a spinner, a slider or a picker draws itself in. "tint(" is matched
+    /// on the lowercased line so `listRowSeparatorTint` and any other spelling
+    /// ending in it are the same rule.
+    private func unnamedAccentUses(in code: String) -> [String] {
+        code.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.contains("foreground") || $0.lowercased().contains("tint(") }
+            .filter { $0.contains("Color.roseGold") }
+    }
+
+    /// The matcher is asked directly what it can see (#591, L1).
+    ///
+    /// Running it over the real tree cannot answer this once the tree is clean:
+    /// a matcher that reads foregrounds only and one that reads tints as well
+    /// give the same silent pass, and the narrow one shipped for two issues
+    /// looking correct. What has to be seen to fail is the matcher, not the
+    /// codebase around it (#586).
+    func testTheAccentMatcherSeesEveryRoleTheAccentIsDrawnIn() {
+        let mustCatch = [
+            "            .foregroundStyle(Color.roseGold)",
+            "                .tint(Color.roseGold)",
+            "                ProgressView().controlSize(.small).tint(Color.roseGold)",
+            "            .listRowSeparatorTint(Color.roseGold)",
+        ]
+        for line in mustCatch {
+            XCTAssertEqual(unnamedAccentUses(in: line).count, 1, """
+                the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as the \
+                raw accent, so a control coloured that way is exempt from the rule and \
+                reads exactly like a screen that has none
+                """)
+        }
+
+        let mustAllow = [
+            "                .tint(PaintedSurfaces.iconAccent)",
+            "                .tint(PaintedSurfaces.photoPlaceholderSpinner)",
+            "            .foregroundStyle(PaintedSurfaces.pageAccentText)",
+            "                .tint(Color.warmMid)",
+            "    static let iconAccent = Color.roseGold",
+        ]
+        for line in mustAllow {
+            XCTAssertEqual(unnamedAccentUses(in: line).count, 0, """
+                the check reports \(line.trimmingCharacters(in: .whitespaces)) as the raw \
+                accent, which it is not. A rule that fires on correct code is the rule \
+                people learn to work around
+                """)
         }
     }
 
