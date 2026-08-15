@@ -579,6 +579,36 @@ final class BannerLegibilityTests: XCTestCase {
         }
     }
 
+    /// The selected pill's colours are pinned, not whatever is current (#587).
+    ///
+    /// `Color.primary` is a dynamic colour: read under one appearance it is
+    /// near-black, under another it is near-white. If the pinning quietly did
+    /// nothing, this pair would be measuring the appearance the TEST process
+    /// happens to have, agree with itself, and say nothing about the app. So
+    /// the same colour is resolved under the opposite appearance and the two
+    /// have to differ, which they only can if the pin binds (L70).
+    func testTheSelectedPillIsMeasuredUnderTheAppearanceTheAppPins() throws {
+        let pinned = try XCTUnwrap(NSColor(PaintedSurfaces.selectedPillLabel)
+            .usingColorSpace(.sRGB))
+
+        var underDark: NSColor?
+        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
+            underDark = NSColor(Color.primary).usingColorSpace(.sRGB)
+        }
+        let dark = try XCTUnwrap(underDark, "the opposite appearance did not resolve")
+
+        XCTAssertNotEqual(pinned.brightnessComponent, dark.brightnessComponent,
+                          accuracy: 0.01,
+                          "the selected pill's label resolves to the same colour under "
+                          + "both appearances, so it is not pinned to the one the app "
+                          + "forces and this pair is measuring whatever is current here")
+        XCTAssertLessThan(pinned.brightnessComponent, 0.5,
+                          "the app pins itself to light, where the label colour is dark. "
+                          + "A light one here means this resolved under the wrong "
+                          + "appearance and the ratio is against a colour the app never "
+                          + "draws")
+    }
+
     /// The pill's wash and its ink are two different colours (#582).
     ///
     /// They were one, drawn as both the fill and the type on that fill, which
