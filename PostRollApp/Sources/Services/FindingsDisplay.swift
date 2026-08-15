@@ -46,6 +46,23 @@ enum FindingsDisplay {
         return "\(count) \(noun) to fix"
     }
 
+    /// What the panel says once the text has moved on under it (#603).
+    ///
+    /// Beside `summary` because it is the same decision: the sentence names
+    /// what the checks ran against, so it points at the thing Dan edited. It
+    /// was written out twice in the view, once per feature, with the same two
+    /// verbs in a different order, which is one sentence written twice.
+    static func staleNote(subject: String) -> String {
+        "These ran against the \(subject) as generated. You have edited it since, "
+        + "so some may already be fixed. Revise or regenerate to re-check."
+    }
+
+    /// What a person hears instead of the panel's contents, naming which checks
+    /// these are. The caption's panel had one and the blog's had none.
+    static func spokenLabel(subject: String, summary: String) -> String {
+        "\(subject.prefix(1).uppercased())\(subject.dropFirst()) checks: \(summary)"
+    }
+
     /// One heading per rule, in first-appearance order, with every offending
     /// quote under it. Seven over-long alt texts are one problem to work
     /// through, not seven separate alarms.
