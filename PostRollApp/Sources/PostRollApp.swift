@@ -23,7 +23,12 @@ struct PostRollApp: App {
                 .environment(ocrManager)
                 .environment(exportManager)
                 .preferredColorScheme(.light)
-                .tint(Color.roseGold)
+                // The accent every system control inherits: a spinner's arc, a
+                // slider's filled track, a picker's selection. Named as the
+                // icon role rather than written raw, because that is what it is
+                // in: a mark, held to 3:1 rather than to the 4.5:1 the same
+                // colour would need as words (#591).
+                .tint(PaintedSurfaces.iconAccent)
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     NotificationService.shared.clearDelivered()
                     NotificationService.shared.clearBadge()

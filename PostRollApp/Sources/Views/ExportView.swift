@@ -273,7 +273,7 @@ struct ExportView: View {
                 if let exportBlockedReason {
                     HStack(spacing: Spacing.xs) {
                         Spacer()
-                        ProgressView().controlSize(.small).tint(Color.roseGold)
+                        ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
                         Text("\(exportBlockedReason) before exporting, so the folder gets the new files rather than the previous ones.")
                             .font(.system(size: 12))
                             .foregroundStyle(Color.warmDark.opacity(0.8))
@@ -317,7 +317,7 @@ struct ExportView: View {
             }
             if isRegenerating {
                 HStack(spacing: Spacing.xs) {
-                    ProgressView().controlSize(.small).tint(Color.roseGold)
+                    ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
                     Text("Rebuilding Sunday, Monday, and Wednesday for the new layout…")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmDark.opacity(0.8))
@@ -377,7 +377,7 @@ struct ExportView: View {
             Spacer().frame(height: Spacing.xl)
             ProgressView()
                 .controlSize(.large)
-                .tint(Color.roseGold)
+                .tint(PaintedSurfaces.iconAccent)
             Text(label)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.warmDark)
@@ -403,7 +403,7 @@ struct ExportView: View {
             Spacer().frame(height: Spacing.xl)
             ProgressView()
                 .controlSize(.large)
-                .tint(Color.roseGold)
+                .tint(PaintedSurfaces.iconAccent)
             Text("Generating visual assets…")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.warmDark)

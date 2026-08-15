@@ -1081,7 +1081,7 @@ private struct CroppablePhotoThumb: View {
                     MissingPhotoBadge()
                 } else {
                     PaintedSurfaces.photoPlaceholder
-                        .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
+                        .overlay { ProgressView().controlSize(.small).tint(PaintedSurfaces.photoPlaceholderSpinner) }
                 }
             }
             .frame(width: 80, height: 80)
@@ -1468,7 +1468,7 @@ private struct PhotoTaggingSheet: View {
                         .foregroundStyle(Color.warmMid)
                 }
             } else {
-                ProgressView().controlSize(.small).tint(Color.roseGold)
+                ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
             }
         }
         .frame(height: 380)
@@ -1789,7 +1789,7 @@ private struct TuesdayReelSection: View {
                             }
                             HStack(spacing: Spacing.sm) {
                                 Slider(value: $targetDuration, in: 10...30, step: 1)
-                                    .tint(Color.roseGold)
+                                    .tint(PaintedSurfaces.iconAccent)
                                 Text("\(Int(targetDuration))s")
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(Color.warmDark)
@@ -1954,7 +1954,7 @@ private struct ThursdayReelSection: View {
                             .foregroundStyle(Color.warmMid)
                         HStack(spacing: Spacing.sm) {
                             Slider(value: $scrollDuration, in: 15...60, step: 5)
-                                .tint(Color.roseGold)
+                                .tint(PaintedSurfaces.iconAccent)
                             Text("\(Int(scrollDuration))s")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(Color.warmDark)

@@ -46,7 +46,7 @@ struct CaptionReviewActionBar: View {
             // window narrower than about 920pt Dan read "Waiting for the Wednesday
             // and..." and never learned which days or why (L79).
             HStack(alignment: .top, spacing: Spacing.sm) {
-                ProgressView().controlSize(.small).tint(Color.roseGold)
+                ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(reason)…")
                         .font(.system(size: 12, weight: .medium))

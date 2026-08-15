@@ -2598,7 +2598,7 @@ private struct RevisionPanel: View {
                 if isRevising {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(Color.roseGold)
+                        .tint(PaintedSurfaces.iconAccent)
                     Text("Revising…")
                         .font(.light(11))
                         .foregroundStyle(Color.warmMid)
@@ -3402,7 +3402,7 @@ private struct ReviewMediaStrip: View {
                     if isRegenerating {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(Color.roseGold)
+                            .tint(PaintedSurfaces.iconAccent)
                     } else if let onRegenerate {
                         Button("Generate Reel") { onRegenerate() }
                             .buttonStyle(BrandButtonStyle())
@@ -3600,7 +3600,7 @@ private struct PipelineStatusView: View {
                 EmptyView()
             case .running(let seconds):
                 HStack(spacing: Spacing.xs) {
-                    ProgressView().controlSize(.small).tint(Color.roseGold)
+                    ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
                     Text("Working… \(seconds)s")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.warmMid)
@@ -3793,7 +3793,7 @@ private struct FridayClipCropPopover: View {
                         .font(.system(size: 9)).foregroundStyle(Color.warmMid)
                         .accessibilityHidden(true)
                     Slider(value: $cropOffset.x, in: -1...1)
-                        .tint(Color.roseGold)
+                        .tint(PaintedSurfaces.iconAccent)
                         .accessibilityLabel("Horizontal crop position")
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9)).foregroundStyle(Color.warmMid)
@@ -3808,7 +3808,7 @@ private struct FridayClipCropPopover: View {
                         .font(.system(size: 9)).foregroundStyle(Color.warmMid)
                         .accessibilityHidden(true)
                     Slider(value: $cropOffset.y, in: -1...1)
-                        .tint(Color.roseGold)
+                        .tint(PaintedSurfaces.iconAccent)
                         .accessibilityLabel("Vertical crop position")
                     Image(systemName: "chevron.down")
                         .font(.system(size: 9)).foregroundStyle(Color.warmMid)
@@ -4554,7 +4554,7 @@ private struct CollagePreviewThumbnail: View {
                             Image(nsImage: image).resizable().scaledToFill()
                         } else {
                             PaintedSurfaces.photoPlaceholder
-                                .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
+                                .overlay { ProgressView().controlSize(.small).tint(PaintedSurfaces.photoPlaceholderSpinner) }
                         }
                     }
                     .frame(width: geo.size.width, height: geo.size.height)
@@ -4854,7 +4854,7 @@ private struct CollagePreviewThumbnail: View {
                         .font(.system(size: 9))
                         .foregroundStyle(Color.warmMid)
                     Slider(value: scaleBinding, in: 0.25...2.5)
-                    .tint(Color.roseGold)
+                    .tint(PaintedSurfaces.iconAccent)
                     Image(systemName: "photo.fill")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmMid)
@@ -5038,7 +5038,7 @@ private struct ReelStripPreviewThumbnail: View {
                                     .scaledToFit()
                             } else {
                                 PaintedSurfaces.photoPlaceholder
-                                    .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
+                                    .overlay { ProgressView().controlSize(.small).tint(PaintedSurfaces.photoPlaceholderSpinner) }
                             }
                         }
                         .frame(width: geo.size.width, height: displayH)
@@ -5204,7 +5204,7 @@ private struct ReelStripPreviewThumbnail: View {
                         .font(.system(size: 9))
                         .foregroundStyle(Color.warmMid)
                     Slider(value: scaleBinding, in: 0.25...2.5)
-                        .tint(Color.roseGold)
+                        .tint(PaintedSurfaces.iconAccent)
                     Image(systemName: "photo.fill")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmMid)
@@ -5953,7 +5953,7 @@ private struct InlineReelPhotoAssignment: View {
                 if isRegenerating {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(Color.roseGold)
+                        .tint(PaintedSurfaces.iconAccent)
                 } else {
                     Button("Generate Reel") { onGenerate() }
                         .buttonStyle(BrandButtonStyle())
@@ -6032,7 +6032,7 @@ private struct CollageLayoutGallery: View {
 
             if isLoading {
                 VStack(spacing: Spacing.md) {
-                    ProgressView().controlSize(.large).tint(Color.roseGold)
+                    ProgressView().controlSize(.large).tint(PaintedSurfaces.iconAccent)
                     Text("Rendering layout options…")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.warmMid)

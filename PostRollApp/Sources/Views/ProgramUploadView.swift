@@ -424,7 +424,7 @@ private struct ProgramDropZone: View {
         VStack(spacing: 14) {
             ProgressView()
                 .controlSize(.regular)
-                .tint(Color.roseGold)
+                .tint(PaintedSurfaces.iconAccent)
             Text("Importing…")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.warmDark)
@@ -519,7 +519,7 @@ private struct ProgramThumbnail: View {
                 switch state {
                 case .loading:
                     PaintedSurfaces.photoPlaceholder
-                        .overlay { ProgressView().controlSize(.small).tint(Color.roseGold) }
+                        .overlay { ProgressView().controlSize(.small).tint(PaintedSurfaces.photoPlaceholderSpinner) }
                 case .loaded(let image):
                     Image(nsImage: image)
                         .resizable()
