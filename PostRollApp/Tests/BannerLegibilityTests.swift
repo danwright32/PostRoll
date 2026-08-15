@@ -776,16 +776,22 @@ final class BannerLegibilityTests: XCTestCase {
 
         for relative in files {
             let code = try appSource("Sources/\(relative)")
-            XCTAssertFalse(code.contains(".background(Color."), """
-                \(relative) paints a background from a colour written at the point of \
-                use. Nothing can check the words against it, because nothing else can \
-                name it. Add it to PaintedSurfaces and draw from there.
-                """)
-            XCTAssertFalse(code.contains(".fill(Color."), """
-                \(relative) fills a shape from a colour written at the point of use. \
-                Same problem: an unnamed fill is a surface no legibility check can \
-                reach.
-                """)
+
+            // The two spellings where the colour is an argument to a painting
+            // modifier. Read per line rather than over the whole file, so the
+            // failure names the line and so a colour reached through a ternary
+            // or built from numbers is caught too (#600): the first version
+            // looked for the literal text ".background(Color." and a condition
+            // between the bracket and the colour was enough to walk past it.
+            for (number, line) in unnamedFills(in: code) {
+                XCTFail("""
+                    \(relative):\(number) paints from a colour written at the point of \
+                    use. Nothing can check the words against it, because nothing else \
+                    can name it. Add it to PaintedSurfaces and draw from there.
+
+                    \(line)
+                    """)
+            }
 
             // The third spelling (#586). A colour is a view in its own right, so
             // it paints an area with no modifier around it at all, and neither
@@ -802,6 +808,78 @@ final class BannerLegibilityTests: XCTestCase {
                     \(line)
                     """)
             }
+        }
+    }
+
+    /// Lines painting a background or a shape from a colour written there.
+    ///
+    /// A line offends when it calls one of the two painting modifiers AND
+    /// mentions a colour by value: `Color.<token>`, or one built from literal
+    /// components. `PaintedSurfaces.x`, a local, or a computed pair mention no
+    /// colour and pass.
+    ///
+    /// `Color.clear` is excluded because it paints nothing: it is a spacer and
+    /// a hit area, with no surface behind any words. Excluded by name here so
+    /// the exemption is one decision written down once (L129).
+    private func unnamedFills(in code: String) -> [(Int, String)] {
+        code.split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated()
+            .compactMap { index, raw in
+                let line = raw.trimmingCharacters(in: .whitespaces)
+                guard line.contains(".background(") || line.contains(".fill(") else {
+                    return nil
+                }
+                let mentionsAColour = line.range(of: #"Color\.[A-Za-z]"#,
+                                                 options: .regularExpression) != nil
+                    || line.range(of: #"Color\(\s*(red|white|hue|nsColor|\.)"#,
+                                  options: .regularExpression) != nil
+                guard mentionsAColour, !line.contains("Color.clear") else { return nil }
+                return (index + 1, line)
+            }
+    }
+
+    /// The fill matcher is asked directly what it can see (#600, L1).
+    ///
+    /// The tree is clean, so a matcher that sees one spelling and one that sees
+    /// three give the same silent pass, which is how two of these shipped
+    /// looking like a rule that held. The same proof
+    /// `testTheColourAsAViewMatcherSeesEverySpelling` gets, for the two
+    /// spellings it does not cover.
+    func testTheUnnamedFillMatcherSeesEverySpelling() {
+        let mustCatch = [
+            "            .background(Color.creamDeep)",
+            "            .fill(Color.roseGold.opacity(0.12))",
+            "            .background(Color(red: 0.10, green: 0.09, blue: 0.08))",
+            "                    Color(white: 0.92)",
+            "            .background(isDragging ? Color.roseGold : Color.black.opacity(0.65))",
+            "                Capsule().fill((stale ? Color.warmMid : Color.roseDeep).opacity(0.12))",
+            "            .fill(LinearGradient(colors: [Color(red: 1.0, green: 0.78, blue: 0.22)],",
+        ]
+        for line in mustCatch {
+            let hits = unnamedFills(in: line).count + bareColourViews(in: line).count
+            XCTAssertEqual(hits, 1, """
+                the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as a \
+                painted surface written at the point of use, so a fill spelled that way \
+                is exempt from the rule and reads exactly like no fill at all
+                """)
+        }
+
+        let mustAllow = [
+            "            .background(PaintedSurfaces.page)",
+            "            .fill(pill.wash)",
+            "            .background(isSelected ? PaintedSurfaces.selectedPillFill : pill.wash)",
+            "            .fill(PaintedSurfaces.captionFindings(stale: stale).panel)",
+            "            .background(Color.clear)",
+            "            .foregroundStyle(Color.warmDark)",
+            "    static let creamDeep = Color(red: 237/255, green: 232/255, blue: 224/255)",
+        ]
+        for line in mustAllow {
+            let hits = unnamedFills(in: line).count + bareColourViews(in: line).count
+            XCTAssertEqual(hits, 0, """
+                the check reports \(line.trimmingCharacters(in: .whitespaces)) as an \
+                unnamed painted surface, which it is not. A rule that fires on correct \
+                code is the rule people learn to work around
+                """)
         }
     }
 
@@ -827,7 +905,11 @@ final class BannerLegibilityTests: XCTestCase {
             .enumerated()
             .compactMap { index, raw in
                 let line = raw.trimmingCharacters(in: .whitespaces)
-                guard line.range(of: #"^Color\.[A-Za-z][A-Za-z0-9]*\b"#,
+                // A named colour, or one built from literal components (#600):
+                // the placeholder square inside the Instagram card was
+                // `Color(white: 0.92)` on a line of its own, which is this
+                // spelling and this rule, and the pattern could not say so.
+                guard line.range(of: #"^Color(\.[A-Za-z][A-Za-z0-9]*\b|\(\s*(red|white|hue)\b)"#,
                                  options: .regularExpression) != nil,
                       !line.hasPrefix("Color.clear") else { return nil }
                 return (index + 1, line)

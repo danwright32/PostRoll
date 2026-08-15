@@ -1,0 +1,8 @@
+{
+  "name": "caption-findings-count-clears-its-wash",
+  "file": "PostRollApp/Sources/Views/PaintedSurfaces.swift",
+  "find": "                ink: stale ? Color.warmDark.opacity(0.8) : Color.roseDeep)",
+  "replace": "                ink: stale ? Color.warmMid : Color.roseDeep)",
+  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
+  "breaks": "a stale findings count goes back to being drawn in the colour of its own wash at 4.35:1, under the 4.5:1 its 10pt count needs, which is the shape #582 took apart for the stage pill (#600)"
+}

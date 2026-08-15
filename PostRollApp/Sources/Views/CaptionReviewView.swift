@@ -1613,15 +1613,15 @@ private struct CaptionSection: View {
     @ViewBuilder
     private var captionFindingsBadge: some View {
         if let summary = caption.findingsSummary {
-            let stale = caption.findingsAreStale
+            // The wash and the ink from one place, so the count cannot be drawn
+            // in the colour of its own capsule again (#600).
+            let findings = PaintedSurfaces.captionFindings(stale: caption.findingsAreStale)
             Text(summary)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(stale ? Color.warmMid : Color.roseDeep)
+                .foregroundStyle(findings.ink)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(
-                    Capsule().fill((stale ? Color.warmMid : Color.roseDeep).opacity(0.12))
-                )
+                .background(Capsule().fill(findings.badge))
                 .accessibilityLabel("Caption checks: \(summary)")
         }
     }
@@ -1647,7 +1647,7 @@ private struct CaptionSection: View {
                         .font(.system(size: 10, weight: .medium))
                         .tracking(0.8)
                 }
-                .foregroundStyle(stale ? Color.warmMid : Color.roseDeep)
+                .foregroundStyle(PaintedSurfaces.captionFindings(stale: stale).ink)
 
                 if stale {
                     Text("These ran against the caption as generated. You have edited it since, so some may already be fixed. Revise or regenerate to re-check.")
@@ -1677,10 +1677,10 @@ private struct CaptionSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm)
-                    .fill((stale ? Color.warmMid : Color.roseDeep).opacity(0.07))
+                    .fill(PaintedSurfaces.captionFindings(stale: stale).panel)
                     .overlay(
                         RoundedRectangle(cornerRadius: Radius.sm)
-                            .stroke((stale ? Color.warmMid : Color.roseDeep).opacity(0.45),
+                            .stroke(PaintedSurfaces.captionFindings(stale: stale).border,
                                     lineWidth: 1.5)
                     )
             )
@@ -2739,7 +2739,7 @@ private struct BlogSection: View {
                         .font(.system(size: 10, weight: .medium))
                         .tracking(0.8)
                 }
-                .foregroundStyle(stale ? Color.warmMid : Color.roseDeep)
+                .foregroundStyle(PaintedSurfaces.captionFindings(stale: stale).ink)
 
                 if stale {
                     Text("These ran against the draft as generated. You have edited it since, so some may already be fixed. Regenerate or revise to re-check.")
@@ -2769,10 +2769,10 @@ private struct BlogSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm)
-                    .fill((stale ? Color.warmMid : Color.roseDeep).opacity(0.07))
+                    .fill(PaintedSurfaces.captionFindings(stale: stale).panel)
                     .overlay(
                         RoundedRectangle(cornerRadius: Radius.sm)
-                            .stroke((stale ? Color.warmMid : Color.roseDeep).opacity(0.45),
+                            .stroke(PaintedSurfaces.captionFindings(stale: stale).border,
                                     lineWidth: 1.5)
                     )
             )
@@ -3965,9 +3965,9 @@ private struct InstagramMockup: View {
                 ZStack {
                     Circle()
                         .fill(LinearGradient(
-                            colors: [Color(red: 1.0, green: 0.78, blue: 0.22),
-                                     Color(red: 0.98, green: 0.28, blue: 0.50),
-                                     Color(red: 0.62, green: 0.18, blue: 0.82)],
+                            colors: [PaintedSurfaces.instagramRingWarm,
+                                     PaintedSurfaces.instagramRingPink,
+                                     PaintedSurfaces.instagramRingViolet],
                             startPoint: .topLeading, endPoint: .bottomTrailing))
                     Circle().fill(PaintedSurfaces.instagramAvatarRing).padding(2)
                     Image("DWAvatar")
@@ -3985,7 +3985,7 @@ private struct InstagramMockup: View {
                         .foregroundStyle(Color.black)
                     Text("Original audio")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color(white: 0.45))
+                        .foregroundStyle(PaintedSurfaces.instagramSecondaryText)
                 }
 
                 Spacer()
@@ -4076,7 +4076,7 @@ private struct InstagramMockup: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(Color(white: 0.2))
+                            .foregroundStyle(PaintedSurfaces.instagramGlyph)
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
@@ -4085,7 +4085,7 @@ private struct InstagramMockup: View {
                 } else {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color(white: 0.2))
+                        .foregroundStyle(PaintedSurfaces.instagramGlyph)
                 }
             }
             .padding(.horizontal, 11)
@@ -4154,16 +4154,16 @@ private struct InstagramMockup: View {
                             }
                         }
                 } else if displayedPhotoURL != nil {
-                    Color(white: 0.92)
+                    PaintedSurfaces.instagramPlaceholder
                         .frame(width: cardWidth, height: cardWidth)
                         .overlay { ProgressView().controlSize(.small) }
                 } else {
-                    Color(white: 0.92)
+                    PaintedSurfaces.instagramPlaceholder
                         .frame(width: cardWidth, height: cardWidth)
                         .overlay {
                             Image(systemName: "photo")
                                 .font(.system(size: 28))
-                                .foregroundStyle(Color(white: 0.7))
+                                .foregroundStyle(PaintedSurfaces.instagramPlaceholderMark)
                         }
                 }
             }
@@ -4197,7 +4197,7 @@ private struct InstagramMockup: View {
                 if caption.isEmpty && hashtagLine.isEmpty {
                     Text("Caption will appear here…")
                         .font(.system(size: 12.5))
-                        .foregroundStyle(Color(white: 0.65))
+                        .foregroundStyle(PaintedSurfaces.instagramCaptionPlaceholder)
                         .italic()
                 } else {
                     if !caption.isEmpty {
@@ -4209,7 +4209,7 @@ private struct InstagramMockup: View {
                     if !hashtagLine.isEmpty {
                         Text(hashtagLine)
                             .font(.system(size: 12))
-                            .foregroundStyle(Color(red: 0.07, green: 0.31, blue: 0.78))
+                            .foregroundStyle(PaintedSurfaces.instagramLink)
                             .lineLimit(2)
                     }
                 }
@@ -4217,12 +4217,12 @@ private struct InstagramMockup: View {
                 // View all comments
                 Text("View all comments")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.55))
+                    .foregroundStyle(PaintedSurfaces.instagramCommentsLine)
 
                 // Timestamp
                 Text(dayLabel.uppercased())
                     .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(Color(white: 0.6))
+                    .foregroundStyle(PaintedSurfaces.instagramDate)
                     .kerning(0.3)
             }
             .padding(.horizontal, 11)
@@ -4233,7 +4233,7 @@ private struct InstagramMockup: View {
         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .stroke(Color(white: 0.82), lineWidth: 0.5)
+                .stroke(PaintedSurfaces.instagramCardEdge, lineWidth: 0.5)
         )
         .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: 2)
         .task(id: displayedPhotoURL) {
@@ -4259,7 +4259,7 @@ private struct CarouselArrow: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color(white: 0.2))
+                .foregroundStyle(PaintedSurfaces.instagramGlyph)
                 .frame(width: 26, height: 26)
                 .background(Circle().fill(PaintedSurfaces.instagramOverlayButton))
                 .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
