@@ -366,6 +366,115 @@ def changed_registry_names(repo_root: Path, registry_path: Path,
     return changed
 
 
+
+# ── Narrowing a scoped run to the guard that actually moved (#634) ────────────
+#
+# `--changed` selected an entry whenever its guard TEST FILE was in the diff.
+# BannerLegibilityTests.swift holds around forty entries, so editing one guard
+# in it re-proved all forty, at the 12 to 22 seconds each that #621 measured.
+#
+# The narrowing has an honest half and a dangerous half. A guard's behaviour
+# lives as much in the matcher it calls as in the function that asserts on it,
+# and editing a shared helper leaves every test function byte for byte
+# identical, so selecting only changed FUNCTIONS would skip precisely the
+# entries whose meaning just changed. Anything outside the test functions
+# therefore selects them all.
+
+
+def _swift_test_bodies(text: str) -> dict[str, str] | None:
+    """Each `func testX` mapped to its body, or None if the braces do not close.
+
+    None rather than a best effort, because a file this cannot read is one it
+    knows nothing about, and the safe answer is to run everything (L11)."""
+    bodies: dict[str, str] = {}
+    for match in re.finditer(r"\bfunc\s+(test[A-Za-z0-9_]*)\s*\(", text):
+        opening = text.find("{", match.end())
+        if opening == -1:
+            return None
+        depth, index = 0, opening
+        while index < len(text):
+            if text[index] == "{":
+                depth += 1
+            elif text[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            index += 1
+        if depth != 0:
+            return None
+        bodies[match.group(1)] = text[match.start():index + 1]
+    return bodies
+
+
+def _python_test_bodies(text: str) -> dict[str, str] | None:
+    """The same for module level `def test_x`, bounded by the next top level
+    line."""
+    bodies: dict[str, str] = {}
+    lines = text.split("\n")
+    starts = [(i, m.group(1))
+              for i, line in enumerate(lines)
+              if (m := re.match(r"def\s+(test[A-Za-z0-9_]*)\s*\(", line))]
+    for position, (start, name) in enumerate(starts):
+        end = len(lines)
+        for later in range(start + 1, len(lines)):
+            if lines[later] and not lines[later][0].isspace():
+                end = later
+                break
+        bodies[name] = "\n".join(lines[start:end])
+        _ = position
+    return bodies
+
+
+def test_bodies(text: str, path: str) -> dict[str, str] | None:
+    return (_python_test_bodies(text) if path.endswith(".py")
+            else _swift_test_bodies(text))
+
+
+def _outside_the_tests(text: str, bodies: dict[str, str]) -> str:
+    """Everything in the file that is not inside a test function: the imports,
+    the fixtures, and the matchers the tests lean on."""
+    for body in bodies.values():
+        text = text.replace(body, "")
+    return text
+
+
+def test_method(entry: Entry) -> str:
+    """The function name inside the guard test file."""
+    return (entry.test.split("::")[-1].split("[")[0] if entry.test.startswith("tests/")
+            else entry.test.split("/")[-1])
+
+
+def guards_touched_by(repo_root: Path, base: str, path: str,
+                      entries: list[Entry], log=print) -> set[str] | None:
+    """Which of `entries` a change to guard test file `path` really affects.
+
+    None when it cannot tell, which the caller treats as "all of them"."""
+    target = repo_root / path
+    new_text = target.read_text() if target.is_file() else None
+    old_text = _git(repo_root, "show", f"{base}:{path}")
+    if new_text is None or old_text is None:
+        log(f"{path}: it could not be read at both ends of the diff, so every "
+            "guard in it is being re-proven rather than guessed at")
+        return None
+
+    new_bodies = test_bodies(new_text, path)
+    old_bodies = test_bodies(old_text, path)
+    if new_bodies is None or old_bodies is None:
+        log(f"{path}: the test functions could not be read, so every guard in "
+            "it is being re-proven rather than guessed at")
+        return None
+
+    # Anything outside the test functions is shared: a matcher, a fixture, a
+    # threshold. Changing one of those changes what every test in the file
+    # means while leaving each function identical.
+    if _outside_the_tests(new_text, new_bodies) \
+            != _outside_the_tests(old_text, old_bodies):
+        return {e.name for e in entries}
+
+    return {e.name for e in entries
+            if new_bodies.get(test_method(e)) != old_bodies.get(test_method(e))}
+
+
 def guard_test_path(entry: Entry, repo_root: Path) -> str | None:
     """The file the entry's guard test lives in, repo-relative."""
     if entry.test.startswith("tests/"):
@@ -553,9 +662,23 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
                 "sweep instead")
             return 1
         stale = changed_registry_names(repo_root, registry_path, base)
+        # Which entries the diff reaches through their guard TEST file, worked
+        # out per file so one edit does not drag its neighbours along (#634).
+        by_test_file: dict[str, list[Entry]] = {}
+        for entry in entries:
+            path = guard_test_path(entry, repo_root)
+            if path is not None and path in touched:
+                by_test_file.setdefault(path, []).append(entry)
+
+        through_tests: set[str] = set()
+        for path, sharing in by_test_file.items():
+            affected = guards_touched_by(repo_root, base, path, sharing, log=log)
+            through_tests |= ({e.name for e in sharing} if affected is None
+                              else affected)
+
         selected = [e for e in entries
                     if e.file in touched or e.name in stale
-                    or guard_test_path(e, repo_root) in touched]
+                    or e.name in through_tests]
         log(f"--changed: {len(selected)} of {len(entries)} entries affected "
             f"by the diff against {base[:12]}; {len(entries) - len(selected)} "
             "skipped as untouched, which proves nothing about them (run "
