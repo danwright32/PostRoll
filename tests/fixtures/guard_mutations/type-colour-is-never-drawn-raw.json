@@ -1,8 +1,8 @@
 {
   "name": "type-colour-is-never-drawn-raw",
-  "file": "PostRollApp/Sources/Views/CollaboratorPanel.swift",
-  "find": "? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)",
-  "replace": "? PaintedSurfaces.pageAccentText : Color.warmMid)",
+  "file": "PostRollApp/Sources/Views/ProgramUploadView.swift",
+  "find": "isHere ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText",
+  "replace": "isHere ? Color.roseGold : Color.warmMid.opacity(0.35)",
   "test": "PostRollTests/BannerLegibilityTests/testNoScreenDrawsTypeInARawPaletteColour",
-  "breaks": "a screen goes back to drawing type in a colour written at the point of use, which nothing can hold to a level because nothing else can name what is behind it. 362 places were doing this when the check was written (#620)"
+  "breaks": "a screen goes back to drawing type in a colour written at the point of use, which nothing can hold to a level because nothing else can name what is behind it. Here that is the stage breadcrumb, whose blocked step measured 1.60:1 and whose current step measured 4.31:1 as 9pt text (#620)"
 }
