@@ -41,44 +41,23 @@ final class BannerLegibilityTests: XCTestCase {
     /// image is itself a colour that differs from the fill, and at these sizes
     /// it measures as several percent of the page, which is enough to make a
     /// blank render look like a drawn one.
-    private func render(_ view: some View, width: CGFloat = 520) throws -> NSBitmapImageRep {
+    private func render(_ view: some View, width: CGFloat = 520,
+                        wordless: Bool = false) throws -> NSBitmapImageRep {
         // On Color.cream, because that is the surface every one of these sits
         // on in the app. A banner fill is translucent, so rendered against
         // nothing it is mostly transparent and every measurement below would be
         // taken on a page the person never sees.
-        let renderer = ImageRenderer(content: ZStack {
+        //
+        // The `.frame(width:)` is load-bearing beyond layout: ImageRenderer
+        // draws the text of a view carrying a repeating animation only when it
+        // is given a size, so without it every animating surface would render
+        // wordless and pass on its own chrome (#612).
+        // `HostedControlLegibilityTests.testTheNoticeHarnessRendersIntoAFrame`
+        // is what holds that line here.
+        try WordFootprint.imageRendered(ZStack {
             Color.cream
             view.padding(Spacing.md)
-        }.frame(width: width))
-        renderer.scale = 2
-        let image = try XCTUnwrap(renderer.nsImage, "the banner produced no image at all")
-        let tiff = try XCTUnwrap(image.tiffRepresentation)
-        return try XCTUnwrap(NSBitmapImageRep(data: tiff))
-    }
-
-    /// The share of pixels that differ noticeably from the most common colour.
-    ///
-    /// The most common colour IS the background (a banner is mostly its own
-    /// fill), so this measures how much of the image is something else: text,
-    /// icon, border. Near zero means the message is there in the view tree and
-    /// invisible on screen, which is the failure that keeps recurring.
-    private func inkCoverage(_ rep: NSBitmapImageRep) -> Double {
-        var luminances: [Double] = []
-        for y in Swift.stride(from: 0, to: rep.pixelsHigh, by: 2) {
-            for x in Swift.stride(from: 0, to: rep.pixelsWide, by: 2) {
-                guard let c = rep.colorAt(x: x, y: y)?
-                    .usingColorSpace(.deviceRGB) else { continue }
-                luminances.append(0.299 * c.redComponent
-                                  + 0.587 * c.greenComponent
-                                  + 0.114 * c.blueComponent)
-            }
-        }
-        guard !luminances.isEmpty else { return 0 }
-        // The fill is whatever most of the page is, so the median IS the
-        // background whether the banner is light or dark.
-        let background = luminances.sorted()[luminances.count / 2]
-        let ink = luminances.filter { abs($0 - background) > 0.12 }
-        return Double(ink.count) / Double(luminances.count)
+        }.frame(width: width), wordless: wordless)
     }
 
     /// Every banner state the app can show, each carrying the message its own
@@ -394,40 +373,69 @@ final class BannerLegibilityTests: XCTestCase {
         ]
     }
 
+    /// Every surface here puts its words on the page (#396, #612, #614).
+    ///
+    /// This asked for a share of the render to be INK until #614. Ink is the
+    /// share of pixels unlike the commonest colour, so it counts the fill, the
+    /// border, the icon and the button along with the type, and a notice is
+    /// mostly those: the rescan offer measured 0.2477 while almost all of it was
+    /// a button's own background. That is L141 in the check built to catch L141.
+    ///
+    /// Now each state is rendered twice, once as it ships and once with its type
+    /// switched off, and what is measured is the difference. Nothing about the
+    /// chrome is in that number.
+    ///
+    /// The floor comes from `WordFootprint` and is one number for every surface
+    /// in the suite, which is what #614 was about: three thresholds had grown
+    /// here, 0.01 for a notice and 0.005 twice for a sparser screen, each
+    /// honestly measured against its own surface and each lower than the last.
     func testEveryBannerActuallyDrawsItsMessage() throws {
+        // A sweep that reads nothing objects to nothing (L98).
+        XCTAssertGreaterThan(states.count, 30,
+                             "the sweep found \(states.count) states, so it is proving "
+                             + "nothing about the ones it did not draw")
+
         for state in states {
-            let coverage = inkCoverage(try render(state.view))
-            XCTAssertGreaterThan(coverage, Self.legibleInk, """
-                The "\(state.name)" banner rendered almost nothing but its own \
-                background (\(String(format: "%.3f", coverage)) of pixels differ). \
-                The message exists in the view tree and cannot be read on screen.
+            let share = WordFootprint.share(try render(state.view),
+                                            try render(state.view, wordless: true))
+            XCTAssertGreaterThan(share, WordFootprint.drawn, """
+                Switching every word off the "\(state.name)" banner changed \
+                \(String(format: "%.4f", share)) of the render, which is nothing. Its \
+                message is in the view tree and not on the screen, and the fill, the \
+                border and the buttons this surface paints for itself would keep a flat \
+                ink threshold happy without it (L141). Either the words are drawn in the \
+                colour of what is behind them, or ImageRenderer is not drawing them at \
+                all, in which case the state belongs in HostedControlLegibilityTests \
+                where AppKit hosts it.
                 """)
         }
     }
 
-    /// What each surface actually measures, so the threshold above stays a
+    /// What each surface's words are actually worth, so the floor stays a
     /// measured number rather than one carried forward on faith (#396).
     ///
     /// Printed rather than asserted per surface: pinning each figure would fail on
     /// every legitimate wording change, which is a guard asserting a rendering
     /// instead of the rule behind it (L103). What IS asserted is the property the
-    /// threshold depends on, that the thinnest real surface still clears it with
+    /// floor depends on, that the thinnest real surface still clears it with
     /// room, so adding a screen cannot quietly drag the band down onto blank.
     func testTheThinnestRealSurfaceStillClearsTheThresholdWithRoom() throws {
         var measured: [(String, Double)] = []
         for state in states {
-            measured.append((state.name, inkCoverage(try render(state.view))))
+            measured.append((state.name,
+                             WordFootprint.share(try render(state.view),
+                                                 try render(state.view, wordless: true))))
         }
         let sorted = measured.sorted { $0.1 < $1.1 }
-        for (name, coverage) in sorted {
-            print(String(format: "  %.4f  %@", coverage, name))
+        for (name, share) in sorted {
+            print(String(format: "  %.4f  %@", share, name))
         }
 
         let thinnest = try XCTUnwrap(sorted.first)
-        XCTAssertGreaterThan(thinnest.1, Self.legibleInk * 1.5, """
+        XCTAssertGreaterThan(thinnest.1, WordFootprint.drawn * 5, """
             "\(thinnest.0)" measures \(String(format: "%.4f", thinnest.1)), which is \
-            close enough to the \(Self.legibleInk) threshold that the check above can \
-            no longer tell a thin surface from a blank one. Re-measure the threshold \
+            close enough to the \(WordFootprint.drawn) floor that the check above can \
+            no longer tell a thin surface from a blank one. Re-measure the floor \
             against the real band rather than lowering it.
             """)
     }
@@ -436,8 +444,10 @@ final class BannerLegibilityTests: XCTestCase {
     /// at a narrow width is where a long message with a two button row breaks.
     func testEveryBannerStillDrawsItsMessageWhenNarrow() throws {
         for state in states {
-            let coverage = inkCoverage(try render(state.view, width: 300))
-            XCTAssertGreaterThan(coverage, Self.legibleInk,
+            let share = WordFootprint.share(
+                try render(state.view, width: 300),
+                try render(state.view, width: 300, wordless: true))
+            XCTAssertGreaterThan(share, WordFootprint.drawn,
                                  "the \"\(state.name)\" banner lost its message at 300pt wide")
         }
     }
@@ -477,19 +487,24 @@ final class BannerLegibilityTests: XCTestCase {
             .frame(height: 60)
         }
 
-        let invisible = inkCoverage(try render(button(.cream)))
-        let legible = inkCoverage(try render(button(.warmDark)))
+        func share(_ colour: Color) throws -> Double {
+            WordFootprint.share(try render(button(colour)),
+                                try render(button(colour), wordless: true))
+        }
+        let invisible = try share(.cream)
+        let legible = try share(.warmDark)
 
-        XCTAssertLessThan(invisible, 0.001, """
+        XCTAssertLessThan(invisible, WordFootprint.drawn, """
             A button whose label is drawn in its own background colour measured \
-            \(String(format: "%.4f", invisible)), so something other than its words \
-            is putting ink on the page. If ImageRenderer has started substituting a \
-            placeholder for Button the way it does for Menu, the rescan offer below \
-            is being measured on that block rather than on anything readable.
+            \(String(format: "%.4f", invisible)) as a footprint, so something other \
+            than its words is moving when the type is taken away. If ImageRenderer has \
+            started substituting a placeholder for Button the way it does for Menu, the \
+            rescan offer below is being measured on that block rather than on anything \
+            readable.
             """)
-        XCTAssertGreaterThan(legible, invisible * 10,
-                             "the same button label in a readable colour has to measure "
-                             + "as far more ink, or its words are not being drawn")
+        XCTAssertGreaterThan(legible, WordFootprint.drawn * 5,
+                             "the same button label in a readable colour has to be worth "
+                             + "far more than the floor, or its words are not being drawn")
     }
 
     /// Ink is not the whole answer for a control that paints a fill (#559).
@@ -1503,13 +1518,28 @@ final class BannerLegibilityTests: XCTestCase {
                              + "against the panel it sits on")
     }
 
+    /// One of the two checks left in the suite that are about INK (#614).
+    ///
+    /// The threshold it uses is no longer what any surface is judged by, and
+    /// that is the point of keeping it: this records that a control with no
+    /// words at all still measures as a respectable amount of ink, which is why
+    /// ink was the wrong quantity to ask any of these surfaces about.
     func testTheUnrenderableControlsAreNamedRatherThanMeasured() throws {
-        let spinnerOnly = inkCoverage(try render(ProgressView().frame(height: 40)))
+        let spinnerOnly = WordFootprint.ink(try render(ProgressView().frame(height: 40)))
         XCTAssertGreaterThan(spinnerOnly, Self.legibleInk, """
             A bare ProgressView measured \(String(format: "%.4f", spinnerOnly)), which \
             clears the legibility threshold while drawing no words at all. If this \
             ever stops being true, ImageRenderer has learned to draw it and the \
             states above can carry their menus again.
+            """)
+
+        let words = WordFootprint.share(try render(ProgressView().frame(height: 40)),
+                                        try render(ProgressView().frame(height: 40),
+                                                   wordless: true))
+        XCTAssertLessThan(words, WordFootprint.drawn, """
+            A bare ProgressView has a word footprint of \(String(format: "%.4f", words)), \
+            so the measurement every surface is now judged by is reading something as \
+            type on a control that has none.
             """)
     }
 
@@ -1534,14 +1564,40 @@ final class BannerLegibilityTests: XCTestCase {
             .frame(height: 60)
         }
 
-        let invisible = inkCoverage(try render(card(.cream)))
-        let legible = inkCoverage(try render(card(.warmDark)))
+        func share(_ colour: Color) throws -> Double {
+            WordFootprint.share(try render(card(colour)),
+                                try render(card(colour), wordless: true))
+        }
+        let invisible = try share(.cream)
+        let legible = try share(.warmDark)
 
-        XCTAssertLessThan(invisible, 0.001,
-                          "type drawn in its own background colour has to measure as blank")
-        XCTAssertGreaterThan(legible, invisible * 10,
-                             "the same words in a readable colour have to measure as far more "
-                             + "ink, or the metric is not reading the type at all")
+        XCTAssertLessThan(invisible, WordFootprint.drawn,
+                          "type drawn in its own background colour has to measure as "
+                          + "nothing, or the floor is above the defect it exists to catch")
+        XCTAssertGreaterThan(legible, WordFootprint.drawn * 5,
+                             "the same words in a readable colour have to be worth far more "
+                             + "than the floor, or the metric is not reading the type at all")
+    }
+
+    /// The measurement's own zero, measured rather than assumed (L1, #614).
+    ///
+    /// The floor every surface in the suite is judged by is a margin over "no
+    /// difference at all". If two renders of one view ever stopped agreeing,
+    /// every figure in these checks would be noise and the floor would be
+    /// measuring the renderer instead of the type.
+    ///
+    /// Taken on a real surface from this file rather than a shape invented for
+    /// it, because what has to be stable is the rendering of the things
+    /// actually being measured.
+    func testTheFootprintOfNothingIsNothing() throws {
+        let state = try XCTUnwrap(states.first)
+        XCTAssertEqual(WordFootprint.share(try render(state.view),
+                                           try render(state.view)),
+                       0, accuracy: 0.00001, """
+            two renders of "\(state.name)" differ, so the footprint measurement is \
+            reading the renderer rather than the words and the floor it is judged \
+            against means nothing
+            """)
     }
 }
 

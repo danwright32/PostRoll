@@ -20,15 +20,8 @@ private struct EventListRowPreview: View {
     /// one is in at any moment.
     private let hover = EventListHover()
 
-    /// The row with its words, or the same row's chrome with nothing in it.
-    ///
-    /// One view drawing both, so what the words are measured against is this
-    /// row's own background rather than a second copy of it built here (L70).
-    var wordless = false
-
     var body: some View {
         EventRow(event: event, isSelected: isSelected, renameText: .constant(""))
-            .opacity(wordless ? 0 : 1)
             .padding(.horizontal, Spacing.rowInset)
             .padding(.vertical, Spacing.rowV)
             .background(EventRowBackground(eventID: event.id,
@@ -36,26 +29,6 @@ private struct EventListRowPreview: View {
                                            hover: hover,
                                            selectionNamespace: selectionNamespace))
     }
-}
-
-/// Draws no type at all (#612).
-///
-/// The generic way to ask a shipping view what its words are worth. #607 could
-/// put a `wordless` flag on the reading screen because that screen was being
-/// written; the thirty-eight surfaces measured next door are shipping notices
-/// that know nothing about being measured, and a flag on each of them would be
-/// a change to the app for the benefit of a test.
-///
-/// Layout is untouched, because only the drawing is replaced: every fill,
-/// border, symbol and button stays exactly where it was, so the difference
-/// between a render with this and one without is the type and nothing else.
-///
-/// Applied to ONE side of the comparison only. Putting a renderer of ours on
-/// the words-on side too changes the path the type takes, and that path is the
-/// subject: the busy pill, whose label ImageRenderer is known to drop, drew its
-/// label perfectly through a custom renderer.
-private struct WordSwitch: TextRenderer {
-    func draw(layout: Text.Layout, in context: inout GraphicsContext) {}
 }
 
 /// #404: the two controls `BannerLegibilityTests` cannot draw.
@@ -87,8 +60,14 @@ private struct WordSwitch: TextRenderer {
 @MainActor
 final class HostedControlLegibilityTests: XCTestCase {
 
-    /// Same threshold as the ImageRenderer harness, for the same reason: below the
-    /// thinnest real surface and far above a blank page.
+    /// The ink threshold, kept for the two checks that are ABOUT ink (#614).
+    ///
+    /// Everything in this file that asks whether words reached the screen now
+    /// asks `WordFootprint` instead, which measures the type by taking it away
+    /// rather than by counting how unlike its background a surface is. What is
+    /// left here is the pair of measurements recording what the two renderers
+    /// do to a control that has no words at all, where ink is exactly the
+    /// quantity in question.
     private static let legibleInk = 0.01
 
     /// The narrowest detail pane a notice has to survive.
@@ -106,37 +85,14 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// no window server rather than making it a check that only works locally.
     private func render(_ view: some View,
                         width: CGFloat = 520,
-                        height: CGFloat = 90) throws -> NSBitmapImageRep {
-        let host = NSHostingView(rootView: ZStack {
+                        height: CGFloat = 90,
+                        wordless: Bool = false) throws -> NSBitmapImageRep {
+        try WordFootprint.hosted(ZStack {
             Color.cream
             view.padding(Spacing.md)
-        }.frame(width: width, height: height))
-        host.frame = NSRect(x: 0, y: 0, width: width, height: height)
-        host.layoutSubtreeIfNeeded()
-
-        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
-                                "AppKit produced no bitmap to draw into")
-        host.cacheDisplay(in: host.bounds, to: rep)
-        return rep
-    }
-
-    /// The share of pixels differing noticeably from the most common colour, which
-    /// IS the background. Same measurement as the ImageRenderer harness.
-    private func inkCoverage(_ rep: NSBitmapImageRep) -> Double {
-        var luminances: [Double] = []
-        for y in Swift.stride(from: 0, to: rep.pixelsHigh, by: 2) {
-            for x in Swift.stride(from: 0, to: rep.pixelsWide, by: 2) {
-                guard let c = rep.colorAt(x: x, y: y)?
-                    .usingColorSpace(.deviceRGB) else { continue }
-                luminances.append(0.299 * c.redComponent
-                                  + 0.587 * c.greenComponent
-                                  + 0.114 * c.blueComponent)
-            }
-        }
-        guard !luminances.isEmpty else { return 0 }
-        let background = luminances.sorted()[luminances.count / 2]
-        return Double(luminances.filter { abs($0 - background) > 0.12 }.count)
-            / Double(luminances.count)
+        }.frame(width: width, height: height),
+                                 size: CGSize(width: width, height: height),
+                                 wordless: wordless)
     }
 
     /// The states that carry an unrenderable control, each built the way the app
@@ -179,7 +135,7 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// So neither renderer can tell anyone whether the spinner is visible, and no
     /// test in this file claims to.
     func testInkCannotJudgeASpinnerInEitherRenderer() throws {
-        let hosted = inkCoverage(try render(ProgressView(), height: 40))
+        let hosted = WordFootprint.ink(try render(ProgressView(), height: 40))
 
         let imageRendered: Double = try {
             let renderer = ImageRenderer(content: ZStack {
@@ -189,7 +145,7 @@ final class HostedControlLegibilityTests: XCTestCase {
             renderer.scale = 2
             let image = try XCTUnwrap(renderer.nsImage)
             let tiff = try XCTUnwrap(image.tiffRepresentation)
-            return inkCoverage(try XCTUnwrap(NSBitmapImageRep(data: tiff)))
+            return WordFootprint.ink(try XCTUnwrap(NSBitmapImageRep(data: tiff)))
         }()
 
         print(String(format: "  ProgressView ink: AppKit %.4f, ImageRenderer %.4f",
@@ -222,13 +178,23 @@ final class HostedControlLegibilityTests: XCTestCase {
 
     // MARK: - The states
 
+    /// Every hosted state puts its words on the page (#614).
+    ///
+    /// This used to ask for a share of the render to be ink, which on these two
+    /// states is mostly the menu, the bar and the spinner around the words. Now
+    /// it asks what the words themselves are worth, by rendering each state
+    /// again with its type switched off and comparing the two.
     func testEveryHostedStateDrawsSomethingLegible() throws {
         for state in states {
-            let coverage = inkCoverage(try render(state.view, height: state.height))
-            XCTAssertGreaterThan(coverage, Self.legibleInk, """
-                "\(state.name)" rendered almost nothing but its own background \
-                (\(String(format: "%.4f", coverage))), so the control Dan is meant to \
-                see is not on the page.
+            let share = WordFootprint.share(
+                try render(state.view, height: state.height),
+                try render(state.view, height: state.height, wordless: true))
+            print(String(format: "  %.4f  hosted, %@", share, state.name))
+
+            XCTAssertGreaterThan(share, WordFootprint.drawn, """
+                Switching every word off "\(state.name)" changed \
+                \(String(format: "%.4f", share)) of the render, which is nothing, so \
+                what Dan is meant to read on that control is not on the page.
                 """)
         }
     }
@@ -264,26 +230,25 @@ final class HostedControlLegibilityTests: XCTestCase {
     private func renderRow(isSelected: Bool,
                            width: CGFloat,
                            wordless: Bool) throws -> NSBitmapImageRep {
-        let row = EventListRowPreview(event: sampleEvent,
-                                      isSelected: isSelected,
-                                      wordless: wordless)
+        let row = EventListRowPreview(event: sampleEvent, isSelected: isSelected)
             .environment(GenerationManager())
             .environment(OCRManager())
             .environment(ExportManager())
             .background(PaintedSurfaces.deepPage)
             .frame(width: width)
 
-        let host = NSHostingView(rootView: row)
-        host.frame = NSRect(x: 0, y: 0, width: width, height: host.fittingSize.height)
-        host.layoutSubtreeIfNeeded()
+        // The height the row asks for, taken before the render so both renders
+        // are the same size and a difference between them is the type rather
+        // than a row that laid out differently.
+        let sizing = NSHostingView(rootView: row)
+        let height = sizing.fittingSize.height
+        XCTAssertGreaterThan(height, 30,
+                             "the row laid out \(height)pt tall, which is not a row; "
+                             + "the measurement would be of nothing")
 
-        XCTAssertGreaterThan(host.frame.height, 30,
-                             "the row laid out \(host.frame.height)pt tall, which is "
-                             + "not a row; the measurement would be of nothing")
-        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
-                                "AppKit produced no bitmap for the row")
-        host.cacheDisplay(in: host.bounds, to: rep)
-        return rep
+        return try WordFootprint.hosted(row,
+                                        size: CGSize(width: width, height: height),
+                                        wordless: wordless)
     }
 
     /// One row of the list, drawn.
@@ -304,27 +269,18 @@ final class HostedControlLegibilityTests: XCTestCase {
             for isSelected in [false, true] {
                 let state = isSelected ? "selected" : "at rest"
 
-                let words = inkCoverage(try renderRow(isSelected: isSelected,
-                                                     width: width, wordless: false))
-                let chrome = inkCoverage(try renderRow(isSelected: isSelected,
-                                                       width: width, wordless: true))
-                print(String(format: "  %.4f words, %.4f chrome   row %@, %@",
-                             words, chrome, state, where_))
+                let share = WordFootprint.share(
+                    try renderRow(isSelected: isSelected, width: width, wordless: false),
+                    try renderRow(isSelected: isSelected, width: width, wordless: true))
+                print(String(format: "  %.4f  row %@, %@", share, state, where_))
 
-                XCTAssertGreaterThan(words, Self.legibleInk, """
-                    A row \(state), \(where_) (\(Int(width))pt), rendered almost \
-                    nothing but its own background \
-                    (\(String(format: "%.4f", words))). The name, the organisation, \
-                    the date and the stage are in the view tree and are not on the \
-                    screen.
-                    """)
-                XCTAssertGreaterThan(words, chrome * 3, """
-                    A row \(state), \(where_), measures \
-                    \(String(format: "%.4f", words)) with its words and \
-                    \(String(format: "%.4f", chrome)) with every one of them switched \
-                    off. The words have to be worth far more ink than the fill and \
-                    the spine the row paints for itself, or this check is reading the \
-                    decoration and would pass on a row showing nothing.
+                XCTAssertGreaterThan(share, WordFootprint.drawn, """
+                    Switching every word off a row \(state), \(where_) \
+                    (\(Int(width))pt) changed \(String(format: "%.4f", share)) of the \
+                    render, which is nothing. The name, the organisation, the date and \
+                    the stage are in the view tree and are not on the screen, and the \
+                    fill and the rose gold spine this row paints for itself would keep \
+                    a flat ink threshold happy on their own (L141).
                     """)
             }
         }
@@ -338,22 +294,18 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// label that stopped drawing would move the number by less than the
     /// difference between one stage's wording and another's.
     private func renderPill(_ state: StagePillState,
-                            isSelected: Bool) throws -> NSBitmapImageRep {
+                            isSelected: Bool,
+                            wordless: Bool = false) throws -> NSBitmapImageRep {
         let row = isSelected ? PaintedSurfaces.eventRowSelected
                              : PaintedSurfaces.eventRowAtRest
-        let host = NSHostingView(rootView: StagePill(state: state, isSelected: isSelected)
-            .background(row))
-        host.frame = NSRect(origin: .zero, size: host.fittingSize)
-        host.layoutSubtreeIfNeeded()
+        let pill = StagePill(state: state, isSelected: isSelected).background(row)
 
-        XCTAssertGreaterThan(host.frame.width, 20,
-                             "the \(state) pill laid out at \(host.frame.width)pt wide, "
+        let size = NSHostingView(rootView: pill).fittingSize
+        XCTAssertGreaterThan(size.width, 20,
+                             "the \(state) pill laid out at \(size.width)pt wide, "
                              + "which is not a pill; the measurement below would be of "
                              + "nothing")
-        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
-                                "AppKit produced no bitmap for the \(state) pill")
-        host.cacheDisplay(in: host.bounds, to: rep)
-        return rep
+        return try WordFootprint.hosted(pill, size: size, wordless: wordless)
     }
 
     /// Every state the pill can be in, drawn, on both of the rows it sits on.
@@ -367,27 +319,32 @@ final class HostedControlLegibilityTests: XCTestCase {
         for state in StagePillState.allPillStates {
             for isSelected in [false, true] {
                 let where_ = isSelected ? "selected" : "at rest"
-                let coverage = inkCoverage(try renderPill(state, isSelected: isSelected))
-                measured.append(("\(state), row \(where_)", coverage))
+                let share = WordFootprint.share(
+                    try renderPill(state, isSelected: isSelected),
+                    try renderPill(state, isSelected: isSelected, wordless: true))
+                measured.append(("\(state), row \(where_)", share))
 
-                XCTAssertGreaterThan(coverage, Self.legibleInk, """
-                    The \(state) pill on a row \(where_) rendered almost nothing but \
-                    its own wash (\(String(format: "%.4f", coverage)) of pixels \
-                    differ), so its label is in the view tree and not on the screen.
+                XCTAssertGreaterThan(share, WordFootprint.drawn, """
+                    Switching the \(state) pill's label off on a row \(where_) changed \
+                    \(String(format: "%.4f", share)) of the render, which is nothing, \
+                    so the label is in the view tree and not on the screen. The wash \
+                    and the busy dot are marks whatever the word does.
                     """)
             }
         }
-        for (name, coverage) in measured.sorted(by: { $0.1 < $1.1 }) {
-            print(String(format: "  %.4f  %@", coverage, name))
+        for (name, share) in measured.sorted(by: { $0.1 < $1.1 }) {
+            print(String(format: "  %.4f  %@", share, name))
         }
     }
 
     /// The pill measurement can fail, or the walk above is decoration (L1).
     ///
     /// A capsule whose label is drawn in its own wash is the defect in bare
-    /// form, and it is the one the ratio walk exists for. Proving the picture
-    /// can see it too is what makes the two checks independent rather than one
-    /// check counted twice.
+    /// form, and it is the one this file exists for. Under the ink threshold
+    /// this replaced, that capsule still measured as a drawn pill and the proof
+    /// had to be that the number was small; under the footprint it is the
+    /// stronger statement that taking the label away changes NOTHING, because
+    /// there was nothing to take.
     func testThePillMeasurementTellsALabelFromAnEmptyCapsule() throws {
         let pill = PaintedSurfaces.stagePill(.awaitingExport)
         func capsule(_ ink: Color) -> some View {
@@ -401,70 +358,33 @@ final class HostedControlLegibilityTests: XCTestCase {
                 .background(PaintedSurfaces.eventRowAtRest)
         }
 
-        let invisible = inkCoverage(try hostedAtItsOwnSize(capsule(
-            pill.wash.composited(over: PaintedSurfaces.eventRowAtRest))))
-        let legible = inkCoverage(try hostedAtItsOwnSize(capsule(pill.ink)))
+        func share(_ ink: Color) throws -> Double {
+            let size = NSHostingView(rootView: capsule(ink)).fittingSize
+            return WordFootprint.share(
+                try WordFootprint.hosted(capsule(ink), size: size, wordless: false),
+                try WordFootprint.hosted(capsule(ink), size: size, wordless: true))
+        }
 
-        XCTAssertLessThan(invisible, Self.legibleInk, """
+        let invisible = try share(pill.wash.composited(over: PaintedSurfaces.eventRowAtRest))
+        let legible = try share(pill.ink)
+
+        XCTAssertLessThan(invisible, WordFootprint.drawn, """
             A pill label drawn in the colour of its own wash measured \
-            \(String(format: "%.4f", invisible)), above the threshold the walk above \
-            uses, so that walk would pass on a pill showing no words.
+            \(String(format: "%.4f", invisible)) as a footprint, above the floor the \
+            walk above uses, so that walk would pass on a pill showing no words.
             """)
-        XCTAssertGreaterThan(legible, invisible * 10,
-                             "the same label in its real ink has to measure as far more "
-                             + "ink, or the pill render is not reading the type at all")
+        XCTAssertGreaterThan(legible, WordFootprint.drawn * 5,
+                             "the same label in its real ink has to be worth far more "
+                             + "than the floor, or the pill render is not reading the "
+                             + "type at all")
     }
 
-    /// What ImageRenderer does to a view that is animating, measured (#592).
-    ///
-    /// The stage pill starts a `repeatForever` pulse in `onAppear` while a run
-    /// is in flight. Through `ImageRenderer` that pill loses its LABEL: the
-    /// capsule and the pulsing dot are drawn and the word is not, which is why
-    /// the pills are rendered in this file rather than beside the notices.
-    ///
-    /// Recorded as a measurement rather than a note, for the reason
-    /// `testInkCannotJudgeASpinnerInEitherRenderer` is: if the renderer ever
-    /// learns to draw these, the reasoning here needs redoing, and nothing else
-    /// would say so.
-    func testImageRendererLosesTheLabelOfAnAnimatingPill() throws {
-        let hosted = inkCoverage(try renderPill(.generating, isSelected: false))
-
-        let imageRendered: Double = try {
-            let renderer = ImageRenderer(content: ZStack {
-                PaintedSurfaces.eventRowAtRest
-                StagePill(state: .generating)
-            })
-            renderer.scale = 2
-            let image = try XCTUnwrap(renderer.nsImage)
-            let tiff = try XCTUnwrap(image.tiffRepresentation)
-            return inkCoverage(try XCTUnwrap(NSBitmapImageRep(data: tiff)))
-        }()
-
-        print(String(format: "  busy pill ink: AppKit %.4f, ImageRenderer %.4f",
-                     hosted, imageRendered))
-
-        XCTAssertGreaterThan(hosted, imageRendered * 3, """
-            A hosted busy pill measured \(String(format: "%.4f", hosted)) and the same \
-            pill through ImageRenderer \(String(format: "%.4f", imageRendered)). The \
-            hosted one is meant to be far the bolder, because ImageRenderer draws the \
-            capsule and the dot and drops the word. If these have converged, \
-            ImageRenderer has learned to draw an animating view and the pills can be \
-            measured beside the notices again.
-            """)
-        XCTAssertGreaterThan(hosted, Self.legibleInk,
-                             "the hosted busy pill has to draw its label, or this "
-                             + "comparison is between two blank images")
-    }
-
-    /// A view rendered at exactly the size it asks for.
-    private func hostedAtItsOwnSize(_ view: some View) throws -> NSBitmapImageRep {
-        let host = NSHostingView(rootView: view)
-        host.frame = NSRect(origin: .zero, size: host.fittingSize)
-        host.layoutSubtreeIfNeeded()
-        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-        host.cacheDisplay(in: host.bounds, to: rep)
-        return rep
-    }
+    // What ImageRenderer does to an animating view is measured by
+    // `testTheRendererDrawsAnimatingWordsOnlyWhenItIsGivenASize` below, which
+    // is one check where there were two: the older one compared a hosted pill's
+    // ink against an image-rendered pill's, which is a difference between two
+    // renderers as well as between a drawn word and a missing one, and it said
+    // nothing about the size that turned out to be the whole mechanism (#612).
 
     // MARK: - The screen a program is read on (#607)
 
@@ -519,33 +439,13 @@ final class HostedControlLegibilityTests: XCTestCase {
     private func renderReadingScreen(_ live: OCRProgressBody.Live,
                                      wordless: Bool,
                                      width: CGFloat = 520) throws -> NSBitmapImageRep {
-        let view = OCRProgressBody(eventName: "Spring Gala",
-                                   live: { _ in live },
-                                   onCancel: {},
-                                   wordless: wordless)
-            .frame(width: width, height: 400)
-            .background(PaintedSurfaces.page)
-
-        let host = NSHostingView(rootView: view)
-        host.frame = NSRect(x: 0, y: 0, width: width, height: 400)
-        host.layoutSubtreeIfNeeded()
-        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
-                                "AppKit produced no bitmap for the reading screen")
-        host.cacheDisplay(in: host.bounds, to: rep)
-        return rep
+        try WordFootprint.hosted(
+            OCRProgressBody(eventName: "Spring Gala", live: { _ in live }, onCancel: {})
+                .frame(width: width, height: 400)
+                .background(PaintedSurfaces.page),
+            size: CGSize(width: width, height: 400),
+            wordless: wordless)
     }
-
-    /// A lower floor than the 0.01 the rest of this file uses, and the reason is
-    /// the surface rather than a weaker standard.
-    ///
-    /// This is a whole detail pane holding a name, two short lines, a timer and
-    /// a footer, centred in a great deal of empty page, where a notice is a
-    /// small box that is almost all type. Measured, the three states render
-    /// between 0.0138 and 0.0256, and the same screen with every word switched
-    /// off renders 0.0007. So this sits comfortably between drawn and blank,
-    /// and the ratio below is what makes either number mean anything. The same
-    /// call `PhotoLightboxTests` made, for the same shape of screen.
-    private static let readingScreenInk = 0.005
 
     /// The screen Dan watches for minutes while a program is read, drawn (#607).
     ///
@@ -553,32 +453,27 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// measured, and this one never was, so nothing had ever confirmed its
     /// words reach the screen.
     ///
-    /// Measured against the SAME SCREEN WITH ITS WORDS SWITCHED OFF rather than
-    /// a flat threshold. The shimmer rail is a mark on the page whatever the
-    /// type does, and a floor alone would let it answer for the type (L141).
-    /// What that comparison establishes here is that the rail is worth 0.0007
-    /// and could not have answered for it, which is a measurement rather than
-    /// the assumption it replaced.
+    /// It used to carry a floor of its own, 0.005 where the rest of the file
+    /// asked 0.01, honestly measured against this surface: a whole detail pane
+    /// holding a name, two short lines, a timer and a footer, centred in a great
+    /// deal of empty page. That is the drift #614 is about, a sparse screen
+    /// earning a lower bar because that is what it happened to measure. The
+    /// screen's own words are the same size whatever it is centred in, and this
+    /// now measures those.
     func testTheReadingScreenDrawsItsWords() throws {
         for state in Self.readingStates {
-            let words = inkCoverage(try renderReadingScreen(state.live, wordless: false))
-            let chrome = inkCoverage(try renderReadingScreen(state.live, wordless: true))
-            print(String(format: "  %.4f words, %.4f shimmer only   reading, %@",
-                         words, chrome, state.name))
+            let share = WordFootprint.share(
+                try renderReadingScreen(state.live, wordless: false),
+                try renderReadingScreen(state.live, wordless: true))
+            print(String(format: "  %.4f  reading, %@", share, state.name))
 
-            XCTAssertGreaterThan(words, Self.readingScreenInk, """
-                The reading screen "\(state.name)" rendered almost nothing but its own \
-                page (\(String(format: "%.4f", words))). The show's name, the phase, \
-                the timer and the footer are in the view tree and are not on the \
-                screen, which is the state Dan sits in front of for minutes at a time.
-                """)
-            XCTAssertGreaterThan(words, chrome * 3, """
-                The reading screen "\(state.name)" measures \
-                \(String(format: "%.4f", words)) with its words and \
-                \(String(format: "%.4f", chrome)) with every one of them switched off. \
-                The words have to be worth far more ink than the shimmer rail the \
-                screen paints for itself, or this check is reading the decoration and \
-                would pass on a screen showing nothing (L141).
+            XCTAssertGreaterThan(share, WordFootprint.drawn, """
+                Switching every word off the reading screen "\(state.name)" changed \
+                \(String(format: "%.4f", share)) of the render, which is nothing. The \
+                show's name, the phase, the timer and the footer are in the view tree \
+                and are not on the screen, which is the state Dan sits in front of for \
+                minutes at a time. The shimmer rail is a mark on the page whatever they \
+                do, so a flat ink threshold could not have said this (L141).
                 """)
         }
     }
@@ -586,11 +481,11 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// The screen still draws when the window is dragged narrow.
     func testTheReadingScreenStillDrawsWhenNarrow() throws {
         for state in Self.readingStates {
-            let coverage = inkCoverage(try renderReadingScreen(state.live,
-                                                               wordless: false,
-                                                               width: 300))
-            XCTAssertGreaterThan(coverage, Self.readingScreenInk,
-                                 "the reading screen \"\(state.name)\" lost its content "
+            let share = WordFootprint.share(
+                try renderReadingScreen(state.live, wordless: false, width: 300),
+                try renderReadingScreen(state.live, wordless: true, width: 300))
+            XCTAssertGreaterThan(share, WordFootprint.drawn,
+                                 "the reading screen \"\(state.name)\" lost its words "
                                  + "at 300pt wide")
         }
     }
@@ -600,8 +495,9 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// #607 was filed expecting this screen to be the stage pill's case again:
     /// it carries a `repeatForever` shimmer, and #592 measured `ImageRenderer`
     /// drawing an animating pill's capsule and dropping its word. Through
-    /// `ImageRenderer` this screen measures 0.0111 with its words and 0.0003
-    /// without them, so the words are drawn.
+    /// `ImageRenderer` at the size the harness gives it, this screen's words are
+    /// worth a measurable share of the render, printed on each run, so they are
+    /// drawn.
     ///
     /// #607 read that as a property of the screen, and said the difference was
     /// WHERE the animation is declared: `StagePill` starts its pulse in an
@@ -617,33 +513,22 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// is where the mechanism itself is pinned.
     func testTheAnimationTrapHasNotReachedThisScreensWords() throws {
         let live = try XCTUnwrap(Self.readingStates.first).live
+        let screen = OCRProgressBody(eventName: "Spring Gala", live: { _ in live },
+                                     onCancel: {})
+            .frame(width: 520, height: 400)
+            .background(PaintedSurfaces.page)
 
-        func imageRendered(wordless: Bool) throws -> Double {
-            let renderer = ImageRenderer(content: OCRProgressBody(
-                eventName: "Spring Gala", live: { _ in live }, onCancel: {},
-                wordless: wordless)
-                .frame(width: 520, height: 400)
-                .background(PaintedSurfaces.page))
-            renderer.scale = 2
-            let image = try XCTUnwrap(renderer.nsImage)
-            let tiff = try XCTUnwrap(image.tiffRepresentation)
-            return inkCoverage(try XCTUnwrap(NSBitmapImageRep(data: tiff)))
-        }
+        let share = WordFootprint.share(
+            try WordFootprint.imageRendered(screen, wordless: false),
+            try WordFootprint.imageRendered(screen, wordless: true))
+        print(String(format: "  reading screen through ImageRenderer: %.4f", share))
 
-        let words = try imageRendered(wordless: false)
-        let chrome = try imageRendered(wordless: true)
-        print(String(format: "  reading screen through ImageRenderer: %.4f words, "
-                     + "%.4f shimmer only", words, chrome))
-
-        XCTAssertGreaterThan(words, chrome * 3, """
-            Through ImageRenderer the reading screen measures \
-            \(String(format: "%.4f", words)) with its words and \
-            \(String(format: "%.4f", chrome)) with them switched off, which means the \
-            words are no longer being drawn. #592's animation trap has reached this \
-            screen: something has moved the shimmer's repeating animation up to a view \
-            the type sits under. The hosted checks above still see it, so nothing is \
-            unguarded, but any surface added to BannerLegibilityTests near this one is \
-            now measuring its own decoration.
+        XCTAssertGreaterThan(share, WordFootprint.drawn, """
+            Through ImageRenderer, switching every word off the reading screen changed \
+            \(String(format: "%.4f", share)) of the render, which means the words are \
+            no longer being drawn even at a proposed size. The hosted checks above still \
+            see this screen, so nothing here is unguarded, but a surface added to \
+            BannerLegibilityTests near it would now be measuring its own decoration.
             """)
     }
 
@@ -693,57 +578,6 @@ final class HostedControlLegibilityTests: XCTestCase {
         return rep
     }
 
-    /// The share of pixels one part of a screen accounts for.
-    ///
-    /// Two renders of the same view at the same size, differing only in whether
-    /// that part is drawn, compared pixel for pixel. Ink over the whole surface
-    /// cannot answer this: a 44pt symbol and a filled button are marks on the
-    /// page whatever the type does, and the guard that measured a filled button
-    /// that way read 0.2475 of it as content while almost all of it was the
-    /// button's own background (#559, L141). A difference isolates the part.
-    ///
-    /// Layout is identical between the two, because a part is switched off with
-    /// `.opacity(0)` rather than removed, so a pixel that moved is a pixel that
-    /// part drew.
-    private func footprint(_ whole: NSBitmapImageRep,
-                           _ without: NSBitmapImageRep) -> Double {
-        guard whole.pixelsWide == without.pixelsWide,
-              whole.pixelsHigh == without.pixelsHigh else { return 0 }
-        var differing = 0
-        var sampled = 0
-        for y in Swift.stride(from: 0, to: whole.pixelsHigh, by: 2) {
-            for x in Swift.stride(from: 0, to: whole.pixelsWide, by: 2) {
-                guard let a = whole.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-                      let b = without.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
-                else { continue }
-                sampled += 1
-                func luminance(_ c: NSColor) -> Double {
-                    0.299 * c.redComponent + 0.587 * c.greenComponent
-                        + 0.114 * c.blueComponent
-                }
-                if abs(luminance(a) - luminance(b)) > 0.02 { differing += 1 }
-            }
-        }
-        guard sampled > 0 else { return 0 }
-        return Double(differing) / Double(sampled)
-    }
-
-    /// What a part, or a whole surface's type, has to be worth to count as
-    /// drawn.
-    ///
-    /// Not a share of the surface picked to sit under whatever the smallest one
-    /// measured. Two renders of the SAME view differ by nothing at all, which
-    /// `testTheFootprintOfNothingIsNothing` measures rather than assumes, so
-    /// anything above zero is type putting pixels on the page. This is a margin
-    /// over that zero, and both bands it is judged against sit well clear of
-    /// it: the smallest part of the failure screen, the 11pt Go Back, is 0.0013,
-    /// and the thirty-eight measured notices run from 0.0097 to 0.0761 (#612).
-    ///
-    /// The other side of it is measured too. A surface whose words the renderer
-    /// drops reads 0.0000, not merely small, because the two renders are then
-    /// the same image.
-    private static let drawnFootprint = 0.0004
-
     /// Every word on the screen a read fails on reaches the screen (#613).
     ///
     /// The failure half of the view #607 drew. It is the only screen that says
@@ -759,10 +593,10 @@ final class HostedControlLegibilityTests: XCTestCase {
             let whole = try renderFailureScreen(state.message)
             for part in OCRFailureBody.Part.allCases {
                 let without = try renderFailureScreen(state.message, hiding: [part])
-                let share = footprint(whole, without)
+                let share = WordFootprint.share(whole, without)
                 print(String(format: "  %.4f  %@, %@", share, state.name, part.rawValue))
 
-                XCTAssertGreaterThan(share, Self.drawnFootprint, """
+                XCTAssertGreaterThan(share, WordFootprint.drawn, """
                     On the failure screen for \(state.name), switching "\(part.rawValue)" \
                     off changed \(String(format: "%.4f", share)) of the render, which is \
                     nothing. That part is in the view tree and not on the screen: this is \
@@ -780,7 +614,7 @@ final class HostedControlLegibilityTests: XCTestCase {
         for part in OCRFailureBody.Part.allCases {
             let without = try renderFailureScreen(message, hiding: [part],
                                                   width: Self.narrowestPane)
-            XCTAssertGreaterThan(footprint(whole, without), Self.drawnFootprint,
+            XCTAssertGreaterThan(WordFootprint.share(whole, without), WordFootprint.drawn,
                                  "the failure screen lost \"\(part.rawValue)\" at "
                                  + "\(Int(Self.narrowestPane))pt wide")
         }
@@ -795,7 +629,7 @@ final class HostedControlLegibilityTests: XCTestCase {
         let message = try XCTUnwrap(Self.failureMessages.first).message
         let once = try renderFailureScreen(message)
         let again = try renderFailureScreen(message)
-        XCTAssertEqual(footprint(once, again), 0, accuracy: 0.00001, """
+        XCTAssertEqual(WordFootprint.share(once, again), 0, accuracy: 0.00001, """
             two renders of the same screen differ, so the footprint measurement is \
             reading the renderer rather than the words and the floor it is judged \
             against means nothing
@@ -821,109 +655,27 @@ final class HostedControlLegibilityTests: XCTestCase {
 
         let blank = try render(ZStack { PaintedSurfaces.page }.frame(width: 520,
                                                                      height: 90))
-        let invisible = footprint(try render(card(PaintedSurfaces.page)), blank)
-        let legible = footprint(try render(card(Color.warmDark)), blank)
+        let invisible = WordFootprint.share(try render(card(PaintedSurfaces.page)), blank)
+        let legible = WordFootprint.share(try render(card(Color.warmDark)), blank)
 
-        XCTAssertLessThan(invisible, Self.drawnFootprint, """
+        XCTAssertLessThan(invisible, WordFootprint.drawn, """
             type drawn in the colour of the page behind it measures \
             \(String(format: "%.4f", invisible)) as a footprint, which clears the floor \
             the checks above use, so those checks would pass on a screen showing nothing
             """)
-        XCTAssertGreaterThan(legible, Self.drawnFootprint * 5, """
+        XCTAssertGreaterThan(legible, WordFootprint.drawn * 5, """
             the same sentence in a readable colour measures \
             \(String(format: "%.4f", legible)), which is not far enough above the floor \
             for the floor to mean anything
             """)
     }
 
-    // MARK: - Every measured state, asked what its words are worth (#612)
+    // MARK: - What the renderer next door can see (#612)
     //
-    // The thirty-eight surfaces measured next door had never been asked. A
-    // surface whose type does not reach the page measures its own fill, border
-    // and button while reporting a pass, which is what #404, #559 and #592 were
-    // each about, and no threshold over there can say so: the state renders,
-    // the number is respectable, and the words are missing.
-    //
-    // So each state is drawn twice, once as the harness draws it and once with
-    // its words switched off, and the two images are compared pixel for pixel.
-    // The difference is the type.
-    //
-    // The answer for the animation trap specifically is that it cannot reach
-    // these states while the harness renders into a frame, which is measured in
-    // the two checks above rather than assumed. What this sweep is for is the
-    // general case: type that does not draw, for any reason.
-
-    /// One view through ImageRenderer, exactly as the notice harness draws it,
-    /// or with its words switched off.
-    ///
-    /// The words-on render carries NO modifier of any kind. That is not a
-    /// detail: the first version of this asked for both renders through a
-    /// custom text renderer, and putting one on the words-on side dissolved the
-    /// defect being looked for. The busy pill, which ImageRenderer is known to
-    /// draw without its label, came out WITH its label as soon as its type went
-    /// through a renderer of ours, so the check measured a screen the harness
-    /// does not draw and reported everything healthy. The calibration below is
-    /// the only reason that was ever noticed (L1).
-    private func imageRendered(_ content: some View,
-                               wordless: Bool) throws -> NSBitmapImageRep {
-        let renderer = wordless
-            ? ImageRenderer(content: AnyView(content.textRenderer(WordSwitch())))
-            : ImageRenderer(content: AnyView(content))
-        renderer.scale = 2
-        let image = try XCTUnwrap(renderer.nsImage, "the state produced no image at all")
-        let tiff = try XCTUnwrap(image.tiffRepresentation)
-        return try XCTUnwrap(NSBitmapImageRep(data: tiff))
-    }
-
-    /// What the words of one surface are worth, drawn the way the notice
-    /// harness draws it.
-    private func wordFootprint(of view: some View, width: CGFloat = 520) throws -> Double {
-        let content = ZStack {
-            PaintedSurfaces.page
-            view.padding(Spacing.md)
-        }.frame(width: width)
-
-        return footprint(try imageRendered(content, wordless: false),
-                         try imageRendered(content, wordless: true))
-    }
-
-    /// Every measured surface is one the renderer can actually see (#612).
-    ///
-    /// Measured as a difference rather than as a ratio of ink. Ink is the share
-    /// of pixels unlike the commonest colour, and on a surface that is mostly
-    /// its own button fill, removing the type MOVES what the commonest colour
-    /// is: three of these states measured MORE ink with their words switched
-    /// off than with them on. A metric that can go up when content is taken
-    /// away cannot be asked whether content is there. The difference between
-    /// the two images can: it is the type, and nothing else.
-    func testNoMeasuredStateIsInvisibleToTheRendererThatMeasuresIt() throws {
-        let states = BannerLegibilityTests.measuredStates
-
-        // A sweep that reads nothing objects to nothing (L98).
-        XCTAssertGreaterThan(states.count, 30,
-                             "the sweep found \(states.count) measured states, so it is "
-                             + "proving nothing about the ones it did not draw")
-
-        var measured: [(String, Double)] = []
-        for state in states {
-            let share = try wordFootprint(of: state.view)
-            measured.append((state.name, share))
-
-            XCTAssertGreaterThan(share, Self.drawnFootprint, """
-                Switching every word off "\(state.name)" changed \
-                \(String(format: "%.4f", share)) of the render, which is nothing. Its \
-                type is not reaching the page, so what the notice harness measures over \
-                there is the fill, the border and the button: it would report the same \
-                number with the surface empty (L141). Either the words are drawn in the \
-                colour of what is behind them, or ImageRenderer is not drawing them at \
-                all, in which case the state belongs in this file where AppKit hosts it.
-                """)
-        }
-
-        for (name, share) in measured.sorted(by: { $0.1 < $1.1 }) {
-            print(String(format: "  %.4f  %@", share, name))
-        }
-    }
+    // The sweep over the thirty-eight measured states lives in
+    // BannerLegibilityTests, beside the states themselves, where it replaced
+    // that file's ink threshold (#614). What is here is the pair of facts that
+    // sweep rests on, both about the renderer rather than about any one screen.
 
     /// What actually decides whether ImageRenderer draws an animating view's
     /// words, measured (#612).
@@ -954,8 +706,8 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// thirty-eight surfaces can be hit by this.
     func testTheRendererDrawsAnimatingWordsOnlyWhenItIsGivenASize() throws {
         func share(_ content: some View) throws -> Double {
-            footprint(try imageRendered(content, wordless: false),
-                      try imageRendered(content, wordless: true))
+            WordFootprint.share(try WordFootprint.imageRendered(content, wordless: false),
+                      try WordFootprint.imageRendered(content, wordless: true))
         }
 
         let pill = ZStack {
@@ -979,14 +731,14 @@ final class HostedControlLegibilityTests: XCTestCase {
             print(String(format: "  %@: %.4f at its own size, %.4f given one",
                          one.name, one.ownSize, one.sized))
 
-            XCTAssertLessThan(one.ownSize, Self.drawnFootprint, """
+            XCTAssertLessThan(one.ownSize, WordFootprint.drawn, """
                 Switching the words off \(one.name) rendered at its own size changed \
                 \(String(format: "%.4f", one.ownSize)) of the image, which means the \
                 words were there to lose. ImageRenderer has learned to draw an animating \
                 view unsized, and the reasoning in this file, in #592 and in #607 needs \
                 redoing: the sweep below is calibrated on this being the case that fails.
                 """)
-            XCTAssertGreaterThan(one.sized, Self.drawnFootprint, """
+            XCTAssertGreaterThan(one.sized, WordFootprint.drawn, """
                 \(one.name) given a size lost its words too \
                 (\(String(format: "%.4f", one.sized))). Every check in the notice harness \
                 renders into a frame, so if a proposed size no longer restores the words, \
@@ -1169,10 +921,11 @@ final class HostedControlLegibilityTests: XCTestCase {
 
     func testEveryHostedStateStillDrawsWhenNarrow() throws {
         for state in states {
-            let coverage = inkCoverage(try render(state.view, width: 300,
-                                                 height: state.height))
-            XCTAssertGreaterThan(coverage, Self.legibleInk,
-                                 "\"\(state.name)\" lost its content at 300pt wide")
+            let share = WordFootprint.share(
+                try render(state.view, width: 300, height: state.height),
+                try render(state.view, width: 300, height: state.height, wordless: true))
+            XCTAssertGreaterThan(share, WordFootprint.drawn,
+                                 "\"\(state.name)\" lost its words at 300pt wide")
         }
     }
 }
