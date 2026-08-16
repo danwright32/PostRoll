@@ -1,0 +1,8 @@
+{
+  "name": "colour-exemption-has-something-to-exempt",
+  "file": "PostRollApp/Tests/BannerLegibilityTests.swift",
+  "find": "        \"Services/CollageRenderer.swift\":",
+  "replace": "        \"Services/ExportStaging.swift\":",
+  "test": "PostRollTests/BannerLegibilityTests/testEveryColourExemptionStillHasSomethingToExempt",
+  "breaks": "an exemption points at a file with no colour of its own, so it silently covers whatever arrives in that file next while reading as a decision somebody is still standing behind (#620, L96)"
+}

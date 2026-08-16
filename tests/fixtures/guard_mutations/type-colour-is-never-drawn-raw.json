@@ -1,0 +1,8 @@
+{
+  "name": "type-colour-is-never-drawn-raw",
+  "file": "PostRollApp/Sources/Views/CollaboratorPanel.swift",
+  "find": "? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)",
+  "replace": "? PaintedSurfaces.pageAccentText : Color.warmMid)",
+  "test": "PostRollTests/BannerLegibilityTests/testNoScreenDrawsTypeInARawPaletteColour",
+  "breaks": "a screen goes back to drawing type in a colour written at the point of use, which nothing can hold to a level because nothing else can name what is behind it. 362 places were doing this when the check was written (#620)"
+}
