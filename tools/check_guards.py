@@ -49,13 +49,16 @@ anyone runs this.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import enum
 import json
 import os
 import re
 import signal
+import fcntl
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -475,6 +478,64 @@ def guards_touched_by(repo_root: Path, base: str, path: str,
             if new_bodies.get(test_method(e)) != old_bodies.get(test_method(e))}
 
 
+
+# ── One build at a time, and saying so while it waits (#642, #641) ────────────
+
+
+def build_lock_path(repo_root: Path) -> str | None:
+    """The lock every xcodebuild sharing the cache takes, or None when this
+    checkout names no cache to contend over.
+
+    Beside the cache and derived from the same shell definition, never spelled
+    again: two spellings of one location is how a second lock quietly starts
+    protecting nothing (L41)."""
+    cache = derived_data_path(repo_root)
+    return f"{cache}.lock" if cache else None
+
+
+@contextlib.contextmanager
+def build_lock(path: str | None, log=print):
+    """Hold the build lock for the duration, saying so if it has to wait.
+
+    Since #621 the sweep builds into the same DerivedData as `make build` and
+    `make test`, which was the point. Two xcodebuilds against one DerivedData
+    produce errors that read like real compile failures in whichever run
+    notices first, and this tool would report that as a guard ERROR rather than
+    as contention, which is a verdict on the guard it did not earn.
+
+    A wait announces itself, because a run held up by another build otherwise
+    looks exactly like the hang #641 is about."""
+    if path is None:
+        yield
+        return
+
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            log(f"another build is using the shared cache; waiting for it "
+                f"({path})")
+            waited = time.monotonic()
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            log(f"the other build finished after "
+                f"{time.monotonic() - waited:.0f}s; carrying on")
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def say(message: str) -> None:
+    """The default logger, flushed.
+
+    `print` buffers whenever stdout is a pipe or a file, so a redirected run
+    left its log at zero bytes for twenty minutes and then arrived all at once.
+    A sweep that is working and one that has hung have to look different
+    (#641)."""
+    print(message, flush=True)
+
+
 def guard_test_path(entry: Entry, repo_root: Path) -> str | None:
     """The file the entry's guard test lives in, repo-relative."""
     if entry.test.startswith("tests/"):
@@ -592,7 +653,7 @@ def _dirty(path: Path, repo_root: Path) -> bool:
     return bool(status.stdout.strip())
 
 
-def run_entry(entry: Entry, repo_root: Path, runner) -> Result:
+def run_entry(entry: Entry, repo_root: Path, runner, log=say) -> Result:
     target = repo_root / entry.file
     if not target.is_file():
         return Result(entry, Outcome.ERROR,
@@ -617,7 +678,11 @@ def run_entry(entry: Entry, repo_root: Path, runner) -> Result:
     _PENDING[target] = original
     target.write_bytes(text.replace(entry.find, entry.replace).encode("utf-8"))
     try:
-        code, output = runner(command_for(entry, repo_root), repo_root)
+        # Swift entries build; Python ones do not, so only the former contend
+        # for the shared cache.
+        lock = build_lock_path(repo_root) if entry.test.startswith("PostRollTests/") else None
+        with build_lock(lock, log=log):
+            code, output = runner(command_for(entry, repo_root), repo_root)
         verdict = classify(entry, code, output)
     except Exception as exc:  # noqa: BLE001  the restore below must always run
         verdict = Verdict(Outcome.ERROR, f"the runner failed: {exc}")
@@ -634,7 +699,7 @@ def run_entry(entry: Entry, repo_root: Path, runner) -> Result:
 
 def check_guards(repo_root: Path, registry_path: Path, runner,
                  only: str | None = None, changed_only: bool = False,
-                 log=print) -> int:
+                 log=say) -> int:
     # Installed here rather than in main() so every caller that can perturb the
     # tree is covered, including the tests that drive this directly (#547).
     install_interrupt_restore(repo_root, log=log)
@@ -699,12 +764,16 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
             "reusing one")
 
     results = []
-    for entry in entries:
-        log(f"{entry.name}: breaking {entry.file} "
+    started = time.monotonic()
+    for number, entry in enumerate(entries, start=1):
+        # How far in and how long so far, on every line, because the thing a
+        # person watching needs to tell apart is progress from a hang (#641).
+        where = f"[{number} of {len(entries)}, {time.monotonic() - started:.0f}s]"
+        log(f"{where} {entry.name}: breaking {entry.file} "
             f"({entry.breaks}), expecting {entry.test} to go red")
-        result = run_entry(entry, repo_root, runner)
+        result = run_entry(entry, repo_root, runner, log=log)
         results.append(result)
-        log(f"{entry.name}: {result.outcome.value}"
+        log(f"{where} {entry.name}: {result.outcome.value}"
             + (f", {result.detail}" if result.detail else ""))
 
     bad = [r for r in results if r.outcome is not Outcome.KILLED]
