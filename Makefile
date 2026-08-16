@@ -100,6 +100,11 @@ check-toolchain:
 # folder that is emptied once per process, so running them separately would have
 # each clear the others' work.
 #
+# The previous run is kept as a baseline so a visual change reports itself
+# (#636). It says only that a screen CHANGED: a recorded expectation defends
+# whatever it captured, including a state nobody checked (L84), so whether a
+# screen is CORRECT stays the business of the ink and footprint checks.
+#
 # The folder is NOT named here. The tests decide it and print it, and this reads
 # it back, because a path both sides spell separately is a path they can
 # disagree about (L41). Every step that could match nothing is checked, since a
@@ -147,6 +152,30 @@ review-sheet:
 	fi; \
 	printf '%s\n' "$$out" | sed -n 's/^REVIEW-SHEET-WROTE /  /p'; \
 	echo "  $$count images in $$folder"; \
+	prev=$$(printf '%s\n' "$$out" | sed -n 's/^REVIEW-SHEET-BASELINE //p' | head -1); \
+	if [ -z "$$prev" ]; then \
+		echo "  the run never said where the previous sheet was kept, so nothing"; \
+		echo "  here can say what moved: check ReviewSheet.baselineMarker"; \
+		exit 1; \
+	fi; \
+	if [ ! -d "$$prev" ]; then \
+		echo "  no previous sheet to compare against, so this run is the baseline"; \
+	else \
+		moved=0; added=0; gone=0; \
+		for f in "$$folder"/*.png; do \
+			b="$$prev/$$(basename "$$f")"; \
+			if [ ! -f "$$b" ]; then \
+				added=$$((added+1)); echo "    new:     $$(basename "$$f")"; \
+			elif ! cmp -s "$$f" "$$b"; then \
+				moved=$$((moved+1)); echo "    changed: $$(basename "$$f")"; \
+			fi; \
+		done; \
+		for b in "$$prev"/*.png; do \
+			[ -f "$$folder/$$(basename "$$b")" ] || { \
+				gone=$$((gone+1)); echo "    gone:    $$(basename "$$b")"; }; \
+		done; \
+		echo "  $$moved of $$count changed, $$added new, $$gone gone"; \
+	fi; \
 	open "$$folder" || true
 
 clean:
