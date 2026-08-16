@@ -71,7 +71,7 @@ struct EventListView: View {
                     )
                     .listRowInsets(EdgeInsets(top: Spacing.rowV, leading: Spacing.rowInset, bottom: Spacing.rowV, trailing: Spacing.rowInset))
                     .listRowSeparator(.visible)
-                    .listRowSeparatorTint(Color.creamEdge)
+                    .listRowSeparatorTint(PaintedSurfaces.edgeRule)
                     .contentShape(Rectangle())
                     // Writes the hover, never reads it, so this closure does
                     // not tie the list's body to the pointer (#457).
@@ -117,7 +117,7 @@ struct EventListView: View {
                     } label: {
                         Image(systemName: "tag.circle")
                             .font(.system(size: 14))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .frame(width: 18, height: 18)
                     }
                     .buttonStyle(.plain)
@@ -132,7 +132,7 @@ struct EventListView: View {
                             ZStack(alignment: .topTrailing) {
                                 Image(systemName: "archivebox")
                                     .font(.system(size: 14))
-                                    .foregroundStyle(showExported ? PaintedSurfaces.iconAccent : Color.warmMid)
+                                    .foregroundStyle(showExported ? PaintedSurfaces.iconAccent : PaintedSurfaces.secondaryText)
                                     .frame(width: 18, height: 18)
                                 if !showExported {
                                     Text("\(exportedCount)")
@@ -177,10 +177,10 @@ struct EventListView: View {
                 VStack(spacing: Spacing.sm) {
                     Text("No results for \"\(searchText)\"")
                         .font(.light(12))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Text("Try clearing the search field.")
                         .font(.light(10))
-                        .foregroundStyle(Color.warmMid.opacity(0.65))
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Button("Clear Search") { searchText = "" }
                         .buttonStyle(.plain)
                         .font(.system(size: 11, weight: .medium))
@@ -193,7 +193,7 @@ struct EventListView: View {
                 VStack(spacing: Spacing.sm) {
                     Text("All events are archived.")
                         .font(.light(12))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Button("Show Archived") {
                         withAnimation(.easeOut(duration: 0.2)) { showExported = true }
                     }
@@ -295,7 +295,7 @@ struct EventRow: View {
             if isRenaming {
                 TextField("Event name", text: $renameText)
                     .font(.signPainter(19))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .textFieldStyle(.plain)
                     .focused($renameFocused)
                     .onSubmit { onRenameCommit?() }
@@ -473,7 +473,7 @@ private struct UndoBanner: View {
         HStack {
             Text(message)
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Spacer()
             Button("Undo", action: onUndo)
                 .font(.system(size: 11, weight: .medium))
@@ -505,7 +505,7 @@ struct HashtagSettingsSheet: View {
                 Text("HASHTAG SETTINGS")
                     .font(.system(size: 11, weight: .medium))
                     .tracking(0.8)
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                 Spacer()
                 Button("Done") { saveGlobal(); dismiss() }
                     .buttonStyle(.plain)
@@ -526,10 +526,10 @@ struct HashtagSettingsSheet: View {
                             .foregroundStyle(PaintedSurfaces.pageAccentText)
                         Text("Added to every caption automatically.")
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                         TextField("e.g. #dwphotony #nyc #concertphotography", text: $globalRaw)
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.warmDark)
+                            .foregroundStyle(PaintedSurfaces.bodyText)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
                             .background(
@@ -549,17 +549,17 @@ struct HashtagSettingsSheet: View {
                             .foregroundStyle(PaintedSurfaces.pageAccentText)
                         Text("Apply a saved group of hashtags to any caption with one tap.")
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
 
                         ForEach(hashtagStore.presets) { preset in
                             HStack(alignment: .top, spacing: Spacing.sm) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(preset.name)
                                         .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(Color.warmDark)
+                                        .foregroundStyle(PaintedSurfaces.bodyText)
                                     Text(preset.tags.joined(separator: " "))
                                         .font(.system(size: 10))
-                                        .foregroundStyle(Color.warmMid)
+                                        .foregroundStyle(PaintedSurfaces.secondaryText)
                                         .lineLimit(2)
                                 }
                                 Spacer()
@@ -567,7 +567,7 @@ struct HashtagSettingsSheet: View {
                                     hashtagStore.deletePreset(id: preset.id)
                                 } label: {
                                     Image(systemName: "minus.circle")
-                                        .foregroundStyle(Color.warmMid)
+                                        .foregroundStyle(PaintedSurfaces.secondaryText)
                                         .font(.system(size: 14))
                                 }
                                 .buttonStyle(.plain)
@@ -586,7 +586,7 @@ struct HashtagSettingsSheet: View {
                             VStack(alignment: .leading, spacing: Spacing.sm) {
                                 TextField("Preset name (e.g. DCINY concert)", text: $newPresetName)
                                     .font(.system(size: 12))
-                                    .foregroundStyle(Color.warmDark)
+                                    .foregroundStyle(PaintedSurfaces.bodyText)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 6)
                                     .background(
@@ -597,7 +597,7 @@ struct HashtagSettingsSheet: View {
                                     )
                                 TextField("Tags (space-separated)", text: $newPresetTags)
                                     .font(.system(size: 12))
-                                    .foregroundStyle(Color.warmDark)
+                                    .foregroundStyle(PaintedSurfaces.bodyText)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 6)
                                     .background(
@@ -627,7 +627,7 @@ struct HashtagSettingsSheet: View {
                                     }
                                     .buttonStyle(.plain)
                                     .font(.system(size: 12))
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                 }
                             }
                             .padding(.top, Spacing.sm)
@@ -664,14 +664,14 @@ private struct EmptySidebarView: View {
         VStack(spacing: Spacing.sm) {
             Image(systemName: "music.mic")
                 .font(.system(size: 28))
-                .foregroundStyle(Color.warmMid.opacity(Opacity.subtle))
+                .foregroundStyle(PaintedSurfaces.quietMark)
                 .padding(.bottom, 4)
             Text("No events")
                 .font(.light(12))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Text("Click New Event or press ⌘N to start.")
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(PaintedSurfaces.deepPage)

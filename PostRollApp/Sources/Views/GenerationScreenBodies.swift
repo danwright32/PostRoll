@@ -40,7 +40,7 @@ struct GenerationConfigureBody: View {
                 if !canGenerate {
                     Text("Add photos to at least one day to generate.")
                         .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 HStack {
                     Spacer()
@@ -75,12 +75,12 @@ struct GenerationRunningBody: View {
         VStack(spacing: Spacing.lg) {
             Text(eventName)
                 .font(.signPainter(28))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
 
             Text(subtitle)
                 .font(.system(size: 11, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .textCase(.uppercase)
 
             VStack(alignment: .leading, spacing: 12) {
@@ -106,12 +106,12 @@ struct GenerationRunningBody: View {
                 Text("/ \(estimatedTotalFormatted)")
                     .font(.light(12))
             }
-            .foregroundStyle(Color.warmMid)
+            .foregroundStyle(PaintedSurfaces.secondaryText)
 
             Button("Cancel", action: onCancel)
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
-                .foregroundStyle(Color.warmMid.opacity(0.7))
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .padding(.top, Spacing.sm)
         }
     }
@@ -235,7 +235,7 @@ struct GenerationDoneBody: View {
         VStack(spacing: Spacing.lg) {
             Text(eventName)
                 .font(.signPainter(28))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
 
             Image(systemName: isUnqualifiedSuccess ? "checkmark.circle.fill" : "checkmark.circle")
                 .font(.system(size: 44))
@@ -245,7 +245,7 @@ struct GenerationDoneBody: View {
 
             Text(headline)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
                 .opacity(revealed ? 1 : 0)
                 .offset(y: revealed ? 0 : 8)
 
@@ -439,7 +439,7 @@ private struct PhaseRow: View {
                         .symbolEffect(.pulse)
                 case .pending:
                     Image(systemName: "circle")
-                        .foregroundStyle(Color.creamEdge)
+                        .foregroundStyle(PaintedSurfaces.pendingStepMark)
                 }
             }
             .font(.system(size: 12))
@@ -448,8 +448,8 @@ private struct PhaseRow: View {
             Text(name)
                 .font(.system(size: 13, weight: state == .active ? .medium : .regular))
                 .foregroundStyle(
-                    state == .pending  ? Color.warmMid.opacity(0.5) :
-                    state == .active   ? Color.warmDark             : Color.warmMid
+                    state == .pending  ? PaintedSurfaces.secondaryText :
+                    state == .active   ? PaintedSurfaces.bodyText     : PaintedSurfaces.secondaryText
                 )
         }
         .animation(.easeOut(duration: 0.25), value: state)

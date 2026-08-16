@@ -43,7 +43,7 @@ struct FindingsPanel: View {
             if isStale {
                 Text(FindingsDisplay.staleNote(subject: subject))
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -51,12 +51,12 @@ struct FindingsPanel: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(group.message)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(group.details, id: \.self) { detail in
                         Text(detail)
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }

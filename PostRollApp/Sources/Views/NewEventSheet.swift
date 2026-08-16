@@ -31,7 +31,7 @@ struct NewEventSheet: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("New Event")
                                 .font(.signPainter(32))
-                                .foregroundStyle(Color.warmDark)
+                                .foregroundStyle(PaintedSurfaces.bodyText)
                             RoseGoldDivider()
                         }
                         .padding(.top, Spacing.lg)
@@ -47,7 +47,7 @@ struct NewEventSheet: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Date")
                                     .font(.light(11))
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                 DatePicker("", selection: $date, displayedComponents: .date)
                                     .labelsHidden()
                                     .tint(PaintedSurfaces.iconAccent)
@@ -77,7 +77,7 @@ struct NewEventSheet: View {
                                 Button("Cancel") { dismiss() }
                                     .buttonStyle(.plain)
                                     .font(.system(size: 13))
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                 Spacer()
                                 Button("Create Event") { createEvent() }
                                     .buttonStyle(BrandButtonStyle())
@@ -120,7 +120,7 @@ struct BrandSectionLabel: View {
         Text(text.uppercased())
             .font(.system(size: 10, weight: .medium))
             .tracking(1.2)
-            .foregroundStyle(Color.warmMid)
+            .foregroundStyle(PaintedSurfaces.secondaryText)
     }
 }
 
@@ -138,7 +138,7 @@ struct BrandTextField: View {
         TextField(placeholder, text: $text)
             .focused($focused)
             .font(.system(size: 13))
-            .foregroundStyle(Color.warmDark)
+            .foregroundStyle(PaintedSurfaces.bodyText)
             .focusEffectDisabled()
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -177,10 +177,10 @@ private struct ShootTypeOption: View {
                 }
                 Image(systemName: type.systemImage)
                     .imageScale(.small)
-                    .foregroundStyle(isSelected ? PaintedSurfaces.iconAccent : Color.warmMid)
+                    .foregroundStyle(isSelected ? PaintedSurfaces.iconAccent : PaintedSurfaces.secondaryText)
                 Text(type.rawValue)
                     .font(.system(size: 13))
-                    .foregroundStyle(isSelected ? Color.warmDark : Color.warmMid)
+                    .foregroundStyle(isSelected ? PaintedSurfaces.bodyText : PaintedSurfaces.secondaryText)
                 Spacer(minLength: 0)
             }
             .contentShape(Rectangle())

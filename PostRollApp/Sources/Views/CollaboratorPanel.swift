@@ -28,11 +28,11 @@ struct CollaboratorPanel: View {
             Text("COLLABORATORS TO INVITE")
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Text("Instagram allows \(CollaboratorPick.maxPerPost) per post. "
                  + "A collaborator invite puts this post on their own grid.")
                 .font(.system(size: 11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             ForEach(Array(result.suggested.enumerated()), id: \.element.handle) { index, candidate in
@@ -47,10 +47,10 @@ struct CollaboratorPanel: View {
                 Text("LEFT OUT ONLY FOR NOT BEING IN THE FIRST PHOTO")
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 Text("Swap in by hand if the reach is worth it.")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 row(rank: "", candidate: excluded)
             }
 
@@ -59,7 +59,7 @@ struct CollaboratorPanel: View {
                 Text("NOT COUNTED YET, SO NOT RANKED")
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 ForEach(result.unranked, id: \.handle) { candidate in
                     row(rank: "", candidate: candidate)
                 }
@@ -68,7 +68,7 @@ struct CollaboratorPanel: View {
             ForEach(result.notes, id: \.self) { note in
                 Label(note, systemImage: "exclamationmark.triangle")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -93,17 +93,17 @@ struct CollaboratorPanel: View {
             if !rank.isEmpty {
                 Text(rank)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .frame(width: 16, alignment: .trailing)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(candidate.handle)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .textSelection(.enabled)
                 Text(candidate.reason)
                     .font(.system(size: 10))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 // Only on the few that come back, so the row says why it is the
                 // one worth a minute (#289).
@@ -130,7 +130,7 @@ struct CollaboratorPanel: View {
             .font(.system(size: 11))
             .foregroundStyle(
                 RecurringAccounts.emphasis(handle: candidate.handle, in: eventCounts) == .prominent
-                    ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                    ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
             .accessibilityLabel("Edit numbers for \(candidate.handle)")
         }
     }
@@ -157,13 +157,13 @@ struct AccountNumbersSheet: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             Text(handle)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
 
             Text("Open their profile and read these off a few recent posts. "
                  + "Leave a field empty if you do not know it: empty means not counted, "
                  + "which is different from zero.")
                 .font(.system(size: 11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             field("Followers", text: $followers)
@@ -177,14 +177,14 @@ struct AccountNumbersSheet: View {
                 Text(stats.freshnessLabel(asOf: Date()))
                     .font(.system(size: 11))
                     .foregroundStyle(stats.freshness(asOf: Date()).isStale
-                                     ? Color.roseDeep : Color.warmMid)
+                                     ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
             }
 
             HStack {
                 Spacer()
                 Button("Cancel", action: onCancel)
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 Button("Save") {
                     onSave(AccountNumbersEntry.parse(followers),
                            AccountNumbersEntry.parse(likes),
@@ -209,7 +209,7 @@ struct AccountNumbersSheet: View {
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             TextField("Not counted", text: text)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 12))

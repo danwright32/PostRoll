@@ -173,13 +173,13 @@ private struct WelcomeDetailView: View {
             if hasEvents {
                 Text("Select an event from the\nsidebar to continue.")
                     .font(.light(13))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
             } else {
                 Text("Create an event to begin\nyour weekly posting workflow.")
                     .font(.light(13))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
 

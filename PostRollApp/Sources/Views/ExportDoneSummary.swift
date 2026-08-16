@@ -41,16 +41,16 @@ struct ExportDoneSummary: View {
 
             Image(systemName: isIncomplete ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                 .font(.system(size: 44))
-                .foregroundStyle(isIncomplete ? Color.roseDeep : PaintedSurfaces.iconAccent.opacity(0.7))
+                .foregroundStyle(isIncomplete ? PaintedSurfaces.pageAccentText : PaintedSurfaces.iconAccent.opacity(0.7))
                 .padding(.top, Spacing.xl)
 
             Text(isIncomplete ? "Export incomplete" : "Export complete")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
 
             Text(folderName)
                 .font(.light(12))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
 
             RoseGoldDivider()
                 .frame(width: 80)
@@ -121,7 +121,7 @@ struct ExportArchiveNote: View {
     var body: some View {
         Text(message)
             .font(.light(11))
-            .foregroundStyle(Color.warmMid.opacity(0.75))
+            .foregroundStyle(PaintedSurfaces.secondaryText)
             .multilineTextAlignment(.center)
             // Order matters. The width has to be capped BEFORE the height is
             // allowed to grow, or the text is already laid out on one ideal line

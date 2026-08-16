@@ -11,10 +11,10 @@ struct InsightsOrgsView: View {
                     Text("ORGANIZATIONS")
                         .font(.system(size: 11, weight: .medium))
                         .tracking(0.8)
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                     Text("Set follower size once per org so analytics can control for audience reach.")
                         .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
             }
             .padding(.horizontal, Spacing.lg)
@@ -36,7 +36,7 @@ struct InsightsOrgsView: View {
                         }
                         .listRowBackground(Color.cream)
                         .listRowInsets(EdgeInsets(top: 4, leading: Spacing.lg, bottom: 4, trailing: Spacing.lg))
-                        .listRowSeparatorTint(Color.creamEdge)
+                        .listRowSeparatorTint(PaintedSurfaces.edgeRule)
                     }
                 }
                 .scrollContentBackground(.hidden)
@@ -68,10 +68,10 @@ private struct OrgRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("@\(org)")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                 Text("Instagram followers")
                     .font(.light(10))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
             Spacer()
             Picker("Follower band", selection: $selected) {
@@ -95,13 +95,13 @@ private struct OrgsEmptyState: View {
         VStack(spacing: 8) {
             Image(systemName: "building.2")
                 .font(.system(size: 28))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Text("No organizations detected yet.")
                 .font(.light(13))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Text("Import your Meta CSV first. Orgs are extracted from @-mentions in your captions.")
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 260)
         }

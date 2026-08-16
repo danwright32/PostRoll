@@ -139,7 +139,7 @@ struct OCRProgressBody: View {
             VStack(spacing: 6) {
                 Text(eventName)
                     .font(.signPainter(28))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
 
                 Text(OCRProgressText.readingHeading)
                     .font(.system(size: 10, weight: .medium))
@@ -158,7 +158,7 @@ struct OCRProgressBody: View {
                 VStack(spacing: Spacing.lg) {
                     Text(now.phase)
                         .font(.light(13))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .contentTransition(.opacity)
                         .animation(.easeInOut(duration: 0.5), value: now.phase)
 
@@ -172,7 +172,7 @@ struct OCRProgressBody: View {
                     if now.footer.isStalled {
                         Label(now.footer.text, systemImage: "exclamationmark.triangle")
                             .font(.light(11))
-                            .foregroundStyle(Color.roseDeep)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 300)
                     } else {
@@ -190,7 +190,7 @@ struct OCRProgressBody: View {
             Button("Cancel") { onCancel() }
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .padding(.top, Spacing.sm)
         }
     }
@@ -252,11 +252,11 @@ struct OCRFailureBody: View {
             VStack(spacing: 6) {
                 Text(OCRProgressText.failureHeading)
                     .font(.signPainter(28))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .opacity(opacity(.heading))
                 Text(message)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 400)
                     .opacity(opacity(.reason))
@@ -269,7 +269,7 @@ struct OCRFailureBody: View {
             Button("Go Back") { onGoBack() }
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .opacity(opacity(.goBack))
         }
     }

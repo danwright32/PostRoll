@@ -168,7 +168,7 @@ struct PhotoAssignmentView: View {
 
                 Text("Your photo assignments are saved. Going back won't lose them.")
                     .font(.light(10))
-                    .foregroundStyle(Color.warmMid.opacity(0.7))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .padding(.horizontal, Spacing.xl)
                     .padding(.bottom, Spacing.md)
 
@@ -873,17 +873,17 @@ private struct PhotoDaySection: View {
                             Text(label.uppercased())
                                 .font(.system(size: 10, weight: .medium))
                                 .tracking(1.2)
-                                .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                                .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                             if !photos.isEmpty { PhotoCountBadge(count: photos.count) }
                         }
                         if let subtitle {
-                            Text(subtitle).font(.light(11)).foregroundStyle(Color.warmMid)
+                            Text(subtitle).font(.light(11)).foregroundStyle(PaintedSurfaces.secondaryText)
                         }
                     }
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, Spacing.xl)
@@ -922,7 +922,7 @@ private struct PhotoDaySection: View {
                         }
                     }
                     if let collageNote {
-                        Text(collageNote).font(.system(size: 10)).foregroundStyle(Color.warmMid).padding(.top, 2)
+                        Text(collageNote).font(.system(size: 10)).foregroundStyle(PaintedSurfaces.secondaryText).padding(.top, 2)
                     }
                     Button(photos.isEmpty ? "Add Photos…" : "Add more…", action: onAddPhotos)
                         .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(PaintedSurfaces.pageAccentText)
@@ -1102,7 +1102,7 @@ private struct CroppablePhotoThumb: View {
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
                     .symbolRenderingMode(.palette)
-                    .foregroundStyle(Color.cream, Color.warmDark.opacity(0.7))
+                    .foregroundStyle(PaintedSurfaces.removeButtonGlyph, PaintedSurfaces.removeButtonDisc)
                     .font(.system(size: 16))
             }
             .buttonStyle(.plain)
@@ -1212,7 +1212,7 @@ private struct PhotoTagEditor: View {
                 TextField("Add a name or @handle", text: $newTag)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .focused($focused)
                     .focusEffectDisabled()
                     .onSubmit { commit(newTag); newTag = "" }
@@ -1245,7 +1245,7 @@ private struct PhotoTagEditor: View {
                         Text(tagsHeading)
                             .font(.system(size: 8, weight: .medium))
                             .tracking(0.8)
-                            .foregroundStyle(Color.warmMid.opacity(0.7))
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                         FlowLayout(spacing: 4) {
                             ForEach(tags, id: \.self) { tag in
                                 HStack(spacing: 3) {
@@ -1272,7 +1272,7 @@ private struct PhotoTagEditor: View {
                         Text("FROM THIS EVENT")
                             .font(.system(size: 8, weight: .medium))
                             .tracking(0.8)
-                            .foregroundStyle(Color.warmMid.opacity(0.7))
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                         TagSuggestionFlow(suggestions: available) { picked in
                             addToken(picked.token)
                         }
@@ -1355,7 +1355,7 @@ private struct PhotoTaggingSheet: View {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     Text("Names or @handles. Saved into CAPTIONS.txt for this photo so you know who to tag on the slide.")
                         .font(.system(size: 10))
-                        .foregroundStyle(Color.warmMid.opacity(0.85))
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Re-created per photo so the text field clears and the
@@ -1392,7 +1392,7 @@ private struct PhotoTaggingSheet: View {
                                     .foregroundStyle(PaintedSurfaces.iconAccent)
                                 Text(applyResult)
                                     .font(.system(size: 10))
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                     .fixedSize(horizontal: false, vertical: true)
                                 // One click to apply had to be ten popovers to
                                 // reverse, which is the slowness batch tagging
@@ -1432,12 +1432,12 @@ private struct PhotoTaggingSheet: View {
             Spacer()
             Text(PhotoTagSheetNavigation.label(index: safeIndex, count: photos.count))
                 .font(.system(size: 11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Spacer()
             Button(action: onClose) {
                 Image(systemName: "xmark.circle.fill")
                     .symbolRenderingMode(.palette)
-                    .foregroundStyle(Color.cream, Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.removeButtonGlyph, PaintedSurfaces.removeButtonDisc)
                     .font(.system(size: 18))
             }
             .buttonStyle(.plain)
@@ -1466,7 +1466,7 @@ private struct PhotoTaggingSheet: View {
                         .foregroundStyle(PaintedSurfaces.iconAccent)
                     Text("This photo could not be opened.")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
             } else {
                 ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
@@ -1675,11 +1675,11 @@ private struct TuesdayReelSection: View {
                 HStack(spacing: Spacing.sm) {
                     Image(systemName: hasReelInputs ? "film.fill" : "film")
                         .font(.system(size: 11))
-                        .foregroundStyle(hasReelInputs ? PaintedSurfaces.iconAccent : Color.warmMid)
+                        .foregroundStyle(hasReelInputs ? PaintedSurfaces.iconAccent : PaintedSurfaces.secondaryText)
                     Text("SPEED EDIT REEL")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                     if hasReelInputs {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 10))
@@ -1688,7 +1688,7 @@ private struct TuesdayReelSection: View {
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, Spacing.xl)
@@ -1700,7 +1700,7 @@ private struct TuesdayReelSection: View {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     Text("RAW and edited photos become a before/after reel. Add a screen recording for a timelapse version.")
                         .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .padding(.bottom, 4)
 
                     BeforeAfterPicker(
@@ -1780,13 +1780,13 @@ private struct TuesdayReelSection: View {
                                 Text("TARGET DURATION")
                                     .font(.system(size: 9, weight: .medium))
                                     .tracking(0.8)
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                 Spacer()
                                 if let dur = recordingSeconds {
                                     let speed = dur / targetDuration
                                     Text(String(format: "%.0f× speed", speed))
                                         .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(speed > 40 ? Color.roseDeep : PaintedSurfaces.pageAccentText)
+                                        .foregroundStyle(speed > 40 ? PaintedSurfaces.pageAccentText : PaintedSurfaces.pageAccentText)
                                 }
                             }
                             HStack(spacing: Spacing.sm) {
@@ -1794,7 +1794,7 @@ private struct TuesdayReelSection: View {
                                     .tint(PaintedSurfaces.iconAccent)
                                 Text("\(Int(targetDuration))s")
                                     .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(Color.warmDark)
+                                    .foregroundStyle(PaintedSurfaces.bodyText)
                                     .frame(width: 28, alignment: .trailing)
                             }
                             if let dur = recordingSeconds {
@@ -1802,7 +1802,7 @@ private struct TuesdayReelSection: View {
                                 let seconds = Int(dur) % 60
                                 Text("Recording: \(minutes > 0 ? "\(minutes)m " : "")\(seconds)s")
                                     .font(.light(10))
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                             }
                         }
                         .padding(.top, 4)
@@ -1840,20 +1840,20 @@ private struct CollageLayoutSection: View {
                 HStack(spacing: Spacing.sm) {
                     Image(systemName: "square.grid.2x2")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Text("COLLAGE LAYOUT")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                     if let seed = collageSeed {
                         Text("layout \(seed % 1000)")
                             .font(.light(10))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, Spacing.xl)
@@ -1870,11 +1870,11 @@ private struct CollageLayoutSection: View {
                     if let shortfall = CollagePhotoSelection.shortfallMessage(photoCount: photoCount) {
                         Text(shortfall)
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     } else if CollagePhotoSelection.offersAlternativeLayouts(photoCount: photoCount) {
                         Text("Tap photos above to adjust crop. Tap below to try a different layout arrangement.")
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
 
                         Button("New layout") {
                             collageSeed = Int.random(in: 1...99999)
@@ -1890,7 +1890,7 @@ private struct CollageLayoutSection: View {
                         Text("Tap photos above to adjust crop. There is only one "
                              + "layout for \(photoCount) photos, so there is nothing to reroll.")
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                 }
                 .padding(.horizontal, Spacing.xl)
@@ -1921,15 +1921,15 @@ private struct ThursdayReelSection: View {
                 HStack(spacing: Spacing.sm) {
                     Image(systemName: audio != nil ? "music.note" : "play.rectangle")
                         .font(.system(size: 11))
-                        .foregroundStyle(audio != nil ? PaintedSurfaces.iconAccent : Color.warmMid)
+                        .foregroundStyle(audio != nil ? PaintedSurfaces.iconAccent : PaintedSurfaces.secondaryText)
                     Text("SCROLL REEL")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, Spacing.xl)
@@ -1943,7 +1943,7 @@ private struct ThursdayReelSection: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Optional audio, auto-fetched from Jamendo if omitted.")
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                         AudioFilePicker(audio: $audio, isMissing: audioMissing,
                                         onPick: onPickAudio, onLocate: onLocateAudio)
                     }
@@ -1953,13 +1953,13 @@ private struct ThursdayReelSection: View {
                         Text("SCROLL DURATION")
                             .font(.system(size: 9, weight: .medium))
                             .tracking(0.8)
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                         HStack(spacing: Spacing.sm) {
                             Slider(value: $scrollDuration, in: 15...60, step: 5)
                                 .tint(PaintedSurfaces.iconAccent)
                             Text("\(Int(scrollDuration))s")
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(Color.warmDark)
+                                .foregroundStyle(PaintedSurfaces.bodyText)
                                 .frame(width: 32, alignment: .trailing)
                         }
                     }
@@ -2001,10 +2001,10 @@ private struct FridayBeforeAfterSection: View {
                     Text("FRIDAY")
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(hasPhotos ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                        .foregroundStyle(hasPhotos ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                     Text("Before/after story — reuses Tuesday's RAW + edited photos")
                         .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 Spacer()
                 if hasPhotos {
@@ -2050,11 +2050,11 @@ private struct BeforeAfterPicker: View {
                 Text(label.uppercased())
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
-                    .foregroundStyle(isMissing ? Color.roseDeep : Color.warmMid)
+                    .foregroundStyle(isMissing ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                 if isMissing {
                     Label("file missing", systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.roseDeep)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
             }
             .frame(width: 110, alignment: .leading)
@@ -2071,7 +2071,7 @@ private struct BeforeAfterPicker: View {
                         Button(action: onClear) {
                             Image(systemName: "xmark.circle.fill")
                                 .symbolRenderingMode(.palette)
-                                .foregroundStyle(Color.warmMid.opacity(0.6), Color.creamEdge)
+                                .foregroundStyle(PaintedSurfaces.clearButtonGlyph, PaintedSurfaces.clearButtonDisc)
                                 .font(.system(size: 14))
                         }
                         .buttonStyle(.plain)
@@ -2096,7 +2096,7 @@ private struct BeforeAfterPicker: View {
                                 .foregroundStyle(PaintedSurfaces.iconAccent)
                             Text("File")
                                 .font(.system(size: 8))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                         }
                         .frame(width: 40, height: 40)
                         .background(PaintedSurfaces.deepPage)
@@ -2147,7 +2147,7 @@ private struct BeforeAfterThumb: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.cream, PaintedSurfaces.iconAccent)
+                        .foregroundStyle(PaintedSurfaces.selectionTickGlyph, PaintedSurfaces.iconAccent)
                         .font(.system(size: 14))
                         .offset(x: 4, y: -4)
                 }
@@ -2174,25 +2174,25 @@ private struct SingleFilePicker: View {
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(isMissing ? Color.roseDeep : Color.warmMid)
+                .foregroundStyle(isMissing ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                 .frame(width: 110, alignment: .leading)
 
             if let url {
                 Text(url.lastPathComponent)
                     .font(.system(size: 11))
-                    .foregroundStyle(isMissing ? Color.roseDeep : Color.warmDark)
+                    .foregroundStyle(isMissing ? PaintedSurfaces.pageAccentText : PaintedSurfaces.bodyText)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if isMissing {
                     Label("file missing", systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.roseDeep)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
                 Spacer()
                 Button(action: onClear) {
                     Image(systemName: "xmark.circle.fill")
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.warmMid.opacity(0.6), Color.creamEdge)
+                        .foregroundStyle(PaintedSurfaces.clearButtonGlyph, PaintedSurfaces.clearButtonDisc)
                         .font(.system(size: 14))
                 }
                 .buttonStyle(.plain)
@@ -2221,10 +2221,10 @@ private struct PhotoDropZone: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Drop photos here")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isTargeted ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                    .foregroundStyle(isTargeted ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                 Text("JPEG · PNG · HEIC")
                     .font(.light(10))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
             Spacer()
         }
@@ -2292,7 +2292,7 @@ private struct PhotoThumb: View {
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
                     .symbolRenderingMode(.palette)
-                    .foregroundStyle(Color.cream, Color.warmDark.opacity(0.7))
+                    .foregroundStyle(PaintedSurfaces.removeButtonGlyph, PaintedSurfaces.removeButtonDisc)
                     .font(.system(size: 16))
             }
             .buttonStyle(.plain)
@@ -2330,7 +2330,7 @@ private struct AudioFilePicker: View {
             Text("AUDIO FILE")
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .frame(width: 110, alignment: .leading)
 
             if let url = audio, isMissing {
@@ -2340,7 +2340,7 @@ private struct AudioFilePicker: View {
                     .foregroundStyle(PaintedSurfaces.iconAccent)
                 Text("\(url.lastPathComponent) can't be found")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
@@ -2351,7 +2351,7 @@ private struct AudioFilePicker: View {
                 Button(action: { audio = nil; stopPlayback() }) {
                     Image(systemName: "xmark.circle.fill")
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.warmMid.opacity(0.6), Color.creamEdge)
+                        .foregroundStyle(PaintedSurfaces.clearButtonGlyph, PaintedSurfaces.clearButtonDisc)
                         .font(.system(size: 14))
                 }
                 .buttonStyle(.plain)
@@ -2360,7 +2360,7 @@ private struct AudioFilePicker: View {
             } else if let url = audio {
                 Text(url.lastPathComponent)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
@@ -2368,7 +2368,7 @@ private struct AudioFilePicker: View {
                     // A control that does nothing when pressed reads as broken.
                     Text(problem)
                         .font(.system(size: 10))
-                        .foregroundStyle(Color.roseDeep)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
                 Button {
                     playbackError = preview.toggle(url: url)
@@ -2384,7 +2384,7 @@ private struct AudioFilePicker: View {
                 Button(action: { audio = nil; stopPlayback() }) {
                     Image(systemName: "xmark.circle.fill")
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.warmMid.opacity(0.6), Color.creamEdge)
+                        .foregroundStyle(PaintedSurfaces.clearButtonGlyph, PaintedSurfaces.clearButtonDisc)
                         .font(.system(size: 14))
                 }
                 .buttonStyle(.plain)
@@ -2418,11 +2418,11 @@ private struct DayNotesField: View {
         HStack(spacing: Spacing.sm) {
             Image(systemName: "pencil.and.outline")
                 .font(.system(size: 10))
-                .foregroundStyle(notes.isEmpty && !focused ? Color.warmMid.opacity(0.3) : Color.warmMid.opacity(0.6))
-            TextField("", text: $notes, prompt: Text("Notes for today's shoot (seen by caption generator)").foregroundStyle(Color.warmMid.opacity(0.30)))
+                .foregroundStyle(notes.isEmpty && !focused ? PaintedSurfaces.quietMark : PaintedSurfaces.secondaryText)
+            TextField("", text: $notes, prompt: Text("Notes for today's shoot (seen by caption generator)").foregroundStyle(PaintedSurfaces.fieldPlaceholder))
                 .focused($focused)
                 .font(.light(11))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
                 .textFieldStyle(.plain)
         }
         .padding(.horizontal, Spacing.xl)
@@ -2483,11 +2483,11 @@ private struct PerformerAssignmentSection: View {
                 HStack(alignment: .center, spacing: Spacing.sm) {
                     Image(systemName: hasContent ? "person.crop.rectangle.stack.fill" : "person.crop.rectangle.stack")
                         .font(.system(size: 11))
-                        .foregroundStyle(hasContent ? PaintedSurfaces.iconAccent : Color.warmMid)
+                        .foregroundStyle(hasContent ? PaintedSurfaces.iconAccent : PaintedSurfaces.secondaryText)
                     Text(PerformerPanelDisplay.title(isCarouselDay: isCarouselDay))
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                     if hasContent {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 10))
@@ -2496,7 +2496,7 @@ private struct PerformerAssignmentSection: View {
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, Spacing.xl)
@@ -2509,7 +2509,7 @@ private struct PerformerAssignmentSection: View {
                     if let hint = PerformerPanelDisplay.hint(isCarouselDay: isCarouselDay) {
                         Text(hint)
                             .font(.system(size: 10))
-                            .foregroundStyle(Color.warmMid.opacity(0.85))
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -2522,7 +2522,7 @@ private struct PerformerAssignmentSection: View {
                                 .foregroundStyle(PaintedSurfaces.iconAccent.opacity(0.8))
                             Text("Already credited from the photos: \(creditedFromPhotos.joined(separator: ", "))")
                                 .font(.system(size: 10))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.bottom, 2)
@@ -2588,10 +2588,10 @@ private struct PerformerCheckboxGrid: View {
                 HStack(spacing: 5) {
                     Image(systemName: allSelected ? "checkmark.square.fill" : "square")
                         .font(.system(size: 12))
-                        .foregroundStyle(allSelected ? PaintedSurfaces.iconAccent : Color.warmMid.opacity(0.5))
+                        .foregroundStyle(allSelected ? PaintedSurfaces.iconAccent : PaintedSurfaces.quietMark)
                     Text(allSelected ? "Deselect all" : "Select all")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
             }
             .buttonStyle(.plain)
@@ -2627,22 +2627,22 @@ private struct PerformerCheckbox: View {
             HStack(spacing: 5) {
                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
                     .font(.system(size: 12))
-                    .foregroundStyle(isSelected ? PaintedSurfaces.iconAccent : Color.warmMid.opacity(0.5))
+                    .foregroundStyle(isSelected ? PaintedSurfaces.iconAccent : PaintedSurfaces.quietMark)
                 Text(performer.name)
                     .font(.system(size: 11))
-                    .foregroundStyle(isSelected ? Color.warmDark : Color.warmMid)
+                    .foregroundStyle(isSelected ? PaintedSurfaces.bodyText : PaintedSurfaces.secondaryText)
                     .lineLimit(1)
                     .layoutPriority(1)
                 if !designation.isEmpty {
                     Text(designation.lowercased())
                         .font(.system(size: 10).italic())
-                        .foregroundStyle(Color.warmMid.opacity(0.75))
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .lineLimit(1)
                 }
                 if PythonBridge.isRealHandle(performer.handle) {
                     Text(performer.handle.hasPrefix("@") ? performer.handle : "@\(performer.handle)")
                         .font(.system(size: 10))
-                        .foregroundStyle(Color.warmMid.opacity(0.6))
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .lineLimit(1)
                 }
             }
@@ -2672,7 +2672,7 @@ private struct HandleField: View {
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             ZStack(alignment: .leading) {
                 if text.isEmpty {
                     Text(placeholder)
@@ -2684,7 +2684,7 @@ private struct HandleField: View {
                 TextField("", text: $text)
                     .focused($focused)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .focusEffectDisabled()
                     .padding(.horizontal, 8)
             }

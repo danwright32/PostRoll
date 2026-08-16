@@ -1,0 +1,8 @@
+{
+  "name": "secondary-text-clears-the-deeper-page",
+  "file": "PostRollApp/Sources/Views/PaintedSurfaces.swift",
+  "find": "    static let secondaryText = Color.warmDark.opacity(0.8)",
+  "replace": "    static let secondaryText = Color.warmMid",
+  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
+  "breaks": "the app's secondary type goes back to 4.33:1 on the deeper page, under the 4.5:1 body text needs, and the deeper page is what the sidebar, the panels and every field are filled with. Ink cannot report it because that type draws perfectly well and is simply too pale (#619)"
+}

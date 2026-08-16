@@ -27,7 +27,7 @@ struct InsightsOverviewView: View {
                         Text("INSTAGRAM INSIGHTS")
                             .font(.system(size: 11, weight: .medium))
                             .tracking(0.8)
-                            .foregroundStyle(Color.warmDark)
+                            .foregroundStyle(PaintedSurfaces.bodyText)
                         if let last = analyticsStore.lastImport {
                             let f: DateFormatter = {
                                 let d = DateFormatter()
@@ -37,7 +37,7 @@ struct InsightsOverviewView: View {
                             }()
                             Text("Last import \(f.string(from: last)) · \(analyticsStore.feedPosts.count) feed, \(analyticsStore.storyPosts.count) stories")
                                 .font(.light(11))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                         }
                     }
                     Spacer()
@@ -79,7 +79,7 @@ struct InsightsOverviewView: View {
                             .foregroundStyle(PaintedSurfaces.insightConfidenceHigh)
                         Text(summary)
                             .font(.light(12))
-                            .foregroundStyle(Color.warmDark)
+                            .foregroundStyle(PaintedSurfaces.bodyText)
                     }
                     .transition(.opacity)
                 }
@@ -90,7 +90,7 @@ struct InsightsOverviewView: View {
                             .foregroundStyle(PaintedSurfaces.iconAccent)
                         Text(error)
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                 }
 
@@ -125,7 +125,7 @@ struct InsightsOverviewView: View {
                                 .foregroundStyle(PaintedSurfaces.iconAccent)
                             Text(genError)
                                 .font(.light(11))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                         }
                     }
 
@@ -229,7 +229,7 @@ private struct InsightsEmptyState: View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
             Text("No Instagram data yet.")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
 
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 InstructionRow(number: "1", text: "Open **business.facebook.com** on your Mac.")
@@ -241,7 +241,7 @@ private struct InsightsEmptyState: View {
 
             Text("Meta exports stories and feed posts as separate CSVs. Import both at once for the full picture.")
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
         }
         .padding(Spacing.lg)
         .background(
@@ -267,7 +267,7 @@ private struct InstructionRow: View {
                 .frame(width: 14, alignment: .trailing)
             Text(text)
                 .font(.light(12))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
         }
     }
 }
@@ -292,10 +292,10 @@ private struct InsightReportView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Insights Report")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                     Text("Generated \(dateFormatter.string(from: report.generatedAt)) · \(report.feedCount) feed, \(report.storyCount) stories")
                         .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 Spacer()
             }
@@ -308,7 +308,7 @@ private struct InsightReportView: View {
                     SectionHeader("SUMMARY")
                     Text(report.summary)
                         .font(.light(13))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                         .lineSpacing(4)
                 }
             }
@@ -344,7 +344,7 @@ private struct InsightReportView: View {
                     SectionHeader("BRAND VOICE SUGGESTIONS")
                     Text("Apply these to your brand voice file to influence future caption generation.")
                         .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     ForEach(report.brandVoiceSuggestions, id: \.self) { suggestion in
                         BrandVoiceSuggestionRow(suggestion: suggestion)
                     }
@@ -361,11 +361,11 @@ private struct InsightReportView: View {
                             // it, so it is hidden rather than announced ahead of
                             // every line (#538).
                             Text("·")
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                                 .accessibilityHidden(true)
                             Text(caveat)
                                 .font(.light(11))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                         }
                     }
                 }
@@ -389,7 +389,7 @@ private struct FindingsList: View {
                 Text(title)
                     .font(.system(size: 10, weight: .medium))
                     .tracking(0.4)
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 ForEach(findings) { finding in
                     FindingRow(finding: finding)
                 }
@@ -404,8 +404,8 @@ private struct FindingRow: View {
 
     private var confidenceColor: Color {
         switch finding.confidence {
-        case .low:    return Color.warmMid
-        case .medium: return Color.roseGold
+        case .low:    return PaintedSurfaces.insightConfidenceLow
+        case .medium: return PaintedSurfaces.insightConfidenceMedium
         case .high:   return PaintedSurfaces.insightConfidenceHigh
         }
     }
@@ -420,11 +420,11 @@ private struct FindingRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(finding.headline)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                     if isExpanded {
                         Text(finding.evidence)
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .lineSpacing(3)
                             .transition(.opacity)
                     }
@@ -434,7 +434,7 @@ private struct FindingRow: View {
                     withAnimation(.easeOut(duration: 0.15)) { isExpanded.toggle() }
                 } label: {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .font(.system(size: 10))
                 }
                 .buttonStyle(.plain)
@@ -461,7 +461,7 @@ private struct BrandVoiceSuggestionRow: View {
         HStack(alignment: .top, spacing: 10) {
             Text(suggestion)
                 .font(.light(12))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
                 .lineSpacing(3)
             Spacer()
             Button(applied ? "Applied" : "Apply") {
@@ -479,7 +479,7 @@ private struct BrandVoiceSuggestionRow: View {
             }
             .buttonStyle(.plain)
             .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(applied ? Color.warmMid : PaintedSurfaces.pageAccentText)
+            .foregroundStyle(applied ? PaintedSurfaces.secondaryText : PaintedSurfaces.pageAccentText)
             .disabled(applied)
         }
 
@@ -487,10 +487,10 @@ private struct BrandVoiceSuggestionRow: View {
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseDeep)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                 Text(saveError)
                     .font(.light(11))
-                    .foregroundStyle(Color.roseDeep)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

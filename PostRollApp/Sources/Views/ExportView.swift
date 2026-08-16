@@ -276,7 +276,7 @@ struct ExportView: View {
                         ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
                         Text("\(exportBlockedReason) before exporting, so the folder gets the new files rather than the previous ones.")
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.warmDark.opacity(0.8))
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                 }
             }
@@ -301,7 +301,7 @@ struct ExportView: View {
             HStack(spacing: Spacing.md) {
                 Text("Posting layout")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                 Picker("Posting layout", selection: Binding(
                     get: { effectivePreset },
                     set: { requestPresetChange($0) }
@@ -320,14 +320,14 @@ struct ExportView: View {
                     ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
                     Text("Rebuilding Sunday, Monday, and Wednesday for the new layout…")
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.warmDark.opacity(0.8))
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
             } else {
                 Text(effectivePreset == .balanced
                      ? "This event: Sunday, Monday, and Wednesday each post a 4 photo carousel with a collage story."
                      : "This event: Sunday and Monday post a single photo; Wednesday posts a 10 photo carousel with a collage story.")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.warmDark.opacity(0.7))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
         }
     }
@@ -380,7 +380,7 @@ struct ExportView: View {
                 .tint(PaintedSurfaces.iconAccent)
             Text(label)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
             // An elapsed clock even on the fast phase: without one this screen
             // is a spinner that reads the same at two seconds and at two
             // minutes, so a stuck text export looks exactly like a quick one
@@ -391,7 +391,7 @@ struct ExportView: View {
                 Text(mediaElapsedFormatted)
                     .font(.system(size: 12, weight: .medium).monospacedDigit())
             }
-            .foregroundStyle(Color.warmMid)
+            .foregroundStyle(PaintedSurfaces.secondaryText)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -406,7 +406,7 @@ struct ExportView: View {
                 .tint(PaintedSurfaces.iconAccent)
             Text("Generating visual assets…")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
 
             // Elapsed clock vs estimated total — mirrors the first generation
             // screen. The estimate is content-aware: copying approved previews
@@ -421,11 +421,11 @@ struct ExportView: View {
                         .font(.light(12))
                 }
             }
-            .foregroundStyle(Color.warmMid)
+            .foregroundStyle(PaintedSurfaces.secondaryText)
 
             Text("Approved previews copy instantly. Reels take longer only when they need regenerating.")
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid.opacity(0.8))
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
 
@@ -532,14 +532,14 @@ private struct ExportDayRow: View {
             Text(day.displayName.uppercased())
                 .font(.system(size: 9, weight: .medium))
                 .tracking(1.0)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .frame(width: 70, alignment: .leading)
             Image(systemName: "checkmark")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(PaintedSurfaces.iconAccent)
             Text(summary)
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: Spacing.sm)
             Button("Export just this day", action: onExportJustThisDay)
@@ -558,14 +558,14 @@ private struct ExportBlogRow: View {
             Text("BLOG")
                 .font(.system(size: 9, weight: .medium))
                 .tracking(1.0)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .frame(width: 70, alignment: .leading)
             Image(systemName: "checkmark")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(PaintedSurfaces.iconAccent)
             Text(blog?.title ?? "Draft")
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .lineLimit(1)
         }
     }
