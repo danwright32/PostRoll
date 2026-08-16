@@ -46,7 +46,7 @@ struct ProgramUploadView: View {
                         .foregroundStyle(PaintedSurfaces.pageAccentText)
                     TextField("https://dciny.org/events/…", text: $eventURL)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
                         .background(
@@ -353,21 +353,21 @@ struct EventHeader: View {
             if isEditing {
                 TextField("Event name", text: $editName, onCommit: commitRename)
                     .font(.signPainter(28))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .textFieldStyle(.plain)
                     .onExitCommand { isEditing = false }
             } else {
                 HStack(spacing: 6) {
                     Text(event.name)
                         .font(.signPainter(28))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                     Button {
                         editName = event.name
                         isEditing = true
                     } label: {
                         Image(systemName: "pencil")
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.warmMid.opacity(0.6))
+                            .foregroundStyle(PaintedSurfaces.quietMark)
                     }
                     .buttonStyle(.plain)
                     .help("Rename event")
@@ -427,7 +427,7 @@ private struct ProgramDropZone: View {
                 .tint(PaintedSurfaces.iconAccent)
             Text("Importing…")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: 180)
@@ -447,10 +447,10 @@ private struct ProgramDropZone: View {
             VStack(spacing: 4) {
                 Text("Drop program photos here")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                 Text("PDF · JPEG · PNG · HEIC")
                     .font(.light(11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
             Button("Choose Files…", action: onPickFiles)
                 .buttonStyle(.plain)
@@ -475,7 +475,7 @@ private struct ProgramDropZone: View {
             HStack {
                 Text("\(imagePaths.count) page\(imagePaths.count == 1 ? "" : "s")")
                     .font(.light(12))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 Spacer()
                 Button("Add more…", action: onPickFiles)
                     .buttonStyle(.plain)
@@ -490,7 +490,7 @@ private struct ProgramDropZone: View {
             ForEach(lastImport) { file in
                 Text(file.summary)
                     .font(.light(11))
-                    .foregroundStyle(Color.warmMid.opacity(0.8))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110))], spacing: Spacing.sm) {
@@ -539,7 +539,7 @@ private struct ProgramThumbnail: View {
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
                     .symbolRenderingMode(.palette)
-                    .foregroundStyle(Color.cream, Color.warmDark.opacity(0.7))
+                    .foregroundStyle(PaintedSurfaces.removeButtonGlyph, PaintedSurfaces.removeButtonDisc)
                     .font(.system(size: 16))
             }
             .buttonStyle(.plain)
@@ -657,9 +657,18 @@ struct StageStepBar: View {
         .help(blocked ?? (isHere ? "You are here" : "Go to \(StageNavigation.title(stage))"))
     }
 
+    /// What each step of the breadcrumb is drawn in.
+    ///
+    /// Every one of these is 9pt TEXT, so 4.5:1 is the level for all four
+    /// states, and three of them were under it: the accent as type is 4.31:1,
+    /// a blocked step was 1.60:1 and a step not yet reached was 2.83:1 (#620).
+    ///
+    /// So the states are told apart by weight and by the accent, which the
+    /// label already does, rather than by fading the words out. The two that
+    /// used to fade are the two carrying the most information: a blocked step
+    /// is the one Dan wants to know about, and it stays pressable precisely so
+    /// it can say why in its tooltip, which an unreadable label works against.
     private func colour(isHere: Bool, done: Bool, blocked: Bool) -> Color {
-        if isHere { return Color.roseGold }
-        if blocked { return Color.warmMid.opacity(0.35) }
-        return done ? Color.warmMid : Color.warmMid.opacity(0.7)
+        isHere ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText
     }
 }

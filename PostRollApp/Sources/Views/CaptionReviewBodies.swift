@@ -50,11 +50,11 @@ struct CaptionReviewActionBar: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(reason)…")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("Exporting now would copy the previous version.")
                         .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)

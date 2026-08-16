@@ -48,7 +48,7 @@ struct ClipboardCopyButton: View {
         } label: {
             Image(systemName: CopyAcknowledgement.symbol(copied: copied))
                 .font(.system(size: size))
-                .foregroundStyle(copied ? PaintedSurfaces.iconAccent : Color.warmMid)
+                .foregroundStyle(copied ? PaintedSurfaces.iconAccent : PaintedSurfaces.secondaryText)
         }
         .buttonStyle(.plain)
         .help(CopyAcknowledgement.label(copied: copied, what: what))

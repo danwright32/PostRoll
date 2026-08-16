@@ -77,7 +77,7 @@ struct PhotoAssignmentContinueBar: View {
             if !canContinue {
                 Text("Add photos to at least one day to continue.")
                     .font(.light(11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
             HStack {
                 Spacer()
@@ -117,7 +117,7 @@ struct MissingPhotosBanner: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(PaintedSurfaces.missingMediaAction)
-            Text("·").foregroundStyle(Color.warmMid.opacity(0.5))
+            Text("·").foregroundStyle(PaintedSurfaces.quietMark)
                 .accessibilityHidden(true)
             Button("Remove missing", action: onRemove)
                 .buttonStyle(BrandOutlineButtonStyle())

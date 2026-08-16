@@ -78,7 +78,7 @@ struct HaltedWeekBody: View {
 
             Text(survivedText)
                 .font(.system(size: 13))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .padding(.horizontal, Spacing.xl)
 
             VStack(alignment: .leading, spacing: Spacing.md) {
@@ -96,7 +96,7 @@ struct HaltedWeekBody: View {
                         }
                         Text(choice.explanation)
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             // Without this the first explanation truncates to
                             // one line with an ellipsis while the second wraps,
                             // so the reason for the free option is the part

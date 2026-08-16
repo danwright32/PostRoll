@@ -27,25 +27,25 @@ struct InsightsSidebarView: View {
                 HStack(spacing: 8) {
                     Image(systemName: icon)
                         .imageScale(.small)
-                        .foregroundStyle(isSelected ? PaintedSurfaces.iconAccent : Color.warmMid)
+                        .foregroundStyle(isSelected ? PaintedSurfaces.iconAccent : PaintedSurfaces.secondaryText)
                         .frame(width: 16)
                     Text(label)
                         .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                        .foregroundStyle(isSelected ? Color.warmDark : Color.warmMid)
+                        .foregroundStyle(isSelected ? PaintedSurfaces.bodyText : PaintedSurfaces.secondaryText)
                     Spacer()
                     if section == .posts {
                         let count = analyticsStore.posts.count
                         if count > 0 {
                             Text("\(count)")
                                 .font(.system(size: 10))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                         }
                     } else if section == .orgs {
                         let count = analyticsStore.uniqueOrgs.count
                         if count > 0 {
                             Text("\(count)")
                                 .font(.system(size: 10))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                         }
                     }
                 }
@@ -78,7 +78,7 @@ struct InsightsSidebarView: View {
                     Text("HISTORY")
                         .font(.system(size: 9, weight: .medium))
                         .tracking(0.8)
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .padding(.top, Spacing.sm)
                 }
             }
@@ -104,10 +104,10 @@ private struct ReportHistoryRow: View {
         HStack(spacing: 6) {
             Image(systemName: "clock.arrow.circlepath")
                 .imageScale(.small)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Text(Self.formatter.localizedString(for: report.generatedAt, relativeTo: Date()))
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Spacer()
             // Which weeks this report is about. Written by every analysis and
             // shown nowhere, so two saved reports were told apart only by when
@@ -115,10 +115,10 @@ private struct ReportHistoryRow: View {
             Text(InsightsDisplay.reportRange(from: report.dateRangeStart,
                                              to: report.dateRangeEnd))
                 .font(.system(size: 10))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Text("\(report.postCount) posts")
                 .font(.system(size: 10))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
         }
         .padding(.vertical, 2)
         .listRowBackground(Color.clear)

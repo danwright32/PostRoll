@@ -18,7 +18,7 @@ struct StageBackButton: View {
                 Text(label)
                     .font(.system(size: 11))
             }
-            .foregroundStyle(Color.warmMid)
+            .foregroundStyle(PaintedSurfaces.secondaryText)
         }
         .buttonStyle(.plain)
     }

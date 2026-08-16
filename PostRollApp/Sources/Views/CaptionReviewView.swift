@@ -1664,16 +1664,16 @@ private struct CaptionSection: View {
                     Text(day.displayName.uppercased())
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
 
                     if day == .friday {
                         Text("Story only")
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     } else if !caption.caption.isEmpty {
                         Text(String(caption.caption.prefix(40)) + (caption.caption.count > 40 ? "…" : ""))
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .lineLimit(1)
                     }
 
@@ -1684,7 +1684,7 @@ private struct CaptionSection: View {
                     captionFindingsBadge
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.vertical, 14)
@@ -1711,10 +1711,10 @@ private struct CaptionSection: View {
                         HStack(alignment: .top, spacing: 6) {
                             Image(systemName: "crop")
                                 .font(.system(size: 11))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                             Text(cropNote)
                                 .font(.light(11))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.horizontal, Spacing.xl)
@@ -1747,7 +1747,7 @@ private struct CaptionSection: View {
                                 Text(plan.rationale)
                                     .font(.light(11))
                                     .italic()
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                     .frame(maxWidth: tuesdayReelCardWidth, alignment: .leading)
                                     .padding(.top, Spacing.sm)
                             }
@@ -1761,7 +1761,7 @@ private struct CaptionSection: View {
                                 Text("STORY")
                                     .font(.system(size: 9, weight: .medium))
                                     .tracking(0.8)
-                                    .foregroundStyle(Color.warmMid.opacity(0.55))
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                     .frame(maxWidth: tuesdayReelCardWidth, alignment: .leading)
                                     .padding(.top, Spacing.md)
                                 PreviewGraphicThumbnail(
@@ -1851,7 +1851,7 @@ private struct CaptionSection: View {
                             Text(splitPreviewLabel)
                                 .font(.system(size: 9, weight: .medium))
                                 .tracking(0.8)
-                                .foregroundStyle(Color.warmMid.opacity(0.55))
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, Spacing.md)
                                 .padding(.top, Spacing.sm)
@@ -1876,7 +1876,7 @@ private struct CaptionSection: View {
                     } else {
                         Text("Friday story will appear here once generated.")
                             .font(.light(12))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .padding(.horizontal, Spacing.xl)
                             .padding(.vertical, Spacing.md)
                     }
@@ -1957,7 +1957,7 @@ private struct CaptionSection: View {
                                     Spacer()
                                     Text("\(caption.caption.count) chars")
                                         .font(.system(size: 10))
-                                        .foregroundStyle(caption.caption.count > 2200 ? Color.roseDeep : Color.warmMid)
+                                        .foregroundStyle(caption.caption.count > 2200 ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                                     // Says the copy landed, and carries a name for an icon
                                     // that had none (#465, #466).
                                     ClipboardCopyButton(text: caption.caption,
@@ -1999,7 +1999,7 @@ private struct CaptionSection: View {
                                             }
                                             .buttonStyle(.plain)
                                             .font(.system(size: 12))
-                                            .foregroundStyle(Color.warmMid)
+                                            .foregroundStyle(PaintedSurfaces.secondaryText)
                                         }
                                     }
                                 }
@@ -2065,7 +2065,7 @@ private struct CaptionSection: View {
                                 Spacer()
                                 Text("\(caption.caption.count) chars")
                                     .font(.system(size: 10))
-                                    .foregroundStyle(caption.caption.count > 2200 ? Color.roseDeep : Color.warmMid)
+                                    .foregroundStyle(caption.caption.count > 2200 ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                                 // Says the copy landed, and carries a name for an icon
                                 // that had none (#465, #466).
                                 ClipboardCopyButton(text: caption.caption,
@@ -2107,7 +2107,7 @@ private struct CaptionSection: View {
                                         }
                                         .buttonStyle(.plain)
                                         .font(.system(size: 12))
-                                        .foregroundStyle(Color.warmMid)
+                                        .foregroundStyle(PaintedSurfaces.secondaryText)
                                     }
                                 }
                             }
@@ -2136,7 +2136,7 @@ private struct CaptionSection: View {
                                 Text(splitPreviewLabel)
                                     .font(.system(size: 9, weight: .medium))
                                     .tracking(0.8)
-                                    .foregroundStyle(Color.warmMid.opacity(0.55))
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, Spacing.md)
                                     .padding(.top, Spacing.sm)
@@ -2383,7 +2383,7 @@ private struct CaptionSection: View {
                             Spacer()
                             Text("\(caption.caption.count) chars")
                                 .font(.system(size: 10))
-                                .foregroundStyle(caption.caption.count > 2200 ? Color.roseDeep : Color.warmMid)
+                                .foregroundStyle(caption.caption.count > 2200 ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                             // Says the copy landed, and carries a name for an icon
                             // that had none (#465, #466).
                             ClipboardCopyButton(text: caption.caption,
@@ -2425,7 +2425,7 @@ private struct CaptionSection: View {
                                     }
                                     .buttonStyle(.plain)
                                     .font(.system(size: 12))
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                 }
                             }
                         }
@@ -2509,7 +2509,7 @@ private struct RevisionPanel: View {
             TextField("e.g. make it shorter, add @dciny, don't mention the scene label", text: $feedbackText)
                 .focused($focused)
                 .font(.system(size: 12))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
                 .focusEffectDisabled()
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
@@ -2531,7 +2531,7 @@ private struct RevisionPanel: View {
             Toggle(isOn: $saveToBrandVoice) {
                 Text("Save this feedback to brand voice for all future events")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
             .toggleStyle(.checkbox)
             .disabled(isRevising)
@@ -2539,14 +2539,14 @@ private struct RevisionPanel: View {
             if let error {
                 Text(error)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseDeep)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if let brandVoiceError {
                 Text(brandVoiceError)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseDeep)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -2557,7 +2557,7 @@ private struct RevisionPanel: View {
                         .tint(PaintedSurfaces.iconAccent)
                     Text("Revising…")
                         .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 } else {
                     Button("Apply") { onApply() }
                         .buttonStyle(BrandButtonStyle())
@@ -2565,7 +2565,7 @@ private struct RevisionPanel: View {
                     Button("Cancel") { onCancel() }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
             }
         }
@@ -2628,10 +2628,10 @@ private struct BlogSection: View {
                 Text("POST METADATA")
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 Text("Not part of the post. Paste these into the page's own fields, not into the body.")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
                 ForEach(metadataFields, id: \.label) { field in
@@ -2639,7 +2639,7 @@ private struct BlogSection: View {
                         HStack {
                             Text(field.label)
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(Color.warmDark)
+                                .foregroundStyle(PaintedSurfaces.bodyText)
                             Spacer()
                             Button {
                                 NSPasteboard.general.clearContents()
@@ -2659,7 +2659,7 @@ private struct BlogSection: View {
                         }
                         Text(field.text)
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2701,11 +2701,11 @@ private struct BlogSection: View {
                         Text("BLOG POST")
                             .font(.system(size: 10, weight: .medium))
                             .tracking(1.2)
-                            .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                            .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                         if !blog.title.isEmpty {
                             Text(blog.title)
                                 .font(.light(11))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                                 .lineLimit(1)
                         }
                     }
@@ -2713,22 +2713,24 @@ private struct BlogSection: View {
                     // Visible while collapsed, so the checks are not something
                     // Dan has to open the section to discover (#201).
                     if let summary = blog.findingsSummary {
+                        // The ink and the wash from one place, which is what
+                        // captionFindings exists for: this drew its own summary
+                        // in a colour chosen beside the wash it sits on, so the
+                        // two could disagree and the measured pair covered
+                        // neither (#600, #620).
+                        let findings = PaintedSurfaces.captionFindings(
+                            stale: blog.findingsAreStale)
                         Text(summary)
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(blog.findingsAreStale
-                                             ? Color.warmMid : Color.roseDeep)
+                            .foregroundStyle(findings.ink)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(
-                                Capsule().fill(
-                                    (blog.findingsAreStale
-                                     ? Color.warmMid : Color.roseDeep).opacity(0.12))
-                            )
+                            .background(Capsule().fill(findings.badge))
                             .accessibilityLabel("Blog checks: \(summary)")
                     }
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.vertical, 14)
@@ -2747,7 +2749,7 @@ private struct BlogSection: View {
                             Text("BODY (MARKDOWN)")
                                 .font(.system(size: 9, weight: .medium))
                                 .tracking(0.8)
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                             Spacer()
                             // One thing to copy, title included (#205). The
                             // title was generated, stored and shown, and Dan
@@ -2786,7 +2788,7 @@ private struct BlogSection: View {
                                     }
                                 }
                                 .font(.system(size: 12))
-                                .foregroundStyle(Color.warmDark)
+                                .foregroundStyle(PaintedSurfaces.bodyText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(8)
                             }
@@ -2831,16 +2833,16 @@ private struct BlogSection: View {
                             if onSwapPhotos != nil {
                                 if isSwappingPhotos {
                                     HStack(spacing: 4) {
-                                        ProgressView().controlSize(.mini).tint(Color.warmMid)
+                                        ProgressView().controlSize(.mini).tint(PaintedSurfaces.secondaryText)
                                         Text("Updating photos…")
                                             .font(.system(size: 12))
-                                            .foregroundStyle(Color.warmMid)
+                                            .foregroundStyle(PaintedSurfaces.secondaryText)
                                     }
                                 } else {
                                     Button("Change photos (\(photoCount))…") { pickAndSwapPhotos() }
                                         .buttonStyle(.plain)
                                         .font(.system(size: 12))
-                                        .foregroundStyle(Color.warmMid)
+                                        .foregroundStyle(PaintedSurfaces.secondaryText)
                                 }
                             }
                             if undoBlog != nil {
@@ -2852,7 +2854,7 @@ private struct BlogSection: View {
                                 }
                                 .buttonStyle(.plain)
                                 .font(.system(size: 12))
-                                .foregroundStyle(Color.warmMid)
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                             }
                         }
                         if let err = photoSwapError {
@@ -2961,7 +2963,7 @@ private struct BlogBodyEditor: View {
     var body: some View {
         SpellCheckingTextEditor(text: $text)
             .nsFont(.systemFont(ofSize: 12))
-            .nsTextColor(NSColor(Color.warmDark))
+            .nsTextColor(NSColor(PaintedSurfaces.bodyText))
             .focused($focused)
             .frame(minHeight: 280)
             .padding(8)
@@ -2996,11 +2998,11 @@ private struct HashtagsEditor: View {
                 Text("HASHTAGS")
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 Spacer()
                 Text("\(hashtags.count)/30")
                     .font(.system(size: 9))
-                    .foregroundStyle(hashtags.count > 30 ? Color.roseDeep : Color.warmMid)
+                    .foregroundStyle(hashtags.count > 30 ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                 if !hashtagStore.presets.isEmpty {
                     Menu {
                         ForEach(hashtagStore.presets) { preset in
@@ -3032,7 +3034,7 @@ private struct HashtagsEditor: View {
             TextField("#tag1 #tag2 #tag3", text: $raw)
                 .focused($focused)
                 .font(.system(size: 12))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
                 .focusEffectDisabled()
                 .textFieldStyle(.plain)
                 .lineLimit(1)
@@ -3086,10 +3088,10 @@ private struct AltTextsSection: View {
                     Text("ALT TEXTS (\(altTexts.count))")
                         .font(.system(size: 9, weight: .medium))
                         .tracking(0.8)
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Spacer()
                 }
             }
@@ -3122,12 +3124,12 @@ private struct AltTextRow: View {
         HStack(alignment: .top, spacing: Spacing.sm) {
             Text("P\(index + 1)")
                 .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .padding(.top, 8)
                 .frame(width: 20, alignment: .leading)
             SpellCheckingTextEditor(text: $text)
                 .nsFont(.systemFont(ofSize: 11))
-                .nsTextColor(NSColor(Color.warmDark))
+                .nsTextColor(NSColor(PaintedSurfaces.bodyText))
                 .focused($focused)
                 .frame(minHeight: 44)
                 .padding(6)
@@ -3160,10 +3162,10 @@ private struct ReviewTextArea: View {
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             SpellCheckingTextEditor(text: $text)
                 .nsFont(.systemFont(ofSize: 12))
-                .nsTextColor(NSColor(Color.warmDark))
+                .nsTextColor(NSColor(PaintedSurfaces.bodyText))
                 .focused($focused)
                 .frame(minHeight: minHeight)
                 .padding(8)
@@ -3299,7 +3301,7 @@ private struct ReviewMediaStrip: View {
                     Text("REEL")
                         .font(.system(size: 9, weight: .medium))
                         .tracking(0.8)
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .padding(.horizontal, Spacing.xl)
                     ReelPreviewPlayer(url: url, version: graphicVersion, onRegenerate: onRegenerate, isRegenerating: isRegenerating)
                         .id("\(url.path)-\(graphicVersion)")
@@ -3312,7 +3314,7 @@ private struct ReviewMediaStrip: View {
                 VStack(spacing: Spacing.sm) {
                     Text("No reel generated yet")
                         .font(.light(12))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     if isRegenerating {
                         ProgressView()
                             .controlSize(.small)
@@ -3334,11 +3336,11 @@ private struct ReviewMediaStrip: View {
                         Text("COLLAGE")
                             .font(.system(size: 9, weight: .medium))
                             .tracking(0.8)
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                         Spacer()
                         Text("Drag photo to reposition · tap to select · drag borders to resize")
                             .font(.system(size: 9))
-                            .foregroundStyle(Color.warmMid.opacity(0.7))
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                     .padding(.horizontal, Spacing.xl)
 
@@ -3377,7 +3379,7 @@ private struct ReviewMediaStrip: View {
                     Text(label)
                         .font(.system(size: 9, weight: .medium))
                         .tracking(0.8)
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .padding(.horizontal, Spacing.xl)
 
                     PreviewGraphicThumbnail(
@@ -3449,7 +3451,7 @@ private struct ReviewMediaStrip: View {
                                     Button("Remove") { onRemoveBW?() }
                                         .buttonStyle(.plain)
                                         .font(.system(size: 10))
-                                        .foregroundStyle(Color.warmMid)
+                                        .foregroundStyle(PaintedSurfaces.secondaryText)
                                 }
                                 .disabled(isRegenerating)
                                 .padding(.top, 4)
@@ -3517,15 +3519,15 @@ private struct PipelineStatusView: View {
                     ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
                     Text("Working… \(seconds)s")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
             case .stalled(let seconds):
                 HStack(spacing: Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle")
-                        .foregroundStyle(Color.roseDeep)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                     Text("Still working (\(seconds)s): this is taking longer than usual")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.roseDeep)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
             }
         }
@@ -3559,7 +3561,7 @@ private struct FridayClipEditor: View {
                 Text("CLIPS")
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
-                    .foregroundStyle(Color.warmMid.opacity(0.55))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
 
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                     HStack(spacing: Spacing.sm) {
@@ -3576,11 +3578,19 @@ private struct FridayClipEditor: View {
                             .disabled(index == entries.count - 1)
                         }
                         .font(.system(size: 9))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
 
                         Text(URL(fileURLWithPath: entry.clipPath).lastPathComponent)
                             .font(.system(size: 11))
-                            .foregroundStyle(entry.included ? Color.white : Color.warmMid)
+                            // An included clip was drawn in WHITE, on a panel
+                            // filled with the cream page: about 1.02:1, which
+                            // is the file name of every clip that IS in the
+                            // reel, invisible, while the excluded ones beside
+                            // them read fine (#620). Included is the emphasis
+                            // now and excluded stays quiet and struck through.
+                            .foregroundStyle(entry.included
+                                             ? PaintedSurfaces.bodyText
+                                             : PaintedSurfaces.secondaryText)
                             .lineLimit(1)
                             .strikethrough(!entry.included)
 
@@ -3623,7 +3633,7 @@ private struct FridayClipEditor: View {
                         Button(TitleCardToggleLabel.text(muted: titleCardMuted), action: onToggleTitleCard)
                             .buttonStyle(.plain)
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
 
                     if hasOverride, let onRecutWithAI {
@@ -3687,7 +3697,7 @@ private struct FridayClipCropPopover: View {
             Text("ADJUST CROP")
                 .font(.system(size: 9, weight: .medium))
                 .tracking(1.0)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
 
             HStack(spacing: 6) {
                 ForEach(0..<3, id: \.self) { i in
@@ -3696,7 +3706,7 @@ private struct FridayClipCropPopover: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("HORIZONTAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(Color.warmMid)
+                Text("HORIZONTAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(PaintedSurfaces.secondaryText)
                 HStack(spacing: 4) {
                     // Symbols rather than typed arrow characters (#538): a glyph
                     // renders at whatever size and weight the font decides, and
@@ -3704,28 +3714,28 @@ private struct FridayClipCropPopover: View {
                     // decoration either side of the slider and the slider itself
                     // now carries the meaning.
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .font(.system(size: 9)).foregroundStyle(PaintedSurfaces.secondaryText)
                         .accessibilityHidden(true)
                     Slider(value: $cropOffset.x, in: -1...1)
                         .tint(PaintedSurfaces.iconAccent)
                         .accessibilityLabel("Horizontal crop position")
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .font(.system(size: 9)).foregroundStyle(PaintedSurfaces.secondaryText)
                         .accessibilityHidden(true)
                 }
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("VERTICAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(Color.warmMid)
+                Text("VERTICAL").font(.system(size: 8, weight: .medium)).tracking(0.8).foregroundStyle(PaintedSurfaces.secondaryText)
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.up")
-                        .font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .font(.system(size: 9)).foregroundStyle(PaintedSurfaces.secondaryText)
                         .accessibilityHidden(true)
                     Slider(value: $cropOffset.y, in: -1...1)
                         .tint(PaintedSurfaces.iconAccent)
                         .accessibilityLabel("Vertical crop position")
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 9)).foregroundStyle(Color.warmMid)
+                        .font(.system(size: 9)).foregroundStyle(PaintedSurfaces.secondaryText)
                         .accessibilityHidden(true)
                 }
             }
@@ -3896,7 +3906,7 @@ private struct InstagramMockup: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("dwphotony")
                         .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(Color.black)
+                        .foregroundStyle(PaintedSurfaces.instagramInk)
                     Text("Original audio")
                         .font(.system(size: 11))
                         .foregroundStyle(PaintedSurfaces.instagramSecondaryText)
@@ -4094,7 +4104,7 @@ private struct InstagramMockup: View {
                 Image(systemName: "bookmark")
                     .font(.system(size: 22, weight: .light))
             }
-            .foregroundStyle(Color.black)
+            .foregroundStyle(PaintedSurfaces.instagramInk)
             .padding(.horizontal, 11)
             .padding(.top, 9)
             .padding(.bottom, 6)
@@ -4102,7 +4112,7 @@ private struct InstagramMockup: View {
             // ── Likes ────────────────────────────────────────────────────────
             Text("1,021 likes")
                 .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(Color.black)
+                .foregroundStyle(PaintedSurfaces.instagramInk)
                 .padding(.horizontal, 11)
                 .padding(.bottom, 5)
 
@@ -4117,7 +4127,7 @@ private struct InstagramMockup: View {
                     if !caption.isEmpty {
                         (Text("dwphotony ").font(.system(size: 12.5, weight: .semibold))
                          + Text(caption).font(.system(size: 12.5)))
-                            .foregroundStyle(Color.black)
+                            .foregroundStyle(PaintedSurfaces.instagramInk)
                             .lineLimit(4)
                     }
                     if !hashtagLine.isEmpty {
@@ -4208,7 +4218,7 @@ private struct CoverSlotView: View {
                 Text("COVER")
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
-                    .foregroundStyle(Color.warmMid.opacity(0.55))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 Spacer()
                 if let onChooseOverride {
                     Button(action: onChooseOverride) {
@@ -4235,7 +4245,7 @@ private struct CoverSlotView: View {
                 Text(rationale)
                     .font(.light(11))
                     .italic()
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .padding(.top, Spacing.xs)
             }
 
@@ -4377,7 +4387,7 @@ private struct CollagePreviewThumbnail: View {
     @State private var dropTargetIdx: Int? = nil
     // Sampled from the loaded PNG's left-margin pixel so divider-drag fill
     // rectangles match Python's photo-tinted gap_color (varies per collage).
-    @State private var gapColor: Color = Color.creamDeep
+    @State private var gapColor: Color = PaintedSurfaces.deepPage
 
     private static let canvasW: Double = 1080
     private static let canvasH: Double = 1920
@@ -4385,11 +4395,11 @@ private struct CollagePreviewThumbnail: View {
     private static func sampleGapColor(from nsImage: NSImage?) -> Color {
         guard let nsImage,
               let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        else { return Color.creamDeep }
+        else { return PaintedSurfaces.deepPage }
         let bitmap = NSBitmapImageRep(cgImage: cgImage)
         guard let sampled = bitmap.colorAt(x: 4, y: 4),
               let srgb = sampled.usingColorSpace(.sRGB)
-        else { return Color.creamDeep }
+        else { return PaintedSurfaces.deepPage }
         return Color(
             red:   Double(srgb.redComponent),
             green: Double(srgb.greenComponent),
@@ -4766,12 +4776,12 @@ private struct CollagePreviewThumbnail: View {
 
                     Image(systemName: "photo")
                         .font(.system(size: 9))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Slider(value: scaleBinding, in: 0.25...2.5)
                     .tint(PaintedSurfaces.iconAccent)
                     Image(systemName: "photo.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     if hasAdjust {
                         // A symbol rather than a typed glyph, and named, because
                         // this is a control: nothing else on the row says what it
@@ -4809,7 +4819,7 @@ private struct CollagePreviewThumbnail: View {
                         .foregroundStyle(PaintedSurfaces.iconAccent)
                     Text("Frame changes saved — they'll appear in the exported collage")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Spacer()
                 }
                 .padding(.horizontal, 2)
@@ -4923,7 +4933,7 @@ private struct ReelStripPreviewThumbnail: View {
                          ? "Tap the photo you want to move"
                          : "Tap the spot you want to swap it with")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                     Spacer()
                     Button("Cancel") {
                         swapMode = false
@@ -5116,12 +5126,12 @@ private struct ReelStripPreviewThumbnail: View {
 
                     Image(systemName: "photo")
                         .font(.system(size: 9))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Slider(value: scaleBinding, in: 0.25...2.5)
                         .tint(PaintedSurfaces.iconAccent)
                     Image(systemName: "photo.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     if hasAdjust {
                         // A symbol rather than a typed glyph, and named, because
                         // this is a control: nothing else on the row says what it
@@ -5155,7 +5165,7 @@ private struct ReelStripPreviewThumbnail: View {
                          ? "Rebuilding reel…"
                          : "Drag photos to pan · tap for zoom")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     Spacer()
                     if onSwapPhotos != nil && !swapMode {
                         Button {
@@ -5633,7 +5643,7 @@ private struct LabeledReviewThumb: View {
             Text(label.uppercased())
                 .font(.system(size: 8, weight: .medium))
                 .tracking(0.6)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
         }
     }
 }
@@ -5650,7 +5660,7 @@ private struct ReviewMediaFileRow: View {
                 .foregroundStyle(PaintedSurfaces.iconAccent)
             Text(label)
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Spacer()
             Button("Open") { NSWorkspace.shared.open(url) }
                 .buttonStyle(.plain)
@@ -5704,13 +5714,13 @@ private struct LearningSuggestionSheet: View {
 
                 Text("Based on how you revised these captions, there may be something worth adding to your brand voice. Edit the wording below before saving if you want to refine it:")
                     .font(.light(12))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             SpellCheckingTextEditor(text: $editedSuggestion)
                 .nsFont(.systemFont(ofSize: 13))
-                .nsTextColor(NSColor(Color.warmDark))
+                .nsTextColor(NSColor(PaintedSurfaces.bodyText))
                 .padding(Spacing.sm)
                 .frame(minHeight: 120, maxHeight: 220)
                 .background(
@@ -5724,12 +5734,12 @@ private struct LearningSuggestionSheet: View {
 
             Text("Adding this will apply to all future caption generation.")
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
 
             if let saveError {
                 Text(saveError)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.roseDeep)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -5740,13 +5750,13 @@ private struct LearningSuggestionSheet: View {
                 Button("Reset") { editedSuggestion = suggestion }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .disabled(editedSuggestion == suggestion)
                 Spacer()
                 Button("Skip") { onSkip() }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
         }
         .padding(Spacing.xl)
@@ -5777,12 +5787,12 @@ private struct InlineReelPhotoAssignment: View {
             Text("REEL")
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Text("Assign the RAW and Edited photos to generate a speed-edit reel.")
                 .font(.light(12))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
 
             HStack(alignment: .top, spacing: Spacing.md) {
                 photoSlot(label: "RAW (unedited)", url: rawPhoto, action: onPickRaw)
@@ -5838,10 +5848,10 @@ private struct InlineReelPhotoAssignment: View {
                             VStack(spacing: 4) {
                                 Image(systemName: "plus.circle")
                                     .font(.system(size: 18))
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                                 Text("Choose")
                                     .font(.system(size: 10))
-                                    .foregroundStyle(Color.warmMid)
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
                             }
                         }
                 }
@@ -5849,7 +5859,7 @@ private struct InlineReelPhotoAssignment: View {
             .buttonStyle(.plain)
             Text(label)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
         }
     }
 }
@@ -5876,7 +5886,7 @@ private struct CollageLayoutGallery: View {
             HStack {
                 Text("Choose a layout — \(day.displayName)")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                 Spacer()
                 Button("Cancel") { onCancel() }
                     .buttonStyle(.plain)
@@ -5891,13 +5901,13 @@ private struct CollageLayoutGallery: View {
                     ProgressView().controlSize(.large).tint(PaintedSurfaces.iconAccent)
                     Text("Rendering layout options…")
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error {
                 Text(error)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.roseDeep)
+                    .foregroundStyle(PaintedSurfaces.pageAccentText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding()
             } else {

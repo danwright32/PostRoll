@@ -36,13 +36,13 @@ struct OutdatedDesignsSheet: View {
                         ProgressView().controlSize(.small)
                         Text("Looking at every rendered day…")
                             .font(.light(12))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                 } else if groups.isEmpty {
                     Text(OutdatedDesignsDisplay.summary(result,
                                                         hasPreviewRoot: hasPreviewRoot))
                         .font(.system(size: 13))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: Spacing.lg) {
@@ -67,13 +67,13 @@ struct OutdatedDesignsSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Outdated Designs")
                 .font(.signPainter(30))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
             RoseGoldDivider()
             if !isScanning {
                 Text(OutdatedDesignsDisplay.summary(result,
                                                     hasPreviewRoot: hasPreviewRoot))
                     .font(.light(12))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .padding(.top, 2)
             }
         }
@@ -86,7 +86,7 @@ struct OutdatedDesignsSheet: View {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(OutdatedDesignsDisplay.rowLabel(day))
                         .font(.system(size: 13))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     if let id = group.eventID {
@@ -100,7 +100,7 @@ struct OutdatedDesignsSheet: View {
                         // from, so there is nothing to offer either.
                         Text("no event on record")
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                 }
                 .padding(.vertical, 4)
@@ -114,7 +114,7 @@ struct OutdatedDesignsSheet: View {
             if let scannedAt, !isScanning {
                 Text("Checked \(scannedAt.formatted(date: .omitted, time: .shortened))")
                     .font(.light(11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
             Spacer()
             Button("Check again") { Task { await rescan() } }

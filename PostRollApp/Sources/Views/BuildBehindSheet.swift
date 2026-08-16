@@ -36,7 +36,7 @@ struct BuildBehindSheet: View {
                             .foregroundStyle(PaintedSurfaces.iconAccent)
                         Text("PostRoll is out of date")
                             .font(.signPainter(28))
-                            .foregroundStyle(Color.warmDark)
+                            .foregroundStyle(PaintedSurfaces.bodyText)
                     }
                     RoseGoldDivider()
                 }
@@ -45,7 +45,7 @@ struct BuildBehindSheet: View {
                                             latestCommit: latestCommit,
                                             remedy: remedy))
                     .font(.system(size: 13))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .fixedSize(horizontal: false, vertical: true)
 
                 // The command on its own line, in the shape it is typed, so it
@@ -54,7 +54,7 @@ struct BuildBehindSheet: View {
                     .font(.system(size: 13, design: .monospaced))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)

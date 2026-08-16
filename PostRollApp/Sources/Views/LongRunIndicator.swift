@@ -69,14 +69,14 @@ struct LongRunIndicator: View {
                     ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
                     Text(step?.display ?? label)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                     Text(elapsedText(seconds))
                         .font(.light(11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     if let estimate {
                         Text(estimate)
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                 }
 
@@ -84,17 +84,17 @@ struct LongRunIndicator: View {
                 HStack(alignment: .top, spacing: Spacing.sm) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.roseDeep)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Still running after \(elapsedText(seconds)), with nothing new for a while")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color.roseDeep)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                         // Which step it went quiet in is the actionable part.
                         // "Something is stuck" tells him nothing he can use.
                         Text(step.map { "Last step: \($0.display)" }
                              ?? "It has not reported a step yet.")
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                 }
 
@@ -102,10 +102,10 @@ struct LongRunIndicator: View {
                 HStack(alignment: .top, spacing: Spacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.roseDeep)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                     Text(message)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.roseDeep)
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
             }
         }

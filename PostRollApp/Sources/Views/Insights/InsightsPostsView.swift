@@ -42,7 +42,7 @@ struct InsightsPostsView: View {
 
                 Text("\(filteredPosts.count) posts")
                     .font(.light(11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
             .padding(.horizontal, Spacing.lg)
             .padding(.vertical, Spacing.md)
@@ -61,7 +61,7 @@ struct InsightsPostsView: View {
                     Text(InsightsPostsEmpty.message(searchText: searchText,
                                                     filter: filterType.rawValue))
                         .font(.light(12))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     if !searchText.isEmpty {
                         Button("Clear Search") { searchText = "" }
                             .buttonStyle(.plain)
@@ -78,7 +78,7 @@ struct InsightsPostsView: View {
                         PostRow(post: post)
                             .listRowBackground(Color.cream)
                             .listRowInsets(EdgeInsets(top: 6, leading: Spacing.lg, bottom: 6, trailing: Spacing.lg))
-                            .listRowSeparatorTint(Color.creamEdge)
+                            .listRowSeparatorTint(PaintedSurfaces.edgeRule)
                     }
                 }
                 .scrollContentBackground(.hidden)
@@ -128,11 +128,11 @@ private struct PostRow: View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .center, spacing: 4) {
                 Image(systemName: mediaIcon)
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .imageScale(.medium)
                 Text(dateFormatter.string(from: post.publishedAt))
                     .font(.system(size: 9))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .multilineTextAlignment(.center)
             }
             .frame(width: 56)
@@ -145,13 +145,13 @@ private struct PostRow: View {
                 }
                 Text(post.caption.isEmpty ? "(no caption)" : post.caption)
                     .font(.light(12))
-                    .foregroundStyle(post.caption.isEmpty ? Color.warmMid : Color.warmDark)
+                    .foregroundStyle(post.caption.isEmpty ? PaintedSurfaces.secondaryText : PaintedSurfaces.bodyText)
                     .lineLimit(3)
 
                 if !post.hashtags.isEmpty {
                     Text(post.hashtags.prefix(5).joined(separator: " ") + (post.hashtags.count > 5 ? " +\(post.hashtags.count - 5)" : ""))
                         .font(.system(size: 10))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .lineLimit(1)
                 }
 
@@ -168,7 +168,7 @@ private struct PostRow: View {
                             }
                         }
                     }
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(InsightsDisplay.metricsLabel(metrics))
                 }
@@ -197,13 +197,13 @@ private struct PostsEmptyState: View {
         VStack(spacing: 8) {
             Image(systemName: "photo.stack")
                 .font(.system(size: 28))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Text("No posts imported yet.")
                 .font(.light(13))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Text("Use the Import CSV button on Overview to load your Meta export.")
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 260)
         }

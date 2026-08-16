@@ -1080,6 +1080,179 @@ final class BannerLegibilityTests: XCTestCase {
         return bare.filter { $0 == "(" }.count - bare.filter { $0 == ")" }.count
     }
 
+    // MARK: - Every colour drawn as type, not just the two that were caught (#620)
+
+    /// A palette colour written straight into a foreground or a tint.
+    ///
+    /// The rule the accent (#580) and the faint tone (#611) each got one at a
+    /// time, generalised: a colour used as TYPE has to name the role it is
+    /// playing, because only a role can be registered against what is behind it
+    /// and only then can anything measure the pair.
+    ///
+    /// Both of those were found the same way, by somebody measuring rather than
+    /// by any check, and both had been under the floor for months while the
+    /// suite was green. Nothing said the class existed, so the third one was
+    /// only ever going to be found the same way (L30).
+    ///
+    /// Reuses `statements`, so a colour reached through a ternary spread over
+    /// three lines is one string to match against, which is the spelling that
+    /// defeated the first version of the accent rule (L144).
+    ///
+    /// `Color.clear` is excluded because it draws nothing: it is a spacer and a
+    /// hit area, and there is no type to read. Named here so the exemption is
+    /// one decision written down once (L129).
+    private func rawTypeColourUses(in code: String) -> [String] {
+        statements(in: code)
+            // `return` as well as the two modifiers, because a colour handed to
+            // a foreground by a helper is type just as much as one written into
+            // the modifier. Two such helpers were the whole reason this line
+            // says `return`: `ProgramUploadView.colour(isHere:done:blocked:)`
+            // and `OCRReviewView.confidenceColor` were outside every check in
+            // this file, and between them held the raw accent, two of the
+            // platform's own state colours and a tone at 1.60:1. A rule that
+            // covers the modifier and not the function feeding it reads exactly
+            // like a rule that holds (#620).
+            .filter {
+                $0.contains("foreground") || $0.lowercased().contains("tint(")
+                    || $0.contains("return ")
+            }
+            .filter { statement in
+                statement.ranges(of: #/Color\.[A-Za-z][A-Za-z0-9]*/#)
+                    .map { String(statement[$0]) }
+                    .contains { $0 != "Color.clear" }
+            }
+    }
+
+    /// The files that DECLARE colours rather than draw with them, and why.
+    ///
+    /// Written down rather than left as a silent hole in the sweep, and checked
+    /// in both directions below: an entry naming a file with nothing to exempt
+    /// fails too, because a stale exemption quietly covers whatever drifts into
+    /// its place (L129, L96).
+    private static let declaresItsOwnColours: [String: String] = [
+        "Views/BrandBanner.swift":
+            "declares the banner palette itself, and PaintedSurfaces.all reads "
+            + "its background, icon, text and action colours straight out of it "
+            + "to build the banner pairs. It is a naming site like "
+            + "PaintedSurfaces, so a rule against naming colours here would be a "
+            + "rule against the thing that makes the banners measurable",
+        "Services/CollageRenderer.swift":
+            "draws a photographic collage rather than app chrome. Its colours "
+            + "are print matting inside an exported image, held by the design "
+            + "version fingerprint guards rather than by contrast against a "
+            + "screen nobody reads them on",
+    ]
+
+    /// No screen draws type in a colour nothing can measure (#620).
+    ///
+    /// `PaintedSurfaces` holds every painted FILL against the words on it, and
+    /// had no rule at all about the words themselves. So `warmDark`, `warmMid`
+    /// and `roseDeep` were written straight into foregrounds in hundreds of
+    /// places, and whether any of them cleared its level was decided by whoever
+    /// typed it.
+    ///
+    /// Measured, that was not academic: `warmMid` is 4.33:1 on the deeper page
+    /// against the 4.5:1 body text needs (#619), the same tone at the reduced
+    /// opacities dotted through these files runs from 3.74:1 down to 1.49:1,
+    /// and two field placeholders were drawn at that bottom figure.
+    func testNoScreenDrawsTypeInARawPaletteColour() throws {
+        let files = try everySourceFile()
+        XCTAssertGreaterThan(files.count, 20,
+                             "the sweep read \(files.count) source files, so it is proving "
+                             + "nothing about the ones it did not open")
+
+        var offenders: [String] = []
+        for relative in files where Self.declaresItsOwnColours[relative] == nil {
+            for statement in rawTypeColourUses(in: try appSource("Sources/\(relative)")) {
+                offenders.append("\(relative)  \(statement.prefix(120))")
+            }
+        }
+
+        XCTAssertTrue(offenders.isEmpty, """
+            \(offenders.count) places draw type in a colour written at the point of use. \
+            Nothing can hold any of them to a level, because nothing else can name what \
+            is behind them:
+
+            \(offenders.prefix(40).joined(separator: "\n"))
+
+            Give the role a name in PaintedSurfaces and register it in `all` against the \
+            surface it is drawn on, the way the accent and the faint tone already are.
+            """)
+    }
+
+    /// The matcher is asked directly what it can see (#620, L1).
+    ///
+    /// The tree is clean once this lands, so a matcher reading one spelling and
+    /// one reading all of them give the same silent pass. Both of the earlier
+    /// rules in this file shipped narrow and looked exactly like rules that
+    /// held, so what has to be seen to fail is the matcher.
+    func testTheTypeColourMatcherSeesEverySpelling() {
+        let mustCatch = [
+            "            .foregroundStyle(Color.warmMid)",
+            "            .foregroundStyle(Color.warmMid.opacity(0.55))",
+            "                .foregroundColor(Color.warmDark)",
+            "            .tint(Color.roseDeep)",
+            "            .listRowSeparatorTint(Color.creamEdge)",
+            "        .foregroundStyle(Color.cream, Color.warmDark.opacity(0.7))",
+            // The two colour returning helpers, which sat outside every rule in
+            // this file until the sweep was widened past the modifiers.
+            "        case \"high\":   return Color.green.opacity(0.8)",
+            "        if blocked { return Color.warmMid.opacity(0.35) }",
+        ]
+        for line in mustCatch {
+            XCTAssertEqual(rawTypeColourUses(in: line).count, 1, """
+                the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as type \
+                drawn in a colour written at the point of use, so type spelled that way is \
+                exempt from the rule and reads exactly like a screen that has none
+                """)
+        }
+
+        // The wrapped ternary, which is the spelling that defeated the first
+        // version of the accent rule and which the line based conversion for
+        // this issue could not see either (L144).
+        XCTAssertEqual(rawTypeColourUses(in: """
+            .foregroundStyle(stats.freshness(asOf: Date()).isStale
+                             ? Color.roseDeep : Color.warmMid)
+            """).count, 1, """
+            the check cannot see a colour chosen by a ternary spread over two lines, so \
+            type drawn that way is exempt while reading as covered
+            """)
+
+        let mustAllow = [
+            "            .foregroundStyle(PaintedSurfaces.secondaryText)",
+            "            .foregroundStyle(PaintedSurfaces.bodyText)",
+            "        .foregroundStyle(isOn ? PaintedSurfaces.iconAccent : PaintedSurfaces.quietMark)",
+            // A fill is the other rule's business, and Color.clear draws nothing.
+            "            .background(Color.creamDeep)",
+            "            .foregroundStyle(Color.clear)",
+            "    static let warmMid   = Color(red: 122/255, green: 104/255, blue:  96/255)",
+        ]
+        for line in mustAllow {
+            XCTAssertEqual(rawTypeColourUses(in: line).count, 0, """
+                the check reports \(line.trimmingCharacters(in: .whitespaces)) as type in a \
+                raw palette colour, which it is not. A rule that fires on correct code is \
+                the rule people learn to work around
+                """)
+        }
+    }
+
+    /// Every exemption still has something to exempt (#620, L96).
+    ///
+    /// An entry that has stopped matching anything is worse than no entry: it
+    /// covers whatever drifts into that file next, and it reads as a decision
+    /// somebody is still standing behind. So the list is checked in the
+    /// direction nobody checks, from the exemption to the code.
+    func testEveryColourExemptionStillHasSomethingToExempt() throws {
+        for (relative, reason) in Self.declaresItsOwnColours {
+            let code = try appSource("Sources/\(relative)")
+            XCTAssertFalse(rawTypeColourUses(in: code).isEmpty, """
+                \(relative) is exempt from the type colour rule, on the grounds that it \
+                \(reason), but it no longer names a colour of its own. An exemption with \
+                nothing under it silently covers whatever arrives in that file next.
+                """)
+        }
+    }
+
     // MARK: - The faint tone (#611)
 
     /// Every use of the faint tone, whatever it is drawn as.

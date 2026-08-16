@@ -521,11 +521,11 @@ private struct ReviewSectionRow<Content: View>: View {
                     Text(title.uppercased())
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(isExpanded ? PaintedSurfaces.iconAccent : Color.warmMid)
+                        .foregroundStyle(isExpanded ? PaintedSurfaces.iconAccent : PaintedSurfaces.secondaryText)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .contentShape(Rectangle())
@@ -643,7 +643,7 @@ private struct PerformersEditor: View {
                     if let err = handleLookupError {
                         Text(err)
                             .font(.light(10))
-                            .foregroundStyle(Color.roseDeep)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
                 }
             }
@@ -672,7 +672,7 @@ private struct PerformersEditor: View {
                         if let err = fetchError {
                             Text(err)
                                 .font(.light(10))
-                                .foregroundStyle(Color.roseDeep)
+                                .foregroundStyle(PaintedSurfaces.pageAccentText)
                         }
                     }
                 }
@@ -769,11 +769,11 @@ private struct HandleSuggestionsView: View {
                 Text("HANDLE SUGGESTIONS")
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 Spacer()
                 Button("Dismiss all") { onDismissAll() }
                     .font(.system(size: 10))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .buttonStyle(.plain)
             }
 
@@ -795,9 +795,9 @@ private struct HandleSuggestionRow: View {
 
     private var confidenceColor: Color {
         switch suggestion.confidence {
-        case "high":   return Color.green.opacity(0.8)
-        case "medium": return Color.orange.opacity(0.8)
-        default:       return Color.warmMid.opacity(0.6)
+        case "high":   return PaintedSurfaces.stateSuccessText
+        case "medium": return PaintedSurfaces.stateWarningText
+        default:       return PaintedSurfaces.quietMark
         }
     }
 
@@ -807,7 +807,7 @@ private struct HandleSuggestionRow: View {
                 HStack(spacing: 4) {
                     Text(suggestion.name)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                     Circle()
                         .fill(confidenceColor)
                         .frame(width: 6, height: 6)
@@ -829,7 +829,7 @@ private struct HandleSuggestionRow: View {
                 } label: {
                     Text("Verify")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .buttonStyle(.plain)
                 .help("Open Instagram profile to verify")
@@ -838,7 +838,7 @@ private struct HandleSuggestionRow: View {
             Button { onAccept() } label: {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 14))
-                    .foregroundStyle(Color.green.opacity(0.8))
+                    .foregroundStyle(PaintedSurfaces.stateSuccessText)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Apply this handle")
@@ -883,7 +883,7 @@ private struct PerformerRow: View {
                     if isGuessed {
                         Label(HandleBookMark.note, systemImage: "questionmark.circle")
                             .font(.system(size: 9))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .help(HandleBookMark.explanation)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -901,7 +901,7 @@ private struct PerformerRow: View {
                 }
             } label: {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(performer.name.isEmpty ? Color.creamEdge : Color.warmMid)
+                    .foregroundStyle(performer.name.isEmpty ? PaintedSurfaces.quietMark : PaintedSurfaces.secondaryText)
                     .font(.system(size: 13))
             }
             .buttonStyle(.plain)
@@ -1002,7 +1002,7 @@ private struct PiecesEditor: View {
                     if let err = fetchError {
                         Text(err)
                             .font(.light(10))
-                            .foregroundStyle(Color.roseDeep)
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1100,7 +1100,7 @@ private struct ScenesEditor: View {
         if scenes.isEmpty {
             Text("No scenes. Normal for concerts; scenes apply to operas and plays.")
                 .font(.system(size: 12))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .padding(.bottom, Spacing.sm)
         } else {
             VStack(spacing: Spacing.sm) {
@@ -1164,12 +1164,12 @@ private struct BrandTextArea: View {
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
 
             TextEditor(text: $text)
                 .focused($focused)
                 .font(.system(size: 12))
-                .foregroundStyle(Color.warmDark)
+                .foregroundStyle(PaintedSurfaces.bodyText)
                 .focusEffectDisabled()
                 .frame(minHeight: 72)
                 .padding(8)
@@ -1215,7 +1215,7 @@ private struct BrandField: View {
         }
         .focused($focused)
         .font(.system(size: 12))
-        .foregroundStyle(Color.warmDark)
+        .foregroundStyle(PaintedSurfaces.bodyText)
         .focusEffectDisabled()
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -1255,7 +1255,7 @@ private struct BrandDeleteButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "minus.circle")
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .font(.system(size: 14))
         }
         .buttonStyle(.plain)
@@ -1273,7 +1273,7 @@ private struct OCRUndoBanner: View {
         HStack {
             Text(message)
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
             Spacer()
             Button("Undo", action: onUndo)
                 .font(.system(size: 11, weight: .medium))
@@ -1299,7 +1299,7 @@ private struct EventHandlesField: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             Text("These handles are added to every caption automatically.")
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             HandleRow(
@@ -1327,16 +1327,16 @@ private struct HandleRow: View {
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
 
             TextField(
                 "",
                 text: $text,
-                prompt: Text(placeholder).foregroundStyle(Color.warmMid.opacity(0.30))
+                prompt: Text(placeholder).foregroundStyle(PaintedSurfaces.fieldPlaceholder)
             )
             .focused($focused)
             .font(.system(size: 12))
-            .foregroundStyle(Color.warmDark)
+            .foregroundStyle(PaintedSurfaces.bodyText)
             .focusEffectDisabled()
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -1382,7 +1382,7 @@ private struct FlagReviewSection: View {
             }
             Text("Claude flagged these items as possibly wrong. Edit the value, keep the OCR text, or describe the correction in your own words.")
                 .font(.light(11))
-                .foregroundStyle(Color.warmMid)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
 
             VStack(spacing: Spacing.xs) {
                 ForEach($flags) { $flag in
@@ -1465,7 +1465,7 @@ private struct FlagRow: View {
                         .foregroundStyle(PaintedSurfaces.iconAccent)
                     Text(confirmation)
                         .font(.light(11))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.top, 4)
@@ -1477,7 +1477,7 @@ private struct FlagRow: View {
                     .padding(.top, 4)
                 TextEditor(text: $reflowText)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.warmDark)
+                    .foregroundStyle(PaintedSurfaces.bodyText)
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 56, maxHeight: 120)
                     .padding(.horizontal, 6)
@@ -1500,7 +1500,7 @@ private struct FlagRow: View {
                         ProgressView().controlSize(.small)
                         Text("Asking Claude…")
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                     } else {
                         Button("Send to Claude") { Task { await runReflow() } }
                             .buttonStyle(.plain)
@@ -1516,7 +1516,7 @@ private struct FlagRow: View {
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
                 }
             } else {
@@ -1534,7 +1534,7 @@ private struct FlagRow: View {
                         Text("Describe the correction (let Claude rewrite)")
                             .font(.system(size: 11))
                     }
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .buttonStyle(.plain)
                 .help("Type a plain-English correction. Claude will update one or more fields on this item — useful when the right fix doesn't fit a single field.")
@@ -1569,12 +1569,12 @@ private struct FlagRow: View {
                         .foregroundStyle(PaintedSurfaces.pageAccentText)
                     Text(flag.concern)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.warmDark)
+                        .foregroundStyle(PaintedSurfaces.bodyText)
                         .fixedSize(horizontal: false, vertical: true)
                     if !flag.programContext.isEmpty {
                         Text(flag.programContext)
                             .font(.light(11))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -1595,7 +1595,7 @@ private struct FlagRow: View {
                             .foregroundStyle(PaintedSurfaces.tertiaryText)
                         Text(flag.currentValue)
                             .font(.system(size: 10))
-                            .foregroundStyle(Color.warmMid)
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
                             .strikethrough(hasRealSuggestion)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -1608,7 +1608,7 @@ private struct FlagRow: View {
                                 .foregroundStyle(PaintedSurfaces.pageAccentText)
                             Text(flag.suggestedValue)
                                 .font(.system(size: 10))
-                                .foregroundStyle(Color.warmDark)
+                                .foregroundStyle(PaintedSurfaces.bodyText)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
@@ -1624,14 +1624,14 @@ private struct FlagRow: View {
                 if isStringLeaf {
                     Text("Replace \(fieldName) with:")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.warmMid)
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
                         .padding(.top, 4)
 
                     HStack(spacing: 6) {
                         TextField("", text: $draftValue)
                             .textFieldStyle(.plain)
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.warmDark)
+                            .foregroundStyle(PaintedSurfaces.bodyText)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
                             .background(

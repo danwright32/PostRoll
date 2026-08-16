@@ -128,7 +128,7 @@ struct OCRConfirmBar: View {
             if unresolvedFlagCount > 0, !help.isEmpty {
                 Text(help)
                     .font(.light(11))
-                    .foregroundStyle(Color.warmMid)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {

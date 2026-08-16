@@ -209,6 +209,103 @@ enum PaintedSurfaces {
     /// exemption cannot spread to ordinary type (L129).
     static let disabledControlLabel = Color.warmFaint
 
+    // MARK: - The app's ink, in the roles it is drawn in (#619, #620)
+    //
+    // The third time this shape has come up, and the first time it is the whole
+    // class rather than one token. #580 took the accent apart because it was
+    // right as a symbol and too pale as words; #611 did the same for the faint
+    // tone. Both were found by somebody measuring, both had been under the floor
+    // for months, and nothing could have reported either, because a colour
+    // written straight into a foreground has no name and an unnamed colour has
+    // no pair (L30).
+    //
+    // So the palette's ink now has roles too, and `testNoScreenDrawsTypeInARawPaletteColour`
+    // refuses a colour written at the point of use in any foreground or tint.
+    // 362 statements were drawing type that way when that check first ran.
+
+    /// The app's primary ink: a heading, a sentence, a value, a field's
+    /// contents. Measured 11.29:1 on the page and 9.65:1 on the deeper one, so
+    /// this moves nothing. Named because it could not be measured at all
+    /// before, which is the gap rather than the colour.
+    static let bodyText = Color.warmDark
+
+    /// The line under it: an organisation and a date, a count, a hint, the
+    /// label beside a value.
+    ///
+    /// Deeper than the `warmMid` this was. That measured 5.07:1 on the page and
+    /// **4.33:1 on the deeper one**, under the 4.5:1 body text needs, and the
+    /// deeper page is what the sidebar, the panels and every field are filled
+    /// with, so most of this app's secondary type was sitting on the surface
+    /// where the tone ran out (#619). 6.16:1 and 5.56:1 now.
+    ///
+    /// One value for both backgrounds rather than one each, and the deeper one
+    /// decided it. A role that takes its value from the easier surface is a role
+    /// that is under the line everywhere else it is used, which is exactly how
+    /// this arrived (L143).
+    ///
+    /// The same remedy, at the same strength, that #574 used on the summary
+    /// row's label, #590 on the event row's detail lines and #582 on the missing
+    /// photo badge. Those keep their own names because each is registered
+    /// against its own fill rather than against the page.
+    static let secondaryText = Color.warmDark.opacity(0.8)
+
+    /// A quieter still line that is genuinely decorative rather than read: the
+    /// separator dot between two facts, a chevron, a drag handle.
+    ///
+    /// Its own role because the alternative is a foreground with an opacity on
+    /// it at the point of use, which is what 26 of these were: `warmMid` at
+    /// strengths from 0.85 down to 0.30, measuring 3.74:1 down to **1.49:1**,
+    /// none of them named and so none of them measured. As a mark 3:1 is the
+    /// level, and this clears it at 4.33:1 on the deeper page.
+    ///
+    /// It is deliberately NOT for words. Anything that has to be read is
+    /// `secondaryText`, and the check that separates them is the pair list: this
+    /// is registered as an interface element only.
+    static let quietMark = Color.warmMid
+
+    // The two tone symbols, each as the mark and the disc behind it.
+    //
+    // The shape `lightboxCloseIcon` and its disc already have, and for the same
+    // reason: a palette-rendered SF Symbol draws its glyph ON its own disc, so
+    // the disc is what is behind the mark and the page is not. Written at the
+    // point of use as a pair of raw colours, neither half could be named, and
+    // the pale one below turned out to be the closest to the line.
+
+    /// The clear button inside a field or a panel.
+    ///
+    /// It was `warmMid` at 60% on this disc, which is 2.19:1: a mark needs 3:1
+    /// and this is the palest disc in the app, so the glyph on it had the least
+    /// room of any in the product and was given the least. 3.65:1 now. The
+    /// first value tried here was still under at 2.64:1, which is the pair walk
+    /// doing its job rather than anybody's judgement.
+    static let clearButtonGlyph = Color.warmDark.opacity(0.7)
+    static let clearButtonDisc = Color.creamEdge
+
+    /// The remove button on a thumbnail, which sits over a photograph.
+    static let removeButtonGlyph = Color.cream
+    static let removeButtonDisc = Color.warmDark.opacity(0.7)
+
+    /// The tick on a selected photo.
+    static let selectionTickGlyph = Color.cream
+
+    /// The circle beside a step that has not started.
+    ///
+    /// Deliberately not a pair, and the exemption is the reasoning the
+    /// hairlines are exempt under (L129): the step's NAME is beside it and its
+    /// position in the list is what says where the run has got to, so no
+    /// meaning rests on this mark alone. It measures 1.56:1, which would be
+    /// indefensible if it were carrying anything.
+    ///
+    /// What reviews it instead is the name, which is `secondaryText` now: a
+    /// pending step used to be drawn at 2.02:1 and was the only thing on that
+    /// row anybody had to read.
+    static let pendingStepMark = Color.creamEdge
+
+    /// The ink on the Instagram card, which is black because Instagram is
+    /// black. Named for the reason the rest of that mock was in #600: exempt by
+    /// a decision somebody made rather than by nobody having looked.
+    static let instagramInk = Color.black
+
     // MARK: - The rest of the app's painted surfaces (#582)
     //
     // #574 named the surfaces the notices paint. Seventeen other view files
@@ -536,6 +633,17 @@ enum PaintedSurfaces {
     /// (#600). It satisfies the palette's warm rule exactly, R equal to B.
     static let insightConfidenceHigh = Color(red: 110/255, green: 140/255, blue: 110/255)
 
+    /// The other two ratings, which the table had all along and nobody could
+    /// see (#620).
+    ///
+    /// #600 named the high one because it was written from literal components,
+    /// and left these two because they were written as palette tokens, so a
+    /// three entry lookup ended up with one entry measured and two exempt for
+    /// no reason anybody chose (L113). Both are marks, at the 3:1 a mark needs:
+    /// 4.33:1 and 4.31:1 on the page.
+    static let insightConfidenceMedium = Color.roseGold
+    static let insightConfidenceLow = Color.warmMid
+
     /// The caption findings badge and the panel under it, in both states (#600).
     ///
     /// One place decides the wash and the ink, the shape #582 gave the stage
@@ -628,6 +736,16 @@ enum PaintedSurfaces {
         "outlineButtonHitArea": outlineButtonHitArea,
         "pageAccentText": pageAccentText,
         "iconAccent": iconAccent,
+        "bodyText": bodyText,
+        "secondaryText": secondaryText,
+        "quietMark": quietMark,
+        "clearButtonGlyph": clearButtonGlyph,
+        "clearButtonDisc": clearButtonDisc,
+        "removeButtonGlyph": removeButtonGlyph,
+        "removeButtonDisc": removeButtonDisc,
+        "selectionTickGlyph": selectionTickGlyph,
+        "pendingStepMark": pendingStepMark,
+        "instagramInk": instagramInk,
         "tertiaryText": tertiaryText,
         "fieldPlaceholder": fieldPlaceholder,
         "disabledControlLabel": disabledControlLabel,
@@ -691,6 +809,8 @@ enum PaintedSurfaces {
         "instagramCardEdge": instagramCardEdge,
         "instagramLink": instagramLink,
         "insightConfidenceHigh": insightConfidenceHigh,
+        "insightConfidenceMedium": insightConfidenceMedium,
+        "insightConfidenceLow": insightConfidenceLow,
         "dividerRule": dividerRule,
         "photoPlaceholder": photoPlaceholder,
         "photoPlaceholderSpinner": photoPlaceholderSpinner,
@@ -810,6 +930,24 @@ enum PaintedSurfaces {
         pairs.append(Pair("field placeholder", "placeholder",
                           fieldPlaceholder, on: deepPage, .bodyText))
 
+        // The app's ink, each role on both of the page colours it can land on
+        // (#619, #620). Both, not the easier one: the whole of #619 is that
+        // secondary type was judged by eye on cream and then drawn on the
+        // deeper page, where the same tone is 4.33:1.
+        for (name, colour, kind) in [
+            ("body text", bodyText, Kind.bodyText),
+            ("secondary text", secondaryText, Kind.bodyText),
+            // A mark rather than words, at the level a mark is held to, and the
+            // one role here allowed to stay at the tone that was too pale for
+            // type. What keeps it honest is that it is registered ONLY as an
+            // interface element, so using it for a sentence is using a name
+            // that was never measured for one (L143).
+            ("quiet mark", quietMark, Kind.interfaceElement),
+        ] {
+            pairs.append(Pair(name, "on the page", colour, on: page, kind))
+            pairs.append(Pair(name, "on the deeper page", colour, on: deepPage, kind))
+        }
+
         // Every stage pill, on both of the row backgrounds it can sit on
         // (#582). Per state rather than one sample of the family: the wash is
         // the pill's own colour, so each state is a different measurement and
@@ -898,9 +1036,30 @@ enum PaintedSurfaces {
                               .bodyText))
         }
 
+        // The two tone symbols, each mark against its own disc rather than
+        // against the page (#620). The clear button is why these are named: at
+        // the tone it was written in it measured under the level a mark needs,
+        // on the palest disc in the app.
+        pairs.append(Pair("clear button", "glyph",
+                          clearButtonGlyph,
+                          on: clearButtonDisc.composited(over: page),
+                          .interfaceElement))
+        // Over the brightest a photograph can be, like every other surface
+        // drawn on one.
+        pairs.append(Pair("remove button", "glyph",
+                          removeButtonGlyph,
+                          on: removeButtonDisc.composited(over: brightestPhoto),
+                          .interfaceElement))
+        pairs.append(Pair("selection tick", "glyph",
+                          selectionTickGlyph, on: iconAccent, .interfaceElement))
+
         // A confident rating, as the dot and the tick it is drawn as.
-        pairs.append(Pair("insight confidence", "high",
-                          insightConfidenceHigh, on: page, .interfaceElement))
+        for (rating, colour) in [("high", insightConfidenceHigh),
+                                 ("medium", insightConfidenceMedium),
+                                 ("low", insightConfidenceLow)] {
+            pairs.append(Pair("insight confidence", rating,
+                              colour, on: page, .interfaceElement))
+        }
 
         // The divider handle, in both of its states, over the worst a photo can
         // be underneath it.
