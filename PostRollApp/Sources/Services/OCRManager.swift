@@ -181,7 +181,7 @@ final class OCRManager {
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
-                    failure = error.localizedDescription
+                    failure = ((error as? PythonBridgeError)?.message(whileDoing: .programRead) ?? error.localizedDescription)
                 }
                 switch WebPerformersOutcome.decide(fetched: fetched, failure: failure) {
                 case .use(let performers):        result.performers = performers
@@ -215,7 +215,7 @@ final class OCRManager {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                flagError = error.localizedDescription
+                flagError = ((error as? PythonBridgeError)?.message(whileDoing: .programRead) ?? error.localizedDescription)
             }
 
             finishSuccess(eventID: eventID, snapshot: ev, result: result,
@@ -240,7 +240,7 @@ final class OCRManager {
                     + "scan stopped. Check the cast list and notes against the "
                     + "printed programme, or scan again. (\(reason))")
         } catch {
-            finishFailure(eventID: eventID, message: error.localizedDescription)
+            finishFailure(eventID: eventID, message: ((error as? PythonBridgeError)?.message(whileDoing: .programRead) ?? error.localizedDescription))
         }
     }
 

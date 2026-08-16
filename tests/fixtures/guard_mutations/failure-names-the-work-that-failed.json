@@ -1,0 +1,8 @@
+{
+  "name": "failure-names-the-work-that-failed",
+  "file": "PostRollApp/Sources/Services/PythonBridgeError.swift",
+  "find": "            return \"\\(work.subject) finished but produced no output.",
+  "replace": "            return \"Generation finished but produced no output.",
+  "test": "PostRollTests/PythonBridgeErrorTests/testAFailedProgramReadIsNeverCalledGeneration",
+  "breaks": "a failed program read is described as generation again, on the one screen that says a paid read did not work, under a heading saying the program could not be read (#626, L118)"
+}

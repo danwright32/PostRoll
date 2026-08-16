@@ -1,5 +1,37 @@
 import Foundation
 
+/// What was running when a bridge call failed, in the words the person uses
+/// for it (#626).
+///
+/// `PythonBridgeError` is thrown from sixteen places across program reads,
+/// generation and export, and every sentence it produced began "Generation".
+/// That is right for one caller and wrong for the others, and it was wrongest
+/// on the screen that says a paid program read did not work: the heading says
+/// the program could not be read and the sentence under it named a different
+/// stage of the app. Each sentence was defensible where it was written and the
+/// contradiction existed only in the reading (L118).
+///
+/// The subject is supplied by whoever STARTED the work, because that is the
+/// only place that knows. `other` is the default rather than a guess: a caller
+/// that says nothing gets a vague sentence instead of a confidently wrong one,
+/// and a vague sentence is never the wrong claim (L93).
+enum PythonBridgeWork: CaseIterable {
+    case programRead
+    case generation
+    case export
+    case other
+
+    /// How a failure sentence names it.
+    var subject: String {
+        switch self {
+        case .programRead: return "The program read"
+        case .generation:  return "Generation"
+        case .export:      return "The export"
+        case .other:       return "The run"
+        }
+    }
+}
+
 enum PythonBridgeError: LocalizedError {
     case scriptFailed(exitCode: Int32, stderr: String)
     case outputMissing
@@ -13,12 +45,17 @@ enum PythonBridgeError: LocalizedError {
     /// than a failure, because nothing then tells Dan to check the rest.
     case partialOCR(OCRResult, reason: String)
 
-    var errorDescription: String? {
+    /// The safe wording, for the many call sites that reach this through
+    /// `localizedDescription` and cannot say what they were doing.
+    var errorDescription: String? { message(whileDoing: .other) }
+
+    /// The same failure, named in the language of the work that failed.
+    func message(whileDoing work: PythonBridgeWork) -> String {
         switch self {
         case .scriptFailed(_, let stderr):
-            return Self.humanise(stderr: stderr)
+            return Self.humanise(stderr: stderr, work: work)
         case .outputMissing:
-            return "Generation finished but produced no output. Check that the program PDF has readable text and try again."
+            return "\(work.subject) finished but produced no output. Check that the program PDF has readable text and try again."
         case .invalidOutput(let reason):
             // Every call site writes a reason and this switch used to discard
             // all of them, so "No OCR result. Complete the OCR step first."
@@ -28,11 +65,11 @@ enum PythonBridgeError: LocalizedError {
             let detail = reason.trimmingCharacters(in: .whitespacesAndNewlines)
             let whereToLook = "If it keeps failing, check \(AppPaths.logsDirDisplayPath)."
             guard !detail.isEmpty else {
-                return "Generated output couldn't be read. Try regenerating. \(whereToLook)"
+                return "\(work.subject) produced something PostRoll could not read. Try again. \(whereToLook)"
             }
             return "\(detail)\n\n\(whereToLook)"
         case .timedOut(let seconds):
-            return "The operation was still running after \(Int(seconds / 60)) minutes and was stopped. Check your internet connection and try again."
+            return "\(work.subject) was still running after \(Int(seconds / 60)) minutes and was stopped. Check your internet connection and try again."
         case .partialOCR(let result, let reason):
             let read = [
                 result.performers.isEmpty ? nil : "\(result.performers.count) performer\(result.performers.count == 1 ? "" : "s")",
@@ -53,7 +90,7 @@ enum PythonBridgeError: LocalizedError {
     /// a whole run. `GenerationFailureText` says it in the language of one day,
     /// off the same kind, so the two can no longer disagree about what happened
     /// or how long to wait (#401).
-    private static func humanise(stderr: String) -> String {
+    private static func humanise(stderr: String, work: PythonBridgeWork) -> String {
         switch RunFailureKind.of(stderr) {
         case .ffmpegMissing:
             return "Media generation failed: ffmpeg is not installed. Run `brew install ffmpeg` "
@@ -70,32 +107,32 @@ enum PythonBridgeError: LocalizedError {
         case .overloaded:
             return waitSentence("The AI service is overloaded right now.", .overloaded)
         case .authFailed:
-            return "Generation failed: the AI service rejected the API key. Check that "
+            return "\(work.subject) failed: the AI service rejected the API key. Check that "
                  + "ANTHROPIC_API_KEY is set correctly, then try again."
         case .aiServiceError:
-            return waitSentence("Generation failed: the AI service returned an error.",
+            return waitSentence("\(work.subject) failed: the AI service returned an error.",
                                 .aiServiceError)
         // Deliberately no wait and no retry: this fails identically every time
         // until the model id is changed, so offering a wait would send Dan round
         // a loop that cannot end (#542).
         case .modelUnavailable(let model):
             let named = model.map { "a model called \($0)" } ?? "a model"
-            return "Generation failed: PostRoll asked the AI service for \(named), which it "
+            return "\(work.subject) failed: PostRoll asked the AI service for \(named), which it "
                  + "does not have. This is a PostRoll configuration problem rather than "
                  + "something to retry: the model ids live in postroll/ai/model_ids.py and "
                  + "one of them has been retired."
         case .outputUnreadable:
-            return "Generation failed: the output could not be read. This is usually a "
+            return "\(work.subject) failed: the output could not be read. This is usually a "
                  + "temporary issue. Try again."
         case .fileMissing:
-            return "Generation failed: a required file was not found. Check that your photos "
+            return "\(work.subject) failed: a required file was not found. Check that your photos "
                  + "are still in their original locations."
         // The per-day kinds cannot be reached from here, because `of` is called
         // without a day. Named rather than defaulted, so adding a kind is a
         // compile error here instead of silently becoming the fallback.
         case .beforeAfterInputsMissing, .reelPhotosMissing,
              .storyFallbackFailed, .unknown:
-            return fallback(stderr: stderr)
+            return fallback(stderr: stderr, work: work)
         }
     }
 
@@ -103,6 +140,24 @@ enum PythonBridgeError: LocalizedError {
     private static func waitSentence(_ cause: String, _ kind: RunFailureKind) -> String {
         guard let wait = kind.waitAdvice else { return "\(cause) Try again." }
         return "\(cause) Wait \(wait) and try again."
+    }
+
+    /// The last line of a traceback begins with the name of a type inside the
+    /// program: `RuntimeError:`, `ValueError:`, `anthropic.APIError:`. That is
+    /// the first thing a photographer is shown at the moment something has
+    /// already gone wrong, and there is nothing they can do with it (#626).
+    ///
+    /// Only the leading class name, and only when something is left after it.
+    /// A rule that matches by SHAPE has to be tested against what it must
+    /// PRESERVE as well as what it must catch (L104): the description behind
+    /// the colon is the only account of what happened, so dropping it would
+    /// make the message say less than the raw traceback did.
+    private static func withoutExceptionClass(_ line: String) -> String {
+        guard let match = line.range(
+            of: #"^[A-Za-z_][A-Za-z0-9_.]*(Error|Exception):\s*"#,
+            options: .regularExpression) else { return line }
+        let rest = String(line[match.upperBound...])
+        return rest.isEmpty ? line : rest
     }
 
     /// The last line of stderr rather than a raw traceback, and never the whole
@@ -114,12 +169,13 @@ enum PythonBridgeError: LocalizedError {
     /// which Python tracebacks routinely are. The other is the ordinary case,
     /// where a sentence-shaped message from our own Python already ends in a stop
     /// and a bare exception repr ends in nothing.
-    private static func fallback(stderr: String) -> String {
+    private static func fallback(stderr: String, work: PythonBridgeWork) -> String {
         let trimmed = stderr.split(separator: "\n")
             .last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
             .map(String.init) ?? stderr
-        let preview = trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
-        return "Generation failed: \(Sentence.closed(preview)) "
+        let named = withoutExceptionClass(trimmed)
+        let preview = named.count > 120 ? String(named.prefix(120)) + "…" : named
+        return "\(work.subject) failed: \(Sentence.closed(preview)) "
              + "Check \(AppPaths.logsDirDisplayPath) if this persists."
     }
 }
