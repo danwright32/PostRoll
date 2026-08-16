@@ -47,10 +47,34 @@ build:
 		build
 	@echo "Build complete. Use 'make install' to install a signed, verified bundle."
 
-# The Swift model/service suite. Excludes the UI tests, which drive the real GUI.
+# The three tests that RENDER rather than check, named once so the sheet can
+# select them and the ordinary suite can skip them (#644).
+REVIEW_TESTS := \
+	PostRollTests/BannerLegibilityTests/testDumpBannersForReview \
+	PostRollTests/HostedControlLegibilityTests/testDumpEveryMeasuredScreenForReview \
+	PostRollTests/PhotoLightboxTests/testDumpTheLightboxForReview
+
+# The Swift model/service suite. Excludes the UI tests, which drive the real GUI,
+# and the three screenshot dumps.
+#
+# The dumps are skipped because they are not checks, they are a rendering, and
+# rendering them here CONSUMED the thing `make review-sheet` compares against
+# (#644). The dump clears the sheet folder and keeps what was there as the
+# baseline, so the ordinary order of work (render the sheet, change something,
+# run the suite, look at the sheet) rotated the POST-change pictures into the
+# baseline and the comparison then reported nothing had moved. A comparison that
+# reports no difference because its reference point was overwritten is worse
+# than no comparison.
+#
+# Skipped from the same REVIEW_TESTS list the sheet selects, so the two cannot
+# drift into disagreeing about which tests are renderings (L41). CI runs
+# xcodebuild directly rather than through here, so the dumps are still proven
+# there on every push; what is skipped is only the local rendering.
 test:
 	@$(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
-		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' test
+		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
+		$(foreach t,$(REVIEW_TESTS),-skip-testing:$(t)) \
+		test
 
 # The full local suite, in ONE parallel pass (#497).
 #
@@ -131,10 +155,7 @@ check-toolchain:
 # SUCCEEDED, and this target cheerfully announced 80 images with the whole
 # lightbox group absent. A spec matching nothing is not a pass (L98), so the
 # count of groups that reported is held to the count of tests asked for.
-REVIEW_TESTS := \
-	PostRollTests/BannerLegibilityTests/testDumpBannersForReview \
-	PostRollTests/HostedControlLegibilityTests/testDumpEveryMeasuredScreenForReview \
-	PostRollTests/PhotoLightboxTests/testDumpTheLightboxForReview
+
 
 review-sheet:
 	out=$$($(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \

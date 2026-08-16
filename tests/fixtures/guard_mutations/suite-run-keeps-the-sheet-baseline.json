@@ -1,0 +1,8 @@
+{
+  "name": "suite-run-keeps-the-sheet-baseline",
+  "file": "Makefile",
+  "find": "\t\t$(foreach t,$(REVIEW_TESTS),-skip-testing:$(t)) \\",
+  "replace": "\t\t\\",
+  "test": "tests/test_build_and_test_gates.py::test_an_ordinary_suite_run_skips_the_renderings",
+  "breaks": "an ordinary `make test` re-renders the review sheet, which rotates the post-change pictures into the baseline, so the next comparison reports that nothing moved when something did. A comparison that reports no difference because its reference point was overwritten is worse than no comparison, because it is believed (#644)"
+}

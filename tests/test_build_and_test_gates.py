@@ -343,3 +343,54 @@ def test_the_install_gate_runs_the_fast_subset_and_ci_still_runs_everything():
         "CI is deselecting the slow files as well, so the four files that render "
         "real reels now run nowhere: the install gate was relaxed on the promise "
         "that every merge still runs them")
+
+
+# ── The screenshot baseline survives an ordinary suite run (#644) ─────────────
+
+
+def _makefile() -> str:
+    return (Path(__file__).resolve().parent.parent / "Makefile").read_text()
+
+
+def _review_tests() -> list[str]:
+    """The renderings, read from the one list the Makefile keeps them in."""
+    text = _makefile()
+    start = text.index("REVIEW_TESTS := ")
+    block = text[start:text.index("\n\n", start)]
+    names = [line.strip().rstrip("\\").strip()
+             for line in block.split("\n")[1:]]
+    return [name for name in names if name]
+
+
+def test_the_makefile_names_the_renderings_once():
+    """If this finds nothing the two checks below pass while proving nothing
+    (L98)."""
+    assert len(_review_tests()) >= 3, _review_tests()
+
+
+def test_an_ordinary_suite_run_skips_the_renderings():
+    """The dumps clear the sheet folder and keep what was there as the
+    baseline, so rendering them during `make test` rotated the POST-change
+    pictures into the baseline and the comparison then reported that nothing
+    had moved (#644).
+
+    A comparison reporting no difference because its reference point was
+    overwritten is worse than no comparison, because it is believed."""
+    target = _makefile()
+    body = target[target.index("\ntest:"):target.index("\ntest-python:")]
+
+    for name in _review_tests():
+        assert f"-skip-testing:{name}" in body or "$(REVIEW_TESTS)" in body, (
+            f"`make test` runs {name}, which re-renders the review sheet and "
+            "consumes the baseline the comparison needs")
+
+
+def test_the_sheet_selects_exactly_what_the_suite_skips():
+    """One list, so the two cannot drift into disagreeing about which tests are
+    renderings rather than checks (L41)."""
+    target = _makefile()
+    skipping = target[target.index("\ntest:"):target.index("\ntest-python:")]
+    selecting = target[target.index("\nreview-sheet:"):]
+
+    assert "$(foreach t,$(REVIEW_TESTS),-skip-testing:$(t))" in skipping
+    assert "$(foreach t,$(REVIEW_TESTS),-only-testing:$(t))" in selecting
