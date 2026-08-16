@@ -1610,25 +1610,25 @@ extension BannerLegibilityTests {
     /// that cannot fail is indistinguishable from one that silently stopped
     /// working, and this codebase already treats that as a defect.
     func testDumpBannersForReview() throws {
-        let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["POSTROLL_BANNER_DUMP"]
-            ?? FileManager.default.temporaryDirectory.appendingPathComponent("postroll-banners").path)
-        // Cleared first: an image left by an earlier run is a picture of a
-        // state the app may no longer produce, and reviewing it is worse than
-        // reviewing nothing.
-        try? FileManager.default.removeItem(at: out)
-        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        // Into the one shared folder now (#623), so the notices sit beside the
+        // screens they appear on rather than in a directory of their own that
+        // has to be found separately. `ReviewSheet` empties it once per process
+        // and prints where it is.
         for state in states {
-            let rep = try render(state.view)
-            let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
-            try png.write(to: out.appendingPathComponent(
-                state.name.replacingOccurrences(of: " ", with: "-") + ".png"))
+            try ReviewSheet.write(try render(state.view),
+                                  group: Self.reviewGroup, name: state.name)
         }
 
-        let written = try FileManager.default.contentsOfDirectory(atPath: out.path)
-            .filter { $0.hasSuffix(".png") }
-        XCTAssertEqual(written.count, states.count,
-                       "every state has to reach disk, or a review of these images is a "
-                       + "review of whichever ones happened to be written")
+        let written = try ReviewSheet.written(group: Self.reviewGroup)
+        ReviewSheet.announce(group: Self.reviewGroup, count: written.count)
+
+        XCTAssertEqual(written.count, states.count, """
+            \(states.count) notices were rendered and \(written.count) reached \
+            \(ReviewSheet.folder.path). A review of these images is otherwise a review \
+            of whichever ones happened to be written.
+            """)
     }
+
+    fileprivate static let reviewGroup = "notices"
 }
 #endif

@@ -150,3 +150,37 @@ final class PhotoLightboxTests: XCTestCase {
             try String(contentsOf: url, encoding: .utf8))
     }
 }
+
+#if POSTROLL_TESTS
+extension PhotoLightboxTests {
+    /// The lightbox into the shared review sheet (#623).
+    ///
+    /// It is the one measured surface that had no dump of its own, and it is
+    /// the hardest of them to reach by hand: it only appears over a photo that
+    /// has gone missing off disk.
+    ///
+    /// Both states, because the file name is the useful half of this screen and
+    /// the check next door exists to prove it is drawn: a sheet showing only the
+    /// named one could not show that.
+    func testDumpTheLightboxForReview() throws {
+        let states = [("a file that has gone", "DSC_4417.jpg"),
+                      ("a file with no name", "")]
+
+        for (name, fileName) in states {
+            try ReviewSheet.write(try render(wordless: false, fileName: fileName),
+                                  group: Self.reviewGroup, name: name)
+        }
+
+        let written = try ReviewSheet.written(group: Self.reviewGroup)
+        ReviewSheet.announce(group: Self.reviewGroup, count: written.count)
+
+        XCTAssertEqual(written.count, states.count, """
+            \(states.count) lightbox states were rendered and \(written.count) reached \
+            \(ReviewSheet.folder.path), so the sheet is missing one and reads exactly \
+            like a sheet holding both.
+            """)
+    }
+
+    fileprivate static let reviewGroup = "lightbox"
+}
+#endif
