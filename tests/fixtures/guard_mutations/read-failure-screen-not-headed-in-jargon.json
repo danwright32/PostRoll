@@ -1,0 +1,8 @@
+{
+  "name": "read-failure-screen-not-headed-in-jargon",
+  "file": "PostRollApp/Sources/Services/OCRProgressText.swift",
+  "find": "    static let failureHeading = \"Couldn't read the program\"",
+  "replace": "    static let failureHeading = \"OCR Failed\"",
+  "test": "PostRollTests/HostedControlLegibilityTests/testNeitherProgramReadScreenIsHeadedInJargon",
+  "breaks": "the screen that says a paid read did not work goes back to naming the step by the app's internal term for it, while the screen immediately before it says the program is being read, so the pair reads as two features (#622)"
+}

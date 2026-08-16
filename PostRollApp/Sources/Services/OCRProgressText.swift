@@ -20,6 +20,27 @@ enum OCRProgressText {
         let isStalled: Bool
     }
 
+    // MARK: - What the two screens call themselves (#622)
+    //
+    // Both here rather than one word typed into each view, for the reason the
+    // phase table moved here in #607: the check has to see the string the app
+    // shows. It also makes them a PAIR, which is the whole defect. They are
+    // read one after the other and nothing else ever reads either of them, so
+    // the contradiction only existed in the reading and each sentence was
+    // defensible alone (L118).
+
+    /// The tracked label under the event's name while the program is being
+    /// read.
+    static let readingHeading = "Reading Program"
+
+    /// The heading on the screen that says the read did not work.
+    ///
+    /// Was "OCR Failed", which is the name for the step inside the code. The
+    /// screen before it says the app is reading a program, so the two together
+    /// read as two features, on the one screen that reports a paid read did not
+    /// work and offers the way to run it again (#622).
+    static let failureHeading = "Couldn't read the program"
+
     /// The phase label. The run's own step when it has reported one, otherwise
     /// the elapsed-derived guess, which is honest as a guess but cannot be
     /// evidence of anything.

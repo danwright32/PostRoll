@@ -141,7 +141,7 @@ struct OCRProgressBody: View {
                     .font(.signPainter(28))
                     .foregroundStyle(Color.warmDark)
 
-                Text("Reading Program")
+                Text(OCRProgressText.readingHeading)
                     .font(.system(size: 10, weight: .medium))
                     .tracking(1.4)
                     .foregroundStyle(PaintedSurfaces.pageAccentText)
@@ -250,7 +250,7 @@ struct OCRFailureBody: View {
                 .foregroundStyle(PaintedSurfaces.iconAccent)
 
             VStack(spacing: 6) {
-                Text("OCR Failed")
+                Text(OCRProgressText.failureHeading)
                     .font(.signPainter(28))
                     .foregroundStyle(Color.warmDark)
                     .opacity(opacity(.heading))

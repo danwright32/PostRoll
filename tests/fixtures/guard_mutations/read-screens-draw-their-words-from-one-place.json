@@ -1,0 +1,8 @@
+{
+  "name": "read-screens-draw-their-words-from-one-place",
+  "file": "PostRollApp/Sources/Views/OCRProgressView.swift",
+  "find": "                Text(OCRProgressText.failureHeading)",
+  "replace": "                Text(\"OCR Failed\")",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheProgramReadScreensDrawNoJargonOfTheirOwn",
+  "breaks": "the heading is typed back into the view, which leaves the named wording correct, unread and passing while the screen says something else, and a value nothing reads is indistinguishable from one that works (#622, L46)"
+}
