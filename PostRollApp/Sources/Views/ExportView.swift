@@ -511,7 +511,7 @@ private struct ExportSummaryCard: View {
         .clipShape(RoundedRectangle(cornerRadius: Radius.md))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(Color.creamEdge, lineWidth: 1)
+                .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)
         )
     }
 }

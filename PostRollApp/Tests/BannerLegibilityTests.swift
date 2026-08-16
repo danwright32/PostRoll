@@ -841,7 +841,17 @@ final class BannerLegibilityTests: XCTestCase {
             .enumerated()
             .compactMap { index, raw in
                 let line = raw.trimmingCharacters(in: .whitespaces)
-                guard line.contains(".background(") || line.contains(".fill(") else {
+                // The two painting modifiers, plus the four that draw a LINE or
+                // a shadow rather than an area (#628). A border is still exempt
+                // from the contrast level, for the reason written over the pair
+                // list, but exempt from being MEASURED is not exempt from being
+                // named: 31 of these were colours written at the point of use,
+                // where nothing else can say what they are or notice one
+                // changing. The fill rule had covered the two spellings that
+                // fill an area and read as though it covered the rest.
+                guard [".background(", ".fill(", ".stroke(",
+                       ".strokeBorder(", ".border(", ".shadow("]
+                        .contains(where: line.contains) else {
                     return nil
                 }
                 let mentionsAColour = line.range(of: #"Color\.[A-Za-z]"#,
@@ -869,6 +879,15 @@ final class BannerLegibilityTests: XCTestCase {
             "            .background(isDragging ? Color.roseGold : Color.black.opacity(0.65))",
             "                Capsule().fill((stale ? Color.warmMid : Color.roseDeep).opacity(0.12))",
             "            .fill(LinearGradient(colors: [Color(red: 1.0, green: 0.78, blue: 0.22)],",
+            // The four that draw a line or a shadow rather than an area (#628).
+            // These were outside the rule entirely, and 31 borders had been
+            // written at the point of use while this check read as covering
+            // every painted surface in the app.
+            "                .strokeBorder(Color.creamEdge, lineWidth: 1)",
+            "                .stroke(Color.warmMid.opacity(0.2), lineWidth: 1)",
+            "        .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: 2)",
+            "            .border(Color.roseGold)",
+            "            .strokeBorder(isSelected ? Color.roseGold : Color.creamEdge, lineWidth: 1)",
         ]
         for line in mustCatch {
             let hits = unnamedFills(in: line).count + bareColourViews(in: line).count
@@ -886,6 +905,8 @@ final class BannerLegibilityTests: XCTestCase {
             "            .fill(PaintedSurfaces.captionFindings(stale: stale).panel)",
             "            .background(Color.clear)",
             "            .foregroundStyle(Color.warmDark)",
+            "                .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)",
+            "                .stroke(PaintedSurfaces.accentBorder.opacity(0.2), lineWidth: 1)",
             "    static let creamDeep = Color(red: 237/255, green: 232/255, blue: 224/255)",
         ]
         for line in mustAllow {

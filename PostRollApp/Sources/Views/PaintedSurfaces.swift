@@ -319,6 +319,36 @@ enum PaintedSurfaces {
     /// hairlines below.
     static let edgeRule = Color.creamEdge
 
+    // MARK: - The lines, at last (#628)
+    //
+    // #574 named the fills, #620 named the type, and the rule about fills read
+    // the two spellings that fill an AREA. A line drawn with `.stroke`,
+    // `.strokeBorder`, `.border` or `.shadow` was outside all of it, and 31
+    // borders were colours written at the point of use.
+    //
+    // Still deliberately NOT pairs. The reasoning over the pair list stands:
+    // every surface here is identified by its fill, its icon and its words, so
+    // no meaning rests on a border alone and the level for interface components
+    // does not apply to it. Exempt from being MEASURED is not exempt from being
+    // NAMED, though: an unnamed border is one nothing else can describe, notice
+    // changing, or hold to the decision above.
+
+    /// The accent as an outline: a focused field, a selected card, a panel that
+    /// wants the eye. At whatever strength its call site asks for, the way
+    /// `dividerRule` is.
+    static let accentBorder = Color.roseGold
+
+    /// The outline button's own edge, deeper than the accent because its label
+    /// is `outlineButtonLabel` and the two read as one control.
+    static let outlineButtonBorder = Color.roseDeep.opacity(0.55)
+
+    /// The rule around a preview thumbnail that has been given a treatment.
+    static let treatmentTileBorder = Color.warmMid.opacity(0.2)
+
+    /// What lifts the Instagram card off the page. Part of the mock, so exempt
+    /// for the reason the rest of that card is (#600).
+    static let instagramCardShadow = Color.black.opacity(0.18)
+
     /// The accent hairline `RoseGoldDivider` draws, at whatever strength its
     /// call site asks for.
     ///
@@ -750,6 +780,10 @@ enum PaintedSurfaces {
         "fieldPlaceholder": fieldPlaceholder,
         "disabledControlLabel": disabledControlLabel,
         "mastheadWordmark": mastheadWordmark,
+        "accentBorder": accentBorder,
+        "outlineButtonBorder": outlineButtonBorder,
+        "treatmentTileBorder": treatmentTileBorder,
+        "instagramCardShadow": instagramCardShadow,
         "edgeRule": edgeRule,
         "eventRow": eventRow,
         "eventRowSelectedFill": eventRowSelectedFill,

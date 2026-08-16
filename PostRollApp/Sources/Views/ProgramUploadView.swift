@@ -53,7 +53,7 @@ struct ProgramUploadView: View {
                             RoundedRectangle(cornerRadius: Radius.xs)
                                 .fill(PaintedSurfaces.deepPage)
                                 .overlay(RoundedRectangle(cornerRadius: Radius.xs)
-                                    .strokeBorder(Color.creamEdge, lineWidth: 1))
+                                    .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1))
                         )
                         .onChange(of: eventURL) { _, url in
                             // Live read, never the captured prop (#103).
@@ -434,7 +434,7 @@ private struct ProgramDropZone: View {
         .background(PaintedSurfaces.deepPage)
         .overlay(
             RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(Color.roseGold.opacity(0.3),
+                .strokeBorder(PaintedSurfaces.accentBorder.opacity(0.3),
                               style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
         )
     }
@@ -533,7 +533,7 @@ private struct ProgramThumbnail: View {
             .clipShape(RoundedRectangle(cornerRadius: Radius.md))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.md)
-                    .strokeBorder(Color.creamEdge, lineWidth: 0.5)
+                    .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 0.5)
             )
 
             Button(action: onRemove) {

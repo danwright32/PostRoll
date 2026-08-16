@@ -90,7 +90,7 @@ struct BrandOutlineButtonStyle: ButtonStyle {
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm)
-                    .strokeBorder(Color.roseDeep.opacity(0.55), lineWidth: 1)
+                    .strokeBorder(PaintedSurfaces.outlineButtonBorder, lineWidth: 1)
                     .background(
                         RoundedRectangle(cornerRadius: Radius.sm)
                             .fill(configuration.isPressed

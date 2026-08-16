@@ -536,7 +536,7 @@ struct HashtagSettingsSheet: View {
                                 RoundedRectangle(cornerRadius: Radius.xs)
                                     .fill(PaintedSurfaces.deepPage)
                                     .overlay(RoundedRectangle(cornerRadius: Radius.xs)
-                                        .strokeBorder(Color.creamEdge, lineWidth: 1))
+                                        .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1))
                             )
                             .onChange(of: globalRaw) { _, _ in saveGlobal() }
                     }
@@ -593,7 +593,7 @@ struct HashtagSettingsSheet: View {
                                         RoundedRectangle(cornerRadius: Radius.xs)
                                             .fill(PaintedSurfaces.deepPage)
                                             .overlay(RoundedRectangle(cornerRadius: Radius.xs)
-                                                .strokeBorder(Color.creamEdge, lineWidth: 1))
+                                                .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1))
                                     )
                                 TextField("Tags (space-separated)", text: $newPresetTags)
                                     .font(.system(size: 12))
@@ -604,7 +604,7 @@ struct HashtagSettingsSheet: View {
                                         RoundedRectangle(cornerRadius: Radius.xs)
                                             .fill(PaintedSurfaces.deepPage)
                                             .overlay(RoundedRectangle(cornerRadius: Radius.xs)
-                                                .strokeBorder(Color.creamEdge, lineWidth: 1))
+                                                .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1))
                                     )
                                 HStack(spacing: Spacing.sm) {
                                     Button("Save") {

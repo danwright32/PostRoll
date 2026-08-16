@@ -1401,7 +1401,7 @@ private struct FlagReviewSection: View {
         .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.sm)
-                .strokeBorder(Color.roseGold.opacity(0.25), lineWidth: 1)
+                .strokeBorder(PaintedSurfaces.accentBorder.opacity(0.25), lineWidth: 1)
         )
     }
 }
@@ -1486,7 +1486,7 @@ private struct FlagRow: View {
                         RoundedRectangle(cornerRadius: Radius.xs)
                             .fill(PaintedSurfaces.page)
                             .overlay(RoundedRectangle(cornerRadius: Radius.xs)
-                                .strokeBorder(Color.creamEdge, lineWidth: 1))
+                                .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1))
                     )
                     .disabled(isReflowing)
                 if let err = reflowError {
@@ -1638,7 +1638,7 @@ private struct FlagRow: View {
                                 RoundedRectangle(cornerRadius: Radius.xs)
                                     .fill(PaintedSurfaces.page)
                                     .overlay(RoundedRectangle(cornerRadius: Radius.xs)
-                                        .strokeBorder(Color.creamEdge, lineWidth: 1))
+                                        .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1))
                             )
                         Button("Save correction") {
                             guard draftIsChange else { return }

@@ -167,7 +167,7 @@ private struct ShootTypeOption: View {
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .strokeBorder(isSelected ? Color.roseGold : Color.creamEdge, lineWidth: 1.5)
+                        .strokeBorder(isSelected ? PaintedSurfaces.accentBorder : PaintedSurfaces.edgeRule, lineWidth: 1.5)
                         .frame(width: 18, height: 18)
                     if isSelected {
                         Circle()

@@ -249,7 +249,7 @@ private struct InsightsEmptyState: View {
                 .fill(PaintedSurfaces.deepPage)
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.md)
-                        .strokeBorder(Color.creamEdge, lineWidth: 1)
+                        .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)
                 )
         )
     }
@@ -501,7 +501,7 @@ private struct BrandVoiceSuggestionRow: View {
                 .fill(PaintedSurfaces.deepPage)
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.sm)
-                        .strokeBorder(Color.creamEdge, lineWidth: 1)
+                        .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)
                 )
         )
     }
