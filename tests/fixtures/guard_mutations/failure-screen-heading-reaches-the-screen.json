@@ -1,0 +1,8 @@
+{
+  "name": "failure-screen-heading-reaches-the-screen",
+  "file": "PostRollApp/Sources/Views/OCRProgressView.swift",
+  "find": "                Text(\"OCR Failed\")\n                    .font(.signPainter(28))\n                    .foregroundStyle(Color.warmDark)",
+  "replace": "                Text(\"OCR Failed\")\n                    .font(.signPainter(28))\n                    .foregroundStyle(PaintedSurfaces.page)",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheFailureScreenDrawsEveryOneOfItsWords",
+  "breaks": "the heading on the only screen that says a paid read did not work is drawn in the colour of the page behind it, so it is in the view tree and invisible on screen, and the symbol and the button fill are enough ink that a whole-surface measurement would not move (#613, L141)"
+}

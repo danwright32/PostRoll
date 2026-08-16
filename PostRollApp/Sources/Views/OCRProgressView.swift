@@ -84,33 +84,13 @@ struct OCRProgressView: View {
     // MARK: - Error state
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: Spacing.lg) {
-            Image(systemName: "exclamationmark.circle")
-                .font(.system(size: 44))
-                .foregroundStyle(PaintedSurfaces.iconAccent)
-
-            VStack(spacing: 6) {
-                Text("OCR Failed")
-                    .font(.signPainter(28))
-                    .foregroundStyle(Color.warmDark)
-                Text(message)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.warmMid)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 400)
-            }
-
-            Button("Try Again") {
+        OCRFailureBody(
+            message: message,
+            onRetry: {
                 ocrManager.clearOutcome(eventID: event.id)
                 ocrManager.start(eventID: event.id, appState: appState)
-            }
-            .buttonStyle(BrandButtonStyle())
-
-            Button("Go Back") { cancelOCR() }
-                .buttonStyle(.plain)
-                .font(.system(size: 11))
-                .foregroundStyle(Color.warmMid)
-        }
+            },
+            onGoBack: cancelOCR)
     }
 
     // MARK: - Cancel
@@ -228,6 +208,85 @@ struct OCRProgressBody: View {
                 .foregroundStyle(Color.warmMid)
                 .padding(.top, Spacing.sm)
                 .opacity(wordOpacity)
+        }
+    }
+}
+
+// MARK: - The screen a read fails on
+
+/// The screen shown when a program could not be read, with nothing behind it
+/// (#613).
+///
+/// The sibling of `OCRProgressBody`, split out for the same reason and drawn by
+/// nothing until now: the heading, the reason the read failed, Try Again and Go
+/// Back had never been rendered or measured. It matters slightly more than an
+/// ordinary notice because it is the only screen that says a paid read did not
+/// work, and the only place the way to run it again is offered.
+///
+/// Handed its message rather than reading the run from the environment, so
+/// rendering it cannot start a paid Claude read (L2).
+struct OCRFailureBody: View {
+    let message: String
+    let onRetry: () -> Void
+    let onGoBack: () -> Void
+
+    /// One thing this screen offers, nameable so the render check can measure
+    /// what that thing alone puts on the page.
+    ///
+    /// A whole-screen ink measurement cannot do it here: the 44pt symbol and
+    /// the filled Try Again button are marks on the page whatever the type
+    /// does, and a filled button measured 0.2475 of a surface almost all of it
+    /// its own background (#559, L141). So each part is compared against the
+    /// same screen with that part gone, which isolates what it is worth.
+    ///
+    /// Try Again is the whole control rather than its label, because a button
+    /// style owns its own title: what that part proves is that the way to run
+    /// the read again is on the screen. Its label being readable ON the fill is
+    /// the primary button pair in `PaintedSurfaces`, which is measured next
+    /// door.
+    enum Part: String, CaseIterable {
+        case heading
+        case reason
+        case tryAgain
+        case goBack
+    }
+
+    #if POSTROLL_TESTS
+    /// Behind the test-only flag so the shipping app cannot reach it.
+    var hidden: Set<Part> = []
+    private func opacity(_ part: Part) -> Double { hidden.contains(part) ? 0 : 1 }
+    #else
+    private func opacity(_ part: Part) -> Double { 1 }
+    #endif
+
+    var body: some View {
+        VStack(spacing: Spacing.lg) {
+            Image(systemName: "exclamationmark.circle")
+                .font(.system(size: 44))
+                .foregroundStyle(PaintedSurfaces.iconAccent)
+
+            VStack(spacing: 6) {
+                Text("OCR Failed")
+                    .font(.signPainter(28))
+                    .foregroundStyle(Color.warmDark)
+                    .opacity(opacity(.heading))
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.warmMid)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 400)
+                    .opacity(opacity(.reason))
+            }
+
+            Button("Try Again") { onRetry() }
+                .buttonStyle(BrandButtonStyle())
+                .opacity(opacity(.tryAgain))
+
+            Button("Go Back") { onGoBack() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.warmMid)
+                .opacity(opacity(.goBack))
         }
     }
 }
