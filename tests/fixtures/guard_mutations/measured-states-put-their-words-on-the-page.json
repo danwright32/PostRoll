@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/BrandBanner.swift",
   "find": "    static let text = Color.warmMid",
   "replace": "    static let text = Self.background(.info)",
-  "test": "PostRollTests/HostedControlLegibilityTests/testNoMeasuredStateIsInvisibleToTheRendererThatMeasuresIt",
+  "test": "PostRollTests/BannerLegibilityTests/testEveryBannerActuallyDrawsItsMessage",
   "breaks": "most of what this app tells Dan is drawn in the colour of the fill behind it, so every banner is in the view tree and invisible on screen while the ink measurement next door reads the fill and the border and reports a pass (#612, L141)"
 }

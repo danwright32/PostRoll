@@ -1,8 +1,8 @@
 {
   "name": "reading-screen-reaches-the-screen",
   "file": "PostRollApp/Sources/Views/OCRProgressView.swift",
-  "find": "                .opacity(wordOpacity)\n        }\n    }\n}",
-  "replace": "                .opacity(wordOpacity)\n        }\n        .opacity(0)\n    }\n}",
+  "find": "            Button(\"Cancel\") { onCancel() }\n                .buttonStyle(.plain)\n                .font(.system(size: 11))\n                .foregroundStyle(Color.warmMid)\n                .padding(.top, Spacing.sm)\n        }\n    }\n}",
+  "replace": "            Button(\"Cancel\") { onCancel() }\n                .buttonStyle(.plain)\n                .font(.system(size: 11))\n                .foregroundStyle(Color.warmMid)\n                .padding(.top, Spacing.sm)\n        }\n        .opacity(0)\n    }\n}",
   "test": "PostRollTests/HostedControlLegibilityTests/testTheReadingScreenDrawsItsWords",
   "breaks": "the screen Dan watches for minutes while a program is read keeps its name, its phase, its timer and its footer in the view tree and puts none of them on the page, which is the failure the ink measurement exists for and the one nothing had ever looked for on this screen (#607)"
 }

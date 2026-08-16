@@ -133,19 +133,6 @@ struct OCRProgressBody: View {
     let live: (Date) -> Live
     let onCancel: () -> Void
 
-    #if POSTROLL_TESTS
-    /// The same screen with every word switched off, for the render check that
-    /// measures the type against what this screen paints for itself.
-    ///
-    /// Not a flat threshold, because the shimmer rail is a mark on the page
-    /// whatever the words do and would answer for them (L141). Behind the
-    /// test-only flag so the shipping app cannot reach it.
-    var wordless = false
-    private var wordOpacity: Double { wordless ? 0 : 1 }
-    #else
-    private var wordOpacity: Double { 1 }
-    #endif
-
     var body: some View {
         VStack(spacing: Spacing.lg) {
             // Event identity
@@ -159,7 +146,6 @@ struct OCRProgressBody: View {
                     .tracking(1.4)
                     .foregroundStyle(PaintedSurfaces.pageAccentText)
             }
-            .opacity(wordOpacity)
 
             // Shimmer line: the alive signal, replacing the system spinner
             OCRShimmerLine()
@@ -200,14 +186,12 @@ struct OCRProgressBody: View {
                     }
                 }
             }
-            .opacity(wordOpacity)
 
             Button("Cancel") { onCancel() }
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
                 .foregroundStyle(Color.warmMid)
                 .padding(.top, Spacing.sm)
-                .opacity(wordOpacity)
         }
     }
 }

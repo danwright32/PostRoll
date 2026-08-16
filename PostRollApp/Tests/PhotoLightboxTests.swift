@@ -55,47 +55,52 @@ final class PhotoLightboxTests: XCTestCase {
 
     /// The missing-file state, rendered (#602).
     ///
-    /// Three lines on a dark backdrop that nothing had ever drawn. Measured
-    /// against the same view with its words switched off, not against a flat
-    /// threshold, because the backdrop is itself a mark on the page and would
-    /// answer for the type (L141).
+    /// Three lines on a dark backdrop that nothing had ever drawn.
+    ///
+    /// This carried a floor of its own, 0.005 where the legibility harnesses
+    /// asked 0.01, honestly measured against this surface: a lightbox is
+    /// deliberately mostly empty backdrop with three short lines in the middle
+    /// of it. That is the drift #614 is about, and the check beside it was
+    /// weaker than it read: the words-off render switched off the WHOLE view,
+    /// backdrop and all, so what it compared the screen against was a blank
+    /// image rather than the same screen without its type.
+    ///
+    /// Now the type alone is switched off and what is measured is the
+    /// difference, against the one floor the whole suite uses.
     func testTheMissingFileStateDrawsItsWords() throws {
-        let words = inkCoverage(try render(wordless: false))
-        let backdropOnly = inkCoverage(try render(wordless: true))
+        let share = WordFootprint.share(try render(wordless: false),
+                                        try render(wordless: true))
+        print(String(format: "  lightbox, missing file: %.4f", share))
 
-        print(String(format: "  lightbox, missing file: %.4f words, %.4f backdrop",
-                     words, backdropOnly))
-
-        // A lower floor than the 0.01 the two legibility harnesses use, and the
-        // reason is the surface rather than a weaker standard: a lightbox is
-        // deliberately mostly empty backdrop, with three short lines in the
-        // middle of it, and it measures 0.0111. What makes that meaningful is
-        // the line below: the same view with its words switched off measures
-        // 0.0000, so every one of those pixels is type.
-        XCTAssertGreaterThan(words, 0.005, """
-            The lightbox rendered almost nothing but its backdrop \
-            (\(String(format: "%.4f", words))), so the sentence saying the file is \
-            gone is in the view tree and not on the screen. A spinner would read as \
-            a slow load of a photo that no longer exists (L10).
-            """)
-        XCTAssertGreaterThan(words, backdropOnly * 3, """
-            The lightbox measures \(String(format: "%.4f", words)) with its words and \
-            \(String(format: "%.4f", backdropOnly)) with them switched off. The words \
-            have to be worth far more than the backdrop and the close button, or this \
-            check is reading the chrome.
+        XCTAssertGreaterThan(share, WordFootprint.drawn, """
+            Switching every word off the lightbox changed \
+            \(String(format: "%.4f", share)) of the render, which is nothing, so the \
+            sentence saying the file is gone is in the view tree and not on the screen. \
+            A spinner would read as a slow load of a photo that no longer exists (L10). \
+            The backdrop and the close button are marks on the page whatever the words \
+            do, so a flat threshold could not have said this (L141).
             """)
     }
 
     /// The file name is the useful half of that state, so it is drawn rather
     /// than only passed in.
+    ///
+    /// Measured as the footprint of the words, not as ink: with a name the type
+    /// covers more of the screen than without one, and both renders paint the
+    /// same backdrop, so ink would be comparing two numbers that are mostly
+    /// backdrop either way.
     func testTheMissingFileStateNamesTheFile() throws {
-        let withName = inkCoverage(try render(wordless: false))
-        let withoutName = inkCoverage(try render(wordless: false, fileName: ""))
+        let withName = WordFootprint.share(try render(wordless: false),
+                                           try render(wordless: true))
+        let withoutName = WordFootprint.share(
+            try render(wordless: false, fileName: ""),
+            try render(wordless: true, fileName: ""))
 
         XCTAssertGreaterThan(withName, withoutName, """
-            The lightbox measures the same with a file name and without one, so the \
-            name of the missing file is not reaching the screen and the person is \
-            told only that something is gone.
+            The lightbox's words are worth the same with a file name \
+            (\(String(format: "%.4f", withName))) and without one \
+            (\(String(format: "%.4f", withoutName))), so the name of the missing file is \
+            not reaching the screen and the person is told only that something is gone.
             """)
     }
 
@@ -105,41 +110,15 @@ final class PhotoLightboxTests: XCTestCase {
     /// page around it, because the lightbox covers everything.
     private func render(wordless: Bool,
                         fileName: String = "DSC_4417.jpg") throws -> NSBitmapImageRep {
-        let view = PhotoLightboxBody(
-            url: URL(fileURLWithPath: "/photos/\(fileName)"),
-            load: .missing,
-            onDismiss: {})
-            .opacity(wordless ? 0 : 1)
-            .frame(width: 520, height: 300)
-            .background(PaintedSurfaces.lightboxBackdrop.composited(over: PaintedSurfaces.page))
-
-        let host = NSHostingView(rootView: view)
-        host.frame = NSRect(x: 0, y: 0, width: 520, height: 300)
-        host.layoutSubtreeIfNeeded()
-        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
-                                "AppKit produced no bitmap for the lightbox")
-        host.cacheDisplay(in: host.bounds, to: rep)
-        return rep
-    }
-
-    /// The share of pixels differing noticeably from the most common colour,
-    /// which IS the background. The same measurement the two legibility
-    /// harnesses use.
-    private func inkCoverage(_ rep: NSBitmapImageRep) -> Double {
-        var luminances: [Double] = []
-        for y in Swift.stride(from: 0, to: rep.pixelsHigh, by: 2) {
-            for x in Swift.stride(from: 0, to: rep.pixelsWide, by: 2) {
-                guard let c = rep.colorAt(x: x, y: y)?
-                    .usingColorSpace(.deviceRGB) else { continue }
-                luminances.append(0.299 * c.redComponent
-                                  + 0.587 * c.greenComponent
-                                  + 0.114 * c.blueComponent)
-            }
-        }
-        guard !luminances.isEmpty else { return 0 }
-        let background = luminances.sorted()[luminances.count / 2]
-        return Double(luminances.filter { abs($0 - background) > 0.12 }.count)
-            / Double(luminances.count)
+        try WordFootprint.hosted(
+            PhotoLightboxBody(url: URL(fileURLWithPath: "/photos/\(fileName)"),
+                              load: .missing,
+                              onDismiss: {})
+                .frame(width: 520, height: 300)
+                .background(PaintedSurfaces.lightboxBackdrop
+                    .composited(over: PaintedSurfaces.page)),
+            size: CGSize(width: 520, height: 300),
+            wordless: wordless)
     }
 
     // MARK: - Reading the tree
