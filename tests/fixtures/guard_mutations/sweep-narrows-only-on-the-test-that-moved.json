@@ -1,0 +1,8 @@
+{
+  "name": "sweep-narrows-only-on-the-test-that-moved",
+  "file": "tools/check_guards.py",
+  "find": "    if _outside_the_tests(new_text, new_bodies) \\\n            != _outside_the_tests(old_text, old_bodies):\n        return {e.name for e in entries}",
+  "replace": "    if False:\n        return {e.name for e in entries}",
+  "test": "tests/test_check_guards.py::test_changed_mode_selects_every_entry_when_shared_test_code_changed",
+  "breaks": "a change to a matcher or fixture shared by every test in a file selects no entry at all, because each test function is still byte for byte identical, so the sweep skips exactly the guards whose meaning just changed and reports a clean scoped run (#634)"
+}
