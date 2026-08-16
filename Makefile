@@ -1,6 +1,21 @@
 # The one cache location, taken from the shared definition rather than
 # spelled here as well (#485). Outside the iCloud-synced checkout.
 BUILD_DIR := $(shell . PostRollApp/derived-data-path.sh; printf %s "$$POSTROLL_DERIVED_DATA")
+
+# One build at a time against that cache (#642). Since #621 the guard sweep
+# builds into it too, and two xcodebuilds against one DerivedData produce errors
+# that read like real compile failures in whichever run notices first. Sessions
+# run side by side on this machine, and a sweep holds the cache for 20+ minutes.
+#
+# Beside the cache rather than named separately, so the lock cannot end up
+# guarding a different location from the one being shared. tools/check_guards.py
+# derives the same path from the same definition.
+BUILD_LOCK := $(BUILD_DIR).lock
+# Through Python rather than flock(1), which is a Linux tool present here only
+# because Homebrew installed it: a Makefile calling it would fail on any
+# checkout without that package. tools/check_guards.py takes the same lock at
+# the same path, so there is one implementation rather than two.
+LOCKED = /usr/bin/env python3 tools/with_build_lock.py
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
@@ -22,7 +37,7 @@ install-force:
 	@SKIP_INSTALL_TESTS=1 ./PostRollApp/build-install.sh --launch
 
 build:
-	@xcodebuild \
+	@$(LOCKED) xcodebuild \
 		-project "$(PROJECT)" \
 		-scheme "$(APP_NAME)" \
 		-configuration Release \
@@ -34,7 +49,7 @@ build:
 
 # The Swift model/service suite. Excludes the UI tests, which drive the real GUI.
 test:
-	@xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
+	@$(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
 		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' test
 
 # The full local suite, in ONE parallel pass (#497).
@@ -122,7 +137,7 @@ REVIEW_TESTS := \
 	PostRollTests/PhotoLightboxTests/testDumpTheLightboxForReview
 
 review-sheet:
-	@out=$$(xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
+	out=$$($(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
 		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
 		$(foreach t,$(REVIEW_TESTS),-only-testing:$(t)) \
 		test 2>&1); \

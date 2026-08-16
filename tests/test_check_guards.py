@@ -31,6 +31,8 @@ from tools.check_guards import (
     Entry,
     Outcome,
     RegistryError,
+    build_lock,
+    build_lock_path,
     check_guards,
     classify_pytest,
     classify_swift,
@@ -597,6 +599,13 @@ def scoped_registry(repo: Path) -> Path:
     return repo / "tests" / "fixtures" / "guard_mutations"
 
 
+def run_changed_all(repo: Path, runner) -> tuple[int, list[str]]:
+    """Every entry, so the progress counter has something to count."""
+    lines: list[str] = []
+    code = check_guards(repo, scoped_registry(repo), runner, log=lines.append)
+    return code, lines
+
+
 def run_changed(repo: Path, runner) -> tuple[int, list[str]]:
     lines: list[str] = []
     code = check_guards(repo, scoped_registry(repo), runner,
@@ -916,3 +925,116 @@ def test_a_restore_that_fails_is_reported_rather_than_swallowed():
     assert [p for p, _ in failed] == [unwritable], (
         "a restore that could not happen was not reported, so an interrupted "
         "sweep would exit looking clean while the file is still perturbed")
+
+
+# ── Saying it is alive, and not fighting another build (#641, #642) ───────────
+
+
+def test_each_entry_reports_where_it_has_got_to(scoped_repo: Path):
+    """A run that is working and one that has hung must look different (#641).
+
+    Over one session this cost four "is it still going?" checks and one wrong
+    reading, where a half finished sweep was taken for a finished one and the
+    working tree was inspected mid perturbation."""
+    runner = a_runner(65, SWIFT_RED)
+    _, lines = run_changed_all(scoped_repo, runner)
+
+    progress = [line for line in lines if " of " in line and "]" in line]
+    assert len(progress) >= 2, (
+        "no line says how far through the sweep is, so twenty minutes of work "
+        "looks the same as a hang:\n" + "\n".join(lines))
+    assert "[1 of" in progress[0], progress[0]
+    assert any("s]" in line for line in progress), (
+        "no line carries elapsed time, so a slow entry and a stuck one are the "
+        "same thing to anybody watching")
+
+
+def test_the_log_reaches_the_terminal_as_it_goes(scoped_repo: Path, capsys):
+    """Buffered output arrives all at once at the end, which is the whole
+    defect: the file stays empty for the entire run (#641)."""
+    flushes = []
+
+    class Recording:
+        def write(self, text): return len(text)
+        def flush(self): flushes.append(True)
+
+    real = sys.stdout
+    sys.stdout = Recording()
+    try:
+        check_guards(scoped_repo, scoped_registry(scoped_repo),
+                     a_runner(65, SWIFT_RED), changed_only=False)
+    finally:
+        sys.stdout = real
+
+    assert flushes, (
+        "nothing flushed, so redirected output sits in a buffer until the run "
+        "ends and an empty log file means nothing")
+
+
+def test_the_build_lock_sits_beside_the_shared_cache(repo: Path):
+    """One lock for every xcodebuild that shares the cache (#642).
+
+    Derived from the same shell definition as the cache itself, not spelled a
+    second time, because two spellings of one location is how a second lock
+    quietly starts protecting nothing (L41)."""
+    with_shared_cache(repo, "/tmp/some-cache")
+
+    assert build_lock_path(repo) == "/tmp/some-cache.lock"
+
+
+def test_a_checkout_with_no_shared_cache_takes_no_lock(repo: Path):
+    """The failure path. Without a shared cache there is nothing to contend
+    over, and inventing a lock path would be inventing a location nothing else
+    honours."""
+    assert build_lock_path(repo) is None
+
+
+def test_two_runs_do_not_build_at_the_same_time(tmp_path: Path):
+    """Proven by holding it, not by reading the code (L1).
+
+    A lock nobody has ever seen block is indistinguishable from no lock."""
+    lock = tmp_path / "cache.lock"
+    order: list[str] = []
+
+    with build_lock(str(lock), log=lambda _: None):
+        order.append("first in")
+        proc = subprocess.Popen(
+            [sys.executable, "-c",
+             "import fcntl,sys;"
+             f"f=open({str(lock)!r},'w');"
+             "fcntl.flock(f, fcntl.LOCK_EX);"
+             "print('second in')"],
+            stdout=subprocess.PIPE, text=True)
+        time.sleep(0.4)
+        assert proc.poll() is None, (
+            "the second run got in while the first held the lock, so two "
+            "xcodebuilds can write to one DerivedData at once")
+        order.append("first out")
+
+    assert proc.communicate(timeout=10)[0].strip() == "second in"
+    assert order == ["first in", "first out"]
+
+
+def test_a_run_that_waits_for_the_lock_says_so(tmp_path: Path):
+    """Waiting silently is the hang that #641 is about, arriving by another
+    route."""
+    lock = tmp_path / "cache.lock"
+    said: list[str] = []
+
+    holder = subprocess.Popen(
+        [sys.executable, "-c",
+         "import fcntl,time;"
+         f"f=open({str(lock)!r},'w');"
+         "fcntl.flock(f, fcntl.LOCK_EX);"
+         "time.sleep(1.0)"])
+    time.sleep(0.3)
+    try:
+        with build_lock(str(lock), log=said.append):
+            pass
+    finally:
+        holder.wait(timeout=10)
+
+    assert any("wait" in line.lower() for line in said), (
+        "a run held up by another build said nothing, so it looks stalled\n"
+        + "\n".join(said))
+
