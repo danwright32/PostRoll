@@ -845,7 +845,12 @@ struct PhotoAssignmentView: View {
 
 // MARK: - Photo Day Section
 
-private struct PhotoDaySection: View {
+/// Internal rather than private so the review sheet can draw it (#645).
+///
+/// Handed its photos and reading nothing from the environment, which is what
+/// makes it drawable: the screen around it holds the event and would reach
+/// the store and the real photo library (L2).
+struct PhotoDaySection: View {
     let label: String
     var subtitle: String? = nil
     var collageNote: String? = nil

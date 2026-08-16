@@ -1100,6 +1100,11 @@ extension HostedControlLegibilityTests {
                              { try self.renderFailureScreen(state.message) }))
         }
 
+        surfaces.append(("insights report", { try self.renderInsightsReport() }))
+        surfaces.append(("caption card", { try self.renderCaptionCard() }))
+        surfaces.append(("photo day grid, thumbnails still loading",
+                         { try self.renderPhotoDay() }))
+
         return surfaces
     }
 
@@ -1138,6 +1143,221 @@ extension HostedControlLegibilityTests {
         }
         expect("event row at rest", "an event row at rest")
         expect("event row selected", "a selected event row")
+
+        // The three screens that could only ever be reviewed by launching the
+        // app (#645). Named individually rather than counted, so removing one
+        // fails here instead of shrinking both sides of the dump's own count
+        // (L70).
+        expect("insights report", "the Insights report")
+        expect("caption card", "a day's caption card")
+        expect("photo day grid", "a posting day's photo grid")
+    }
+
+    /// The Insights report, at the size the pane gives it (#645).
+    ///
+    /// A measured fixture rather than an invented one where it matters: the
+    /// counts and the date range are the shape a real fortnight produces, and
+    /// the findings carry all three confidence levels, because the dot beside
+    /// each one is drawn from a three entry table and a fixture holding only
+    /// "high" would picture a screen missing two thirds of it (L113).
+    ///
+    /// The store is given a file in a temporary directory, so drawing this
+    /// cannot read or write the real analytics (L2). `InsightReportView` is
+    /// handed its report and fetches nothing, which is why it can be drawn at
+    /// all; the pane around it goes to disk.
+    private static var insightsReport: InsightReport {
+        func finding(_ headline: String, _ evidence: String,
+                     _ confidence: InsightFinding.Confidence) -> InsightFinding {
+            InsightFinding(id: UUID(), headline: headline,
+                           evidence: evidence, confidence: confidence)
+        }
+
+        let feed = InsightFindings(
+            captionPatterns: [
+                finding("Captions opening on a performer's name do better",
+                        "9 of your 12 strongest posts name somebody in the first line.",
+                        .high),
+            ],
+            hashtagPatterns: [
+                finding("Venue tags outperform genre tags",
+                        "Posts tagging the room reached 40% further than those tagging the form.",
+                        .medium),
+            ],
+            contentTypePatterns: [
+                finding("Carousels hold attention longer than single frames",
+                        "Median watch time 4.1s against 2.3s across 18 posts.",
+                        .high),
+            ],
+            timingPatterns: [
+                finding("Thursday evening posts travel furthest",
+                        "Too few Sunday posts to say anything about the weekend yet.",
+                        .low),
+            ])
+
+        let story = InsightFindings(
+            captionPatterns: [
+                finding("Stories with no caption at all do fine",
+                        "The picture carries it; 6 of 8 top stories had no text.",
+                        .medium),
+            ],
+            hashtagPatterns: [],
+            contentTypePatterns: [
+                finding("Behind the scenes frames get the most replies",
+                        "11 replies across 4 stories from the wings.",
+                        .high),
+            ],
+            timingPatterns: [])
+
+        // Pinned, not read from the clock: a fixture whose meaning is a date
+        // range walks into a different state as real time passes (L130).
+        let end = Date(timeIntervalSince1970: 1_760_000_000)
+        return InsightReport(
+            id: UUID(),
+            generatedAt: end,
+            dateRangeStart: end.addingTimeInterval(-14 * 24 * 60 * 60),
+            dateRangeEnd: end,
+            postCount: 26, storyCount: 8, feedCount: 18,
+            summary: "Naming the performer in the first line is doing more work "
+                + "than anything else you changed this fortnight.",
+            feedFindings: feed,
+            storyFindings: story,
+            brandVoiceSuggestions: [
+                "Keep opening on a name.",
+                "The venue is worth tagging; the genre is not.",
+            ],
+            caveats: [
+                "Eight stories is not many, so treat the story findings as a hint.",
+            ])
+    }
+
+    private func renderInsightsReport(width: CGFloat = 700) throws -> NSBitmapImageRep {
+        let store = AnalyticsStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("review-sheet-analytics-\(UUID().uuidString).json"))
+
+        let view = ScrollView {
+            InsightReportView(report: Self.insightsReport)
+                .padding(Spacing.lg)
+        }
+        .environment(store)
+        .frame(width: width, height: 900)
+        .background(PaintedSurfaces.page)
+
+        return try WordFootprint.hosted(view,
+                                        size: CGSize(width: width, height: 900),
+                                        wordless: false)
+    }
+
+    /// One day's caption card, expanded, which is the bulk of the review pane
+    /// (#645).
+    ///
+    /// Carries findings as well as a caption, because the findings panel is the
+    /// feature on that screen: it is where the deterministic credit checks
+    /// report a handle that was asked for and never appeared, and a fixture
+    /// with a clean caption would picture the card with its most important part
+    /// missing.
+    private func renderCaptionCard(width: CGFloat = 700) throws -> NSBitmapImageRep {
+        var caption = DayCaption()
+        caption.caption = "Isabel Ruiz closing the second act at the Green Room, "
+            + "with the band still going behind her.\n\nShot for @thegreenroom42."
+        caption.hashtags = ["#nycjazz", "#livemusicphotography", "#greenroom42"]
+        caption.altTexts = ["A singer mid phrase, lit warm from stage left."]
+        caption.generatedCaption = caption.caption
+
+        var day = PostingDay(day: .wednesday)
+        day.tagHandles = ["@thegreenroom42"]
+        day.nameMentions = ["Isabel Ruiz"]
+
+        // Nothing saved is read, so the picture is the same on any machine and
+        // the render cannot reach Dan's own tags (L2).
+        let hashtags = HashtagStore(loadingSaved: false)
+        hashtags.globalTags = ["#nycjazz", "#livemusicphotography"]
+
+        let view = ScrollView {
+            CaptionSection(day: .wednesday,
+                           postingDay: day,
+                           caption: .constant(caption),
+                           isExpanded: true,
+                           onToggle: {},
+                           onRevise: { _ in })
+                .padding(Spacing.lg)
+        }
+        .environment(hashtags)
+        .frame(width: width, height: 900)
+        .background(PaintedSurfaces.page)
+
+        return try WordFootprint.hosted(view,
+                                        size: CGSize(width: width, height: 900),
+                                        wordless: false)
+    }
+
+    /// A posting day's photo grid, which is most of the assignment screen
+    /// (#645).
+    ///
+    /// The photographs are written into a temporary directory rather than taken
+    /// from anywhere real: this must not reach Dan's library, and a fixture
+    /// pointing at whatever happens to be on disk would draw a different
+    /// picture every run (L2).
+    ///
+    /// Six of them, because the grid wraps and a fixture of one or two would
+    /// picture a row that never wraps, which is the shape the screen is
+    /// actually in (L101).
+    ///
+    /// ## What this picture does NOT show, said out loud
+    ///
+    /// The thumbnails come out as the loading placeholder, because the images
+    /// load asynchronously and the render captures before they arrive. So the
+    /// surface is named for the state it is really in rather than for the one
+    /// it looks like it should be: a recorded picture that photographed a
+    /// loading state and passed as the screen at rest is exactly the trap L84
+    /// records, and a placeholder is itself a mark on the page (L115).
+    ///
+    /// What it does cover is everything that moves when type or colour moves:
+    /// the day label, the count badge, the subtitle, the remove buttons, the
+    /// add control and the rule under it. Drawing the photographs themselves
+    /// would need the loads awaited, which is its own piece of work.
+    private func renderPhotoDay(width: CGFloat = 700) throws -> NSBitmapImageRep {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("review-sheet-photos-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder,
+                                                withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        var urls: [URL] = []
+        for index in 1...6 {
+            let size = NSSize(width: 400, height: 300)
+            let image = NSImage(size: size)
+            image.lockFocus()
+            // A recognisable frame rather than flat colour, so a thumbnail that
+            // failed to load is visibly different from one that drew.
+            NSColor(calibratedHue: CGFloat(index) / 8.0, saturation: 0.35,
+                    brightness: 0.75, alpha: 1).setFill()
+            NSRect(origin: .zero, size: size).fill()
+            image.unlockFocus()
+
+            guard let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:])
+            else { throw XCTSkip("the fixture photograph could not be encoded") }
+
+            let url = folder.appendingPathComponent("DSC_100\(index).jpg")
+            try png.write(to: url)
+            urls.append(url)
+        }
+
+        let view = ScrollView {
+            PhotoDaySection(label: "Wednesday",
+                            subtitle: "Carousel, up to 10 photos",
+                            photos: .constant(urls),
+                            onAddPhotos: {})
+                .padding(Spacing.lg)
+        }
+        .frame(width: width, height: 700)
+        .background(PaintedSurfaces.page)
+
+        return try WordFootprint.hosted(view,
+                                        size: CGSize(width: width, height: 700),
+                                        wordless: false)
     }
 
     /// Writes every one of them into the shared folder (#623).

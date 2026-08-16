@@ -1424,7 +1424,12 @@ struct CaptionReviewView: View {
 
 // MARK: - Caption Section
 
-private struct CaptionSection: View {
+/// Internal rather than private so the review sheet can draw it (#645).
+///
+/// It is the bulk of the caption review pane and reads nothing from the
+/// environment, which is what makes it safe to render: the screen around it
+/// holds the week's result and would reach the store (L2).
+struct CaptionSection: View {
     let day: DayName
     let postingDay: PostingDay?
     var previewPaths: [String: String]? = nil

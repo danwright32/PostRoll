@@ -1,0 +1,8 @@
+{
+  "name": "review-sheet-covers-the-main-screens",
+  "file": "PostRollApp/Tests/HostedControlLegibilityTests.swift",
+  "find": "        surfaces.append((\"insights report\", { try self.renderInsightsReport() }))",
+  "replace": "",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheSheetShowsEveryStateTheseChecksMeasure",
+  "breaks": "the Insights report drops out of the review sheet, which is one of the three screens that could only ever be reviewed by launching the app, and the dump's own count cannot notice because it compares the surfaces it enumerated with the files it wrote and both shrink together (#645, L70)"
+}
