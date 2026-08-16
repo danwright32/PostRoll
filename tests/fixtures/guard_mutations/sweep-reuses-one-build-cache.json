@@ -1,0 +1,8 @@
+{
+  "name": "sweep-reuses-one-build-cache",
+  "file": "tools/check_guards.py",
+  "find": "        cache = derived_data_path(repo_root)",
+  "replace": "        cache = None",
+  "test": "tests/test_check_guards.py::test_a_swift_run_reuses_the_projects_build_cache",
+  "breaks": "the sweep stops naming a build cache, so xcodebuild picks a location of its own that nothing else fills or reclaims, and a second full copy of DerivedData starts growing beside the project's (#621, L114)"
+}
