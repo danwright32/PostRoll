@@ -1,0 +1,8 @@
+{
+  "name": "colour-sweep-sees-a-branching-helper",
+  "file": "PostRollApp/Tests/BannerLegibilityTests.swift",
+  "find": "            depth += braceBalance(of: statement)",
+  "replace": "            depth += 0",
+  "test": "PostRollTests/BannerLegibilityTests/testTheTypeColourMatcherSeesEverySpelling",
+  "breaks": "the sweep stops tracking where a colour returning helper's body ends, so every colour inside a helper that branches is exempt from the type colour rule while the one line version of the same helper is still caught (#630)"
+}
