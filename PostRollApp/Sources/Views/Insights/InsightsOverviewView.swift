@@ -274,7 +274,12 @@ private struct InstructionRow: View {
 
 // MARK: - Report View
 
-private struct InsightReportView: View {
+/// Internal rather than private so the review sheet can draw it (#645).
+///
+/// It is handed its report and reads nothing, which is what makes it safe to
+/// render in a test: the screen around it fetches from the analytics store
+/// and would go to disk (L2).
+struct InsightReportView: View {
     let report: InsightReport
     @Environment(AnalyticsStore.self) private var analyticsStore
 
