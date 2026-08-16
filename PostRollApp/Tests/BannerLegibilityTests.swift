@@ -1102,25 +1102,38 @@ final class BannerLegibilityTests: XCTestCase {
     /// hit area, and there is no type to read. Named here so the exemption is
     /// one decision written down once (L129).
     private func rawTypeColourUses(in code: String) -> [String] {
-        statements(in: code)
-            // `return` as well as the two modifiers, because a colour handed to
-            // a foreground by a helper is type just as much as one written into
-            // the modifier. Two such helpers were the whole reason this line
-            // says `return`: `ProgramUploadView.colour(isHere:done:blocked:)`
-            // and `OCRReviewView.confidenceColor` were outside every check in
-            // this file, and between them held the raw accent, two of the
-            // platform's own state colours and a tone at 1.60:1. A rule that
-            // covers the modifier and not the function feeding it reads exactly
-            // like a rule that holds (#620).
-            .filter {
-                $0.contains("foreground") || $0.lowercased().contains("tint(")
-                    || $0.contains("return ")
+        let all = statements(in: code)
+
+        // Which statements can put a colour on type. The two modifiers, plus
+        // `return`, plus the body of anything declared `-> Color`, because a
+        // colour handed to a foreground by a helper is type just as much as one
+        // written into the modifier.
+        //
+        // Each of those three was added because the sweep was found blind to
+        // it. `ProgramUploadView.colour(isHere:done:blocked:)` and
+        // `OCRReviewView.confidenceColor` sat outside the modifiers and between
+        // them held the raw accent, two of the platform's own state colours and
+        // a tone at 1.60:1. Then the mutation written for this very guard put a
+        // raw colour back into the FIRST of those and it stayed green, because
+        // that helper is one expression with no `return` in it at all: the
+        // statement after a `-> Color` declaration is its body (L1).
+        var typeBearing: [String] = []
+        var previousDeclaredAColour = false
+        for statement in all {
+            if statement.contains("foreground")
+                || statement.lowercased().contains("tint(")
+                || statement.contains("return ")
+                || previousDeclaredAColour {
+                typeBearing.append(statement)
             }
-            .filter { statement in
-                statement.ranges(of: #/Color\.[A-Za-z][A-Za-z0-9]*/#)
-                    .map { String(statement[$0]) }
-                    .contains { $0 != "Color.clear" }
-            }
+            previousDeclaredAColour = statement.contains("-> Color")
+        }
+
+        return typeBearing.filter { statement in
+            statement.ranges(of: #/Color\.[A-Za-z][A-Za-z0-9]*/#)
+                .map { String(statement[$0]) }
+                .contains { $0 != "Color.clear" }
+        }
     }
 
     /// The files that DECLARE colours rather than draw with them, and why.
@@ -1199,6 +1212,17 @@ final class BannerLegibilityTests: XCTestCase {
             "        case \"high\":   return Color.green.opacity(0.8)",
             "        if blocked { return Color.warmMid.opacity(0.35) }",
         ]
+        // A helper that is ONE expression, so its body carries no `return` at
+        // all. This is what the mutation for this guard put back, and the first
+        // version of the sweep stayed green on it.
+        XCTAssertEqual(rawTypeColourUses(in: """
+            private func colour(isHere: Bool) -> Color {
+                isHere ? Color.roseGold : Color.warmMid.opacity(0.35)
+            }
+            """).count, 1, """
+            the check cannot see a colour returned implicitly from a `-> Color` helper, so \
+            a screen fed its type by one of those is exempt from the rule
+            """)
         for line in mustCatch {
             XCTAssertEqual(rawTypeColourUses(in: line).count, 1, """
                 the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as type \
