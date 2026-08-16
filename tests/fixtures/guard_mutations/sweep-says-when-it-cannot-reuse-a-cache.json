@@ -1,0 +1,8 @@
+{
+  "name": "sweep-says-when-it-cannot-reuse-a-cache",
+  "file": "tools/check_guards.py",
+  "find": "    if any(e.test.startswith(\"PostRollTests/\") for e in entries) \\",
+  "replace": "    if False and any(e.test.startswith(\"PostRollTests/\") for e in entries) \\",
+  "test": "tests/test_check_guards.py::test_a_checkout_without_the_shared_definition_says_the_sweep_will_pay_for_it",
+  "breaks": "a checkout that cannot name the shared cache goes quiet about it, and a sweep paying a whole build for every entry looks exactly like one reusing a cache until somebody times it (#621)"
+}

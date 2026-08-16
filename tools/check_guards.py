@@ -178,16 +178,58 @@ def load_registry(path: Path) -> list[Entry]:
     return entries
 
 
+#: Where the project's one build cache is defined, for the Makefile,
+#: build-install.sh and now this tool. Read rather than copied: two spellings of
+#: one location is how a second cache quietly starts filling (L41).
+DERIVED_DATA_DEFINITION = Path("PostRollApp") / "derived-data-path.sh"
+
+
+def derived_data_path(repo_root: Path) -> str | None:
+    """The shared build cache, or None when this checkout cannot name one.
+
+    Sourced through a shell for the same reason the Makefile sources it: the
+    definition is a shell script, and parsing it here would be a second
+    implementation of the expansion that only agrees with the first until the
+    script says something more interesting than a plain assignment.
+
+    None rather than a guessed default, because a guess would put builds
+    somewhere nothing else looks and still read as sharing.
+    """
+    script = repo_root / DERIVED_DATA_DEFINITION
+    if not script.is_file():
+        return None
+    try:
+        completed = subprocess.run(
+            ["bash", "-c", '. "$1"; printf %s "$POSTROLL_DERIVED_DATA"',
+             "_", str(script)],
+            capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    path = completed.stdout.strip()
+    # An empty answer is an absent one, not a valid location: a templating or
+    # shell read routinely renders a missing setting as the empty string, and
+    # accepting it would build into the current directory (L138).
+    return path or None
+
+
 def command_for(entry: Entry, repo_root: Path) -> list[str]:
     if entry.test.startswith("PostRollTests/"):
-        return [
+        cmd = [
             "xcodebuild",
             "-project", str(repo_root / "PostRollApp" / "PostRoll.xcodeproj"),
             "-scheme", "PostRollTests",
             "-destination", "platform=macOS",
             f"-only-testing:{entry.test}",
-            "test",
         ]
+        # One warm cache across every entry (#621). Each entry perturbs a single
+        # file, so a shared cache recompiles that file and its dependents rather
+        # than the whole app: the sweep used to pass no path at all, which sends
+        # xcodebuild to a location of its own choosing that starts empty and is
+        # never the one `make build` has already filled.
+        cache = derived_data_path(repo_root)
+        if cache is not None:
+            cmd += ["-derivedDataPath", cache]
+        return cmd + ["test"]
     return [python_for(repo_root), "-m", "pytest", entry.test, "-q"]
 
 
@@ -523,6 +565,15 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
                 "was verified")
             return 0
         entries = selected
+
+    # Said out loud, because a sweep paying a whole build for every entry looks
+    # exactly like one reusing a cache until somebody times it (#621). It is not
+    # a refusal: the guards are still proven, just at the old cost.
+    if any(e.test.startswith("PostRollTests/") for e in entries) \
+            and derived_data_path(repo_root) is None:
+        log(f"{DERIVED_DATA_DEFINITION} names no build cache here, so each "
+            "Swift entry below pays a full app build of its own instead of "
+            "reusing one")
 
     results = []
     for entry in entries:

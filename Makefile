@@ -63,11 +63,21 @@ test-python-fast:
 	@venv/bin/python -m pytest tests/ -q -m "not slow"
 
 # Proves the registered guard tests still go red on deliberately broken code
-# (#416). Not part of `make test`: it mutates the working tree and pays a Swift
-# build per entry. Run it whenever a guard is added or changed; for just the
-# entries your diff touches, `venv/bin/python tools/check_guards.py --changed`
-# (#426). The registry lives in tests/fixtures/guard_mutations/, one file per
-# guard (#506), and is held to the code on every normal suite run by
+# (#416). Not part of `make test`: it mutates the working tree, and each entry
+# recompiles the file it perturbs plus everything downstream of it, so the cost
+# is per entry however warm the cache is. Measured on this Mac with the cache
+# warm: about 12s for an entry in a leaf file and about 22s for one in
+# PaintedSurfaces.swift, which most of the app imports.
+#
+# It builds into the same BUILD_DIR as everything else (#621), so it starts from
+# whatever the last `make build` or `make test` left rather than from a second
+# copy of DerivedData that only this target ever filled and `make clean` could
+# not name.
+#
+# Run it whenever a guard is added or changed; for just the entries your diff
+# touches, `venv/bin/python tools/check_guards.py --changed` (#426). The
+# registry lives in tests/fixtures/guard_mutations/, one file per guard (#506),
+# and is held to the code on every normal suite run by
 # tests/test_guard_mutation_registry.py.
 check-guards:
 	@venv/bin/python tools/check_guards.py

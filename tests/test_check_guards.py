@@ -35,6 +35,7 @@ from tools.check_guards import (
     classify_pytest,
     classify_swift,
     command_for,
+    derived_data_path,
     load_registry,
     run_entry,
 )
@@ -289,6 +290,90 @@ def test_a_pytest_spec_runs_through_the_repos_venv_when_there_is_one(repo: Path)
         "checkout that has one has to be run through it")
     assert "pytest" in cmd
     assert "tests/test_note.py::test_ink" in cmd
+
+
+def with_shared_cache(repo: Path, path: str = "/tmp/some-cache") -> Path:
+    """Give a throwaway repo the shared build-cache definition the real one has."""
+    script = repo / "PostRollApp" / "derived-data-path.sh"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text('export POSTROLL_DERIVED_DATA="' + path + '"\n')
+    return repo
+
+
+def test_a_swift_run_reuses_the_projects_build_cache(repo: Path):
+    """One warm cache across the sweep, rather than a full build per entry (#621).
+
+    Every entry perturbs one file, so a shared cache means one file and its
+    dependents recompile instead of the whole app. Without it xcodebuild picks
+    its own location, which starts empty and is never the one `make build` has
+    already filled.
+    """
+    with_shared_cache(repo, "/tmp/some-cache")
+
+    cmd = command_for(entry(), repo)
+
+    assert "-derivedDataPath" in cmd, (
+        "the sweep builds into whatever location xcodebuild picks for itself, "
+        "so it shares nothing with the project's own cache and pays a full "
+        "build for every entry")
+    assert cmd[cmd.index("-derivedDataPath") + 1] == "/tmp/some-cache"
+
+
+def test_the_build_cache_is_read_from_the_one_shell_definition(repo: Path):
+    """Read, not spelled again here (L41).
+
+    The Makefile and build-install.sh both source that script for the same
+    value. A copy in this tool would be a second spelling of one location,
+    which is how a second cache quietly starts filling.
+    """
+    with_shared_cache(repo, "/tmp/moved-somewhere-else")
+
+    cmd = command_for(entry(), repo)
+
+    assert cmd[cmd.index("-derivedDataPath") + 1] == "/tmp/moved-somewhere-else", (
+        "the tool did not follow the shell definition, so it is carrying its "
+        "own idea of where the cache lives")
+
+
+def test_the_real_definition_keeps_the_cache_out_of_the_synced_checkout():
+    """The property that actually matters, asserted against the real script.
+
+    The checkout is under ~/Documents, which iCloud syncs: a cache in there is
+    uploaded, counted against Dan's storage and conflict-copied. Asserted as
+    "outside the checkout" rather than as the literal path, so moving it
+    somewhere else that is also safe passes (L103).
+    """
+    path = derived_data_path(REPO_ROOT)
+
+    assert path is not None, (
+        "the real repository cannot read its own shared build-cache "
+        "definition, so every guard entry pays a full build")
+    assert not Path(path).resolve().is_relative_to(REPO_ROOT), (
+        f"the build cache resolves to {path}, which is inside the "
+        "iCloud-synced checkout")
+
+
+def test_a_checkout_without_the_shared_definition_says_the_sweep_will_pay_for_it(
+        repo: Path, tmp_path: Path):
+    """The failure path, which must be loud rather than merely slower (#621).
+
+    A missing definition cannot stop the sweep: it still proves every guard,
+    just at the old cost. What it must not do is go quiet, because a sweep
+    paying a full build per entry looks exactly like one reusing a cache until
+    somebody times it.
+    """
+    assert not (repo / "PostRollApp" / "derived-data-path.sh").exists()
+
+    assert derived_data_path(repo) is None
+    assert "-derivedDataPath" not in command_for(entry(), repo)
+
+    registry = write_registry(tmp_path / "registry", [registry_dict()])
+    lines: list[str] = []
+    check_guards(repo, registry, a_runner(65, SWIFT_RED), log=lines.append)
+
+    assert any("full" in line and "build" in line for line in lines), (
+        "nothing in the log says the sweep is paying a whole build per entry, "
+        "so the cost is invisible. Log was:\n" + "\n".join(lines))
 
 
 def test_a_checkout_with_no_venv_uses_the_interpreter_it_is_running_under(repo: Path):
