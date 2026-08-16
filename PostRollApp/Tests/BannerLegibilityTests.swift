@@ -1070,6 +1070,22 @@ final class BannerLegibilityTests: XCTestCase {
         return out
     }
 
+    /// Open braces minus closed ones, counting neither inside a string (#630).
+    ///
+    /// Why this exists rather than the one statement lookahead it replaced: a
+    /// colour returning helper is only ONE statement when its body is one
+    /// expression. Give it an `if` or a `switch` and its colours sit in the
+    /// statements after that, where the lookahead could not see them, so the
+    /// exact defect the lookahead was added for came back the moment the
+    /// helper grew a branch.
+    private func braceBalance(of line: String) -> Int {
+        guard !line.contains("\"\"\"") else { return 0 }
+        let bare = line.replacingOccurrences(of: #""(\\.|[^"\\])*""#,
+                                             with: "\"\"",
+                                             options: .regularExpression)
+        return bare.filter { $0 == "{" }.count - bare.filter { $0 == "}" }.count
+    }
+
     /// Open brackets minus closed ones, counting neither inside a string.
     private func bracketBalance(of line: String) -> Int {
         // A multi-line literal's delimiter line carries no structure of its own.
@@ -1118,15 +1134,28 @@ final class BannerLegibilityTests: XCTestCase {
         // that helper is one expression with no `return` in it at all: the
         // statement after a `-> Color` declaration is its body (L1).
         var typeBearing: [String] = []
-        var previousDeclaredAColour = false
+        var depth = 0
+        var colourBodyDepth: Int?
+
         for statement in all {
             if statement.contains("foreground")
                 || statement.lowercased().contains("tint(")
                 || statement.contains("return ")
-                || previousDeclaredAColour {
+                || colourBodyDepth != nil {
                 typeBearing.append(statement)
             }
-            previousDeclaredAColour = statement.contains("-> Color")
+
+            let before = depth
+            depth += braceBalance(of: statement)
+
+            if colourBodyDepth == nil,
+               statement.range(of: #"(->|:)\s*Color\s*\{"#,
+                               options: .regularExpression) != nil,
+               depth > before {
+                colourBodyDepth = before
+            } else if let body = colourBodyDepth, depth <= body {
+                colourBodyDepth = nil
+            }
         }
 
         return typeBearing.filter { statement in
@@ -1212,6 +1241,23 @@ final class BannerLegibilityTests: XCTestCase {
             "        case \"high\":   return Color.green.opacity(0.8)",
             "        if blocked { return Color.warmMid.opacity(0.35) }",
         ]
+        // The same helper with a branch in it (#630). The one statement
+        // lookahead this replaced saw the `if` and nothing after it, so every
+        // colour in a helper of more than one line was exempt.
+        XCTAssertEqual(rawTypeColourUses(in: """
+            private var confidenceColor: Color {
+                switch suggestion.confidence {
+                case "high":   PaintedSurfaces.stateSuccessText
+                case "medium": PaintedSurfaces.stateWarningText
+                default:       Color.warmMid.opacity(0.6)
+                }
+            }
+            """).count, 1, """
+            the check cannot see a colour inside a `-> Color` helper that BRANCHES, so a \
+            screen fed its type by one of those is exempt from the rule while the one \
+            line version of the same helper is caught
+            """)
+
         // A helper that is ONE expression, so its body carries no `return` at
         // all. This is what the mutation for this guard put back, and the first
         // version of the sweep stayed green on it.
@@ -1258,6 +1304,145 @@ final class BannerLegibilityTests: XCTestCase {
                 the rule people learn to work around
                 """)
         }
+    }
+
+    // MARK: - The quiet tone only ever dresses a mark (#629)
+
+    /// Uses of `quietMark` whose owning view is words, with the line number.
+    ///
+    /// The owner is found by walking BACK to the nearest view constructor,
+    /// not by looking in a window around the line. A window is answered by
+    /// whatever else happens to be nearby: both checkbox rows in photo
+    /// assignment put a `Text` directly under the `Image` this colour dresses,
+    /// so a window check would report the icon as words (L135).
+    private func quietMarksOnWords(in code: String) -> [(Int, String)] {
+        let lines = code.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        let marks = ["Image", "Divider", "Circle", "Capsule", "Rectangle",
+                     "RoundedRectangle", "Label", "ProgressView"]
+
+        return lines.enumerated().compactMap { index, line in
+            guard line.contains("PaintedSurfaces.quietMark") else { return nil }
+
+            for back in stride(from: index, through: Swift.max(0, index - 12), by: -1) {
+                let candidate = lines[back]
+                if marks.contains(where: { candidate.hasPrefix("\($0)(")
+                                        || candidate.hasPrefix("\($0).") }) {
+                    return nil
+                }
+                guard candidate.hasPrefix("Text(") else { continue }
+                // Words are allowed to wear it only when nobody reads them:
+                // the separator dot between two buttons is a mark that happens
+                // to be typed as a character.
+                let chain = lines[back...Swift.min(lines.count - 1, back + 5)]
+                return chain.contains(where: { $0.contains("accessibilityHidden(true)") })
+                    ? nil : (index + 1, line)
+            }
+            return (index + 1, line)
+        }
+    }
+
+    /// Uses whose owner the walk cannot reach, with where it IS drawn.
+    ///
+    /// A colour returning helper has no view above it, so the walk finds
+    /// nothing and reports it. Written down rather than passed over, because a
+    /// use the check cannot judge and a use it approves are otherwise the same
+    /// thing, and checked in both directions below so an entry that stops
+    /// matching cannot quietly cover whatever replaces it (L129, L96).
+    private static let quietMarkDrawnElsewhere: [String: String] = [
+        "Views/OCRReviewView.swift":
+            "confidenceColor fills a 6pt Circle beside a suggestion, which is a "
+            + "mark and is held to the 3:1 a mark needs. The helper has no view "
+            + "above it for the walk to find",
+    ]
+
+    /// `quietMark` keeps the tone that is too pale for words, so it may only
+    /// ever dress a mark (#629).
+    ///
+    /// #620 split the palette's ink into roles and kept this one at `warmMid`,
+    /// which is 4.33:1 on the deeper page: over the 3:1 a mark needs and under
+    /// the 4.5:1 a sentence needs. Its documentation says it is not for words
+    /// and nothing enforced that, so a sentence wearing it would be type at
+    /// 4.33:1 under a name that was measured for something else, and the pair
+    /// walk cannot tell: it only ever sees the colour and the level the
+    /// registry claims for it.
+    ///
+    /// The same shape as `testEveryFaintLabelDressesAControlThatIsSwitchedOff`
+    /// one role away, and for the same reason: an exemption with no reviewer is
+    /// the same as no rule (L129).
+    func testTheQuietToneOnlyEverDressesAMark() throws {
+        let files = try everySourceFile()
+        var found = 0
+        var offenders: [String] = []
+
+        for relative in files {
+            let code = try appSource("Sources/\(relative)")
+            found += code.components(separatedBy: "PaintedSurfaces.quietMark").count - 1
+            let unjudged = quietMarksOnWords(in: code)
+            if Self.quietMarkDrawnElsewhere[relative] == nil {
+                for (number, line) in unjudged {
+                    offenders.append("\(relative):\(number)  \(line.prefix(110))")
+                }
+            } else {
+                XCTAssertFalse(unjudged.isEmpty, """
+                    \(relative) is exempt from the quiet mark rule, because \
+                    \(Self.quietMarkDrawnElsewhere[relative] ?? ""), but the check now \
+                    judges every use in it. An exemption with nothing under it silently \
+                    covers whatever arrives in that file next.
+                    """)
+            }
+        }
+
+        // A sweep that finds nothing to look at proves nothing (L98). If the
+        // role were renamed this would report a clean tree over a rule that had
+        // stopped covering anything.
+        XCTAssertGreaterThan(found, 0,
+                             "no use of PaintedSurfaces.quietMark was found at all, so this "
+                             + "check is proving nothing about the role it exists for")
+
+        XCTAssertTrue(offenders.isEmpty, """
+            These draw WORDS in the quiet mark tone, which is 4.33:1 on the deeper page \
+            against the 4.5:1 a sentence needs:
+
+            \(offenders.joined(separator: "\n"))
+
+            Use PaintedSurfaces.secondaryText for anything that is read. This tone is \
+            registered as an interface element only, so a sentence wearing it is type \
+            held to a level nobody measured it for.
+            """)
+    }
+
+    /// The owner walk is asked what it can see (L1).
+    func testTheQuietMarkOwnerWalkFindsWhatDressesIt() {
+        let onAnIcon = """
+            Image(systemName: allSelected ? "checkmark.square.fill" : "square")
+            .font(.system(size: 12))
+            .foregroundStyle(allSelected ? PaintedSurfaces.iconAccent : PaintedSurfaces.quietMark)
+            Text(allSelected ? "Deselect all" : "Select all")
+            .foregroundStyle(PaintedSurfaces.secondaryText)
+            """
+        XCTAssertEqual(quietMarksOnWords(in: onAnIcon).count, 0, """
+            the check reports a checkbox mark as words, because a label sits under it in \
+            the same stack. A rule that fires on correct code is the rule people learn to \
+            work around
+            """)
+
+        let hiddenDot = """
+            Text("·").foregroundStyle(PaintedSurfaces.quietMark)
+            .accessibilityHidden(true)
+            """
+        XCTAssertEqual(quietMarksOnWords(in: hiddenDot).count, 0,
+                       "the check reports a decorative separator nobody reads as words")
+
+        let onASentence = """
+            Text(summary)
+            .font(.system(size: 11))
+            .foregroundStyle(PaintedSurfaces.quietMark)
+            """
+        XCTAssertEqual(quietMarksOnWords(in: onASentence).count, 1, """
+            the check cannot see a sentence drawn in the quiet mark tone, which is the \
+            one thing this rule exists to catch
+            """)
     }
 
     /// Every exemption still has something to exempt (#620, L96).
