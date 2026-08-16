@@ -1,8 +1,0 @@
-{
-  "name": "event-row-detail-lines-are-readable",
-  "file": "PostRollApp/Sources/Views/PaintedSurfaces.swift",
-  "find": "    static let eventRowDetail = Color.warmDark.opacity(0.8)",
-  "replace": "    static let eventRowDetail = Color.warmMid",
-  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
-  "breaks": "the two lines that say which organisation and date a row is about go back to 4.33:1 at rest and 4.10:1 hovered, under the 4.5:1 a 10pt line needs, and ink cannot report it because the type draws perfectly well and is simply too pale (#590)"
-}

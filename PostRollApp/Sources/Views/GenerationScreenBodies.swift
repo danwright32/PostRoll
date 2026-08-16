@@ -272,7 +272,7 @@ struct GenerationDoneBody: View {
                                 .foregroundStyle(PaintedSurfaces.failureCardLabel)
                             Text(info.message)
                                 .font(.system(size: 12))
-                                .foregroundStyle(PaintedSurfaces.failureCardMessage)
+                                .foregroundStyle(PaintedSurfaces.bodyText)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -411,7 +411,7 @@ private struct SummaryStat: View {
             Text(label)
                 .font(.system(size: 9, weight: .medium))
                 .tracking(1.2)
-                .foregroundStyle(PaintedSurfaces.summaryLabel)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
         }
     }
 }

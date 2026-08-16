@@ -847,7 +847,7 @@ private struct HandleSuggestionRow: View {
             Button { onDismiss() } label: {
                 Image(systemName: "xmark.circle")
                     .font(.system(size: 14))
-                    .foregroundStyle(PaintedSurfaces.suggestionRowDismissIcon)
+                    .foregroundStyle(PaintedSurfaces.quietMark)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss this suggestion")

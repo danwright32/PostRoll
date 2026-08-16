@@ -316,7 +316,7 @@ struct EventRow: View {
                     // measures: 11.61:1 selected, which is why this one moved
                     // nowhere while the lines below it did (#590).
                     .foregroundStyle(isSelected ? PaintedSurfaces.eventRowNameSelected
-                                                : PaintedSurfaces.eventRowName)
+                                                : PaintedSurfaces.bodyText)
                     .lineLimit(1)
                     .padding(.bottom, 2)
             }
@@ -336,7 +336,7 @@ struct EventRow: View {
             // palette, so no pair covered the one line that confirms the right
             // show was clicked.
             .foregroundStyle(isSelected ? PaintedSurfaces.eventRowDetailSelected
-                                        : PaintedSurfaces.eventRowDetail)
+                                        : PaintedSurfaces.secondaryText)
             .lineLimit(1)
 
             HStack(spacing: 5) {
@@ -362,7 +362,7 @@ struct EventRow: View {
             }
             .font(.system(size: 10))
             .foregroundStyle(isSelected ? PaintedSurfaces.eventRowDetailSelected
-                                        : PaintedSurfaces.eventRowDetail)
+                                        : PaintedSurfaces.secondaryText)
             .padding(.top, 2)
         }
         .padding(.vertical, 5)
