@@ -212,7 +212,7 @@ struct OCRProgressBody: View {
                     } else {
                         Text(now.footer.text)
                             .font(.light(11))
-                            .foregroundStyle(Color.warmFaint)
+                            .foregroundStyle(PaintedSurfaces.tertiaryText)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 300)
                             .contentTransition(.opacity)

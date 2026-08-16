@@ -637,7 +637,7 @@ private struct PerformersEditor: View {
 
                     Text("Searches the web for Instagram accounts matching your performers. You'll verify each one before it's applied.")
                         .font(.light(10))
-                        .foregroundStyle(Color.warmFaint)
+                        .foregroundStyle(PaintedSurfaces.tertiaryText)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let err = handleLookupError {
@@ -666,7 +666,7 @@ private struct PerformersEditor: View {
 
                         Text("Replaces the performer list with conductors and named groups from the event page. Use for DCINY-style concerts where the website is more useful than the program.")
                             .font(.light(10))
-                            .foregroundStyle(Color.warmFaint)
+                            .foregroundStyle(PaintedSurfaces.tertiaryText)
                             .fixedSize(horizontal: false, vertical: true)
 
                         if let err = fetchError {
@@ -996,7 +996,7 @@ private struct PiecesEditor: View {
 
                         Text("Asks Claude to find 1-2 sentence program notes for each work without notes. Skips pieces that already have notes.")
                             .font(.light(10))
-                            .foregroundStyle(Color.warmFaint)
+                            .foregroundStyle(PaintedSurfaces.tertiaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let err = fetchError {
@@ -1056,7 +1056,7 @@ private struct PieceRow: View {
         HStack(alignment: .top, spacing: Spacing.sm) {
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 11))
-                .foregroundStyle(Color.warmFaint)
+                .foregroundStyle(PaintedSurfaces.tertiaryText)
                 .padding(.top, 9)
                 .help("Drag to reorder")
             VStack(spacing: 6) {
@@ -1472,7 +1472,7 @@ private struct FlagRow: View {
             } else if reflowOpen {
                 Text("Describe the correction in your own words (e.g. \"Ordway is the arranger; composer is Traditional Chinese\"). Claude can update multiple fields at once.")
                     .font(.light(10))
-                    .foregroundStyle(Color.warmFaint)
+                    .foregroundStyle(PaintedSurfaces.tertiaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 4)
                 TextEditor(text: $reflowText)
@@ -1506,7 +1506,8 @@ private struct FlagRow: View {
                             .buttonStyle(.plain)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(reflowText.trimmingCharacters(in: .whitespaces).isEmpty
-                                             ? Color.warmFaint : Color.roseGold)
+                                             ? PaintedSurfaces.disabledControlLabel
+                                             : PaintedSurfaces.pageAccentText)
                             .disabled(reflowText.trimmingCharacters(in: .whitespaces).isEmpty)
                         Button("Cancel") {
                             reflowOpen = false
@@ -1581,7 +1582,7 @@ private struct FlagRow: View {
                 if flag.resolved {
                     Label("Resolved", systemImage: "checkmark.circle.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.warmFaint)
+                        .foregroundStyle(PaintedSurfaces.tertiaryText)
                         .labelStyle(.titleAndIcon)
                 }
             }
@@ -1591,7 +1592,7 @@ private struct FlagRow: View {
                     HStack(spacing: 4) {
                         Text("OCR read:")
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Color.warmFaint)
+                            .foregroundStyle(PaintedSurfaces.tertiaryText)
                         Text(flag.currentValue)
                             .font(.system(size: 10))
                             .foregroundStyle(Color.warmMid)
@@ -1614,7 +1615,7 @@ private struct FlagRow: View {
                     } else {
                         Text("Claude flagged this but didn't propose a replacement. Edit the value below if you can correct it, or click Keep OCR Text.")
                             .font(.light(10))
-                            .foregroundStyle(Color.warmFaint)
+                            .foregroundStyle(PaintedSurfaces.tertiaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -1648,7 +1649,8 @@ private struct FlagRow: View {
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(draftIsChange ? PaintedSurfaces.pageAccentText : Color.warmFaint)
+                        .foregroundStyle(draftIsChange ? PaintedSurfaces.pageAccentText
+                                         : PaintedSurfaces.disabledControlLabel)
                         .disabled(!draftIsChange)
                         .help("Replace the \(fieldName) value with what you typed.")
 
@@ -1666,7 +1668,7 @@ private struct FlagRow: View {
                 } else {
                     Text("This fix changes the \(fieldName) list, so it can't be made in a single field. Use Describe the correction (Claude's suggestion is pre-filled) or Keep OCR Text.")
                         .font(.light(10))
-                        .foregroundStyle(Color.warmFaint)
+                        .foregroundStyle(PaintedSurfaces.tertiaryText)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 4)
 

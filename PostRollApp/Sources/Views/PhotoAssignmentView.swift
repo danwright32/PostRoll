@@ -1375,7 +1375,8 @@ private struct PhotoTaggingSheet: View {
                                     .font(.system(size: 10))
                             }
                             .foregroundStyle(tagsBinding.wrappedValue.isEmpty
-                                             ? Color.warmFaint : Color.roseGold)
+                                             ? PaintedSurfaces.disabledControlLabel
+                                             : PaintedSurfaces.pageAccentText)
                         }
                         .buttonStyle(.plain)
                         .disabled(tagsBinding.wrappedValue.isEmpty)
@@ -1484,7 +1485,8 @@ private struct PhotoTaggingSheet: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(PhotoTagSheetNavigation.canGoPrevious(from: safeIndex, count: photos.count)
-                             ? Color.roseGold : Color.warmFaint)
+                             ? PaintedSurfaces.pageAccentText
+                             : PaintedSurfaces.disabledControlLabel)
             .disabled(!PhotoTagSheetNavigation.canGoPrevious(from: safeIndex, count: photos.count))
             .keyboardShortcut(.leftArrow, modifiers: [])
 
@@ -1970,7 +1972,7 @@ private struct ThursdayReelSection: View {
                             .foregroundStyle(PaintedSurfaces.pageAccentText)
                         Text("Re-rolls the photo arrangement. Takes effect when the reel is generated.")
                             .font(.light(10))
-                            .foregroundStyle(Color.warmFaint)
+                            .foregroundStyle(PaintedSurfaces.tertiaryText)
                     }
                 }
                 .padding(.horizontal, Spacing.xl)
@@ -2545,7 +2547,7 @@ private struct PerformerAssignmentSection: View {
                         if !eventHandles.trimmingCharacters(in: .whitespaces).isEmpty {
                             Text("Already tagged on every post: \(eventHandles)")
                                 .font(.system(size: 10).italic())
-                                .foregroundStyle(Color.warmFaint.opacity(0.85))
+                                .foregroundStyle(PaintedSurfaces.tertiaryText)
                         }
                     }
 
@@ -2675,7 +2677,7 @@ private struct HandleField: View {
                 if text.isEmpty {
                     Text(placeholder)
                         .font(.system(size: 12).italic())
-                        .foregroundStyle(Color.warmFaint.opacity(0.45))
+                        .foregroundStyle(PaintedSurfaces.fieldPlaceholder)
                         .padding(.horizontal, 8)
                         .allowsHitTesting(false)
                 }

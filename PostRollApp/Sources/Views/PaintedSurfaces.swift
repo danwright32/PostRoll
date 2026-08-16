@@ -162,6 +162,53 @@ enum PaintedSurfaces {
     /// both roles and so the one the accent has to clear.
     static let deepPage = Color.creamDeep
 
+    // MARK: - The faint tone in its three roles (#611)
+    //
+    // The same shape as the accent above, one step further down the palette.
+    // `warmFaint` is 2.43:1 on the page and 2.07:1 on the deeper one, under the
+    // 4.5:1 body text needs and under even the 3:1 an interface element needs,
+    // and it was the foreground of 14 text draws across the reading screen, OCR
+    // review and photo assignment. Nothing reported it: the token was in no pair
+    // here, so the harness built to catch exactly this had never been given it.
+    //
+    // Splitting it by role is what made the values decidable. Two of the three
+    // roles are read, so each takes the value its own background asks for; the
+    // third is exempt and keeps the tone.
+
+    /// The sentence under a control saying what it does, and the small labels
+    /// beside a value: the step below secondary type.
+    ///
+    /// `warmMid`, which is where that step runs out. On cream this measures
+    /// 5.07:1 and on a resolved flag 4.69:1, and anything lighter is under
+    /// 4.5:1, so there is no room for a paler tone that is still read. What
+    /// carries the hierarchy instead is size and weight: these are 10pt light
+    /// against the 12pt regular they sit under.
+    static let tertiaryText = Color.warmMid
+
+    /// The placeholder inside a field, which is filled with `deepPage` rather
+    /// than drawn on the page.
+    ///
+    /// Its own value because its background is the deeper one: `tertiaryText`
+    /// is 4.33:1 there, under the line, so the role that lands on the harder
+    /// surface decides its own value rather than inheriting one measured
+    /// somewhere easier (L143). 4.86:1 on that fill, and still clearly lighter
+    /// than the `warmDark` a typed value is drawn in.
+    static let fieldPlaceholder = Color.warmDark.opacity(0.75)
+
+    /// The label of a control that is switched off.
+    ///
+    /// The tone itself, unchanged, and the one place in the app allowed under
+    /// the contrast floor: WCAG 1.4.3 exempts the text of an inactive component,
+    /// and a greyed-out control that reads at full strength is not reporting
+    /// that it cannot be pressed.
+    ///
+    /// Deliberately not in the pair list, because there is no level it has to
+    /// clear. What reviews it instead is
+    /// `BannerLegibilityTests.testEveryFaintLabelDressesAControlThatIsSwitchedOff`,
+    /// which holds every use of it to a control carrying `.disabled(`, so the
+    /// exemption cannot spread to ordinary type (L129).
+    static let disabledControlLabel = Color.warmFaint
+
     // MARK: - The rest of the app's painted surfaces (#582)
     //
     // #574 named the surfaces the notices paint. Seventeen other view files
@@ -581,6 +628,9 @@ enum PaintedSurfaces {
         "outlineButtonHitArea": outlineButtonHitArea,
         "pageAccentText": pageAccentText,
         "iconAccent": iconAccent,
+        "tertiaryText": tertiaryText,
+        "fieldPlaceholder": fieldPlaceholder,
+        "disabledControlLabel": disabledControlLabel,
         "mastheadWordmark": mastheadWordmark,
         "edgeRule": edgeRule,
         "eventRow": eventRow,
@@ -744,6 +794,21 @@ enum PaintedSurfaces {
             pairs.append(Pair(name, "on the page", colour, on: page, kind))
             pairs.append(Pair(name, "on the deeper page", colour, on: deepPage, kind))
         }
+
+        // The faint tone in each of the roles it is actually drawn in, which is
+        // the whole of #611: it was under the floor as type on all three of
+        // these and in the registry on none of them.
+        pairs.append(Pair("tertiary text", "sentence", tertiaryText, on: page, .bodyText))
+        pairs.append(Pair("tertiary text", "sentence, on a resolved flag",
+                          tertiaryText, on: resolvedFlagFill.composited(over: deepPage),
+                          .bodyText))
+        // The same colour as a symbol rather than as words: the handle a piece
+        // is dragged by. A lower level, and it is the level the token would have
+        // been judged against if only its icon role had been listed (L143).
+        pairs.append(Pair("tertiary text", "reorder handle",
+                          tertiaryText, on: page, .interfaceElement))
+        pairs.append(Pair("field placeholder", "placeholder",
+                          fieldPlaceholder, on: deepPage, .bodyText))
 
         // Every stage pill, on both of the row backgrounds it can sit on
         // (#582). Per state rather than one sample of the family: the wash is

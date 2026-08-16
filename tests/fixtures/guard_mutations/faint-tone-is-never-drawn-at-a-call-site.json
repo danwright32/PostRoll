@@ -1,0 +1,8 @@
+{
+  "name": "faint-tone-is-never-drawn-at-a-call-site",
+  "file": "PostRollApp/Sources/Views/OCRProgressView.swift",
+  "find": "                            .foregroundStyle(PaintedSurfaces.tertiaryText)",
+  "replace": "                            .foregroundStyle(Color.warmFaint)",
+  "test": "PostRollTests/BannerLegibilityTests/testTheFaintToneIsNeverDrawnAtACallSite",
+  "breaks": "a screen draws type in the raw faint tone, which is 2.43:1 on the page and names no role, so nothing can hold it to a level and the words Dan reads while a program is being read go back under the line (#611)"
+}

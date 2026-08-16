@@ -1,0 +1,8 @@
+{
+  "name": "accent-is-never-drawn-unnamed-in-a-wrapped-ternary",
+  "file": "PostRollApp/Sources/Views/PhotoAssignmentView.swift",
+  "find": "                                             : PaintedSurfaces.pageAccentText)",
+  "replace": "                                             : Color.roseGold)",
+  "test": "PostRollTests/BannerLegibilityTests/testTheAccentIsNeverDrawnUnnamed",
+  "breaks": "the raw accent comes back as a button's label on the half of a wrapped ternary that carries no modifier, which the rule read past for three sites while reporting the tree clean (#611)"
+}
