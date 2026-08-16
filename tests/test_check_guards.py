@@ -554,7 +554,9 @@ def test_only_matching_nothing_is_a_failure(repo: Path, tmp_path: Path):
 GUARD_TEST_SOURCE = (
     "import XCTest\n"
     "final class NoteTests: XCTestCase {\n"
-    "    func testInk() {}\n"
+    "    private func matcher(_ line: String) -> Bool { line.contains(\"x\") }\n"
+    "    func testInk() { XCTAssertTrue(matcher(\"x\")) }\n"
+    "    func testWraps() { XCTAssertTrue(true) }\n"
     "}\n"
 )
 
@@ -569,10 +571,16 @@ def scoped_repo(tmp_path: Path) -> Path:
     (repo / "tests" / "fixtures").mkdir(parents=True)
     (repo / "Sources" / "Note.swift").write_text(SOURCE)
     (repo / "Sources" / "Other.swift").write_text("let other = 1\n")
+    (repo / "Sources" / "Wraps.swift").write_text("let wraps = true\n")
     (repo / "PostRollApp" / "Tests" / "NoteTests.swift").write_text(GUARD_TEST_SOURCE)
     (repo / "tests" / "test_other.py").write_text("def test_other():\n    pass\n")
     entries = [
         registry_dict(),
+        # Shares NoteTests.swift with note-ink but protects a file of its own,
+        # so "one test function changed" has a sibling it must not drag along.
+        registry_dict(name="note-wraps", file="Sources/Wraps.swift",
+                      find="let wraps = true", replace="let wraps = false",
+                      test="PostRollTests/NoteTests/testWraps"),
         registry_dict(name="other-guard", file="Sources/Other.swift",
                       find="let other = 1", replace="let other = 2",
                       test="tests/test_other.py::test_other"),
@@ -607,7 +615,14 @@ def test_changed_mode_selects_an_entry_whose_protected_file_changed(scoped_repo:
     assert any("NoteTests" in arg for arg in runner.calls[0])
 
 
-def test_changed_mode_selects_an_entry_whose_swift_guard_test_changed(scoped_repo: Path):
+def test_changed_mode_selects_every_entry_when_shared_test_code_changed(scoped_repo: Path):
+    """A change OUTSIDE every test function selects them all (#634).
+
+    This is the half that keeps the narrowing honest. A guard's behaviour lives
+    as much in the matcher it calls as in the function that asserts on it, and
+    editing a shared helper leaves every test function in the file byte for byte
+    identical. Selecting only the functions that changed would skip exactly the
+    entries that just changed meaning."""
     (scoped_repo / "PostRollApp" / "Tests" / "NoteTests.swift").write_text(
         GUARD_TEST_SOURCE + "// tightened\n")
     git(scoped_repo, "add", "-A")
@@ -615,7 +630,56 @@ def test_changed_mode_selects_an_entry_whose_swift_guard_test_changed(scoped_rep
     runner = a_runner(65, SWIFT_RED)
     code, _ = run_changed(scoped_repo, runner)
     assert code == 0
-    assert len(runner.calls) == 1
+    assert len(runner.calls) == 2, "both entries in that file have to re-prove themselves"
+
+
+def test_changed_mode_selects_only_the_guard_whose_own_test_changed(scoped_repo: Path):
+    """Editing one guard re-proves that guard, not its neighbours (#634).
+
+    BannerLegibilityTests holds about forty entries, so a one line change to one
+    of them used to re-prove all forty at roughly 12 to 22 seconds each. An
+    expensive habit is a habit that gets skipped, which is what #426 narrowed
+    this sweep for once already."""
+    source = (scoped_repo / "PostRollApp" / "Tests" / "NoteTests.swift").read_text()
+    (scoped_repo / "PostRollApp" / "Tests" / "NoteTests.swift").write_text(
+        source.replace('func testInk() { XCTAssertTrue(matcher("x")) }',
+                       'func testInk() { XCTAssertTrue(matcher("x")); XCTAssertTrue(true) }'))
+    git(scoped_repo, "add", "-A")
+    git(scoped_repo, "commit", "-m", "tighten testInk")
+
+    runner = a_runner(65, SWIFT_RED)
+    code, _ = run_changed(scoped_repo, runner)
+
+    assert code == 0
+    assert len(runner.calls) == 1, (
+        "editing one test function re-proved its neighbour too, which is the "
+        "cost this is meant to remove")
+    assert "testInk" in " ".join(runner.calls[0])
+
+
+def test_changed_mode_selects_everything_when_it_cannot_read_the_test_file(
+        scoped_repo: Path):
+    """Unparseable is not unchanged (L11).
+
+    If the functions cannot be located the tool knows nothing about which guard
+    moved, and the safe answer is to run them all and say why. Silently
+    narrowing to none would report a clean sweep over guards it never touched."""
+    (scoped_repo / "PostRollApp" / "Tests" / "NoteTests.swift").write_text(
+        "import XCTest\n"
+        "final class NoteTests: XCTestCase {\n"
+        "    func testInk() { if x { \n")   # never closes
+    git(scoped_repo, "add", "-A")
+    git(scoped_repo, "commit", "-m", "half written")
+
+    runner = a_runner(65, SWIFT_RED)
+    _, lines = run_changed(scoped_repo, runner)
+
+    assert len(runner.calls) == 2, "a file it cannot read must not narrow anything"
+    assert any("could not" in line.lower() or "cannot" in line.lower()
+               for line in lines), (
+        "nothing said the file could not be read, so a sweep that gave up on "
+        "narrowing looks exactly like one that narrowed correctly\n"
+        + "\n".join(lines))
 
 
 def test_changed_mode_selects_a_pytest_entry_whose_test_file_changed(scoped_repo: Path):
@@ -650,7 +714,8 @@ def test_changed_mode_counts_uncommitted_work(scoped_repo: Path):
     runner = a_runner(65, SWIFT_RED)
     code, _ = run_changed(scoped_repo, runner)
     assert code == 0
-    assert len(runner.calls) == 1
+    # Outside every test function, so both entries in that file are selected.
+    assert len(runner.calls) == 2
 
 
 def test_changed_mode_says_what_it_skipped(scoped_repo: Path):
@@ -658,7 +723,7 @@ def test_changed_mode_says_what_it_skipped(scoped_repo: Path):
     git(scoped_repo, "add", "-A")
     git(scoped_repo, "commit", "-m", "touch note")
     _, lines = run_changed(scoped_repo, a_runner(65, SWIFT_RED))
-    assert any("1 of 2" in line and "skipped" in line for line in lines), lines
+    assert any("1 of 3" in line and "skipped" in line for line in lines), lines
 
 
 def test_changed_mode_with_nothing_affected_is_explicit(scoped_repo: Path):
