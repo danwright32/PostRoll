@@ -1,0 +1,8 @@
+{
+  "name": "review-sheet-covers-the-stage-pills",
+  "file": "PostRollApp/Tests/HostedControlLegibilityTests.swift",
+  "find": "        for state in StagePillState.allPillStates {\n            for isSelected in [false, true] {\n                let row = isSelected ? \"row selected\" : \"row at rest\"\n                surfaces.append((\"stage pill \\(state) \\(row)\",\n                                 { try self.renderPill(state, isSelected: isSelected) }))\n            }\n        }",
+  "replace": "",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheSheetShowsEveryStateTheseChecksMeasure",
+  "breaks": "a whole group of surfaces drops out of the review sheet, which the dump's own count cannot notice because it compares the surfaces it enumerated with the files it wrote and both shrink together (#623, L70)"
+}

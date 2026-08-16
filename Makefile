@@ -4,7 +4,7 @@ BUILD_DIR := $(shell . PostRollApp/derived-data-path.sh; printf %s "$$POSTROLL_D
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
-.PHONY: install install-force build test test-python test-python-fast check-guards check-toolchain clean
+.PHONY: install install-force build test test-python test-python-fast check-guards check-toolchain review-sheet clean
 
 # One build-and-install implementation, not two. This used to run its own
 # xcodebuild and cp, skipping the xattr clear, the stable-identity signing and
@@ -88,6 +88,66 @@ check-guards:
 # here can tell you. Run by build-install.sh before it installs.
 check-toolchain:
 	@venv/bin/python tools/check_toolchain.py
+
+# A picture of every screen the checks measure, in one folder (#623).
+#
+# Reviewing a visual change used to mean launching the app and navigating to
+# each screen. The suite already rendered all of these, several times over, and
+# threw the pixels away: #611 changed the colour of type in fourteen places
+# across three screens and the only review available was by hand.
+#
+# One xcodebuild invocation on purpose. The three dump tests write into one
+# folder that is emptied once per process, so running them separately would have
+# each clear the others' work.
+#
+# The folder is NOT named here. The tests decide it and print it, and this reads
+# it back, because a path both sides spell separately is a path they can
+# disagree about (L41). Every step that could match nothing is checked, since a
+# grep that finds nothing exits quietly and would leave this reporting a sheet
+# that was never written (L100).
+#
+# Including the specs themselves. Measured while writing this: renaming one of
+# the three to a test that does not exist left xcodebuild reporting TEST
+# SUCCEEDED, and this target cheerfully announced 80 images with the whole
+# lightbox group absent. A spec matching nothing is not a pass (L98), so the
+# count of groups that reported is held to the count of tests asked for.
+REVIEW_TESTS := \
+	PostRollTests/BannerLegibilityTests/testDumpBannersForReview \
+	PostRollTests/HostedControlLegibilityTests/testDumpEveryMeasuredScreenForReview \
+	PostRollTests/PhotoLightboxTests/testDumpTheLightboxForReview
+
+review-sheet:
+	@out=$$(xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
+		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
+		$(foreach t,$(REVIEW_TESTS),-only-testing:$(t)) \
+		test 2>&1); \
+	if ! printf '%s' "$$out" | grep -q 'TEST SUCCEEDED'; then \
+		printf '%s\n' "$$out" | grep -E 'error:|failed' | tail -20; \
+		echo "The render run failed, so there is no sheet to review."; \
+		exit 1; \
+	fi; \
+	groups=$$(printf '%s\n' "$$out" | grep -c '^REVIEW-SHEET-WROTE ' || true); \
+	if [ "$$groups" -ne $(words $(REVIEW_TESTS)) ]; then \
+		echo "$$groups of $(words $(REVIEW_TESTS)) dumps reported. A test spec that"; \
+		echo "matches nothing still exits green, so a sheet missing a whole group"; \
+		echo "looks exactly like a full one. Check the names in REVIEW_TESTS."; \
+		exit 1; \
+	fi; \
+	folder=$$(printf '%s\n' "$$out" | sed -n 's/^REVIEW-SHEET-FOLDER //p' | head -1); \
+	if [ -z "$$folder" ]; then \
+		echo "The run passed but never said where it wrote. Nothing here can"; \
+		echo "point at a sheet, and an empty answer must not read as an empty"; \
+		echo "folder: check ReviewSheet.folderMarker still prints."; \
+		exit 1; \
+	fi; \
+	count=$$(ls "$$folder" 2>/dev/null | grep -c '\.png$$' || true); \
+	if [ "$$count" -eq 0 ]; then \
+		echo "No images in $$folder, so there is nothing to review."; \
+		exit 1; \
+	fi; \
+	printf '%s\n' "$$out" | sed -n 's/^REVIEW-SHEET-WROTE /  /p'; \
+	echo "  $$count images in $$folder"; \
+	open "$$folder" || true
 
 clean:
 	@rm -rf "$(BUILD_DIR)"

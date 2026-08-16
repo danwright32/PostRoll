@@ -1043,31 +1043,126 @@ final class HostedControlLegibilityTests: XCTestCase {
 
 #if POSTROLL_TESTS
 extension HostedControlLegibilityTests {
-    /// Writes the hosted states to PNG so a person can look at them, which is the
-    /// point of the whole exercise.
+
+    /// Every surface this file measures, each paired with the pixels it draws
+    /// (#623).
+    ///
+    /// Built by walking the SAME collections the measurement tests walk, and by
+    /// calling the SAME render helpers, rather than by listing the screens
+    /// again here. That is what makes "the sheet shows what the checks know
+    /// about" true by construction instead of by somebody remembering: a state
+    /// added to `readingStates` or a case added to `StagePillState` is in the
+    /// sheet the moment it is measured, and a hand-kept list would simply be
+    /// missing it while still reporting a full sheet (L96).
+    ///
+    /// It is also why there is no second renderer. A picture drawn by code the
+    /// checks do not use would be a picture of a screen the app never draws,
+    /// which is the trap #607 recorded when the reading screen's phase table
+    /// still lived in the view (L48).
+    private var reviewSurfaces: [(name: String, render: () throws -> NSBitmapImageRep)] {
+        var surfaces: [(String, () throws -> NSBitmapImageRep)] = []
+
+        for state in states {
+            surfaces.append((state.name, { try self.render(state.view,
+                                                           height: state.height) }))
+        }
+
+        for (where_, width) in Self.sidebarWidths {
+            for isSelected in [false, true] {
+                let state = isSelected ? "selected" : "at rest"
+                surfaces.append(("event row \(state) \(where_)",
+                                 { try self.renderRow(isSelected: isSelected,
+                                                      width: width, wordless: false) }))
+            }
+        }
+
+        for state in StagePillState.allPillStates {
+            for isSelected in [false, true] {
+                let row = isSelected ? "row selected" : "row at rest"
+                surfaces.append(("stage pill \(state) \(row)",
+                                 { try self.renderPill(state, isSelected: isSelected) }))
+            }
+        }
+
+        for state in Self.readingStates {
+            surfaces.append(("reading screen \(state.name)",
+                             { try self.renderReadingScreen(state.live,
+                                                            wordless: false) }))
+        }
+
+        for state in Self.failureMessages {
+            surfaces.append(("failure screen \(state.name)",
+                             { try self.renderFailureScreen(state.message) }))
+        }
+
+        return surfaces
+    }
+
+    /// The sheet names every state the checks in this file measure (#623).
+    ///
+    /// Without this the coverage claim above is unguarded: `reviewSurfaces` is
+    /// checked against its own length, so deleting a whole loop out of it
+    /// shrinks both sides of that comparison and the dump goes on passing while
+    /// the sheet quietly stops showing the stage pills. A count compared with
+    /// itself can only prove it is self-consistent (L70).
+    ///
+    /// So this asks the question from the other side, against the collections
+    /// the measurement tests walk: for each state they measure, is there a
+    /// picture of it. A state added there and missed here fails, which is the
+    /// direction a hand-kept list always fails in (L96).
+    func testTheSheetShowsEveryStateTheseChecksMeasure() {
+        let names = reviewSurfaces.map(\.name)
+
+        func expect(_ fragment: String, _ what: String) {
+            XCTAssertTrue(names.contains { $0.contains(fragment) }, """
+                Nothing in the review sheet shows \(what) ("\(fragment)"), so a visual \
+                change to it can only be reviewed by launching the app, which is the \
+                thing this sheet exists to replace.
+                """)
+        }
+
+        for state in states { expect(state.name, "the \(state.name)") }
+        for state in StagePillState.allPillStates {
+            expect("stage pill \(state)", "the \(state) stage pill")
+        }
+        for state in Self.readingStates {
+            expect("reading screen \(state.name)", "the reading screen \(state.name)")
+        }
+        for state in Self.failureMessages {
+            expect("failure screen \(state.name)", "the failure screen for \(state.name)")
+        }
+        expect("event row at rest", "an event row at rest")
+        expect("event row selected", "a selected event row")
+    }
+
+    /// Writes every one of them into the shared folder (#623).
     ///
     /// Asserts rather than merely producing files: a utility in the suite that
     /// cannot fail is indistinguishable from one that silently stopped working.
-    func testDumpHostedStatesForReview() throws {
-        let out = URL(fileURLWithPath:
-            ProcessInfo.processInfo.environment["POSTROLL_HOSTED_DUMP"]
-            ?? FileManager.default.temporaryDirectory
-                .appendingPathComponent("postroll-hosted").path)
-        try? FileManager.default.removeItem(at: out)
-        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+    /// It counts what is ON DISK afterwards rather than what the loop meant to
+    /// write, because counting the loop is counting itself.
+    func testDumpEveryMeasuredScreenForReview() throws {
+        let surfaces = reviewSurfaces
+        XCTAssertGreaterThan(surfaces.count, 20,
+                             "the sheet claims \(surfaces.count) surfaces, which is "
+                             + "fewer than this file measures, so it is a review of "
+                             + "whichever ones happened to be listed")
 
-        for state in states {
-            let rep = try render(state.view, height: state.height)
-            let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
-            try png.write(to: out.appendingPathComponent(
-                state.name.replacingOccurrences(of: " ", with: "-") + ".png"))
+        for surface in surfaces {
+            try ReviewSheet.write(try surface.render(),
+                                  group: Self.reviewGroup, name: surface.name)
         }
 
-        let written = try FileManager.default.contentsOfDirectory(atPath: out.path)
-            .filter { $0.hasSuffix(".png") }
-        XCTAssertEqual(written.count, states.count,
-                       "every state has to reach disk, or reviewing these images is a "
-                       + "review of whichever ones happened to be written")
+        let written = try ReviewSheet.written(group: Self.reviewGroup)
+        ReviewSheet.announce(group: Self.reviewGroup, count: written.count)
+
+        XCTAssertEqual(written.count, surfaces.count, """
+            \(surfaces.count) surfaces were rendered and \(written.count) reached \
+            \(ReviewSheet.folder.path). A sheet missing a screen looks exactly like a \
+            sheet of every screen, and the one missing is the one nobody reviews.
+            """)
     }
+
+    fileprivate static let reviewGroup = "screens"
 }
 #endif
