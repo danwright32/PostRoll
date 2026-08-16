@@ -1,0 +1,8 @@
+{
+  "name": "failure-screen-way-back-reaches-the-screen",
+  "file": "PostRollApp/Sources/Views/OCRProgressView.swift",
+  "find": "            Button(\"Go Back\") { onGoBack() }\n                .buttonStyle(.plain)\n                .font(.system(size: 11))\n                .foregroundStyle(Color.warmMid)",
+  "replace": "            Button(\"Go Back\") { onGoBack() }\n                .buttonStyle(.plain)\n                .font(.system(size: 11))\n                .foregroundStyle(PaintedSurfaces.page)",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheFailureScreenDrawsEveryOneOfItsWords",
+  "breaks": "the way off a failed read is drawn in the colour of the page, which is the smallest part of that screen and so the one closest to the floor: a check that could not see this one could not see any of them (#613)"
+}

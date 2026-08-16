@@ -624,6 +624,189 @@ final class HostedControlLegibilityTests: XCTestCase {
             """)
     }
 
+    // MARK: - The screen a read fails on (#613)
+
+    /// What the failure screen says, from the code that says it.
+    ///
+    /// Every message is a real `PythonBridgeError` rendered through its own
+    /// `localizedDescription`, which is the exact route `OCRManager` takes when
+    /// a run dies: it catches an error and stores that string. Nothing here is
+    /// typed copy, so a fixture cannot show a sentence the app never says
+    /// (L48).
+    ///
+    /// Three lengths, because the message is the one part of this screen whose
+    /// size the app does not control: a stopped run says one sentence, an
+    /// unrecognised failure says three and quotes the log.
+    private static var failureMessages: [(name: String, message: String)] {
+        [
+            ("a run that timed out",
+             PythonBridgeError.timedOut(seconds: 600).localizedDescription),
+            ("a read that produced nothing",
+             PythonBridgeError.outputMissing.localizedDescription),
+            ("a failure nothing recognised",
+             PythonBridgeError.scriptFailed(
+                exitCode: 1,
+                stderr: "Traceback (most recent call last):\n"
+                    + "  File \"postroll/ai/ocr.py\", line 214, in read_program\n"
+                    + "RuntimeError: the page bundle was rejected by the service")
+                .localizedDescription),
+        ]
+    }
+
+    private func renderFailureScreen(_ message: String,
+                                     hiding: Set<OCRFailureBody.Part> = [],
+                                     width: CGFloat = 520) throws -> NSBitmapImageRep {
+        let view = OCRFailureBody(message: message, onRetry: {}, onGoBack: {},
+                                  hidden: hiding)
+            .frame(width: width, height: 400)
+            .background(PaintedSurfaces.page)
+
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(x: 0, y: 0, width: width, height: 400)
+        host.layoutSubtreeIfNeeded()
+        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
+                                "AppKit produced no bitmap for the failure screen")
+        host.cacheDisplay(in: host.bounds, to: rep)
+        return rep
+    }
+
+    /// The share of pixels one part of a screen accounts for.
+    ///
+    /// Two renders of the same view at the same size, differing only in whether
+    /// that part is drawn, compared pixel for pixel. Ink over the whole surface
+    /// cannot answer this: a 44pt symbol and a filled button are marks on the
+    /// page whatever the type does, and the guard that measured a filled button
+    /// that way read 0.2475 of it as content while almost all of it was the
+    /// button's own background (#559, L141). A difference isolates the part.
+    ///
+    /// Layout is identical between the two, because a part is switched off with
+    /// `.opacity(0)` rather than removed, so a pixel that moved is a pixel that
+    /// part drew.
+    private func footprint(_ whole: NSBitmapImageRep,
+                           _ without: NSBitmapImageRep) -> Double {
+        guard whole.pixelsWide == without.pixelsWide,
+              whole.pixelsHigh == without.pixelsHigh else { return 0 }
+        var differing = 0
+        var sampled = 0
+        for y in Swift.stride(from: 0, to: whole.pixelsHigh, by: 2) {
+            for x in Swift.stride(from: 0, to: whole.pixelsWide, by: 2) {
+                guard let a = whole.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                      let b = without.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
+                else { continue }
+                sampled += 1
+                func luminance(_ c: NSColor) -> Double {
+                    0.299 * c.redComponent + 0.587 * c.greenComponent
+                        + 0.114 * c.blueComponent
+                }
+                if abs(luminance(a) - luminance(b)) > 0.02 { differing += 1 }
+            }
+        }
+        guard sampled > 0 else { return 0 }
+        return Double(differing) / Double(sampled)
+    }
+
+    /// What a part has to be worth to count as drawn.
+    ///
+    /// Not a share of the surface picked to sit under whatever the smallest one
+    /// measured. Two renders of the SAME view differ by nothing at all, which
+    /// `testTheFootprintOfNothingIsNothing` measures rather than assumes, so
+    /// anything above zero is a part putting pixels on the page. This is a
+    /// margin over that zero, and the smallest real part, the 11pt Go Back,
+    /// measures several times it.
+    private static let drawnFootprint = 0.0004
+
+    /// Every word on the screen a read fails on reaches the screen (#613).
+    ///
+    /// The failure half of the view #607 drew. It is the only screen that says
+    /// a paid read did not work, and the only place the way to run it again is
+    /// offered, and nothing had ever rendered it.
+    ///
+    /// Per part rather than per screen, because a screen check here would be
+    /// answered by the symbol and the button fill: those two are most of the
+    /// ink, so the heading and the reason could both vanish and a whole-surface
+    /// measurement would barely move (L141).
+    func testTheFailureScreenDrawsEveryOneOfItsWords() throws {
+        for state in Self.failureMessages {
+            let whole = try renderFailureScreen(state.message)
+            for part in OCRFailureBody.Part.allCases {
+                let without = try renderFailureScreen(state.message, hiding: [part])
+                let share = footprint(whole, without)
+                print(String(format: "  %.4f  %@, %@", share, state.name, part.rawValue))
+
+                XCTAssertGreaterThan(share, Self.drawnFootprint, """
+                    On the failure screen for \(state.name), switching "\(part.rawValue)" \
+                    off changed \(String(format: "%.4f", share)) of the render, which is \
+                    nothing. That part is in the view tree and not on the screen: this is \
+                    the screen that tells Dan a paid read did not work and offers the way \
+                    to run it again.
+                    """)
+            }
+        }
+    }
+
+    /// The failure screen still says everything when the window is narrow.
+    func testTheFailureScreenDrawsEveryWordWhenNarrow() throws {
+        let message = try XCTUnwrap(Self.failureMessages.last).message
+        let whole = try renderFailureScreen(message, width: Self.narrowestPane)
+        for part in OCRFailureBody.Part.allCases {
+            let without = try renderFailureScreen(message, hiding: [part],
+                                                  width: Self.narrowestPane)
+            XCTAssertGreaterThan(footprint(whole, without), Self.drawnFootprint,
+                                 "the failure screen lost \"\(part.rawValue)\" at "
+                                 + "\(Int(Self.narrowestPane))pt wide")
+        }
+    }
+
+    /// The measurement's own zero, measured rather than assumed (L1).
+    ///
+    /// The floor above is a margin over "no difference at all". If two renders
+    /// of the same view ever stopped agreeing, every figure in these checks
+    /// would be noise and the floor would be measuring the renderer.
+    func testTheFootprintOfNothingIsNothing() throws {
+        let message = try XCTUnwrap(Self.failureMessages.first).message
+        let once = try renderFailureScreen(message)
+        let again = try renderFailureScreen(message)
+        XCTAssertEqual(footprint(once, again), 0, accuracy: 0.00001, """
+            two renders of the same screen differ, so the footprint measurement is \
+            reading the renderer rather than the words and the floor it is judged \
+            against means nothing
+            """)
+    }
+
+    /// The measurement can tell a part that drew from one that did not (L1).
+    ///
+    /// The same proof `BannerLegibilityTests` gets for ink: one view, rendered
+    /// twice, differing only in whether its type is the colour of the page
+    /// behind it. Type drawn in its own background is the defect this whole
+    /// harness exists for, and it has shipped in this app three times.
+    func testTheFootprintTellsDrawnTypeFromInvisibleType() throws {
+        func card(_ colour: Color) -> some View {
+            ZStack {
+                PaintedSurfaces.page
+                Text("The program could not be read.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(colour)
+            }
+            .frame(width: 520, height: 90)
+        }
+
+        let blank = try render(ZStack { PaintedSurfaces.page }.frame(width: 520,
+                                                                     height: 90))
+        let invisible = footprint(try render(card(PaintedSurfaces.page)), blank)
+        let legible = footprint(try render(card(Color.warmDark)), blank)
+
+        XCTAssertLessThan(invisible, Self.drawnFootprint, """
+            type drawn in the colour of the page behind it measures \
+            \(String(format: "%.4f", invisible)) as a footprint, which clears the floor \
+            the checks above use, so those checks would pass on a screen showing nothing
+            """)
+        XCTAssertGreaterThan(legible, Self.drawnFootprint * 5, """
+            the same sentence in a readable colour measures \
+            \(String(format: "%.4f", legible)), which is not far enough above the floor \
+            for the floor to mean anything
+            """)
+    }
+
     // MARK: - Fits, rather than merely inks
 
     /// The width AppKit says this content requires.
