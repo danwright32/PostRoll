@@ -100,7 +100,6 @@ enum PaintedSurfaces {
     /// One failed day's card.
     static let failureCardPanel = Color.roseDeep.opacity(0.08)
     static let failureCardLabel = Color.roseDeep
-    static let failureCardMessage = Color.warmDark
 
     /// The row of counts on the configure screen.
     static let summaryPanel = Color.creamDeep
@@ -110,13 +109,11 @@ enum PaintedSurfaces {
     /// measured 4.33:1, under the 4.5:1 its 9pt label needs, and nothing said
     /// so: the row is mostly its own panel, so the ink check read it as full
     /// whatever the label did (#574).
-    static let summaryLabel = Color.warmDark.opacity(0.8)
 
     /// The row saying photos have gone missing off disk.
     static let missingMediaPanel = Color.roseGold.opacity(0.08)
     static let missingMediaBorder = Color.roseGold.opacity(0.25)
     static let missingMediaIcon = Color.roseGold
-    static let missingMediaMessage = Color.warmDark
     /// Deeper than `roseGold`, which measured 3.92:1 on this panel against the
     /// 4.5:1 its 11pt label needs. Same reason as the banner's action buttons
     /// below, and the same remedy #569 used on the primary button (#574).
@@ -124,7 +121,6 @@ enum PaintedSurfaces {
 
     /// Type drawn straight onto the page, with no fill of its own. Named for
     /// the same reason: the check has to be able to say it looked at these too.
-    static let refusalNoteText = Color.warmMid
     static let outlineButtonLabel = Color.roseDeep
 
     // MARK: - The accent in its two roles (#580)
@@ -228,6 +224,30 @@ enum PaintedSurfaces {
     /// this moves nothing. Named because it could not be measured at all
     /// before, which is the gap rather than the colour.
     static let bodyText = Color.warmDark
+
+    // Ten names came out of here in #637. `bodyText` was five (the failure
+    // card's message, the missing media row's message, the event row's name,
+    // a tag chip's text and itself), `secondaryText` was four, `tertiaryText`
+    // was two and `quietMark` was three. Each was defensible alone, and each
+    // arrived separately as its own surface was measured, which is how a
+    // palette ends up with four names for one decision.
+    //
+    // A Pair carries its own background, so ONE name is measured against every
+    // surface it is drawn on. The name is for the decision, not for the place.
+    //
+    // What is deliberately NOT merged, so the next reader does not have to work
+    // it out again: `runNoteText` and `fieldPlaceholder` share a value and are
+    // different decisions, a sentence on a panel against a placeholder inside a
+    // field, and either could move without the other. `clearButtonGlyph` and
+    // `removeButtonDisc` likewise, a mark against the disc behind a different
+    // mark. And `insightConfidenceLow` keeps its own name because it is one of
+    // three ratings in a lookup table, and naming that table's entries
+    // separately is what stopped the other two being invisible (L113).
+    //
+    // No check enforces this. A rule reading "two names may not share a value"
+    // fires on seventeen groups in this file, nearly all of them correct: the
+    // accent is legitimately a fill, an icon, a rule and a wordmark. A rule
+    // that fires on correct code is the rule people learn to work around.
 
     /// The line under it: an organisation and a date, a count, a hint, the
     /// label beside a value.
@@ -400,7 +420,6 @@ enum PaintedSurfaces {
     /// because it was the only foreground on the row nothing could read: the
     /// two lines under it were 3.68:1 in the same state and no pair covered
     /// either of them, which is the gap rather than the colour (#590).
-    static let eventRowName = Color.warmDark
     static var eventRowNameSelected: Color { inPinnedAppearance(.primary) }
 
     /// The second and third lines of a row: the organisation and date, and the
@@ -416,7 +435,6 @@ enum PaintedSurfaces {
     ///
     /// Deeper than the `warmMid` it was, which is the same remedy #574 used on
     /// the summary row's label against the same background.
-    static let eventRowDetail = Color.warmDark.opacity(0.8)
 
     /// The same lines on a selected row, which keeps the adaptation
     /// `EventListView` records as deliberate rather than dropping it: the row
@@ -477,8 +495,6 @@ enum PaintedSurfaces {
 
     /// A tag already on a photo, and the accounts the event suggests.
     static let tagChipFill = Color.roseGold.opacity(0.14)
-    static let tagChipText = Color.warmDark
-    static let tagChipRemoveIcon = Color.warmMid
     static let suggestionChipFill = Color.roseGold.opacity(0.10)
 
     /// How many photos are on a day, drawn over the photo itself.
@@ -523,7 +539,6 @@ enum PaintedSurfaces {
     /// A suggested correction, and the control that dismisses it. The icon was
     /// `warmMid` at half strength, which is 1.98:1 on this row (#582).
     static let suggestionRowFill = Color.warmDark.opacity(0.03)
-    static let suggestionRowDismissIcon = Color.warmMid
     /// The panel offering to reflow a page.
     static let reflowPanelFill = Color.roseGold.opacity(0.05)
     /// A flag whose correction has been accepted, faded back.
@@ -563,7 +578,6 @@ enum PaintedSurfaces {
     /// 3:1 a symbol needs, and its label was `warmMid` at 4.33:1 against the
     /// 4.5:1 its own asks for. Same remedy #574 used on the summary row.
     static let missingPhotoIcon = Color.roseGold
-    static let missingPhotoLabel = Color.warmDark.opacity(0.8)
 
     /// The backdrop behind a photo opened at full size.
     ///
@@ -751,17 +765,13 @@ enum PaintedSurfaces {
         "runNoteText": runNoteText,
         "failureCardPanel": failureCardPanel,
         "failureCardLabel": failureCardLabel,
-        "failureCardMessage": failureCardMessage,
         "summaryPanel": summaryPanel,
         "summaryBorder": summaryBorder,
         "summaryValue": summaryValue,
-        "summaryLabel": summaryLabel,
         "missingMediaPanel": missingMediaPanel,
         "missingMediaBorder": missingMediaBorder,
         "missingMediaIcon": missingMediaIcon,
-        "missingMediaMessage": missingMediaMessage,
         "missingMediaAction": missingMediaAction,
-        "refusalNoteText": refusalNoteText,
         "outlineButtonLabel": outlineButtonLabel,
         "outlineButtonHitArea": outlineButtonHitArea,
         "pageAccentText": pageAccentText,
@@ -794,17 +804,13 @@ enum PaintedSurfaces {
         "eventRowSelected": eventRowSelected,
         "selectedPillLabel": selectedPillLabel,
         "selectedPillFill": selectedPillFill,
-        "eventRowName": eventRowName,
         "eventRowNameSelected": eventRowNameSelected,
-        "eventRowDetail": eventRowDetail,
         "eventRowDetailSelected": eventRowDetailSelected,
         "readableSecondaryLabel": readableSecondaryLabel,
         "systemFormBackground": systemFormBackground,
         "exportedCountBadge": exportedCountBadge,
         "exportedCountText": exportedCountText,
         "tagChipFill": tagChipFill,
-        "tagChipText": tagChipText,
-        "tagChipRemoveIcon": tagChipRemoveIcon,
         "suggestionChipFill": suggestionChipFill,
         "photoCountBadge": photoCountBadge,
         "photoCountText": photoCountText,
@@ -817,7 +823,6 @@ enum PaintedSurfaces {
         "photoScrimText": photoScrimText,
         "photoHintPanel": photoHintPanel,
         "suggestionRowFill": suggestionRowFill,
-        "suggestionRowDismissIcon": suggestionRowDismissIcon,
         "reflowPanelFill": reflowPanelFill,
         "resolvedFlagFill": resolvedFlagFill,
         "shimmerTrack": shimmerTrack,
@@ -849,7 +854,6 @@ enum PaintedSurfaces {
         "photoPlaceholder": photoPlaceholder,
         "photoPlaceholderSpinner": photoPlaceholderSpinner,
         "missingPhotoIcon": missingPhotoIcon,
-        "missingPhotoLabel": missingPhotoLabel,
         "lightboxBackdrop": lightboxBackdrop,
         "lightboxLabel": lightboxLabel,
         "lightboxDetail": lightboxDetail,
@@ -920,23 +924,23 @@ enum PaintedSurfaces {
         pairs.append(Pair("failure card", "day label",
                           failureCardLabel, on: cardPanel, .bodyText))
         pairs.append(Pair("failure card", "message",
-                          failureCardMessage, on: cardPanel, .bodyText))
+                          bodyText, on: cardPanel, .bodyText))
 
         pairs.append(Pair("summary row", "value",
                           summaryValue, on: summaryPanel, .largeText))
         pairs.append(Pair("summary row", "label",
-                          summaryLabel, on: summaryPanel, .bodyText))
+                          secondaryText, on: summaryPanel, .bodyText))
 
         let missingPanel = missingMediaPanel.composited(over: page)
         pairs.append(Pair("missing media row", "message",
-                          missingMediaMessage, on: missingPanel, .bodyText))
+                          bodyText, on: missingPanel, .bodyText))
         pairs.append(Pair("missing media row", "icon",
                           missingMediaIcon, on: missingPanel, .interfaceElement))
         pairs.append(Pair("missing media row", "locate button",
                           missingMediaAction, on: missingPanel, .bodyText))
 
         pairs.append(Pair("refusal note", "sentence",
-                          refusalNoteText, on: page, .bodyText))
+                          tertiaryText, on: page, .bodyText))
 
         // Both roles of the accent, on both of the app's page colours, each at
         // the level its own role asks for. The deeper page is the harder one,
@@ -1009,9 +1013,9 @@ enum PaintedSurfaces {
         // state they are read in.
         for (where_, row) in [("at rest", eventRowAtRest), ("hovered", eventRowHovered)] {
             pairs.append(Pair("event row \(where_)", "name",
-                              eventRowName, on: row, .largeText))
+                              bodyText, on: row, .largeText))
             pairs.append(Pair("event row \(where_)", "detail lines",
-                              eventRowDetail, on: row, .bodyText))
+                              secondaryText, on: row, .bodyText))
         }
         pairs.append(Pair("event row selected", "name",
                           eventRowNameSelected, on: eventRowSelected, .largeText))
@@ -1107,9 +1111,9 @@ enum PaintedSurfaces {
                           exportedCountText, on: exportedCountBadge, .bodyText))
 
         let tagChip = tagChipFill.composited(over: page)
-        pairs.append(Pair("tag chip", "tag", tagChipText, on: tagChip, .bodyText))
+        pairs.append(Pair("tag chip", "tag", bodyText, on: tagChip, .bodyText))
         pairs.append(Pair("tag chip", "remove icon",
-                          tagChipRemoveIcon, on: tagChip, .interfaceElement))
+                          quietMark, on: tagChip, .interfaceElement))
         pairs.append(Pair("suggestion chip", "account",
                           pageAccentText, on: suggestionChipFill.composited(over: page),
                           .bodyText))
@@ -1131,7 +1135,7 @@ enum PaintedSurfaces {
         pairs.append(Pair("suggestion row", "sentence",
                           Color.warmDark, on: suggestionRow, .bodyText))
         pairs.append(Pair("suggestion row", "dismiss icon",
-                          suggestionRowDismissIcon, on: suggestionRow, .interfaceElement))
+                          quietMark, on: suggestionRow, .interfaceElement))
         pairs.append(Pair("reflow panel", "sentence", Color.warmDark,
                           on: reflowPanelFill.composited(over: page), .bodyText))
         pairs.append(Pair("resolved flag", "sentence", Color.warmDark,
@@ -1151,7 +1155,7 @@ enum PaintedSurfaces {
         pairs.append(Pair("missing photo badge", "icon",
                           missingPhotoIcon, on: photoPlaceholder, .interfaceElement))
         pairs.append(Pair("missing photo badge", "label",
-                          missingPhotoLabel, on: photoPlaceholder, .bodyText))
+                          secondaryText, on: photoPlaceholder, .bodyText))
 
         // The busy scrim covers the picture while it is being remade, and says
         // so in words, so it is measured against the brightest a photo can be

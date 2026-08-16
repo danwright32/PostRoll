@@ -44,7 +44,7 @@ struct RefusalNote: View {
                 .font(.light(10))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .foregroundStyle(PaintedSurfaces.refusalNoteText)
+        .foregroundStyle(PaintedSurfaces.tertiaryText)
     }
 }
 

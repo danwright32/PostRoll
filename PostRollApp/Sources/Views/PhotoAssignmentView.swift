@@ -1251,12 +1251,12 @@ private struct PhotoTagEditor: View {
                                 HStack(spacing: 3) {
                                     Text(tag)
                                         .font(.system(size: 10))
-                                        .foregroundStyle(PaintedSurfaces.tagChipText)
+                                        .foregroundStyle(PaintedSurfaces.bodyText)
                                         .lineLimit(1)
                                     Button { tags.removeAll { $0 == tag } } label: {
                                         Image(systemName: "xmark")
                                             .font(.system(size: 7, weight: .bold))
-                                            .foregroundStyle(PaintedSurfaces.tagChipRemoveIcon)
+                                            .foregroundStyle(PaintedSurfaces.quietMark)
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("Remove \(tag)")

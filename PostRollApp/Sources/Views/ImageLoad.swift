@@ -87,7 +87,7 @@ struct MissingPhotoBadge: View {
                     .foregroundStyle(PaintedSurfaces.missingPhotoIcon)
                 Text(label)
                     .font(.system(size: labelSize, weight: .medium))
-                    .foregroundStyle(PaintedSurfaces.missingPhotoLabel)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             }
         }
         .accessibilityElement(children: .ignore)

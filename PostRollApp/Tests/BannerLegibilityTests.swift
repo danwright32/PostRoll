@@ -650,8 +650,8 @@ final class BannerLegibilityTests: XCTestCase {
     func testTheEventRowDrawsEveryWordFromANamedPair() throws {
         let row = try eventRowDeclaration()
 
-        for name in ["eventRowName", "eventRowNameSelected",
-                     "eventRowDetail", "eventRowDetailSelected"] {
+        for name in ["bodyText", "eventRowNameSelected",
+                     "secondaryText", "eventRowDetailSelected"] {
             XCTAssertTrue(row.contains("PaintedSurfaces.\(name)"), """
                 EventRow no longer draws from PaintedSurfaces.\(name), so that pair is \
                 measuring a colour the list does not use and says nothing about what is \

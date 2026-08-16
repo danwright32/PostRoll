@@ -110,7 +110,7 @@ struct MissingPhotosBanner: View {
             Text(MissingMediaBannerText.message(photoCount: photoCount,
                                                 standaloneNames: standaloneNames))
                 .font(.system(size: 11))
-                .foregroundStyle(PaintedSurfaces.missingMediaMessage)
+                .foregroundStyle(PaintedSurfaces.bodyText)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
             Button("Locate…", action: onLocate)
