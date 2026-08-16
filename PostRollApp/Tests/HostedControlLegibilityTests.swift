@@ -38,6 +38,26 @@ private struct EventListRowPreview: View {
     }
 }
 
+/// Draws no type at all (#612).
+///
+/// The generic way to ask a shipping view what its words are worth. #607 could
+/// put a `wordless` flag on the reading screen because that screen was being
+/// written; the thirty-eight surfaces measured next door are shipping notices
+/// that know nothing about being measured, and a flag on each of them would be
+/// a change to the app for the benefit of a test.
+///
+/// Layout is untouched, because only the drawing is replaced: every fill,
+/// border, symbol and button stays exactly where it was, so the difference
+/// between a render with this and one without is the type and nothing else.
+///
+/// Applied to ONE side of the comparison only. Putting a renderer of ours on
+/// the words-on side too changes the path the type takes, and that path is the
+/// subject: the busy pill, whose label ImageRenderer is known to drop, drew its
+/// label perfectly through a custom renderer.
+private struct WordSwitch: TextRenderer {
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {}
+}
+
 /// #404: the two controls `BannerLegibilityTests` cannot draw.
 ///
 /// `ImageRenderer` has no AppKit host, so `Menu` and `ProgressView` come out as a
@@ -579,19 +599,22 @@ final class HostedControlLegibilityTests: XCTestCase {
     ///
     /// #607 was filed expecting this screen to be the stage pill's case again:
     /// it carries a `repeatForever` shimmer, and #592 measured `ImageRenderer`
-    /// drawing an animating pill's capsule and dropping its word. It is not.
-    /// Through `ImageRenderer` this screen measures 0.0111 with its words and
-    /// 0.0003 without them, so the words are drawn.
+    /// drawing an animating pill's capsule and dropping its word. Through
+    /// `ImageRenderer` this screen measures 0.0111 with its words and 0.0003
+    /// without them, so the words are drawn.
     ///
-    /// The difference is WHERE the animation is declared. `StagePill` starts
-    /// its pulse in an `onAppear` on the pill, so the transaction covers the
-    /// label as well; `OCRShimmerLine` starts its own inside itself, and the
-    /// type is in a sibling of it rather than under it.
+    /// #607 read that as a property of the screen, and said the difference was
+    /// WHERE the animation is declared: `StagePill` starts its pulse in an
+    /// `onAppear` on the pill so the transaction covers the label, while
+    /// `OCRShimmerLine` starts its own inside itself. That is wrong, and #612
+    /// measured it: rendered at its own size this screen loses every word it
+    /// has, exactly like the pill. What decides it is whether the renderer is
+    /// given a SIZE, and this check gives it one on the line above.
     ///
-    /// Recorded rather than deleted, because that distinction is the thing a
-    /// future reader needs and no comment can keep honest. Lifting the shimmer's
-    /// animation onto the `VStack` above it would take the words of this whole
-    /// screen with it, and this is the only check that would say so.
+    /// So what it holds is narrower than it was thought to hold, and still
+    /// worth having: this screen, drawn the way the harness draws it, puts its
+    /// words on the page. `testTheRendererDrawsAnimatingWordsOnlyWhenItIsGivenASize`
+    /// is where the mechanism itself is pinned.
     func testTheAnimationTrapHasNotReachedThisScreensWords() throws {
         let live = try XCTUnwrap(Self.readingStates.first).live
 
@@ -705,14 +728,20 @@ final class HostedControlLegibilityTests: XCTestCase {
         return Double(differing) / Double(sampled)
     }
 
-    /// What a part has to be worth to count as drawn.
+    /// What a part, or a whole surface's type, has to be worth to count as
+    /// drawn.
     ///
     /// Not a share of the surface picked to sit under whatever the smallest one
     /// measured. Two renders of the SAME view differ by nothing at all, which
     /// `testTheFootprintOfNothingIsNothing` measures rather than assumes, so
-    /// anything above zero is a part putting pixels on the page. This is a
-    /// margin over that zero, and the smallest real part, the 11pt Go Back,
-    /// measures several times it.
+    /// anything above zero is type putting pixels on the page. This is a margin
+    /// over that zero, and both bands it is judged against sit well clear of
+    /// it: the smallest part of the failure screen, the 11pt Go Back, is 0.0013,
+    /// and the thirty-eight measured notices run from 0.0097 to 0.0761 (#612).
+    ///
+    /// The other side of it is measured too. A surface whose words the renderer
+    /// drops reads 0.0000, not merely small, because the two renders are then
+    /// the same image.
     private static let drawnFootprint = 0.0004
 
     /// Every word on the screen a read fails on reaches the screen (#613).
@@ -804,6 +833,199 @@ final class HostedControlLegibilityTests: XCTestCase {
             the same sentence in a readable colour measures \
             \(String(format: "%.4f", legible)), which is not far enough above the floor \
             for the floor to mean anything
+            """)
+    }
+
+    // MARK: - Every measured state, asked what its words are worth (#612)
+    //
+    // The thirty-eight surfaces measured next door had never been asked. A
+    // surface whose type does not reach the page measures its own fill, border
+    // and button while reporting a pass, which is what #404, #559 and #592 were
+    // each about, and no threshold over there can say so: the state renders,
+    // the number is respectable, and the words are missing.
+    //
+    // So each state is drawn twice, once as the harness draws it and once with
+    // its words switched off, and the two images are compared pixel for pixel.
+    // The difference is the type.
+    //
+    // The answer for the animation trap specifically is that it cannot reach
+    // these states while the harness renders into a frame, which is measured in
+    // the two checks above rather than assumed. What this sweep is for is the
+    // general case: type that does not draw, for any reason.
+
+    /// One view through ImageRenderer, exactly as the notice harness draws it,
+    /// or with its words switched off.
+    ///
+    /// The words-on render carries NO modifier of any kind. That is not a
+    /// detail: the first version of this asked for both renders through a
+    /// custom text renderer, and putting one on the words-on side dissolved the
+    /// defect being looked for. The busy pill, which ImageRenderer is known to
+    /// draw without its label, came out WITH its label as soon as its type went
+    /// through a renderer of ours, so the check measured a screen the harness
+    /// does not draw and reported everything healthy. The calibration below is
+    /// the only reason that was ever noticed (L1).
+    private func imageRendered(_ content: some View,
+                               wordless: Bool) throws -> NSBitmapImageRep {
+        let renderer = wordless
+            ? ImageRenderer(content: AnyView(content.textRenderer(WordSwitch())))
+            : ImageRenderer(content: AnyView(content))
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.nsImage, "the state produced no image at all")
+        let tiff = try XCTUnwrap(image.tiffRepresentation)
+        return try XCTUnwrap(NSBitmapImageRep(data: tiff))
+    }
+
+    /// What the words of one surface are worth, drawn the way the notice
+    /// harness draws it.
+    private func wordFootprint(of view: some View, width: CGFloat = 520) throws -> Double {
+        let content = ZStack {
+            PaintedSurfaces.page
+            view.padding(Spacing.md)
+        }.frame(width: width)
+
+        return footprint(try imageRendered(content, wordless: false),
+                         try imageRendered(content, wordless: true))
+    }
+
+    /// Every measured surface is one the renderer can actually see (#612).
+    ///
+    /// Measured as a difference rather than as a ratio of ink. Ink is the share
+    /// of pixels unlike the commonest colour, and on a surface that is mostly
+    /// its own button fill, removing the type MOVES what the commonest colour
+    /// is: three of these states measured MORE ink with their words switched
+    /// off than with them on. A metric that can go up when content is taken
+    /// away cannot be asked whether content is there. The difference between
+    /// the two images can: it is the type, and nothing else.
+    func testNoMeasuredStateIsInvisibleToTheRendererThatMeasuresIt() throws {
+        let states = BannerLegibilityTests.measuredStates
+
+        // A sweep that reads nothing objects to nothing (L98).
+        XCTAssertGreaterThan(states.count, 30,
+                             "the sweep found \(states.count) measured states, so it is "
+                             + "proving nothing about the ones it did not draw")
+
+        var measured: [(String, Double)] = []
+        for state in states {
+            let share = try wordFootprint(of: state.view)
+            measured.append((state.name, share))
+
+            XCTAssertGreaterThan(share, Self.drawnFootprint, """
+                Switching every word off "\(state.name)" changed \
+                \(String(format: "%.4f", share)) of the render, which is nothing. Its \
+                type is not reaching the page, so what the notice harness measures over \
+                there is the fill, the border and the button: it would report the same \
+                number with the surface empty (L141). Either the words are drawn in the \
+                colour of what is behind them, or ImageRenderer is not drawing them at \
+                all, in which case the state belongs in this file where AppKit hosts it.
+                """)
+        }
+
+        for (name, share) in measured.sorted(by: { $0.1 < $1.1 }) {
+            print(String(format: "  %.4f  %@", share, name))
+        }
+    }
+
+    /// What actually decides whether ImageRenderer draws an animating view's
+    /// words, measured (#612).
+    ///
+    /// This is a correction. #592 found the busy stage pill coming out of
+    /// ImageRenderer as a capsule and a dot with no label, and #607 concluded
+    /// the difference was WHERE the animation is declared: the pill starts its
+    /// pulse on the pill, so the transaction covers the label, while
+    /// `OCRShimmerLine` starts its own inside itself and the type in a sibling
+    /// survives. That explanation fits both observations and is wrong.
+    ///
+    /// What decides it is whether the renderer is given a SIZE. Measured here
+    /// on both views:
+    ///
+    /// * the busy pill at its own size loses its word, and at a proposed width
+    ///   keeps it;
+    /// * the reading screen at its own size loses EVERY word it has, and at a
+    ///   proposed size keeps them all.
+    ///
+    /// So the screen #607 measured as safe is not safe by construction; it is
+    /// safe because that check renders it into a frame. The two views differ in
+    /// nothing that matters here.
+    ///
+    /// Both halves are asserted rather than printed. The half that loses its
+    /// words is what proves the footprint measurement can see the defect at all
+    /// (L1), and the half that keeps them is what the whole sweep below rests
+    /// on: the notice harness always proposes a width, which is why none of its
+    /// thirty-eight surfaces can be hit by this.
+    func testTheRendererDrawsAnimatingWordsOnlyWhenItIsGivenASize() throws {
+        func share(_ content: some View) throws -> Double {
+            footprint(try imageRendered(content, wordless: false),
+                      try imageRendered(content, wordless: true))
+        }
+
+        let pill = ZStack {
+            PaintedSurfaces.eventRowAtRest
+            StagePill(state: .generating)
+        }
+        let live = try XCTUnwrap(Self.readingStates.first).live
+        let readingScreen = OCRProgressBody(eventName: "Spring Gala",
+                                            live: { _ in live }, onCancel: {})
+            .background(PaintedSurfaces.page)
+
+        let cases: [(name: String, ownSize: Double, sized: Double)] = [
+            ("the busy stage pill",
+             try share(pill), try share(pill.frame(width: 520))),
+            ("the reading screen",
+             try share(readingScreen),
+             try share(readingScreen.frame(width: 520, height: 400))),
+        ]
+
+        for one in cases {
+            print(String(format: "  %@: %.4f at its own size, %.4f given one",
+                         one.name, one.ownSize, one.sized))
+
+            XCTAssertLessThan(one.ownSize, Self.drawnFootprint, """
+                Switching the words off \(one.name) rendered at its own size changed \
+                \(String(format: "%.4f", one.ownSize)) of the image, which means the \
+                words were there to lose. ImageRenderer has learned to draw an animating \
+                view unsized, and the reasoning in this file, in #592 and in #607 needs \
+                redoing: the sweep below is calibrated on this being the case that fails.
+                """)
+            XCTAssertGreaterThan(one.sized, Self.drawnFootprint, """
+                \(one.name) given a size lost its words too \
+                (\(String(format: "%.4f", one.sized))). Every check in the notice harness \
+                renders into a frame, so if a proposed size no longer restores the words, \
+                thirty-eight surfaces over there are measuring their own fills and \
+                borders and reporting a pass.
+                """)
+        }
+    }
+
+    /// The notice harness gives the renderer a size (#612).
+    ///
+    /// The sweep below is only true while that holds. It is one line in the
+    /// helper every check over there renders through, and nothing else would
+    /// say if it went: the states would keep rendering, the ink would still be
+    /// mostly fills and borders, and every threshold would still pass.
+    ///
+    /// Scoped to that one function rather than searched for over the file,
+    /// because the file mentions widths in a dozen places and a match anywhere
+    /// in it would answer for the region this is about (L135).
+    func testTheNoticeHarnessRendersIntoAFrame() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("BannerLegibilityTests.swift")
+        let code = SwiftSourceText.withoutComments(
+            try String(contentsOf: url, encoding: .utf8))
+
+        let start = try XCTUnwrap(code.range(of: "private func render("),
+                                  "BannerLegibilityTests no longer has a render helper, "
+                                  + "so this check is reading a file that has moved on")
+        let body = code[start.lowerBound...]
+        let end = try XCTUnwrap(body.range(of: "\n    }"),
+                                "the render helper never closes, so this is reading the "
+                                + "rest of the file rather than that function")
+
+        XCTAssertTrue(body[..<end.lowerBound].contains(".frame(width:"), """
+            The notice harness renders without proposing a width. ImageRenderer draws an \
+            animating view's text only when it is given a size, measured next door, so \
+            every surface over there that carries a repeating animation is now being \
+            measured with its words missing and nothing reports it (#592, #612).
             """)
     }
 
