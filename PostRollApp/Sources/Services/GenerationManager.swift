@@ -143,10 +143,10 @@ final class GenerationManager {
                                        renderedDays: doGraphics ? onlyDays : [],
                                        appState: appState)
                 self?.finishFailure(eventID: eventID,
-                                    message: partial.localizedDescription)
+                                    message: ((partial as? PythonBridgeError)?.message(whileDoing: .generation) ?? partial.localizedDescription))
             } catch {
                 graphicsTask?.cancel()
-                self?.finishFailure(eventID: eventID, message: error.localizedDescription)
+                self?.finishFailure(eventID: eventID, message: ((error as? PythonBridgeError)?.message(whileDoing: .generation) ?? error.localizedDescription))
             }
         }
         tracker.update(eventID) { $0.task = task }
@@ -176,7 +176,7 @@ final class GenerationManager {
         case .success(let r):
             return (r, r.errors, r.warnings)
         case .failure(let error):
-            return (nil, [PreviewMergePolicy.graphicsRunKey: error.localizedDescription], [:])
+            return (nil, [PreviewMergePolicy.graphicsRunKey: ((error as? PythonBridgeError)?.message(whileDoing: .generation) ?? error.localizedDescription)], [:])
         case nil:
             return (nil, [:], [:])   // graphics didn't run this time
         }

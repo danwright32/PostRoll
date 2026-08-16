@@ -546,18 +546,23 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// size the app does not control: a stopped run says one sentence, an
     /// unrecognised failure says three and quotes the log.
     private static var failureMessages: [(name: String, message: String)] {
-        [
-            ("a run that timed out",
-             PythonBridgeError.timedOut(seconds: 600).localizedDescription),
-            ("a read that produced nothing",
-             PythonBridgeError.outputMissing.localizedDescription),
+        // Through `message(whileDoing: .programRead)`, which is what OCRManager
+        // hands this screen, rather than through `localizedDescription`, which
+        // is the neutral wording nothing shows here (#626). A fixture that
+        // takes a different path from the app is a picture of a screen the app
+        // never draws (L48).
+        func read(_ error: PythonBridgeError) -> String {
+            error.message(whileDoing: .programRead)
+        }
+        return [
+            ("a run that timed out", read(.timedOut(seconds: 600))),
+            ("a read that produced nothing", read(.outputMissing)),
             ("a failure nothing recognised",
-             PythonBridgeError.scriptFailed(
+             read(.scriptFailed(
                 exitCode: 1,
                 stderr: "Traceback (most recent call last):\n"
                     + "  File \"postroll/ai/ocr.py\", line 214, in read_program\n"
-                    + "RuntimeError: the page bundle was rejected by the service")
-                .localizedDescription),
+                    + "RuntimeError: the page bundle was rejected by the service"))),
         ]
     }
 

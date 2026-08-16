@@ -104,4 +104,187 @@ final class PythonBridgeErrorTests: XCTestCase {
         XCTAssertFalse(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         XCTAssertTrue(message.contains(AppPaths.logsDirDisplayPath), "got: \(message)")
     }
+
+    // MARK: - A failure is described in the language of the work that failed (#626)
+
+    /// Every failure a caller can be shown, in one place, so a wording that
+    /// names the wrong unit of work fails here rather than on a screen.
+    private static var everyFailure: [(name: String, error: PythonBridgeError)] {
+        [
+            ("a run that produced nothing", .outputMissing),
+            ("a run that timed out", .timedOut(seconds: 600)),
+            ("an output nothing could read", .invalidOutput("the cover path was missing")),
+            ("a rejected key",
+             .scriptFailed(exitCode: 1,
+                           stderr: "anthropic.AuthenticationError: invalid x-api-key")),
+            ("an overloaded service",
+             .scriptFailed(exitCode: 1, stderr: "Error code: 529 - overloaded_error")),
+            ("a failure nothing recognised",
+             .scriptFailed(exitCode: 1,
+                           stderr: "RuntimeError: the page bundle was rejected")),
+        ]
+    }
+
+    /// A failed program read is never described as generation (#626).
+    ///
+    /// The screen that reports a paid read did not work is headed "Couldn't
+    /// read the program" since #622, and every sentence under it began
+    /// "Generation failed" or "Generation finished", because `errorDescription`
+    /// had one hardcoded noun and 16 throw sites across both reads and
+    /// generation share it. Each sentence is correct where it was written and
+    /// the contradiction exists only in the reading (L118).
+    func testAFailedProgramReadIsNeverCalledGeneration() {
+        for state in Self.everyFailure {
+            let text = state.error.message(whileDoing: .programRead)
+            XCTAssertFalse(text.lowercased().contains("generat"), """
+                For \(state.name), a failed program read says: "\(text)"
+
+                Generation is a different stage of this app, with its own screens and its \
+                own stage pill, so this names the wrong unit of work on the one screen \
+                that says a paid read did not work.
+                """)
+        }
+    }
+
+    /// No failure ever names a unit of work other than the one that failed.
+    ///
+    /// The general form of the rule above, which is what actually matters: a
+    /// sentence may be silent about what was running, and several rightly are,
+    /// because "The AI service is overloaded right now" is about the service
+    /// rather than about the work and reads correctly whoever asked. What it
+    /// may never do is name the WRONG one, which is the whole of #626.
+    func testNoFailureNamesAUnitOfWorkOtherThanTheOneThatFailed() {
+        for state in Self.everyFailure {
+            for work in PythonBridgeWork.allCases {
+                let text = state.error.message(whileDoing: work)
+                for other in PythonBridgeWork.allCases where other != work && other != .other {
+                    XCTAssertFalse(text.contains(other.subject), """
+                        For \(state.name) while doing \(work), the failure says: "\(text)"
+
+                        That names \(other.subject), which is a different part of this app \
+                        with its own screens. The person reading it is told the wrong thing \
+                        stopped.
+                        """)
+                }
+            }
+        }
+    }
+
+    /// And the two failures that describe the WORK itself do name it.
+    ///
+    /// These are the generic ones, the run produced nothing and the run ran out
+    /// of time, where the sentence has nothing else to be about. If either
+    /// stopped naming the work it would be back to saying "the operation",
+    /// which is what sent somebody looking at the wrong screen.
+    func testTheFailuresAboutTheWorkItselfNameIt() {
+        for work in PythonBridgeWork.allCases {
+            for error in [PythonBridgeError.outputMissing,
+                          PythonBridgeError.timedOut(seconds: 600)] {
+                let text = error.message(whileDoing: work)
+                XCTAssertTrue(text.contains(work.subject), """
+                    While doing \(work), the failure says "\(text)", which never says what \
+                    was running.
+                    """)
+            }
+        }
+    }
+
+    /// The default names no particular work, rather than guessing one (#626).
+    ///
+    /// `localizedDescription` is reached from dozens of places and cannot know
+    /// what was running, so it has to be the SAFE answer rather than the common
+    /// one. It used to say "Generation", which is right for one caller and wrong
+    /// for every other, and a caller that forgets to say what it was doing got
+    /// a confidently wrong noun instead of a vague one (L93).
+    func testTheDefaultWordingGuessesNoParticularWork() {
+        for state in Self.everyFailure {
+            let text = state.error.localizedDescription
+            XCTAssertFalse(text.lowercased().contains("generat"), """
+                For \(state.name), the default wording says: "\(text)"
+
+                Nothing at that call site knows generation was what failed, so a caller \
+                that says nothing must not be handed a specific claim.
+                """)
+        }
+    }
+
+    /// A failure nobody recognised does not lead with a Python class name (#626).
+    ///
+    /// The unrecognised path shows the last line of stderr, which for a real
+    /// traceback begins "RuntimeError:" or "ValueError:". That is the name of a
+    /// type inside the program, in front of a photographer, at the moment
+    /// something has already gone wrong.
+    func testAnUnrecognisedFailureDoesNotLeadWithAnExceptionClass() {
+        let error = PythonBridgeError.scriptFailed(
+            exitCode: 1,
+            stderr: "Traceback (most recent call last):\n"
+                + "RuntimeError: the page bundle was rejected by the service")
+
+        let text = error.message(whileDoing: .programRead)
+
+        XCTAssertFalse(text.contains("RuntimeError"), """
+            The failure reads: "\(text)"
+
+            A person cannot act on the name of an exception class, and it is the first \
+            thing they are shown.
+            """)
+        XCTAssertTrue(text.contains("the page bundle was rejected by the service"), """
+            The failure reads: "\(text)"
+
+            Stripping the class name must not take the only description of what happened \
+            with it, or the message says less than it did.
+            """)
+    }
+
+    /// The managers actually say what they were doing (#626, L3).
+    ///
+    /// Naming the work proves nothing on its own: the wording is only right if
+    /// the code that catches the error passes it. A manager falling back to
+    /// `localizedDescription` gets the neutral sentence, which is not WRONG,
+    /// which is exactly why nothing would report it: the screen would quietly
+    /// go back to saying "The run failed" and look fine.
+    ///
+    /// Scoped per file, and the rule really is file wide: each of these
+    /// managers runs one kind of work, so a bare `localizedDescription` on a
+    /// bridge error is an offence wherever in the file it sits.
+    func testEachManagerNamesTheWorkItStarted() throws {
+        let expected = [
+            "Services/OCRManager.swift": "programRead",
+            "Services/OCRRescan.swift": "programRead",
+            "Services/GenerationManager.swift": "generation",
+            "Services/ExportManager.swift": "export",
+        ]
+
+        for (relative, work) in expected {
+            let url = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/\(relative)")
+            let code = SwiftSourceText.withoutComments(
+                try String(contentsOf: url, encoding: .utf8))
+
+            let named = code.ranges(of: #/message\(whileDoing: \.([a-zA-Z]+)\)/#)
+                .map { String(code[$0]) }
+
+            XCTAssertFalse(named.isEmpty, """
+                \(relative) never says it was doing \(work), so every failure it shows \
+                falls back to the neutral wording and the screen stops naming what \
+                stopped.
+                """)
+
+            // EVERY one of them, not "does the file mention it somewhere". A
+            // file with three of these is answered by any one of them, so the
+            // mutation written for this guard changed a single site and the
+            // first version stayed green while that screen went back to the
+            // neutral sentence (L135).
+            for site in named {
+                XCTAssertTrue(site.contains(".\(work))"), """
+                    \(relative) has a failure that says \(site) rather than naming \
+                    \(work), the one kind of work this file starts. That screen falls back \
+                    to the neutral wording, which is not wrong and so is reported by \
+                    nothing.
+                    """)
+            }
+        }
+    }
 }

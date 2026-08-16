@@ -197,7 +197,7 @@ enum OCRRescan {
         } catch let error as NSError where error.isPermissionDenied {
             return .denied
         } catch {
-            return .unreadable(error.localizedDescription)
+            return .unreadable(((error as? PythonBridgeError)?.message(whileDoing: .programRead) ?? error.localizedDescription))
         }
     }
 

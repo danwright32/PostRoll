@@ -346,7 +346,7 @@ final class ExportManager {
                             assets: assets, to: dayDir, label: day.displayName))
                     }
                 } catch {
-                    mediaError = error.localizedDescription
+                    mediaError = ((error as? PythonBridgeError)?.message(whileDoing: .export) ?? error.localizedDescription)
                 }
             }
 
@@ -389,7 +389,7 @@ final class ExportManager {
                     + "It is complete and waiting at \(failure.stagedAt.path), and the "
                     + "previous export is still in place."
             } catch {
-                swapError = Sentence.closed(error.localizedDescription)
+                swapError = Sentence.closed(((error as? PythonBridgeError)?.message(whileDoing: .export) ?? error.localizedDescription))
             }
             let errorWithSwap = [combinedError.isEmpty ? nil : combinedError, swapError]
                 .compactMap { $0 }.joined(separator: "\n\n")
@@ -408,7 +408,7 @@ final class ExportManager {
             destinationRoot.stopAccessingSecurityScopedResource()
             tracker.update(eventID) {
                 $0.task = nil
-                $0.phase = .failed(error.localizedDescription)
+                $0.phase = .failed(((error as? PythonBridgeError)?.message(whileDoing: .export) ?? error.localizedDescription))
             }
             tracker.deactivate(eventID)
         }
