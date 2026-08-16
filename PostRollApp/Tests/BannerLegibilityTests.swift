@@ -1009,11 +1009,222 @@ final class BannerLegibilityTests: XCTestCase {
     /// tint a spinner, a slider or a picker draws itself in. "tint(" is matched
     /// on the lowercased line so `listRowSeparatorTint` and any other spelling
     /// ending in it are the same rule.
+    ///
+    /// Read over whole statements rather than lines (#611). A colour chosen by
+    /// a ternary wraps, and the half naming the colours is then a line with no
+    /// `foregroundStyle` on it at all: three of those were drawing the accent as
+    /// a button's label while this reported the tree clean, which is the shape
+    /// of every guard in this file that has gone blind on a spelling.
     private func unnamedAccentUses(in code: String) -> [String] {
-        code.split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+        statements(in: code)
             .filter { $0.contains("foreground") || $0.lowercased().contains("tint(") }
             .filter { $0.contains("Color.roseGold") }
+    }
+
+    /// Source rejoined into statements, so a modifier and the colours a wrapped
+    /// ternary chooses are one string to match against.
+    ///
+    /// A window of lines cannot do this, and the first version of the widened
+    /// accent rule was one: it read two lines, the real ternary in
+    /// `PhotoAssignmentView` spans three, and the guard went green on the
+    /// mutation written for it while passing the two-line case it had been
+    /// shaped around (L144). Joined by bracket depth instead, which is a
+    /// property of the code rather than a number measured off whichever
+    /// spelling happened to exist that day.
+    ///
+    /// String literals are blanked before the brackets are counted, so a `(` in
+    /// a sentence cannot swallow the rest of the file into one statement and
+    /// leave this reporting matches nobody wrote. Comments are already gone:
+    /// `appSource` strips them.
+    private func statements(in code: String) -> [String] {
+        var out: [String] = []
+        var buffer = ""
+        var depth = 0
+
+        for raw in code.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            buffer = buffer.isEmpty ? line : buffer + " " + line
+            depth += bracketBalance(of: line)
+            if depth <= 0 {
+                if !buffer.isEmpty { out.append(buffer) }
+                buffer = ""
+                depth = 0
+            }
+        }
+        if !buffer.isEmpty { out.append(buffer) }
+        return out
+    }
+
+    /// Open brackets minus closed ones, counting neither inside a string.
+    private func bracketBalance(of line: String) -> Int {
+        // A multi-line literal's delimiter line carries no structure of its own.
+        guard !line.contains("\"\"\"") else { return 0 }
+        let bare = line.replacingOccurrences(of: #""(\\.|[^"\\])*""#,
+                                             with: "\"\"",
+                                             options: .regularExpression)
+        return bare.filter { $0 == "(" }.count - bare.filter { $0 == ")" }.count
+    }
+
+    // MARK: - The faint tone (#611)
+
+    /// Every use of the faint tone, whatever it is drawn as.
+    ///
+    /// Not "used as a foreground", which is the mistake the accent rule above
+    /// had to be widened out of: the colour reaches type through a wrapped
+    /// ternary as readily as through a `foregroundStyle`, and a matcher that
+    /// reads one spelling is indistinguishable from one that holds. So the rule
+    /// is that this token is not written outside the file that names its roles
+    /// at all. `PaintedSurfaces.swift` declares the roles and is excluded from
+    /// the sweep, which is where the one remaining use of it lives.
+    private func rawFaintToneUses(in code: String) -> [String] {
+        code.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.contains("Color.warmFaint") }
+    }
+
+    /// The faint tone is never drawn at a call site (#611).
+    ///
+    /// `warmFaint` measures 2.43:1 on the page, under the 4.5:1 body text needs
+    /// and under even the 3:1 an interface element needs, and it was the
+    /// foreground of 14 text draws across three screens. Nothing reported it:
+    /// the pair registry never held it, so the harness built to catch exactly
+    /// this had never been given it (L143, the same shape as #580).
+    ///
+    /// It still has one honest role, the label of a control that is switched
+    /// off, which WCAG exempts. That role has a name now, and
+    /// `testEveryFaintLabelDressesAControlThatIsSwitchedOff` below is what holds
+    /// the exemption to controls that really are inactive (L129).
+    func testTheFaintToneIsNeverDrawnAtACallSite() throws {
+        let files = try everySourceFile()
+        XCTAssertGreaterThan(files.count, 20,
+                             "the sweep read \(files.count) source files, so it is proving "
+                             + "nothing about the ones it did not open")
+
+        for relative in files {
+            for line in rawFaintToneUses(in: try appSource("Sources/\(relative)")) {
+                XCTFail("""
+                    \(relative) draws Color.warmFaint, which is 2.43:1 on the page and \
+                    says nothing about which role it is playing. Nothing can measure it \
+                    from here, because nothing else can name it. Use \
+                    PaintedSurfaces.tertiaryText for type, PaintedSurfaces.fieldPlaceholder \
+                    inside a field, or PaintedSurfaces.disabledControlLabel on a control \
+                    that is switched off.
+
+                    \(line)
+                    """)
+            }
+        }
+    }
+
+    /// The faint matcher is asked what it can see (#611, L1).
+    ///
+    /// The tree is clean once this issue lands, and a clean tree cannot tell a
+    /// matcher that reads every spelling from one that reads the first it was
+    /// written for. Both give the same silent pass.
+    func testTheFaintToneMatcherSeesEverySpelling() {
+        let mustCatch = [
+            "            .foregroundStyle(Color.warmFaint)",
+            "                             ? Color.warmFaint : Color.roseGold)",
+            "                .foregroundStyle(Color.warmFaint.opacity(0.45))",
+            "            .foregroundStyle(draftIsChange ? PaintedSurfaces.pageAccentText : Color.warmFaint)",
+        ]
+        for line in mustCatch {
+            XCTAssertEqual(rawFaintToneUses(in: line).count, 1, """
+                the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as a raw \
+                use of the faint tone, so type drawn that way is exempt from the rule and \
+                reads exactly like a screen that has none
+                """)
+        }
+
+        let mustAllow = [
+            "            .foregroundStyle(PaintedSurfaces.tertiaryText)",
+            "            .foregroundStyle(PaintedSurfaces.disabledControlLabel)",
+            "                .foregroundStyle(Color.warmMid)",
+        ]
+        for line in mustAllow {
+            XCTAssertEqual(rawFaintToneUses(in: line).count, 0, """
+                the check reports \(line.trimmingCharacters(in: .whitespaces)) as a raw use \
+                of the faint tone, which it is not. A rule that fires on correct code is \
+                the rule people learn to work around
+                """)
+        }
+    }
+
+    /// Uses of the disabled-label colour with no switched-off control near them.
+    ///
+    /// The window reaches two lines back and six forward, which is what the
+    /// wrapped ternary spellings in this app actually span: the colour is chosen
+    /// inside the label and `.disabled(` lands after the button's style.
+    private func faintLabelsOnLiveControls(in code: String) -> [(Int, String)] {
+        let lines = code.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        return lines.enumerated().compactMap { index, line in
+            guard line.contains("PaintedSurfaces.disabledControlLabel") else { return nil }
+            let window = lines[Swift.max(0, index - 2)...Swift.min(lines.count - 1, index + 6)]
+            return window.contains { $0.contains(".disabled(") } ? nil : (index + 1, line)
+        }
+    }
+
+    /// The one colour under the floor only ever dresses an inactive control
+    /// (#611).
+    ///
+    /// WCAG 1.4.3 exempts the text of an inactive component from its contrast
+    /// minimum, which is why the four greyed-out labels in this app keep a tone
+    /// nothing else may use. An exemption with no reviewer is the same as no
+    /// rule (L129), so this is the reviewer: the exempt colour has to be on a
+    /// control that is switched off, or it is ordinary type wearing 2.43:1.
+    func testEveryFaintLabelDressesAControlThatIsSwitchedOff() throws {
+        let files = try everySourceFile()
+        var found = 0
+
+        for relative in files {
+            let code = try appSource("Sources/\(relative)")
+            found += code.components(separatedBy: "PaintedSurfaces.disabledControlLabel").count - 1
+            for (number, line) in faintLabelsOnLiveControls(in: code) {
+                XCTFail("""
+                    \(relative):\(number) draws the disabled-label colour on a control with \
+                    no .disabled( near it. That tone is 2.43:1 and is exempt only because \
+                    an inactive component is exempt; on a live control it is unreadable \
+                    type that no check will ever object to.
+
+                    \(line)
+                    """)
+            }
+        }
+
+        // A sweep that finds no subjects is not a sweep that passed (L98). The
+        // four sites are the reason the exemption exists; if they leave, the
+        // exemption should leave with them rather than sitting here unused.
+        XCTAssertGreaterThan(found, 0, """
+            nothing in the app draws PaintedSurfaces.disabledControlLabel any more, so the \
+            one colour allowed under the contrast floor has no user and should be deleted \
+            rather than left as a way around the rule.
+            """)
+    }
+
+    /// The disabled-label matcher is asked what it can see (#611, L1).
+    func testTheDisabledLabelMatcherSeesALiveControl() {
+        let live = """
+            Button("Send to Claude") { }
+                .buttonStyle(.plain)
+                .foregroundStyle(PaintedSurfaces.disabledControlLabel)
+            """
+        XCTAssertEqual(faintLabelsOnLiveControls(in: live).count, 1, """
+            the check cannot see the exempt colour drawn on a control that is not \
+            disabled, which is the only thing it exists to catch
+            """)
+
+        let inactive = """
+            Button("Send to Claude") { }
+                .foregroundStyle(empty ? PaintedSurfaces.disabledControlLabel
+                                 : PaintedSurfaces.pageAccentText)
+                .buttonStyle(.plain)
+                .disabled(empty)
+            """
+        XCTAssertEqual(faintLabelsOnLiveControls(in: inactive).count, 0, """
+            the check reports a genuinely switched-off control as an offender, which is \
+            the state the exemption is for
+            """)
     }
 
     /// The matcher is asked directly what it can see (#591, L1).
@@ -1030,6 +1241,41 @@ final class BannerLegibilityTests: XCTestCase {
             "                ProgressView().controlSize(.small).tint(Color.roseGold)",
             "            .listRowSeparatorTint(Color.roseGold)",
         ]
+        // The wrapped ternary, invisible here until #611: the half naming the
+        // colours carries no modifier at all. Both widths, because the first
+        // version of the fix read two lines, the real one in
+        // PhotoAssignmentView spans three, and it went green on exactly the
+        // mutation written for it (L144).
+        let wrapped = [
+            """
+            .foregroundStyle(canGoPrevious
+                             ? Color.roseGold : PaintedSurfaces.disabledControlLabel)
+            """,
+            """
+            .foregroundStyle(tagsBinding.wrappedValue.isEmpty
+                             ? PaintedSurfaces.disabledControlLabel
+                             : Color.roseGold)
+            """,
+        ]
+        for spelling in wrapped {
+            XCTAssertEqual(unnamedAccentUses(in: spelling).count, 1, """
+                the check cannot see the accent chosen by a ternary spread over \
+                \(spelling.split(separator: "\n").count) lines, so a label drawn that way \
+                is exempt from the rule while reading as covered by it
+                """)
+        }
+
+        // A bracket inside a sentence is not structure. Left uncounted, the
+        // statement below never closes and everything after it joins on, which
+        // would have this reporting matches in code nobody wrote.
+        XCTAssertEqual(unnamedAccentUses(in: """
+            .help("Copies this photo's tags onto every photo :-( in this day")
+            .foregroundStyle(PaintedSurfaces.pageAccentText)
+            Capsule().fill(Color.roseGold.opacity(0.15))
+            """).count, 0, """
+            the check joins a statement past an unbalanced bracket inside a string, so it \
+            reads a fill three lines away as part of a foreground and fails on correct code
+            """)
         for line in mustCatch {
             XCTAssertEqual(unnamedAccentUses(in: line).count, 1, """
                 the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as the \

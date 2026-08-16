@@ -1,0 +1,8 @@
+{
+  "name": "field-placeholder-clears-its-field",
+  "file": "PostRollApp/Sources/Views/PaintedSurfaces.swift",
+  "find": "    static let fieldPlaceholder = Color.warmDark.opacity(0.75)",
+  "replace": "    static let fieldPlaceholder = Color.warmDark.opacity(0.35)",
+  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
+  "breaks": "the placeholder inside a field is measured against the page rather than the deeper fill it actually sits on, which is the role that decides its value (#611)"
+}

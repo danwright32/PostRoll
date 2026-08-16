@@ -1,0 +1,8 @@
+{
+  "name": "tertiary-text-clears-the-text-level",
+  "file": "PostRollApp/Sources/Views/PaintedSurfaces.swift",
+  "find": "    static let tertiaryText = Color.warmMid",
+  "replace": "    static let tertiaryText = Color.warmFaint",
+  "test": "PostRollTests/BannerLegibilityTests/testEverySurfaceIsReadableAgainstWhatIsBehindIt",
+  "breaks": "the sentence under a control goes back to 2.43:1 on the page, under the 4.5:1 body text needs, and ink cannot report it because that type draws perfectly well and is simply too pale (#611)"
+}

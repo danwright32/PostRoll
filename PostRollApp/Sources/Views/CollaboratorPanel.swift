@@ -130,7 +130,7 @@ struct CollaboratorPanel: View {
             .font(.system(size: 11))
             .foregroundStyle(
                 RecurringAccounts.emphasis(handle: candidate.handle, in: eventCounts) == .prominent
-                    ? Color.roseGold : Color.warmMid)
+                    ? PaintedSurfaces.pageAccentText : Color.warmMid)
             .accessibilityLabel("Edit numbers for \(candidate.handle)")
         }
     }
