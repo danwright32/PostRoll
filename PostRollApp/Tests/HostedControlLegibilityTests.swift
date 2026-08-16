@@ -620,6 +620,117 @@ final class HostedControlLegibilityTests: XCTestCase {
         }
     }
 
+    // MARK: - What the two program-read screens call themselves (#622)
+
+    /// The app's internal name for the step, which Dan never has to learn.
+    private static let jargon = "OCR"
+
+    /// Whether a line of source puts that term in front of a person.
+    ///
+    /// String literals only. The type names in this file are full of it
+    /// (`OCRFailureBody`, `OCRProgressText`), and none of them is a word
+    /// anybody reads, so a check over the raw line would be answered by the
+    /// declarations rather than by the copy.
+    private static func showsJargon(_ line: String) -> Bool {
+        line.matches(of: #/"[^"]*"/#)
+            .contains { String($0.output).uppercased().contains(jargon) }
+    }
+
+    /// Neither program-read screen is headed in jargon (#622).
+    ///
+    /// The failure screen was headed "OCR Failed" while the screen immediately
+    /// before it says "Reading Program". They are only ever read in sequence,
+    /// and read that way the pair sounded like two different features on the
+    /// one screen that reports a paid read did not work and offers the way to
+    /// run it again (L21, L118).
+    ///
+    /// Asserted on the strings the views draw from, and on the rule rather than
+    /// on either wording: a heading may not name the step by the term the app
+    /// uses in front of Dan nowhere else, and it has to name the thing being
+    /// read, so a later rewording that keeps both passes (L103).
+    func testNeitherProgramReadScreenIsHeadedInJargon() {
+        for (screen, heading) in [
+            ("the reading screen", OCRProgressText.readingHeading),
+            ("the failure screen", OCRProgressText.failureHeading),
+        ] {
+            XCTAssertFalse(heading.uppercased().contains(Self.jargon), """
+                \(screen) is headed "\(heading)", which names the step by the app's own \
+                internal term for it. That word appears nowhere else Dan can see, so the \
+                screen introduces a name for a thing he already has a name for.
+                """)
+            XCTAssertTrue(heading.lowercased().contains("program"), """
+                \(screen) is headed "\(heading)", which does not name the thing being \
+                read. These two screens are read one after the other and have to sound \
+                like one feature.
+                """)
+        }
+    }
+
+    /// And the screens actually draw from those strings (#622, L3).
+    ///
+    /// Naming the heading somewhere the check can read it proves nothing on its
+    /// own: a heading typed back into the view would leave the constant above
+    /// correct, unread and passing, which is the shape of a value written but
+    /// never used (L46). So the file that draws these screens may not carry the
+    /// word at all.
+    ///
+    /// The whole file rather than one declaration, because the rule really is
+    /// file-wide here: both screens live in it, and a literal naming the step
+    /// that way is an offence wherever it sits, so there is no legitimate other
+    /// use that could answer for a broken one (L135).
+    func testTheProgramReadScreensDrawNoJargonOfTheirOwn() throws {
+        let relative = "Sources/Views/OCRProgressView.swift"
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // PostRollApp
+            .appendingPathComponent(relative)
+        let code = SwiftSourceText.withoutComments(
+            try String(contentsOf: url, encoding: .utf8))
+
+        let offenders = code.split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated()
+            .compactMap { index, line -> String? in
+                guard Self.showsJargon(String(line)) else { return nil }
+                return "\(relative):\(index + 1)  "
+                    + line.trimmingCharacters(in: .whitespaces)
+            }
+
+        XCTAssertTrue(offenders.isEmpty, """
+            These lines show Dan the app's internal name for the program read:
+
+            \(offenders.joined(separator: "\n"))
+
+            The words on these screens come from OCRProgressText, so they can be read \
+            as a pair and checked as one. Put the wording there and draw it from here.
+            """)
+    }
+
+    /// The matcher above is asked directly what it can see (L1).
+    ///
+    /// The file is clean once the fix lands, so a matcher reading nothing and a
+    /// matcher reading everything give the same silent pass. What has to be seen
+    /// to fail is the matcher, not the tree around it.
+    func testTheJargonMatcherReadsLiteralsRatherThanSymbols() {
+        for line in ["                Text(\"OCR Failed\")",
+                     "        Text(\"Reading with OCR\")",
+                     "            Label(\"ocr failed\", systemImage: \"x\")"] {
+            XCTAssertTrue(Self.showsJargon(line),
+                          "the check cannot see \(line.trimmingCharacters(in: .whitespaces)) "
+                          + "as jargon shown on screen, so a heading spelled that way is "
+                          + "exempt from the rule and reads exactly like a clean file")
+        }
+
+        for line in ["                Text(OCRProgressText.failureHeading)",
+                     "struct OCRFailureBody: View {",
+                     "    private var run: OCRManager.Run? { ocrManager.run(for: event.id) }"] {
+            XCTAssertFalse(Self.showsJargon(line),
+                           "the check reports \(line.trimmingCharacters(in: .whitespaces)) "
+                           + "as jargon on screen, which it is not: a type name is not a "
+                           + "word anybody reads. A rule that fires on correct code is the "
+                           + "rule people learn to work around")
+        }
+    }
+
     /// The measurement's own zero, measured rather than assumed (L1).
     ///
     /// The floor above is a margin over "no difference at all". If two renders
