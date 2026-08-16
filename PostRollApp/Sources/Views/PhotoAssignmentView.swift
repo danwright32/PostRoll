@@ -1222,7 +1222,7 @@ private struct PhotoTagEditor: View {
                             .fill(PaintedSurfaces.deepPage)
                             .overlay(
                                 RoundedRectangle(cornerRadius: Radius.xs)
-                                    .strokeBorder(focused ? Color.roseGold : Color.creamEdge,
+                                    .strokeBorder(focused ? PaintedSurfaces.accentBorder : PaintedSurfaces.edgeRule,
                                                   lineWidth: focused ? 1.5 : 1)
                             )
                     )
@@ -1637,7 +1637,7 @@ private struct TagSuggestionFlow: View {
                         .padding(.vertical, 3)
                         .background(
                             Capsule().fill(PaintedSurfaces.suggestionChipFill)
-                                .overlay(Capsule().strokeBorder(Color.roseGold.opacity(0.3), lineWidth: 0.5))
+                                .overlay(Capsule().strokeBorder(PaintedSurfaces.accentBorder.opacity(0.3), lineWidth: 0.5))
                         )
                 }
                 .buttonStyle(.plain)
@@ -2102,7 +2102,7 @@ private struct BeforeAfterPicker: View {
                         .background(PaintedSurfaces.deepPage)
                         .overlay(
                             RoundedRectangle(cornerRadius: 4)
-                                .strokeBorder(Color.creamEdge, lineWidth: 1)
+                                .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                     }
@@ -2282,7 +2282,7 @@ private struct PhotoThumb: View {
             .clipShape(RoundedRectangle(cornerRadius: Radius.md))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.md)
-                    .strokeBorder(loadFailed ? Color.roseGold.opacity(0.7) : (isReorderTarget ? Color.roseGold : Color.creamEdge),
+                    .strokeBorder(loadFailed ? PaintedSurfaces.accentBorder.opacity(0.7) : (isReorderTarget ? PaintedSurfaces.accentBorder : PaintedSurfaces.edgeRule),
                                   lineWidth: isReorderTarget ? 2 : (loadFailed ? 1.5 : 0.5))
             )
             .opacity(isReorderTarget ? 0.75 : 1.0)

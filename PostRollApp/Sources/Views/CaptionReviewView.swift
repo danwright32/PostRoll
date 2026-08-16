@@ -2574,7 +2574,7 @@ private struct RevisionPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: Radius.md))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(Color.roseGold.opacity(0.2), lineWidth: 1)
+                .strokeBorder(PaintedSurfaces.accentBorder.opacity(0.2), lineWidth: 1)
         )
     }
 }
@@ -2673,7 +2673,7 @@ private struct BlogSection: View {
                     .fill(PaintedSurfaces.deepPage)
                     .overlay(
                         RoundedRectangle(cornerRadius: Radius.sm)
-                            .strokeBorder(Color.creamEdge, lineWidth: 1)
+                            .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)
                     )
             )
         }
@@ -2798,7 +2798,7 @@ private struct BlogSection: View {
                                     .fill(PaintedSurfaces.deepPage)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: Radius.sm)
-                                            .strokeBorder(Color.creamEdge, lineWidth: 1)
+                                            .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)
                                     )
                             )
                         } else {
@@ -4159,7 +4159,7 @@ private struct InstagramMockup: View {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .stroke(PaintedSurfaces.instagramCardEdge, lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: 2)
+        .shadow(color: PaintedSurfaces.instagramCardShadow, radius: 8, x: 0, y: 2)
         .task(id: displayedPhotoURL) {
             guard let url = displayedPhotoURL else { return }
             // Keep the previous image on screen while loading the next so
@@ -4281,7 +4281,7 @@ private struct PreviewGraphicThumbnail: View {
         .clipShape(RoundedRectangle(cornerRadius: Radius.md))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(Color.creamEdge, lineWidth: 0.5)
+                .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 0.5)
         )
         // Dim + spinner while regenerating
         .overlay {
@@ -4348,7 +4348,7 @@ private struct ReviewThumb: View {
         .clipShape(RoundedRectangle(cornerRadius: Radius.md))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(Color.creamEdge, lineWidth: 0.5)
+                .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 0.5)
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
@@ -4679,7 +4679,7 @@ private struct CollagePreviewThumbnail: View {
             .clipShape(RoundedRectangle(cornerRadius: Radius.md))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.md)
-                    .strokeBorder(Color.creamEdge, lineWidth: 0.5)
+                    .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 0.5)
             )
             .overlay(alignment: .bottomTrailing) {
                 Button { openComposited() } label: {
@@ -5019,7 +5019,7 @@ private struct ReelStripPreviewThumbnail: View {
             .clipShape(RoundedRectangle(cornerRadius: Radius.md))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.md)
-                    .strokeBorder(Color.creamEdge, lineWidth: 0.5)
+                    .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 0.5)
             )
             .overlay(alignment: .topTrailing) {
                 if onRegenerate != nil || onSwapAudio != nil || onUploadAudio != nil || onChangePhotos != nil || onChangeReelLength != nil {
@@ -5674,7 +5674,7 @@ private struct ReviewMediaFileRow: View {
                 .fill(PaintedSurfaces.deepPage)
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.xs)
-                        .strokeBorder(Color.creamEdge, lineWidth: 0.5)
+                        .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 0.5)
                 )
         )
     }
@@ -5728,7 +5728,7 @@ private struct LearningSuggestionSheet: View {
                         .fill(PaintedSurfaces.noteFieldFill)
                         .overlay(
                             RoundedRectangle(cornerRadius: Radius.md)
-                                .strokeBorder(Color.roseGold.opacity(0.2), lineWidth: 1)
+                                .strokeBorder(PaintedSurfaces.accentBorder.opacity(0.2), lineWidth: 1)
                         )
                 )
 
@@ -5940,7 +5940,7 @@ private struct CollageLayoutGallery: View {
                 .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                        .stroke(Color.warmMid.opacity(0.2), lineWidth: 1)
+                        .stroke(PaintedSurfaces.treatmentTileBorder, lineWidth: 1)
                 )
         } else {
             RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
