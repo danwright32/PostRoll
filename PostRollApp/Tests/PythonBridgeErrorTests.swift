@@ -263,11 +263,28 @@ final class PythonBridgeErrorTests: XCTestCase {
             let code = SwiftSourceText.withoutComments(
                 try String(contentsOf: url, encoding: .utf8))
 
-            XCTAssertTrue(code.contains("whileDoing: .\(work)"), """
+            let named = code.ranges(of: #/message\(whileDoing: \.([a-zA-Z]+)\)/#)
+                .map { String(code[$0]) }
+
+            XCTAssertFalse(named.isEmpty, """
                 \(relative) never says it was doing \(work), so every failure it shows \
                 falls back to the neutral wording and the screen stops naming what \
                 stopped.
                 """)
+
+            // EVERY one of them, not "does the file mention it somewhere". A
+            // file with three of these is answered by any one of them, so the
+            // mutation written for this guard changed a single site and the
+            // first version stayed green while that screen went back to the
+            // neutral sentence (L135).
+            for site in named {
+                XCTAssertTrue(site.contains(".\(work))"), """
+                    \(relative) has a failure that says \(site) rather than naming \
+                    \(work), the one kind of work this file starts. That screen falls back \
+                    to the neutral wording, which is not wrong and so is reported by \
+                    nothing.
+                    """)
+            }
         }
     }
 }
