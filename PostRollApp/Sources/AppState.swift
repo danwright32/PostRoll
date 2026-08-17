@@ -29,10 +29,50 @@ final class AppState {
     ///
     /// A sentence rather than the reading it came from: what the window needs is
     /// the words, and keeping the phrasing in one place stops a second version
-    /// of it growing here. Read once per launch, like the two above; a checkout
-    /// can move while the app is open, and re-reading it on every draw would put
-    /// three git calls on the path of every keystroke (L59).
-    var checkoutNotice: String?
+    /// of it growing here.
+    ///
+    /// Kept up to date rather than read once per launch (#668). A checkout moves
+    /// while the app is open, because that is when somebody switches branch or
+    /// leaves an edit, so a notice read only at launch is silent in the case it
+    /// exists for and its silence then reads as an assurance. It is still not
+    /// re-derived on every draw, which would put three git calls on the path of
+    /// every keystroke (L59): it is refreshed when the app comes forward and
+    /// whenever a reading is taken anywhere, which includes the one every
+    /// generation takes for its own log.
+    ///
+    /// Written only through `apply`, so a reading can never set the sentence
+    /// without also being able to clear it.
+    private(set) var checkoutNotice: String?
+
+    /// What the window says about the code folder, from one reading of it.
+    ///
+    /// Clearing is as much the job as setting: a checkout put back on a clean
+    /// main, or one that could not be read at all, must take the sentence away
+    /// rather than leave the previous one standing (L11). The whole point of
+    /// re-reading is lost if the notice only ever appears.
+    func apply(_ reading: CheckoutRevision.Reading) {
+        checkoutNotice = CheckoutNotice.message(for: reading)
+    }
+
+    /// Listen for readings taken anywhere, so a run refreshes the notice.
+    ///
+    /// Idempotent: a window that appears twice must not end up with two
+    /// observers on one shared centre. The subscription is held here and removed
+    /// when this state goes away, because a notification centre outlives what
+    /// registers with it and holds it unowned (L86).
+    func watchCheckoutReadings(_ center: NotificationCenter = .default) {
+        guard checkoutReadings == nil else { return }
+        checkoutReadings = NotificationSubscription(
+            center: center, name: CheckoutRevision.readNotification
+        ) { [weak self] notification in
+            guard let reading = CheckoutRevision.reading(in: notification) else { return }
+            // Hopped deliberately: the reading a generation takes is taken on a
+            // detached task, so this arrives off the main actor.
+            Task { @MainActor in self?.apply(reading) }
+        }
+    }
+
+    private var checkoutReadings: NotificationSubscription?
 
     /// Set when events.json existed but its contents could not be decoded.
     /// Shown once as a dismissible alert; the bad file was moved aside, so

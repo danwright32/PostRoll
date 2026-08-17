@@ -108,6 +108,18 @@ struct MainWindowView: View {
                              repo: behind.repo)
         }
         .task { await checkBuildFreshness() }
+        // A checkout moves while the app is open, which is the case the notice
+        // exists for and the one a launch-time read cannot see (#668). Coming
+        // back from the terminal that moved it is the whole scenario, and it
+        // produces exactly this notification.
+        //
+        // The app coming forward rather than each window becoming key: the
+        // reading runs git three times, and every window shuffle inside the app
+        // would pay for it while answering the same thing.
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didBecomeActiveNotification)) { _ in
+                Task { await refreshCheckoutNotice() }
+            }
         // Said at launch rather than left for the first generation to discover,
         // because an app that cannot generate anything otherwise looks entirely
         // normal until Dan has picked a day and pressed a button (#652).
@@ -161,6 +173,23 @@ struct MainWindowView: View {
         }
     }
 
+    /// Read the checkout again, because it may have moved (#668).
+    ///
+    /// Only the checkout, not the build freshness beside it: that answer cannot
+    /// change while the app is open, and this one changes precisely then.
+    ///
+    /// Nothing is assigned here. The read announces itself and the subscription
+    /// made at launch applies it, so there is one path from a reading to the
+    /// sentence on the window rather than one per caller (L16).
+    ///
+    /// An unreachable checkout is left to the launch check that already reports
+    /// it: raising the same alert every time the app is brought forward would
+    /// make the app unusable while the folder is missing.
+    private func refreshCheckoutNotice() async {
+        guard case .ready(let repo) = LaunchProjectCheck.outcome() else { return }
+        _ = await Task.detached { CheckoutRevision.read(inRepo: repo) }.value
+    }
+
     /// Ask once, at launch, whether this build predates the code.
     ///
     /// Off the main actor: it stats a file and runs git, and neither belongs on
@@ -169,6 +198,9 @@ struct MainWindowView: View {
     /// nothing actionable in it is one that gets dismissed on reflex, and the
     /// real warning would go with it.
     private func checkBuildFreshness() async {
+        // Subscribed before anything is read, so the reading taken below and
+        // every one a generation takes afterwards land the same way (#668).
+        appState.watchCheckoutReadings()
         // One resolution of the checkout for both checks, so they cannot end up
         // disagreeing about whether there is one.
         //
@@ -189,7 +221,10 @@ struct MainWindowView: View {
         // check below it: it runs git, three times, and the thread drawing the
         // window is not where that belongs.
         let revision = await Task.detached { CheckoutRevision.read(inRepo: repo) }.value
-        appState.checkoutNotice = CheckoutNotice.message(for: revision)
+        // Applied here as well as through the subscription above, so the notice
+        // at launch does not depend on the subscription having been made. The
+        // same reading applied twice is the same sentence.
+        appState.apply(revision)
         if case .unknown(let reason) = revision {
             // To the log rather than to the window, the same way an unreadable
             // build freshness verdict goes: there is nothing here Dan can act
