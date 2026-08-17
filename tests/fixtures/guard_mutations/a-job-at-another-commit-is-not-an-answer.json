@@ -1,0 +1,8 @@
+{
+  "name": "a-job-at-another-commit-is-not-an-answer",
+  "file": "tools/wait_for_checks.py",
+  "find": "            if str(job.get(\"head_sha\")) != head_sha:",
+  "replace": "            if False:",
+  "test": "tests/test_wait_for_checks.py::test_a_job_at_another_commit_is_refused_rather_than_counted",
+  "breaks": "the second witness goes away. A run and its jobs are two separate replies, and the job carries its own head_sha, so checking only the run leaves the SHA proved by one lookup agreeing with itself (L70)"
+}

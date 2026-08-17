@@ -1,0 +1,8 @@
+{
+  "name": "a-commit-landing-mid-wait-is-said-out-loud",
+  "file": "tools/wait_for_checks.py",
+  "find": "        if judged and reading.head_sha != judged:",
+  "replace": "        if False:",
+  "test": "tests/test_wait_for_checks.py::test_a_commit_landing_mid_wait_is_said_out_loud_and_judged_afresh",
+  "breaks": "a push arriving while the wait is running is absorbed silently, so the lines already printed describe a commit nobody is told about and the reader cannot tell which commit the verdict is for"
+}

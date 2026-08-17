@@ -1,0 +1,8 @@
+{
+  "name": "a-run-at-another-commit-is-not-an-answer",
+  "file": "tools/wait_for_checks.py",
+  "find": "        if str(run.get(\"head_sha\")) != head_sha:",
+  "replace": "        if False:",
+  "test": "tests/test_wait_for_checks.py::test_a_run_at_another_commit_is_refused_rather_than_counted",
+  "breaks": "a workflow run belonging to another commit is counted as an answer about this one, which is #669 exactly: on 2026-08-17 three consecutive pushes each reported the previous commit's failure, and the mirror is a superseded run that passed reporting green for a commit nothing has judged"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "a-run-still-in-flight-is-never-green",
+  "file": "tools/wait_for_checks.py",
+  "find": "        if run.get(\"status\") != \"completed\":",
+  "replace": "        if False:",
+  "test": "tests/test_wait_for_checks.py::test_a_run_still_in_flight_is_never_green",
+  "breaks": "a commit reads green while a run at it is still going on. Every job a run has started can be listed and settled in the seconds it spends finalising, so the green arrives before the work does"
+}
