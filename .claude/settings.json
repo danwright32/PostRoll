@@ -1,10 +1,4 @@
 {
-  "enabledPlugins": {
-    "cloudflare@cloudflare": false,
-    "figma@claude-plugins-official": false,
-    "stripe@claude-plugins-official": false,
-    "vercel-plugin@vercel-vercel-plugin": false
-  },
   "hooks": {
     "PreToolUse": [
       {
@@ -17,5 +11,12 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "cloudflare@cloudflare": false,
+    "figma@claude-plugins-official": false,
+    "stripe@claude-plugins-official": false,
+    "vercel-plugin@vercel-vercel-plugin": false,
+    "swift-lsp@claude-plugins-official": true
   }
 }
