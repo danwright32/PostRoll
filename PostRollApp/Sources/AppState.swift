@@ -19,6 +19,10 @@ final class AppState {
     /// Checked once per launch: it reads the disk and runs git, and the answer
     /// cannot change while the app is open.
     var buildBehind: BuildBehind?
+    /// Set at launch when PostRoll cannot reach its code folder, so the app
+    /// says so before Dan has picked a day and pressed a button on something
+    /// that was never going to run (#652).
+    var projectRootProblem: AppPaths.ProjectRootProblem?
 
     /// Set when events.json existed but its contents could not be decoded.
     /// Shown once as a dismissible alert; the bad file was moved aside, so

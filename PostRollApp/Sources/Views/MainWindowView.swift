@@ -95,6 +95,23 @@ struct MainWindowView: View {
                              repo: behind.repo)
         }
         .task { await checkBuildFreshness() }
+        // Said at launch rather than left for the first generation to discover,
+        // because an app that cannot generate anything otherwise looks entirely
+        // normal until Dan has picked a day and pressed a button (#652).
+        //
+        // Dismissible: everything that is not generation still works, so
+        // trapping him behind it would take away more than the fault does.
+        .alert(
+            LaunchProjectCheck.title,
+            isPresented: Binding(
+                get: { appState.projectRootProblem != nil },
+                set: { if !$0 { appState.projectRootProblem = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(appState.projectRootProblem.map(LaunchProjectCheck.message) ?? "")
+        }
         .alert(
             "Saved events could not be read",
             isPresented: Binding(
@@ -139,11 +156,20 @@ struct MainWindowView: View {
     /// nothing actionable in it is one that gets dismissed on reflex, and the
     /// real warning would go with it.
     private func checkBuildFreshness() async {
-        // No checkout, no verdict. Saying so in the log rather than guessing a
-        // folder to run git in, which is what produced #648 (L11).
-        guard let repo = AppPaths.projectRoot else {
-            NSLog("[PostRoll] build freshness unknown: \(ProjectRootText.message(.notRecorded))")
+        // One resolution of the checkout for both checks, so they cannot end up
+        // disagreeing about whether there is one.
+        //
+        // An unreachable checkout is reported and nothing else is attempted:
+        // build freshness runs git inside that folder, so with no folder there
+        // is no verdict to reach, and the answer Dan needs is the one already
+        // in hand (#652).
+        let repo: URL
+        switch LaunchProjectCheck.outcome() {
+        case .unreachable(let problem):
+            appState.projectRootProblem = problem
             return
+        case .ready(let root):
+            repo = root
         }
         let verdict = await Task.detached { BuildFreshness.check(repo: repo) }.value
         switch verdict {
