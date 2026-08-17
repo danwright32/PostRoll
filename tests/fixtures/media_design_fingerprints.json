@@ -1,42 +1,42 @@
 {
   "before_after": {
-    "fingerprint": "7029a0b8aad1c7f39e976ce2573ca77d7d343d11dc83d633e0e6edb58b88b828",
+    "fingerprint": "acd430a5c3dcc2fe04e5e6f58c2aea074e0456e5dc2fb75fabf9bfe34c3d0e39",
     "version": 1
   },
   "collage": {
-    "fingerprint": "ac1e4c6cda33e4d0fdf08ac860e4fb29b648045edf275d5465e638c6016c25f8",
+    "fingerprint": "d7b966daf9205cb47e589d42afaf97d869359aa1e933124ca1e92025031c143a",
     "version": 1
   },
   "cover": {
-    "fingerprint": "e482f06ebcf696198aedfe841bc98ca4bc451905d4eb66ca3685159eedcedd39",
+    "fingerprint": "86c2ceeb9b11eb068dc38b1fb9f5444bf68fd16d36415677f651d50be50c64a1",
     "version": 1
   },
   "reel_clip": {
-    "fingerprint": "662b8aa7b3ecf51e76eb294efe12e4b5c3ccf8f695128eb7754f90ed67613dcc",
+    "fingerprint": "62733d7cab88bc73877770efd6fe06cb867863a76c1113f856870b32bb8ffdda",
     "version": 1
   },
   "reel_morph": {
-    "fingerprint": "8d76ffe387bfc24aac3c26ce06300827706cf86c5e2c8ae38f052ee79baf375b",
+    "fingerprint": "6a205fc1286315b2742eaf816e277b4c95d94ddd5646e349db02bb9d74f56f0d",
     "version": 2
   },
   "reel_preview": {
-    "fingerprint": "bd4c9088364577c2a9c8b2fd10abe118a2075dc34712c09d32df1936321e124e",
+    "fingerprint": "2409198eff9c864488445e3905cb696532083ec06f72c4433a8bf511c81466b7",
     "version": 1
   },
   "reel_screen": {
-    "fingerprint": "61f3b43e0783176a54d65fbc757b0811dfb0cbb81d02575b99302483c2386189",
+    "fingerprint": "fc36732bcdb01a11be6a896573990019e70065e697daf0c5e77c38a74718ed52",
     "version": 1
   },
   "reel_scroll": {
-    "fingerprint": "bd4c9088364577c2a9c8b2fd10abe118a2075dc34712c09d32df1936321e124e",
+    "fingerprint": "2409198eff9c864488445e3905cb696532083ec06f72c4433a8bf511c81466b7",
     "version": 1
   },
   "reel_slider": {
-    "fingerprint": "e87adbc9d3ed546c950b4350b8da1030524ca0906635bf5b0dbb6c965cfb57c2",
+    "fingerprint": "0e2892ef85474517d7fb78400a533718d7468460c06461d8e56b914d9481f335",
     "version": 2
   },
   "story": {
-    "fingerprint": "e482f06ebcf696198aedfe841bc98ca4bc451905d4eb66ca3685159eedcedd39",
+    "fingerprint": "86c2ceeb9b11eb068dc38b1fb9f5444bf68fd16d36415677f651d50be50c64a1",
     "version": 1
   }
 }

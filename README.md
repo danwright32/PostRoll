@@ -19,7 +19,7 @@ Six steps. Run them in order from the repo root.
 **1. Install the tools that aren't Python packages.**
 
 ```
-brew install ffmpeg xcodegen
+brew install ffmpeg xcodegen python@3.11
 ```
 
 `ffmpeg` and `ffprobe` (both come from that one formula) render every reel.
@@ -29,8 +29,15 @@ still image. `xcodegen` generates the Xcode project.
 **2. Create the Python environment.**
 
 ```
-python3 -m venv venv && venv/bin/python -m pip install -r requirements.txt pytest
+/opt/homebrew/opt/python@3.11/bin/python3.11 -m venv venv && venv/bin/python -m pip install -r requirements.txt pytest
 ```
+
+Named explicitly rather than `python3`, which is whatever the shell finds
+first. This venv was once built on the Python inside Xcode.app, which meant an
+Xcode update could take the whole generation pipeline with it, and it held the
+Mac on 3.9 while CI ran 3.11 (#656). 3.11 is what every CI job installs, so
+matching it is what makes a green run here mean anything. `make check-toolchain`
+refuses both mistakes, and `build-install.sh` runs it before installing.
 
 **3. Generate the Xcode project.**
 

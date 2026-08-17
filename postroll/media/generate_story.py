@@ -19,6 +19,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .design_tokens import (
+    load_font,
     FONT_DETAIL,
     FONT_DETAIL_LIGHT,
     FONT_SCRIPT,
@@ -56,13 +57,6 @@ BG_DARKEN_OPACITY = 70  # lighter overlay, let warm tones show through
 FONT_DETAIL_INDEX = FONT_DETAIL_LIGHT
 
 
-def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
-    """Load a font, falling back to default if not found."""
-    try:
-        return ImageFont.truetype(path, size, index=index)
-    except (OSError, IOError):
-        print(f"Warning: Could not load font {path}, using default")
-        return ImageFont.load_default()
 
 
 def create_blurred_background(photo: Image.Image) -> Image.Image:

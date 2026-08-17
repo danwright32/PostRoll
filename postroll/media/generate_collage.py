@@ -21,12 +21,13 @@ import json
 import random
 import sys
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
 
 # The brand palette, type and mat scale live in one module (#162). Aliased to
 # the names this template has always used where the local name reads better in
 # context; the value is the shared one either way.
 from .design_tokens import (
+    load_font,
     CREAM as STRIP_CREAM,
     FONT_DETAIL,
     FONT_DETAIL_LIGHT as PLATE_DETAIL_WEIGHT,
@@ -344,11 +345,6 @@ def _seed_for_split(
     return 0
 
 
-def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
-    try:
-        return ImageFont.truetype(path, size, index=index)
-    except (OSError, IOError):
-        return ImageFont.load_default()
 
 
 

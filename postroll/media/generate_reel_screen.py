@@ -22,11 +22,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from .audio_fit import fit_audio_to_duration
 
 from .design_tokens import (
+    load_font,
     CREAM,
     FONT_DETAIL,
     FONT_DETAIL_LIGHT,
@@ -62,11 +63,6 @@ LOGO_WIDTH = 200
 AUDIO_FADE_DURATION = 2.0
 
 
-def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
-    try:
-        return ImageFont.truetype(path, size, index=index)
-    except (OSError, IOError):
-        return ImageFont.load_default()
 
 
 def get_video_duration(path: str) -> float:

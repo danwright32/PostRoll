@@ -23,13 +23,14 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 # Reuse the collage's pan/zoom-aware crop so per-photo offsets produce
 # identical output in both the strip preview PNG and the final encoded reel.
 from .generate_collage import DEFAULT_CROP_OFFSET, crop_to_fill as _crop_to_fill
 
 from .design_tokens import (
+    load_font,
     CREAM,
     FONT_DETAIL,
     FONT_DETAIL_LIGHT,
@@ -102,11 +103,6 @@ DEFAULT_LOGO = str(_ASSETS_DIR / "logo-black.png")
 AUDIO_FADE_DURATION = 5.0
 
 
-def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
-    try:
-        return ImageFont.truetype(path, size, index=index)
-    except (OSError, IOError):
-        return ImageFont.load_default()
 
 
 def load_logo(logo_path: str | None) -> Image.Image | None:

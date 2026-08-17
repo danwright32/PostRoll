@@ -27,7 +27,15 @@ from pathlib import Path
 
 import pytest
 
-from tools.check_toolchain import Verdict, parse_version, recorded_ci_version, verdict
+from tools.check_toolchain import (
+    Verdict,
+    base_interpreter,
+    ci_python_version,
+    parse_version,
+    python_verdict,
+    recorded_ci_version,
+    verdict,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -148,3 +156,56 @@ def test_this_machine_is_not_ahead_of_the_compiler_ci_will_use() -> None:
     ).stdout
     result = verdict(local=parse_version(banner), ci=recorded_ci_version())
     assert result.ok, result.detail
+
+
+# ── the Python side of the same hazard (#656) ────────────────────────────────
+#
+# The venv was built on the Python inside Xcode.app, so an Xcode update or move
+# would have taken the whole generation pipeline with it, and it pinned this Mac
+# to 3.9 while every CI job runs 3.11. Same shape as the Xcode check above: a
+# toolchain difference nothing on this machine reports.
+
+
+def test_an_interpreter_inside_an_application_bundle_is_refused() -> None:
+    result = python_verdict(
+        local="3.11.16", ci="3.11",
+        base="/Applications/Xcode.app/Contents/Developer/usr/bin")
+    assert not result.ok
+    # It has to name the application, or the reason is unguessable.
+    assert "Xcode.app" in result.detail
+
+
+def test_an_ordinary_interpreter_is_accepted() -> None:
+    result = python_verdict(
+        local="3.11.16", ci="3.11", base="/opt/homebrew/opt/python@3.11/bin")
+    assert result.ok
+
+
+def test_a_local_python_that_differs_from_ci_is_refused() -> None:
+    result = python_verdict(
+        local="3.9.6", ci="3.11", base="/opt/homebrew/bin")
+    assert not result.ok
+    assert "3.9" in result.detail and "3.11" in result.detail
+
+
+def test_the_patch_level_is_not_what_is_compared() -> None:
+    """CI pins a minor version, so holding the Mac to a patch would fail for a
+    difference nobody chose and cannot fix."""
+    assert python_verdict(local="3.11.16", ci="3.11",
+                          base="/opt/homebrew/bin").ok
+
+
+def test_the_ci_python_version_is_read_from_the_workflows() -> None:
+    """Derived, never a second copy: a hand-kept number drifts from the one CI
+    actually installs and the check then compares against a fiction (L41)."""
+    assert ci_python_version(REPO_ROOT / ".github" / "workflows") == "3.11"
+
+
+def test_the_base_interpreter_is_read_from_the_venv_config() -> None:
+    text = "home = /opt/homebrew/opt/python@3.11/bin\ninclude-system-site-packages = false\n"
+    assert base_interpreter(text) == "/opt/homebrew/opt/python@3.11/bin"
+
+
+def test_a_venv_config_naming_no_home_is_not_silently_accepted() -> None:
+    """An unreadable config is not evidence of a healthy environment (L98)."""
+    assert base_interpreter("version = 3.11.16\n") is None

@@ -20,9 +20,10 @@ so a change to the plate moves both.
 
 from __future__ import annotations
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
 
 from .design_tokens import (
+    load_font,
     CREAM,
     CREAM_EDGE,
     FONT_DETAIL,
@@ -91,11 +92,6 @@ def print_rect(photo_size: tuple[int, int]) -> tuple[int, int, int, int]:
     return ((CANVAS_W - print_w) // 2, PRINT_Y, print_w, MAX_PRINT_H)
 
 
-def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
-    try:
-        return ImageFont.truetype(path, size, index=index)
-    except (OSError, IOError):
-        return ImageFont.load_default()
 
 
 def tracked(draw, text, font, fill, x, y, spacing):

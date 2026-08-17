@@ -1,0 +1,8 @@
+{
+  "name": "a-venv-inside-an-app-bundle-is-refused",
+  "file": "tools/check_toolchain.py",
+  "find": "    owner = next((part for part in Path(base).parts if part.endswith(\".app\")), None)",
+  "replace": "    owner = next((part for part in Path(base).parts if part.endswith(\".never\")), None)",
+  "test": "tests/test_toolchain_matches_ci.py::test_an_interpreter_inside_an_application_bundle_is_refused",
+  "breaks": "a virtualenv built on the Python inside another application stops being reported, so that application's update schedule silently owns the generation pipeline. That is #656: the venv ran on Xcode.app's Python 3.9 and nothing said so"
+}

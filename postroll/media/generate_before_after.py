@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 # Reuse the title-fitting helper from the story template so single-line
 # shrink + two-line wrap behavior stays consistent across both layouts.
@@ -28,6 +28,7 @@ from .missing_media import require_present
 from .brand_text import detail_lines
 
 from .design_tokens import (
+    load_font,
     CREAM,
     CREAM_EDGE,
     FONT_DETAIL,
@@ -107,12 +108,6 @@ def header_detail_lines(event_name: str, org: str, venue: str) -> list[str]:
     return detail_lines(event_name, org, venue)
 
 
-def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
-    try:
-        return ImageFont.truetype(path, size, index=index)
-    except (OSError, IOError):
-        print(f"Warning: Could not load font {path}, using default")
-        return ImageFont.load_default()
 
 
 
