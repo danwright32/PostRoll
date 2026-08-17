@@ -1,0 +1,8 @@
+{
+  "name": "run-log-names-the-commit-that-ran",
+  "file": "PostRollApp/Sources/Services/CheckoutRevision.swift",
+  "find": "let state = dirty ? \"with UNCOMMITTED CHANGES\" : \"clean\"",
+  "replace": "let state = \"clean\"",
+  "test": "PostRollTests/CheckoutRevisionTests/testAnUncommittedTreeIsSaidInWords",
+  "breaks": "a run made from a tree with uncommitted edits is logged as a clean checkout"
+}

@@ -2091,8 +2091,28 @@ actor PythonBridge {
     /// the app never reads. The path is single-quoted for the shell script, and
     /// any apostrophe in it is escaped, because a home folder can contain one.
     static func dataDirExport(_ root: URL) -> String {
-        let escaped = root.path.replacingOccurrences(of: "'", with: "'\"'\"'")
-        return "export POSTROLL_DATA_DIR='\(escaped)'"
+        "export POSTROLL_DATA_DIR=\(shellQuoted(root.path))"
+    }
+
+    /// A value the launch script can carry without the shell reading any of it.
+    ///
+    /// One implementation, because the same escaping is applied to a path, an
+    /// argument and a branch name, and a second copy is one that can be got
+    /// wrong on its own. Single quotes stop every expansion the shell would
+    /// otherwise perform, and an apostrophe inside is closed, escaped and
+    /// reopened, because a home folder and a branch name can both contain one.
+    static func shellQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+    }
+
+    /// The line a run opens its log with (#661).
+    ///
+    /// The revision belongs here because the app runs the Python from the
+    /// working tree: without it, a surprising output is diagnosed against
+    /// whatever is checked out when somebody looks, which is not necessarily
+    /// what ran.
+    static func runHeader(marker: String, revision: CheckoutRevision.Reading) -> String {
+        "Running [\(marker)] (\(CheckoutRevision.describe(revision))):"
     }
 
     static func apiKeyDelivery(_ key: String?) -> (environment: [String: String], scriptLines: String) {
@@ -2137,27 +2157,32 @@ actor PythonBridge {
         // here so it exists before the subprocess reads it), keeping generation
         // off the TCC-protected Documents file.
         AppPaths.ensureBrandVoiceSeeded()
-        let brandVoicePath = AppPaths.brandVoiceFile.path
-            .replacingOccurrences(of: "'", with: "'\"'\"'")
-        let brandVoiceExport = "export POSTROLL_BRAND_VOICE='\(brandVoicePath)'"
+        let brandVoiceExport =
+            "export POSTROLL_BRAND_VOICE=\(Self.shellQuoted(AppPaths.brandVoiceFile.path))"
+
+        // Which code this run is about to execute (#661). Read off the checkout
+        // it was cleared to use, on a detached task so a git that never answers
+        // cannot hold the actor other runs are waiting on.
+        let revision = await Task.detached(priority: .userInitiated) {
+            CheckoutRevision.read(inRepo: root)
+        }.value
 
         // Python cannot reproduce AppPaths' marker-gated choice between
         // Documents and Application Support, so the app tells it. The AI usage
         // log (#207) is written here.
         let dataDirExport = Self.dataDirExport(AppPaths.root)
 
-        let quotedArgs = ([python] + args)
-            .map { "'" + $0.replacingOccurrences(of: "'", with: "'\"'\"'") + "'" }
-            .joined(separator: " ")
-
-        let logPath = logURL.path.replacingOccurrences(of: "'", with: "'\"'\"'")
+        let quotedArgs = ([python] + args).map(Self.shellQuoted).joined(separator: " ")
         // This run's own stderr file. The shared log is truncated by whichever
         // run starts next, and that truncation swaps the inode under any run
         // already appending, so a shared file could lose this run's output
         // entirely and hand back somebody else's (#90).
         let runMarker = UUID().uuidString
         let runLogURL = PythonBridgeLog.runLogURL(in: logsDir, marker: runMarker)
-        let runLogPath = runLogURL.path.replacingOccurrences(of: "'", with: "'\"'\"'")
+        let runLogPath = Self.shellQuoted(runLogURL.path)
+        // Quoted, not interpolated: the header carries a branch name, which is
+        // whatever somebody typed, and the shell would otherwise expand it.
+        let header = Self.shellQuoted(Self.runHeader(marker: runMarker, revision: revision))
         // Rotation moves here, out of the launch script, so it happens once
         // under a lock instead of racing every concurrent run.
         PythonBridgeLog.rotate(logURL)
@@ -2174,8 +2199,8 @@ actor PythonBridge {
             \(brandVoiceExport)
             \(dataDirExport)
             cd '\(root.path)'
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running [\(runMarker)]:" \(quotedArgs) >> '\(runLogPath)'
-            exec \(quotedArgs) 2>> '\(runLogPath)'
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')]" \(header) \(quotedArgs) >> \(runLogPath)
+            exec \(quotedArgs) 2>> \(runLogPath)
             """
 
         // The subprocess plumbing lives in ProcessRunner so its timeout,

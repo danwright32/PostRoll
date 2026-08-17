@@ -1,0 +1,8 @@
+{
+  "name": "run-header-is-not-the-process-speaking",
+  "file": "PostRollApp/Sources/Services/PythonBridgeError.swift",
+  "find": ".filter { !$0.contains(marker) }",
+  "replace": ".filter { _ in true }",
+  "test": "PostRollTests/PythonBridgeRunLogTests/testABranchNameInTheHeaderCannotBeReadAsTheFailure",
+  "breaks": "the launcher's own header, branch name included, is classified as the process's failure"
+}
