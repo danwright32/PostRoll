@@ -25,8 +25,65 @@ final class ProjectRootPreflightTests: XCTestCase {
         return dir
     }
 
+    /// A checkout is only usable if the Python environment inside it is there.
+    /// The app runs `postroll` with the packages that environment provides, so
+    /// a checkout without one cannot generate anything (#651).
+    private func makeCheckout(withEnvironment: Bool) throws -> URL {
+        let dir = try makeCheckout()
+        if withEnvironment {
+            let bin = dir.appendingPathComponent("venv/bin")
+            try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+            try Data("#!/bin/sh\n".utf8).write(to: bin.appendingPathComponent("python3"))
+        }
+        return dir
+    }
+
+    func testACheckoutWithNoPythonEnvironmentIsItsOwnProblem() throws {
+        let checkout = try makeCheckout(withEnvironment: false)
+        defer { try? FileManager.default.removeItem(at: checkout) }
+        XCTAssertEqual(AppPaths.projectRootProblem(checkout), .noEnvironment(checkout))
+    }
+
+    func testACheckoutWithItsEnvironmentHasNoProblem() throws {
+        let checkout = try makeCheckout(withEnvironment: true)
+        defer { try? FileManager.default.removeItem(at: checkout) }
+        XCTAssertNil(AppPaths.projectRootProblem(checkout))
+    }
+
+    func testAMissingEnvironmentIsRefusedByName() throws {
+        let checkout = try makeCheckout(withEnvironment: false)
+        defer { try? FileManager.default.removeItem(at: checkout) }
+        XCTAssertThrowsError(try PythonBridge.preflight(projectRoot: checkout)) { error in
+            guard case PythonBridgeError.projectRootUnavailable(let problem) = error else {
+                return XCTFail("expected projectRootUnavailable, got \(error)")
+            }
+            XCTAssertEqual(problem, .noEnvironment(checkout))
+        }
+    }
+
+    /// The message has to name the environment rather than the folder, because
+    /// the folder is present and reinstalling does not put an environment back.
+    func testTheMissingEnvironmentMessageNamesTheEnvironmentAndThePath() {
+        let dir = URL(fileURLWithPath: "/Volumes/Work/Apps/PostRoll")
+        let text = ProjectRootText.message(.noEnvironment(dir))
+        XCTAssertTrue(text.contains("/Volumes/Work/Apps/PostRoll"), text)
+        XCTAssertTrue(text.lowercased().contains("environment"), text)
+        for advice in ["re-assign", "reassign", "original locations", "photo screen"] {
+            XCTAssertFalse(text.lowercased().contains(advice), text)
+        }
+    }
+
+    /// The interpreter is the checkout's own, never one found on the machine.
+    /// A system Python does not have the packages the pipeline imports, so
+    /// running on one fails later and somewhere else.
+    func testTheInterpreterComesFromTheCheckout() {
+        let checkout = URL(fileURLWithPath: "/Volumes/Work/Apps/PostRoll")
+        XCTAssertEqual(PythonBridge.interpreter(in: checkout),
+                       "/Volumes/Work/Apps/PostRoll/venv/bin/python3")
+    }
+
     func testAUsableCheckoutIsHandedBack() throws {
-        let checkout = try makeCheckout()
+        let checkout = try makeCheckout(withEnvironment: true)
         defer { try? FileManager.default.removeItem(at: checkout) }
         XCTAssertEqual(try PythonBridge.preflight(projectRoot: checkout), checkout)
     }

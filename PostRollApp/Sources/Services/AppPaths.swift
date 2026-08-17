@@ -138,6 +138,14 @@ enum AppPaths {
         case missing(URL)
         /// The folder is there but the Python package is not in it.
         case notACheckout(URL)
+        /// A real checkout, with no Python environment inside it (#651).
+        ///
+        /// Its own case rather than folded into `notACheckout`, because the
+        /// answer is different: the code is present and correct, and what is
+        /// missing has to be rebuilt rather than found. Reinstalling the app
+        /// does not put one back, so a message offering that would send Dan
+        /// round a loop that cannot end (L111).
+        case noEnvironment(URL)
     }
 
     /// Whether `root` can actually be used to run the Python.
@@ -153,6 +161,12 @@ enum AppPaths {
               isDirectory.boolValue else { return .missing(root) }
         guard fm.fileExists(atPath: root.appendingPathComponent("postroll").path) else {
             return .notACheckout(root)
+        }
+        // The interpreter the app actually runs. Without it the pipeline's
+        // packages are not present, and every run fails on an import far from
+        // the thing that is wrong (#651).
+        guard fm.fileExists(atPath: root.appendingPathComponent("venv/bin/python3").path) else {
+            return .noEnvironment(root)
         }
         return nil
     }
@@ -398,6 +412,15 @@ enum ProjectRootText {
             return "PostRoll found \(root.path), but its code folder is not inside it, so it "
                  + "cannot generate anything. If you moved the project, reinstall PostRoll from "
                  + "where it is now. Your photos and saved events are not affected."
+        // No reinstall offered here, on purpose. The code folder is present and
+        // correct; what is missing is the Python environment inside it, and
+        // installing the app again does not create one. Telling him to reinstall
+        // would be advice that cannot change the state he is in (L111).
+        case .noEnvironment(let root):
+            return "PostRoll's Python environment is missing from \(root.path), so it cannot "
+                 + "generate anything. The code is all there, but the packages it runs on are "
+                 + "not, and they have to be set up again in that folder before anything will "
+                 + "work. Your photos and saved events are not affected."
         }
     }
 }

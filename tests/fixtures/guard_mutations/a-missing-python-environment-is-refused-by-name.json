@@ -1,0 +1,8 @@
+{
+  "name": "a-missing-python-environment-is-refused-by-name",
+  "file": "PostRollApp/Sources/Services/AppPaths.swift",
+  "find": "        guard fm.fileExists(atPath: root.appendingPathComponent(\"venv/bin/python3\").path) else {",
+  "replace": "        guard fm.fileExists(atPath: root.appendingPathComponent(\"venv/bin/python3\").path) || true else {",
+  "test": "PostRollTests/ProjectRootPreflightTests/testACheckoutWithNoPythonEnvironmentIsItsOwnProblem",
+  "breaks": "a checkout with no Python environment reads as usable, so a run goes ahead against an interpreter that does not have the packages the pipeline imports and fails later on an import naming none of this (#651)"
+}
