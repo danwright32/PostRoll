@@ -1,0 +1,8 @@
+{
+  "name": "the-window-re-reads-when-the-app-comes-forward",
+  "file": "PostRollApp/Sources/Views/MainWindowView.swift",
+  "find": "            for: NSApplication.didBecomeActiveNotification)) { _ in",
+  "replace": "            for: NSApplication.willResignActiveNotification)) { _ in",
+  "test": "PostRollTests/CheckoutNoticeFreshnessTests/testTheWindowRefreshesTheNoticeWhenTheAppComesForward",
+  "breaks": "the window watches the wrong moment, so coming back from the terminal that moved the checkout, which is the whole scenario, refreshes nothing (#668)"
+}

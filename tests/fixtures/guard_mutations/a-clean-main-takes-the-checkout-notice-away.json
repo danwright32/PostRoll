@@ -1,0 +1,8 @@
+{
+  "name": "a-clean-main-takes-the-checkout-notice-away",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "        checkoutNotice = CheckoutNotice.message(for: reading)",
+  "replace": "        if let words = CheckoutNotice.message(for: reading) { checkoutNotice = words }",
+  "test": "PostRollTests/CheckoutNoticeFreshnessTests/testGoingBackToACleanMainTakesTheNoticeAway",
+  "breaks": "the notice can appear and never leave, so a checkout put back on a clean main goes on being reported as off it for the rest of the session, naming a branch that was left an hour ago. Re-reading is worth nothing if only one direction of the answer is applied (#668)"
+}

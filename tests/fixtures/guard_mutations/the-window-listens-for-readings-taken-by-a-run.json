@@ -1,0 +1,8 @@
+{
+  "name": "the-window-listens-for-readings-taken-by-a-run",
+  "file": "PostRollApp/Sources/Views/MainWindowView.swift",
+  "find": "        appState.watchCheckoutReadings()",
+  "replace": "        _ = appState",
+  "test": "PostRollTests/CheckoutNoticeFreshnessTests/testTheWindowListensForReadingsTakenByARun",
+  "breaks": "nothing subscribes, so the reading a generation takes at its own start reaches no surface and the notice is only ever as fresh as the last time the app was brought forward (#668)"
+}
