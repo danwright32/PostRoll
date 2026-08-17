@@ -3,6 +3,6 @@
   "file": "postroll/media/design_tokens.py",
   "find": "        return ImageFont.truetype(path, size, index=index,\n                                  layout_engine=FONT_LAYOUT_ENGINE)",
   "replace": "        return ImageFont.truetype(path, size, index=index)",
-  "test": "tests/test_font_loading.py::test_the_shared_loader_pins_the_layout_engine",
-  "breaks": "which renderer draws Dan's type goes back to being decided by whatever Pillow build happens to be installed. Measured 2026-08-17: the same Pillow version renders the before/after title band about four pixels across depending on whether raqm is present, which is 0.64% of the frame and enough to fail its reference, so rebuilding a virtualenv could change what his graphics look like (#656)"
+  "test": "tests/test_font_loading.py::test_the_loader_names_the_engine_rather_than_inheriting_it",
+  "breaks": "which renderer draws Dan's type goes back to being decided by whatever Pillow build happens to be installed. Measured 2026-08-17: the same Pillow version renders the before/after title band about four pixels across depending on whether raqm is present, which is 0.64% of the frame and enough to fail its reference, so rebuilding a virtualenv could change what his graphics look like (#656). The guard points at the argument being passed rather than the resulting engine, because the behavioural assertion is vacuous on any machine without raqm, which is every CI runner: it SURVIVED there on 2026-08-17"
 }

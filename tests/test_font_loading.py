@@ -45,8 +45,37 @@ GENERATORS = [
 ]
 
 
+def test_the_loader_names_the_engine_rather_than_inheriting_it(monkeypatch):
+    """The invariant, asserted where it is observable ANYWHERE.
+
+    Checking the engine on the returned font only works on a machine that HAS
+    the advanced shaper: where it is absent, Pillow's default is already BASIC,
+    so the assertion passes whether or not anything was pinned. That is exactly
+    what happened, and it was caught by CI rather than here: the guard for this
+    SURVIVED its mutation on a runner with no raqm, which is to say the pin was
+    untested on the machine that gates every merge (L1).
+
+    So this asserts that the argument is PASSED, which goes red on any machine
+    the moment the pin is dropped.
+    """
+    seen: dict = {}
+    real = ImageFont.truetype
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(ImageFont, "truetype", spy)
+    tokens.load_font(tokens.FONT_DETAIL, 40)
+
+    assert seen.get("layout_engine") == tokens.FONT_LAYOUT_ENGINE, (
+        "load_font left the layout engine to Pillow, so which renderer draws "
+        "the type is decided by what happens to be installed")
+
+
 def test_the_shared_loader_pins_the_layout_engine():
-    """Whatever is installed, the engine is the one we chose."""
+    """The same promise seen through behaviour, which is only meaningful on a
+    machine where the other engine is actually available."""
     font = tokens.load_font(tokens.FONT_DETAIL, 40)
     assert font.layout_engine == ImageFont.Layout.BASIC
 
