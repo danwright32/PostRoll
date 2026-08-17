@@ -770,6 +770,45 @@ def test_the_clip_reel_matches_its_reference_frame(source_clips, silent_audio,
     assert_matches_golden(frame, "clip_reel", tmp_path)
 
 
+@requires_mac_fonts
+def test_the_title_card_type_is_drawn_light_enough_to_sit_over_footage(tmp_path):
+    """The rule the reference frame above rests on, checked without rendering.
+
+    Here rather than beside the card's other tests, because it renders real
+    script type and is therefore font-gated, and a font-gated file has to be in
+    a macOS shard or it runs nowhere while CI stays green. This file is already
+    that shard.
+
+    The card is transparent, so nothing measured on its own can say whether it
+    is legible: that is decided when it is composited, which the clip reel's
+    reference frame checks on a real encoded frame. What this checks is the rule
+    the design rests on, that the type is LIGHT, because it is laid over
+    photographic footage whose mid tones are dark. It is the half a text edit can
+    break, so it is the half the mutation sweep can prove.
+
+    Measured on the type's own pixels: the card also draws a blurred black
+    shadow and two rose gold rules, and either would drag a whole-image average
+    down while the type stayed white.
+    """
+    out = tmp_path / "title.png"
+    card_mod.render_title_card_image("Reference Event", out)
+
+    card = Image.open(out).convert("RGBA")
+    alpha = card.getchannel("A")
+    type_mask = alpha.point(lambda a: 255 if a >= 250 else 0)
+
+    drawn = type_mask.histogram()[255]
+    assert drawn > 500, (
+        f"only {drawn} fully opaque pixels, so there is no type here to measure "
+        f"and this check would pass on an empty card")
+
+    brightness = ImageStat.Stat(card.convert("L"), mask=type_mask).mean[0]
+    assert brightness > 200, (
+        f"the type is drawn at brightness {brightness:.0f}, which is not light "
+        f"enough to read over footage; this card carries no background of its "
+        f"own, so a dark title is invisible wherever it lands")
+
+
 # ── the guards on the guards ──────────────────────────────────────────────────
 
 GOLDEN_NAMES = {

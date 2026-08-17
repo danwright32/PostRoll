@@ -13,7 +13,7 @@ import shutil
 import subprocess
 
 import pytest
-from PIL import Image, ImageStat
+from PIL import Image
 
 from postroll.media.generate_story import CANVAS_H, CANVAS_W
 from postroll.media.generate_title_card import (
@@ -24,8 +24,6 @@ from postroll.media.generate_title_card import (
     apply_title_card,
     render_title_card_image,
 )
-
-from conftest import needs_mac_fonts
 
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 needs_ffmpeg = pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
@@ -66,48 +64,6 @@ def test_title_card_image_has_visible_text_pixels(tmp_path):
     img = Image.open(out)
     alphas = [px[3] for px in img.getdata()]
     assert max(alphas) > 0, "no non-transparent pixels: text was never drawn"
-
-
-@needs_mac_fonts
-def test_the_type_is_drawn_light_enough_to_sit_over_footage(tmp_path):
-    """The rule that makes this card readable at all (#665).
-
-    Gated on the macOS fonts, like every other check that renders real type:
-    the script face is a system font, and without it the card comes back with
-    one fully opaque pixel in it. Found on a Linux runner, by the refusal below
-    rather than by a green pass over an empty measurement.
-
-    The card is transparent, so nothing here can measure it against a
-    background: its legibility is decided when it is composited over the reel,
-    and `test_golden_frames.py` measures that on a real encoded frame. What can
-    be checked without rendering a reel is the rule the design rests on, that
-    the type is LIGHT, because it is laid over photographic footage whose mid
-    tones are dark.
-
-    Measured on the type's own pixels, not on the card as a whole: the card also
-    draws a blurred black shadow and two rose gold rules, and either would drag
-    a whole-image average down while the type stayed white. Fully opaque is what
-    separates them, since the shadow is blurred to a fraction of full alpha and
-    the rules are drawn at 170.
-    """
-    out = tmp_path / "title.png"
-    render_title_card_image("Sing Play", out)
-
-    card = Image.open(out).convert("RGBA")
-    grey = card.convert("L")
-    alpha = card.getchannel("A")
-    type_mask = alpha.point(lambda a: 255 if a >= 250 else 0)
-
-    drawn = type_mask.histogram()[255]
-    assert drawn > 500, (
-        f"only {drawn} fully opaque pixels, so there is no type here to "
-        f"measure and this check would pass on an empty card")
-
-    brightness = ImageStat.Stat(grey, mask=type_mask).mean[0]
-    assert brightness > 200, (
-        f"the type is drawn at brightness {brightness:.0f}, which is not light "
-        f"enough to read over footage; this card carries no background of its "
-        f"own, so a dark title is invisible wherever it lands")
 
 
 def test_title_card_image_handles_long_event_names_without_crashing(tmp_path):
