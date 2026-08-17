@@ -28,6 +28,23 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         INFOPLIST_KEY_CFBundleDisplayName: PostRoll
+        # Where this build was made from, stamped into the bundle so the app can
+        # find the Python checkout at runtime (#648). The Python is NOT bundled:
+        # `postroll/` has to be somewhere real on disk for anything to generate.
+        #
+        # This used to be a hardcoded `~/Documents/PostRoll` in AppPaths, and
+        # when the project moved out of iCloud Drive on 2026-08-16 that folder
+        # stopped existing. Recording it here means moving the project and
+        # reinstalling fixes itself, rather than rescheduling the same defect
+        # for the next move.
+        #
+        # SRCROOT is this PostRollApp folder, so its parent is the checkout.
+        # AppPaths standardizes the `..` away when it reads it back.
+        #
+        # Deliberately NOT set on PostRollTests below: the tests inject this
+        # value, and leaving it unset keeps "nothing was recorded" a state the
+        # suite actually runs in rather than one nothing ever reaches.
+        INFOPLIST_KEY_POSTROLLProjectRoot: "$(SRCROOT)/.."
     entitlements:
       path: PostRoll.entitlements
 

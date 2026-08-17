@@ -34,7 +34,11 @@ actor PythonBridge {
     }
 
     // nonisolated lets these be read from Task.detached without hopping back to the actor
-    nonisolated let projectRoot: URL
+    /// Nil when this build recorded no checkout and none was overridden (#648).
+    /// Every run goes through `preflight`, which turns that into a named
+    /// refusal rather than letting it become a path under a folder that is not
+    /// there.
+    nonisolated let projectRoot: URL?
     nonisolated let python3: String
 
     private init() {
@@ -44,8 +48,8 @@ actor PythonBridge {
         projectRoot = root
 
         // Prefer the project venv so all pip packages are available
-        let venvPython = root.appendingPathComponent("venv/bin/python3").path
-        if FileManager.default.fileExists(atPath: venvPython) {
+        let venvPython = root?.appendingPathComponent("venv/bin/python3").path
+        if let venvPython, FileManager.default.fileExists(atPath: venvPython) {
             python3 = venvPython
         } else {
             let candidates = [
@@ -55,6 +59,29 @@ actor PythonBridge {
             ]
             python3 = candidates.first { FileManager.default.fileExists(atPath: $0) } ?? "python3"
         }
+    }
+
+    /// The checkout, or a refusal naming why it cannot be used (#648).
+    ///
+    /// Called before anything is launched. It has to be here rather than left
+    /// to the failure classifier afterwards, because what comes back from a run
+    /// that went ahead is only the shell's `cd` line, and at that point the
+    /// three causes (nothing recorded, folder gone, folder is not a checkout)
+    /// are no longer distinguishable from each other or from a missing photo.
+    ///
+    /// A pure function taking the root rather than reading the static one, so
+    /// each outcome it enumerates can be built and seen (L151).
+    nonisolated static func preflight(projectRoot: URL?,
+                                      fileManager: FileManager = .default) throws -> URL {
+        if let problem = AppPaths.projectRootProblem(projectRoot, fileManager: fileManager) {
+            throw PythonBridgeError.projectRootUnavailable(problem)
+        }
+        // Non-nil whenever the problem is nil: `projectRootProblem` answers
+        // `.notRecorded` for a nil root, so this cannot be reached with one.
+        guard let projectRoot else {
+            throw PythonBridgeError.projectRootUnavailable(.notRecorded)
+        }
+        return projectRoot
     }
 
     // MARK: - Public API
@@ -309,7 +336,7 @@ actor PythonBridge {
             // and CollageCandidateCache removes the dir when superseded.
         }
 
-        let logo = projectRoot.appendingPathComponent("postroll/assets/logo-black.png").path
+        let logo = projectRoot?.appendingPathComponent("postroll/assets/logo-black.png").path
         var args = [
             "-m", "postroll.media.generate_collage",
             "--photos",
@@ -322,7 +349,7 @@ actor PythonBridge {
             "--candidates-out", outDir.path,
             "--candidates-json", jsonFile.path,
         ]
-        if FileManager.default.fileExists(atPath: logo) {
+        if let logo, FileManager.default.fileExists(atPath: logo) {
             args += ["--logo", logo]
         }
         // Pass the day's saved per-photo crop offsets so the gallery thumbnails
@@ -2093,7 +2120,9 @@ actor PythonBridge {
     private func runProcess(args: [String], timeout: TimeInterval = 1800,
                             forcePaidPath: Bool = false) async throws {
         let python = python3
-        let root = projectRoot
+        // Refuse here rather than let the script's `cd` fail and be read as a
+        // missing photo (#648). Nothing has been launched or paid for yet.
+        let root = try Self.preflight(projectRoot: projectRoot)
         // Logs go under the data root (Application Support), NOT the Documents
         // checkout: an absolute log path lets the subprocess write there while
         // its cwd stays at the checkout, so generation no longer writes to the

@@ -92,7 +92,7 @@ struct MainWindowView: View {
             BuildBehindSheet(builtAt: behind.builtAt,
                              latestCommit: behind.latestCommit,
                              remedy: behind.remedy,
-                             repo: AppPaths.projectRoot)
+                             repo: behind.repo)
         }
         .task { await checkBuildFreshness() }
         .alert(
@@ -139,13 +139,19 @@ struct MainWindowView: View {
     /// nothing actionable in it is one that gets dismissed on reflex, and the
     /// real warning would go with it.
     private func checkBuildFreshness() async {
-        let repo = AppPaths.projectRoot
+        // No checkout, no verdict. Saying so in the log rather than guessing a
+        // folder to run git in, which is what produced #648 (L11).
+        guard let repo = AppPaths.projectRoot else {
+            NSLog("[PostRoll] build freshness unknown: \(ProjectRootText.message(.notRecorded))")
+            return
+        }
         let verdict = await Task.detached { BuildFreshness.check(repo: repo) }.value
         switch verdict {
         case let .behind(builtAt, latestCommit, remedy):
             appState.buildBehind = BuildBehind(builtAt: builtAt,
                                                latestCommit: latestCommit,
-                                               remedy: remedy)
+                                               remedy: remedy,
+                                               repo: repo)
         case .current:
             break
         case let .cannotTell(reason):

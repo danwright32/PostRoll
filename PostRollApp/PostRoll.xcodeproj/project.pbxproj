@@ -475,6 +475,7 @@
 		E5D036B356722876CB531E91 /* ExportDoneSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C5A9B020FD25026E4B610DA /* ExportDoneSummary.swift */; };
 		E70A16ED00D7C53692CE391F /* ProgressFileCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E807C54D20709D3564A27304 /* ProgressFileCleanupTests.swift */; };
 		E73FA43F05D290F6DFFB64FE /* InsightsOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7DDBE7D2AD5AD12EBDDDEFA /* InsightsOverviewView.swift */; };
+		E82193357F332F9DF6043C1B /* ProjectRootPreflightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 960CFC4CA216676F208F3C1D /* ProjectRootPreflightTests.swift */; };
 		E8E865A4EB38690F0F685136 /* PreviewGraphicsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1CDE5E7FE6EBBE254D2AA7 /* PreviewGraphicsManager.swift */; };
 		E8EE83CEAF2EC2DAF9261A68 /* VerifiedProgramPDFWriteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8221AA19EA1DDA261E129EDB /* VerifiedProgramPDFWriteTests.swift */; };
 		E9B3111FF501C77F84E9F8D3 /* PostingPresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D01AD78F4EA1A52E642B5A /* PostingPresetStore.swift */; };
@@ -743,6 +744,7 @@
 		930CF68D1B36F64FF2F7215C /* DirectoryListingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryListingTests.swift; sourceTree = "<group>"; };
 		939A60F113D20E66722DA5B9 /* PostRollApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostRollApp.swift; sourceTree = "<group>"; };
 		942DF3FAA989DED0099BFC38 /* VisionTextLayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionTextLayerTests.swift; sourceTree = "<group>"; };
+		960CFC4CA216676F208F3C1D /* ProjectRootPreflightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRootPreflightTests.swift; sourceTree = "<group>"; };
 		965B2DE8F6ED922A33E8922F /* OCRProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRProgressView.swift; sourceTree = "<group>"; };
 		966919211F063D6F40668119 /* DesignStampTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignStampTests.swift; sourceTree = "<group>"; };
 		969F691577653294EC543DB7 /* AppStateRestoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateRestoreTests.swift; sourceTree = "<group>"; };
@@ -1276,6 +1278,7 @@
 				740043AABC817F80BE3D3939 /* ProgramScanRetentionTests.swift */,
 				E807C54D20709D3564A27304 /* ProgressFileCleanupTests.swift */,
 				A392BA6D0540808DD8F484A9 /* ProgressFileNamingTests.swift */,
+				960CFC4CA216676F208F3C1D /* ProjectRootPreflightTests.swift */,
 				D45798045E0493885EC5FE5D /* PythonBridgeErrorTests.swift */,
 				29AFF788381FCF9BF097FDB2 /* PythonBridgeRunLogTests.swift */,
 				3B748576B7A3449CF8EFCD32 /* RealFailureTextTests.swift */,
@@ -1882,6 +1885,7 @@
 				35786B24DD695CCDF1F5AD7D /* ProgressFileCleanup.swift in Sources */,
 				E70A16ED00D7C53692CE391F /* ProgressFileCleanupTests.swift in Sources */,
 				1FFC71B44035BA0B8CF4049F /* ProgressFileNamingTests.swift in Sources */,
+				E82193357F332F9DF6043C1B /* ProjectRootPreflightTests.swift in Sources */,
 				F574621F63DFACE936FF04D4 /* PythonBridge.swift in Sources */,
 				C1F5D9E78FC6F6F58A8D1A13 /* PythonBridgeError.swift in Sources */,
 				F112C0F8355AE69288C12920 /* PythonBridgeErrorTests.swift in Sources */,
@@ -1973,6 +1977,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PostRoll;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_POSTROLLProjectRoot = "$(SRCROOT)/..";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -2098,6 +2103,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PostRoll;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_POSTROLLProjectRoot = "$(SRCROOT)/..";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

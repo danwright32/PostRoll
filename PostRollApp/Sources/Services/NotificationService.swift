@@ -1,9 +1,14 @@
 import AppKit
 import UserNotifications
 
-/// Deletes program-image copies that PostRoll wrote into
-/// ~/Documents/PostRoll/programs/. Refuses to touch URLs outside that folder
-/// so a user's source files (e.g. originals in ~/Downloads) are never deleted.
+/// Deletes program-image copies that PostRoll wrote into its own `programs/`
+/// folder, under the data root. Refuses to touch URLs outside that folder so a
+/// user's source files (e.g. originals in ~/Downloads) are never deleted.
+///
+/// Named off `AppPaths` rather than spelled out, because the code has always
+/// read the live path and a comment naming a fixed one goes stale silently: it
+/// said ~/Documents/PostRoll/programs long after the data moved to Application
+/// Support (#648, same class as #101).
 enum ProgramImageCleanup {
     static func delete(urls: [URL]) {
         let programsDir = AppPaths.programsDir.standardizedFileURL.path

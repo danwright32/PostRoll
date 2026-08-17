@@ -41,6 +41,20 @@ enum RunFailureKind: Equatable {
     // The run produced something unusable.
     case outputUnreadable
 
+    /// The shell could not enter the Python checkout, so nothing ran (#648).
+    ///
+    /// Its own case rather than `fileMissing`, which is what it used to be
+    /// read as: the shell writes "no such file or directory" about the FOLDER
+    /// THE APP RUNS FROM, and `fileMissing`'s sentence tells Dan to check that
+    /// his photos are still in their original locations. His photos are fine,
+    /// and following that advice cannot fix anything.
+    ///
+    /// `PythonBridge.preflight` refuses before launching, so in practice this
+    /// is reached only if the checkout disappears between that check and the
+    /// exec. It exists so that the guard and the classifier cannot give two
+    /// different answers about the same thing (L144).
+    case projectRootMissing
+
     // Inputs. `fileMissing` is a file that moved; the rest are a step not done.
     case fileMissing
     case beforeAfterInputsMissing(day: String)
@@ -165,6 +179,14 @@ enum RunFailureKind: Equatable {
             }
         }
 
+        // Before the generic missing-file needle, which it would otherwise
+        // match: the shell's complaint is ALSO "no such file or directory", and
+        // reading it as a missing input told Dan to go and check his photos
+        // (#648). Measured from the real output rather than guessed: /bin/zsh
+        // writes "zsh:cd:2: no such file or directory: <path>", and that prefix
+        // is the shell's own, so no Python traceback can produce it.
+        if s.contains("zsh:cd:") { return .projectRootMissing }
+
         if s.contains("no such file") || s.contains("filenotfounderror") { return .fileMissing }
         if s.contains("story fallback failed") { return .storyFallbackFailed }
 
@@ -191,8 +213,12 @@ enum RunFailureKind: Equatable {
         // can change on the photo screen affects which model was asked for, and
         // offering that route would send him to change inputs that were never
         // the problem. It is fixed in postroll/ai/model_ids.py.
+        // projectRootMissing is not fixable from the app for the same reason:
+        // nothing on the photo screen affects where the code folder is, and
+        // offering that route is exactly the wrong turn Dan was sent on before
+        // this kind existed. It is fixed by reinstalling from the new location.
         case .ffmpegMissing, .audioServiceUnreachable, .rateLimited, .overloaded,
-             .authFailed, .aiServiceError, .modelUnavailable:
+             .authFailed, .aiServiceError, .modelUnavailable, .projectRootMissing:
             return false
         case .requestTooLarge, .outputUnreadable, .fileMissing, .beforeAfterInputsMissing,
              .reelPhotosMissing, .storyFallbackFailed, .unknown:

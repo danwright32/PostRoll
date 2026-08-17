@@ -44,6 +44,14 @@ enum PythonBridgeError: LocalizedError {
     /// finished read, and half a cast list presented as a complete one is worse
     /// than a failure, because nothing then tells Dan to check the rest.
     case partialOCR(OCRResult, reason: String)
+    /// The Python checkout could not be reached, so nothing was launched (#648).
+    ///
+    /// Thrown BEFORE the subprocess rather than classified from its wreckage.
+    /// By the time a run has failed, all that comes back is the shell's own
+    /// `cd` line, which reads as a missing file and was reported as one: Dan
+    /// was told to check that his photos had not moved. Refusing up front is
+    /// what keeps the cause nameable.
+    case projectRootUnavailable(AppPaths.ProjectRootProblem)
 
     /// The safe wording, for the many call sites that reach this through
     /// `localizedDescription` and cannot say what they were doing.
@@ -70,6 +78,10 @@ enum PythonBridgeError: LocalizedError {
             return "\(detail)\n\n\(whereToLook)"
         case .timedOut(let seconds):
             return "\(work.subject) was still running after \(Int(seconds / 60)) minutes and was stopped. Check your internet connection and try again."
+        // The same sentence whoever the caller is: not being able to find the
+        // code folder has nothing to do with which stage asked for it.
+        case .projectRootUnavailable(let problem):
+            return ProjectRootText.message(problem)
         case .partialOCR(let result, let reason):
             let read = [
                 result.performers.isEmpty ? nil : "\(result.performers.count) performer\(result.performers.count == 1 ? "" : "s")",
@@ -121,6 +133,16 @@ enum PythonBridgeError: LocalizedError {
                  + "does not have. This is a PostRoll configuration problem rather than "
                  + "something to retry: the model ids live in postroll/ai/model_ids.py and "
                  + "one of them has been retired."
+        // The same sentence the pre-launch refusal gives, so the guard and the
+        // classifier cannot disagree about what happened (L144). Re-read here
+        // rather than carried on the kind, because by now the folder may have
+        // come back, and what it says then is still true: it was not there when
+        // this run tried to enter it.
+        case .projectRootMissing:
+            guard let root = AppPaths.projectRoot else {
+                return ProjectRootText.message(.notRecorded)
+            }
+            return ProjectRootText.message(AppPaths.projectRootProblem(root) ?? .missing(root))
         case .outputUnreadable:
             return "\(work.subject) failed: the output could not be read. This is usually a "
                  + "temporary issue. Try again."

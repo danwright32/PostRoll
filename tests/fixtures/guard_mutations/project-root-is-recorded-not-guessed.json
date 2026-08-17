@@ -1,0 +1,8 @@
+{
+  "name": "project-root-is-recorded-not-guessed",
+  "file": "PostRollApp/Sources/Services/AppPaths.swift",
+  "find": "        return URL(fileURLWithPath: recorded, isDirectory: true).standardizedFileURL",
+  "replace": "        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(\"Documents/PostRoll\")",
+  "test": "PostRollTests/AppPathsTests/testProjectRootIsWhereThisBuildWasMadeFrom",
+  "breaks": "the app goes back to guessing a fixed home-relative folder for the Python checkout instead of reading the one this build was made from. That is #648 exactly: the project moved out of iCloud Drive on 2026-08-16, the guessed folder stopped existing, and every generation, the collage watermark and the brand-voice seed resolved under a directory that is not there"
+}
