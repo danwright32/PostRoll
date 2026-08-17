@@ -20,7 +20,7 @@ so a change to the plate moves both.
 
 from __future__ import annotations
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
 
 from .design_tokens import (
     load_font,

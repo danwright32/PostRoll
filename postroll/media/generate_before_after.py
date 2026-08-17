@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 # Reuse the title-fitting helper from the story template so single-line
 # shrink + two-line wrap behavior stays consistent across both layouts.

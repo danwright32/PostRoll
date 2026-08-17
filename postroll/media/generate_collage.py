@@ -21,7 +21,7 @@ import json
 import random
 import sys
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
 
 # The brand palette, type and mat scale live in one module (#162). Aliased to
 # the names this template has always used where the local name reads better in

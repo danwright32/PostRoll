@@ -23,7 +23,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 # Reuse the collage's pan/zoom-aware crop so per-photo offsets produce
 # identical output in both the strip preview PNG and the final encoded reel.
