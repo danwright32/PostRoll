@@ -1,0 +1,8 @@
+{
+  "name": "checkout-read-has-a-deadline",
+  "file": "PostRollApp/Sources/Services/CheckoutRevision.swift",
+  "find": "guard exited.wait(timeout: .now() + timeout) == .success else {",
+  "replace": "guard exited.wait(timeout: .distantFuture) == .success else {",
+  "test": "PostRollTests/CheckoutRevisionTests/testAGitThatNeverAnswersIsGivenUpOnRatherThanWaitedFor",
+  "breaks": "a git that never answers holds up every generation with no message at all"
+}

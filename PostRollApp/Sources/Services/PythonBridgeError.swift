@@ -263,12 +263,34 @@ enum PythonBridgeLog {
     /// one entirely, which is the whole reason per-run files exist (#90).
     static func runOutput(runLog: URL, sharedLog: URL,
                           marker: String) -> ProcessRunner.ProcessOutput {
-        if let own = try? String(contentsOf: runLog, encoding: .utf8),
-           !own.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .own(own)
+        if let own = try? String(contentsOf: runLog, encoding: .utf8) {
+            let spoken = withoutLauncherLines(own, marker: marker)
+            if !spoken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .own(spoken)
+            }
         }
         guard let shared = try? String(contentsOf: sharedLog, encoding: .utf8) else { return .none }
         return .sharedTail(scopedTail(shared, marker: marker))
+    }
+
+    /// The run log without the lines this app wrote into it itself (#661).
+    ///
+    /// The launch script opens every run log with a header naming the time, the
+    /// marker, the command and, since #661, the commit and BRANCH the checkout
+    /// was on. None of that is the process speaking, and `.own` outranks
+    /// everything the launcher said, so leaving it in has two consequences:
+    /// a run that wrote nothing at all is diagnosed from our own header instead
+    /// of from the launcher's message, and a branch named `fix-413-x` reads to
+    /// the failure classifier as an HTTP 413 with clean boundaries either side,
+    /// which is #650 arriving through a new door.
+    ///
+    /// Keyed on the marker, which is on every line the launcher writes and on
+    /// nothing the process writes: it is generated per run and never given to
+    /// Python.
+    static func withoutLauncherLines(_ text: String, marker: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.contains(marker) }
+            .joined(separator: "\n")
     }
 
     /// Trim the shared log to its last `keepingLines` lines.

@@ -73,6 +73,51 @@ final class PythonBridgeRunLogTests: XCTestCase {
         XCTAssertTrue(text.contains("command not found"), text)
     }
 
+    // MARK: - the launcher's own header is not the process speaking (#661)
+
+    func testTheHeaderTheLauncherWroteIsNotDiagnosedAsTheProcessOutput() throws {
+        // The run log always opens with a line this app echoed into it: the
+        // time, the marker, what is about to run and, since #661, which commit
+        // the checkout was on. None of that is the process's output, and
+        // `.own` outranks everything the launcher said, so a run that wrote
+        // nothing at all would be diagnosed from our own header.
+        let mine = PythonBridgeLog.runLogURL(in: dir, marker: "mine")
+        let shared = dir.appendingPathComponent("postroll.log")
+        try "Running [mine] (commit 1a2b3c4 on main, clean): 'python3'"
+            .write(to: mine, atomically: true, encoding: .utf8)
+        try "zsh: no such file or directory".write(to: shared, atomically: true, encoding: .utf8)
+
+        let output = PythonBridgeLog.runOutput(runLog: mine, sharedLog: shared, marker: "mine")
+
+        guard case .sharedTail = output else {
+            return XCTFail("a run log holding only our own header means the "
+                           + "process said nothing, got \(output)")
+        }
+    }
+
+    func testABranchNameInTheHeaderCannotBeReadAsTheFailure() throws {
+        // Why the line above has to go: the header now carries a branch name,
+        // which is whatever somebody typed. `fix-413-x` reads to the failure
+        // classifier as an HTTP 413 with clean boundaries either side, and
+        // would rename a 401 as "the photos are too large" (#650 by a new
+        // door).
+        let mine = PythonBridgeLog.runLogURL(in: dir, marker: "mine")
+        try """
+            Running [mine] (commit 1a2b3c4 on fix-413-x, clean): 'python3'
+            anthropic.AuthenticationError: 401 unauthorized
+            """.write(to: mine, atomically: true, encoding: .utf8)
+
+        let output = PythonBridgeLog.runOutput(
+            runLog: mine, sharedLog: dir.appendingPathComponent("nope.log"), marker: "mine")
+
+        guard case .own(let text) = output else {
+            return XCTFail("the process spoke, so this is its own output, got \(output)")
+        }
+        XCTAssertTrue(text.contains("401"), text)
+        XCTAssertFalse(text.contains("413"),
+                       "the launcher's header must not reach the classifier")
+    }
+
     // MARK: - rotation
 
     func testRotationKeepsTheMostRecentLines() throws {
