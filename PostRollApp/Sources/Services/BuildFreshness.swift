@@ -21,6 +21,11 @@ struct BuildBehind: Identifiable, Equatable {
     let builtAt: Date
     let latestCommit: Date
     let remedy: BuildFreshness.Remedy
+    /// The checkout this verdict was reached against, carried rather than
+    /// looked up again when the sheet spells its remedy command (#648). The
+    /// verdict cannot exist without one, so carrying it keeps the sheet from
+    /// having to cope with not knowing where the code is.
+    let repo: URL
 
     var id: String { "\(builtAt.timeIntervalSince1970)-\(latestCommit.timeIntervalSince1970)" }
 }

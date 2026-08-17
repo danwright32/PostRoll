@@ -1,0 +1,8 @@
+{
+  "name": "missing-checkout-is-not-a-missing-photo",
+  "file": "PostRollApp/Sources/Services/RunFailureKind.swift",
+  "find": "        if s.contains(\"zsh:cd:\") { return .projectRootMissing }",
+  "replace": "        if s.contains(\"zsh:cd:never-matches\") { return .projectRootMissing }",
+  "test": "PostRollTests/RunFailureKindTests/testAShellThatCannotEnterTheCheckoutIsItsOwnKind",
+  "breaks": "a shell that could not enter the code folder falls through to the generic missing-file needle again and is classified as fileMissing, whose sentence tells Dan to check that his photos are still in their original locations and offers him the route back to the photo screen. His photos were never involved and no amount of re-assigning them fixes it (#648, L11)"
+}

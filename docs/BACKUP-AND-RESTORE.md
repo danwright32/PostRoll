@@ -32,8 +32,9 @@ Inside it:
 | `logs/` | Diagnostic logs | Yes |
 | `usage.jsonl` | What each paid AI call cost, for the spend figures in the app | No, but it is a record rather than something the app needs |
 
-The project folder in `~/Documents/PostRoll` is **code only**. It holds no data
-and does not need backing up.
+The project folder (this checkout, wherever you keep it) is **code only**. It
+holds no data and does not need backing up. The app finds it by the path the
+build recorded, so if you move it, reinstall PostRoll from its new location.
 
 ## Backing it all up (one action)
 

@@ -47,19 +47,134 @@ final class AppPathsTests: XCTestCase {
         )
     }
 
-    func testDefaultProjectRootIsDocumentsPostRoll() {
-        // The Python checkout (venv, source, logs) stays in the repo.
-        let projectRoot = AppPaths.resolveProjectRoot(environment: [:])
-        XCTAssertEqual(
-            projectRoot,
-            FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Documents/PostRoll")
-        )
+    // MARK: - Where the Python checkout is (#648)
+    //
+    // These pin the RULE, not one machine's absolute path: the checkout is
+    // wherever this build was made from, recorded into the bundle at build
+    // time. The old rule was a fixed `~/Documents/PostRoll`, and when the
+    // project moved out of iCloud Drive on 2026-08-16 every generation, the
+    // watermark asset and the brand-voice seed resolved under a folder that
+    // does not exist. A hardcoded absolute path that can move is the defect;
+    // pointing the same hardcode somewhere new would only reschedule it.
+
+    func testProjectRootIsWhereThisBuildWasMadeFrom() {
+        let root = AppPaths.resolveProjectRoot(
+            environment: [:], recorded: "/Volumes/Work/Apps/PostRoll")
+        XCTAssertEqual(root?.path, "/Volumes/Work/Apps/PostRoll")
     }
 
-    func testProjectRootOverride() {
-        let projectRoot = AppPaths.resolveProjectRoot(environment: ["POSTROLL_PROJECT_DIR": "/tmp/postroll-code"])
-        XCTAssertEqual(projectRoot.path, "/tmp/postroll-code")
+    /// The build records `$(SRCROOT)/..`, which is the app folder's parent
+    /// spelled with a `..` in it. Resolving that is what makes the recording
+    /// survive being read back as a path.
+    func testRecordedProjectRootIsResolvedNotStoredLiterally() {
+        let root = AppPaths.resolveProjectRoot(
+            environment: [:], recorded: "/Volumes/Work/Apps/PostRoll/PostRollApp/..")
+        XCTAssertEqual(root?.path, "/Volumes/Work/Apps/PostRoll")
+    }
+
+    /// No recording means no answer. It must NOT fall back to a home-relative
+    /// guess: a guess is indistinguishable from a real location to every caller
+    /// downstream, and that is exactly how #648 stayed silent.
+    func testProjectRootIsUnknownWhenTheBuildRecordedNothing() {
+        XCTAssertNil(AppPaths.resolveProjectRoot(environment: [:], recorded: nil))
+        XCTAssertNil(AppPaths.resolveProjectRoot(environment: [:], recorded: "   "))
+    }
+
+    func testProjectRootOverrideBeatsTheRecordedPath() {
+        let root = AppPaths.resolveProjectRoot(
+            environment: ["POSTROLL_PROJECT_DIR": "/tmp/postroll-code"],
+            recorded: "/Volumes/Work/Apps/PostRoll")
+        XCTAssertEqual(root?.path, "/tmp/postroll-code")
+    }
+
+    func testBlankProjectRootOverrideFallsBackToTheRecordedPath() {
+        let root = AppPaths.resolveProjectRoot(
+            environment: ["POSTROLL_PROJECT_DIR": "   "],
+            recorded: "/Volumes/Work/Apps/PostRoll")
+        XCTAssertEqual(root?.path, "/Volumes/Work/Apps/PostRoll")
+    }
+
+    // MARK: - Saying so when the checkout cannot be reached (#648)
+    //
+    // Three distinct causes, three distinct answers (L11). Before this, all
+    // three arrived as `.fileMissing` from the shell's own `cd` failure and
+    // told Dan to check that his PHOTOS had not moved.
+
+    func testNoRecordedCheckoutIsItsOwnProblem() {
+        XCTAssertEqual(AppPaths.projectRootProblem(nil), .notRecorded)
+    }
+
+    func testAnAbsentCheckoutIsNamedAsAbsent() throws {
+        let gone = URL(fileURLWithPath: "/tmp/postroll-gone-\(UUID().uuidString)")
+        XCTAssertEqual(AppPaths.projectRootProblem(gone), .missing(gone))
+    }
+
+    func testAFolderWithoutThePythonPackageIsNotACheckout() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("pr-empty-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+        XCTAssertEqual(AppPaths.projectRootProblem(dir), .notACheckout(dir))
+    }
+
+    func testARealCheckoutHasNoProblem() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("pr-checkout-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir.appendingPathComponent("postroll"),
+                               withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+        XCTAssertNil(AppPaths.projectRootProblem(dir))
+    }
+
+    /// The whole point of the named failure: the sentence has to name the
+    /// checkout and the path it looked in, and must not send Dan to his photos.
+    ///
+    /// "must not blame the photos" is checked as "does not carry the photo
+    /// screen's advice", not as "does not contain the word photo". The message
+    /// deliberately DOES say his photos are not affected, which is the opposite
+    /// of blaming them and is worth saying to someone reading that the app
+    /// cannot find part of itself.
+    func testTheMessageNamesTheCheckoutAndThePathItLookedIn() {
+        let gone = URL(fileURLWithPath: "/Volumes/Work/Apps/PostRoll")
+        let text = ProjectRootText.message(.missing(gone))
+        XCTAssertTrue(text.contains("/Volumes/Work/Apps/PostRoll"),
+                      "the message must name the path it looked in, got: \(text)")
+        assertDoesNotSendDanToThePhotoScreen(text)
+    }
+
+    /// The advice that made #648 worse than a bare failure: Dan was told to
+    /// re-assign photos that were never the problem.
+    private func assertDoesNotSendDanToThePhotoScreen(
+        _ text: String, file: StaticString = #filePath, line: UInt = #line
+    ) {
+        let s = text.lowercased()
+        for advice in ["re-assign", "reassign", "original locations", "photo screen"] {
+            XCTAssertFalse(s.contains(advice),
+                           "sends Dan to the photo screen over a missing code folder: \(text)",
+                           file: file, line: line)
+        }
+    }
+
+    func testEachProblemGetsItsOwnMessage() {
+        let dir = URL(fileURLWithPath: "/Volumes/Work/Apps/PostRoll")
+        let messages = [
+            ProjectRootText.message(.notRecorded),
+            ProjectRootText.message(.missing(dir)),
+            ProjectRootText.message(.notACheckout(dir)),
+        ]
+        XCTAssertEqual(Set(messages).count, 3, "distinct causes need distinct messages")
+    }
+
+    /// All three name the same thing the same way. Without this, the sentence a
+    /// caller gets depends on which cause it hit, and a test asserting the
+    /// message names the code folder passes or fails on the machine's state
+    /// rather than on the code (L118).
+    func testEveryProblemCallsItTheCodeFolder() {
+        let dir = URL(fileURLWithPath: "/Volumes/Work/Apps/PostRoll")
+        for problem: AppPaths.ProjectRootProblem in [.notRecorded, .missing(dir), .notACheckout(dir)] {
+            XCTAssertTrue(ProjectRootText.message(problem).lowercased().contains("code folder"),
+                          "\(problem) does not call it the code folder")
+        }
     }
 
     func testDerivedPathsHangOffRoot() {

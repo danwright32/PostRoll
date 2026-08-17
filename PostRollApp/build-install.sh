@@ -35,12 +35,16 @@ if [[ "${SKIP_INSTALL_TESTS:-0}" == "1" ]]; then
 else
   echo "==> Running the Swift tests before installing"
   # The output is kept so a permissions refusal can be told apart from a real
-  # red suite (#271). The repo lives under ~/Documents, which macOS protects,
-  # so the test process needs Documents access to read its own fixtures; when
-  # that is refused, several fixture-reading suites fail at once and the output
-  # reads as broken tests. A gate that fails for reasons unrelated to the code
-  # teaches the operator to bypass it every time, and a gate that is always
-  # bypassed is the same as no gate.
+  # red suite (#271). A checkout under a folder macOS protects (~/Documents,
+  # ~/Desktop, iCloud Drive) means the test process needs access to read its own
+  # fixtures; when that is refused, several fixture-reading suites fail at once
+  # and the output reads as broken tests. A gate that fails for reasons
+  # unrelated to the code teaches the operator to bypass it every time, and a
+  # gate that is always bypassed is the same as no gate.
+  #
+  # Written as a condition rather than as "the repo lives under ~/Documents",
+  # which is what it used to say and stopped being true when the project moved
+  # on 2026-08-16 (#648).
   # An explicit XXXXXX template. The short `-t NAME` form of mktemp is
   # BSD-only, GNU mktemp refuses it, and it broke every Linux CI run while
   # working perfectly on this Mac.

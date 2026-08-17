@@ -97,7 +97,7 @@ Optional overrides, none of which need setting for normal use:
 | Variable | What it does |
 | --- | --- |
 | `POSTROLL_DATA_DIR` | Where events, photos, programs and previews live. Defaults to `~/Library/Application Support/PostRoll`. Used by the tests to stay off live data. |
-| `POSTROLL_PROJECT_DIR` | Where the Python checkout lives. Defaults to `~/Documents/PostRoll`. |
+| `POSTROLL_PROJECT_DIR` | Where the Python checkout lives. Defaults to the folder the app was built from, which the build records into the bundle, so moving the checkout and reinstalling is enough. Set this only to point a build at a different checkout. |
 | `POSTROLL_BRAND_VOICE` | Path to the writable brand-voice file. Set by the app; override only for testing. |
 | `POSTROLL_CLAUDE_BIN` | Path to the `claude` binary, used on the CLI fallback path. |
 | `JAMENDO_TRACKS_URL` | Overrides the Jamendo endpoint. Test seam. |

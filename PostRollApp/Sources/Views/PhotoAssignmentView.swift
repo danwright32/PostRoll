@@ -1036,9 +1036,12 @@ struct PhotoDaySection: View {
         return true
     }
 
-    /// Copies a dropped photo into ~/Documents/PostRoll/photos/ so the stored
+    /// Copies a dropped photo into the app's own `photos/` folder so the stored
     /// path survives the provider's temp file deletion. Shares one copy
     /// implementation with the file-picker import path.
+    ///
+    /// The folder is wherever `AppPaths` says, not a fixed path: this comment
+    /// named ~/Documents/PostRoll/photos long after the data moved (#648).
     private nonisolated static func permanentPhotoCopy(of url: URL) -> URL? {
         AppPaths.importedCopy(of: url, into: AppPaths.photosDir)
     }

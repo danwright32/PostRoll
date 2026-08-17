@@ -11,11 +11,14 @@ import Foundation
 ///   completes it stays at the legacy ~/Documents/PostRoll so the app keeps
 ///   working. POSTROLL_DATA_DIR redirects this for tests.
 /// - `projectRoot` — the Python project checkout (venv, source, logs,
-///   brand-voice files). Stays in ~/Documents/PostRoll; only read during
-///   generation, not at launch. POSTROLL_PROJECT_DIR overrides it.
+///   brand-voice files). Discovered from the path this build was made from,
+///   which the build stamps into the app bundle; only read during generation,
+///   not at launch. POSTROLL_PROJECT_DIR overrides it. Optional, because "we
+///   do not know where the checkout is" is a real state and inventing a path
+///   for it is what #648 was.
 enum AppPaths {
     static let root: URL = resolveRoot()
-    static let projectRoot: URL = resolveProjectRoot()
+    static let projectRoot: URL? = resolveProjectRoot()
 
     /// Marker file (inside `appSupportRoot`) written by `DataMigration` only once
     /// a verified copy of every irreplaceable data folder has completed. Its
@@ -65,18 +68,93 @@ enum AppPaths {
         return legacyDataRoot
     }
 
+    /// The Info.plist key the build stamps with the checkout it was built from,
+    /// written by the app target's "Record the checkout this build was made
+    /// from" phase in project.yml. Read back here at runtime.
+    ///
+    /// A script rather than an `INFOPLIST_KEY_` build setting, which was tried
+    /// first and does not work: Xcode maps that prefix onto a known set of
+    /// Info.plist keys only, so the setting reached both project.yml and the
+    /// generated .xcodeproj and the built app had no such key.
+    ///
+    /// The name is spelled in two files that cannot share a definition, so
+    /// tests/test_project_root_recorded.py checks the two halves against each
+    /// other rather than each against a third idea of what it is called.
+    static let projectRootInfoKey = "POSTROLLProjectRoot"
+
+    /// What this build recorded, if anything. Absent in the test bundle, which
+    /// deliberately does not stamp one, and in any bundle built before #648.
+    static func recordedProjectRoot(bundle: Bundle = .main) -> String? {
+        bundle.object(forInfoDictionaryKey: projectRootInfoKey) as? String
+    }
+
     /// Where the Python code lives — separate from data so the data root can sit
     /// outside the TCC-protected Documents folder.
+    ///
+    /// Discovered rather than assumed (#648). This used to return a hardcoded
+    /// `~/Documents/PostRoll`, and when the project moved out of iCloud Drive on
+    /// 2026-08-16 that folder stopped existing: generation, the collage
+    /// watermark and the brand-voice seed all resolved under a directory that is
+    /// not there, and nothing said so. Pointing the same hardcode somewhere new
+    /// would only reschedule that for the next move, so the build records where
+    /// it was made from and this reads it back. Moving the checkout and
+    /// rebuilding now fixes itself.
+    ///
+    /// Deriving it from the app bundle's OWN location cannot work: an installed
+    /// build lives in /Applications and a Debug build lives in DerivedData, and
+    /// neither is inside the checkout.
+    ///
+    /// Returns nil when nothing was recorded and nothing was overridden. That is
+    /// deliberate: a fabricated path is indistinguishable from a real one to
+    /// every caller downstream, which is precisely how the old defect stayed
+    /// quiet. Callers ask `projectRootProblem` what to say about it.
     static func resolveProjectRoot(
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> URL {
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        recorded: String? = recordedProjectRoot()
+    ) -> URL? {
         if let override = environment["POSTROLL_PROJECT_DIR"],
            !override.trimmingCharacters(in: .whitespaces).isEmpty {
             return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
         }
-        return FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/PostRoll")
+        guard let recorded,
+              !recorded.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        // Standardized so a path carrying a `..` or a trailing slash compares
+        // and prints the same way as one that does not. The build already
+        // resolves what it records, so this is belt and braces there, and it is
+        // the only cleanup a hand-set POSTROLL_PROJECT_DIR gets.
+        return URL(fileURLWithPath: recorded, isDirectory: true).standardizedFileURL
+    }
+
+    /// Why the Python checkout cannot be used, or nil when it can.
+    ///
+    /// Three causes, kept apart because the answer to each is different and a
+    /// person told the wrong one goes looking in the wrong place (L11).
+    enum ProjectRootProblem: Equatable {
+        /// This build stamped no checkout path at all, so it was not built by
+        /// the install script.
+        case notRecorded
+        /// A path is known and there is no folder there. The ordinary case: the
+        /// project was moved after this build was made.
+        case missing(URL)
+        /// The folder is there but the Python package is not in it.
+        case notACheckout(URL)
+    }
+
+    /// Whether `root` can actually be used to run the Python.
+    ///
+    /// The `postroll` package is what the app runs with `-m`, so its presence is
+    /// the thing worth checking rather than the folder merely existing.
+    static func projectRootProblem(
+        _ root: URL?, fileManager fm: FileManager = .default
+    ) -> ProjectRootProblem? {
+        guard let root else { return .notRecorded }
+        var isDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: root.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return .missing(root) }
+        guard fm.fileExists(atPath: root.appendingPathComponent("postroll").path) else {
+            return .notACheckout(root)
+        }
+        return nil
     }
 
     static var eventsFile: URL { layout.eventsFile }
@@ -130,16 +208,22 @@ enum AppPaths {
     /// once from the checkout's read-only default via `ensureBrandVoiceSeeded`.
     static var brandVoiceFile: URL { layout.brandVoiceFile }
     /// The read-only default shipped in the Python checkout — the seed source.
-    static var brandVoiceSeed: URL {
-        projectRoot.appendingPathComponent("postroll/assets/brand-voice.md")
+    /// Nil when the checkout cannot be located, rather than a path under a
+    /// folder that does not exist (#648).
+    static var brandVoiceSeed: URL? {
+        projectRoot?.appendingPathComponent("postroll/assets/brand-voice.md")
     }
 
     /// Copies the checkout's brand-voice.md into the data root once, if the
     /// writable copy is absent. Called lazily at generation/append time (never at
     /// launch), so the single Documents read is a one-time migration that also
     /// carries over any notes the user already accumulated in the old location.
+    /// No checkout means no seed to copy. Nothing is said about it here because
+    /// nothing can run without the checkout anyway: the caller refuses first,
+    /// by name, before any of this is reached.
     static func ensureBrandVoiceSeeded() {
-        seedBrandVoice(into: root, from: brandVoiceSeed)
+        guard let seed = brandVoiceSeed else { return }
+        seedBrandVoice(into: root, from: seed)
     }
 
     /// Injectable core of `ensureBrandVoiceSeeded` (so it can be unit-tested
@@ -275,6 +359,46 @@ enum AppPaths {
     }
     static func storedClip(_ url: URL) -> Result<URL, ImportCopyFailure> {
         importedCopyResult(of: url, into: clipsDir)
+    }
+}
+
+/// What Dan is told when PostRoll cannot reach its own code folder (#648).
+///
+/// Kept out of the views so the wording can be pinned by a test, the same way
+/// `ImportFailureText` is.
+///
+/// The sentences say "code folder" rather than "project root" or "checkout",
+/// because Dan does not use the terminal and the thing he actually did was move
+/// a folder in Finder. Each one names the path it looked in.
+///
+/// They mention photos only to say his are NOT affected, which is worth telling
+/// someone who has just read that the app cannot find part of itself. What none
+/// of them does is send him to CHANGE them: the message this replaces told him
+/// to check that his photos were still in their original locations, and offered
+/// the route back to the photo screen, over a folder that had nothing to do with
+/// them (L11).
+enum ProjectRootText {
+    static func message(_ problem: AppPaths.ProjectRootProblem) -> String {
+        switch problem {
+        case .notRecorded:
+            return "PostRoll cannot tell where its own code folder is, so it cannot generate "
+                 + "anything. This copy of the app was built without recording one, which "
+                 + "usually means it was not installed by the usual build. Reinstall PostRoll "
+                 + "from the project folder and it will record the right place. Your photos "
+                 + "and saved events are not affected."
+        case .missing(let root):
+            return "PostRoll cannot find its own code folder, so it cannot generate anything. "
+                 + "It looked in \(root.path), and there is no folder there. If you moved the "
+                 + "project, reinstall PostRoll from where it is now and it will point at the "
+                 + "new place. Your photos and saved events are not affected."
+        // "code folder" in all three, deliberately: one word for one thing, so
+        // two of these read side by side cannot look like different subjects
+        // (L118).
+        case .notACheckout(let root):
+            return "PostRoll found \(root.path), but its code folder is not inside it, so it "
+                 + "cannot generate anything. If you moved the project, reinstall PostRoll from "
+                 + "where it is now. Your photos and saved events are not affected."
+        }
     }
 }
 

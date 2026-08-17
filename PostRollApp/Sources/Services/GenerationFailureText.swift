@@ -75,6 +75,14 @@ enum GenerationFailureText {
         case .reelPhotosMissing:
             return "Thursday's scroll reel needs at least one photo. Add photos to Thursday "
                  + "and retry."
+        // Beside fileMissing on purpose, because this is the one it used to be
+        // mistaken for, and the two sentences are opposites: that one sends Dan
+        // to the photo screen, and this one is about the app itself, which
+        // nothing on the photo screen can fix (#648).
+        case .projectRootMissing:
+            return "PostRoll cannot find its own code folder, so nothing could run. If you "
+                 + "moved the project, reinstall PostRoll from where it is now. Your photos "
+                 + "are not the problem."
         case .fileMissing:
             return "A photo or audio file was moved or deleted. Re-assign your photos on the "
                  + "photo screen and retry."

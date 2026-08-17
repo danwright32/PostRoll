@@ -1,0 +1,8 @@
+{
+  "name": "preflight-refuses-an-unreachable-checkout",
+  "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+  "find": "        if let problem = AppPaths.projectRootProblem(projectRoot, fileManager: fileManager) {",
+  "replace": "        if false, let problem = AppPaths.projectRootProblem(projectRoot, fileManager: fileManager) {",
+  "test": "PostRollTests/ProjectRootPreflightTests/testAnAbsentCheckoutIsRefusedByName",
+  "breaks": "the bridge stops refusing before it launches, so a run goes ahead with a code folder that is not there. What comes back is the shell's own cd line, and by then the three causes (nothing recorded, folder gone, folder is not a checkout) are no longer distinguishable from each other or from a missing photo (#648)"
+}

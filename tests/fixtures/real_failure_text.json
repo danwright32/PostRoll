@@ -141,6 +141,13 @@
       "expected": "modelUnavailable",
       "note": "Reached by postroll/ai/model_ids.py going stale after a deprecation, which is rare but real. A 404 carries no needle of its own, so it fell through to the generic service branch and Dan was told the service was having trouble and to wait a minute. Retrying a model the service does not have fails identically forever, which is the same defect #403 fixed for 413 and for a prompt past the context window: a permanent failure wearing a transient one's advice.",
       "text": "Anthropic API error: Error code: 404 - {'type': 'error', 'error': {'type': 'not_found_error', 'message': 'model: claude-opus-9'}, 'request_id': 'req_011CTgLm4rB29WqSaMPLE'}"
+    },
+    {
+      "name": "the Python checkout is not where the app looked",
+      "provenance": "captured",
+      "expected": "projectRootMissing",
+      "note": "Captured on 2026-08-17 for #648 by running the exact script shape PythonBridge.runProcess builds, with the project root pointed at the folder the app used to hardcode. Two things make this the ONLY text the classifier sees: the shell's `cd` failure goes to the stderr pipe Swift reads, while Python's own error goes to the run's private log, and ProcessRunner consults that log only when the pipe is EMPTY. It is not empty, it holds this one line. Before this kind existed the line matched the generic `no such file` needle and came back as fileMissing, whose sentence tells Dan to re-assign his photos. His photos were never involved, and no amount of re-assigning them could have fixed it.",
+      "text": "zsh:cd:2: no such file or directory: /Users/danielhankins-wright/Documents/PostRoll"
     }
   ]
 }

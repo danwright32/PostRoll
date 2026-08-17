@@ -295,4 +295,76 @@ extension RunFailureKindTests {
         XCTAssertFalse(summary.text.lowercased().contains("wait"), summary.text)
         XCTAssertFalse(summary.fixable)
     }
+
+    // MARK: - The checkout itself is missing (#648)
+
+    /// Measured, not invented (L48). This is the exact line `/bin/zsh` writes
+    /// when the launch script's first command, `cd '<projectRoot>'`, cannot find
+    /// the folder, captured by running the same script shape by hand.
+    ///
+    /// It matters that this is the ONLY text the classifier sees: Python's real
+    /// error goes to the run's own log file, and `ProcessRunner` reads that only
+    /// when the stderr pipe is EMPTY. The pipe is not empty here, it holds this
+    /// one line.
+    private static let shellCouldNotEnterCheckout =
+        "zsh:cd:2: no such file or directory: /Users/dan/Documents/PostRoll"
+
+    /// Before #648 this matched the generic `no such file` needle and came back
+    /// as `.fileMissing`, whose sentence tells Dan to check that his PHOTOS are
+    /// still in their original locations. His photos were never involved.
+    func testAShellThatCannotEnterTheCheckoutIsItsOwnKind() {
+        XCTAssertEqual(RunFailureKind.of(Self.shellCouldNotEnterCheckout), .projectRootMissing)
+    }
+
+    /// The generic needle must still work. A Python `FileNotFoundError` about a
+    /// photo is a genuinely different failure and keeps its own answer.
+    func testAnOrdinaryMissingFileIsStillAMissingFile() {
+        XCTAssertEqual(RunFailureKind.of("FileNotFoundError: /photos/a.jpg"), .fileMissing)
+        XCTAssertEqual(RunFailureKind.of("no such file or directory"), .fileMissing)
+    }
+
+    /// What Dan reads. It has to name the code folder and must not send him to
+    /// his photos.
+    func testTheRunMessageForAMissingCheckoutNamesTheCodeFolder() {
+        let text = PythonBridgeError.scriptFailed(
+            exitCode: 1, stderr: Self.shellCouldNotEnterCheckout).errorDescription ?? ""
+        XCTAssertTrue(text.lowercased().contains("code folder"),
+                      "the message must name the code folder: \(text)")
+        Self.assertDoesNotSendDanToThePhotoScreen(text)
+    }
+
+    /// Distinct causes, distinct messages (L11). This is the pair that used to
+    /// be one sentence, which is the whole reason the kind exists.
+    func testAMissingCheckoutAndAMissingPhotoDoNotShareASentence() {
+        let checkout = PythonBridgeError.scriptFailed(
+            exitCode: 1, stderr: Self.shellCouldNotEnterCheckout).errorDescription
+        let photo = PythonBridgeError.scriptFailed(
+            exitCode: 1, stderr: "FileNotFoundError: /photos/a.jpg").errorDescription
+        XCTAssertNotNil(checkout)
+        XCTAssertNotEqual(checkout, photo)
+    }
+
+    /// The advice that made #648 worse than a bare failure: Dan was sent to
+    /// re-assign photos that were never involved. Checked as the ADVICE rather
+    /// than as the word "photo", because both messages deliberately reassure
+    /// him that his photos are not the problem.
+    private static func assertDoesNotSendDanToThePhotoScreen(
+        _ text: String, file: StaticString = #filePath, line: UInt = #line
+    ) {
+        let s = text.lowercased()
+        for advice in ["re-assign", "reassign", "original locations", "photo screen"] {
+            XCTAssertFalse(s.contains(advice),
+                           "sends Dan to the photo screen over a missing code folder: \(text)",
+                           file: file, line: line)
+        }
+    }
+
+    /// The per-day path says it too, in its own words.
+    func testTheDayMessageForAMissingCheckoutDoesNotBlameThePhotos() {
+        let summary = GenerationFailureText.summary(
+            day: "thursday", raw: Self.shellCouldNotEnterCheckout)
+        Self.assertDoesNotSendDanToThePhotoScreen(summary.text)
+        XCTAssertFalse(summary.fixable,
+                       "nothing on the photo screen can fix a missing code folder")
+    }
 }

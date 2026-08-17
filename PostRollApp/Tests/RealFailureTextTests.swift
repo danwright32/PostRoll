@@ -45,6 +45,7 @@ final class RealFailureTextTests: XCTestCase {
         case .modelUnavailable:         return "modelUnavailable"
         case .outputUnreadable:         return "outputUnreadable"
         case .fileMissing:              return "fileMissing"
+        case .projectRootMissing:       return "projectRootMissing"
         case .beforeAfterInputsMissing: return "beforeAfterInputsMissing"
         case .reelPhotosMissing:        return "reelPhotosMissing"
         case .storyFallbackFailed:      return "storyFallbackFailed"
