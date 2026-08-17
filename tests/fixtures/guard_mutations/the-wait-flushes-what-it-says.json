@@ -1,0 +1,8 @@
+{
+  "name": "the-wait-flushes-what-it-says",
+  "file": "tools/wait_for_checks.py",
+  "find": "    out: Callable[[str], None] = say,",
+  "replace": "    out: Callable[[str], None] = print,",
+  "test": "tests/test_wait_for_checks.py::test_the_wait_speaks_through_the_flushing_voice_by_default",
+  "breaks": "the wait goes back to bare print, which Python block-buffers the moment stdout is not a terminal. Every elapsed line, every retry and every notice that the head commit moved then arrives at the end or not at all, and a wait redirected to a file, which is how a long one is actually run, is indistinguishable from one that has stalled (L106)"
+}

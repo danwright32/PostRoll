@@ -39,7 +39,9 @@ which is what the verdict rules were calibrated against and still are.
 
 from __future__ import annotations
 
+import inspect
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -58,6 +60,7 @@ from tools.wait_for_checks import (
     expected_checks,
     main,
     poll_checks,
+    say,
     verdict,
 )
 
@@ -584,6 +587,43 @@ def test_retrying_does_not_run_past_the_deadline() -> None:
          poll=poll, now=clock.now, sleep=clock.sleep,
          workflows=WORKFLOWS, out=lambda _line: None)
     assert clock.t <= 30
+
+
+def test_the_default_voice_flushes_every_line() -> None:
+    """Caught live on 2026-08-17 running this against #671 in the background.
+
+    Every progress line here exists so a wait that is working and a wait that
+    has stalled do not look identical (L106), and Python block-buffers stdout
+    the moment it is not a terminal, which is precisely how a long wait is run.
+    The output file stayed empty for the whole wait.
+    """
+    class Recorder:
+        def __init__(self) -> None:
+            self.written = ""
+            self.flushes = 0
+
+        def write(self, text: str) -> int:
+            self.written += text
+            return len(text)
+
+        def flush(self) -> None:
+            self.flushes += 1
+
+    recorder = Recorder()
+    original = sys.stdout
+    sys.stdout = recorder  # type: ignore[assignment]
+    try:
+        say("120s elapsed at 84e9dbf2b774")
+    finally:
+        sys.stdout = original
+
+    assert "120s elapsed" in recorder.written
+    assert recorder.flushes >= 1, "the line was written and left in the buffer"
+
+
+def test_the_wait_speaks_through_the_flushing_voice_by_default() -> None:
+    """A flushing printer nothing calls is a wait that still says nothing (L3)."""
+    assert inspect.signature(main).parameters["out"].default is say
 
 
 def test_every_exit_code_is_distinct() -> None:

@@ -537,6 +537,20 @@ ASK_ATTEMPTS = 3
 ASK_BACKOFF_SECONDS = (2.0, 4.0)
 
 
+def say(line: str) -> None:
+    """One line out, flushed.
+
+    Not bare `print`. Python block-buffers stdout the moment it is not a
+    terminal, which is exactly how a wait this long is run: redirected to a
+    file, or piped, while somebody watches for progress. Caught on 2026-08-17
+    watching #671, where the output file stayed empty for the whole wait, so
+    every elapsed line, every retry and every "the head moved" arrived at the
+    end or not at all. A wait that says nothing while it works is
+    indistinguishable from one that has stalled (L106).
+    """
+    print(line, flush=True)
+
+
 def ask(
     number: str,
     *,
@@ -573,7 +587,7 @@ def main(
     now: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
     workflows: Path = WORKFLOWS,
-    out: Callable[[str], None] = print,
+    out: Callable[[str], None] = say,
 ) -> int:
     import time
 
