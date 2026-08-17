@@ -68,9 +68,14 @@ enum AppPaths {
         return legacyDataRoot
     }
 
-    /// The Info.plist key the build stamps with the checkout it was built from
-    /// (`INFOPLIST_KEY_POSTROLLProjectRoot` in project.yml, expanded from
-    /// `$(SRCROOT)/..`). Read back here at runtime.
+    /// The Info.plist key the build stamps with the checkout it was built from,
+    /// written by the app target's "Record the checkout this build was made
+    /// from" phase in project.yml. Read back here at runtime.
+    ///
+    /// A script rather than an `INFOPLIST_KEY_` build setting, which was tried
+    /// first and does not work: Xcode maps that prefix onto a known set of
+    /// Info.plist keys only, so the setting reached both project.yml and the
+    /// generated .xcodeproj and the built app had no such key.
     ///
     /// The name is spelled in two files that cannot share a definition, so
     /// tests/test_project_root_recorded.py checks the two halves against each
@@ -113,8 +118,10 @@ enum AppPaths {
         }
         guard let recorded,
               !recorded.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        // Standardized because what is recorded is `$(SRCROOT)/..`, which
-        // arrives with the `..` still in it.
+        // Standardized so a path carrying a `..` or a trailing slash compares
+        // and prints the same way as one that does not. The build already
+        // resolves what it records, so this is belt and braces there, and it is
+        // the only cleanup a hand-set POSTROLL_PROJECT_DIR gets.
         return URL(fileURLWithPath: recorded, isDirectory: true).standardizedFileURL
     }
 
@@ -362,10 +369,14 @@ enum AppPaths {
 ///
 /// The sentences say "code folder" rather than "project root" or "checkout",
 /// because Dan does not use the terminal and the thing he actually did was move
-/// a folder in Finder. Each one names the path it looked in, and none of them
-/// mentions photos: the message this replaces told him to check that his photos
-/// were still in their original locations, which was never the problem and sent
-/// him to change inputs that were fine (L11).
+/// a folder in Finder. Each one names the path it looked in.
+///
+/// They mention photos only to say his are NOT affected, which is worth telling
+/// someone who has just read that the app cannot find part of itself. What none
+/// of them does is send him to CHANGE them: the message this replaces told him
+/// to check that his photos were still in their original locations, and offered
+/// the route back to the photo screen, over a folder that had nothing to do with
+/// them (L11).
 enum ProjectRootText {
     static func message(_ problem: AppPaths.ProjectRootProblem) -> String {
         switch problem {
