@@ -270,8 +270,13 @@ jobs:
             files: tests/test_frame_legibility.py
           - name: thursday-reel
             files: tests/test_thursday_reel_legibility.py
+          # test_generate_title_card.py joined this shard with #665, which gave
+          # it a check on the colour Friday's title is drawn in. That renders
+          # real script type, so it is font-gated, and a font-gated file in no
+          # shard runs nowhere while CI stays green. Its measured cost is a few
+          # seconds against this shard's 266, so it does not move the balance.
           - name: goldens
-            files: tests/test_golden_frames.py tests/test_slider_program_plate.py tests/test_gallery_alignment.py
+            files: tests/test_golden_frames.py tests/test_slider_program_plate.py tests/test_gallery_alignment.py tests/test_generate_title_card.py
     steps:
       - uses: actions/checkout@v5
 
