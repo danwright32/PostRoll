@@ -1,0 +1,8 @@
+{
+  "name": "failure-is-read-from-the-process-not-the-launcher",
+  "file": "PostRollApp/Sources/Services/ProcessRunner.swift",
+  "find": "        case .own(let text) where present(text):",
+  "replace": "        case .own(let text) where present(text) && !present(launcher):",
+  "test": "PostRollTests/ProcessRunnerTests/testTheProcessOwnOutputWinsOverWhateverTheShellSaid",
+  "breaks": "the diagnosis goes back to whichever source is non-empty, which hands it to the launcher shell, because the shell speaks exactly when the real work never started and the process therefore has nothing to say. That is #650: a moved checkout produced one line of shell output, matched the missing-file rule, and told Dan to check that his photos were still in their original locations while the real traceback sat unread in the run's own log (L158)"
+}

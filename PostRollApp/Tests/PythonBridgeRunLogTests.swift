@@ -41,9 +41,14 @@ final class PythonBridgeRunLogTests: XCTestCase {
         try "my failure: bad photo path".write(to: mine, atomically: true, encoding: .utf8)
         try "unrelated failure: 413 too large".write(to: other, atomically: true, encoding: .utf8)
 
-        let text = PythonBridgeLog.runOutput(runLog: mine, sharedLog: dir.appendingPathComponent("nope.log"),
-                                             marker: "mine")
+        let output = PythonBridgeLog.runOutput(runLog: mine, sharedLog: dir.appendingPathComponent("nope.log"),
+                                               marker: "mine")
 
+        // `.own` and not `.sharedTail`: which source it came from decides
+        // whether it outranks what the launcher shell said (#650).
+        guard case .own(let text) = output else {
+            return XCTFail("this run's own file must be reported as its own, got \(output)")
+        }
         XCTAssertTrue(text.contains("my failure"), text)
         XCTAssertFalse(text.contains("413"),
                        "a concurrent run's output must be unreachable, not merely unlikely")
@@ -57,7 +62,14 @@ final class PythonBridgeRunLogTests: XCTestCase {
         let shared = dir.appendingPathComponent("postroll.log")
         try "Running [mine]:\nzsh: command not found".write(to: shared, atomically: true, encoding: .utf8)
 
-        let text = PythonBridgeLog.runOutput(runLog: mine, sharedLog: shared, marker: "mine")
+        let output = PythonBridgeLog.runOutput(runLog: mine, sharedLog: shared, marker: "mine")
+
+        // Reported as a shared tail, deliberately: it may hold another run's
+        // lines, so it must not be allowed to outrank the launcher's own words
+        // the way this run's private file does (#650).
+        guard case .sharedTail(let text) = output else {
+            return XCTFail("a shared-log read must be reported as one, got \(output)")
+        }
         XCTAssertTrue(text.contains("command not found"), text)
     }
 
