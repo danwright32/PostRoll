@@ -1,0 +1,8 @@
+{
+  "name": "checkout-notice-is-quiet-on-a-clean-main",
+  "file": "PostRollApp/Sources/Services/CheckoutNotice.swift",
+  "find": "guard !states.isEmpty else { return nil }",
+  "replace": "let _ = states.isEmpty",
+  "test": "PostRollTests/CheckoutNoticeTests/testACleanMainSaysNothingAtAll",
+  "breaks": "the code folder notice appears on every ordinary launch, so it is ignored by the time it means something"
+}

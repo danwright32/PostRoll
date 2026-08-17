@@ -29,6 +29,13 @@ enum CheckoutRevision {
         case unknown(reason: String)
     }
 
+    /// How a checkout on no branch at all is named.
+    ///
+    /// One definition, because both readers of it (the run log and the notice on
+    /// the window) have to agree about which state this is, and a second copy of
+    /// the phrase is one they can disagree over.
+    static let detachedBranch = "a detached HEAD"
+
     /// How long git gets before the run stops waiting for it.
     ///
     /// A wait with no deadline cannot fail, it can only hang, and a hang here
@@ -79,7 +86,7 @@ enum CheckoutRevision {
                                  + "uncommitted changes")
         }
         return .known(commit: commit,
-                      branch: branch == "HEAD" ? "a detached HEAD" : branch,
+                      branch: branch == "HEAD" ? detachedBranch : branch,
                       dirty: !status.isEmpty)
     }
 

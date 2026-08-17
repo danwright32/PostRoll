@@ -187,6 +187,14 @@ final class BannerLegibilityTests: XCTestCase {
                 message: SaveFailureNotice.message(reason: "The volume is out of space."),
                 style: .error,
                 actions: [BrandBannerAction(label: SaveFailureNotice.retryLabel, action: {})]))),
+            // The longest state it has, which is the one that has to fit and
+            // stay readable: a branch AND unsaved work (#664).
+            ("checkout not on main", AnyView(BrandBanner(
+                icon: CheckoutNotice.icon,
+                message: CheckoutNotice.message(
+                    for: .known(commit: "1a2b3c4", branch: "wip/pinned-text-shaper",
+                                dirty: true)) ?? "",
+                style: .warning))),
             ("analytics recovery", AnyView(BrandBanner(
                 icon: "chart.bar", message: analytics, style: .error))),
             ("missing media", AnyView(BrandBanner(

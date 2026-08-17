@@ -24,6 +24,16 @@ final class AppState {
     /// that was never going to run (#652).
     var projectRootProblem: AppPaths.ProjectRootProblem?
 
+    /// Set at launch when the code folder is not on a clean main, so anything
+    /// generated runs code that is not what this app was built from (#664).
+    ///
+    /// A sentence rather than the reading it came from: what the window needs is
+    /// the words, and keeping the phrasing in one place stops a second version
+    /// of it growing here. Read once per launch, like the two above; a checkout
+    /// can move while the app is open, and re-reading it on every draw would put
+    /// three git calls on the path of every keystroke (L59).
+    var checkoutNotice: String?
+
     /// Set when events.json existed but its contents could not be decoded.
     /// Shown once as a dismissible alert; the bad file was moved aside, so
     /// starting from an empty list is safe.
