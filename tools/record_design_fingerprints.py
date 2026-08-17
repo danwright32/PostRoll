@@ -28,9 +28,9 @@ the result. It refuses, by name, in every case where the evidence is not real:
 
 What it does NOT claim: that a passing reference frame proves a template renders
 identically. It proves the frames that were photographed are the same within the
-codec tolerance. Everything outside those frames, and the three templates below
-that no reference frame covers at all, is still the honest limit the guard's own
-docstring states.
+codec tolerance. Everything outside those frames is still the honest limit the
+guard's own docstring states. Every template has a frame since #665; a template
+that loses one, or arrives without one, is refused rather than assumed.
 
     venv/bin/python tools/record_design_fingerprints.py     # or: make record-fingerprints
 """
@@ -91,24 +91,33 @@ REFERENCE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_golden_frames.py::test_slider_reel_matches_its_reference_frame",
         "tests/test_golden_frames.py::"
         "test_the_closing_hold_matches_its_reference_frame[slider_reel_closing]"),
+    # The three that had no reference of their own until #665. The cover is
+    # photographed through the app's own cover path rather than through the
+    # story template it shares, because what is different about it (the sticky
+    # gate, the wordmark it is handed) lives there.
+    "cover": (
+        "tests/test_golden_frames.py::test_the_cover_matches_its_reference_frame",),
+    "reel_preview": (
+        "tests/test_golden_frames.py::"
+        "test_the_reel_preview_matches_its_reference_frame",),
+    "reel_clip": (
+        "tests/test_golden_frames.py::test_the_clip_reel_matches_its_reference_frame",),
 }
 
 
 #: Templates no reference frame photographs, and why.
 #:
-#: Named rather than left out, because a template missing from both lists would
-#: be silently exempt. These are refused: nothing here can show their rendering
-#: is unchanged, so recording them would be the hand written re-record wearing a
-#: tool's name. Each is fixed the same way, by recording a reference frame for
-#: it in `tests/test_golden_frames.py`.
-UNPHOTOGRAPHED: dict[str, str] = {
-    "cover": "the story template's reference frame photographs the story, not "
-             "the single-photograph cover its module also draws",
-    "reel_preview": "the still the Thursday crop editor draws over is built by "
-                    "build_reel_preview and no reference frame records it",
-    "reel_clip": "Friday's clip reel and the title card composited over it have "
-                 "no reference frame of their own",
-}
+#: Empty since #665, and kept rather than deleted: it is the half of the pair
+#: that makes a NEW template a decision rather than an oversight. A template in
+#: neither list is refused too, so nothing is silently exempt either way, but a
+#: refusal that names the reason is worth more than one that says a registry is
+#: incomplete.
+#:
+#: A template listed here is refused: nothing can show its rendering is
+#: unchanged, so recording it would be the hand written re-record wearing a
+#: tool's name. The fix is always the same, a reference frame in
+#: `tests/test_golden_frames.py`.
+UNPHOTOGRAPHED: dict[str, str] = {}
 
 
 # ── what has to be recorded ──────────────────────────────────────────────────

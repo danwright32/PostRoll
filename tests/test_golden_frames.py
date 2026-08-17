@@ -38,7 +38,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageStat
 
 from conftest import needs_ffmpeg, needs_mac_fonts as requires_mac_fonts
 from postroll.media import design_tokens as tokens
@@ -51,6 +51,9 @@ from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_reel_scroll as scroll_mod
 from postroll.media import generate_reel_slider as slider_mod
 from postroll.media import generate_story as story_mod
+from postroll.media import generate_title_card as card_mod
+from postroll.media import render_clip_reel as clip_mod
+from postroll.ai import generate_media as media_mod
 
 # Every check in this file renders a real reel and reads pixels back, which is
 # where the suite's time goes. `make test-python-fast` deselects it; CI and
@@ -152,6 +155,60 @@ def assert_shows_real_content(frame: Image.Image, name: str) -> None:
     assert dominant < 0.92 * frame.width * frame.height, (
         f"{name}: one colour covers {dominant / (frame.width * frame.height):.0%} "
         f"of the frame, so almost nothing rendered")
+
+
+def assert_the_title_reads_against_the_footage(
+    frame: Image.Image, event_name: str, tmp_path: Path, min_contrast: float = 40.0
+) -> None:
+    """Friday's title measured against the footage immediately around it (#665).
+
+    Through the card's OWN alpha rather than over a box, because a box is
+    answered by whatever else is inside it. Measured, not suspected: the first
+    version of this check took the darkest against the lightest pixel in a box
+    around the title and passed with the type drawn in the colour of the footage
+    behind it, because the card also draws a blurred shadow and two rose gold
+    rules and those cleared the threshold on their own (L141).
+
+    So the card is rendered separately, its fully opaque pixels are the type
+    itself, and the pixels it did not touch at all are the footage. The
+    comparison is between those two populations inside the same band, which is
+    the question a person asks looking at the frame: can I read the title.
+    """
+    card = Image.open(
+        card_mod.render_title_card_image(event_name, tmp_path / "title_card.png")
+    ).convert("RGBA")
+    assert card.size == frame.size, (
+        f"the card is {card.size} and the frame is {frame.size}, so the alpha "
+        f"does not line up with what was drawn")
+
+    band = (0, card_mod.TITLE_CARD_ANCHOR_Y - 140,
+            frame.width, card_mod.TITLE_CARD_ANCHOR_Y + 40)
+    alpha = card.getchannel("A").crop(band)
+    grey = frame.convert("L").crop(band)
+
+    # The type: fully opaque. The shadow is blurred to a fraction of that and
+    # the rules are drawn at 170, so neither can be mistaken for it.
+    type_mask = alpha.point(lambda a: 255 if a >= 250 else 0)
+    footage_mask = alpha.point(lambda a: 255 if a == 0 else 0)
+
+    # A measurement over nothing is not a measurement (L98): an empty mask makes
+    # every mean below meaningless, and the assertion would pass on it.
+    type_pixels = type_mask.histogram()[255]
+    footage_pixels = footage_mask.histogram()[255]
+    assert type_pixels > 500, (
+        f"only {type_pixels} pixels of type were drawn in the title band, so "
+        f"there is nothing here to measure")
+    assert footage_pixels > 500, (
+        f"only {footage_pixels} untouched pixels in the title band, so there is "
+        f"nothing to measure the type against")
+
+    on_type = ImageStat.Stat(grey, mask=type_mask).mean[0]
+    on_footage = ImageStat.Stat(grey, mask=footage_mask).mean[0]
+
+    assert abs(on_type - on_footage) >= min_contrast, (
+        f"the title reads {on_type:.0f} against footage at {on_footage:.0f}, a "
+        f"difference of {abs(on_type - on_footage):.0f}, so it is drawn in "
+        f"roughly the colour of what is behind it and cannot be read")
 
 
 def assert_ink_reads_against_its_background(
@@ -267,6 +324,44 @@ def screen_recording(tmp_path) -> str:
          str(path)],
         check=True, capture_output=True)
     return str(path)
+
+
+@pytest.fixture
+def scroll_photos(tmp_path) -> list[str]:
+    """Enough photographs that the strip is TALLER than the frame (#665).
+
+    The ten the other tests use produce a 1760px strip against a 1920px frame,
+    which is the size where the scroll has nothing to scroll and the generator
+    collapses it to a still. A fixture is minimal by construction, so the mode
+    that actually ships is the one nothing exercises (L101). Fourteen puts the
+    strip past the frame, which is where every Thursday reel Dan makes lives.
+    """
+    return [_patterned_photo(tmp_path / f"s{i}.jpg", seed=i) for i in range(14)]
+
+
+def _clip_from_photo(photo: str, path: Path, seconds: float = 3.0) -> str:
+    """A landscape video clip, the shape Friday's reel is cut from.
+
+    Built from `_broad_photo`'s smooth bands rather than the 40px check, for the
+    reason the closing hold already established: this frame is almost entirely
+    photograph, and two ffmpeg builds do not agree on a near-Nyquist pattern
+    once it has been scaled and cropped.
+
+    Landscape and larger than the portrait canvas, so the crop-to-fill the
+    renderer performs is actually exercised rather than being a no-op.
+    """
+    subprocess.run(
+        ["ffmpeg", "-y", "-loop", "1", "-i", photo,
+         "-t", str(seconds), "-r", "30", "-vf", "scale=1920:1280",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)],
+        check=True, capture_output=True)
+    return str(path)
+
+
+@pytest.fixture
+def source_clips(broad_photos, tmp_path) -> list[str]:
+    return [_clip_from_photo(photo, tmp_path / f"clip{i}.mp4")
+            for i, photo in enumerate(broad_photos[:2])]
 
 
 @pytest.fixture
@@ -579,11 +674,108 @@ def test_screen_reel_matches_its_reference_frame(photos, silent_audio, screen_re
     assert_matches_golden(frame, "screen_reel", tmp_path)
 
 
+# ── the three that had no reference of their own (#665) ───────────────────────
+#
+# Seven templates were photographed and three were not, and those three were
+# where a contrast or legibility regression could still ship unseen, which is
+# the exact failure this file was written for. It also cost something concrete:
+# `make record-fingerprints` (#660) records a design fingerprint only for a
+# template whose reference frames have been seen to pass, so a change moving any
+# of these three ended with somebody editing the record by hand.
+
+
+@requires_mac_fonts
+def test_the_cover_matches_its_reference_frame(photos, tmp_path):
+    """Through the app's own cover path, not through the template directly.
+
+    The cover is `generate_story` applied to one chosen photograph, so a
+    reference built by calling that function would photograph the story test
+    again under a second name. Going through `_render_cover` covers what is
+    actually different about the cover: the sticky gate that reuses a persisted
+    pick, and the wordmark the app hands it.
+
+    `build_candidates` fails rather than returning: picking a cover fresh is a
+    paid Claude call, and a reference frame must be structurally unable to make
+    one (L2).
+    """
+    day_dir = tmp_path / "thursday"
+    day_dir.mkdir()
+    result: dict = {}
+
+    media_mod._render_cover(
+        day_name="thursday", day_dir=day_dir,
+        day_info={"cover_source": photos[0]},
+        build_candidates=lambda: pytest.fail(
+            "the reference frame must never pick a cover, which is a paid call"),
+        event="Reference Event", org="Reference Org", venue="Reference Venue",
+        day_result=result, errors={})
+
+    assert "cover" in result, f"no cover was rendered: {result}"
+    frame = Image.open(result["cover"]).convert("RGB")
+    assert_shows_real_content(frame, "cover")
+    assert_matches_golden(frame, "cover", tmp_path)
+
+
+@requires_mac_fonts
+def test_the_reel_preview_matches_its_reference_frame(scroll_photos, tmp_path):
+    """The still the Thursday crop editor draws over.
+
+    Not a frame of the scroll reel: this is the whole strip, at the size the
+    editor pans and zooms inside, and the cell rects in its sidecar are what
+    every crop offset is expressed against. A cell that collapsed to a sliver
+    here would move every crop the editor applied.
+    """
+    out = tmp_path / "reel_preview.png"
+    scroll_mod.build_reel_preview(
+        photo_paths=scroll_photos, output_path=str(out), seed=163)
+
+    frame = Image.open(out).convert("RGB")
+    assert frame.height > scroll_mod.CANVAS_H, (
+        f"the strip is {frame.height}px against a {scroll_mod.CANVAS_H}px frame, "
+        f"so this reference records the collapsed case rather than the one that "
+        f"ships (L101)")
+    assert_shows_real_content(frame, "reel_preview")
+    assert_matches_golden(frame, "reel_preview", tmp_path)
+
+
+@needs_ffmpeg
+@requires_mac_fonts
+def test_the_clip_reel_matches_its_reference_frame(source_clips, silent_audio,
+                                                   tmp_path):
+    """Friday's reel with its title card, sampled while the card is up.
+
+    Sampled inside the hold rather than at the start: the card fades in over
+    TITLE_CARD_FADE_SECONDS, so a frame taken at zero would photograph a
+    half-transparent title and defend that as correct.
+
+    The title is drawn in WHITE script over whatever the footage happens to
+    show, which is the element with the worst history in this repo: a light mark
+    on a light surface has shipped invisible three times. So the reference
+    asserts the title reads against its own background as well as matching.
+    """
+    reel = clip_mod.render_clip_reel(
+        [{"clip_path": clip, "trim_in": 0.0, "trim_out": 2.0,
+          "transition_after": "cut"} for clip in source_clips],
+        tmp_path / "clip_reel.mp4", audio_path=silent_audio)
+
+    titled = card_mod.apply_title_card(
+        reel, "Reference Event", tmp_path / "clip_reel_titled.mp4")
+
+    # Half a second into the hold: past the fade, and well clear of its end.
+    at = card_mod.TITLE_CARD_FADE_SECONDS + 0.5
+    frame = _frame_from_encoded_video(titled, at, tmp_path / "clip_reel.png")
+
+    assert_shows_real_content(frame, "clip_reel")
+    assert_the_title_reads_against_the_footage(frame, "Reference Event", tmp_path)
+    assert_matches_golden(frame, "clip_reel", tmp_path)
+
+
 # ── the guards on the guards ──────────────────────────────────────────────────
 
 GOLDEN_NAMES = {
     "collage", "story", "before_after",
     "slider_reel", "morph_reel", "scroll_reel", "screen_reel",
+    "cover", "reel_preview", "clip_reel",
 }
 
 
@@ -602,7 +794,8 @@ def test_the_reel_references_come_from_an_encoded_video():
     # the template's own helpers is what hid the last regression, so the reel
     # tests must go through ffmpeg rather than through PIL.
     source = Path(__file__).read_text()
-    for reel in ("slider_reel", "morph_reel", "scroll_reel", "screen_reel"):
+    for reel in ("slider_reel", "morph_reel", "scroll_reel", "screen_reel",
+                 "clip_reel"):
         block = source.split(f'"{reel}", tmp_path)')[0].rsplit("def test_", 1)[1]
         assert "_frame_from_encoded_video" in block, (
             f"{reel} builds its frame without decoding the encoded file")
@@ -627,7 +820,8 @@ def test_the_cream_tolerance_covers_what_the_codec_actually_does_to_it():
 
 # ── the wordmark fits on the page ─────────────────────────────────────────────
 
-LOGO_BEARING_GOLDENS = ("before_after", "story", "morph_reel", "scroll_reel")
+LOGO_BEARING_GOLDENS = ("before_after", "story", "morph_reel", "scroll_reel",
+                        "cover", "reel_preview")
 
 
 @pytest.mark.parametrize("name", LOGO_BEARING_GOLDENS)
