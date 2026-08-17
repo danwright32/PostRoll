@@ -85,6 +85,9 @@ def test_no_template_is_in_both_lists():
 
 
 def test_a_template_named_as_unphotographed_says_why():
+    # Empty since #665, so this asserts nothing today and is kept deliberately:
+    # it refuses a wordless exemption the moment somebody adds one, which is the
+    # only state in which an exemption is dangerous.
     for template, reason in UNPHOTOGRAPHED.items():
         assert len(reason.split()) >= 5, (
             f"{template} is exempt from the gate with no reason anyone can "
@@ -271,10 +274,33 @@ def test_nothing_to_record_is_not_a_success(repo: Path):
     assert (repo / RECORD_PATH).read_bytes() == before
 
 
-def test_a_template_nothing_photographs_is_refused(repo: Path):
-    # reel_clip has no reference frame, so no run here can show its rendering
-    # is unchanged. Recording it would be the hand written re-record wearing a
-    # tool's name.
+def test_a_template_nothing_photographs_is_refused(repo: Path, monkeypatch):
+    # A template with no reference frame cannot be shown to render unchanged,
+    # so recording it would be the hand written re-record wearing a tool's name.
+    #
+    # Every template has a reference frame since #665, so the state is built
+    # here rather than taken from the live registry. A refusal nothing can
+    # produce is a branch nobody has ever seen run (L151), and the next template
+    # added arrives in exactly this state.
+    monkeypatch.setitem(UNPHOTOGRAPHED, "reel_clip", "nothing photographs it")
+    monkeypatch.delitem(REFERENCE_TESTS, "reel_clip")
+    before = (repo / RECORD_PATH).read_bytes()
+    move_fingerprint(repo, "render_clip_reel.py")
+
+    code, said = run(repo, FakeRunner())
+
+    assert code != 0
+    assert "reel_clip" in said
+    assert "nothing photographs it" in said
+    assert (repo / RECORD_PATH).read_bytes() == before
+
+
+def test_a_template_in_neither_list_is_refused_rather_than_recorded(
+        repo: Path, monkeypatch):
+    # The shape a NEW template arrives in: nothing says which frames photograph
+    # it and nobody has said it has none. Silently recording it would exempt it
+    # from the gate it most needs (L96).
+    monkeypatch.delitem(REFERENCE_TESTS, "reel_clip")
     before = (repo / RECORD_PATH).read_bytes()
     move_fingerprint(repo, "render_clip_reel.py")
 
@@ -410,10 +436,12 @@ def test_recording_while_the_goldens_are_being_rewritten_is_refused(repo: Path):
 
 
 def test_a_proven_template_beside_an_unprovable_one_records_only_the_proven(
-        repo: Path):
+        repo: Path, monkeypatch):
     # What #656 actually looked like: one change moved every template at once.
     # The ones with a reference frame are recorded, the rest are named, and the
     # run reports failure so the unproven ones cannot be missed.
+    monkeypatch.setitem(UNPHOTOGRAPHED, "reel_clip", "nothing photographs it")
+    monkeypatch.delitem(REFERENCE_TESTS, "reel_clip")
     move_fingerprint(repo, "generate_reel_screen.py")
     move_fingerprint(repo, "render_clip_reel.py")
 
