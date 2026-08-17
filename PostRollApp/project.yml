@@ -28,23 +28,63 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         INFOPLIST_KEY_CFBundleDisplayName: PostRoll
-        # Where this build was made from, stamped into the bundle so the app can
-        # find the Python checkout at runtime (#648). The Python is NOT bundled:
-        # `postroll/` has to be somewhere real on disk for anything to generate.
-        #
-        # This used to be a hardcoded `~/Documents/PostRoll` in AppPaths, and
-        # when the project moved out of iCloud Drive on 2026-08-16 that folder
-        # stopped existing. Recording it here means moving the project and
-        # reinstalling fixes itself, rather than rescheduling the same defect
-        # for the next move.
-        #
-        # SRCROOT is this PostRollApp folder, so its parent is the checkout.
-        # AppPaths standardizes the `..` away when it reads it back.
-        #
-        # Deliberately NOT set on PostRollTests below: the tests inject this
-        # value, and leaving it unset keeps "nothing was recorded" a state the
-        # suite actually runs in rather than one nothing ever reaches.
-        INFOPLIST_KEY_POSTROLLProjectRoot: "$(SRCROOT)/.."
+    postBuildScripts:
+      # Record where this build was made from, so the app can find the Python
+      # checkout at runtime (#648). The Python is NOT bundled: `postroll/` has
+      # to be somewhere real on disk for anything to generate.
+      #
+      # This used to be a hardcoded `~/Documents/PostRoll` in AppPaths, and when
+      # the project moved out of iCloud Drive on 2026-08-16 that folder stopped
+      # existing. Recording it means moving the project and reinstalling fixes
+      # itself, rather than rescheduling the same defect for the next move.
+      #
+      # Written by a script rather than by `INFOPLIST_KEY_POSTROLLProjectRoot`,
+      # which was tried first and does NOT work: Xcode maps that prefix onto a
+      # known set of Info.plist keys only, so the setting sat in this file and
+      # the built app had no such key. Nothing about the setting looked wrong.
+      # It was caught by reading the built bundle rather than the manifest.
+      #
+      # basedOnDependencyAnalysis: false so it runs on every build. The value
+      # depends on where the checkout IS, which no input file records, so an
+      # up-to-date check would keep a stale path across a move.
+      #
+      # Deliberately NOT run for PostRollTests: the tests inject this value, and
+      # leaving it unrecorded there keeps "nothing was recorded" a state the
+      # suite actually runs in rather than one nothing ever reaches.
+      - name: Record the checkout this build was made from
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          # SRCROOT is the PostRollApp folder, so its parent is the checkout.
+          # Resolved here rather than stored with a `..` still in it.
+          ROOT="$(cd "${SRCROOT}/.." && pwd)"
+          /usr/libexec/PlistBuddy -c "Delete :POSTROLLProjectRoot" "${PLIST}" >/dev/null 2>&1 || true
+          /usr/libexec/PlistBuddy -c "Add :POSTROLLProjectRoot string ${ROOT}" "${PLIST}"
+          # Read it back. A write that silently did nothing is what this whole
+          # change exists to stop, so the build fails rather than shipping an
+          # app that cannot find its own code.
+          WROTE="$(/usr/libexec/PlistBuddy -c "Print :POSTROLLProjectRoot" "${PLIST}")"
+          if [ "${WROTE}" != "${ROOT}" ]; then
+            echo "error: the checkout path was not recorded into ${PLIST}." >&2
+            echo "error: wanted ${ROOT}, read back \"${WROTE}\"." >&2
+            exit 1
+          fi
+          # This phase runs AFTER Xcode signs, and changing the Info.plist
+          # breaks the seal, so the bundle has to be signed again. Measured, not
+          # assumed: without this, `codesign --verify` on the build product
+          # reports "plist or signature have been modified". An unsigned or
+          # broken bundle has no stable identity for macOS to remember folder
+          # permission grants against, which is what #83 fixed and what this
+          # would quietly undo.
+          #
+          # Skipped when the build was told not to sign at all, which is how
+          # build-install.sh builds: it signs the installed copy itself.
+          if [ "${CODE_SIGNING_ALLOWED:-YES}" = "YES" ]; then
+            IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+            codesign --force --sign "${IDENTITY}" "${TARGET_BUILD_DIR}/${WRAPPER_NAME}"
+            codesign --verify --strict "${TARGET_BUILD_DIR}/${WRAPPER_NAME}"
+          fi
     entitlements:
       path: PostRoll.entitlements
 

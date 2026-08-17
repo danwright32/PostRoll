@@ -13,21 +13,27 @@ app reads it back at runtime. Moving the project and rebuilding therefore fixes
 itself.
 
 That makes two halves that must agree and live in different files: the build
-setting in `project.yml` and the key `AppPaths` reads in Swift. Neither file
-looks wrong on its own if they drift, so the agreement is what is checked here
-rather than either half alone.
+phase in `project.yml` that writes the key, and the key `AppPaths` reads in
+Swift. Neither file looks wrong on its own if they drift, so the agreement is
+what is checked here rather than either half alone.
 
-The third check is the one that matters most. `project.yml` is a manifest;
+The last two checks are the ones that matter most, and they are the two the
+first attempt at this fix failed. `project.yml` is a manifest;
 `PostRoll.xcodeproj` is GENERATED from it and committed, and it is the generated
-file that Xcode actually builds. A setting added to the manifest and never
-regenerated is a setting the shipping app does not have, and nothing about the
-manifest would look wrong (L3, built is not wired).
+file that Xcode actually builds; and neither of those is the built app. The
+first version of this recorded the path with an `INFOPLIST_KEY_` build setting,
+which reached both files and produced a built app with no such key, because
+Xcode maps that prefix onto a known set of Info.plist keys only. Everything read
+as fixed (L3, built is not wired).
 """
 
 from __future__ import annotations
 
+import plistlib
 import re
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -36,9 +42,17 @@ MANIFEST = APP / "project.yml"
 PBXPROJ = APP / "PostRoll.xcodeproj" / "project.pbxproj"
 APP_PATHS = APP / "Sources" / "Services" / "AppPaths.swift"
 
-# What the build stamps: the app folder's parent, which is the checkout root.
-# Xcode expands this when it generates the app's Info.plist.
-RECORDED_VALUE = "$(SRCROOT)/.."
+# The Info.plist key the build writes and the app reads back.
+#
+# Written by a post-build script rather than by an `INFOPLIST_KEY_` build
+# setting. That was tried first and does not work: Xcode maps that prefix onto a
+# known set of Info.plist keys only, so `INFOPLIST_KEY_POSTROLLProjectRoot` sat
+# in project.yml, generated into the .xcodeproj, and produced a built app with
+# no such key. Nothing about the setting looked wrong, and the only way to find
+# out was to read the built bundle (L3). These checks therefore assert the
+# SCRIPT is present, and `test_the_built_app_records_its_checkout` below reads a
+# real build.
+WRITER_ANCHOR = "PlistBuddy"
 
 
 def _strip_comments(text: str) -> str:
@@ -74,17 +88,18 @@ def _app_target_block(manifest: str) -> str:
 
 
 def _recorded_key_from_manifest() -> str:
-    """The Info.plist key the app target stamps the checkout into."""
+    """The Info.plist key the app target's post-build script writes."""
     block = _app_target_block(_strip_comments(MANIFEST.read_text(encoding="utf-8")))
-    found = re.findall(r"^\s*INFOPLIST_KEY_(\w+):\s*(.+?)\s*$", block, re.MULTILINE)
-    recorded = [key for key, value in found if value.strip('"') == RECORDED_VALUE]
-    assert recorded, (
-        "the PostRoll app target records no checkout path. It needs an "
-        f'INFOPLIST_KEY_<name>: "{RECORDED_VALUE}" setting, or the installed app '
-        "has no way to find this repo and every generation fails."
+    assert WRITER_ANCHOR in block, (
+        "the PostRoll app target has no script recording the checkout path, so "
+        "the installed app has no way to find this repo and every generation "
+        "fails with nothing naming the cause."
     )
-    assert len(recorded) == 1, f"more than one setting records the checkout: {recorded}"
-    return recorded[0]
+    written = set(re.findall(r"Add :(\w+) string", block))
+    assert len(written) == 1, (
+        f"expected exactly one recorded Info.plist key, found {sorted(written)}"
+    )
+    return written.pop()
 
 
 def _recorded_key_from_swift() -> str:
@@ -120,8 +135,8 @@ def test_the_generated_project_carries_the_recording():
     """
     key = _recorded_key_from_manifest()
     pbxproj = PBXPROJ.read_text(encoding="utf-8")
-    assert f"INFOPLIST_KEY_{key}" in pbxproj, (
-        f"INFOPLIST_KEY_{key} is in project.yml but not in the generated "
+    assert key in pbxproj, (
+        f"the script recording {key} is in project.yml but not in the generated "
         "PostRoll.xcodeproj. Run `cd PostRollApp && xcodegen generate` and "
         "commit the result, or the shipping app never records its checkout."
     )
@@ -143,4 +158,46 @@ def test_no_home_relative_checkout_guess_survives_in_apppaths():
         "resolveProjectRoot is guessing a home-relative path again. That is the "
         "defect in #648: the folder it names can move, and when it did, nothing "
         "said so."
+    )
+
+
+def test_the_built_app_records_its_checkout():
+    """Read a real build, not the settings that are supposed to produce one.
+
+    This is the check the first attempt at #648 would have failed while every
+    other check here passed: the manifest and the generated project both carried
+    an `INFOPLIST_KEY_POSTROLLProjectRoot` that Xcode silently did not emit.
+
+    A missing build is a SKIP with its reason named, never a pass: finding
+    nothing to inspect and reporting success is indistinguishable from having
+    inspected something (L98). The build itself is where this is really
+    enforced, since the post-build script reads its own write back and fails the
+    build when it did not land.
+
+    Scoped to the BUILD PRODUCT, deliberately not to /Applications/PostRoll.app.
+    The installed copy is a deployment state rather than a property of this
+    code: an install made before this change has no recorded checkout, and
+    failing the suite over that would be a gate going red for a reason unrelated
+    to the code, which is how a gate ends up routinely bypassed. What covers the
+    installed copy instead is build-install.sh, which copies this exact product,
+    plus a check by hand at install time.
+    """
+    key = _recorded_key_from_swift()
+    app = Path.home() / "Library/Developer/PostRoll/Build/Products/Release/PostRoll.app"
+    plist = app / "Contents" / "Info.plist"
+    if not plist.exists():
+        pytest.skip(
+            f"no build product at {app}, so nothing was checked. Run `make "
+            "build` to exercise this."
+        )
+
+    data = plistlib.loads(plist.read_bytes())
+    recorded = data.get(key)
+    assert recorded, (
+        f"{app} carries no {key}, so that build cannot find the Python checkout "
+        "and every generation in it fails. The build settings can look entirely "
+        "correct while this is true, which is exactly what happened once."
+    )
+    assert Path(recorded).is_absolute(), (
+        f"{app} recorded {recorded!r}, which is not an absolute path"
     )
