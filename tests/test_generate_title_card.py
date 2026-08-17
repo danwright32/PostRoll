@@ -25,6 +25,8 @@ from postroll.media.generate_title_card import (
     render_title_card_image,
 )
 
+from conftest import needs_mac_fonts
+
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 needs_ffmpeg = pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
 
@@ -66,8 +68,14 @@ def test_title_card_image_has_visible_text_pixels(tmp_path):
     assert max(alphas) > 0, "no non-transparent pixels: text was never drawn"
 
 
+@needs_mac_fonts
 def test_the_type_is_drawn_light_enough_to_sit_over_footage(tmp_path):
     """The rule that makes this card readable at all (#665).
+
+    Gated on the macOS fonts, like every other check that renders real type:
+    the script face is a system font, and without it the card comes back with
+    one fully opaque pixel in it. Found on a Linux runner, by the refusal below
+    rather than by a green pass over an empty measurement.
 
     The card is transparent, so nothing here can measure it against a
     background: its legibility is decided when it is composited over the reel,
