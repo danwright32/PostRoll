@@ -27,6 +27,7 @@ by build-install.sh before it installs anything.
 from __future__ import annotations
 
 import enum
+import platform
 import re
 import subprocess
 import sys
@@ -107,13 +108,104 @@ def verdict(*, local: Version, ci: Version) -> Result:
     )
 
 
+# ── the same hazard, on the Python side (#656) ───────────────────────────────
+#
+# The venv was built on the Python inside Xcode.app, which meant an Xcode update
+# or move would take the entire generation pipeline with it, and it held this
+# Mac on 3.9 while every CI job runs 3.11. Neither was reported anywhere.
+#
+# Two rules, for two different failures:
+#
+#   base inside an app bundle   another application owns your runtime, and its
+#                               update schedule is not yours.
+#   local minor != CI's minor   the drift this file already guards for the
+#                               compiler, in the language the pipeline runs in.
+
+WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
+
+
+def base_interpreter(pyvenv_cfg: str) -> str | None:
+    """The interpreter a venv was built from, out of its pyvenv.cfg.
+
+    None when the file names none, which is NOT the same as a healthy
+    environment and must not be treated as one by the caller (L98).
+    """
+    for line in pyvenv_cfg.splitlines():
+        key, _, value = line.partition("=")
+        if key.strip() == "home":
+            return value.strip() or None
+    return None
+
+
+def ci_python_version(workflows: Path | None = None) -> str:
+    """The Python minor version CI installs, read from the workflows.
+
+    Derived rather than recorded a second time here: a hand-kept copy drifts
+    from what CI actually installs, and the check then compares this Mac
+    against a fiction (L41).
+    """
+    found: set[str] = set()
+    for path in sorted((workflows or WORKFLOWS).glob("*.yml")):
+        found.update(re.findall(r"""python-version:\s*["']?(\d+\.\d+)""",
+                                path.read_text(encoding="utf-8")))
+    if not found:
+        raise ValueError(
+            f"no python-version pinned in any workflow under {workflows or WORKFLOWS}, "
+            "so there is nothing to hold this Mac to")
+    if len(found) > 1:
+        raise ValueError(
+            f"CI installs more than one Python minor version {sorted(found)}, so "
+            "there is no single version for this Mac to match")
+    return found.pop()
+
+
+def python_verdict(*, local: str, ci: str, base: str | None) -> Result:
+    """Whether this machine's Python is one the project can rely on."""
+    if base is None:
+        return Result(
+            Verdict.LOCAL_IS_AHEAD,
+            "the virtualenv does not say which interpreter it was built from, so "
+            "nothing here can tell whether it is a safe one. Rebuild it.")
+
+    # Checked before the version, because it is the more serious of the two: a
+    # matching version inside somebody else's app is still a runtime that can
+    # vanish on their schedule.
+    owner = next((part for part in Path(base).parts if part.endswith(".app")), None)
+    if owner:
+        return Result(
+            Verdict.LOCAL_IS_AHEAD,
+            f"the virtualenv is built on the Python inside {owner} ({base}). That "
+            "runtime belongs to another application and moves or disappears when it "
+            "updates, taking generation with it. Rebuild the venv on a standalone "
+            f"Python {ci}.")
+
+    spelled_local = ".".join(local.split(".")[:2])
+    if spelled_local != ci:
+        return Result(
+            Verdict.LOCAL_IS_AHEAD,
+            f"this Mac's virtualenv runs Python {spelled_local} and CI runs {ci}. "
+            "Code that passes on one can be rejected by the other, and only a push "
+            f"would say so. Rebuild the venv on Python {ci}.")
+
+    return Result(Verdict.MATCHED,
+                  f"Python {ci} on both sides, from {base}.")
+
+
 def main(argv: list[str]) -> int:
     banner = subprocess.run(
         ["xcodebuild", "-version"], capture_output=True, text=True, check=True
     ).stdout
     result = verdict(local=parse_version(banner), ci=recorded_ci_version())
     print(f"{result.outcome.value}: {result.detail}")
-    return 0 if result.ok else 1
+
+    cfg = Path(sys.prefix) / "pyvenv.cfg"
+    python = python_verdict(
+        local=platform.python_version(),
+        ci=ci_python_version(),
+        base=base_interpreter(cfg.read_text(encoding="utf-8")) if cfg.exists() else None)
+    print(f"{python.outcome.value}: {python.detail}")
+
+    return 0 if result.ok and python.ok else 1
 
 
 if __name__ == "__main__":

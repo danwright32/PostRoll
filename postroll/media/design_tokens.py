@@ -19,6 +19,8 @@ them. What belongs here is anything two templates are supposed to agree on.
 
 from __future__ import annotations
 
+from PIL import ImageFont
+
 
 # ── Colour ────────────────────────────────────────────────────────────────────
 
@@ -146,6 +148,53 @@ FONT_DETAIL_MEDIUM = 10
 #: The default detail weight. Thin renders spindly at these sizes.
 FONT_DETAIL_LIGHT = 7
 FONT_DETAIL_THIN = 12
+
+#: How text is shaped, named rather than left to Pillow to choose (#656).
+#:
+#: Pillow uses the advanced shaper (raqm) whenever it can find one, and whether
+#: it can is decided by what is installed on the machine doing the drawing, not
+#: by anything in this project. Measured on 2026-08-17, same Pillow version and
+#: the same wheel name throughout:
+#:
+#:     this Mac, Python 3.9 venv    raqm absent    BASIC
+#:     this Mac, Python 3.11 venv   raqm present   RAQM
+#:     CI, Python 3.11              raqm absent    BASIC
+#:
+#: The two renderings differ: the before/after title band sits about four pixels
+#: across under one against the other, which is 0.64% of that frame and enough
+#: to fail its reference. So rebuilding a virtualenv could change what Dan's
+#: graphics look like, and the reference frames were the only thing that would
+#: have noticed.
+#:
+#: BASIC is chosen because it is what CI, the committed references and the
+#: shipping app already produce, so naming it changes nothing about today's
+#: output and takes the installed-package lottery out of it. Moving to raqm is
+#: then a deliberate design change carrying a reference re-record, rather than
+#: something that happens to somebody.
+FONT_LAYOUT_ENGINE = ImageFont.Layout.BASIC
+
+
+def load_font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
+    """Load a face at a size, shaped by the engine this project chose.
+
+    One implementation, imported by every generator. There were six identical
+    copies of this, each omitting the layout engine, so pinning it in one of
+    them would have left the other five deciding by whatever was installed.
+
+    A font that cannot be read degrades to Pillow's default rather than taking
+    the whole render down, which is the behaviour all six copies had.
+
+    It SAYS so, which only two of them did. The other four swapped the brand
+    face for Pillow's default silently, so whether a missing font was reported
+    depended on which template you happened to be rendering, and the quiet ones
+    produced an off-brand asset with nothing anywhere naming why (L11).
+    """
+    try:
+        return ImageFont.truetype(path, size, index=index,
+                                  layout_engine=FONT_LAYOUT_ENGINE)
+    except (OSError, IOError):
+        print(f"Warning: Could not load font {path}, using default")
+        return ImageFont.load_default()
 
 
 # ── Mat scale ─────────────────────────────────────────────────────────────────

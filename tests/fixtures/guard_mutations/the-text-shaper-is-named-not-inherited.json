@@ -1,0 +1,8 @@
+{
+  "name": "the-text-shaper-is-named-not-inherited",
+  "file": "postroll/media/design_tokens.py",
+  "find": "        return ImageFont.truetype(path, size, index=index,\n                                  layout_engine=FONT_LAYOUT_ENGINE)",
+  "replace": "        return ImageFont.truetype(path, size, index=index)",
+  "test": "tests/test_font_loading.py::test_the_shared_loader_pins_the_layout_engine",
+  "breaks": "which renderer draws Dan's type goes back to being decided by whatever Pillow build happens to be installed. Measured 2026-08-17: the same Pillow version renders the before/after title band about four pixels across depending on whether raqm is present, which is 0.64% of the frame and enough to fail its reference, so rebuilding a virtualenv could change what his graphics look like (#656)"
+}
