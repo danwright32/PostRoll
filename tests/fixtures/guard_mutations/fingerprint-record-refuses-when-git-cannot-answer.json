@@ -1,0 +1,8 @@
+{
+  "name": "fingerprint-record-refuses-when-git-cannot-answer",
+  "file": "tools/record_design_fingerprints.py",
+  "find": "    if git_failed:",
+  "replace": "    if git_failed and False:",
+  "test": "tests/test_record_design_fingerprints.py::test_a_git_that_cannot_answer_is_refused_rather_than_read_as_clean",
+  "breaks": "a git that could not say whether the reference frames are committed reads as a clean tree"
+}

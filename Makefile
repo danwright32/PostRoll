@@ -19,7 +19,7 @@ LOCKED = /usr/bin/env python3 tools/with_build_lock.py
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
-.PHONY: install install-force build test test-python test-python-fast check-guards check-toolchain review-sheet clean
+.PHONY: install install-force build test test-python test-python-fast check-guards check-toolchain record-fingerprints review-sheet clean
 
 # One build-and-install implementation, not two. This used to run its own
 # xcodebuild and cp, skipping the xattr clear, the stable-identity signing and
@@ -127,6 +127,20 @@ check-guards:
 # here can tell you. Run by build-install.sh before it installs.
 check-toolchain:
 	@venv/bin/python tools/check_toolchain.py
+
+# The only supported way to record a media design fingerprint (#660).
+#
+# The design fingerprint guard fails whenever a template's source moves, and
+# offers two ways out: bump the design version because the rendering changed, or
+# record the fingerprint alone because it did not. Only the first was ever
+# implemented, so the second was done with a script written on the spot, which
+# cannot tell those two apart. That is the whole thing the guard exists to ask.
+#
+# This runs the reference frames that photograph each moved template and records
+# only what they vouch for. It renders real reels, so it is not fast, and it
+# refuses rather than guessing: see the tool's docstring for every case.
+record-fingerprints:
+	@venv/bin/python tools/record_design_fingerprints.py
 
 # A picture of every screen the checks measure, in one folder (#623).
 #

@@ -1,0 +1,8 @@
+{
+  "name": "fingerprint-record-refuses-an-unphotographed-template",
+  "file": "tools/record_design_fingerprints.py",
+  "find": "refused = {t: UNPHOTOGRAPHED[t] for t in moved if t in UNPHOTOGRAPHED}",
+  "replace": "refused = {}",
+  "test": "tests/test_record_design_fingerprints.py::test_a_template_nothing_photographs_is_refused",
+  "breaks": "a template no reference frame photographs is recorded on no evidence at all"
+}
