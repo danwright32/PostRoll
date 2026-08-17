@@ -29,16 +29,27 @@ already safe (L96).
 Exit codes, all distinct, because "green", "red" and "nothing ever showed up"
 are three different things and only one of them may be merged on:
 
-    0  green          every expected check settled, none failing
+    0  green          every expected check settled, none failing, and with
+                      --merge that commit is now merged
     1  red            an expected check failed, was cancelled, or skipped
                       where the workflow said it should run
     2  never appeared the deadline passed with an expected check absent
     3  still running  the deadline passed with everything present but pending
     4  unusable       gh could not be asked, or the workflows could not be read
+    5  not merged     the commit was green and GitHub refused to merge it,
+                      which is what a head that moved in between looks like
+
+#674 is the last step of the same defect. Proving one named commit passed and
+then merging in a separate step merges whatever is at the top of the branch by
+then, so a push landing in the seconds between the two is merged with nothing
+having judged it, and that is the step that cannot be undone. `--merge` closes
+it by construction: GitHub's merge endpoint takes the commit as `sha` and
+answers 409 when the head is not it.
 
 Usage:
 
-    python tools/wait_for_checks.py <pr-number> [--timeout 1800] [--interval 20]
+    python tools/wait_for_checks.py <pr-number> [--timeout 1800]
+                                    [--interval 20] [--merge]
 
 Reads the workflows as text rather than parsing YAML, for the reason
 `tests/test_ci_gates.py` gives: a YAML parser is not worth a runtime dependency
@@ -66,6 +77,7 @@ EXIT_RED = 1
 EXIT_NEVER_APPEARED = 2
 EXIT_STILL_RUNNING = 3
 EXIT_UNUSABLE = 4
+EXIT_NOT_MERGED = 5
 
 #: The two job conditions this can classify. Anything else is refused rather
 #: than guessed at, because a guessed bar reads as authoritative.
@@ -79,6 +91,17 @@ class UnreadableWorkflow(Exception):
 
 class GhUnusable(Exception):
     """gh could not be asked. Distinct from gh answering "nothing yet"."""
+
+
+class MergeRefused(Exception):
+    """The merge did not happen, and the pull request is still open.
+
+    Its own exception rather than `GhUnusable`, because the two call for
+    different things: one says the question could not be asked, and this says
+    the answer was no. The commonest reason is the one this exists for, a head
+    that moved between the green and the merge, and the response to that is to
+    look at what landed rather than to merge again (L11).
+    """
 
 
 @dataclass(frozen=True, order=True)
@@ -321,6 +344,58 @@ def gh_json(path: str) -> dict:
     return reply
 
 
+#: How this repository's pull requests land. Every commit on main is a squash
+#: of one pull request, so a merge that made a merge commit here would be the
+#: odd one out rather than a choice.
+MERGE_METHOD = "squash"
+
+
+def merge_commit(number: str, sha: str, *,
+                 method: str = MERGE_METHOD,
+                 run: Callable[..., object] = subprocess.run) -> str:
+    """Merge pull request `number`, but only while its head is still `sha`.
+
+    The green above proves that ONE named commit passed. Merging the top of the
+    branch is a different act: a push landing in the seconds between the two
+    merges a commit nothing has judged, which is #669 moved one step later and
+    into the step that cannot be undone (#674).
+
+    GitHub's merge endpoint takes the commit as `sha` and answers 409 when the
+    head is not it, so this is closed by construction rather than by being
+    quick. The reply is then read rather than the exit code trusted: gh exiting
+    0 having been told "not mergeable" is not a merge, and reporting one over a
+    pull request still sitting open is a success claim nobody verified (L12).
+    """
+    path = f"repos/{{owner}}/{{repo}}/pulls/{number}/merge"
+    try:
+        done = run(
+            ["gh", "api", "-X", "PUT",
+             "-H", "Accept: application/vnd.github+json", path,
+             "-f", f"sha={sha}", "-f", f"merge_method={method}"],
+            capture_output=True, text=True, check=False)
+    except FileNotFoundError as error:
+        raise MergeRefused("gh is not installed or not on PATH") from error
+
+    body = (done.stdout or "").strip()
+    if done.returncode != 0:
+        raise MergeRefused(
+            f"gh api PUT {path} exited {done.returncode}: "
+            f"{((done.stderr or '').strip() or body)[:200] or '(silence)'}")
+    try:
+        reply = json.loads(body)
+    except json.JSONDecodeError as error:
+        raise MergeRefused(
+            f"gh api PUT {path} printed something that is not JSON ({error}): "
+            f"{body[:200]!r}") from error
+    if not isinstance(reply, dict) or not reply.get("merged"):
+        said = ""
+        if isinstance(reply, dict):
+            said = str(reply.get("message") or "")
+        raise MergeRefused(
+            f"GitHub did not merge {sha[:12]}: {said or body[:200] or '(silence)'}")
+    return str(reply.get("sha") or sha)
+
+
 #: What a job's status and conclusion mean, in the vocabulary `verdict` judges.
 #:
 #: Listed rather than derived because it is GitHub's vocabulary, not ours, and
@@ -491,16 +566,22 @@ class Arguments:
     number: str
     timeout: float
     interval: float
+    #: Merge the commit this judged, rather than leaving a second step to be
+    #: taken against whatever is at the top of the branch by then (#674).
+    merge: bool = False
 
 
 def parse_arguments(argv: Sequence[str]) -> Arguments:
-    """The pull request number and the two knobs, with unknown flags refused."""
+    """The pull request number and the knobs, with unknown flags refused."""
     numbers = {"--timeout": 1800.0, "--interval": 20.0}
+    merge = False
     positional: list[str] = []
     rest = list(argv)
     while rest:
         word = rest.pop(0)
-        if word in numbers:
+        if word == "--merge":
+            merge = True
+        elif word in numbers:
             if not rest:
                 raise GhUnusable(f"{word} needs a number after it")
             try:
@@ -515,8 +596,9 @@ def parse_arguments(argv: Sequence[str]) -> Arguments:
     if len(positional) != 1:
         raise GhUnusable(
             "usage: wait_for_checks.py <pr-number> [--timeout 1800] "
-            "[--interval 20]")
-    return Arguments(positional[0], numbers["--timeout"], numbers["--interval"])
+            "[--interval 20] [--merge]")
+    return Arguments(positional[0], numbers["--timeout"], numbers["--interval"],
+                     merge)
 
 
 # How many times one poll is attempted before gh is called unusable, and how
@@ -584,6 +666,7 @@ def main(
     argv: Sequence[str],
     *,
     poll: Callable[[str], Poll] = poll_checks,
+    merge: Callable[[str, str], str] = merge_commit,
     now: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
     workflows: Path = WORKFLOWS,
@@ -628,6 +711,17 @@ def main(
         answer = verdict(expected, reading.rows, reading.unfinished)
         if answer.state == "green":
             out(f"green at {judged[:12]}: {answer.summary}")
+            if not arguments.merge:
+                return EXIT_GREEN
+            # The merge names the commit the green was earned by, so a push
+            # landing in between is refused by GitHub rather than merged (#674).
+            try:
+                merged = merge(number, judged)
+            except MergeRefused as error:
+                out(f"green at {judged[:12]} but not merged: {error}")
+                return EXIT_NOT_MERGED
+            out(f"merged {merged[:12]}, which is the commit judged at "
+                f"{judged[:12]}")
             return EXIT_GREEN
         if answer.state == "red":
             out(f"red at {judged[:12]}: {answer.summary}")

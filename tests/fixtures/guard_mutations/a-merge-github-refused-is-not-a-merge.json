@@ -1,0 +1,8 @@
+{
+  "name": "a-merge-github-refused-is-not-a-merge",
+  "file": "tools/wait_for_checks.py",
+  "find": "    if not isinstance(reply, dict) or not reply.get(\"merged\"):",
+  "replace": "    if not isinstance(reply, dict):",
+  "test": "tests/test_wait_for_checks.py::test_a_reply_that_does_not_say_it_merged_is_a_refusal",
+  "breaks": "gh exiting zero is read as the merge having happened, so a pull request GitHub declined to merge is reported as merged and the branch is left open behind a success message (L12)"
+}
