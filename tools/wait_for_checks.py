@@ -1,4 +1,4 @@
-"""Wait for a pull request's checks, and refuse to call an empty answer green.
+"""Wait for one commit's checks, and refuse to call an empty answer green.
 
 #564. `gh pr checks <n>` reports nothing at all in the window between a push
 and the checks being registered. Twice on 2026-08-14 a wait loop read that as
@@ -7,7 +7,20 @@ against. That is L98: finding zero subjects is indistinguishable from
 everything passing, and the empty reply arrives exactly when the work has not
 started, which is the moment a green verdict is most likely to be believed.
 
-The fix is to know what the wait is waiting FOR. The expected checks are
+#669 is the same defect one push later, and gh cannot help with it at all: its
+rows are keyed by workflow and check NAME, with no notion of which commit
+produced them. Measured on #667 on 2026-08-17, three consecutive pushes each
+reported `red: failed: Tests / python` within seconds, every one of them the
+previous commit's run. The mirror is the dangerous half, a superseded run that
+PASSED reporting green for a commit nothing has judged yet.
+
+So this asks the Actions API about a SHA instead. The head commit is resolved
+first and carried into every later question, every run and every job is checked
+against it again on the way back, and a run still in flight is never green
+(L173). Every line printed names the commit judged, so a green can be held up
+against the commit about to be merged rather than trusted.
+
+The fix for both is to know what the wait is waiting FOR. The expected checks are
 derived from the workflow files rather than pinned here, so adding a job raises
 the bar with no edit to this file: a hand-written list would only ever check
 what somebody remembered to add, and the entries you remember are the ones
@@ -53,16 +66,6 @@ EXIT_RED = 1
 EXIT_NEVER_APPEARED = 2
 EXIT_STILL_RUNNING = 3
 EXIT_UNUSABLE = 4
-
-#: gh's own words when a branch has no checks registered yet, read out of the
-#: shipped binary (gh 2.89.0) rather than remembered (L52):
-#:
-#:     no checks reported on the '%s' branch
-#:
-#: Matched loosely because the branch name is interpolated into it, and on
-#: either stream because which one gh uses is its choice rather than a fact
-#: worth depending on.
-NO_CHECKS = "no checks reported"
 
 #: The two job conditions this can classify. Anything else is refused rather
 #: than guessed at, because a guessed bar reads as authoritative.
@@ -282,44 +285,155 @@ def expected_checks(workflows: Path = WORKFLOWS) -> set[ExpectedCheck]:
     return expected
 
 
-# ── reading what gh said ──────────────────────────────────────────────────────
+# ── asking about one commit ───────────────────────────────────────────────────
 
 
-def read_reply(*, exit_code: int, stdout: str, stderr: str) -> list[dict]:
-    """gh's reply as rows, with "nothing yet" told apart from "cannot ask".
+def gh_json(path: str) -> dict:
+    """One `gh api` call, with "cannot ask" told apart from a real answer.
 
-    gh exits non-zero both when checks are failing and when there are none at
-    all, so the exit code alone cannot separate them. Collapsing the two would
-    put an auth failure on the same path as patience, and the wait would spend
-    its whole timeout looking like it was working.
+    Deliberately not `gh pr checks`. That command reports rows keyed by
+    workflow and check NAME with no notion of which commit produced them (#669),
+    so it answers about whatever GitHub last attached to the branch. Every path
+    here names a SHA or a run id, so a reply that is about another commit can be
+    recognised as one.
     """
-    body = stdout.strip()
-    if NO_CHECKS in (body + stderr).lower():
-        return []
-    if body:
-        try:
-            rows = json.loads(body)
-        except json.JSONDecodeError as error:
-            raise GhUnusable(
-                f"gh printed something that is not JSON ({error}): {body[:200]!r}"
-            ) from error
-        if not isinstance(rows, list):
-            raise GhUnusable(f"gh returned {type(rows).__name__}, not a list of checks")
-        return rows
-
-    raise GhUnusable(
-        f"gh exited {exit_code} with no usable output: {stderr.strip() or '(silence)'}")
-
-
-def fetch_checks(number: str) -> list[dict]:
-    """Ask gh about one pull request's checks."""
     try:
         done = subprocess.run(
-            ["gh", "pr", "checks", number, "--json", "name,state,bucket,workflow"],
+            ["gh", "api", "-H", "Accept: application/vnd.github+json", path],
             capture_output=True, text=True, check=False)
     except FileNotFoundError as error:
         raise GhUnusable("gh is not installed or not on PATH") from error
-    return read_reply(exit_code=done.returncode, stdout=done.stdout, stderr=done.stderr)
+
+    body = done.stdout.strip()
+    if done.returncode != 0 or not body:
+        raise GhUnusable(
+            f"gh api {path} exited {done.returncode}: "
+            f"{(done.stderr.strip() or body)[:200] or '(silence)'}")
+    try:
+        reply = json.loads(body)
+    except json.JSONDecodeError as error:
+        raise GhUnusable(
+            f"gh api {path} printed something that is not JSON ({error}): "
+            f"{body[:200]!r}") from error
+    if not isinstance(reply, dict):
+        raise GhUnusable(
+            f"gh api {path} returned {type(reply).__name__}, not an object")
+    return reply
+
+
+#: What a job's status and conclusion mean, in the vocabulary `verdict` judges.
+#:
+#: Listed rather than derived because it is GitHub's vocabulary, not ours, and
+#: an entry missing from it must not quietly take a default: a word this has
+#: never heard of is read as a failure, which is the side that stops a merge
+#: rather than allowing one (L35, L113).
+CONCLUSION_BUCKETS = {
+    "success": "pass",
+    "neutral": "pass",
+    "skipped": "skipping",
+    "cancelled": "cancel",
+    "failure": "fail",
+    "timed_out": "fail",
+    "action_required": "fail",
+    "startup_failure": "fail",
+    "stale": "fail",
+}
+
+
+def bucket_of(status: str, conclusion: str | None) -> str:
+    """One job's state, as a bucket."""
+    if status != "completed":
+        return "pending"
+    return CONCLUSION_BUCKETS.get(conclusion or "", "fail")
+
+
+@dataclass(frozen=True)
+class Poll:
+    """One reading of a pull request, about one commit and saying which.
+
+    `unfinished` names the workflow runs at that commit which have not finished.
+    It is part of the answer rather than a detail of it: every job a run has
+    started can be listed and settled in the seconds the run spends finalising,
+    and a green read there is a green for work still going on.
+    """
+
+    head_sha: str
+    rows: list[dict] = field(default_factory=list)
+    unfinished: list[str] = field(default_factory=list)
+
+
+def _all_of(reply: dict, key: str, path: str) -> list[dict]:
+    """Every item GitHub said it had, refusing a page that did not hold them.
+
+    A short page is a smaller bar, and a smaller bar is a cheaper green.
+    """
+    items = reply.get(key) or []
+    total = reply.get("total_count")
+    if isinstance(total, int) and total != len(items):
+        raise GhUnusable(
+            f"gh api {path} said {total} {key} and sent {len(items)}, so the "
+            "reply did not fit on one page and the bar this would judge "
+            "against is incomplete")
+    return list(items)
+
+
+def poll_checks(number: str, *, api: Callable[[str], dict] = gh_json) -> Poll:
+    """Every check at the pull request's head commit, and nothing from another.
+
+    The head SHA is resolved first and then carried into every later question,
+    so a run belonging to a superseded push cannot answer for this one. GitHub
+    filters by `head_sha` server side; the SHA is checked again on each run and
+    again on each job, because a check whose two sides come from one lookup can
+    only prove that lookup is self-consistent (L70). A job carries its own
+    `head_sha`, which is a second reply and therefore a second witness.
+    """
+    pull = api(f"repos/{{owner}}/{{repo}}/pulls/{number}")
+    head_sha = str(((pull.get("head") or {}).get("sha") or ""))
+    repo = str((((pull.get("base") or {}).get("repo") or {}).get("full_name") or ""))
+    if not head_sha or not repo:
+        raise GhUnusable(
+            f"pull request {number} reported no head commit or no base "
+            "repository, so there is no commit to ask about")
+
+    runs_path = f"repos/{repo}/actions/runs?head_sha={head_sha}&per_page=100"
+    runs = _all_of(api(runs_path), "workflow_runs", runs_path)
+
+    rows: list[dict] = []
+    unfinished: list[str] = []
+    #: Newest run per workflow, so a re-run supersedes rather than doubles.
+    latest: dict[str, dict] = {}
+    for run in runs:
+        if str(run.get("head_sha")) != head_sha:
+            raise GhUnusable(
+                f"the runs at {head_sha[:12]} include one at "
+                f"{str(run.get('head_sha'))[:12]}, which is not an answer to "
+                "the question asked")
+        # The bar is derived from what a pull request triggers, so the rows
+        # must be too: a workflow that also runs on push would otherwise report
+        # its jobs twice at one commit, under names the bar holds once.
+        if run.get("event") != "pull_request":
+            continue
+        name = str(run.get("name") or "")
+        if int(run.get("id") or 0) >= int(latest.get(name, {}).get("id") or 0):
+            latest[name] = run
+
+    for name, run in sorted(latest.items()):
+        if run.get("status") != "completed":
+            unfinished.append(name)
+        jobs_path = f"repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100"
+        for job in _all_of(api(jobs_path), "jobs", jobs_path):
+            if str(job.get("head_sha")) != head_sha:
+                raise GhUnusable(
+                    f"the job {job.get('name')!r} in run {run['id']} names "
+                    f"commit {str(job.get('head_sha'))[:12]}, not the "
+                    f"{head_sha[:12]} it was asked about")
+            rows.append({
+                "workflow": str(job.get("workflow_name") or name),
+                "name": str(job.get("name") or ""),
+                "bucket": bucket_of(str(job.get("status") or ""),
+                                    job.get("conclusion")),
+            })
+    return Poll(head_sha=head_sha, rows=rows, unfinished=unfinished)
 
 
 # ── judging it ────────────────────────────────────────────────────────────────
@@ -329,7 +443,11 @@ def _label(check: ExpectedCheck) -> str:
     return f"{check.workflow} / {check.name}"
 
 
-def verdict(expected: Iterable[ExpectedCheck], reported: Sequence[dict]) -> Verdict:
+def verdict(
+    expected: Iterable[ExpectedCheck],
+    reported: Sequence[dict],
+    unfinished: Sequence[str] = (),
+) -> Verdict:
     """One answer about a set of checks, with an empty reply never green."""
     rows = {(row.get("workflow", ""), row.get("name", "")): row for row in reported}
 
@@ -354,8 +472,11 @@ def verdict(expected: Iterable[ExpectedCheck], reported: Sequence[dict]) -> Verd
     elif missing:
         state = "missing"
         summary = "never appeared: " + ", ".join(_label(check) for check in missing)
-    elif running:
-        state, summary = "running", "still running: " + ", ".join(running)
+    elif running or unfinished:
+        state = "running"
+        parts = list(running) + [f"the {name} run has not finished"
+                                 for name in unfinished]
+        summary = "still running: " + ", ".join(parts)
     else:
         state, summary = "green", f"all {len(rows)} reported checks settled and green"
     return Verdict(state=state, failed=failed, missing=missing, running=running,
@@ -416,13 +537,27 @@ ASK_ATTEMPTS = 3
 ASK_BACKOFF_SECONDS = (2.0, 4.0)
 
 
+def say(line: str) -> None:
+    """One line out, flushed.
+
+    Not bare `print`. Python block-buffers stdout the moment it is not a
+    terminal, which is exactly how a wait this long is run: redirected to a
+    file, or piped, while somebody watches for progress. Caught on 2026-08-17
+    watching #671, where the output file stayed empty for the whole wait, so
+    every elapsed line, every retry and every "the head moved" arrived at the
+    end or not at all. A wait that says nothing while it works is
+    indistinguishable from one that has stalled (L106).
+    """
+    print(line, flush=True)
+
+
 def ask(
     number: str,
     *,
-    fetch: Callable[[str], list],
+    poll: Callable[[str], Poll],
     sleep: Callable[[float], None],
     out: Callable[[str], None],
-) -> list:
+) -> Poll:
     """One poll, retried a few times before gh is declared unusable.
 
     Each retry is said out loud, because a retry nobody can see is
@@ -431,7 +566,7 @@ def ask(
     last: GhUnusable | None = None
     for attempt in range(1, ASK_ATTEMPTS + 1):
         try:
-            return fetch(number)
+            return poll(number)
         except GhUnusable as error:
             last = error
             if attempt == ASK_ATTEMPTS:
@@ -448,11 +583,11 @@ def ask(
 def main(
     argv: Sequence[str],
     *,
-    fetch: Callable[[str], list] = fetch_checks,
+    poll: Callable[[str], Poll] = poll_checks,
     now: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
     workflows: Path = WORKFLOWS,
-    out: Callable[[str], None] = print,
+    out: Callable[[str], None] = say,
 ) -> int:
     import time
 
@@ -473,20 +608,29 @@ def main(
     started = now()
     deadline = started + timeout
     answer = Verdict(state="missing", missing=sorted(expected))
+    judged = ""
 
     while True:
         try:
-            reported = ask(number, fetch=fetch, sleep=sleep, out=out)
+            reading = ask(number, poll=poll, sleep=sleep, out=out)
         except GhUnusable as error:
             out(f"cannot ask gh: {error}")
             return EXIT_UNUSABLE
 
-        answer = verdict(expected, reported)
+        # A commit landing mid-wait is said out loud rather than absorbed. A
+        # green earned by the commit before it is not a green for this one, and
+        # carrying on quietly would answer about work nothing had run against.
+        if judged and reading.head_sha != judged:
+            out(f"  head moved from {judged[:12]} to {reading.head_sha[:12]}, "
+                "so everything before this judged another commit")
+        judged = reading.head_sha
+
+        answer = verdict(expected, reading.rows, reading.unfinished)
         if answer.state == "green":
-            out(f"green: {answer.summary}")
+            out(f"green at {judged[:12]}: {answer.summary}")
             return EXIT_GREEN
         if answer.state == "red":
-            out(f"red: {answer.summary}")
+            out(f"red at {judged[:12]}: {answer.summary}")
             return EXIT_RED
 
         left = deadline - now()
@@ -494,11 +638,11 @@ def main(
             break
         # Elapsed and a count on every tick, so a wait that is progressing and
         # one that is stuck do not look identical.
-        out(f"  {now() - started:.0f}s elapsed, {len(reported)} reported: "
-            f"{answer.summary}")
+        out(f"  {now() - started:.0f}s elapsed at {judged[:12]}, "
+            f"{len(reading.rows)} reported: {answer.summary}")
         sleep(min(interval, left))
 
-    out(f"gave up after {timeout:.0f}s. {answer.summary}")
+    out(f"gave up after {timeout:.0f}s at {judged[:12]}. {answer.summary}")
     return EXIT_NEVER_APPEARED if answer.missing else EXIT_STILL_RUNNING
 
 

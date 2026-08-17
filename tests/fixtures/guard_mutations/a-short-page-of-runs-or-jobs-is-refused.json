@@ -1,0 +1,8 @@
+{
+  "name": "a-short-page-of-runs-or-jobs-is-refused",
+  "file": "tools/wait_for_checks.py",
+  "find": "    if isinstance(total, int) and total != len(items):",
+  "replace": "    if False:",
+  "test": "tests/test_wait_for_checks.py::test_a_reply_that_did_not_fit_on_one_page_is_refused",
+  "breaks": "a reply that did not fit on one page is judged as if it were the whole answer, so the bar silently drops by however many runs or jobs were left off and a smaller bar is a cheaper green (L98)"
+}

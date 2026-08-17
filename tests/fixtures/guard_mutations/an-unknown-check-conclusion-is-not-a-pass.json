@@ -1,0 +1,8 @@
+{
+  "name": "an-unknown-check-conclusion-is-not-a-pass",
+  "file": "tools/wait_for_checks.py",
+  "find": "    return CONCLUSION_BUCKETS.get(conclusion or \"\", \"fail\")",
+  "replace": "    return CONCLUSION_BUCKETS.get(conclusion or \"\", \"pass\")",
+  "test": "tests/test_wait_for_checks.py::test_a_conclusion_this_has_never_heard_of_is_not_a_pass",
+  "breaks": "a conclusion GitHub adds later, or a job with no conclusion at all, lands on the side that allows a merge. An unknown word must fail closed, because the permissive default is indistinguishable from a deliberate decision (L35)"
+}

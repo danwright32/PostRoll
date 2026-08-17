@@ -11,16 +11,37 @@ from the workflow files rather than pinned by hand, so adding a job raises the
 bar instead of silently lowering it (L96: a hand-written registry only checks
 what it lists).
 
-`tests/fixtures/gh_pr_checks_real.json` is the real reply for pull request 561,
-recorded with `gh pr checks 561 --json name,state,bucket,workflow` on
-2026-08-14, not a shape invented here (L48). It is what calibrates the
-derivation: eight checks, one of them the `full` guard job legitimately skipped
-because it only runs off pull requests.
+#669 is the other half, and the dangerous one. `gh pr checks` reports rows
+keyed by workflow and check NAME with no notion of which commit produced them,
+so a push landing while the previous run finishes mixes two commits' answers:
+measured on #667 on 2026-08-17, three consecutive pushes each reported
+`red: failed: Tests / python` within seconds, every one of them the previous
+commit's run. The mirror is a superseded run that PASSED reporting green for a
+commit nothing has judged. So every row here is now sourced through the head
+SHA and refused if it names another one (L173).
+
+The fixtures are real replies for pull request 667 at
+84e9dbf2b77495a73348cb81bd9de852f2edcf9b, recorded on 2026-08-17, not shapes
+invented here (L48):
+
+    gh api "repos/danwright32/PostRoll/actions/runs?head_sha=<sha>&per_page=100"
+    gh api "repos/danwright32/PostRoll/actions/runs/<id>/jobs?per_page=100"
+
+Each run's `repository`, `head_repository`, `pull_requests`, `head_commit`,
+`actor` and `triggering_actor`, and each job's `steps`, were deleted whole
+because nothing here reads them and they are most of the bytes. Every field
+this tool touches is as GitHub sent it.
+
+`tests/fixtures/gh_pr_checks_real.json` is kept beside them: the real
+`gh pr checks 561 --json name,state,bucket,workflow` reply from 2026-08-14,
+which is what the verdict rules were calibrated against and still are.
 """
 
 from __future__ import annotations
 
+import inspect
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -33,10 +54,13 @@ from tools.wait_for_checks import (
     EXIT_UNUSABLE,
     ExpectedCheck,
     GhUnusable,
+    Poll,
     UnreadableWorkflow,
+    bucket_of,
     expected_checks,
     main,
-    read_reply,
+    poll_checks,
+    say,
     verdict,
 )
 
@@ -44,6 +68,13 @@ from tools.wait_for_checks import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 REAL_REPLY = REPO_ROOT / "tests" / "fixtures" / "gh_pr_checks_real.json"
+REAL_RUNS = REPO_ROOT / "tests" / "fixtures" / "gh_actions_runs_real.json"
+REAL_JOBS = REPO_ROOT / "tests" / "fixtures" / "gh_actions_jobs_real.json"
+
+#: The head commit of pull request 667, which every recorded reply is about.
+HEAD_SHA = "84e9dbf2b77495a73348cb81bd9de852f2edcf9b"
+OTHER_SHA = "0ef38b2c1d4e5f60718293a4b5c6d7e8f9a0b1c2"
+REPO = "danwright32/PostRoll"
 
 
 def real_reply() -> list[dict[str, str]]:
@@ -52,6 +83,46 @@ def real_reply() -> list[dict[str, str]]:
 
 def real_expected() -> set[ExpectedCheck]:
     return expected_checks(WORKFLOWS)
+
+
+def real_runs() -> dict:
+    return json.loads(REAL_RUNS.read_text(encoding="utf-8"))
+
+
+def real_jobs() -> dict[str, dict]:
+    return json.loads(REAL_JOBS.read_text(encoding="utf-8"))
+
+
+class FakeApi:
+    """Answers `gh api` paths out of the recorded replies for #667.
+
+    A real seam rather than a reimplementation: the replies are GitHub's own,
+    so a field renamed here would be a field renamed in the recording (L52).
+    """
+
+    def __init__(
+        self,
+        *,
+        sha: str = HEAD_SHA,
+        runs: dict | None = None,
+        jobs: dict[str, dict] | None = None,
+    ) -> None:
+        self.sha = sha
+        self.runs = real_runs() if runs is None else runs
+        self.jobs = real_jobs() if jobs is None else jobs
+        self.paths: list[str] = []
+
+    def __call__(self, path: str) -> dict:
+        self.paths.append(path)
+        if "/pulls/" in path:
+            sha = self.sha() if callable(self.sha) else self.sha
+            return {"head": {"sha": sha}, "base": {"repo": {"full_name": REPO}}}
+        if "/jobs" in path:
+            run_id = path.split("/actions/runs/", 1)[1].split("/", 1)[0]
+            return self.jobs[run_id]
+        if "/actions/runs?" in path:
+            return self.runs
+        raise AssertionError(f"the tool asked for a path nothing recorded: {path}")
 
 
 # ── what the workflows promise ────────────────────────────────────────────────
@@ -245,6 +316,13 @@ def test_a_job_that_should_have_run_but_skipped_is_not_green() -> None:
     assert answer.failed == ["Tests / python"]
 
 
+def test_a_run_not_yet_finished_outranks_every_settled_check() -> None:
+    """Eight green jobs under a run still going on is not a green commit."""
+    answer = verdict(real_expected(), real_reply(), ["Tests"])
+    assert answer.state == "running"
+    assert "Tests" in answer.summary
+
+
 def test_checks_nobody_derived_do_not_break_green() -> None:
     """A third-party check is not the bar, so it cannot lower or raise it."""
     rows = real_reply() + [
@@ -254,46 +332,135 @@ def test_checks_nobody_derived_do_not_break_green() -> None:
     assert verdict(real_expected(), rows).state == "green"
 
 
-# ── what gh actually said ─────────────────────────────────────────────────────
+# ── a run at another commit is not an answer ──────────────────────────────────
 
 
-def test_an_empty_json_array_reads_as_no_checks() -> None:
-    assert read_reply(exit_code=0, stdout="[]", stderr="") == []
+def test_the_rows_read_out_of_a_real_reply_are_the_checks_the_workflows_promise() -> None:
+    """Calibration: GitHub's own runs and jobs against the derived bar.
 
-
-def test_ghs_own_no_checks_message_reads_as_no_checks() -> None:
-    """`no checks reported on the '%s' branch`, gh's own words.
-
-    Read out of the shipped binary (gh 2.89.0) rather than remembered, because
-    a wait calibrated on a message gh does not actually print would spend its
-    whole timeout on the unusable path (L52).
+    Two independent routes to the same set, the workflow files and what GitHub
+    actually ran, so agreement means something (L70).
     """
-    assert read_reply(
-        exit_code=1, stdout="",
-        stderr="no checks reported on the 'ci-check-wait-564' branch\n") == []
+    poll = poll_checks("667", api=FakeApi())
+    reported = {(row["workflow"], row["name"]) for row in poll.rows}
+    assert reported == {(check.workflow, check.name) for check in real_expected()}
+    assert poll.head_sha == HEAD_SHA
+    assert verdict(real_expected(), poll.rows, poll.unfinished).state == "green"
 
 
-def test_the_no_checks_message_is_read_on_either_stream() -> None:
-    """Which stream it lands on is gh's choice, not a fact worth depending on.
+def test_the_head_sha_is_asked_for_and_carried_into_the_query() -> None:
+    """The whole point of #669: the question names a commit."""
+    api = FakeApi()
+    poll_checks("667", api=api)
+    assert any("/pulls/667" in path for path in api.paths), api.paths
+    assert any(f"head_sha={HEAD_SHA}" in path for path in api.paths), api.paths
 
-    Getting it wrong in the safe direction still costs the whole registration
-    window, which is the exact window this tool exists to survive.
+
+def test_a_run_at_another_commit_is_refused_rather_than_counted() -> None:
+    """#669 measured: the previous commit's failed run answered for the new one.
+
+    GitHub filters by `head_sha` server side, so this can only fire if that
+    filter is dropped, wrong, or asked with the wrong SHA. It is the one thing
+    the tool must never get away with, so it is checked here too rather than
+    trusted (L70).
     """
-    assert read_reply(
-        exit_code=0,
-        stdout="no checks reported on the 'ci-check-wait-564' branch\n",
-        stderr="") == []
+    runs = real_runs()
+    runs["workflow_runs"][0] = dict(runs["workflow_runs"][0], head_sha=OTHER_SHA)
+    with pytest.raises(GhUnusable, match=OTHER_SHA[:12]):
+        poll_checks("667", api=FakeApi(runs=runs))
 
 
-def test_gh_failing_for_any_other_reason_is_not_no_checks() -> None:
+def test_a_job_at_another_commit_is_refused_rather_than_counted() -> None:
+    """Each job names its own commit, which is a second, independent witness.
+
+    A run object and its jobs are two API replies, so a job carrying another
+    SHA is caught even when the run it came from claims the right one.
+    """
+    jobs = real_jobs()
+    jobs["32065034890"]["jobs"][1] = dict(
+        jobs["32065034890"]["jobs"][1], head_sha=OTHER_SHA)
+    with pytest.raises(GhUnusable, match="python"):
+        poll_checks("667", api=FakeApi(jobs=jobs))
+
+
+def test_a_run_still_in_flight_is_never_green() -> None:
+    """"Every run completed" is part of the answer, not a detail of it.
+
+    All eight jobs can be listed and settled in the seconds a run spends
+    finalising, and a green read there is a green for work still going on.
+    """
+    runs = real_runs()
+    runs["workflow_runs"][2] = dict(
+        runs["workflow_runs"][2], status="in_progress", conclusion=None)
+    poll = poll_checks("667", api=FakeApi(runs=runs))
+    assert poll.unfinished == ["Tests"]
+    answer = verdict(real_expected(), poll.rows, poll.unfinished)
+    assert answer.state == "running"
+    assert "Tests" in answer.summary
+
+
+def test_a_run_triggered_by_something_other_than_the_pull_request_is_not_the_bar() -> None:
+    """The bar is derived from what a pull request triggers, so the rows must be.
+
+    A workflow that also runs on push would otherwise report its jobs twice at
+    one commit, under names the bar holds once.
+    """
+    runs = real_runs()
+    runs["total_count"] += 1
+    #: A higher id than any real run, so keeping the newest run per workflow
+    #: cannot be what drops it and the event is the only thing that can.
+    runs["workflow_runs"].append(
+        dict(runs["workflow_runs"][2], id=99999999999, event="push"))
+    api = FakeApi(runs=runs)
+    poll = poll_checks("667", api=api)
+    assert not any("/99999999999/jobs" in path for path in api.paths), api.paths
+    assert len(poll.rows) == len(real_expected())
+
+
+def test_a_reply_that_did_not_fit_on_one_page_is_refused() -> None:
+    """A short page is a smaller bar, and a smaller bar is a cheaper green."""
+    runs = dict(real_runs(), total_count=9)
+    with pytest.raises(GhUnusable, match="9"):
+        poll_checks("667", api=FakeApi(runs=runs))
+
+
+def test_gh_failing_is_unusable_rather_than_an_empty_answer() -> None:
     """An auth failure must not spend the whole timeout looking like patience."""
+    def api(_path: str) -> dict:
+        raise GhUnusable("gh: authentication required")
+
     with pytest.raises(GhUnusable, match="authentication"):
-        read_reply(exit_code=4, stdout="", stderr="gh: authentication required\n")
+        poll_checks("667", api=api)
 
 
-def test_output_that_is_not_json_is_not_no_checks() -> None:
-    with pytest.raises(GhUnusable):
-        read_reply(exit_code=0, stdout="checks are fine\n", stderr="")
+# ── what a status and a conclusion mean ───────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("status", "conclusion", "expected"),
+    [
+        ("completed", "success", "pass"),
+        ("completed", "neutral", "pass"),
+        ("completed", "skipped", "skipping"),
+        ("completed", "cancelled", "cancel"),
+        ("completed", "failure", "fail"),
+        ("completed", "timed_out", "fail"),
+        ("completed", "action_required", "fail"),
+        ("completed", "startup_failure", "fail"),
+        ("queued", None, "pending"),
+        ("in_progress", None, "pending"),
+        ("waiting", None, "pending"),
+    ],
+)
+def test_each_status_and_conclusion_reads_as_one_bucket(
+        status: str, conclusion: str | None, expected: str) -> None:
+    assert bucket_of(status, conclusion) == expected
+
+
+def test_a_conclusion_this_has_never_heard_of_is_not_a_pass() -> None:
+    """GitHub may add one, and the safe side of an unknown word is red (L35)."""
+    assert bucket_of("completed", "exploded") == "fail"
+    assert bucket_of("completed", None) == "fail"
 
 
 # ── the exit codes ────────────────────────────────────────────────────────────
@@ -311,16 +478,17 @@ class FakeClock:
 
 
 def run(replies: list[list[dict[str, str]]], *, timeout: str = "600") -> int:
-    """Drive main() over a scripted series of gh replies."""
+    """Drive main() over a scripted series of polls, all at one commit."""
     clock = FakeClock()
     remaining = list(replies)
 
-    def fetch(_number: str) -> list[dict[str, str]]:
-        return remaining.pop(0) if len(remaining) > 1 else remaining[0]
+    def poll(_number: str) -> Poll:
+        rows = remaining.pop(0) if len(remaining) > 1 else remaining[0]
+        return Poll(head_sha=HEAD_SHA, rows=rows)
 
     return main(
         ["7", "--timeout", timeout, "--interval", "30"],
-        fetch=fetch, now=clock.now, sleep=clock.sleep,
+        poll=poll, now=clock.now, sleep=clock.sleep,
         workflows=WORKFLOWS, out=lambda _line: None)
 
 
@@ -356,12 +524,12 @@ def test_gh_being_unusable_throughout_exits_unusable() -> None:
     momentary API error is not evidence that gh cannot be asked. What must not
     change is the verdict when the failure persists.
     """
-    def fetch(_number: str) -> list[dict[str, str]]:
+    def poll(_number: str) -> Poll:
         raise GhUnusable("gh: authentication required")
 
     clock = FakeClock()
     code = main(["7", "--timeout", "600", "--interval", "30"],
-                fetch=fetch, now=clock.now, sleep=clock.sleep,
+                poll=poll, now=clock.now, sleep=clock.sleep,
                 workflows=WORKFLOWS, out=lambda _line: None)
     assert code == EXIT_UNUSABLE
     # Bounded: a permanent failure costs seconds, not the whole timeout.
@@ -381,15 +549,15 @@ def test_one_transient_gh_failure_does_not_end_the_wait() -> None:
         real_reply(),
     ]
 
-    def fetch(_number: str) -> list[dict[str, str]]:
+    def poll(_number: str) -> Poll:
         nxt = replies.pop(0) if len(replies) > 1 else replies[0]
         if isinstance(nxt, GhUnusable):
             raise nxt
-        return nxt
+        return Poll(head_sha=HEAD_SHA, rows=nxt)
 
     clock = FakeClock()
     code = main(["7", "--timeout", "600", "--interval", "30"],
-                fetch=fetch, now=clock.now, sleep=clock.sleep,
+                poll=poll, now=clock.now, sleep=clock.sleep,
                 workflows=WORKFLOWS, out=lambda _line: None)
     assert code == EXIT_GREEN
 
@@ -398,12 +566,12 @@ def test_a_retried_failure_is_said_out_loud() -> None:
     """A retry nobody can see is indistinguishable from a wait that stalled."""
     lines: list[str] = []
 
-    def fetch(_number: str) -> list[dict[str, str]]:
+    def poll(_number: str) -> Poll:
         raise GhUnusable("HTTP 503: No server is currently available")
 
     clock = FakeClock()
     main(["7", "--timeout", "600", "--interval", "30"],
-         fetch=fetch, now=clock.now, sleep=clock.sleep,
+         poll=poll, now=clock.now, sleep=clock.sleep,
          workflows=WORKFLOWS, out=lines.append)
     assert any("retr" in line.lower() for line in lines), lines
     assert any("503" in line for line in lines), lines
@@ -411,14 +579,51 @@ def test_a_retried_failure_is_said_out_loud() -> None:
 
 def test_retrying_does_not_run_past_the_deadline() -> None:
     """The deadline is the deadline. Retries live inside it, not beside it."""
-    def fetch(_number: str) -> list[dict[str, str]]:
+    def poll(_number: str) -> Poll:
         raise GhUnusable("HTTP 503: No server is currently available")
 
     clock = FakeClock()
     main(["7", "--timeout", "1", "--interval", "30"],
-         fetch=fetch, now=clock.now, sleep=clock.sleep,
+         poll=poll, now=clock.now, sleep=clock.sleep,
          workflows=WORKFLOWS, out=lambda _line: None)
     assert clock.t <= 30
+
+
+def test_the_default_voice_flushes_every_line() -> None:
+    """Caught live on 2026-08-17 running this against #671 in the background.
+
+    Every progress line here exists so a wait that is working and a wait that
+    has stalled do not look identical (L106), and Python block-buffers stdout
+    the moment it is not a terminal, which is precisely how a long wait is run.
+    The output file stayed empty for the whole wait.
+    """
+    class Recorder:
+        def __init__(self) -> None:
+            self.written = ""
+            self.flushes = 0
+
+        def write(self, text: str) -> int:
+            self.written += text
+            return len(text)
+
+        def flush(self) -> None:
+            self.flushes += 1
+
+    recorder = Recorder()
+    original = sys.stdout
+    sys.stdout = recorder  # type: ignore[assignment]
+    try:
+        say("120s elapsed at 84e9dbf2b774")
+    finally:
+        sys.stdout = original
+
+    assert "120s elapsed" in recorder.written
+    assert recorder.flushes >= 1, "the line was written and left in the buffer"
+
+
+def test_the_wait_speaks_through_the_flushing_voice_by_default() -> None:
+    """A flushing printer nothing calls is a wait that still says nothing (L3)."""
+    assert inspect.signature(main).parameters["out"].default is say
 
 
 def test_every_exit_code_is_distinct() -> None:
@@ -432,8 +637,44 @@ def test_the_wait_says_what_it_was_waiting_for() -> None:
     lines: list[str] = []
     clock = FakeClock()
     main(["7", "--timeout", "60", "--interval", "30"],
-         fetch=lambda _n: [], now=clock.now, sleep=clock.sleep,
+         poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=[]),
+         now=clock.now, sleep=clock.sleep,
          workflows=WORKFLOWS, out=lines.append)
     said = "\n".join(lines)
     assert "Tests / python" in said
     assert "60" in said
+
+
+def test_every_verdict_names_the_commit_it_judged() -> None:
+    """So a green can be checked against the commit about to be merged."""
+    lines: list[str] = []
+    clock = FakeClock()
+    code = main(["7", "--timeout", "600", "--interval", "30"],
+                poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
+                now=clock.now, sleep=clock.sleep,
+                workflows=WORKFLOWS, out=lines.append)
+    assert code == EXIT_GREEN
+    assert HEAD_SHA[:12] in lines[-1], lines[-1]
+
+
+def test_a_commit_landing_mid_wait_is_said_out_loud_and_judged_afresh() -> None:
+    """A green earned by the old commit is not a green for the new one.
+
+    Silently carrying on would answer about a commit nothing had run against,
+    which is the same defect one push later.
+    """
+    lines: list[str] = []
+    clock = FakeClock()
+    seen = [Poll(head_sha=OTHER_SHA, rows=[]),
+            Poll(head_sha=HEAD_SHA, rows=real_reply())]
+
+    def poll(_number: str) -> Poll:
+        return seen.pop(0) if len(seen) > 1 else seen[0]
+
+    code = main(["7", "--timeout", "600", "--interval", "30"],
+                poll=poll, now=clock.now, sleep=clock.sleep,
+                workflows=WORKFLOWS, out=lines.append)
+    said = "\n".join(lines)
+    assert code == EXIT_GREEN
+    assert OTHER_SHA[:12] in said and HEAD_SHA[:12] in said, said
+    assert "moved" in said, said
