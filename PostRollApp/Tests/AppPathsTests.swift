@@ -117,11 +117,16 @@ final class AppPathsTests: XCTestCase {
         XCTAssertEqual(AppPaths.projectRootProblem(dir), .notACheckout(dir))
     }
 
+    /// A checkout is only usable with the Python environment inside it, which
+    /// is what the app actually runs (#651), so the fixture builds both.
     func testARealCheckoutHasNoProblem() throws {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("pr-checkout-\(UUID().uuidString)")
         try fm.createDirectory(at: dir.appendingPathComponent("postroll"),
                                withIntermediateDirectories: true)
+        let bin = dir.appendingPathComponent("venv/bin")
+        try fm.createDirectory(at: bin, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\n".utf8).write(to: bin.appendingPathComponent("python3"))
         defer { try? fm.removeItem(at: dir) }
         XCTAssertNil(AppPaths.projectRootProblem(dir))
     }
@@ -161,20 +166,29 @@ final class AppPathsTests: XCTestCase {
             ProjectRootText.message(.notRecorded),
             ProjectRootText.message(.missing(dir)),
             ProjectRootText.message(.notACheckout(dir)),
+            ProjectRootText.message(.noEnvironment(dir)),
         ]
-        XCTAssertEqual(Set(messages).count, 3, "distinct causes need distinct messages")
+        XCTAssertEqual(Set(messages).count, 4, "distinct causes need distinct messages")
     }
 
-    /// All three name the same thing the same way. Without this, the sentence a
-    /// caller gets depends on which cause it hit, and a test asserting the
-    /// message names the code folder passes or fails on the machine's state
-    /// rather than on the code (L118).
-    func testEveryProblemCallsItTheCodeFolder() {
+    /// The three problems about the FOLDER name it the same way. Without this,
+    /// the sentence a caller gets depends on which cause it hit, and a test
+    /// asserting the message names the code folder passes or fails on the
+    /// machine's state rather than on the code (L118).
+    ///
+    /// `noEnvironment` is deliberately not in this list. Its subject genuinely
+    /// is something else: the folder is present and correct, and what is
+    /// missing is the Python environment inside it. Calling that a code folder
+    /// problem would be the same word for two different things.
+    func testEveryProblemAboutTheFolderCallsItTheCodeFolder() {
         let dir = URL(fileURLWithPath: "/Volumes/Work/Apps/PostRoll")
         for problem: AppPaths.ProjectRootProblem in [.notRecorded, .missing(dir), .notACheckout(dir)] {
             XCTAssertTrue(ProjectRootText.message(problem).lowercased().contains("code folder"),
                           "\(problem) does not call it the code folder")
         }
+        XCTAssertTrue(
+            ProjectRootText.message(.noEnvironment(dir)).lowercased().contains("environment"),
+            "a missing environment must name the environment, not the folder")
     }
 
     func testDerivedPathsHangOffRoot() {

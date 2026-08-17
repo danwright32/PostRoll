@@ -39,26 +39,24 @@ actor PythonBridge {
     /// refusal rather than letting it become a path under a folder that is not
     /// there.
     nonisolated let projectRoot: URL?
-    nonisolated let python3: String
 
     private init() {
         // The Python code (venv, source, preview output) lives in the project
         // checkout, separate from the user data root (AppPaths.root).
-        let root = AppPaths.projectRoot
-        projectRoot = root
+        projectRoot = AppPaths.projectRoot
+    }
 
-        // Prefer the project venv so all pip packages are available
-        let venvPython = root?.appendingPathComponent("venv/bin/python3").path
-        if let venvPython, FileManager.default.fileExists(atPath: venvPython) {
-            python3 = venvPython
-        } else {
-            let candidates = [
-                "/opt/homebrew/bin/python3",
-                "/usr/local/bin/python3",
-                "/usr/bin/python3",
-            ]
-            python3 = candidates.first { FileManager.default.fileExists(atPath: $0) } ?? "python3"
-        }
+    /// The interpreter a run uses, which is always the checkout's own (#651).
+    ///
+    /// There is deliberately no fallback to a Python found on the machine. One
+    /// used to be picked silently from Homebrew, /usr/local or /usr/bin when
+    /// the checkout had no environment, and a system Python does not have the
+    /// packages the pipeline imports, so the run failed later, somewhere else,
+    /// with an import error that named none of this. `preflight` refuses by
+    /// name before it gets that far, which means this path is only ever reached
+    /// with an environment that exists.
+    nonisolated static func interpreter(in projectRoot: URL) -> String {
+        projectRoot.appendingPathComponent("venv/bin/python3").path
     }
 
     /// The checkout, or a refusal naming why it cannot be used (#648).
@@ -2119,10 +2117,12 @@ actor PythonBridge {
     /// the subprocess is terminated immediately via SIGTERM.
     private func runProcess(args: [String], timeout: TimeInterval = 1800,
                             forcePaidPath: Bool = false) async throws {
-        let python = python3
         // Refuse here rather than let the script's `cd` fail and be read as a
         // missing photo (#648). Nothing has been launched or paid for yet.
         let root = try Self.preflight(projectRoot: projectRoot)
+        // Derived from the root this run was cleared to use, so the interpreter
+        // and the working directory can never come from different checkouts.
+        let python = Self.interpreter(in: root)
         // Logs go under the data root (Application Support), NOT the Documents
         // checkout: an absolute log path lets the subprocess write there while
         // its cwd stays at the checkout, so generation no longer writes to the
