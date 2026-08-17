@@ -157,17 +157,28 @@ ffmpeg and the macOS system fonts.
 python tools/wait_for_checks.py <pr-number>
 ```
 
-Do not read `gh pr checks` by hand before merging. In the window between a push
-and the checks being registered it reports nothing at all, which is
-indistinguishable from everything passing, and twice on 2026-08-14 that was
-nearly merged on (#564).
+Do not read `gh pr checks` by hand before merging. It gets two things wrong,
+and both of them read as an answer. In the window between a push and the checks
+being registered it reports nothing at all, which is indistinguishable from
+everything passing, and twice on 2026-08-14 that was nearly merged on (#564).
+It also reports rows keyed by workflow and check name with no notion of which
+commit produced them, so a push landing while the previous run finishes mixes
+two commits' answers: on 2026-08-17 three consecutive pushes each reported the
+previous commit's failure within seconds, and the mirror of that is a
+superseded run reporting green for a commit nothing has judged (#669).
 
 The tool derives the checks it is waiting for from the workflow files, so
-adding a job raises the bar with no edit to the tool, and it exits `0` only
-when every one of them has settled green. `1` means red, `2` means a check
-never appeared, `3` means the deadline passed with something still running, and
-`4` means it could not read the workflows or reach `gh`. Only `0` may be merged
-on.
+adding a job raises the bar with no edit to the tool. It resolves the pull
+request's head commit and asks the Actions API for the runs at exactly that
+SHA, refusing any run or job that names another one, and it will not call a
+commit green while a run at it has yet to finish. Every line it prints names
+the commit it judged, so a green can be checked against the commit about to be
+merged.
+
+It exits `0` only when every expected check has settled green. `1` means red,
+`2` means a check never appeared, `3` means the deadline passed with something
+still running, and `4` means it could not read the workflows or reach `gh`.
+Only `0` may be merged on.
 
 ## Layout
 
