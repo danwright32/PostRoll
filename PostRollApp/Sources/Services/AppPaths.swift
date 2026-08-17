@@ -391,8 +391,11 @@ enum ProjectRootText {
                  + "It looked in \(root.path), and there is no folder there. If you moved the "
                  + "project, reinstall PostRoll from where it is now and it will point at the "
                  + "new place. Your photos and saved events are not affected."
+        // "code folder" in all three, deliberately: one word for one thing, so
+        // two of these read side by side cannot look like different subjects
+        // (L118).
         case .notACheckout(let root):
-            return "PostRoll found \(root.path), but the PostRoll code is not inside it, so it "
+            return "PostRoll found \(root.path), but its code folder is not inside it, so it "
                  + "cannot generate anything. If you moved the project, reinstall PostRoll from "
                  + "where it is now. Your photos and saved events are not affected."
         }

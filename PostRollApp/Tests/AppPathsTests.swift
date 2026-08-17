@@ -165,6 +165,18 @@ final class AppPathsTests: XCTestCase {
         XCTAssertEqual(Set(messages).count, 3, "distinct causes need distinct messages")
     }
 
+    /// All three name the same thing the same way. Without this, the sentence a
+    /// caller gets depends on which cause it hit, and a test asserting the
+    /// message names the code folder passes or fails on the machine's state
+    /// rather than on the code (L118).
+    func testEveryProblemCallsItTheCodeFolder() {
+        let dir = URL(fileURLWithPath: "/Volumes/Work/Apps/PostRoll")
+        for problem: AppPaths.ProjectRootProblem in [.notRecorded, .missing(dir), .notACheckout(dir)] {
+            XCTAssertTrue(ProjectRootText.message(problem).lowercased().contains("code folder"),
+                          "\(problem) does not call it the code folder")
+        }
+    }
+
     func testDerivedPathsHangOffRoot() {
         XCTAssertEqual(AppPaths.eventsFile, AppPaths.root.appendingPathComponent("events.json"))
         XCTAssertEqual(AppPaths.analyticsFile, AppPaths.root.appendingPathComponent("analytics.json"))
