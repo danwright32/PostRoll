@@ -1,8 +1,0 @@
-{
-  "name": "clip-reel-title-reads-against-its-footage",
-  "file": "postroll/media/generate_title_card.py",
-  "find": "draw.text((lx, ly), line, font=font, fill=TEXT_WHITE)",
-  "replace": "draw.text((lx, ly), line, font=font, fill=(70, 55, 48))",
-  "test": "tests/test_golden_frames.py::test_the_clip_reel_matches_its_reference_frame",
-  "breaks": "Friday's title is drawn in the colour of the footage behind it, so the reel ships with an invisible title (the regression this repo has had three times)"
-}

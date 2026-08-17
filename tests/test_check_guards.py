@@ -427,11 +427,36 @@ def test_the_grand_total_line_is_the_one_that_counts():
 
 
 def test_pytest_exit_codes_map_to_the_three_outcomes():
-    assert classify_pytest(1).outcome is Outcome.KILLED
-    assert classify_pytest(0).outcome is Outcome.SURVIVED
+    assert classify_pytest(1, "1 failed in 0.4s").outcome is Outcome.KILLED
+    assert classify_pytest(0, "1 passed in 0.4s").outcome is Outcome.SURVIVED
     # 5 is "no tests collected", 2 is an internal error: neither is a verdict.
-    assert classify_pytest(5).outcome is Outcome.ERROR
-    assert classify_pytest(2).outcome is Outcome.ERROR
+    assert classify_pytest(5, "no tests ran").outcome is Outcome.ERROR
+    assert classify_pytest(2, "INTERNALERROR").outcome is Outcome.ERROR
+
+
+def test_a_test_that_skipped_is_not_a_guard_that_survived():
+    """A skip exits 0, and 0 was read as the guard staying green (#665).
+
+    That verdict is an accusation: SURVIVED says the guard is not protecting the
+    code and needs rewriting. A guard whose test needs an external the runner
+    does not have (ffmpeg, on the sweep's own runner) is fine, and gets sent
+    back to be rewritten anyway, while the thing actually missing goes unnamed.
+    Measured on a real run: the clip reel's legibility guard was reported
+    SURVIVED on a runner with no ffmpeg, having never executed.
+    """
+    verdict = classify_pytest(0, "1 skipped in 0.42s")
+
+    assert verdict.outcome is Outcome.ERROR
+    assert "skip" in verdict.detail.lower(), verdict.detail
+
+
+def test_a_run_that_both_passed_and_skipped_is_still_a_survival():
+    # A parametrised guard where one case is skipped and another really ran and
+    # stayed green. Something DID execute against the broken code and did not
+    # notice, which is exactly what SURVIVED means.
+    verdict = classify_pytest(0, "1 passed, 1 skipped in 0.42s")
+
+    assert verdict.outcome is Outcome.SURVIVED
 
 
 # ── Running one entry: mutate, run, restore ───────────────────────────────────

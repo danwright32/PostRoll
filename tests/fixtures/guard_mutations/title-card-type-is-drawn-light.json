@@ -1,0 +1,8 @@
+{
+  "name": "title-card-type-is-drawn-light",
+  "file": "postroll/media/generate_title_card.py",
+  "find": "draw.text((lx, ly), line, font=font, fill=TEXT_WHITE)",
+  "replace": "draw.text((lx, ly), line, font=font, fill=(70, 55, 48))",
+  "test": "tests/test_generate_title_card.py::test_the_type_is_drawn_light_enough_to_sit_over_footage",
+  "breaks": "Friday's title is drawn dark over photographic footage, so the reel ships with an invisible title (the regression this repo has had three times)"
+}

@@ -279,9 +279,30 @@ def classify_swift(returncode: int, output: str) -> Verdict:
                    "which is a tooling problem rather than a verdict")
 
 
-def classify_pytest(returncode: int) -> Verdict:
+#: A pytest summary reporting skips and nothing that ran.
+#:
+#: Read off the summary line rather than the exit code because a skip exits 0,
+#: exactly as a pass does. Both halves are required: a run where one case skipped
+#: and another really executed IS a verdict, and only a run where nothing
+#: executed at all is not.
+_SKIPPED = re.compile(r"\b\d+ skipped\b")
+_PASSED = re.compile(r"\b\d+ passed\b")
+
+
+def classify_pytest(returncode: int, output: str = "") -> Verdict:
     if returncode == 1:
         return Verdict(Outcome.KILLED, "pytest reported failing tests")
+    if returncode == 0 and _SKIPPED.search(output) and not _PASSED.search(output):
+        # SURVIVED is an accusation: it says the guard is not protecting its
+        # code and needs rewriting. A test that never ran cannot support it, and
+        # a guard needing an external this runner lacks would be sent back to be
+        # rewritten while the missing external went unnamed (#665, measured: the
+        # clip reel's legibility guard reported SURVIVED on a runner with no
+        # ffmpeg).
+        return Verdict(Outcome.ERROR,
+                       "the guard's test SKIPPED rather than running, so there "
+                       "is no verdict on it. Whatever it needs (ffmpeg, the "
+                       "macOS fonts) is missing here, not from the guard.")
     if returncode == 0:
         return Verdict(Outcome.SURVIVED, "pytest passed on the broken code")
     if returncode == 5:
@@ -295,7 +316,7 @@ def classify_pytest(returncode: int) -> Verdict:
 def classify(entry: Entry, returncode: int, output: str) -> Verdict:
     if entry.test.startswith("PostRollTests/"):
         return classify_swift(returncode, output)
-    return classify_pytest(returncode)
+    return classify_pytest(returncode, output)
 
 
 def _git(repo_root: Path, *args: str) -> str | None:
