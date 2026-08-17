@@ -2188,7 +2188,7 @@ actor PythonBridge {
                 ? nil
                 : ProcessInfo.processInfo.environment.merging(apiKey.environment) { _, new in new },
             timeout: timeout,
-            logFallback: {
+            processOutput: {
                 // Python's stderr is redirected into this run's own file by the
                 // script above, so the pipe only ever carries pre-exec shell
                 // output. Reading that private file means no other run can have

@@ -255,13 +255,20 @@ enum PythonBridgeLog {
     /// empty, which happens when the shell died before the redirect existed (a
     /// bad interpreter, a missing cwd): degrading to less context beats
     /// degrading to an empty error.
-    static func runOutput(runLog: URL, sharedLog: URL, marker: String) -> String {
+    ///
+    /// Which of the two it came from is returned rather than discarded (#650).
+    /// The caller has to weigh this against what the launcher shell said, and
+    /// the two sources do not deserve equal weight: the run's own file is
+    /// certainly this run, while a tail of the shared log may belong to another
+    /// one entirely, which is the whole reason per-run files exist (#90).
+    static func runOutput(runLog: URL, sharedLog: URL,
+                          marker: String) -> ProcessRunner.ProcessOutput {
         if let own = try? String(contentsOf: runLog, encoding: .utf8),
            !own.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return own
+            return .own(own)
         }
-        guard let shared = try? String(contentsOf: sharedLog, encoding: .utf8) else { return "" }
-        return scopedTail(shared, marker: marker)
+        guard let shared = try? String(contentsOf: sharedLog, encoding: .utf8) else { return .none }
+        return .sharedTail(scopedTail(shared, marker: marker))
     }
 
     /// Trim the shared log to its last `keepingLines` lines.

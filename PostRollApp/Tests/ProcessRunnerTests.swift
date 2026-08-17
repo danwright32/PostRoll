@@ -63,7 +63,7 @@ final class ProcessRunnerTests: XCTestCase {
         let runner = ProcessRunner(executable: URL(fileURLWithPath: "/bin/sh"),
                                    arguments: ["-c", "exit 1"],
                                    timeout: 10,
-                                   logFallback: { "Traceback: the real reason" })
+                                   processOutput: { .own("Traceback: the real reason") })
 
         do {
             try await runner.run()
@@ -79,11 +79,71 @@ final class ProcessRunnerTests: XCTestCase {
         }
     }
 
-    func testTheLogTailIsNotUsedWhenStderrSaidSomething() async {
+    // MARK: - Which text a failure is diagnosed FROM (#650)
+    //
+    // Two sources can supply it: the stderr pipe, which carries what the
+    // LAUNCHER (the shell) said before `exec`, and the run's log, which carries
+    // what the PROCESS said. They are not interchangeable, and which one is
+    // trustworthy depends on where the log text came from:
+    //
+    //   * the run's OWN private file is definitely this run's process output,
+    //     so it is the failure, and the shell's line is context around it.
+    //   * a tail of the SHARED log may belong to another run entirely (#90), so
+    //     it is only worth reading when the pipe said nothing at all.
+    //
+    // Collapsing that into "whichever is non-empty" hands every diagnosis to
+    // the shell, which speaks exactly when the real work never started.
+
+    func testTheProcessOwnOutputWinsOverWhateverTheShellSaid() async {
+        let runner = ProcessRunner(
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "echo 'zsh:cd:2: no such file or directory: /gone' >&2; exit 1"],
+            timeout: 10,
+            processOutput: { .own("Traceback: TypeError in collage_planner.py") })
+
+        do {
+            try await runner.run()
+            XCTFail("a nonzero exit is a failure")
+        } catch let error as PythonBridgeError {
+            guard case .scriptFailed(_, let stderr) = error else {
+                return XCTFail("expected scriptFailed, got \(error)")
+            }
+            XCTAssertTrue(stderr.contains("TypeError"),
+                          "the failure is what the PROCESS said: \(stderr)")
+            XCTAssertFalse(stderr.contains("zsh:cd:"),
+                           "the shell's line must not be classified as the failure: \(stderr)")
+        } catch {
+            XCTFail("expected PythonBridgeError, got \(error)")
+        }
+    }
+
+    /// An empty own-file is not an answer. It means the process wrote nothing,
+    /// so the shell's line is all there is and it is the honest thing to show.
+    func testAnEmptyOwnOutputStillFallsBackToWhatTheShellSaid() async {
+        let runner = ProcessRunner(
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "echo 'the shell could not start it' >&2; exit 1"],
+            timeout: 10,
+            processOutput: { .own("   ") })
+
+        do {
+            try await runner.run()
+            XCTFail("a nonzero exit is a failure")
+        } catch let error as PythonBridgeError {
+            guard case .scriptFailed(_, let stderr) = error else {
+                return XCTFail("expected scriptFailed, got \(error)")
+            }
+            XCTAssertTrue(stderr.contains("could not start it"), stderr)
+        } catch {
+            XCTFail("expected PythonBridgeError, got \(error)")
+        }
+    }
+
+    func testASharedTailIsNotUsedWhenStderrSaidSomething() async {
         let runner = ProcessRunner(executable: URL(fileURLWithPath: "/bin/sh"),
                                    arguments: ["-c", "echo 'the real reason' >&2; exit 1"],
                                    timeout: 10,
-                                   logFallback: { "an older, unrelated log entry" })
+                                   processOutput: { .sharedTail("an older, unrelated log entry") })
 
         do {
             try await runner.run()

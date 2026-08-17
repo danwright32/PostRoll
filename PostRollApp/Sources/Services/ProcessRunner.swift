@@ -17,11 +17,52 @@ struct ProcessRunner {
     /// After this long the child is terminated and `.timedOut` is thrown. No
     /// invocation may hang the UI forever.
     var timeout: TimeInterval = 1800
-    /// Consulted only when the child exits nonzero having written nothing to
-    /// stderr, which is the normal case here because the script redirects
-    /// Python's stderr into the shared log. Without it the error message would
-    /// be an empty string.
-    var logFallback: (@Sendable () -> String)? = nil
+    /// What the PROCESS itself wrote, as distinct from what the launcher shell
+    /// wrote to the stderr pipe (#650).
+    ///
+    /// The script redirects Python's stderr into a log file, so the pipe
+    /// normally carries only whatever the shell said before `exec`, which is
+    /// nothing at all on a healthy run. Both can have content at once, and when
+    /// they do they are describing different things: the shell speaks when the
+    /// work never started, the process speaks when the work failed.
+    var processOutput: (@Sendable () -> ProcessOutput)? = nil
+
+    /// Where a piece of failure text came from, because that decides whether it
+    /// can be trusted to be THIS run's (#90, #650).
+    enum ProcessOutput: Equatable {
+        /// From the run's own private log file. Definitely this run, so it is
+        /// the failure itself and outranks anything the launcher said.
+        case own(String)
+        /// From a tail of the log every run appends to. May belong to another
+        /// run, so it is worth reading only when there is nothing else at all.
+        case sharedTail(String)
+        /// Nothing was found to read.
+        case none
+    }
+
+    /// Which text a failure should be diagnosed from.
+    ///
+    /// Pure and separate from the subprocess call so each combination can be
+    /// built and seen, rather than being reachable only by arranging a real
+    /// process to fail in a particular way (L151).
+    static func diagnosisText(launcher: String, process: ProcessOutput) -> String {
+        func present(_ s: String) -> Bool {
+            !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        switch process {
+        // The process spoke, so that is the failure. The launcher's line is
+        // context around it and stays in the log rather than being classified:
+        // folding the two together would let a stray shell warning match a
+        // needle and rename somebody else's failure.
+        case .own(let text) where present(text):
+            return text
+        // Possibly another run's, so only when there is nothing else.
+        case .sharedTail(let text) where present(text) && !present(launcher):
+            return text
+        default:
+            return launcher
+        }
+    }
     /// How long a child gets to honour SIGTERM before it is SIGKILLed.
     ///
     /// One SIGTERM was the whole teardown, so a child that traps or ignores it
@@ -119,7 +160,7 @@ struct ProcessRunner {
         }
         defer { watchdog.cancel() }
 
-        let fallback = logFallback
+        let readProcessOutput = processOutput
         do {
             try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
@@ -133,10 +174,10 @@ struct ProcessRunner {
                             cont.resume()
                         } else {
                             let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                            var stderr = String(data: data, encoding: .utf8) ?? ""
-                            if stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                stderr = fallback?() ?? ""
-                            }
+                            let launcher = String(data: data, encoding: .utf8) ?? ""
+                            let stderr = Self.diagnosisText(
+                                launcher: launcher,
+                                process: readProcessOutput?() ?? .none)
                             cont.resume(throwing: PythonBridgeError.scriptFailed(
                                 exitCode: status, stderr: stderr))
                         }
