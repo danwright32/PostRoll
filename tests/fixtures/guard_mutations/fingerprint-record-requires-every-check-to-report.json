@@ -1,0 +1,8 @@
+{
+  "name": "fingerprint-record-requires-every-check-to-report",
+  "file": "tools/record_design_fingerprints.py",
+  "find": "outcome = reported.get(case_key(node))",
+  "replace": "outcome = reported.get(case_key(node), \"passed\")",
+  "test": "tests/test_record_design_fingerprints.py::test_a_check_that_reported_nothing_at_all_is_refused",
+  "breaks": "a reference check pytest never found is read as one that passed"
+}

@@ -129,6 +129,28 @@ a headless runner cannot reliably drive a window, and a test nothing runs is
 indistinguishable from no test, so it was removed rather than left to rot
 (#524).
 
+## Re-recording a design fingerprint
+
+```
+make record-fingerprints
+```
+
+`tests/test_media_design_fingerprint.py` fails whenever a media template's
+source moves, and asks which of two things happened: the template renders
+differently now, so `MEDIA_DESIGN_VERSIONS` has to be bumped, or it renders
+identically and only the record needs updating.
+
+Answer it with the command above rather than by editing
+`tests/fixtures/media_design_fingerprints.json`. It runs the reference frames
+that photograph each moved template and records only what they vouch for,
+refusing by name for anything else: a template no reference frame covers, a
+reference frame with uncommitted changes, or a check that skipped, failed or
+reported nothing. A hand written re-record cannot tell the two cases apart, and
+telling them apart is the entire job of the guard (#660).
+
+It renders real reels, so it takes minutes rather than seconds, and it needs
+ffmpeg and the macOS system fonts.
+
 ## Waiting for a pull request's checks
 
 ```

@@ -14,6 +14,11 @@ in which case update the fingerprint alone and say why in the commit.
 
 Nothing can decide that question automatically. This forces it to be asked, at
 the moment of the change, by the person who knows the answer.
+
+Answer it with `make record-fingerprints` rather than by editing the record
+(#660). Until that existed the second option had no implementation at all, so it
+was done with a script written on the spot, which will bless a template whose
+rendering genuinely changed just as readily as one whose did not.
 """
 
 from __future__ import annotations
@@ -100,6 +105,11 @@ def test_the_template_still_renders_the_design_its_version_claims(template, reco
         f"PostRollApp/Sources/DesignTokens.swift, and record the new fingerprint;\n"
         f"  or it renders identically, so record the new fingerprint alone and "
         f"say why in the commit.\n"
+        f"  Either way, record it with `make record-fingerprints`, which writes "
+        f"the fingerprint only for a template whose reference frames still pass "
+        f"(#660). Do not edit the record by hand: a hand written re-record "
+        f"cannot tell those two cases apart, which is the question this guard "
+        f"exists to ask.\n"
         f"  New fingerprint: {current}\n"
         f"  Recorded in {RECORD.relative_to(REPO_ROOT)}")
 

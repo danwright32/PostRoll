@@ -1,0 +1,8 @@
+{
+  "name": "fingerprint-record-refuses-a-dirty-reference",
+  "file": "tools/record_design_fingerprints.py",
+  "find": "    if dirty:",
+  "replace": "    if dirty and False:",
+  "test": "tests/test_record_design_fingerprints.py::test_a_reference_frame_with_uncommitted_changes_cannot_vouch_for_anything",
+  "breaks": "a fingerprint is blessed by a reference frame regenerated from the very code being recorded"
+}
