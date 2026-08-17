@@ -349,7 +349,13 @@ def test_an_empty_first_reply_is_waited_out_rather_than_believed() -> None:
     assert run([[], [], real_reply()]) == EXIT_GREEN
 
 
-def test_gh_being_unusable_exits_unusable_at_once() -> None:
+def test_gh_being_unusable_throughout_exits_unusable() -> None:
+    """A failure that does not clear is still unusable, and says so.
+
+    It is no longer instant: a few attempts are made first, because one
+    momentary API error is not evidence that gh cannot be asked. What must not
+    change is the verdict when the failure persists.
+    """
     def fetch(_number: str) -> list[dict[str, str]]:
         raise GhUnusable("gh: authentication required")
 
@@ -358,7 +364,61 @@ def test_gh_being_unusable_exits_unusable_at_once() -> None:
                 fetch=fetch, now=clock.now, sleep=clock.sleep,
                 workflows=WORKFLOWS, out=lambda _line: None)
     assert code == EXIT_UNUSABLE
-    assert clock.t == 0.0
+    # Bounded: a permanent failure costs seconds, not the whole timeout.
+    assert 0 < clock.t <= 30
+
+
+def test_one_transient_gh_failure_does_not_end_the_wait() -> None:
+    """#657. A single HTTP 503 four minutes into a 2400 second wait ended it.
+
+    The refusal to guess a verdict is right and stays. What was wrong is that
+    one momentary outage counted as evidence gh could not be asked at all, so a
+    GitHub wobble cost a full restart, and during a real incident, which is when
+    a status is hardest to read by hand, the wait could never finish.
+    """
+    replies: list[object] = [
+        GhUnusable("HTTP 503: No server is currently available"),
+        real_reply(),
+    ]
+
+    def fetch(_number: str) -> list[dict[str, str]]:
+        nxt = replies.pop(0) if len(replies) > 1 else replies[0]
+        if isinstance(nxt, GhUnusable):
+            raise nxt
+        return nxt
+
+    clock = FakeClock()
+    code = main(["7", "--timeout", "600", "--interval", "30"],
+                fetch=fetch, now=clock.now, sleep=clock.sleep,
+                workflows=WORKFLOWS, out=lambda _line: None)
+    assert code == EXIT_GREEN
+
+
+def test_a_retried_failure_is_said_out_loud() -> None:
+    """A retry nobody can see is indistinguishable from a wait that stalled."""
+    lines: list[str] = []
+
+    def fetch(_number: str) -> list[dict[str, str]]:
+        raise GhUnusable("HTTP 503: No server is currently available")
+
+    clock = FakeClock()
+    main(["7", "--timeout", "600", "--interval", "30"],
+         fetch=fetch, now=clock.now, sleep=clock.sleep,
+         workflows=WORKFLOWS, out=lines.append)
+    assert any("retr" in line.lower() for line in lines), lines
+    assert any("503" in line for line in lines), lines
+
+
+def test_retrying_does_not_run_past_the_deadline() -> None:
+    """The deadline is the deadline. Retries live inside it, not beside it."""
+    def fetch(_number: str) -> list[dict[str, str]]:
+        raise GhUnusable("HTTP 503: No server is currently available")
+
+    clock = FakeClock()
+    main(["7", "--timeout", "1", "--interval", "30"],
+         fetch=fetch, now=clock.now, sleep=clock.sleep,
+         workflows=WORKFLOWS, out=lambda _line: None)
+    assert clock.t <= 30
 
 
 def test_every_exit_code_is_distinct() -> None:
