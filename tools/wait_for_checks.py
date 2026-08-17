@@ -398,6 +398,53 @@ def parse_arguments(argv: Sequence[str]) -> Arguments:
     return Arguments(positional[0], numbers["--timeout"], numbers["--interval"])
 
 
+# How many times one poll is attempted before gh is called unusable, and how
+# long to pause between attempts (#657).
+#
+# One momentary API error is not evidence that gh cannot be asked: an HTTP 503
+# four minutes into a 2400 second wait ended a whole run, so a GitHub wobble
+# cost a full restart, and during a real incident, which is exactly when a
+# status is hardest to read by hand, the wait could never finish.
+#
+# Deliberately small and fixed. This retries the ASKING, never the verdict: a
+# reply that arrives and says nothing usable is still answered by the same rules
+# as before, and a failure that does not clear is still unusable, just seconds
+# later instead of instantly. Retrying every failure rather than only the ones
+# that look transient keeps this free of a second, message-matching classifier
+# that would eventually disagree with itself (L35).
+ASK_ATTEMPTS = 3
+ASK_BACKOFF_SECONDS = (2.0, 4.0)
+
+
+def ask(
+    number: str,
+    *,
+    fetch: Callable[[str], list],
+    sleep: Callable[[float], None],
+    out: Callable[[str], None],
+) -> list:
+    """One poll, retried a few times before gh is declared unusable.
+
+    Each retry is said out loud, because a retry nobody can see is
+    indistinguishable from a wait that has stalled (L106).
+    """
+    last: GhUnusable | None = None
+    for attempt in range(1, ASK_ATTEMPTS + 1):
+        try:
+            return fetch(number)
+        except GhUnusable as error:
+            last = error
+            if attempt == ASK_ATTEMPTS:
+                break
+            pause = ASK_BACKOFF_SECONDS[min(attempt - 1,
+                                            len(ASK_BACKOFF_SECONDS) - 1)]
+            out(f"  gh failed ({error}), retrying in {pause:.0f}s "
+                f"[attempt {attempt} of {ASK_ATTEMPTS}]")
+            sleep(pause)
+    assert last is not None
+    raise last
+
+
 def main(
     argv: Sequence[str],
     *,
@@ -429,7 +476,7 @@ def main(
 
     while True:
         try:
-            reported = fetch(number)
+            reported = ask(number, fetch=fetch, sleep=sleep, out=out)
         except GhUnusable as error:
             out(f"cannot ask gh: {error}")
             return EXIT_UNUSABLE
