@@ -1,0 +1,8 @@
+{
+  "name": "checkout-banner-is-drawn-from-the-live-notice",
+  "file": "PostRollApp/Sources/Views/MainWindowView.swift",
+  "find": "                                    message: notice,",
+  "replace": "                                    message: \"PostRoll is not running the code that shipped.\",",
+  "test": "PostRollTests/CheckoutBannerTests/testTheWindowDrawsABannerFromTheCheckoutNotice",
+  "breaks": "the banner stops being drawn from the state the checkout was actually read into, so it says the same sentence whatever the folder is doing and can no longer name the branch. The wording tests and the legibility measurement both stay green, because neither touches the window (#670)"
+}

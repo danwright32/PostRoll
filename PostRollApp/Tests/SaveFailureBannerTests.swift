@@ -9,18 +9,11 @@ import XCTest
 /// here that reader has been told his last hour of edits exist only on screen.
 final class SaveFailureBannerTests: XCTestCase {
 
+    // One reader for the window's source, shared with CheckoutBannerTests
+    // rather than copied beside it (#670). Comments are stripped there, so the
+    // prose explaining the retry cannot satisfy a check for the retry (L103).
     private func windowSource() throws -> String {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/Views/MainWindowView.swift")
-        // Comments stripped: the prose explaining the retry must not be able to
-        // satisfy a check for the retry (L103).
-        return try String(contentsOf: url, encoding: .utf8)
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.hasPrefix("//") }
-            .joined(separator: "\n")
+        try MainWindowSource.stripped()
     }
 
     func testTheFailureBannerIsDrawnFromTheFailureItself() throws {
