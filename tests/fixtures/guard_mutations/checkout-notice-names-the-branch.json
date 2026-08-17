@@ -1,0 +1,8 @@
+{
+  "name": "checkout-notice-names-the-branch",
+  "file": "PostRollApp/Sources/Services/CheckoutNotice.swift",
+  "find": "place = \"is on a branch called \\(branch) rather than \\(mainBranch)\"",
+  "replace": "place = \"is on a branch rather than \\(mainBranch)\"",
+  "test": "PostRollTests/CheckoutNoticeTests/testABranchIsNamedSoItCanBeRecognised",
+  "breaks": "the notice says the folder is on some branch without saying which, so nothing can be checked against it"
+}
