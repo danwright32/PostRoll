@@ -58,13 +58,43 @@ enum CheckoutRevision {
         }
     }
 
-    /// The revision of the checkout a run is about to execute.
+    /// Posted with every reading taken, wherever it was taken (#668).
     ///
+    /// The notice on the window was read once at launch and never again, so it
+    /// was silent in exactly the case it exists for: a session that switches
+    /// branch or leaves edits does it while the app is open. Announcing here
+    /// rather than adding a second reader means the read a generation already
+    /// takes for its log refreshes the window at no extra cost, and nobody can
+    /// add a third read site that forgets to tell anyone.
+    static let readNotification = Notification.Name("PostRollCheckoutRevisionRead")
+
+    /// Where the reading sits in the notification.
+    static let readingKey = "reading"
+
+    /// The reading a notification carries, or nil if it carries none.
+    static func reading(in notification: Notification) -> Reading? {
+        notification.userInfo?[readingKey] as? Reading
+    }
+
+    /// The revision of the checkout a run is about to execute, announced.
+    ///
+    /// The announcement wraps the measurement rather than sitting inside it, so
+    /// every way of answering goes out, including the early refusals. Those are
+    /// the returns an announcement is easiest to forget, and a forgotten one
+    /// leaves the previous notice standing as though it had been measured again
+    /// (L100).
+    static func read(inRepo repo: URL, timeout: TimeInterval = deadline,
+                     announcingTo center: NotificationCenter = .default) -> Reading {
+        let reading = measure(inRepo: repo, timeout: timeout)
+        center.post(name: readNotification, object: nil, userInfo: [readingKey: reading])
+        return reading
+    }
+
     /// Three reads rather than one parse of `git status --branch --porcelain`,
     /// because each answers on its own and a repository with no commits yet
     /// still has a branch. Any failure is reported as unknown rather than as a
     /// clean tree.
-    static func read(inRepo repo: URL, timeout: TimeInterval = deadline) -> Reading {
+    private static func measure(inRepo repo: URL, timeout: TimeInterval) -> Reading {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: repo.path, isDirectory: &isDirectory),
               isDirectory.boolValue else {

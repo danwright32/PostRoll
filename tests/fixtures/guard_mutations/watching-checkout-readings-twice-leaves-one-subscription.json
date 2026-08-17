@@ -1,0 +1,8 @@
+{
+  "name": "watching-checkout-readings-twice-leaves-one-subscription",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "        guard checkoutReadings == nil else { return }",
+  "replace": "        guard true else { return }",
+  "test": "PostRollTests/CheckoutNoticeFreshnessTests/testWatchingTwiceLeavesOneSubscription",
+  "breaks": "a window that appears twice ends up with two observers on one shared notification centre, so every reading is applied twice (#668)"
+}
