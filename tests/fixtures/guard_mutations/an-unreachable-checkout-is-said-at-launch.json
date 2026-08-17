@@ -1,0 +1,8 @@
+{
+  "name": "an-unreachable-checkout-is-said-at-launch",
+  "file": "PostRollApp/Sources/Services/LaunchProjectCheck.swift",
+  "find": "        if let problem = AppPaths.projectRootProblem(root, fileManager: fileManager) {",
+  "replace": "        if false, let problem = AppPaths.projectRootProblem(root, fileManager: fileManager) {",
+  "test": "PostRollTests/LaunchProjectCheckTests/testAnAbsentCheckoutIsReportedAtLaunch",
+  "breaks": "launch stops noticing that the code folder cannot be reached, so an app that can generate nothing at all looks entirely normal until Dan has picked a day and pressed a button, which is the effort #652 exists to save him"
+}
