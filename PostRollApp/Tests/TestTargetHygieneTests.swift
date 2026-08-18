@@ -60,6 +60,34 @@ enum TestSourceInventory {
             }
     }
 
+    /// The line numbers where a source builds an AppState through the SHIPPING
+    /// initialiser, the one that reads the real events.json and runs the launch
+    /// sweeps.
+    ///
+    /// Comment lines are stripped first, so prose about the initialiser is not
+    /// an offender (L103). Spelled as a regular expression rather than a plain
+    /// needle so this file is not itself caught: the pattern's own text carries
+    /// backslashes and therefore does not match the pattern.
+    static func shippingAppStateLines(in source: String) -> [Int] {
+        source.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .enumerated()
+            .filter { !$0.element.hasPrefix("//") && !$0.element.hasPrefix("*") }
+            .filter {
+                $0.element.range(of: #"\bAppState\(\s*\)"#, options: .regularExpression) != nil
+            }
+            .map { $0.offset + 1 }
+    }
+
+    /// How many times a source reaches for the test seam.
+    ///
+    /// Only used as a positive control: a scanner that finds no construction at
+    /// all would report every file clean, and clean is indistinguishable from
+    /// blind (L98).
+    static func seamUses(in source: String) -> Int {
+        source.components(separatedBy: "AppState(events:").count - 1
+    }
+
     /// Files carrying `needle`, considering only ones the project compiles.
     static func offenders(in dir: URL, registered: Set<String>, containing needle: String,
                           excluding: String) -> [String] {
@@ -258,5 +286,56 @@ final class TestTargetHygieneTests: XCTestCase {
             + "Found \(definitions) mentions in project.yml. Defining it on the app target "
             + "would make every test-only seam reachable from the shipping app."
         )
+    }
+
+    /// No test builds an AppState through the shipping initialiser (#681).
+    ///
+    /// The seam above is worth nothing while the unsafe path is one character
+    /// shorter to type. The shipping initialiser calls `loadStore()`, which
+    /// reads the real events.json and then runs every launch sweep against
+    /// whatever came back, and those sweeps delete media for events NOT in the
+    /// list they are handed. A test that only wants somewhere for a reading to
+    /// land gets all of that, against live data, for free.
+    ///
+    /// So the rule is structural rather than remembered: tests must be unable
+    /// to reach the real store (L2), and this is what says so out loud when one
+    /// starts to.
+    func testNoTestBuildsAnAppStateThroughTheShippingInitialiser() throws {
+        let registered = TestSourceInventory.registeredNames(inProject: try generatedProject())
+        XCTAssertGreaterThan(registered.count, 50,
+                             "the project lists almost no Swift files, so this guard is vacuous")
+
+        var offenders: [String] = []
+        var scanned = 0
+        var seamUses = 0
+        for name in registered.sorted() {
+            let url = testsDir.appendingPathComponent(name)
+            guard let contents = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            scanned += 1
+            seamUses += TestSourceInventory.seamUses(in: contents)
+            for line in TestSourceInventory.shippingAppStateLines(in: contents) {
+                offenders.append("\(name):\(line)")
+            }
+        }
+
+        // Both controls are here because "no offenders" is what a scanner that
+        // read nothing also reports (L98).
+        XCTAssertGreaterThan(scanned, 50,
+                             "the scanner opened almost no test files, so it has stopped working")
+        XCTAssertGreaterThan(seamUses, 10,
+                             "the scanner found almost no AppState construction of any kind, so "
+                             + "it is reading something other than the test sources")
+
+        XCTAssertTrue(offenders.isEmpty, """
+            These tests build an AppState through the shipping initialiser, which reads \
+            the real events.json and runs the launch sweeps that delete media for every \
+            event not in the list they read:
+
+            \(offenders.joined(separator: "\n"))
+
+            Use the test seam instead, pointed at a temporary tree:
+
+                AppState(events: [], storeURL: <temp>/events.json, dataRoot: <temp>)
+            """)
     }
 }
