@@ -338,4 +338,59 @@ final class TestTargetHygieneTests: XCTestCase {
                 AppState(events: [], storeURL: <temp>/events.json, dataRoot: <temp>)
             """)
     }
+
+    /// The test seam says where it points, every time (#684).
+    ///
+    /// Both locations used to carry a default naming the LIVE ones, so a test
+    /// that left them out was handed the real events.json and the real media
+    /// tree while its call still read as the safe constructor. Seven call sites
+    /// were in exactly that state.
+    ///
+    /// A parameter a function needs in order to be CORRECT must not carry a
+    /// default standing for absent (L168): the omission produces live data
+    /// instead of a compile error, and it surfaces far away as a rewritten
+    /// store or a deleted photo rather than as a refusal.
+    ///
+    /// Required parameters need no guard at run time, which is the point of
+    /// making them required. This guards the REQUIREMENT, because putting a
+    /// default back is one word and nothing else here would go red.
+    func testTheAppStateTestSeamSaysWhereItPoints() throws {
+        let appDir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()    // Tests
+            .deletingLastPathComponent()    // PostRollApp
+        let source = try String(
+            contentsOf: appDir.appendingPathComponent("Sources/AppState.swift"),
+            encoding: .utf8)
+
+        let seam = "init(events:"
+        guard let opens = source.range(of: seam) else {
+            // Gone entirely is fine, for the same reason as the guard above:
+            // what is protected is that it cannot point at live data, not that
+            // it exists.
+            return
+        }
+        let rest = source[opens.upperBound...]
+        let closes = try XCTUnwrap(rest.range(of: ") {"),
+                                   "AppState's `\(seam)` seam has no signature this "
+                                   + "can read, so nothing below checked anything")
+        let signature = String(rest[rest.startIndex..<closes.lowerBound])
+
+        // Without this the assertion below is answered by any parse that came
+        // back empty, and empty is what a scanner that stopped working returns
+        // (L98).
+        for parameter in ["storeURL", "dataRoot"] {
+            XCTAssertTrue(signature.contains(parameter),
+                          "the seam's signature no longer names \(parameter), so this "
+                          + "guard is reading something other than the seam: \(signature)")
+        }
+
+        XCTAssertFalse(
+            signature.contains("="),
+            "AppState's `\(seam)` seam carries a default value: \(signature). Both "
+            + "storeURL and dataRoot must be required. A default here is the LIVE "
+            + "events.json and the LIVE media tree, handed to any test that leaves it "
+            + "out, and the launch sweeps delete media for every event not in the list "
+            + "they hold. Take the default off and make each call site say where it points."
+        )
+    }
 }

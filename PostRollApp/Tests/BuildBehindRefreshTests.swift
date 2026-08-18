@@ -34,9 +34,20 @@ final class BuildBehindRefreshTests: XCTestCase {
     /// checkout, so a test driving it would be answering about whenever this Mac
     /// last committed (L2). What is under test here is what the window does with
     /// a verdict, which is the half that was missing.
+    /// The temporary tree this suite's state objects point at, so the seam's
+    /// required locations (#684) name somewhere that is not the live store.
+    private lazy var root: URL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("BuildBehindRefresh-\(UUID().uuidString)")
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
     @MainActor
     private func state(judging verdicts: [BuildFreshness.Verdict]) -> AppState {
-        let state = AppState(events: [])
+        let state = AppState(events: [],
+                             storeURL: root.appendingPathComponent("events.json"),
+                             dataRoot: root)
         let queue = VerdictQueue(verdicts)
         state.judgeBuildFreshness = { _ in queue.next() }
         return state
