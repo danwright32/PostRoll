@@ -49,16 +49,20 @@ import pytest
 from tools.wait_for_checks import (
     EXIT_GREEN,
     EXIT_NEVER_APPEARED,
+    EXIT_NOT_MERGED,
     EXIT_RED,
     EXIT_STILL_RUNNING,
     EXIT_UNUSABLE,
     ExpectedCheck,
     GhUnusable,
+    MergeRefused,
     Poll,
     UnreadableWorkflow,
     bucket_of,
     expected_checks,
     main,
+    merge_commit,
+    parse_arguments,
     poll_checks,
     say,
     verdict,
@@ -628,7 +632,7 @@ def test_the_wait_speaks_through_the_flushing_voice_by_default() -> None:
 
 def test_every_exit_code_is_distinct() -> None:
     codes = [EXIT_GREEN, EXIT_RED, EXIT_NEVER_APPEARED, EXIT_STILL_RUNNING,
-             EXIT_UNUSABLE]
+             EXIT_UNUSABLE, EXIT_NOT_MERGED]
     assert len(set(codes)) == len(codes)
 
 
@@ -678,3 +682,193 @@ def test_a_commit_landing_mid_wait_is_said_out_loud_and_judged_afresh() -> None:
     assert code == EXIT_GREEN
     assert OTHER_SHA[:12] in said and HEAD_SHA[:12] in said, said
     assert "moved" in said, said
+
+
+# ── merging the commit that was judged ────────────────────────────────────────
+
+
+class FakeMerge:
+    """Stands in for the call that merges, recording what it was asked to merge."""
+
+    def __init__(self, *, refusing: str | None = None) -> None:
+        self.refusing = refusing
+        self.asked: list[tuple[str, str]] = []
+
+    def __call__(self, number: str, sha: str) -> str:
+        self.asked.append((number, sha))
+        if self.refusing:
+            raise MergeRefused(self.refusing)
+        return sha
+
+
+def wait_and_merge(
+    replies: list[list[dict[str, str]]],
+    *,
+    merge: FakeMerge,
+    argv: list[str] | None = None,
+    lines: list[str] | None = None,
+    heads: list[str] | None = None,
+) -> int:
+    """Drive main() to a verdict with the merge step wired to a fake."""
+    clock = FakeClock()
+    remaining = list(replies)
+    seen = list(heads or [HEAD_SHA])
+
+    def poll(_number: str) -> Poll:
+        rows = remaining.pop(0) if len(remaining) > 1 else remaining[0]
+        head = seen.pop(0) if len(seen) > 1 else seen[0]
+        return Poll(head_sha=head, rows=rows)
+
+    return main(
+        argv or ["7", "--timeout", "600", "--interval", "30", "--merge"],
+        poll=poll, merge=merge, now=clock.now, sleep=clock.sleep,
+        workflows=WORKFLOWS, out=(lines.append if lines is not None else lambda _l: None))
+
+
+def test_the_merge_is_of_exactly_the_commit_that_was_judged_green() -> None:
+    """The whole point: the merge names a SHA rather than "the top of the branch".
+
+    A push landing in the seconds between the green and the merge otherwise
+    merges a commit nothing has judged, which is the one step that cannot be
+    undone (#674).
+    """
+    merge = FakeMerge()
+
+    code = wait_and_merge([real_reply()], merge=merge)
+
+    assert code == EXIT_GREEN
+    assert merge.asked == [("7", HEAD_SHA)], merge.asked
+
+
+def test_the_commit_merged_is_the_last_one_judged_not_the_first_seen() -> None:
+    """A commit landing mid-wait is judged afresh, and it is that one that merges."""
+    merge = FakeMerge()
+
+    code = wait_and_merge([[], real_reply()], merge=merge,
+                          heads=[OTHER_SHA, HEAD_SHA])
+
+    assert code == EXIT_GREEN
+    assert merge.asked == [("7", HEAD_SHA)], merge.asked
+
+
+def test_a_refused_merge_is_reported_as_not_merged_rather_than_as_green() -> None:
+    """GitHub refuses with a 409 when the head has moved, which is the case
+    this exists for. Reporting green then would be a success claim over a merge
+    that did not happen (L12), and the caller's next step is to look, not to
+    merge again."""
+    merge = FakeMerge(refusing="the head moved to 0ef38b2c1d4e, so nothing merged")
+    lines: list[str] = []
+
+    code = wait_and_merge([real_reply()], merge=merge, lines=lines)
+
+    assert code == EXIT_NOT_MERGED
+    said = "\n".join(lines)
+    assert "not merged" in said, said
+    assert "the head moved" in said, said
+
+
+def test_a_red_verdict_never_reaches_the_merge() -> None:
+    rows = real_reply()
+    rows[0] = {**rows[0], "bucket": "fail"}
+    merge = FakeMerge()
+
+    code = wait_and_merge([rows], merge=merge)
+
+    assert code == EXIT_RED
+    assert merge.asked == [], merge.asked
+
+
+def test_a_deadline_reached_with_work_still_running_never_reaches_the_merge() -> None:
+    rows = real_reply()
+    rows[0] = dict(rows[0], bucket="pending", state="IN_PROGRESS")
+    merge = FakeMerge()
+
+    code = wait_and_merge([rows], merge=merge)
+
+    assert code == EXIT_STILL_RUNNING
+    assert merge.asked == [], merge.asked
+
+
+def test_without_the_flag_a_green_merges_nothing() -> None:
+    """The wait stays a wait by default: merging is the irreversible step, so
+    it happens only when it was asked for."""
+    merge = FakeMerge()
+
+    code = wait_and_merge([real_reply()], merge=merge,
+                          argv=["7", "--timeout", "600", "--interval", "30"])
+
+    assert code == EXIT_GREEN
+    assert merge.asked == [], merge.asked
+
+
+class FakeGh:
+    """Stands in for the `gh api` subprocess the merge call makes."""
+
+    def __init__(self, *, returncode: int = 0, stdout: str = "",
+                 stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.argv: list[str] = []
+
+    def __call__(self, argv: list[str], **_kwargs: object) -> "FakeGh":
+        self.argv = argv
+        return self
+
+
+def test_the_merge_call_carries_the_sha_github_must_match() -> None:
+    """`sha` is what makes this safe by construction: GitHub refuses the merge
+    with a 409 when the head is not that commit."""
+    gh = FakeGh(stdout=json.dumps({"merged": True, "sha": "aaa111"}))
+
+    merged = merge_commit("7", HEAD_SHA, run=gh)
+
+    assert merged == "aaa111"
+    flattened = " ".join(gh.argv)
+    assert f"sha={HEAD_SHA}" in flattened, flattened
+    assert "PUT" in flattened and "pulls/7/merge" in flattened, flattened
+
+
+def test_a_merge_github_refuses_is_a_refusal_rather_than_a_merge() -> None:
+    gh = FakeGh(returncode=1, stderr="HTTP 409: Head branch was modified")
+
+    with pytest.raises(MergeRefused) as refusal:
+        merge_commit("7", HEAD_SHA, run=gh)
+
+    assert "409" in str(refusal.value), refusal.value
+
+
+def test_a_reply_that_does_not_say_it_merged_is_a_refusal() -> None:
+    """gh exiting 0 is not the merge happening. A reply saying `merged: false`
+    carries GitHub's own reason, and treating it as done would report a merge
+    over a pull request still sitting open (L12)."""
+    gh = FakeGh(stdout=json.dumps(
+        {"merged": False, "message": "Pull Request is not mergeable"}))
+
+    with pytest.raises(MergeRefused) as refusal:
+        merge_commit("7", HEAD_SHA, run=gh)
+
+    assert "not mergeable" in str(refusal.value), refusal.value
+
+
+def test_a_reply_that_is_not_json_is_a_refusal_rather_than_a_merge() -> None:
+    gh = FakeGh(stdout="not json at all")
+
+    with pytest.raises(MergeRefused):
+        merge_commit("7", HEAD_SHA, run=gh)
+
+
+def test_gh_missing_altogether_is_a_refusal() -> None:
+    def missing(_argv: list[str], **_kwargs: object) -> object:
+        raise FileNotFoundError("gh")
+
+    with pytest.raises(MergeRefused):
+        merge_commit("7", HEAD_SHA, run=missing)
+
+
+def test_the_usage_line_names_the_merge_option() -> None:
+    """An option nothing documents is one nobody reaches for."""
+    with pytest.raises(GhUnusable) as refusal:
+        parse_arguments([])
+
+    assert "--merge" in str(refusal.value), refusal.value

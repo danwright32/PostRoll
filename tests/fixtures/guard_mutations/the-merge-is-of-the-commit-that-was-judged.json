@@ -1,0 +1,8 @@
+{
+  "name": "the-merge-is-of-the-commit-that-was-judged",
+  "file": "tools/wait_for_checks.py",
+  "find": "                merged = merge(number, judged)",
+  "replace": "                merged = merge(number, \"whatever-is-on-top\")",
+  "test": "tests/test_wait_for_checks.py::test_the_merge_is_of_exactly_the_commit_that_was_judged_green",
+  "breaks": "the merge stops naming the commit the green was earned by, so a push landing in the seconds between the two is merged with nothing having judged it, which is the one step that cannot be undone (#674)"
+}

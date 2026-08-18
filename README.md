@@ -175,10 +175,26 @@ commit green while a run at it has yet to finish. Every line it prints names
 the commit it judged, so a green can be checked against the commit about to be
 merged.
 
-It exits `0` only when every expected check has settled green. `1` means red,
-`2` means a check never appeared, `3` means the deadline passed with something
-still running, and `4` means it could not read the workflows or reach `gh`.
-Only `0` may be merged on.
+Merge with the tool rather than as a second step afterwards:
+
+```
+python tools/wait_for_checks.py <pr-number> --merge
+```
+
+A green proves that one named commit passed. A merge taken separately is
+against whatever is at the top of the branch by then, so a push landing in the
+seconds between the two merges a commit nothing has judged, and that is the one
+step that cannot be undone (#674). With `--merge` the tool squash merges the
+exact commit it judged, passing it to GitHub as `sha`, which refuses with a 409
+when the head is no longer that commit. It reads the reply rather than trusting
+the exit code: a merge is reported only when GitHub says it merged.
+
+It exits `0` only when every expected check has settled green, and with
+`--merge` only when that commit is also merged. `1` means red, `2` means a
+check never appeared, `3` means the deadline passed with something still
+running, `4` means it could not read the workflows or reach `gh`, and `5` means
+the commit was green but the merge was refused, which is what a head moving in
+between looks like. Only `0` may be merged on.
 
 ## Layout
 
