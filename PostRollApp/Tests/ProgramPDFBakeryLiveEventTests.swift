@@ -44,7 +44,8 @@ final class ProgramPDFBakeryLiveEventTests: XCTestCase {
     /// from somewhere other than the store it will write back to.
     func testAnEventTheStoreDoesNotHoldStartsNothing() throws {
         let bakery = ProgramPDFBakery()
-        let state = AppState(events: [], storeURL: dir.appendingPathComponent("events.json"))
+        let state = AppState(events: [], storeURL: dir.appendingPathComponent("events.json"),
+                             dataRoot: dir)
 
         bakery.bake(eventID: UUID(), appState: state)
 
@@ -58,7 +59,8 @@ final class ProgramPDFBakeryLiveEventTests: XCTestCase {
         event.programImagePaths = []
         let bakery = ProgramPDFBakery()
         let state = AppState(events: [event],
-                             storeURL: dir.appendingPathComponent("events.json"))
+                             storeURL: dir.appendingPathComponent("events.json"),
+                             dataRoot: dir)
 
         bakery.bake(eventID: event.id, appState: state)
 
@@ -73,7 +75,8 @@ final class ProgramPDFBakeryLiveEventTests: XCTestCase {
         stale.programImagePaths = []          // what a screen drawn earlier holds
         let bakery = ProgramPDFBakery()
         let state = AppState(events: [withPages],
-                             storeURL: dir.appendingPathComponent("events.json"))
+                             storeURL: dir.appendingPathComponent("events.json"),
+                             dataRoot: dir)
 
         // Called with the id, so the stale copy cannot be what is read.
         bakery.bake(eventID: stale.id, appState: state)
@@ -88,7 +91,8 @@ final class ProgramPDFBakeryLiveEventTests: XCTestCase {
         let event = try event(withPages: 1)
         let bakery = ProgramPDFBakery()
         let state = AppState(events: [event],
-                             storeURL: dir.appendingPathComponent("events.json"))
+                             storeURL: dir.appendingPathComponent("events.json"),
+                             dataRoot: dir)
 
         bakery.bake(eventID: event.id, appState: state)
         bakery.bake(eventID: event.id, appState: state)

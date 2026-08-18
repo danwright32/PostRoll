@@ -43,7 +43,7 @@ final class AppStateSaveFailureTests: XCTestCase {
 
     @MainActor
     func testAFailedSaveIsSurfacedRatherThanLogged() throws {
-        let state = AppState(events: [], storeURL: storeURL)
+        let state = AppState(events: [], storeURL: storeURL, dataRoot: dir)
 
         state.addEvent(anEvent("Show"))
 
@@ -54,7 +54,7 @@ final class AppStateSaveFailureTests: XCTestCase {
 
     @MainActor
     func testTheFailureStaysUntilASaveActuallySucceeds() throws {
-        let state = AppState(events: [], storeURL: storeURL)
+        let state = AppState(events: [], storeURL: storeURL, dataRoot: dir)
         state.addEvent(anEvent("Show"))
         XCTAssertNotNil(state.saveFailure)
 
@@ -74,7 +74,7 @@ final class AppStateSaveFailureTests: XCTestCase {
         // The debounced writer used to be the one save whose outcome could not
         // reach anything at all.
         let event = anEvent("Show")
-        let state = AppState(events: [event], storeURL: storeURL)
+        let state = AppState(events: [event], storeURL: storeURL, dataRoot: dir)
 
         // Which field is edited does not matter here; the debounced PATH does.
         // That is the one the caption and blog editors use on every keystroke.
@@ -90,7 +90,7 @@ final class AppStateSaveFailureTests: XCTestCase {
     @MainActor
     func testAWorkingStoreSaysNothing() throws {
         try unblock()
-        let state = AppState(events: [], storeURL: storeURL)
+        let state = AppState(events: [], storeURL: storeURL, dataRoot: dir)
 
         state.addEvent(anEvent("Show"))
 

@@ -16,6 +16,7 @@ import XCTest
 final class ExportManagerReadinessTests: XCTestCase {
 
     private var destination: URL!
+    private var root: URL!
 
     // async throws, not setUpWithError: on a @MainActor test class the
     // non-isolated variant cannot touch a main-actor property, which the older
@@ -24,10 +25,26 @@ final class ExportManagerReadinessTests: XCTestCase {
         destination = FileManager.default.temporaryDirectory
             .appendingPathComponent("export-readiness-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("export-readiness-data-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
     override func tearDown() async throws {
         try? FileManager.default.removeItem(at: destination)
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    /// A state object pointed at this suite's own tree (#684).
+    ///
+    /// These tests want an event list for the gate to look at, not a library.
+    /// The seam takes both locations rather than defaulting to the live ones,
+    /// so a call that forgets one is a compile error instead of a state object
+    /// holding the real events.json and the real media tree.
+    private func state(_ events: [Event]) -> AppState {
+        AppState(events: events,
+                 storeURL: root.appendingPathComponent("events.json"),
+                 dataRoot: root)
     }
 
     private func makeEvent() -> Event {
@@ -40,7 +57,7 @@ final class ExportManagerReadinessTests: XCTestCase {
     func testStartRefusesWhileADayIsRebuilding() {
         let manager = ExportManager()
         let event = makeEvent()
-        let state = AppState(events: [event])
+        let state = state([event])
 
         manager.start(eventID: event.id, to: destination, appState: state,
                       regeneratingDays: [.thursday])
@@ -54,7 +71,7 @@ final class ExportManagerReadinessTests: XCTestCase {
         // point is that Dan learns the folder would have been stale.
         let manager = ExportManager()
         let event = makeEvent()
-        let state = AppState(events: [event])
+        let state = state([event])
 
         manager.start(eventID: event.id, to: destination, appState: state,
                       regeneratingDays: [.thursday])
@@ -71,7 +88,7 @@ final class ExportManagerReadinessTests: XCTestCase {
         // copy step, so it must be gated by the same rule.
         let manager = ExportManager()
         let event = makeEvent()
-        let state = AppState(events: [event])
+        let state = state([event])
 
         manager.start(eventID: event.id, to: destination, onlyDay: .wednesday,
                       appState: state, regeneratingDays: [.wednesday])
@@ -85,7 +102,7 @@ final class ExportManagerReadinessTests: XCTestCase {
         for day in DayName.allCases {
             let manager = ExportManager()
             let event = makeEvent()
-            let state = AppState(events: [event])
+            let state = state([event])
 
             manager.start(eventID: event.id, to: destination, appState: state,
                           regeneratingDays: [day])
@@ -104,7 +121,7 @@ final class ExportManagerReadinessTests: XCTestCase {
         // lookup instead of launching a real export: what is under test is
         // that the readiness gate did not record a refusal on the way there.
         let manager = ExportManager()
-        let state = AppState(events: [])
+        let state = state([])
 
         manager.start(eventID: UUID(), to: destination, appState: state,
                       regeneratingDays: [])
@@ -118,7 +135,7 @@ final class ExportManagerReadinessTests: XCTestCase {
         // permanently unavailable (#181: stored errors outlive the fix).
         let manager = ExportManager()
         let event = makeEvent()
-        let state = AppState(events: [event])
+        let state = state([event])
 
         manager.start(eventID: event.id, to: destination, appState: state,
                       regeneratingDays: [.thursday])

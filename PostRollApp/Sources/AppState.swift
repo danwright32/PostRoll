@@ -229,9 +229,17 @@ final class AppState {
     /// Compiled only into the test bundle. The shipping app cannot call this
     /// even by accident, and an accident here would not look like one: it would
     /// open showing an empty library while the real events sat on disk.
+    ///
+    /// Both locations are required (#684). They used to default to the live
+    /// ones, so a test that left them out was handed the real events.json and
+    /// the real media tree while its call still read as the safe constructor,
+    /// and seven of them were. A parameter needed for correctness must not
+    /// carry a default standing for absent (L168): forgetting it then produces
+    /// live data rather than a compile error, and surfaces far away as a
+    /// rewritten store or a deleted photo.
     init(events: [Event],
-         storeURL: URL = EventStore.storeURL,
-         dataRoot: URL = AppPaths.root) {
+         storeURL: URL,
+         dataRoot: URL) {
         self.events = events
         self.storeURL = storeURL
         self.layout = AppPaths.Layout(root: dataRoot)
