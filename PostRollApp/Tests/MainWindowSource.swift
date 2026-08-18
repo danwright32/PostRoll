@@ -30,7 +30,7 @@ enum MainWindowSource {
     ///
     /// A whole-file search is answered by any occurrence anywhere in the file,
     /// which in a window this size is a near certainty (L135): the checkout
-    /// notice is WRITTEN in `checkBuildFreshness` two hundred lines below the
+    /// notice is WRITTEN in `checkTheCodeFolder` two hundred lines below the
     /// banner, so a guard asking whether MainWindowView mentions it passes with
     /// the entire banner deleted. Scoping to the block is what makes the
     /// assertion about the drawing.

@@ -13,12 +13,94 @@ final class AppState {
     /// The list of days whose cached assets predate the current design (#293).
     var showingOutdatedDesigns = false
 
-    /// Set at launch when the running app was built before the newest commit,
-    /// so a fix that has already shipped may simply not be in this copy.
+    /// Set when the running app was built before the newest commit, so a fix
+    /// that has already shipped may simply not be in this copy.
     ///
-    /// Checked once per launch: it reads the disk and runs git, and the answer
-    /// cannot change while the app is open.
-    var buildBehind: BuildBehind?
+    /// Kept up to date rather than read once per launch (#675). The comment here
+    /// used to say the answer could not change while the app was open, and it
+    /// can: the running build is compared against the newest commit in the code
+    /// folder, and the code folder moves precisely while PostRoll sits there,
+    /// because that is when a session pulls or switches branch. A check that is
+    /// silent in the case it exists for makes a shipped fix look like it never
+    /// worked.
+    ///
+    /// Refreshed off the reading the notice already takes rather than by adding
+    /// a second reader of the same folder, the same way #668 did the notice.
+    ///
+    /// Written only through `present` and `dismissBuildBehind`, so a verdict
+    /// cannot reach the window without also passing the check that stops a
+    /// dismissed one coming back.
+    private(set) var buildBehind: BuildBehind?
+
+    /// The verdict already put in front of Dan and waved away.
+    ///
+    /// A sheet in the middle of the window is not a banner: putting the same one
+    /// back every time the app comes forward would make it something to dismiss
+    /// on reflex, and the real warning would go with it (L36). Identity is the
+    /// pair of times, so work merging afterwards is a different verdict and says
+    /// so, and catching up clears this outright rather than silencing the next
+    /// time the build falls behind.
+    private var dismissedBuildBehind: BuildBehind.ID?
+
+    #if POSTROLL_TESTS
+    /// Test seam: how a build is judged against a checkout.
+    ///
+    /// `BuildFreshness.check` runs git, so a test driving the refresh through it
+    /// would be answering about whenever this Mac last committed rather than
+    /// about what the window does with a verdict (L2). Settable only in the test
+    /// bundle.
+    var judgeBuildFreshness: @Sendable (URL) -> BuildFreshness.Verdict = {
+        BuildFreshness.check(repo: $0)
+    }
+    #else
+    let judgeBuildFreshness: @Sendable (URL) -> BuildFreshness.Verdict = {
+        BuildFreshness.check(repo: $0)
+    }
+    #endif
+
+    /// Judge this build against `repo` again and say what changed (#675).
+    ///
+    /// Off the main actor: it stats a file and runs git, and neither belongs on
+    /// the thread drawing the window.
+    func refreshBuildFreshness(inRepo repo: URL) async {
+        let judge = judgeBuildFreshness
+        let verdict = await Task.detached { judge(repo) }.value
+        present(verdict, forRepo: repo)
+    }
+
+    /// What the window says about this build, from one verdict.
+    ///
+    /// Clearing is as much the job as setting, as it is for the checkout notice:
+    /// a rebuild while the app is open is exactly what the sheet asked for, and a
+    /// warning still standing afterwards says the fix did not work.
+    ///
+    /// A verdict that could not be reached leaves whatever is showing alone and
+    /// goes to the log. Nothing was compared, so it can neither raise a warning
+    /// nor take one away, and clearing on it would be a clean bill of health
+    /// nobody measured (L11, L98).
+    func present(_ verdict: BuildFreshness.Verdict, forRepo repo: URL) {
+        switch verdict {
+        case let .behind(builtAt, latestCommit, remedy):
+            let warning = BuildBehind(builtAt: builtAt, latestCommit: latestCommit,
+                                      remedy: remedy, repo: repo)
+            guard warning.id != dismissedBuildBehind else { return }
+            buildBehind = warning
+        case .current:
+            buildBehind = nil
+            dismissedBuildBehind = nil
+        case let .cannotTell(reason):
+            NSLog("[PostRoll] build freshness unknown: \(reason)")
+        }
+    }
+
+    /// Take the sheet away, and remember which verdict it was showing.
+    ///
+    /// Both halves in one place, because a dismissal recorded anywhere else
+    /// could disagree with the one that actually cleared the sheet.
+    func dismissBuildBehind() {
+        dismissedBuildBehind = buildBehind?.id
+        buildBehind = nil
+    }
     /// Set at launch when PostRoll cannot reach its code folder, so the app
     /// says so before Dan has picked a day and pressed a button on something
     /// that was never going to run (#652).
@@ -54,7 +136,13 @@ final class AppState {
         checkoutNotice = CheckoutNotice.message(for: reading)
     }
 
-    /// Listen for readings taken anywhere, so a run refreshes the notice.
+    /// Listen for readings taken anywhere, so a run refreshes what the window
+    /// says about the code folder.
+    ///
+    /// Both things it says: the notice about the checkout, and whether this
+    /// build predates it (#675). One reading answers both questions about one
+    /// folder, so a second reader for the second question would be a second
+    /// chance to read a different folder, or to forget.
     ///
     /// Idempotent: a window that appears twice must not end up with two
     /// observers on one shared centre. The subscription is held here and removed
@@ -66,9 +154,16 @@ final class AppState {
             center: center, name: CheckoutRevision.readNotification
         ) { [weak self] notification in
             guard let reading = CheckoutRevision.reading(in: notification) else { return }
+            // Nil when the reading names no folder, which leaves the freshness
+            // verdict alone rather than judging some other checkout and
+            // reporting the answer as this one's (L75).
+            let repo = CheckoutRevision.repo(in: notification)
             // Hopped deliberately: the reading a generation takes is taken on a
             // detached task, so this arrives off the main actor.
-            Task { @MainActor in self?.apply(reading) }
+            Task { @MainActor in
+                self?.apply(reading)
+                if let repo { await self?.refreshBuildFreshness(inRepo: repo) }
+            }
         }
     }
 

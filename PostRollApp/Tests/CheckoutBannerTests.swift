@@ -30,7 +30,7 @@ final class CheckoutBannerTests: XCTestCase {
                 openedBy: "if let notice = appState.checkoutNotice", in: inset),
             "nothing in the window's bottom inset binds appState.checkoutNotice, "
             + "so the notice is a value the window never reads and no banner can "
-            + "appear. Note the state is still WRITTEN in checkBuildFreshness "
+            + "appear. Note the state is still WRITTEN in checkTheCodeFolder "
             + "below, which is why a search of the whole file would not notice")
 
         XCTAssertNotNil(
