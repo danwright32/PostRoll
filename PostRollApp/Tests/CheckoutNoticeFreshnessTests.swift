@@ -17,6 +17,38 @@ import XCTest
 /// matters most.
 final class CheckoutNoticeFreshnessTests: XCTestCase {
 
+    // MARK: - Somewhere for a reading to land
+
+    private var root: URL!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CheckoutNotice-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    /// A state object, and nothing else (#681).
+    ///
+    /// Every test below wants somewhere for a reading to arrive, so none of
+    /// them want a library. The shipping initialiser reads the real events.json
+    /// and then runs the launch sweeps against whatever came back, and those
+    /// sweeps delete media for every event NOT in the list they were handed.
+    /// Pointed at a temporary tree instead, so this suite is structurally
+    /// unable to reach live data (L2). Held to by
+    /// `TestTargetHygieneTests.testNoTestBuildsAnAppStateThroughTheShippingInitialiser`,
+    /// because the rule is worth nothing while the unsafe path is shorter to
+    /// type.
+    @MainActor
+    private func makeState() -> AppState {
+        AppState(events: [],
+                 storeURL: root.appendingPathComponent("events.json"),
+                 dataRoot: root)
+    }
+
     // MARK: - Every reading says so
 
     private func makeRepo(branch: String = "main") throws -> URL {
@@ -95,7 +127,7 @@ final class CheckoutNoticeFreshnessTests: XCTestCase {
         // the top of every generation, which is the last moment the notice can
         // still be acted on.
         let center = NotificationCenter()
-        let state = AppState()
+        let state = makeState()
         state.watchCheckoutReadings(center)
 
         announce(.known(commit: "1a2b3c4", branch: "wip/fonts", dirty: false), on: center)
@@ -127,7 +159,7 @@ final class CheckoutNoticeFreshnessTests: XCTestCase {
         // otherwise observable from outside (L151).
         let first = NotificationCenter()
         let second = NotificationCenter()
-        let state = AppState()
+        let state = makeState()
         state.watchCheckoutReadings(first)
         state.watchCheckoutReadings(second)
 
@@ -148,7 +180,7 @@ final class CheckoutNoticeFreshnessTests: XCTestCase {
         // The half a re-read exists for. A notice that appears correctly and
         // then never leaves is a banner that says the folder is off main for
         // the rest of the session, which teaches its reader to ignore it.
-        let state = AppState()
+        let state = makeState()
         state.apply(.known(commit: "1a2b3c4", branch: "wip/fonts", dirty: true))
         XCTAssertNotNil(state.checkoutNotice, "the notice must appear first")
 
@@ -164,7 +196,7 @@ final class CheckoutNoticeFreshnessTests: XCTestCase {
         // An unreadable checkout is logged rather than shown (#664), so what
         // must not happen is the previous sentence staying on the window as
         // though it had been measured again.
-        let state = AppState()
+        let state = makeState()
         state.apply(.known(commit: "1a2b3c4", branch: "wip/fonts", dirty: true))
 
         state.apply(.unknown(reason: "git could not name a branch"))

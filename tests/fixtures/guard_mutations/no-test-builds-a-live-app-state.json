@@ -1,0 +1,8 @@
+{
+  "name": "no-test-builds-a-live-app-state",
+  "file": "PostRollApp/Tests/CheckoutNoticeFreshnessTests.swift",
+  "find": "        AppState(events: [],\n                 storeURL: root.appendingPathComponent(\"events.json\"),\n                 dataRoot: root)",
+  "replace": "        AppState()",
+  "test": "PostRollTests/TestTargetHygieneTests/testNoTestBuildsAnAppStateThroughTheShippingInitialiser",
+  "breaks": "a test builds its AppState through the shipping initialiser, which reads the real events.json and then runs the launch sweeps against whatever came back, and those sweeps delete media for every event NOT in the list they read. The seam that exists to keep tests off live data is worth nothing while the unsafe path is shorter to type (#681)"
+}
