@@ -185,9 +185,15 @@ struct MainWindowView: View {
     /// An unreachable checkout is left to the launch check that already reports
     /// it: raising the same alert every time the app is brought forward would
     /// make the app unusable while the folder is missing.
+    ///
+    /// Through the read that can skip itself (#676). This runs on every
+    /// activation, and a reading runs git three times, one of them a status over
+    /// the whole working tree, so clicking in and out of the app was paying for
+    /// the same answer again. It also covers the activation that lands seconds
+    /// after a generation has just read the same folder for its own log.
     private func refreshCheckoutNotice() async {
         guard case .ready(let repo) = LaunchProjectCheck.outcome() else { return }
-        _ = await Task.detached { CheckoutRevision.read(inRepo: repo) }.value
+        _ = await Task.detached { CheckoutRevision.readIfStale(inRepo: repo) }.value
     }
 
     /// Ask once, at launch, whether this build predates the code.
