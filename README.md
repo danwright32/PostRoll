@@ -189,12 +189,27 @@ exact commit it judged, passing it to GitHub as `sha`, which refuses with a 409
 when the head is no longer that commit. It reads the reply rather than trusting
 the exit code: a merge is reported only when GitHub says it merged.
 
+A green also has to have been earned against the base it would land on. Main
+moves while a branch waits, so two changes that are each green against their
+own base can merge into a main neither of them was ever run against (#680).
+Before merging, the tool asks where the base branch is now and refuses a head
+that does not contain it, naming how far behind it is and where main has got
+to. Rebase, push, and wait again.
+
+That comparison is taken immediately before the merge, which makes the window
+seconds wide rather than closing it: GitHub's merge endpoint takes the head as
+`sha` but has no matching precondition for the base. Closing it by construction
+takes the repository setting "require branches to be up to date before
+merging", which is not switched on for this repository.
+
 It exits `0` only when every expected check has settled green, and with
 `--merge` only when that commit is also merged. `1` means red, `2` means a
 check never appeared, `3` means the deadline passed with something still
-running, `4` means it could not read the workflows or reach `gh`, and `5` means
-the commit was green but the merge was refused, which is what a head moving in
-between looks like. Only `0` may be merged on.
+running, `4` means it could not read the workflows or reach `gh` (including
+when it could not find out whether the branch is up to date), `5` means the
+commit was green but the merge was refused, which is what a head moving in
+between looks like, and `6` means the commit was green against a base that has
+since moved. Only `0` may be merged on.
 
 ## Layout
 

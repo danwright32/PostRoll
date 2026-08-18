@@ -47,17 +47,20 @@ from pathlib import Path
 import pytest
 
 from tools.wait_for_checks import (
+    EXIT_BEHIND,
     EXIT_GREEN,
     EXIT_NEVER_APPEARED,
     EXIT_NOT_MERGED,
     EXIT_RED,
     EXIT_STILL_RUNNING,
     EXIT_UNUSABLE,
+    BaseStanding,
     ExpectedCheck,
     GhUnusable,
     MergeRefused,
     Poll,
     UnreadableWorkflow,
+    base_standing,
     bucket_of,
     expected_checks,
     main,
@@ -632,7 +635,7 @@ def test_the_wait_speaks_through_the_flushing_voice_by_default() -> None:
 
 def test_every_exit_code_is_distinct() -> None:
     codes = [EXIT_GREEN, EXIT_RED, EXIT_NEVER_APPEARED, EXIT_STILL_RUNNING,
-             EXIT_UNUSABLE, EXIT_NOT_MERGED]
+             EXIT_UNUSABLE, EXIT_NOT_MERGED, EXIT_BEHIND]
     assert len(set(codes)) == len(codes)
 
 
@@ -687,6 +690,39 @@ def test_a_commit_landing_mid_wait_is_said_out_loud_and_judged_afresh() -> None:
 # ── merging the commit that was judged ────────────────────────────────────────
 
 
+# The recorded comparisons and the stand-in for them live here rather than
+# beside their own tests further down, because the merge harness below needs
+# the stand-in: since #680 a merge crosses the base comparison on its way.
+REAL_BEHIND = REPO_ROOT / "tests" / "fixtures" / "gh_compare_behind_real.json"
+REAL_AHEAD = REPO_ROOT / "tests" / "fixtures" / "gh_compare_ahead_real.json"
+
+#: Where main was when the two comparisons above were recorded, on 2026-08-17.
+MAIN_SHA = "063877ef94c8710b27018261240a811f696dffd6"
+#: A commit two behind that main, which is what a stale branch looks like.
+STALE_SHA = "7b510ea33af5f6fbe5db8dd0b1bcd8d1e9e12cd0"
+
+
+def real_compare(name: str) -> dict:
+    path = REAL_BEHIND if name == "behind" else REAL_AHEAD
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+class FakeStanding:
+    """Stands in for the comparison against the base branch."""
+
+    def __init__(self, *, behind_by: int = 0, raising: Exception | None = None) -> None:
+        self.behind_by = behind_by
+        self.raising = raising
+        self.asked: list[tuple[str, str]] = []
+
+    def __call__(self, number: str, sha: str) -> BaseStanding:
+        self.asked.append((number, sha))
+        if self.raising:
+            raise self.raising
+        return BaseStanding(branch="main", base_sha=MAIN_SHA,
+                            behind_by=self.behind_by, ahead_by=1)
+
+
 class FakeMerge:
     """Stands in for the call that merges, recording what it was asked to merge."""
 
@@ -708,8 +744,14 @@ def wait_and_merge(
     argv: list[str] | None = None,
     lines: list[str] | None = None,
     heads: list[str] | None = None,
+    base: "FakeStanding | None" = None,
 ) -> int:
-    """Drive main() to a verdict with the merge step wired to a fake."""
+    """Drive main() to a verdict with the merge step wired to a fake.
+
+    The base comparison (#680) is a precondition of the merge rather than the
+    subject of these tests, so it stands in as a branch that contains its base.
+    The tests below it are the ones that vary it.
+    """
     clock = FakeClock()
     remaining = list(replies)
     seen = list(heads or [HEAD_SHA])
@@ -721,7 +763,8 @@ def wait_and_merge(
 
     return main(
         argv or ["7", "--timeout", "600", "--interval", "30", "--merge"],
-        poll=poll, merge=merge, now=clock.now, sleep=clock.sleep,
+        poll=poll, merge=merge, base=base or FakeStanding(behind_by=0),
+        now=clock.now, sleep=clock.sleep,
         workflows=WORKFLOWS, out=(lines.append if lines is not None else lambda _l: None))
 
 
@@ -872,3 +915,199 @@ def test_the_usage_line_names_the_merge_option() -> None:
         parse_arguments([])
 
     assert "--merge" in str(refusal.value), refusal.value
+
+
+# ── the base the green was earned against ─────────────────────────────────────
+#
+# #680. Proving one named commit green and merging exactly that commit closes
+# the window between the two (#674). It does not close the other one: the
+# commit judged may have been tested against a base that has since moved, so
+# two changes that are each green against their own base merge into a broken
+# main (L85). Until now that was handled by remembering to rebase.
+
+def wait_merge_and_compare(
+    *,
+    merge: FakeMerge,
+    standing: FakeStanding,
+    lines: list[str] | None = None,
+) -> int:
+    clock = FakeClock()
+    return main(
+        ["7", "--timeout", "600", "--interval", "30", "--merge"],
+        poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
+        merge=merge, base=standing, now=clock.now, sleep=clock.sleep,
+        workflows=WORKFLOWS,
+        out=(lines.append if lines is not None else lambda _l: None))
+
+
+def test_a_branch_behind_its_base_is_refused_rather_than_merged() -> None:
+    """The green was earned against a base that has since moved, so what it
+    proves is not what merging would produce (L85)."""
+    merge = FakeMerge()
+    lines: list[str] = []
+
+    code = wait_merge_and_compare(merge=merge, standing=FakeStanding(behind_by=2),
+                                  lines=lines)
+
+    assert code == EXIT_BEHIND
+    assert merge.asked == [], merge.asked
+    said = "\n".join(lines)
+    assert "2 commits behind main" in said, said
+    assert MAIN_SHA[:12] in said, said
+    # A refusal that does not name a step which changes the state it refuses on
+    # leaves the person facing the same command (L111).
+    assert "Rebase onto main" in said, said
+
+
+def test_a_branch_that_contains_its_base_still_merges() -> None:
+    """The positive case, in the same harness as the refusal above, because a
+    test that something did NOT happen is satisfied by a fixture in which it
+    could not happen (L159)."""
+    merge = FakeMerge()
+
+    code = wait_merge_and_compare(merge=merge, standing=FakeStanding(behind_by=0))
+
+    assert code == EXIT_GREEN
+    assert merge.asked == [("7", HEAD_SHA)], merge.asked
+
+
+def test_the_comparison_is_taken_at_the_commit_that_was_judged() -> None:
+    """Asking about the branch rather than the judged commit would answer for
+    whatever is at the top of it by then, which is the defect one step earlier
+    (#674)."""
+    standing = FakeStanding(behind_by=0)
+
+    wait_merge_and_compare(merge=FakeMerge(), standing=standing)
+
+    assert standing.asked == [("7", HEAD_SHA)], standing.asked
+
+
+def test_a_comparison_that_cannot_be_taken_refuses_to_merge() -> None:
+    """Not knowing whether the base has moved is not the same as it not having
+    moved, and the merge is the step that cannot be undone, so this fails
+    closed (L42)."""
+    merge = FakeMerge()
+    lines: list[str] = []
+
+    code = wait_merge_and_compare(
+        merge=merge, standing=FakeStanding(raising=GhUnusable("HTTP 503")),
+        lines=lines)
+
+    assert code == EXIT_UNUSABLE
+    assert merge.asked == [], merge.asked
+    said = "\n".join(lines)
+    assert "not merged" in said, said
+    assert "503" in said, said
+
+
+def test_without_the_merge_flag_nothing_is_compared() -> None:
+    """The wait stays a wait: it is the merge that this refuses, and a plain
+    wait asking two more questions of GitHub would fail for reasons that have
+    nothing to do with what it was asked."""
+    standing = FakeStanding(behind_by=2)
+    clock = FakeClock()
+
+    code = main(["7", "--timeout", "600", "--interval", "30"],
+                poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
+                base=standing, now=clock.now, sleep=clock.sleep,
+                workflows=WORKFLOWS, out=lambda _l: None)
+
+    assert code == EXIT_GREEN
+    assert standing.asked == [], standing.asked
+
+
+def test_the_wait_compares_through_the_real_reading_by_default() -> None:
+    """A comparison nothing calls is a rule that lives only in a docstring (L3)."""
+    assert inspect.signature(main).parameters["base"].default is base_standing
+
+
+class CompareApi:
+    """Answers the three paths `base_standing` asks, from recorded replies."""
+
+    def __init__(self, *, compare: dict, branch: str = "main",
+                 tip: str = MAIN_SHA) -> None:
+        self.compare = compare
+        self.branch = branch
+        self.tip = tip
+        self.paths: list[str] = []
+
+    def __call__(self, path: str) -> dict:
+        self.paths.append(path)
+        if "/pulls/" in path:
+            return {"head": {"sha": STALE_SHA},
+                    "base": {"ref": self.branch, "repo": {"full_name": REPO}}}
+        if "/compare/" in path:
+            return self.compare
+        if "/commits/" in path:
+            return {"sha": self.tip}
+        raise AssertionError(f"the tool asked for a path nothing recorded: {path}")
+
+
+def test_a_real_reply_about_a_stale_branch_reads_as_behind() -> None:
+    """GitHub's own reply for a commit two behind main, recorded 2026-08-17,
+    rather than a shape invented here (L48)."""
+    api = CompareApi(compare=real_compare("behind"))
+
+    standing = base_standing("7", STALE_SHA, api=api)
+
+    assert standing.behind_by == 2, standing
+    assert standing.branch == "main"
+    assert standing.base_sha == MAIN_SHA
+    # The comparison names the commit judged, not the branch it sits on, so a
+    # push landing meanwhile cannot answer for it (L179).
+    assert any(STALE_SHA in path for path in api.paths), api.paths
+
+
+def test_a_real_reply_about_an_up_to_date_branch_reads_as_not_behind() -> None:
+    api = CompareApi(compare=real_compare("ahead"))
+
+    standing = base_standing("7", HEAD_SHA, api=api)
+
+    assert standing.behind_by == 0, standing
+    assert standing.ahead_by == 1, standing
+
+
+def test_a_comparison_that_will_not_say_how_far_apart_is_refused() -> None:
+    """A missing count must not read as zero: zero is the answer that merges."""
+    reply = dict(real_compare("ahead"))
+    reply.pop("behind_by")
+    api = CompareApi(compare=reply)
+
+    with pytest.raises(GhUnusable) as refusal:
+        base_standing("7", HEAD_SHA, api=api)
+
+    assert "behind" in str(refusal.value), refusal.value
+
+
+def test_a_comparison_whose_two_halves_disagree_is_refused() -> None:
+    """`behind_by` and the merge base say the same thing in two ways. When
+    they stop agreeing, this reply does not mean what the code reads it to
+    mean, and guessing which half is right is how a wrong green ships."""
+    reply = dict(real_compare("behind"))
+    reply["behind_by"] = 0
+    api = CompareApi(compare=reply)
+
+    with pytest.raises(GhUnusable) as refusal:
+        base_standing("7", STALE_SHA, api=api)
+
+    assert "merge base" in str(refusal.value), refusal.value
+
+
+def test_a_pull_request_that_names_no_base_branch_is_refused() -> None:
+    api = CompareApi(compare=real_compare("ahead"), branch="")
+
+    with pytest.raises(GhUnusable) as refusal:
+        base_standing("7", HEAD_SHA, api=api)
+
+    assert "base branch" in str(refusal.value), refusal.value
+
+
+def test_a_base_branch_with_no_commit_is_refused() -> None:
+    """Where main is now is the whole question, so an answer that does not name
+    it is not an answer."""
+    api = CompareApi(compare=real_compare("ahead"), tip="")
+
+    with pytest.raises(GhUnusable) as refusal:
+        base_standing("7", HEAD_SHA, api=api)
+
+    assert "main" in str(refusal.value), refusal.value
