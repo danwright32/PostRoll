@@ -76,6 +76,55 @@ enum CheckoutRevision {
         notification.userInfo?[readingKey] as? Reading
     }
 
+    /// How long one reading stands in for the next (#676).
+    ///
+    /// A reading runs git three times, one of them `git status --porcelain` over
+    /// the whole working tree, and the window's refresh asks for one on every
+    /// activation. Long enough that clicking in and out of the app costs
+    /// nothing, short enough that a checkout moved in a terminal is read again
+    /// on the way back: switching branch and returning takes longer than this.
+    static let reuseWindow: TimeInterval = 5
+
+    /// When a reading was last taken, wherever it was taken.
+    ///
+    /// The moment only, not the reading with it. The reading is already carried
+    /// to everything that wants it by the announcement, and a second copy kept
+    /// here would be a stored value with no reader (L46).
+    ///
+    /// A class with a lock rather than a plain static, because readings are
+    /// taken on detached tasks: a generation takes one at the top of its run
+    /// while the window may be asking for another.
+    final class Recency: @unchecked Sendable {
+        private let lock = NSLock()
+        private var lastTaken: Date?
+        private let window: TimeInterval
+
+        init(window: TimeInterval = CheckoutRevision.reuseWindow) {
+            self.window = window
+        }
+
+        func record(at moment: Date) {
+            lock.lock()
+            defer { lock.unlock() }
+            lastTaken = moment
+        }
+
+        /// Whether a reading taken at `moment` would repeat a recent one.
+        ///
+        /// Nothing recorded is not a recent reading: the first question asked
+        /// has to be answered by measuring, or the app opens saying nothing at
+        /// all about a folder it never looked at (L98).
+        func isRepeat(at moment: Date) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let lastTaken else { return false }
+            return moment.timeIntervalSince(lastTaken) < window
+        }
+    }
+
+    /// The one every reading is recorded in.
+    static let recency = Recency()
+
     /// The revision of the checkout a run is about to execute, announced.
     ///
     /// The announcement wraps the measurement rather than sitting inside it, so
@@ -83,11 +132,42 @@ enum CheckoutRevision {
     /// the returns an announcement is easiest to forget, and a forgotten one
     /// leaves the previous notice standing as though it had been measured again
     /// (L100).
-    static func read(inRepo repo: URL, timeout: TimeInterval = deadline,
-                     announcingTo center: NotificationCenter = .default) -> Reading {
+    ///
+    /// Never skipped, however recently another reading was taken: what this
+    /// returns is written into a run's log as the code that run executed (#661),
+    /// and handing it a reading measured seconds earlier for something else
+    /// would put a commit in that log which nothing measured for that run.
+    /// Skipping is the refresh's job, below.
+    @discardableResult
+    static func read(inRepo repo: URL, at moment: Date = Date(),
+                     timeout: TimeInterval = deadline,
+                     announcingTo center: NotificationCenter = .default,
+                     recording recency: Recency = recency) -> Reading {
         let reading = measure(inRepo: repo, timeout: timeout)
+        recency.record(at: moment)
         center.post(name: readNotification, object: nil, userInfo: [readingKey: reading])
         return reading
+    }
+
+    /// A reading for a surface that only wants the answer kept up to date, or
+    /// nil when one taken moments ago already says it (#676).
+    ///
+    /// The window asks on every activation, and clicking back into PostRoll
+    /// after switching to a terminal and back is the same question about the
+    /// same folder. In a checkout with a lot of uncommitted work the status read
+    /// alone is not instant, so the same answer was being paid for repeatedly.
+    ///
+    /// nil rather than the previous reading, because a skip and a measurement
+    /// are different answers: re-announcing would push the same sentence back
+    /// through every listener, and returning something the caller could log
+    /// would put an unmeasured commit into a record (L11).
+    static func readIfStale(inRepo repo: URL, at moment: Date = Date(),
+                            timeout: TimeInterval = deadline,
+                            announcingTo center: NotificationCenter = .default,
+                            recording recency: Recency = recency) -> Reading? {
+        guard !recency.isRepeat(at: moment) else { return nil }
+        return read(inRepo: repo, at: moment, timeout: timeout,
+                    announcingTo: center, recording: recency)
     }
 
     /// Three reads rather than one parse of `git status --branch --porcelain`,

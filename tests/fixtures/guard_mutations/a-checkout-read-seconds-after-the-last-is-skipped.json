@@ -1,0 +1,8 @@
+{
+  "name": "a-checkout-read-seconds-after-the-last-is-skipped",
+  "file": "PostRollApp/Sources/Services/CheckoutRevision.swift",
+  "find": "        guard !recency.isRepeat(at: moment) else { return nil }",
+  "replace": "        guard !recency.isRepeat(at: moment) || true else { return nil }",
+  "test": "PostRollTests/CheckoutReReadTests/testAReadTakenSecondsAfterTheLastOneIsSkipped",
+  "breaks": "the refresh reads the code folder again however recently it was read, so every click back into PostRoll runs git three times over the whole working tree for an answer taken seconds ago (#676)"
+}
