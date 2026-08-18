@@ -38,6 +38,9 @@ are three different things and only one of them may be merged on:
     4  unusable       gh could not be asked, or the workflows could not be read
     5  not merged     the commit was green and GitHub refused to merge it,
                       which is what a head that moved in between looks like
+    6  behind          the commit was green against a base that has since
+                      moved, so nothing has judged it against what it would
+                      land on
 
 #674 is the last step of the same defect. Proving one named commit passed and
 then merging in a separate step merges whatever is at the top of the branch by
@@ -45,6 +48,19 @@ then, so a push landing in the seconds between the two is merged with nothing
 having judged it, and that is the step that cannot be undone. `--merge` closes
 it by construction: GitHub's merge endpoint takes the commit as `sha` and
 answers 409 when the head is not it.
+
+#680 is the window #674 left open. Merging the exact commit that was judged
+says nothing about the BASE it was judged against: two changes that are each
+green against their own base merge into a broken main (L85). So the merge path
+asks where the base branch is now and refuses a head that does not contain it,
+under its own exit code, rather than leaving it to whoever remembers to rebase.
+
+The comparison is taken immediately before the merge and against the commit
+that was judged, which makes the window seconds wide rather than closing it:
+GitHub's merge endpoint takes a head `sha` and has no matching precondition for
+the base. Closing it by construction takes the repository level setting
+("require branches to be up to date before merging"), which this cannot do for
+anyone from here.
 
 Usage:
 
@@ -78,6 +94,7 @@ EXIT_NEVER_APPEARED = 2
 EXIT_STILL_RUNNING = 3
 EXIT_UNUSABLE = 4
 EXIT_NOT_MERGED = 5
+EXIT_BEHIND = 6
 
 #: The two job conditions this can classify. Anything else is refused rather
 #: than guessed at, because a guessed bar reads as authoritative.
@@ -396,6 +413,79 @@ def merge_commit(number: str, sha: str, *,
     return str(reply.get("sha") or sha)
 
 
+@dataclass(frozen=True)
+class BaseStanding:
+    """Where one commit sits relative to the branch its pull request lands on.
+
+    `base_sha` is where that branch was when this reading was taken, named so a
+    refusal can say what moved rather than only that something did.
+    """
+
+    branch: str
+    base_sha: str
+    behind_by: int
+    ahead_by: int
+
+
+def base_standing(number: str, sha: str, *,
+                  api: Callable[[str], dict] = gh_json) -> BaseStanding:
+    """How far `sha` is behind the branch pull request `number` would land on.
+
+    The green above proves that one named commit passed the checks. It says
+    nothing about what that commit was tested AGAINST: main moves while a
+    branch waits, and two changes that are each green against their own base
+    merge into a main neither of them was ever run against (L85).
+
+    Asked about the judged commit rather than about the branch, so a push
+    landing meanwhile cannot answer for it (L179), and against the base
+    branch's current head commit rather than its name, so the refusal can name
+    where main actually is.
+
+    Anything this cannot read raises rather than returning a zero. Not knowing
+    whether the base has moved is not the same as it not having moved, and zero
+    is the answer that merges (L42).
+    """
+    pull = api(f"repos/{{owner}}/{{repo}}/pulls/{number}")
+    base = pull.get("base") or {}
+    repo = str(((base.get("repo") or {}).get("full_name") or ""))
+    branch = str(base.get("ref") or "")
+    if not repo or not branch:
+        raise GhUnusable(
+            f"pull request {number} named no base branch or no repository, so "
+            "there is nothing to compare its head against")
+
+    tip_path = f"repos/{repo}/commits/{branch}"
+    base_sha = str(api(tip_path).get("sha") or "")
+    if not base_sha:
+        raise GhUnusable(
+            f"gh api {tip_path} named no commit, so where {branch} is now is "
+            "unknown and nothing can be said about what this was judged against")
+
+    path = f"repos/{repo}/compare/{base_sha}...{sha}"
+    reply = api(path)
+    behind, ahead = reply.get("behind_by"), reply.get("ahead_by")
+    if not isinstance(behind, int) or not isinstance(ahead, int):
+        raise GhUnusable(
+            f"gh api {path} did not say how far apart the two commits are "
+            f"(behind_by {behind!r}, ahead_by {ahead!r}), so this cannot tell "
+            f"a branch that contains {branch} from one that does not")
+
+    # The same fact twice: a head that is behind by nothing is one whose merge
+    # base with the branch IS the branch. This catches the reply meaning
+    # something other than what is read here, not a wrong answer, since both
+    # halves come from the one lookup (L70). Refused rather than resolved,
+    # because picking a half is picking which defect to ship (L93).
+    merge_base = str((reply.get("merge_base_commit") or {}).get("sha") or "")
+    if (behind == 0) != (merge_base == base_sha):
+        raise GhUnusable(
+            f"gh api {path} says {behind} behind while its merge base is "
+            f"{merge_base[:12] or '(unnamed)'} against a {branch} at "
+            f"{base_sha[:12]}, and those two cannot both be true")
+
+    return BaseStanding(branch=branch, base_sha=base_sha,
+                        behind_by=behind, ahead_by=ahead)
+
+
 #: What a job's status and conclusion mean, in the vocabulary `verdict` judges.
 #:
 #: Listed rather than derived because it is GitHub's vocabulary, not ours, and
@@ -619,6 +709,10 @@ ASK_ATTEMPTS = 3
 ASK_BACKOFF_SECONDS = (2.0, 4.0)
 
 
+def _commits(count: int) -> str:
+    return f"{count} commit" if count == 1 else f"{count} commits"
+
+
 def say(line: str) -> None:
     """One line out, flushed.
 
@@ -667,6 +761,7 @@ def main(
     *,
     poll: Callable[[str], Poll] = poll_checks,
     merge: Callable[[str, str], str] = merge_commit,
+    base: Callable[[str, str], BaseStanding] = base_standing,
     now: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
     workflows: Path = WORKFLOWS,
@@ -713,6 +808,25 @@ def main(
             out(f"green at {judged[:12]}: {answer.summary}")
             if not arguments.merge:
                 return EXIT_GREEN
+            # What the green was earned AGAINST, asked as late as possible and
+            # about this commit (#680). A base that has moved means nothing has
+            # run this change against what it would land on.
+            try:
+                standing = base(number, judged)
+            except GhUnusable as error:
+                out(f"green at {judged[:12]} but not merged: cannot tell "
+                    f"whether the branch is up to date: {error}")
+                return EXIT_UNUSABLE
+            if standing.behind_by:
+                out(f"green at {judged[:12]} but not merged: it is "
+                    f"{_commits(standing.behind_by)} behind {standing.branch}, "
+                    f"now at {standing.base_sha[:12]}, so nothing has run this "
+                    f"change against what it would land on. Rebase onto "
+                    f"{standing.branch}, push, and wait again.")
+                return EXIT_BEHIND
+            out(f"  {judged[:12]} contains {standing.branch} at "
+                f"{standing.base_sha[:12]}, so the green was earned against "
+                "what it lands on")
             # The merge names the commit the green was earned by, so a push
             # landing in between is refused by GitHub rather than merged (#674).
             try:
