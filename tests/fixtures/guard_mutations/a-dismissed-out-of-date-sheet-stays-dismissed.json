@@ -1,0 +1,8 @@
+{
+  "name": "a-dismissed-out-of-date-sheet-stays-dismissed",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "            guard warning.id != dismissedBuildBehind else { return }",
+  "replace": "            guard warning.id != dismissedBuildBehind || true else { return }",
+  "test": "PostRollTests/BuildBehindRefreshTests/testAVerdictWavedAwayDoesNotComeBackOnTheNextActivation",
+  "breaks": "the out of date sheet is put back in the middle of the window every time the code folder is read, so clicking into PostRoll raises it again and it becomes something to dismiss on reflex, taking the real warning with it (#675, L36)"
+}

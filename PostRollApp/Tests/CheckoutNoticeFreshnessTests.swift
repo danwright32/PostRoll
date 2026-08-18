@@ -2,7 +2,7 @@ import XCTest
 
 /// The code folder notice keeps up with the folder it is about (#668).
 ///
-/// #664 read the checkout once, in `checkBuildFreshness` at launch, and never
+/// #664 read the checkout once, in `checkTheCodeFolder` at launch, and never
 /// again. The condition it reports changes precisely while the app is open,
 /// because that is when a session switches branches or leaves edits in the same
 /// folder, so the likeliest state was a wrong one: the banner absent while the

@@ -100,14 +100,23 @@ struct MainWindowView: View {
         }
         // The app being older than the code it was built from is the one thing
         // that makes a shipped fix look like it never worked, so it is said in
-        // the middle of the window at launch rather than left to be noticed.
-        .sheet(item: $appState.buildBehind) { behind in
+        // the middle of the window rather than left to be noticed.
+        //
+        // Dismissing goes through the state rather than clearing the value here,
+        // because the verdict is taken again every time the code folder is read
+        // (#675): a sheet that only cleared itself would be put straight back by
+        // the next reading and would reappear on every activation, which is how a
+        // warning becomes something to click away on reflex (L36).
+        .sheet(item: Binding(
+            get: { appState.buildBehind },
+            set: { if $0 == nil { appState.dismissBuildBehind() } }
+        )) { behind in
             BuildBehindSheet(builtAt: behind.builtAt,
                              latestCommit: behind.latestCommit,
                              remedy: behind.remedy,
                              repo: behind.repo)
         }
-        .task { await checkBuildFreshness() }
+        .task { await checkTheCodeFolder() }
         // A checkout moves while the app is open, which is the case the notice
         // exists for and the one a launch-time read cannot see (#668). Coming
         // back from the terminal that moved it is the whole scenario, and it
@@ -196,14 +205,16 @@ struct MainWindowView: View {
         _ = await Task.detached { CheckoutRevision.readIfStale(inRepo: repo) }.value
     }
 
-    /// Ask once, at launch, whether this build predates the code.
+    /// Ask at launch what the code folder is and whether this build predates it.
     ///
-    /// Off the main actor: it stats a file and runs git, and neither belongs on
-    /// the thread drawing the window. Only a `behind` verdict is put in front of
-    /// Dan; not being able to tell is written to the log, because a popup with
-    /// nothing actionable in it is one that gets dismissed on reflex, and the
-    /// real warning would go with it.
-    private func checkBuildFreshness() async {
+    /// Only a `behind` verdict is put in front of Dan; not being able to tell is
+    /// written to the log, because a popup with nothing actionable in it is one
+    /// that gets dismissed on reflex, and the real warning would go with it.
+    ///
+    /// Neither answer stops here. Both are refreshed on every later reading of
+    /// the same folder (#668, #675), which is what makes them true of the folder
+    /// as it is rather than as it was when the app opened.
+    private func checkTheCodeFolder() async {
         // Subscribed before anything is read, so the reading taken below and
         // every one a generation takes afterwards land the same way (#668).
         appState.watchCheckoutReadings()
@@ -238,18 +249,12 @@ struct MainWindowView: View {
             NSLog("[PostRoll] checkout revision unknown: \(reason)")
         }
 
-        let verdict = await Task.detached { BuildFreshness.check(repo: repo) }.value
-        switch verdict {
-        case let .behind(builtAt, latestCommit, remedy):
-            appState.buildBehind = BuildBehind(builtAt: builtAt,
-                                               latestCommit: latestCommit,
-                                               remedy: remedy,
-                                               repo: repo)
-        case .current:
-            break
-        case let .cannotTell(reason):
-            NSLog("[PostRoll] build freshness unknown: \(reason)")
-        }
+        // Asked here as well as through the subscription above, for the same
+        // reason the reading is applied twice: the answer at launch must not
+        // depend on the subscription having been made. The same verdict reached
+        // twice is the same sheet, and the second one is refused by the
+        // dismissal check if Dan has already waved it away.
+        await appState.refreshBuildFreshness(inRepo: repo)
     }
 }
 

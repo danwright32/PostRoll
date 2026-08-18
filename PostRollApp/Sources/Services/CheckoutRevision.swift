@@ -71,9 +71,26 @@ enum CheckoutRevision {
     /// Where the reading sits in the notification.
     static let readingKey = "reading"
 
+    /// Where the folder it was taken in sits in the notification (#675).
+    ///
+    /// Carried because a reading on its own cannot answer the other question
+    /// about the same folder, whether the running app was built before its
+    /// newest commit. Sending the folder with the reading lets that be judged
+    /// off the read that already happens rather than off a second one.
+    static let repoKey = "repo"
+
     /// The reading a notification carries, or nil if it carries none.
     static func reading(in notification: Notification) -> Reading? {
         notification.userInfo?[readingKey] as? Reading
+    }
+
+    /// The folder a notification's reading was taken in, or nil if it names none.
+    ///
+    /// nil rather than a guess at where the checkout is: an action carried out
+    /// against a folder nobody named would be judging some other checkout and
+    /// reporting the answer as this one's (L75).
+    static func repo(in notification: Notification) -> URL? {
+        notification.userInfo?[repoKey] as? URL
     }
 
     /// How long one reading stands in for the next (#676).
@@ -145,7 +162,8 @@ enum CheckoutRevision {
                      recording recency: Recency = recency) -> Reading {
         let reading = measure(inRepo: repo, timeout: timeout)
         recency.record(at: moment)
-        center.post(name: readNotification, object: nil, userInfo: [readingKey: reading])
+        center.post(name: readNotification, object: nil,
+                    userInfo: [readingKey: reading, repoKey: repo])
         return reading
     }
 

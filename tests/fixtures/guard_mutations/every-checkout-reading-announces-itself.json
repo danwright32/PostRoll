@@ -1,7 +1,7 @@
 {
   "name": "every-checkout-reading-announces-itself",
   "file": "PostRollApp/Sources/Services/CheckoutRevision.swift",
-  "find": "        center.post(name: readNotification, object: nil, userInfo: [readingKey: reading])",
+  "find": "        center.post(name: readNotification, object: nil,\n                    userInfo: [readingKey: reading, repoKey: repo])",
   "replace": "        _ = center",
   "test": "PostRollTests/CheckoutNoticeFreshnessTests/testAReadingOfARealCheckoutIsAnnounced",
   "breaks": "a reading is taken and nothing is told, so the notice on the window goes back to whatever was true at launch. The read every generation already takes for its log stops refreshing it, which is the moment it matters most (#668)"

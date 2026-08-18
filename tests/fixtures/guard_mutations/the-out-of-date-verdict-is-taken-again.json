@@ -1,0 +1,8 @@
+{
+  "name": "the-out-of-date-verdict-is-taken-again",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "                if let repo { await self?.refreshBuildFreshness(inRepo: repo) }",
+  "replace": "                _ = repo",
+  "test": "PostRollTests/BuildBehindRefreshTests/testAReadingTakenAnywhereRefreshesTheVerdict",
+  "breaks": "the out of date warning goes back to being read once at launch, so a session that pulls or switches to a branch ahead of the build leaves the running copy out of date with nothing saying so (#675)"
+}
