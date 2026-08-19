@@ -257,7 +257,9 @@ struct EventListView: View {
     }
 
     private func commitRename(event: Event) {
-        let trimmed = FieldText.normalized(renameText)
+        // One line, not merely trimmed (#688): the name reaches folder names,
+        // file names and captions.
+        let trimmed = FieldText.singleLine(renameText)
         if !trimmed.isEmpty,
            var ev = appState.events.first(where: { $0.id == event.id }) {
             // Live read (#103): renaming must not revert other saved work.

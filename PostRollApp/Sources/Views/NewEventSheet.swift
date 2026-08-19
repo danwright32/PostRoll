@@ -101,11 +101,15 @@ struct NewEventSheet: View {
     }
 
     private func createEvent() {
+        // Every one of these is a single line field, so a paste carrying a
+        // line break in the MIDDLE is folded rather than only trimmed (#688).
+        // The form renders one as a gap that looks like a space, so nothing on
+        // screen would say the value was broken.
         let event = Event(
-            name: FieldText.normalized(name),
-            org: FieldText.normalized(org),
-            venue: FieldText.normalized(venue),
-            venueContext: FieldText.normalized(venueContext),
+            name: FieldText.singleLine(name),
+            org: FieldText.singleLine(org),
+            venue: FieldText.singleLine(venue),
+            venueContext: FieldText.singleLine(venueContext),
             date: date,
             shootType: shootType
         )
