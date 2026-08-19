@@ -56,7 +56,17 @@ struct IGPost: Codable, Hashable {
     var stickerTaps: Int?
 
     var durationSec: Double?
-    var org: String?                  // first @handle extracted from caption
+    /// The first @handle in the caption that is not Dan's own, extracted at
+    /// import time by `_extract_org` in postroll/ai/import_meta_csv.py.
+    ///
+    /// NOT the event's organisation, despite the name, and the two are
+    /// different facts sharing one word, which is how it stayed invisible for
+    /// so long (#706). They matched for as long as every caption led with the
+    /// company's handle; an event with no organisation leads with the venue or
+    /// a performer instead. The screens now call this what it is, an account
+    /// credited, and the stored name is left alone because it is a key in
+    /// analytics.json that older files already carry.
+    var org: String?
     var isPersonal: Bool              // Claude flags non-concert posts during analysis
 
     enum CodingKeys: String, CodingKey {

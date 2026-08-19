@@ -8,11 +8,11 @@ struct InsightsOrgsView: View {
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("ORGANIZATIONS")
+                    Text("ACCOUNTS CREDITED")
                         .font(.system(size: 11, weight: .medium))
                         .tracking(0.8)
                         .foregroundStyle(PaintedSurfaces.bodyText)
-                    Text("Set follower size once per org so analytics can control for audience reach.")
+                    Text("The first account each caption credits. Set follower size once per account so analytics can control for audience reach.")
                         .font(.light(11))
                         .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
@@ -93,13 +93,13 @@ private struct OrgRow: View {
 private struct OrgsEmptyState: View {
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: "building.2")
+            Image(systemName: "at")
                 .font(.system(size: 28))
                 .foregroundStyle(PaintedSurfaces.secondaryText)
-            Text("No organizations detected yet.")
+            Text("No credited accounts yet.")
                 .font(.light(13))
                 .foregroundStyle(PaintedSurfaces.secondaryText)
-            Text("Import your Meta CSV first. Orgs are extracted from @-mentions in your captions.")
+            Text("Import your Meta CSV first. These are read from the @-mentions in your captions.")
                 .font(.light(11))
                 .foregroundStyle(PaintedSurfaces.secondaryText)
                 .multilineTextAlignment(.center)
