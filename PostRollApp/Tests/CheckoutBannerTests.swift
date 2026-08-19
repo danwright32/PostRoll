@@ -14,13 +14,17 @@ final class CheckoutBannerTests: XCTestCase {
 
     private func insetBlock() throws -> String {
         let code = try MainWindowSource.stripped()
-        let block = MainWindowSource.block(
-            openedBy: ".safeAreaInset(edge: .bottom)", in: code)
+        // The banners moved out of a bottom safe area inset and into a strip of
+        // their own below the window, because the inset did not reach into the
+        // detail column's scroll view and sat on top of the last thing in it
+        // (#695). What this guard is about is unchanged: that the window draws
+        // the notice at all.
+        let block = MainWindowSource.block(openedBy: ".bottomBanners", in: code)
         return try XCTUnwrap(
             block,
-            "MainWindowView no longer has a bottom safe-area inset, which is "
-            + "where both persistent banners live, so nothing here can be "
-            + "checked and this guard would otherwise pass having read nothing")
+            "MainWindowView no longer has a bottom banner strip, which is where "
+            + "both persistent banners live, so nothing here can be checked and "
+            + "this guard would otherwise pass having read nothing")
     }
 
     func testTheWindowDrawsABannerFromTheCheckoutNotice() throws {

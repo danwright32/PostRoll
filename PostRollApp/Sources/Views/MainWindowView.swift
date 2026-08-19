@@ -66,7 +66,12 @@ struct MainWindowView: View {
         // At the bottom rather than in the toolbar because a toolbar can condense
         // and hide what it holds (L79), and this is the message that says the
         // work on screen exists nowhere else.
-        .safeAreaInset(edge: .bottom) {
+        // A strip of their own below everything else, rather than an inset over
+        // it (#695). The inset did not reach into the detail column's scroll
+        // view, so the last 60pt of every scrolling screen sat underneath the
+        // banner with no scroll travel left to bring it out, and on a stage
+        // screen the last item is the stage's primary action.
+        .bottomBanners {
             // Two conditions that both persist, stacked rather than competing
             // for one slot: a failing save and a checkout that is not on a clean
             // main can be true at the same time, and whichever lost would be

@@ -1,0 +1,8 @@
+{
+  "name": "the-banners-do-not-cover-the-content",
+  "file": "PostRollApp/Sources/Views/BottomBanners.swift",
+  "find": "        VStack(spacing: 0) {\n            content\n            banners()\n        }",
+  "replace": "        content.safeAreaInset(edge: .bottom) { banners() }",
+  "test": "PostRollTests/BottomBannerCoverageTests/testTheScrollingRegionDoesNotReachUnderTheBanner",
+  "breaks": "the banners go back to sitting over the window's content, so the last band of every scrolling screen is underneath them with no scroll travel left to bring it out. On a stage screen the last item is that stage's primary action, so how much content the day sections happen to hold decides whether the screen can be finished at all (#695)"
+}
