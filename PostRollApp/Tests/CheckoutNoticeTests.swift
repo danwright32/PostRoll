@@ -97,4 +97,35 @@ final class CheckoutNoticeTests: XCTestCase {
 
         XCTAssertTrue(message.lowercased().contains("generate"), message)
     }
+
+    // MARK: - Which half it is actually true of (#692)
+
+    func testTheNoticeDoesNotClaimTheWholeOfGeneration() {
+        // "Anything you generate now runs that code" is true of the pipeline
+        // and false of the parts the app draws itself. The banner is read at
+        // the exact moment its claim is being relied on: switching to a branch
+        // to test a collage change and reading that sentence says the change is
+        // under test when it is not, and the output then looks like the branch
+        // failing to work.
+        let message = CheckoutNotice.message(
+            for: .known(commit: "1a2b3c4", branch: "wip/collage", dirty: false)) ?? ""
+
+        XCTAssertFalse(message.lowercased().contains("anything you generate"),
+                       "the banner still speaks for all of generation: \(message)")
+    }
+
+    func testTheNoticeNamesBothHalvesAndWhatToDoAboutTheFrozenOne() {
+        // Naming only the live half would be just as misleading in the other
+        // direction: the reader has to know a Swift side change still needs a
+        // rebuild, which is the actionable part (L80).
+        let message = CheckoutNotice.message(
+            for: .known(commit: "1a2b3c4", branch: "wip/collage", dirty: false)) ?? ""
+
+        XCTAssertTrue(message.lowercased().contains("captions"),
+                      "the live half is not named: \(message)")
+        XCTAssertTrue(message.lowercased().contains("collage"),
+                      "the frozen half is not named: \(message)")
+        XCTAssertTrue(message.lowercased().contains("rebuild"),
+                      "nothing says what makes the frozen half current: \(message)")
+    }
 }
