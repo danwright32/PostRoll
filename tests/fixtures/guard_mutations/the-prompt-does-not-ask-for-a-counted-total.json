@@ -1,0 +1,8 @@
+{
+  "name": "the-prompt-does-not-ask-for-a-counted-total",
+  "file": "postroll/ai/analyze_posts.py",
+  "find": "  \"brand_voice_suggestions\": [\"<actionable sentence for the caption generator>\", ...],",
+  "replace": "  \"post_count\": <int>,\n  \"brand_voice_suggestions\": [\"<actionable sentence for the caption generator>\", ...],",
+  "test": "tests/test_analyze_posts.py::TestReportCounts::test_the_prompt_does_not_ask_claude_for_a_count_the_code_holds",
+  "breaks": "the prompt asks the model to supply a number the code has already measured, and a field whose only writer is a prompt cannot tell a model that ignored the instruction from one that judged it inapplicable (#723, L128)"
+}

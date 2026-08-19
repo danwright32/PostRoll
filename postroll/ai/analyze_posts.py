@@ -69,6 +69,9 @@ _EMPTY_FINDINGS = findings_shell()
 
 _EMPTY_REPORT_SHELL: dict[str, Any] = {
     "summary":               "",
+    # Counted by `report_counts` and overwritten in `_finalize` on every
+    # generation (#723), so the zeros here are the payload's declared shape
+    # rather than a value any report can carry.
     "post_count":            0,
     "story_count":           0,
     "feed_count":            0,
@@ -218,6 +221,35 @@ def audience_control(
     }
 
 
+def report_counts(
+    compact_feed: list[dict[str, Any]],
+    compact_stories: list[dict[str, Any]],
+) -> dict[str, int]:
+    """How many posts a report covers, counted rather than asked for (#723).
+
+    These three were whatever Claude returned, even though the split that
+    produced the prompt had already counted them exactly. A model that
+    miscounts, or that answers about a subset, produced a report stating a total
+    nobody measured, and the screen rendered it as fact (L161). Measured from
+    the compacted lists, which is exactly what the prompt is given, so this
+    counts the same population the report is about rather than a second, nearby
+    idea of it (L107).
+
+    These count what the report COVERS, both tracks, personal posts included.
+    `analyzed_count` (#720) is the narrower denominator that drops personal
+    posts because rule 4 of the prompt excludes them from craft analysis. The
+    two are deliberately different numbers, so neither may stand in for the
+    other (L118).
+    """
+    feed = len(compact_feed)
+    stories = len(compact_stories)
+    return {
+        "feed_count":  feed,
+        "story_count": stories,
+        "post_count":  feed + stories,
+    }
+
+
 def _prep(
     posts: list[dict[str, Any]],
     org_bands: dict[str, str],
@@ -253,9 +285,6 @@ Output a JSON object with this exact schema (all fields required):
 
 {
   "summary": "<2–3 paragraphs of plain-English findings>",
-  "post_count": <int — total posts analyzed>,
-  "story_count": <int>,
-  "feed_count": <int>,
   "feed_findings": {
     "caption_patterns":      [FindingList],
     "hashtag_patterns":      [FindingList],
@@ -365,14 +394,21 @@ def _assign_ids(obj: Any) -> None:
 
 
 def _finalize(result: dict[str, Any], date_start: str, date_end: str,
+              counts: dict[str, int],
               control: dict[str, Any] | None = None) -> dict[str, Any]:
     """Add server-generated metadata and ensure all required fields exist.
 
-    `control` is what this code MEASURED about how much of the report could be
-    compared within a follower tier (#720). It overwrites whatever Claude may
+    `counts` is how many posts the report covers, from `report_counts` (#723),
+    and `control` is what this code MEASURED about how much of it could be
+    compared within a follower tier (#720). Both overwrite whatever Claude may
     have said about the same numbers: a fact the system already holds is checked
-    against, never taken from, the model (L161). Left out, the report says
-    nothing rather than zero.
+    against, never taken from, the model (L161).
+
+    `counts` is required, with no default standing for absent, because a caller
+    that forgot it would get Claude's number back silently, which is the whole
+    defect (L168). `control` stays optional: an absent audience measurement is
+    a state a report can legitimately be in, and it renders as nothing rather
+    than as zero.
     """
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -380,6 +416,8 @@ def _finalize(result: dict[str, Any], date_start: str, date_end: str,
     for key, default in _EMPTY_REPORT_SHELL.items():
         if key not in result:
             result[key] = default
+
+    result.update(counts)
 
     if control:
         result.update(control)
@@ -465,6 +503,7 @@ def main() -> None:
         raise ValueError(f"Expected dict from Claude, got {type(result)}")
 
     report = _finalize(result, date_start, date_end,
+                       report_counts(compact_feed, compact_stories),
                        control=audience_control(compact_feed, compact_stories))
 
     out_path = Path(args.output)
