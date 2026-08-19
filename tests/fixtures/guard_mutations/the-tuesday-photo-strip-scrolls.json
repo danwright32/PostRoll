@@ -1,0 +1,8 @@
+{
+  "name": "the-tuesday-photo-strip-scrolls",
+  "file": "PostRollApp/Sources/Views/PhotoAssignmentView.swift",
+  "find": "                FadingScrollView(axis: .horizontal, background: .cream) {",
+  "replace": "                Group {",
+  "test": "PostRollTests/NoScreenForcesTheWindowBiggerTests/testNoStageScreenDemandsMoreThanADisplayCanHold",
+  "breaks": "Tuesday's before and after picker goes back to laying one thumbnail per photo of the day in a row with nothing bounding it, so the screen answers that it needs 2078pt of width. SwiftUI hands that demand to the window, and selecting the event widens the window on its own (#708)"
+}
