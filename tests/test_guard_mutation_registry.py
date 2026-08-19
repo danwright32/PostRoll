@@ -76,11 +76,22 @@ def test_every_named_test_still_exists(entry: Entry):
             f"{class_name} no longer has {method}; update the {entry.name} "
             "entry")
     else:
-        path_part, method = entry.test.split("::")
+        # pytest node ids are `path::name` or `path::Class::name`, and both are
+        # in the registry: the second is how a file groups a set of related
+        # guards under one class. Reading only the first shape raised a
+        # ValueError on the second rather than saying anything useful about it.
+        path_part, *rest = entry.test.split("::")
+        assert rest, f"{entry.name} names no test in {path_part}"
+        class_name = rest[0] if len(rest) > 1 else None
         # A parametrised node id carries its case in brackets; the function
         # the file declares is the part before them.
-        method = method.split("[")[0]
+        method = rest[-1].split("[")[0]
         test_file = REPO_ROOT / path_part
         assert test_file.is_file(), f"{path_part} has moved"
-        assert f"def {method}(" in test_file.read_text(), (
+        source = test_file.read_text()
+        if class_name:
+            assert f"class {class_name}" in source, (
+                f"{path_part} no longer declares {class_name}; update the "
+                f"{entry.name} entry")
+        assert f"def {method}(" in source, (
             f"{path_part} no longer defines {method}")
