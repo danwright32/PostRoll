@@ -1,0 +1,8 @@
+{
+  "name": "insights-names-the-account-not-an-organisation",
+  "file": "PostRollApp/Sources/Views/Insights/InsightsOrgsView.swift",
+  "find": "                    Text(\"ACCOUNTS CREDITED\")",
+  "replace": "                    Text(\"ORGANIZATIONS\")",
+  "test": "PostRollTests/InsightsCreditedAccountCopyTests/testNoInsightsScreenCallsTheseAccountsAnOrganization",
+  "breaks": "Insights goes back to calling a list of credited accounts organizations, and asking Dan to set a follower size against each as though it were the presenting company. Since the organisation became optional the first account credited is often the venue or a performer, and the follower size is the thing that exists to make comparisons between posts fair (#706)"
+}

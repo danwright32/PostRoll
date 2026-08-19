@@ -7,7 +7,12 @@ struct InsightsSidebarView: View {
     private let sections: [(InsightsSection, String, String)] = [
         (.overview, "Overview",  "chart.bar.xaxis"),
         (.posts,    "Posts",     "photo.stack"),
-        (.orgs,     "Orgs",      "building.2"),
+        // Named for what the value IS (#706). It is not the organisation typed
+        // on the event: it is the first account the caption credits, whichever
+        // account that happens to be. The two matched for as long as every
+        // caption led with the company's handle, and stopped matching when the
+        // organisation became optional.
+        (.orgs,     "Credited",  "at"),
     ]
 
     var body: some View {
