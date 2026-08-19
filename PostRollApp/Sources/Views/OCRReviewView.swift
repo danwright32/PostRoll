@@ -247,11 +247,11 @@ struct OCRReviewView: View {
 
     /// Bring a result written underneath this screen into the draft it shows.
     ///
-    /// The decision is `OCRDraftRefresh`, so the rule and this call site cannot
+    /// The decision is `DraftRefresh`, so the rule and this call site cannot
     /// disagree about when it is safe (#518).
     private func adoptStoredResultIfNeeded() {
         let live = appState.events.first(where: { $0.id == event.id }) ?? event
-        guard OCRDraftRefresh.shouldAdopt(
+        guard DraftRefresh.shouldAdopt(
                 stored: live.ocrResult, draft: ocr,
                 isRunning: ocrManager.isRunning(event.id)
                     || notesManager.isRunning(event.id)

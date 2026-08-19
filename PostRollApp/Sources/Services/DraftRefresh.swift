@@ -1,7 +1,9 @@
 import Foundation
 
-/// When the programme review screen must take up what was stored underneath it
-/// (#518).
+/// When a review screen must take up what was stored underneath it (#518).
+///
+/// Two screens hold a draft this way and both have work writing to the store
+/// behind them, so the rule is stated once rather than once per screen (#718).
 ///
 /// The review screen loads its working copy of the OCR result once, at init,
 /// and is keyed on the event id, so it does not reload when that event's stored
@@ -17,7 +19,7 @@ import Foundation
 ///
 /// A correct save that still shows the old value reads as a failed save, and
 /// here it did not merely read as one, it became one (L14, L17).
-enum OCRDraftRefresh {
+enum DraftRefresh {
 
     /// Whether the on screen draft should be replaced by what is stored.
     ///
@@ -30,8 +32,12 @@ enum OCRDraftRefresh {
     /// values that update each other start looping.
     ///
     /// Never from an absent stored result, which would blank the screen.
-    static func shouldAdopt(stored: OCRResult?, draft: OCRResult,
-                            isRunning: Bool) -> Bool {
+    /// Generic over what the draft IS, because the programme review screen
+    /// holds an `OCRResult` and the caption review screen holds a
+    /// `WeekGenerationResult`, and the decision is the same for both. Two
+    /// copies of it would be two rules that can disagree (L41).
+    static func shouldAdopt<Draft: Equatable>(stored: Draft?, draft: Draft,
+                                              isRunning: Bool) -> Bool {
         guard !isRunning, let stored else { return false }
         return stored != draft
     }

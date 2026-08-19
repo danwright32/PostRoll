@@ -218,7 +218,7 @@ extension UnreadProgramPagesTests {
         let onScreen = draft(performers: ["Ana"])
         let merged = draft(performers: ["Ana", "Bo"])
 
-        XCTAssertTrue(OCRDraftRefresh.shouldAdopt(stored: merged, draft: onScreen,
+        XCTAssertTrue(DraftRefresh.shouldAdopt(stored: merged, draft: onScreen,
                                                   isRunning: false),
                       "the screen would keep showing the pre-rescan list and then "
                       + "write it back over the merged one")
@@ -227,7 +227,7 @@ extension UnreadProgramPagesTests {
     /// While the run is still going, the stored result is mid-flight and the
     /// draft must be left alone.
     func testNothingIsAdoptedWhileTheRescanIsStillRunning() {
-        XCTAssertFalse(OCRDraftRefresh.shouldAdopt(stored: draft(performers: ["Ana", "Bo"]),
+        XCTAssertFalse(DraftRefresh.shouldAdopt(stored: draft(performers: ["Ana", "Bo"]),
                                                    draft: draft(performers: ["Ana"]),
                                                    isRunning: true))
     }
@@ -236,13 +236,13 @@ extension UnreadProgramPagesTests {
     /// so adopting would be a pointless write and a possible edit loop.
     func testNothingIsAdoptedWhenTheyAlreadyAgree() {
         let same = draft(performers: ["Ana"])
-        XCTAssertFalse(OCRDraftRefresh.shouldAdopt(stored: same, draft: same,
+        XCTAssertFalse(DraftRefresh.shouldAdopt(stored: same, draft: same,
                                                    isRunning: false))
     }
 
     /// An event with nothing stored must not blank the draft on screen.
     func testAnAbsentStoredResultNeverReplacesTheDraft() {
-        XCTAssertFalse(OCRDraftRefresh.shouldAdopt(stored: nil,
+        XCTAssertFalse(DraftRefresh.shouldAdopt(stored: nil,
                                                    draft: draft(performers: ["Ana"]),
                                                    isRunning: false))
     }
@@ -256,7 +256,7 @@ extension UnreadProgramPagesTests {
     func testTheReviewScreenAdoptsAndStopsPersistingDuringARescan() throws {
         let code = try source("Sources/Views/OCRReviewView.swift")
 
-        XCTAssertTrue(code.contains("OCRDraftRefresh.shouldAdopt"),
+        XCTAssertTrue(code.contains("DraftRefresh.shouldAdopt"),
                       "the screen never takes up what a rescan merged, so it will "
                       + "write its older list back over the newly read pages")
         XCTAssertTrue(code.contains("guard !ocrManager.isRunning(event.id) else { return }"),

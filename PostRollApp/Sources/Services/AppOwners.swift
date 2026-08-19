@@ -32,6 +32,8 @@ struct AppOwners {
     var insights = InsightsWorkManager()
     /// The "describe the correction" reflow on the review screen (#718).
     var reflow = OCRReflowManager()
+    /// The whole-week regeneration started from the caption screen (#718).
+    var captionWork = CaptionWorkManager()
 }
 
 extension View {
@@ -49,5 +51,6 @@ extension View {
             .environment(owners.lookup)
             .environment(owners.insights)
             .environment(owners.reflow)
+            .environment(owners.captionWork)
     }
 }

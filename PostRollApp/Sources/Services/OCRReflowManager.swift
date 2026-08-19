@@ -15,7 +15,7 @@ import Observation
 ///
 /// The shape is `ProgramNotesManager`'s, and the write is the one #518
 /// established for this screen: the result goes to the STORED event, and the
-/// draft on screen takes it up through `OCRDraftRefresh`. That is what the
+/// draft on screen takes it up through `DraftRefresh`. That is what the
 /// issue meant by the result landing somewhere different again: the review
 /// screen holds a draft, so writing into that draft is writing into the view.
 ///

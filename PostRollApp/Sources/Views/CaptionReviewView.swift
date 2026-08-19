@@ -19,13 +19,31 @@ struct CaptionReviewView: View {
     /// against. Held rather than read from `Date()` in the body, so the panel
     /// does not recompute on every redraw.
     @State private var suggestionsAsOf = Date()
-    @State private var isRegenerating = false
-    /// When the current whole-week regeneration started. Set and cleared with
-    /// `isRegenerating` so the indicator can show elapsed time and, past the
-    /// silence threshold, a stalled state instead of an endless spinner (#95).
-    @State private var regenerateStartedAt: Date? = nil
     @State private var showRegenerateConfirm = false
+    /// Whatever the SHORT actions on this screen last failed at: an audio swap,
+    /// a cover rebuild, a photo import. Still view state, because each is
+    /// seconds and none outlives a glance.
+    ///
+    /// The whole-week regeneration is NOT one of them and no longer writes
+    /// here. It is three to six minutes of paid Claude output whose two early
+    /// endings hand back a banner saying which days survived (#262), and that
+    /// banner has to be readable after Dan has been to another event and back.
+    /// It lives on `captionWork` (#718).
     @State private var regenerateError: String?
+
+    /// Owns the whole-week regeneration, so neither the run nor what it has to
+    /// say about a halt dies with this screen (#718).
+    @Environment(CaptionWorkManager.self) private var captionWork
+
+    private var isRegenerating: Bool {
+        captionWork.isRunning(event.id, .regenerateWeek)
+    }
+    /// The banner from a run that stopped early, or the last short action's
+    /// failure. One row on screen, and the run's own outcome wins: it is the
+    /// one that costs money to rediscover.
+    private var noticeToShow: String? {
+        captionWork.outcome(for: event.id, .regenerateWeek)?.failure ?? regenerateError
+    }
 
     enum ReviewSection: Equatable {
         case caption(DayName)
@@ -315,7 +333,7 @@ struct CaptionReviewView: View {
                 // view taking plain values, so the days that need a moved file or
                 // a dead run to reach can be rendered and measured (#396).
                 CaptionReviewNotices(
-                    regenerateError: regenerateError,
+                    regenerateError: noticeToShow,
                     skippedPhotoNotices: daysWithSkippedPhotos.compactMap { day in
                         event.weekResult?.warningMessage(for: day).map {
                             CaptionReviewDayNotice(id: day.rawValue,
@@ -336,7 +354,7 @@ struct CaptionReviewView: View {
                     // process that died is distinguishable from one that is
                     // three minutes into a Claude call (#95, #96).
                     LongRunIndicator(label: "Regenerating captions…",
-                                     startedAt: regenerateStartedAt,
+                                     startedAt: captionWork.startedAt(event.id, .regenerateWeek),
                                      eventID: event.id,
                                      estimate: "~3 to 6 min")
                         .padding(Spacing.xl)
@@ -381,9 +399,21 @@ struct CaptionReviewView: View {
             .onDisappear {
                 appState.flushPendingWrites()
             }
+            // Take up the week a regeneration wrote underneath this screen
+            // (#718). The draft here is written OUT on every edit and only
+            // reloaded when a different event is selected, so nothing brought a
+            // change to the stored week back IN. Without this the run saved
+            // three to six paid minutes of output, the screen went on showing
+            // the older draft so the run looked as though it had done nothing,
+            // and the next keystroke persisted that draft back over it. That is
+            // #518 on the programme screen, where it did not merely read as a
+            // failed save, it became one.
+            .onChange(of: captionWork.isRunning(event.id, .regenerateWeek)) {
+                adoptStoredWeekIfNeeded()
+            }
             .alert("Regenerate all captions?", isPresented: $showRegenerateConfirm) {
                 Button("Regenerate", role: .destructive) {
-                    Task { await regenerateAll() }
+                    regenerateAll()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -559,70 +589,29 @@ struct CaptionReviewView: View {
         appState.events.first(where: { $0.id == event.id }) ?? event
     }
 
-    private func regenerateAll() async {
-        isRegenerating = true
-        regenerateStartedAt = Date()
-        regenerateError = nil
-        do {
-            let live = liveEvent
-            let newResult = try await PythonBridge.shared.runWeekGeneration(event: live)
-            // Persist FIRST, through the store. This is three to six minutes of
-            // paid Claude output, and writing it only into this view's @State
-            // lost it outright whenever the screen had been remounted by an
-            // event switch, while the success notification still fired (#76).
-            var ev = appState.events.first(where: { $0.id == event.id }) ?? live
-            ev.weekResult = newResult
-            appState.updateEvent(ev)
-            result = newResult
-            mergeGlobalTags()
-            NotificationService.shared.notifyRegenerationComplete(eventName: live.name, what: "Captions")
-        } catch let halt as WeekGenerationHalted {
-            // The run stopped at a usage cap. What it finished is real and paid
-            // for, so it is saved over the existing week rather than discarded
-            // with the error (#262). The banner says which days survived and
-            // where the two ways forward are: a halt shown as a bare red error
-            // reads as a crash, and Dan re-runs work he already has.
-            regenerateError = keepPartial(halt.week, banner: HaltedWeek.from(halt.week)?.reviewBanner
-                                          ?? halt.reason)
-        } catch let partial as WeekGenerationFailedWithPartial {
-            // The run died with days already generated, usually the 1800s
-            // watchdog. Saved for the same reason as a halt: they exist and are
-            // paid for. Without this branch the same run started from this
-            // screen threw them away while the generation screen kept them.
-            regenerateError = keepPartial(partial.week, banner: partial.localizedDescription)
-        } catch {
-            regenerateError = error.localizedDescription
-        }
-        isRegenerating = false
-        regenerateStartedAt = nil
-    }
-
-    /// Save what a run produced before it stopped, and hand back the banner to
-    /// show. Shared by the two ways a run can end early (#262).
-    @discardableResult
-    private func keepPartial(_ week: WeekGenerationResult, banner: String) -> String {
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? liveEvent
-        ev.weekResult = PartialWeekMerge.applying(week, onto: ev.weekResult)
-        appState.updateEvent(ev)
-        if let saved = ev.weekResult { result = saved }
-        return banner
-    }
-
     // MARK: - Global hashtag merge
 
+    /// Fold the tags that go on every post into the draft when the screen
+    /// opens.
+    ///
+    /// Through `GlobalTagMerge`, the same decision `CaptionWorkManager` applies
+    /// to a freshly generated week, so an existing week and a regenerated one
+    /// cannot end up with different tags (L41).
     private func mergeGlobalTags() {
-        guard !hashtagStore.globalTags.isEmpty else { return }
-        var changed = false
-        for day in daysWithContent {
-            guard var cap = result[day] else { continue }
-            var dayChanged = false
-            for tag in hashtagStore.globalTags where !cap.hashtags.contains(tag) {
-                cap.hashtags.append(tag)
-                dayChanged = true
-            }
-            if dayChanged { result[day] = cap; changed = true }
-        }
-        if changed { save() }
+        var week = result
+        guard GlobalTagMerge.apply(hashtagStore.globalTags, to: &week,
+                                   for: liveEvent) else { return }
+        result = week
+        save()
+    }
+
+    private func regenerateAll() {
+        // Handed over and let go of. This screen is `.id(event.id)` tagged, so
+        // it is destroyed on every event switch, and it used to be holding the
+        // only copy of the run's progress and of the banner a halted run leaves
+        // behind (#718, #262).
+        captionWork.startRegeneratingWeek(eventID: event.id, appState: appState,
+                                          globalHashtags: hashtagStore.globalTags)
     }
 
     // MARK: - Preview graphics
@@ -1339,11 +1328,30 @@ struct CaptionReviewView: View {
     /// The in-memory event is updated immediately either way, so nothing reads
     /// stale text; only the whole-store serialisation waits (#91, #197).
     private func saveDebounced() {
+        guard !captionWork.isRunning(event.id, .regenerateWeek) else { return }
         appState.updateEventDebounced(mergedEvent())
     }
 
     private func save() {
+        // Never while a regeneration is in flight. The draft on screen predates
+        // the week that run is about to write, so persisting it now would put
+        // the older captions back over three to six paid minutes of output
+        // (#718, the same rule as #518 on the programme screen).
+        guard !captionWork.isRunning(event.id, .regenerateWeek) else { return }
         appState.updateEvent(mergedEvent())
+    }
+
+    /// Bring a week written underneath this screen into the draft it shows.
+    ///
+    /// The decision is `DraftRefresh`, shared with the programme review screen,
+    /// so the rule and this call site cannot disagree about when it is safe.
+    private func adoptStoredWeekIfNeeded() {
+        let live = liveEvent
+        guard DraftRefresh.shouldAdopt(
+                stored: live.weekResult, draft: result,
+                isRunning: captionWork.isRunning(event.id, .regenerateWeek))
+        else { return }
+        result = live.weekResult ?? result
     }
 
     /// The live event with this screen's local state merged in.
