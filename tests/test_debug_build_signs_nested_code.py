@@ -148,6 +148,21 @@ def _clang() -> str:
     return found
 
 
+def _require_signing() -> None:
+    """Skip, by name, where code signing does not exist.
+
+    The Linux leg of the suite has no `codesign`, and these tests are about a
+    macOS bundle being sealed, so there is nothing there for them to check. The
+    macOS leg of the same workflow runs them, which is what stops this reading
+    as coverage that quietly went away: a skip says out loud that nothing was
+    checked and why, where a silent pass would be indistinguishable from having
+    checked something (L98).
+    """
+    if not shutil.which("codesign"):
+        pytest.skip("no codesign here; sealing a .app bundle is macOS-only, and "
+                    "the macOS leg of this workflow runs these")
+
+
 def _unsigned_macho(path: Path, *, dylib: bool) -> None:
     """A real, genuinely unsigned Mach-O at `path`.
 
@@ -170,6 +185,7 @@ def _unsigned_macho(path: Path, *, dylib: bool) -> None:
 
 def _bundle(tmp_path: Path, *, nested: bool) -> Path:
     """A `.app` shaped like a build product, with or without nested code."""
+    _require_signing()
     app = tmp_path / "products" / "Fixture.app"
     macos = app / "Contents" / "MacOS"
     macos.mkdir(parents=True)
