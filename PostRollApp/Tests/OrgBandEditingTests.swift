@@ -109,37 +109,41 @@ final class OrgBandEditingTests: XCTestCase {
 
     // MARK: - What Dan is told
 
-    func testARefusedChangeSaysItWillNotSurviveQuitting() {
-        let notice = InsightsDisplay.unsavedBandNotice(
-            save: .blocked, org: "kyhs_music", edit: .set)
+    /// `XCTUnwrap` rather than a forced unwrap in every one of these: a nil
+    /// crashes the whole test process, and a crashed run reports zero tests
+    /// executed, which the mutation sweep cannot tell from a spec that matched
+    /// nothing (L98). Seen doing exactly that on the first run of the guard
+    /// entry for this file.
+    func testARefusedChangeSaysItWillNotSurviveQuitting() throws {
+        let notice = try XCTUnwrap(InsightsDisplay.unsavedBandNotice(
+            save: .blocked, org: "kyhs_music", edit: .set))
 
-        XCTAssertNotNil(notice)
-        XCTAssertTrue(notice!.contains("kyhs_music"),
+        XCTAssertTrue(notice.contains("kyhs_music"),
                       "the notice has to name the account it is about")
-        XCTAssertTrue(notice!.contains("quit"),
+        XCTAssertTrue(notice.contains("quit"),
                       "the notice has to say the change is only in this window")
     }
 
     /// A refused CLEAR and a refused SET leave opposite states behind: the
     /// cleared entry comes back at next launch, the set band does not. One
     /// message for both would be wrong for one of them (L11).
-    func testARefusedClearSaysTheEntryWillComeBack() {
-        let cleared = InsightsDisplay.unsavedBandNotice(
-            save: .blocked, org: "merkin_hall", edit: .cleared)
+    func testARefusedClearSaysTheEntryWillComeBack() throws {
+        let cleared = try XCTUnwrap(InsightsDisplay.unsavedBandNotice(
+            save: .blocked, org: "merkin_hall", edit: .cleared))
         let set = InsightsDisplay.unsavedBandNotice(
             save: .blocked, org: "merkin_hall", edit: .set)
 
         XCTAssertNotEqual(cleared, set,
                           "a refused clear and a refused change say the same thing")
-        XCTAssertTrue(cleared!.contains("back"),
-                      "a refused clear has to say the entry returns: \(cleared!)")
+        XCTAssertTrue(cleared.contains("back"),
+                      "a refused clear has to say the entry returns: \(cleared)")
     }
 
-    func testAFailedWriteCarriesTheReason() {
-        let notice = InsightsDisplay.unsavedBandNotice(
-            save: .failed("the disk is full"), org: "kyhs_music", edit: .set)
+    func testAFailedWriteCarriesTheReason() throws {
+        let notice = try XCTUnwrap(InsightsDisplay.unsavedBandNotice(
+            save: .failed("the disk is full"), org: "kyhs_music", edit: .set))
 
-        XCTAssertTrue(notice!.contains("the disk is full"), notice!)
+        XCTAssertTrue(notice.contains("the disk is full"), notice)
     }
 
     func testASavedChangeSaysNothing() {
