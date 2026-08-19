@@ -1,0 +1,8 @@
+{
+  "name": "a-refused-analytics-write-is-not-shown-as-an-import",
+  "file": "PostRollApp/Sources/Services/InsightsWorkManager.swift",
+  "find": "            return Outcome(success: nil, note: text)",
+  "replace": "            return Outcome(success: text, note: nil)",
+  "test": "PostRollTests/InsightsWorkManagerTests/testARefusedWriteIsNeverShownAsAnImportThatHappened",
+  "breaks": "a write the store refused is drawn in the row that renders a green tick, so Dan reads that 34 posts arrived and finds them gone at next launch. Success is shown only once the write has landed (#439, L12)"
+}

@@ -26,7 +26,7 @@ final class OCRManager {
         fileprivate var task: Task<Void, Never>?
     }
 
-    private let tracker = EventJobTracker<Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
 
     /// Why OCR would not run, per event, for the upload screen to show once it
     /// has been sent back there. Held here rather than on the event because it

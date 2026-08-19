@@ -25,7 +25,7 @@ final class GenerationManager {
     /// Active or just-failed generation per event. A successful run is removed
     /// once written back; the event's saved `weekResult` is then the source of
     /// truth for the "done" state.
-    private let tracker = EventJobTracker<Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
 
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
 

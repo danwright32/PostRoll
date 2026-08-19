@@ -2156,7 +2156,15 @@ actor PythonBridge {
     ///
     /// Supports Swift task cancellation: when the calling task is cancelled,
     /// the subprocess is terminated immediately via SIGTERM.
-    private func runProcess(args: [String], timeout: TimeInterval = 1800,
+    /// How long any one Python run may take before it is killed.
+    ///
+    /// Named rather than left as a literal on the parameter below because
+    /// anything that waits on a run has to sit OUTSIDE it: a caller's own
+    /// deadline equal to this one races it, and whichever fires first decides
+    /// what Dan is told. Spelling the number twice is how the two drift (L41).
+    static let processTimeout: TimeInterval = 1800
+
+    private func runProcess(args: [String], timeout: TimeInterval = processTimeout,
                             forcePaidPath: Bool = false) async throws {
         // Refuse here rather than let the script's `cd` fail and be read as a
         // missing photo (#648). Nothing has been launched or paid for yet.

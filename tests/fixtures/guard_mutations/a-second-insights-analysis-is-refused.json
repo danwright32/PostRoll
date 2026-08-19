@@ -1,0 +1,8 @@
+{
+  "name": "a-second-insights-analysis-is-refused",
+  "file": "PostRollApp/Sources/Services/InsightsWorkManager.swift",
+  "find": "        guard begin(.generateReport) else { return }",
+  "replace": "        _ = begin(.generateReport)",
+  "test": "PostRollTests/InsightsWorkManagerTests/testASecondReportIsRefusedWhileTheFirstIsGoing",
+  "breaks": "a second paid Claude pass over the whole post history can be stacked on the first. Leaving Insights and coming back used to show the idle button while a run was going, which is exactly how two get started (#718)"
+}

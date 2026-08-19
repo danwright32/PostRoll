@@ -42,7 +42,7 @@ final class ExportManager {
         fileprivate var task: Task<Void, Never>?
     }
 
-    private let tracker = EventJobTracker<Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
 
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isExporting(_ id: Event.ID) -> Bool { tracker.isActive(id) }

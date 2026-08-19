@@ -1,0 +1,8 @@
+{
+  "name": "a-stalled-insights-analysis-becomes-an-error",
+  "file": "PostRollApp/Sources/Services/DeadlinedWork.swift",
+  "find": "                try await Task.sleep(for: .seconds(seconds))",
+  "replace": "                try await Task.sleep(for: .seconds(seconds * 100_000))",
+  "test": "PostRollTests/InsightsWorkManagerTests/testAStalledReportBecomesAnErrorRatherThanAnIndicatorForever",
+  "breaks": "a paid analysis over the whole post history that never comes back sits there as a live indicator forever, and because the run is app scoped it now does so on every visit to Insights rather than only until the screen is left (#718, L110)"
+}

@@ -35,9 +35,16 @@ import Observation
 /// `LongWorkOwnershipTests` fails the build when a view goes back to holding
 /// this state itself, so the rule above is enforced rather than remembered.
 ///
-/// Per-event bookkeeping shared by the background-work managers
-/// ([GenerationManager], [OCRManager], [ExportManager]). Holds one in-flight or
-/// just-finished job per event id and drives a single shared 1s elapsed ticker.
+/// Bookkeeping shared by the background-work managers. Holds one in-flight or
+/// just-finished job per `Key` and drives a single shared 1s elapsed ticker.
+///
+/// `Key` is the thing the work is ABOUT. For most of these that is an event id,
+/// because the run belongs to one event and switching events must not disturb
+/// another's. Two runs are not about an event at all: the Insights CSV import
+/// and the report generation, since there is one analytics history and one
+/// report (#718). They key on their own small enum instead. The alternative was
+/// a second mechanism beside this one for the work that has no event, and two
+/// mechanisms for one rule is how the rule drifts.
 ///
 /// The `activeIDs` / `failedIDs` membership sets are deliberately separate
 /// stored properties from `runs`: the sidebar reads the sets, which only change
@@ -46,11 +53,11 @@ import Observation
 /// than subclass it — `@Observable` doesn't compose well with inheritance.
 @MainActor
 @Observable
-final class EventJobTracker<Job> {
+final class JobTracker<Key: Hashable, Job> {
 
-    private(set) var runs: [Event.ID: Job] = [:]
-    private(set) var activeIDs: Set<Event.ID> = []
-    private(set) var failedIDs: Set<Event.ID> = []
+    private(set) var runs: [Key: Job] = [:]
+    private(set) var activeIDs: Set<Key> = []
+    private(set) var failedIDs: Set<Key> = []
 
     /// Where the elapsed-seconds counter lives inside Job, so the shared ticker
     /// can advance it without knowing Job's shape.
@@ -63,20 +70,20 @@ final class EventJobTracker<Job> {
 
     // MARK: - Reads
 
-    func job(for id: Event.ID) -> Job? { runs[id] }
-    func isActive(_ id: Event.ID) -> Bool { activeIDs.contains(id) }
+    func job(for id: Key) -> Job? { runs[id] }
+    func isActive(_ id: Key) -> Bool { activeIDs.contains(id) }
 
     /// Whether ANY event has work running, for the decisions that are about the
     /// app rather than about one event. Updating PostRoll is the first: it
     /// quits the app to install, so anything mid flight loses whatever it has
     /// not written back (#686).
     var hasWorkInFlight: Bool { !activeIDs.isEmpty }
-    func hasFailed(_ id: Event.ID) -> Bool { failedIDs.contains(id) }
+    func hasFailed(_ id: Key) -> Bool { failedIDs.contains(id) }
 
     // MARK: - Transitions
 
     /// Register a fresh job and mark it active; starts the ticker.
-    func begin(_ job: Job, for id: Event.ID) {
+    func begin(_ job: Job, for id: Key) {
         runs[id] = job
         activeIDs.insert(id)
         failedIDs.remove(id)
@@ -84,7 +91,7 @@ final class EventJobTracker<Job> {
     }
 
     /// Mutate an existing job in place (e.g. set a phase, status, or task handle).
-    func update(_ id: Event.ID, _ mutate: (inout Job) -> Void) {
+    func update(_ id: Key, _ mutate: (inout Job) -> Void) {
         guard var job = runs[id] else { return }
         mutate(&job)
         runs[id] = job
@@ -92,21 +99,21 @@ final class EventJobTracker<Job> {
 
     /// Stop counting an event as active but keep its job — for terminal state
     /// stored inside the job itself (e.g. export's `.done` phase).
-    func deactivate(_ id: Event.ID) {
+    func deactivate(_ id: Key) {
         activeIDs.remove(id)
         stopTimerIfIdle()
     }
 
     /// Mark a job failed: no longer active, flagged for the sidebar, job kept so
     /// its error message survives until acknowledged.
-    func markFailed(_ id: Event.ID) {
+    func markFailed(_ id: Key) {
         activeIDs.remove(id)
         failedIDs.insert(id)
         stopTimerIfIdle()
     }
 
     /// Remove a job entirely (success write-back done, or user cancelled).
-    func remove(_ id: Event.ID) {
+    func remove(_ id: Key) {
         runs.removeValue(forKey: id)
         activeIDs.remove(id)
         failedIDs.remove(id)
@@ -114,7 +121,7 @@ final class EventJobTracker<Job> {
     }
 
     /// Drop a terminal failed outcome once acknowledged — ignored while active.
-    func clearFailed(_ id: Event.ID) {
+    func clearFailed(_ id: Key) {
         guard !isActive(id) else { return }
         runs.removeValue(forKey: id)
         failedIDs.remove(id)

@@ -58,11 +58,11 @@ final class PerformerLookupManager {
 
     /// One tracker per kind, so a handle lookup and a web fetch on the same
     /// event are separate runs rather than one overwriting the other's record.
-    private var trackers: [Kind: EventJobTracker<Run>] = [:]
+    private var trackers: [Kind: JobTracker<Event.ID, Run>] = [:]
 
-    private func tracker(_ kind: Kind) -> EventJobTracker<Run> {
+    private func tracker(_ kind: Kind) -> JobTracker<Event.ID, Run> {
         if let existing = trackers[kind] { return existing }
-        let made = EventJobTracker<Run>(elapsed: \.elapsedSeconds)
+        let made = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
         trackers[kind] = made
         return made
     }
@@ -179,7 +179,7 @@ final class PerformerLookupManager {
         let deadline = activeDeadline
         let task = Task { @MainActor [weak self] in
             do {
-                let found = try await Self.withDeadline(deadline) {
+                let found = try await DeadlinedWork.run(within: deadline) {
                     try await lookUp(missing, org, venue, eventName)
                 }
                 guard !Task.isCancelled else { return }
@@ -230,7 +230,7 @@ final class PerformerLookupManager {
         let deadline = activeDeadline
         let task = Task { @MainActor [weak self] in
             do {
-                let fetched = try await Self.withDeadline(deadline) { try await fetch(url) }
+                let fetched = try await DeadlinedWork.run(within: deadline) { try await fetch(url) }
                 guard !Task.isCancelled else { return }
                 self?.replacePerformers(with: fetched, on: eventID, in: appState)
                 self?.tracker(.fromWeb).deactivate(eventID)
@@ -283,24 +283,5 @@ final class PerformerLookupManager {
             $0.failure = ProgramNotesMerge.failureMessage(error)
         }
         tracker(kind).markFailed(eventID)
-    }
-
-    /// Run `work`, or throw if it has not finished within `seconds`.
-    private static func withDeadline<T: Sendable>(
-        _ seconds: TimeInterval,
-        _ work: @escaping @Sendable () async throws -> T
-    ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await work() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                throw ProgramNotesMerge.Stalled(seconds: seconds)
-            }
-            defer { group.cancelAll() }
-            guard let first = try await group.next() else {
-                throw ProgramNotesMerge.Stalled(seconds: seconds)
-            }
-            return first
-        }
     }
 }

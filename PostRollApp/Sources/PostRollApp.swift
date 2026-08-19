@@ -14,6 +14,10 @@ struct PostRollApp: App {
     /// App scoped for the same reason (#707): the two performer lookups must
     /// survive their section being collapsed and the screen being replaced.
     @State private var lookupManager = PerformerLookupManager()
+    /// App scoped for the same reason again (#718): the CSV import and the paid
+    /// analysis must survive the sidebar moving off Insights, which destroys
+    /// the screen they were started from.
+    @State private var insightsWork = InsightsWorkManager()
 
     init() {
         NotificationService.shared.requestPermission()
@@ -30,6 +34,7 @@ struct PostRollApp: App {
                 .environment(exportManager)
                 .environment(notesManager)
                 .environment(lookupManager)
+                .environment(insightsWork)
                 .preferredColorScheme(.light)
                 // The accent every system control inherits: a spinner's arc, a
                 // slider's filled track, a picker's selection. Named as the

@@ -5,15 +5,15 @@ import XCTest
 /// tracked independently per event id, and the active/failed membership sets
 /// stay correct across every transition so the sidebar reads them reliably.
 @MainActor
-final class EventJobTrackerTests: XCTestCase {
+final class JobTrackerTests: XCTestCase {
 
     private struct Job: Equatable {
         var elapsedSeconds: Int = 0
         var label: String = ""
     }
 
-    private func makeTracker() -> EventJobTracker<Job> {
-        EventJobTracker<Job>(elapsed: \.elapsedSeconds)
+    private func makeTracker() -> JobTracker<UUID, Job> {
+        JobTracker<UUID, Job>(elapsed: \.elapsedSeconds)
     }
 
     func testBeginMarksActiveAndStoresJob() {
@@ -113,5 +113,48 @@ final class EventJobTrackerTests: XCTestCase {
         t.clearFailed(id)
         XCTAssertNil(t.job(for: id))
         XCTAssertFalse(t.hasFailed(id))
+    }
+
+    // MARK: - Work that belongs to the app rather than to an event (#718)
+
+    /// The two Insights runs, the CSV import and the report generation, are
+    /// not about any event: there is one analytics history and one report, so
+    /// there is no event id to key them by.
+    private enum AppJob: Hashable { case importCSV, generateReport }
+
+    func testJobsCanBeKeyedBySomethingOtherThanAnEvent() {
+        // Without this the Insights screen has to grow a second mechanism
+        // beside this one, and the two then drift: the whole reason the rule
+        // holds is that there is ONE place a long run's progress, clock and
+        // error live.
+        let t = JobTracker<AppJob, Job>(elapsed: \.elapsedSeconds)
+
+        t.begin(Job(label: "reading the CSVs"), for: .importCSV)
+        t.begin(Job(label: "analysing"), for: .generateReport)
+
+        XCTAssertTrue(t.isActive(.importCSV))
+        XCTAssertTrue(t.isActive(.generateReport))
+        XCTAssertEqual(t.job(for: .importCSV)?.label, "reading the CSVs")
+
+        // Independent, the same way two events are. An import finishing must
+        // not take the analysis with it.
+        t.remove(.importCSV)
+        XCTAssertFalse(t.isActive(.importCSV))
+        XCTAssertTrue(t.isActive(.generateReport))
+        XCTAssertEqual(t.job(for: .generateReport)?.label, "analysing")
+    }
+
+    func testAFailedAppJobKeepsItsMessage() {
+        // The reason this matters on the Insights screen specifically: leaving
+        // it and coming back destroyed the view, and with it the only copy of
+        // why the analysis failed (L148).
+        let t = JobTracker<AppJob, Job>(elapsed: \.elapsedSeconds)
+        t.begin(Job(label: "analysing"), for: .generateReport)
+        t.update(.generateReport) { $0.label = "the model refused" }
+        t.markFailed(.generateReport)
+
+        XCTAssertFalse(t.isActive(.generateReport))
+        XCTAssertTrue(t.hasFailed(.generateReport))
+        XCTAssertEqual(t.job(for: .generateReport)?.label, "the model refused")
     }
 }

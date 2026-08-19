@@ -2,7 +2,7 @@ import XCTest
 
 /// A view does not own work that outlives it (#713).
 ///
-/// The rule and the reasoning live on `EventJobTracker`, where the mechanism
+/// The rule and the reasoning live on `JobTracker`, where the mechanism
 /// is. This is what makes it hold: without a check, the next long call anyone
 /// writes goes back into view state, and the defect returns one screen at a
 /// time. That has now happened twice (#693, #707), which is what a rule living
@@ -29,10 +29,6 @@ final class LongWorkOwnershipTests: XCTestCase {
             "regenerate, revise, analyse edits and the audio swap. Not yet "
             + "converted: each writes to a different part of the week's result "
             + "and needs its own decision about where that lands.",
-        "InsightsOverviewView.swift":
-            "the CSV import and the insight generation. Neither is keyed by "
-            + "event, so they need an owner shaped differently from the "
-            + "per-event managers.",
     ]
 
     private static func viewSources() throws -> [URL] {
@@ -77,7 +73,7 @@ final class LongWorkOwnershipTests: XCTestCase {
             view that is destroyed whenever a section collapses or the event \
             changes: \(offenders.joined(separator: ", ")).
 
-            The rule and the shape to copy are on EventJobTracker. If one of \
+            The rule and the shape to copy are on JobTracker. If one of \
             these genuinely cannot be converted yet, add it to `known` in this \
             file with what is left to do, so it is visible rather than silent.
             """)

@@ -22,7 +22,7 @@ import Observation
 /// Both are the same defect: long running work belongs to an owner that
 /// outlives the screen that started it (L17). `GenerationManager` was created
 /// for exactly this shape when a generation died on an event switch, and it is
-/// composed from `EventJobTracker`, which already holds one job per event and
+/// composed from `JobTracker`, which already holds one job per event and
 /// drives the shared elapsed ticker. This reuses that rather than growing a
 /// second mechanism beside it.
 ///
@@ -44,7 +44,7 @@ final class ProgramNotesManager {
         fileprivate var task: Task<Void, Never>?
     }
 
-    private let tracker = EventJobTracker<Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
 
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isRunning(_ id: Event.ID) -> Bool { tracker.isActive(id) }
@@ -117,7 +117,7 @@ final class ProgramNotesManager {
         let deadline = activeDeadline
         let task = Task { @MainActor [weak self] in
             do {
-                let results = try await Self.withDeadline(deadline) {
+                let results = try await DeadlinedWork.run(within: deadline) {
                     try await fetch(missing, org, eventName)
                 }
                 guard !Task.isCancelled else { return }
@@ -152,29 +152,6 @@ final class ProgramNotesManager {
         live.ocrResult = stored
         appState.updateEvent(live)
     }
-
-    /// Run `work`, or throw if it has not finished within `seconds`.
-    ///
-    /// A wait with no deadline cannot fail, it can only hang, and a hang is
-    /// worse than a failure because it is indistinguishable from slowness
-    /// (L110).
-    private static func withDeadline<T: Sendable>(
-        _ seconds: TimeInterval,
-        _ work: @escaping @Sendable () async throws -> T
-    ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await work() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                throw ProgramNotesMerge.Stalled(seconds: seconds)
-            }
-            defer { group.cancelAll() }
-            guard let first = try await group.next() else {
-                throw ProgramNotesMerge.Stalled(seconds: seconds)
-            }
-            return first
-        }
-    }
 }
 
 /// The decisions the notes search makes, apart from the running of it.
@@ -182,10 +159,6 @@ final class ProgramNotesManager {
 /// Pure, so each one can be stated and asserted without a process, a network or
 /// a paid call behind it (L151).
 enum ProgramNotesMerge {
-
-    struct Stalled: Error {
-        let seconds: TimeInterval
-    }
 
     /// A work with nothing written about it yet.
     static func needsNotes(_ piece: Piece) -> Bool {
@@ -230,7 +203,7 @@ enum ProgramNotesMerge {
     /// search never came back" are different problems with different next steps
     /// (L11).
     static func failureMessage(_ error: Error) -> String {
-        if let stalled = error as? Stalled {
+        if let stalled = error as? DeadlinedWork.Stalled {
             return "The web search did not come back within "
                  + "\(Int(stalled.seconds / 60)) minutes. Nothing was changed. "
                  + "Try again, or write the notes by hand."

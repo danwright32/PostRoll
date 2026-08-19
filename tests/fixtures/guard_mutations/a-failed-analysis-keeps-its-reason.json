@@ -1,0 +1,8 @@
+{
+  "name": "a-failed-analysis-keeps-its-reason",
+  "file": "PostRollApp/Sources/Services/InsightsWorkManager.swift",
+  "find": "                    success: nil, note: Self.message(for: error, doing: \"analysis\")))",
+  "replace": "                    success: nil, note: nil))",
+  "test": "PostRollTests/InsightsWorkManagerTests/testAFailedReportKeepsItsReasonAfterTheScreenIsGone",
+  "breaks": "the reason an analysis failed is dropped, so a failure that happened while Dan was on another screen can never be read and he is left pressing the same button with nothing to go on (#718, L148)"
+}

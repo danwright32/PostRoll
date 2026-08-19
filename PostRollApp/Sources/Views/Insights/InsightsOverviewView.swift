@@ -5,17 +5,22 @@ struct InsightsOverviewView: View {
     @Environment(AnalyticsStore.self) private var analyticsStore
     @Environment(HashtagStore.self) private var hashtagStore
     @Environment(AppState.self) private var appState
+    /// Both runs belong to the app, not to this screen (#718).
+    ///
+    /// They used to live here in `@State`: the in flight flag, the start time
+    /// the elapsed clock is measured from, and the error message. Clicking
+    /// Events in the sidebar destroys this view and took all three with it, so
+    /// a run still going, one that had finished and one that had failed all
+    /// looked identical, because all three showed nothing. This screen now
+    /// READS them.
+    @Environment(InsightsWorkManager.self) private var insightsWork
 
-    @State private var isImporting = false
-    /// When the current import or analysis started (#460). A bare spinner looks
-    /// identical whether the work is progressing, hung or dead, so both of
-    /// these runs report elapsed time and convert to a stalled state.
-    @State private var importStartedAt: Date?
-    @State private var generationStartedAt: Date?
-    @State private var importError: String?
-    @State private var importSummary: String?
-    @State private var isGenerating = false
-    @State private var generationError: String?
+    private var importRun: InsightsWorkManager.Outcome? {
+        insightsWork.outcome(for: .importCSV)
+    }
+    private var reportRun: InsightsWorkManager.Outcome? {
+        insightsWork.outcome(for: .generateReport)
+    }
 
     var body: some View {
         ScrollView {
@@ -44,17 +49,18 @@ struct InsightsOverviewView: View {
                     Button {
                         importCSV()
                     } label: {
-                        Label(isImporting ? "Importing…" : "Import CSV", systemImage: "square.and.arrow.down")
+                        Label(insightsWork.isRunning(.importCSV) ? "Importing…" : "Import CSV",
+                              systemImage: "square.and.arrow.down")
                             .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
                     .buttonStyle(.plain)
-                    .disabled(isImporting)
+                    .disabled(insightsWork.isRunning(.importCSV))
                     .help("Import Meta Business Suite CSV export (allows multiple files)")
                 }
 
-                if isImporting {
+                if insightsWork.isRunning(.importCSV) {
                     LongRunIndicator(label: "Reading the CSV files…",
-                                     startedAt: importStartedAt,
+                                     startedAt: insightsWork.startedAt(.importCSV),
                                      silenceThreshold: LongRunState.localWorkSilenceThreshold)
                 }
 
@@ -73,7 +79,7 @@ struct InsightsOverviewView: View {
 
                 RoseGoldDivider()
 
-                if let summary = importSummary {
+                if let summary = importRun?.success {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(PaintedSurfaces.insightConfidenceHigh)
@@ -84,7 +90,7 @@ struct InsightsOverviewView: View {
                     .transition(.opacity)
                 }
 
-                if let error = importError {
+                if let error = importRun?.note {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundStyle(PaintedSurfaces.iconAccent)
@@ -103,23 +109,26 @@ struct InsightsOverviewView: View {
                         Button {
                             generateInsights()
                         } label: {
-                            Label(isGenerating ? "Analyzing…" : "Generate Insights", systemImage: "sparkles")
+                            Label(insightsWork.isRunning(.generateReport)
+                                      ? "Analyzing…" : "Generate Insights",
+                                  systemImage: "sparkles")
                         }
                         .buttonStyle(BrandButtonStyle())
-                        .disabled(isGenerating)
+                        .disabled(insightsWork.isRunning(.generateReport))
 
-                        if isGenerating {
+                        if insightsWork.isRunning(.generateReport) {
                             // A paid Claude pass over the whole post history,
                             // behind an indefinite spinner with no elapsed time
-                            // and no stall state until #460.
+                            // and no stall state until #460, and behind nothing
+                            // at all once the sidebar moved off Insights (#718).
                             LongRunIndicator(label: "Analyzing your posts…",
-                                             startedAt: generationStartedAt)
+                                             startedAt: insightsWork.startedAt(.generateReport))
                                 .padding(.leading, 4)
                         }
                         Spacer()
                     }
 
-                    if let genError = generationError {
+                    if let genError = reportRun?.note {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
                                 .foregroundStyle(PaintedSurfaces.iconAccent)
@@ -152,73 +161,15 @@ struct InsightsOverviewView: View {
         panel.message = "Select one or more CSV files exported from Meta Business Suite. You can select both the stories CSV and the feed CSV at once."
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
 
-        let urls = panel.urls
-        isImporting = true
-        importStartedAt = Date()
-        importError = nil
-        importSummary = nil
-        Task {
-            do {
-                let result = try await PythonBridge.shared.importMetaCSV(paths: urls)
-                let prev = analyticsStore.posts.count
-                let save = analyticsStore.mergePosts(result.posts)
-                let added = analyticsStore.posts.count - prev
-                let updated = result.posts.count - max(0, added)
-                // The words, and whether they may be said as a success, are
-                // decided in one place (#439). A merge that was refused a write
-                // is not an import that happened.
-                switch InsightsDisplay.importNotice(imported: result.posts.count,
-                                                    added: max(0, added),
-                                                    updated: max(0, updated),
-                                                    warnings: result.warnings.count,
-                                                    save: save) {
-                case .saved(let text):
-                    importSummary = text
-                    if !result.warnings.isEmpty {
-                        importError = result.warnings.prefix(3).joined(separator: "\n")
-                    }
-                case .notSaved(let text):
-                    // Deliberately NOT importSummary: that row renders a green
-                    // tick, and a tick over a write that did not happen is the
-                    // whole defect.
-                    importSummary = nil
-                    importError = text
-                }
-            } catch {
-                importError = error.localizedDescription
-            }
-            isImporting = false
-            importStartedAt = nil
-        }
+        // Choosing the files is this screen's business; reading them is not.
+        // What may be claimed about the result lives with the run, so a refused
+        // write still says so when Dan comes back to look (#439, #718).
+        insightsWork.startImport(of: panel.urls, into: analyticsStore)
     }
 
     private func generateInsights() {
-        isGenerating = true
-        generationStartedAt = Date()
-        generationError = nil
-        let posts = analyticsStore.posts
-        let bands = analyticsStore.orgFollowerBands
-        let globalTags = hashtagStore.globalTags
-        Task {
-            do {
-                let report = try await PythonBridge.shared.runAnalytics(
-                    posts: posts,
-                    orgBands: bands,
-                    globalHashtags: globalTags
-                )
-                // Same rule as the import above (#439): a report the store was
-                // refused permission to write is in this window only, and the
-                // screen has to say so rather than showing it as recorded.
-                if let unsaved = InsightsDisplay.unsavedReportNotice(
-                    save: analyticsStore.addReport(report)) {
-                    generationError = unsaved
-                }
-            } catch {
-                generationError = error.localizedDescription
-            }
-            isGenerating = false
-            generationStartedAt = nil
-        }
+        insightsWork.startReport(store: analyticsStore,
+                                 globalHashtags: hashtagStore.globalTags)
     }
 }
 
