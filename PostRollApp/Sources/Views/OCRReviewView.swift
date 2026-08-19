@@ -6,6 +6,9 @@ struct OCRReviewView: View {
     /// Owns the programme notes search, so it survives this section being
     /// collapsed and this screen being replaced (#693).
     @Environment(ProgramNotesManager.self) private var notesManager
+    /// Owns the two performer lookups, so neither dies with the section that
+    /// started it or with this screen (#707).
+    @Environment(PerformerLookupManager.self) private var lookupManager
     /// For the rescan of pages an earlier run could not read (#518).
     @Environment(OCRManager.self) private var ocrManager
     @State private var ocr: OCRResult
@@ -297,14 +300,49 @@ struct OCRReviewView: View {
                 venue: event.venue,
                 eventName: event.name,
                 suppliedByBook: bookSupplied,
+                // Read from the manager rather than held in the editor (#707):
+                // this view is destroyed every time another section is opened,
+                // and the progress, the clock, the error and the suggestions
+                // all went with it.
+                eventID: event.id,
+                isLookingUpHandles: lookupManager.isRunning(.handles, for: event.id),
+                handleLookupStartedAt: lookupManager.run(.handles, for: event.id)?.startedAt,
+                handleLookupError: lookupManager.failure(.handles, for: event.id),
+                handleSuggestions: lookupManager.suggestions(for: event.id),
+                isFetchingFromWeb: lookupManager.isRunning(.fromWeb, for: event.id),
+                fetchFromWebStartedAt: lookupManager.run(.fromWeb, for: event.id)?.startedAt,
+                fetchError: lookupManager.failure(.fromWeb, for: event.id),
+                onLookUpHandles: {
+                    lookupManager.clearFailure(.handles, for: event.id)
+                    lookupManager.startHandleLookup(
+                        eventID: event.id, org: event.org, venue: event.venue,
+                        eventName: event.name, appState: appState)
+                },
+                onFetchFromWeb: { url in
+                    lookupManager.clearFailure(.fromWeb, for: event.id)
+                    lookupManager.startWebFetch(
+                        eventID: event.id, url: url, eventName: event.name,
+                        appState: appState)
+                },
+                onAcceptSuggestion: { suggestion in
+                    lookupManager.apply(suggestion, to: event.id, in: appState)
+                },
+                onDismissSuggestion: { suggestion in
+                    lookupManager.dropSuggestion(named: suggestion.name, for: event.id)
+                },
+                onDismissAllSuggestions: {
+                    lookupManager.dropAllSuggestions(for: event.id)
+                },
                 onDeleted: { performer, idx in
                     scheduleUndo(message: "Performer removed") {
                         ocr.performers.insert(performer, at: min(idx, ocr.performers.count))
                     }
                 },
-                onReplacedFromWeb: { old in
+                // The list it replaced lives on the run, so the undo survives
+                // this screen being torn down (#707, L97).
+                onReplacedFromWeb: {
                     scheduleUndo(message: "Replaced from website") {
-                        ocr.performers = old
+                        lookupManager.undoWebFetch(for: event.id, in: appState)
                     }
                 }
             )
@@ -579,18 +617,29 @@ private struct PerformersEditor: View {
     /// Handles the handle book guessed from a name match, so a guess is not
     /// shown as something read off this programme (#459).
     var suppliedByBook: [UUID: String] = [:]
+    /// Both lookups, as the manager that owns them sees them (#707). Passed in
+    /// rather than held here, because this editor is destroyed every time
+    /// another section of the accordion is opened, and every piece of run state
+    /// went with it: a run still going, one that finished and one that failed
+    /// all showed nothing at all.
+    let eventID: Event.ID
+    let isLookingUpHandles: Bool
+    let handleLookupStartedAt: Date?
+    let handleLookupError: String?
+    let handleSuggestions: [PythonBridge.HandleSuggestion]
+    let isFetchingFromWeb: Bool
+    let fetchFromWebStartedAt: Date?
+    let fetchError: String?
+    let onLookUpHandles: () -> Void
+    let onFetchFromWeb: (String) -> Void
+    let onAcceptSuggestion: (PythonBridge.HandleSuggestion) -> Void
+    let onDismissSuggestion: (PythonBridge.HandleSuggestion) -> Void
+    let onDismissAllSuggestions: () -> Void
     let onDeleted: (Performer, Int) -> Void
-    var onReplacedFromWeb: (([Performer]) -> Void)?
-
-    @State private var isFetchingFromWeb = false
-    /// Set and cleared with the flag beside it, so a web lookup that hangs is
-    /// distinguishable from one that is simply slow (#95).
-    @State private var fetchFromWebStartedAt: Date? = nil
-    @State private var fetchError: String?
-    @State private var isLookingUpHandles = false
-    @State private var handleLookupStartedAt: Date? = nil
-    @State private var handleSuggestions: [PythonBridge.HandleSuggestion] = []
-    @State private var handleLookupError: String?
+    /// Called when a web fetch has replaced the list, so the screen can offer
+    /// its undo. The list it replaced is kept by the manager rather than handed
+    /// over here, because the undo has to outlive this view.
+    var onReplacedFromWeb: (() -> Void)?
     @Environment(AppState.self) private var appState
 
     private var performersWithoutHandles: Bool {
@@ -629,15 +678,9 @@ private struct PerformersEditor: View {
                 Divider().padding(.vertical, 4)
                 HandleSuggestionsView(
                     suggestions: handleSuggestions,
-                    onAccept: { suggestion in
-                        applyHandleSuggestion(suggestion)
-                    },
-                    onDismiss: { suggestion in
-                        handleSuggestions.removeAll { $0.name == suggestion.name }
-                    },
-                    onDismissAll: {
-                        handleSuggestions = []
-                    }
+                    onAccept: onAcceptSuggestion,
+                    onDismiss: onDismissSuggestion,
+                    onDismissAll: onDismissAllSuggestions
                 )
             }
 
@@ -646,12 +689,13 @@ private struct PerformersEditor: View {
             // Look up handles button
             if isLookingUpHandles {
                 LongRunIndicator(label: "Searching for Instagram handles…",
-                                 startedAt: handleLookupStartedAt)
+                                 startedAt: handleLookupStartedAt,
+                                 silenceThreshold: LongRunState.localWorkSilenceThreshold)
                     .padding(.top, 2)
             } else if performersWithoutHandles {
                 VStack(alignment: .leading, spacing: 4) {
                     Button {
-                        Task { await lookUpHandles() }
+                        onLookUpHandles()
                     } label: {
                         Label("Look up handles", systemImage: "magnifyingglass")
                             .font(.system(size: 12))
@@ -675,12 +719,13 @@ private struct PerformersEditor: View {
             if let url = eventURL {
                 if isFetchingFromWeb {
                     LongRunIndicator(label: "Fetching from website…",
-                                     startedAt: fetchFromWebStartedAt)
+                                     startedAt: fetchFromWebStartedAt,
+                                     silenceThreshold: LongRunState.localWorkSilenceThreshold)
                         .padding(.top, 2)
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
                         Button {
-                            Task { await fetchFromWeb(url: url) }
+                            onFetchFromWeb(url)
                         } label: {
                             Label("Replace from website", systemImage: "globe")
                                 .font(.system(size: 12))
@@ -704,81 +749,6 @@ private struct PerformersEditor: View {
         }
     }
 
-    @MainActor
-    private func fetchFromWeb(url: String) async {
-        fetchError = nil
-        isFetchingFromWeb = true
-        fetchFromWebStartedAt = Date()
-        defer { isFetchingFromWeb = false; fetchFromWebStartedAt = nil }
-        do {
-            let fetched = try await PythonBridge.shared.fetchWebPerformers(eventURL: url)
-            let old = performers
-            performers = fetched
-            onReplacedFromWeb?(old)
-            NotificationService.shared.notifyWebPerformersFetched(
-                eventName: eventName,
-                count: fetched.count
-            )
-        } catch {
-            fetchError = error.localizedDescription
-        }
-    }
-
-    @MainActor
-    private func lookUpHandles() async {
-        handleLookupError = nil
-        isLookingUpHandles = true
-        handleLookupStartedAt = Date()
-        defer { isLookingUpHandles = false; handleLookupStartedAt = nil }
-
-        // First pass: fill from the handle book (instant, no web search)
-        var bookFilled = 0
-        for i in performers.indices {
-            if performers[i].handle.isEmpty && !performers[i].name.isEmpty {
-                let saved = HandleBook.shared.handle(forPerformer: performers[i].name)
-                if !saved.isEmpty {
-                    performers[i].handle = saved
-                    bookFilled += 1
-                }
-            }
-        }
-
-        // Second pass: search the web for any still missing
-        let needsLookup = performers.filter { !$0.name.isEmpty && $0.handle.isEmpty }
-        guard !needsLookup.isEmpty else {
-            // All handles resolved from the book — no web search needed
-            NotificationService.shared.notifyHandleLookupComplete(
-                eventName: eventName,
-                count: bookFilled
-            )
-            return
-        }
-
-        do {
-            let suggestions = try await PythonBridge.shared.suggestHandles(
-                performers: needsLookup,
-                org: org,
-                venue: venue,
-                event: eventName
-            )
-            // Only show suggestions that actually found something
-            handleSuggestions = suggestions.filter { $0.handle != nil }
-            NotificationService.shared.notifyHandleLookupComplete(
-                eventName: eventName,
-                count: handleSuggestions.count + bookFilled
-            )
-        } catch {
-            handleLookupError = error.localizedDescription
-        }
-    }
-
-    private func applyHandleSuggestion(_ suggestion: PythonBridge.HandleSuggestion) {
-        guard let handle = suggestion.handle else { return }
-        if let idx = performers.firstIndex(where: { $0.name == suggestion.name && $0.handle.isEmpty }) {
-            performers[idx].handle = handle
-        }
-        handleSuggestions.removeAll { $0.name == suggestion.name }
-    }
 }
 
 private struct HandleSuggestionsView: View {

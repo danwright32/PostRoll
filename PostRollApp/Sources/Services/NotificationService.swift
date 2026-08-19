@@ -130,6 +130,18 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Private
 
+    /// Posting a notification needs a real app bundle, and a test bundle is not
+    /// one: `UNUserNotificationCenter.current()` raises rather than failing, so
+    /// any test that reaches a manager which reports its own completion dies
+    /// inside AppKit with a message about a bundle proxy (#707).
+    ///
+    /// Compiled only into the test bundle, the same way every other seam here
+    /// is, so the shipping app cannot end up silently not notifying.
+    #if POSTROLL_TESTS
+    private func send(title: String, body: String) {
+        pendingCount += 1
+    }
+    #else
     private func send(title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
@@ -140,4 +152,5 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )
         incrementBadge()
     }
+    #endif
 }

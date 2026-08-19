@@ -11,6 +11,9 @@ struct PostRollApp: App {
     /// App scoped, so a programme notes search survives the section it was
     /// started from being collapsed and the screen being replaced (#693).
     @State private var notesManager = ProgramNotesManager()
+    /// App scoped for the same reason (#707): the two performer lookups must
+    /// survive their section being collapsed and the screen being replaced.
+    @State private var lookupManager = PerformerLookupManager()
 
     init() {
         NotificationService.shared.requestPermission()
@@ -26,6 +29,7 @@ struct PostRollApp: App {
                 .environment(ocrManager)
                 .environment(exportManager)
                 .environment(notesManager)
+                .environment(lookupManager)
                 .preferredColorScheme(.light)
                 // The accent every system control inherits: a spinner's arc, a
                 // slider's filled track, a picker's selection. Named as the
