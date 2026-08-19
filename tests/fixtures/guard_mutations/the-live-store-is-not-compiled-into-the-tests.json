@@ -1,0 +1,8 @@
+{
+  "name": "the-live-store-is-not-compiled-into-the-tests",
+  "file": "PostRollApp/Sources/Services/AnalyticsStore.swift",
+  "find": "    init(fileURL: URL) {",
+  "replace": "    init(fileURL: URL = AppPaths.analyticsFile) {",
+  "test": "tests/test_swift_tests_never_reach_live_data.py::test_no_store_the_test_bundle_compiles_defaults_to_a_live_location",
+  "breaks": "the initializer the test bundle compiles defaults to Dan's real analytics file again, so any test that omits the argument opens his imported Instagram history and nothing structural stops it (#722, L2)"
+}
