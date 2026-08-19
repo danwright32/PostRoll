@@ -1063,3 +1063,144 @@ def test_a_run_that_waits_for_the_lock_says_so(tmp_path: Path):
         "a run held up by another build said nothing, so it looks stalled\n"
         + "\n".join(said))
 
+
+
+# ── Splitting the sweep, so it fits inside the runner's cap ───────────────────
+#
+# The post-merge sweep proves every registered guard, and it stopped finishing:
+# on 2026-08-19 it hit the workflow's 60 minute cap, which GitHub reports as
+# CANCELLED. That reads like a superseded run rather than a failure, so ~280
+# guards quietly stopped being re-proved with nothing saying so (L98, L11). The
+# registry had more than doubled since the 60 minute cap was measured against
+# 119 entries, which the workflow's own comment predicted would happen.
+#
+# So the sweep splits across runners. The thing that can go wrong with splitting
+# is silent: a partition that drops an entry leaves every shard green and the
+# guard unproven, which looks exactly like a clean sweep.
+
+
+def test_every_entry_lands_in_exactly_one_shard():
+    """The property the whole split rests on.
+
+    An off-by-one that skips an entry cannot be seen in any shard's output:
+    each one reports what it ran, all of them pass, and the dropped guard is
+    never mentioned by anything.
+    """
+    from tools.check_guards import shard_of
+
+    names = [f"guard-{i}" for i in range(97)]
+    entries = [entry(name=n) for n in names]
+    for total in (1, 2, 3, 5, 8, 13):
+        seen: list[str] = []
+        for index in range(1, total + 1):
+            seen += [e.name for e in shard_of(entries, index, total)]
+        assert sorted(seen) == sorted(names), (
+            f"the {total}-way split does not cover the registry exactly once"
+        )
+
+
+def test_the_split_balances_the_expensive_entries():
+    """Swift entries pay a build each; Python ones are under a second.
+
+    A split that put every Swift entry in one shard would leave that shard as
+    slow as the whole sweep was, which is the thing being fixed.
+    """
+    from tools.check_guards import shard_of
+
+    entries = ([entry(name=f"swift-{i}") for i in range(40)]
+               + [entry(name=f"py-{i}", test=f"tests/test_x.py::test_{i}")
+                  for i in range(40)])
+    counts = []
+    for index in range(1, 5):
+        shard = shard_of(entries, index, 4)
+        counts.append(sum(1 for e in shard if e.test.startswith("PostRollTests/")))
+    assert max(counts) - min(counts) <= 1, (
+        f"the expensive entries are spread {counts}, so one shard carries the "
+        "sweep and the split buys nothing"
+    )
+
+
+def test_a_shard_that_would_be_empty_is_refused():
+    """More shards than entries means a runner proving nothing.
+
+    A green run that checked nothing is indistinguishable from one that checked
+    everything (L98), so it is an error rather than a quiet success.
+    """
+    from tools.check_guards import shard_of
+
+    with pytest.raises(ValueError):
+        shard_of([entry(name="only-one")], 2, 2)
+
+
+def test_a_shard_spec_outside_the_split_is_refused():
+    from tools.check_guards import shard_of
+
+    entries = [entry(name=f"g-{i}") for i in range(4)]
+    for bad in ((0, 2), (3, 2), (1, 0)):
+        with pytest.raises(ValueError):
+            shard_of(entries, *bad)
+
+
+def test_the_sweep_says_which_shard_it_ran_and_how_many_it_left(repo: Path, tmp_path: Path):
+    """A shard's output must not read like a whole sweep.
+
+    Every other scoping in this tool says what it skipped, for the same reason:
+    proving four guards says nothing about the other two hundred and seventy six.
+    """
+    from tools.check_guards import check_guards
+
+    registry = write_registry(
+        tmp_path / "registry",
+        [registry_dict(name=f"g-{i}", test=f"tests/test_x.py::test_{i}")
+         for i in range(4)])
+    lines: list[str] = []
+    code = check_guards(repo, registry, a_runner(1, "1 failed"),
+                        shard=(1, 2), log=lines.append)
+    text = "\n".join(lines)
+    assert code == 0
+    assert "shard 1 of 2" in text, text
+    assert "2 of 4" in text, text
+
+
+# ── A deadline that reports as a failure, not as a cancellation ───────────────
+
+
+def test_a_sweep_past_its_deadline_fails_and_names_what_it_never_reached(
+        repo: Path, tmp_path: Path):
+    """The whole reason the timeout was invisible.
+
+    A job killed by the runner's cap reports CANCELLED, which is what a
+    superseded run also reports, so the sweep stopping is indistinguishable
+    from a run somebody replaced. Stopping ourselves turns it into a failure
+    that says how many guards went unproven.
+    """
+    from tools.check_guards import check_guards
+
+    registry = write_registry(
+        tmp_path / "registry",
+        [registry_dict(name=f"g-{i}", test=f"tests/test_x.py::test_{i}")
+         for i in range(6)])
+    lines: list[str] = []
+    # Zero seconds: the first entry is already past it, so nothing depends on
+    # how fast this machine happens to be (L134).
+    code = check_guards(repo, registry, a_runner(1, "1 failed"),
+                        deadline_seconds=0, log=lines.append)
+    text = "\n".join(lines)
+    assert code == 1, "a sweep that ran out of time reported success"
+    assert "deadline" in text.lower(), text
+    assert "unproven" in text.lower() or "never reached" in text.lower(), text
+
+
+def test_a_sweep_inside_its_deadline_is_unaffected(repo: Path, tmp_path: Path):
+    """The control. A deadline that fired on ordinary runs would be turned off,
+    and then it would be protecting nothing (L36)."""
+    from tools.check_guards import check_guards
+
+    registry = write_registry(
+        tmp_path / "registry",
+        [registry_dict(name="g-0", test="tests/test_x.py::test_0")])
+    lines: list[str] = []
+    code = check_guards(repo, registry, a_runner(1, "1 failed"),
+                        deadline_seconds=3600, log=lines.append)
+    assert code == 0, "\n".join(lines)
+    assert "deadline" not in "\n".join(lines).lower()

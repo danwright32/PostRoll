@@ -117,23 +117,45 @@ jobs:
   # minutes of proving plus one build.
   #
   # Then measured on the runner, which is the number that decides this (#548):
-  # 24m57s for 119 entries on the first sweep after a merge, cold. Kept whole
-  # rather than thinned, on three grounds. It fits inside the 60 minute backstop
-  # with room. This repository is public, so the standard runners cost nothing
-  # and the price is wall clock on a branch nobody is waiting behind, since this
-  # runs after the merge rather than before it. And the first sweep immediately
-  # paid for itself by finding an entry whose mutation could not compile, which
-  # had sat in the registry unprovable because the scoped run never selected it.
+  # 24m57s for 119 entries on the first sweep after a merge, cold.
   #
-  # The alternatives are recorded rather than taken: scoping to entries whose
-  # guarded files changed since the last successful sweep would reintroduce
-  # exactly the blind spot that hid that entry, and splitting across a matrix
-  # buys wall clock this job does not need. Revisit if the registry roughly
-  # doubles, at which point the timeout is the thing that will say so.
+  # That comment used to end "revisit if the registry roughly doubles, at which
+  # point the timeout is the thing that will say so". It doubled, to 280, and on
+  # 2026-08-19 the timeout did say so, in the worst available words: a job
+  # killed by `timeout-minutes` reports CANCELLED, which is exactly what a
+  # superseded run reports, so the sweep had been dying at 60 minutes for hours
+  # while the run list read as though somebody had replaced those runs (L11).
+  # Every guard in the registry had quietly stopped being re-proved.
+  #
+  # Two changes, because the timeout and the way it was reported are separate
+  # defects and fixing only the first would leave the next capacity wall just as
+  # invisible:
+  #
+  # Split across a matrix, which the old comment had considered and declined as
+  # buying wall clock the job did not need. It needs it now. `--shard I/N` puts
+  # every entry in exactly one shard and balances the expensive ones, since a
+  # Swift entry pays a build and a Python one is under a second; a contiguous
+  # split would hand one runner most of the builds. Each shard reports what it
+  # did NOT run, so a shard's output cannot be read as a whole sweep.
+  #
+  # And a deadline INSIDE the tool, under the job's own cap, so running out of
+  # time is a failure that names the entries it never reached rather than a
+  # cancellation indistinguishable from an interruption.
+  #
+  # This repository is public, so the standard runners cost nothing and the
+  # price is wall clock on a branch nobody is waiting behind, since this runs
+  # after the merge rather than before it.
   full:
     if: github.event_name != 'pull_request'
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 45
+    strategy:
+      # Every shard runs even when one goes red: a red guard on shard 2 must not
+      # hide an unproven one on shard 3, and half a verdict is worse than none
+      # because it reads like the whole (L73).
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -167,8 +189,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Re-prove every guard
-        run: python tools/check_guards.py
+      - name: Re-prove this shard of the guards
+        # The deadline sits well under `timeout-minutes` on purpose. Whichever
+        # fires first decides what is reported, and only this one can say which
+        # entries went unproven.
+        run: python tools/check_guards.py --shard ${{ matrix.shard }}/4 --deadline-seconds 1800
 
       # Whether the SCHEDULED sweep is still happening at all (#554). The weekly
       # trigger's failure mode is silence: GitHub disables a repository's
@@ -180,8 +205,18 @@ jobs:
       # share a job, and letting a red sweep above it skip the question of
       # whether the schedule is alive would make the two failures hide each
       # other (L73).
+      #
+      # On ONE shard, because the sweep became a matrix and the question is
+      # about the workflow rather than about any shard: asked on all four it
+      # would be answered four times. It was briefly its own job instead, which
+      # is tidier and wrong: a new job is a new CHECK NAME, and
+      # tests/test_wait_for_checks.py calibrates the checks it waits for against
+      # a RECORDED reply from a real pull request. Adding a name to the
+      # workflows without a new recording would have meant hand-editing that
+      # fixture, and a fixture edited to match the thing it is meant to verify
+      # is no longer evidence of anything (L48, L58).
       - name: Say whether the scheduled sweep is still running
-        if: always()
+        if: always() && matrix.shard == 1
         env:
           GH_TOKEN: ${{ github.token }}
         run: python tools/check_guard_sweep_freshness.py

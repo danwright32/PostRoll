@@ -614,3 +614,22 @@ def test_the_guard_job_says_whether_the_schedule_is_still_alive(guards):
     assert "if: always()" in guards, (
         "the freshness check is skipped when the sweep above it goes red, so "
         "two failures would hide each other (L73)")
+
+
+def test_the_freshness_question_is_asked_once_not_once_per_shard(guards):
+    """The sweep is a matrix; the question is about the workflow.
+
+    Asked on every shard it is answered four times, which is noise on a check
+    whose only value is being noticed. Scoping it to one shard keeps it a single
+    answer.
+
+    It was briefly its own job instead, which is tidier and wrong: a new job is
+    a new CHECK NAME, and tests/test_wait_for_checks.py calibrates the checks it
+    waits for against a RECORDED reply from a real pull request. A name added to
+    the workflows with no new recording would have meant hand-editing that
+    fixture, and a fixture edited to match the thing it is meant to verify is no
+    longer evidence of anything (L48, L58).
+    """
+    assert "matrix.shard == 1" in guards, (
+        "the freshness question is asked on every shard of the sweep, so it is "
+        "answered once per runner")

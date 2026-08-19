@@ -718,8 +718,47 @@ def run_entry(entry: Entry, repo_root: Path, runner, log=say) -> Result:
     return Result(entry, verdict.outcome, verdict.detail)
 
 
+def shard_of(entries: list[Entry], index: int, total: int) -> list[Entry]:
+    """The `index` of `total` slice of `entries`, one runner's share (#719 follow-up).
+
+    The post-merge sweep stopped finishing: it hit the workflow's 60 minute cap,
+    which GitHub reports as CANCELLED, and that is what a superseded run reports
+    too, so the sweep dying looked exactly like one somebody replaced (L11).
+    Splitting it across runners is what makes it fit.
+
+    Round robin WITHIN each cost class rather than contiguous slices. A Swift
+    entry pays an app build and a Python one is under a second, and they are
+    interleaved alphabetically only by accident, so a contiguous split can hand
+    one runner most of the builds and leave the sweep as slow as it was.
+
+    Every entry lands in exactly one shard, which is the property the whole
+    split rests on: a partition that drops one leaves every shard green and that
+    guard unproven, with nothing anywhere mentioning it (L98).
+    """
+    if total < 1:
+        raise ValueError(f"a sweep cannot be split {total} ways")
+    if not 1 <= index <= total:
+        raise ValueError(f"shard {index} is outside a {total} way split")
+    if total > len(entries):
+        # A runner that proves nothing and exits green is indistinguishable
+        # from one that proved everything.
+        raise ValueError(
+            f"a {total} way split of {len(entries)} entries leaves at least "
+            "one runner with nothing to prove, and a green run that checked "
+            "nothing reads exactly like a clean sweep")
+
+    expensive = [e for e in entries if e.test.startswith("PostRollTests/")]
+    cheap = [e for e in entries if not e.test.startswith("PostRollTests/")]
+    picked: list[Entry] = []
+    for group in (expensive, cheap):
+        picked += [e for n, e in enumerate(group) if n % total == index - 1]
+    return picked
+
+
 def check_guards(repo_root: Path, registry_path: Path, runner,
                  only: str | None = None, changed_only: bool = False,
+                 shard: tuple[int, int] | None = None,
+                 deadline_seconds: float | None = None,
                  log=say) -> int:
     # Installed here rather than in main() so every caller that can perturb the
     # tree is covered, including the tests that drive this directly (#547).
@@ -775,6 +814,17 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
             return 0
         entries = selected
 
+    if shard is not None:
+        index, total = shard
+        whole = len(entries)
+        entries = shard_of(entries, index, total)
+        # Said out loud for the same reason --changed says what it skipped:
+        # proving one runner's share says nothing about the other shards, and a
+        # shard's output must not read like a whole sweep.
+        log(f"shard {index} of {total}: {len(entries)} of {whole} entries on "
+            f"this runner; the other {whole - len(entries)} are proven by the "
+            "other shards and by nothing here")
+
     # Said out loud, because a sweep paying a whole build for every entry looks
     # exactly like one reusing a cache until somebody times it (#621). It is not
     # a refusal: the guards are still proven, just at the old cost.
@@ -785,8 +835,21 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
             "reusing one")
 
     results = []
+    unproven: list[Entry] = []
     started = time.monotonic()
     for number, entry in enumerate(entries, start=1):
+        # Stop ourselves rather than let the runner's cap do it. A job killed by
+        # `timeout-minutes` reports CANCELLED, which is also what a superseded
+        # run reports, so the sweep running out of time was indistinguishable
+        # from one that was replaced, and it went unnoticed for a day (L11).
+        if deadline_seconds is not None \
+                and time.monotonic() - started >= deadline_seconds:
+            unproven = entries[number - 1:]
+            log(f"the {deadline_seconds:.0f}s deadline passed with "
+                f"{len(unproven)} entries never reached, so they are UNPROVEN. "
+                "This is a failure, not a cancellation: split the sweep further "
+                "or raise the deadline, but do not read it as a clean run.")
+            break
         # How far in and how long so far, on every line, because the thing a
         # person watching needs to tell apart is progress from a hang (#641).
         where = f"[{number} of {len(entries)}, {time.monotonic() - started:.0f}s]"
@@ -800,13 +863,17 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
     bad = [r for r in results if r.outcome is not Outcome.KILLED]
     log(f"{len(results)} guard{'s' if len(results) != 1 else ''} checked, "
         f"{len(results) - len(bad)} killed their mutation, {len(bad)} did not")
+    for skipped in unproven:
+        log(f"  {skipped.name}: never reached before the deadline, so nothing "
+            "here says whether it still protects "
+            f"{skipped.file}")
     for r in bad:
         if r.outcome is Outcome.SURVIVED:
             log(f"  {r.entry.name}: the guard stayed GREEN on broken code. "
                 f"It is not protecting {r.entry.file} and needs rewriting.")
         else:
             log(f"  {r.entry.name}: {r.detail}")
-    return 1 if bad else 0
+    return 1 if (bad or unproven) else 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -819,12 +886,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--registry", type=Path, default=None,
                         help="registry directory, one JSON file per entry "
                              f"(default {DEFAULT_REGISTRY})")
+    parser.add_argument("--shard", default=None, metavar="I/N",
+                        help="prove only this runner's share of the registry, "
+                             "as I/N; every entry lands in exactly one shard")
+    parser.add_argument("--deadline-seconds", type=float, default=None,
+                        help="stop and FAIL once this long has passed, naming "
+                             "the entries never reached, rather than letting "
+                             "the runner's own cap kill the job and report it "
+                             "as a cancellation")
     args = parser.parse_args(argv)
+
+    shard = None
+    if args.shard is not None:
+        try:
+            index, total = (int(part) for part in args.shard.split("/", 1))
+        except ValueError:
+            parser.error(f"--shard wants I/N, not {args.shard!r}")
+        shard = (index, total)
 
     repo_root = Path(__file__).resolve().parent.parent
     registry = args.registry or repo_root / DEFAULT_REGISTRY
     return check_guards(repo_root, registry, real_runner, only=args.only,
-                        changed_only=args.changed)
+                        changed_only=args.changed, shard=shard,
+                        deadline_seconds=args.deadline_seconds)
 
 
 if __name__ == "__main__":
