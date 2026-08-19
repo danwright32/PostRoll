@@ -53,6 +53,23 @@ targets:
       # suite actually runs in rather than one nothing ever reaches.
       - name: Record the checkout this build was made from
         basedOnDependencyAnalysis: false
+        # The Info.plist is declared as an input so the build graph knows this
+        # phase READS what `ProcessInfoPlistFile` writes, and therefore has to
+        # run after it.
+        #
+        # Without the edge the two are unordered, and Xcode scheduled them both
+        # ways on one machine in one afternoon: the plist was regenerated after
+        # the stamp twice out of three builds, which erases the key and leaves a
+        # Release app that cannot find the Python checkout. That is exactly the
+        # #648 defect, back and intermittent.
+        #
+        # It was invisible because the phase VERIFIES ITS OWN WRITE and the
+        # write really did land. Reading a value back proves only that it was
+        # there at the moment you looked, never that anything later left it
+        # alone (L12). What caught it was reading the finished build product,
+        # which is what tests/test_project_root_recorded.py does.
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
         script: |
           set -euo pipefail
           PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
@@ -70,20 +87,82 @@ targets:
             echo "error: wanted ${ROOT}, read back \"${WROTE}\"." >&2
             exit 1
           fi
-          # This phase runs AFTER Xcode signs, and changing the Info.plist
-          # breaks the seal, so the bundle has to be signed again. Measured, not
-          # assumed: without this, `codesign --verify` on the build product
-          # reports "plist or signature have been modified". An unsigned or
-          # broken bundle has no stable identity for macOS to remember folder
+          # Changing the Info.plist can break the bundle's seal, so it is
+          # signed again here and the signature verified. An unsigned or broken
+          # bundle has no stable identity for macOS to remember folder
           # permission grants against, which is what #83 fixed and what this
           # would quietly undo.
+          #
+          # This used to say the phase runs AFTER Xcode signs. It does not, in
+          # either configuration on Xcode 26: the ordering measured on this
+          # toolchain is this phase, then `CodeSign`, so the plist edit breaks
+          # no seal and Xcode seals the edited file itself. The re-sign is kept
+          # anyway. It is correct under the ordering the old comment described,
+          # harmless under the one that holds now, and its verification is what
+          # caught #719. A signing step is not deleted on the strength of one
+          # machine's phase order.
+          #
+          # Nested code is signed FIRST, and that is not tidiness: codesign
+          # REFUSES to seal a bundle containing unsigned nested code, so
+          # without this every Debug build of the app scheme died right here
+          # with "code object is not signed at all" (#719). Release has no
+          # nested code, which is why only Debug ever hit it and why nothing
+          # this project routinely runs noticed.
+          #
+          # What to sign is discovered by reading the bundle, never listed by
+          # name. Xcode does export EXECUTABLE_DEBUG_DYLIB_PATH and
+          # EXECUTABLE_BLANK_INJECTION_DYLIB_PATH, and naming those two would
+          # work today; a hand-kept list is exempt from the very check meant to
+          # catch it the moment a build grows a third (L96). The issue that
+          # reported this knew about PostRoll.debug.dylib and had never heard
+          # of __preview.dylib.
           #
           # Skipped when the build was told not to sign at all, which is how
           # build-install.sh builds: it signs the installed copy itself.
           if [ "${CODE_SIGNING_ALLOWED:-YES}" = "YES" ]; then
             IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"
-            codesign --force --sign "${IDENTITY}" "${TARGET_BUILD_DIR}/${WRAPPER_NAME}"
-            codesign --verify --strict "${TARGET_BUILD_DIR}/${WRAPPER_NAME}"
+            BUNDLE="${TARGET_BUILD_DIR}/${WRAPPER_NAME}"
+            MAIN="${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}"
+            MACHO=0
+            # Newline-only IFS so a build directory with a space in it survives.
+            OLD_IFS="${IFS}"
+            IFS="$(printf '\n_')" && IFS="${IFS%_}"
+            for FOUND in $(/usr/bin/find "${BUNDLE}" -type f -print); do
+              # `case` rather than `file ... | grep -q`, because under pipefail
+              # a short-circuiting reader can fail the pipeline by killing its
+              # producer, and that would read as "not Mach-O" and silently skip
+              # a file that had to be signed (L183).
+              case "$(/usr/bin/file -b "${FOUND}")" in
+                Mach-O*) ;;
+                *) continue ;;
+              esac
+              MACHO=$((MACHO + 1))
+              [ "${FOUND}" = "${MAIN}" ] && continue
+              if ! codesign --force --sign "${IDENTITY}" "${FOUND}"; then
+                echo "error: could not sign nested code at ${FOUND}." >&2
+                echo "error: this is the 'Record the checkout this build was made from' script phase, not Xcode's own signing step." >&2
+                exit 1
+              fi
+            done
+            IFS="${OLD_IFS}"
+            # A sweep that matched NOTHING is not a bundle with nothing to
+            # sign: every bundle has at least its main executable, so finding
+            # none means the search itself is broken and its silence would
+            # read as success (L100, L98).
+            if [ "${MACHO}" -eq 0 ]; then
+              echo "error: no Mach-O file was found anywhere in ${BUNDLE}, not even ${MAIN}." >&2
+              echo "error: the nested-code sweep in the 'Record the checkout this build was made from' phase is matching nothing, so nothing was signed." >&2
+              exit 1
+            fi
+            if ! codesign --force --sign "${IDENTITY}" "${BUNDLE}"; then
+              echo "error: could not seal ${BUNDLE} after recording the checkout path." >&2
+              echo "error: this is the 'Record the checkout this build was made from' script phase, not Xcode's own signing step." >&2
+              exit 1
+            fi
+            if ! codesign --verify --strict "${BUNDLE}"; then
+              echo "error: ${BUNDLE} does not verify after the 'Record the checkout this build was made from' phase re-signed it." >&2
+              exit 1
+            fi
           fi
     entitlements:
       path: PostRoll.entitlements

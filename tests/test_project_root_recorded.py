@@ -201,3 +201,85 @@ def test_the_built_app_records_its_checkout():
     assert Path(recorded).is_absolute(), (
         f"{app} recorded {recorded!r}, which is not an absolute path"
     )
+
+
+# --------------------------------------------------------------------------
+# The stamp has to survive the rest of the build (#719)
+# --------------------------------------------------------------------------
+
+# The build setting naming the file Xcode regenerates and this phase edits.
+# Both halves of the ordering edge are spelled with it, so the guard below can
+# ask whether the edge is declared without hardcoding a path of its own.
+PLIST_INPUT = "$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)"
+
+
+def _script_phase_block() -> str:
+    """The generated project's entry for the checkout-recording phase.
+
+    Read out of the `.xcodeproj` rather than the manifest because that is what
+    Xcode schedules from, and scoped to the one phase rather than searched over
+    the whole file, which any other phase's inputs would answer (L135).
+    """
+    text = PBXPROJ.read_text(encoding="utf-8")
+    section = text.split("/* Begin PBXShellScriptBuildPhase section */", 1)
+    assert len(section) == 2, "the generated project has no shell script phases"
+    body = section[1].split("/* End PBXShellScriptBuildPhase section */", 1)[0]
+    hits = [b for b in body.split("\n\t\t};") if "POSTROLLProjectRoot" in b]
+    assert len(hits) == 1, (
+        f"expected one phase recording the checkout, found {len(hits)}"
+    )
+    return hits[0]
+
+
+def test_the_recording_phase_runs_after_the_plist_is_regenerated():
+    """Ordering, declared rather than hoped for.
+
+    `ProcessInfoPlistFile` writes this Info.plist from scratch, and without a
+    declared dependency it and this phase are UNORDERED. Measured on one machine
+    in one afternoon, Xcode ran them both ways: in two Release builds out of
+    three the plist was regenerated after the stamp was written, which erases
+    the key and ships an app that cannot find the Python checkout. That is #648
+    again, now intermittent, which is worse than the original because a build
+    that happens to work proves nothing about the next one.
+
+    Declaring the plist as an INPUT is what tells the build graph this phase
+    reads what that step produces, so it has to come second.
+
+    Nothing inside the script can check this. The phase reads its own write back
+    and the write genuinely lands; it is destroyed afterwards. A value read back
+    is only proof it was there when you looked (L12). The check that catches the
+    real thing is `test_the_built_app_records_its_checkout`, which reads the
+    finished product; this one catches the removal of the edge cheaply, without
+    needing a build to exist.
+    """
+    block = _script_phase_block()
+    # Non-greedy to the closing `);`, not to the first `)`: the paths
+    # themselves contain `$(...)`, and stopping at that read as an empty
+    # list while the edge was really there.
+    inputs = re.search(r"inputPaths = \((.*?)\);", block, re.S)
+    assert inputs, (
+        "the checkout-recording phase declares no input files, so nothing "
+        "orders it against ProcessInfoPlistFile and the stamp survives or not "
+        "depending on how Xcode happens to schedule that build."
+    )
+    assert PLIST_INPUT in inputs.group(1), (
+        f"the phase does not declare {PLIST_INPUT} as an input, so the build "
+        f"graph does not know it reads the regenerated Info.plist. Declared: "
+        f"{inputs.group(1).strip()}"
+    )
+
+
+def test_the_manifest_declares_the_same_ordering_edge():
+    """`project.yml` is where the next person edits, and it is not what builds.
+
+    Held to the generated project so the edge cannot be dropped from the
+    manifest while the committed `.xcodeproj` still carries it, which would read
+    as working right up until the next `xcodegen generate`.
+    """
+    manifest = _strip_comments(MANIFEST.read_text(encoding="utf-8"))
+    block = _app_target_block(manifest)
+    assert PLIST_INPUT in block, (
+        f"project.yml no longer declares {PLIST_INPUT} as an input of the "
+        "checkout-recording phase. Regenerating from it would drop the ordering "
+        "edge and bring back the intermittently unstamped build."
+    )
