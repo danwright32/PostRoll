@@ -1,0 +1,8 @@
+{
+  "name": "the-window-is-clamped-into-the-screen",
+  "file": "PostRollApp/Sources/Services/WindowFit.swift",
+  "find": "window.setFrame(after, display: true, animate: false)",
+  "replace": "_ = after",
+  "test": "PostRollTests/WindowFitTests/testAnOversizedWindowIsPulledBackInsideTheScreen",
+  "breaks": "the guard works out the right frame and then never applies it, so a window pushed below the Dock stays there. The arithmetic and the log both keep reporting exactly what should have happened, which is the shape of a backstop that reads as working (#690, #687)"
+}
