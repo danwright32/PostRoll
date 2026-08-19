@@ -21,10 +21,6 @@ final class LongWorkOwnershipTests: XCTestCase {
     /// countable rather than being rediscovered. An entry here is a statement
     /// that somebody looked, not that it is fine (L129, L65).
     private static let known: [String: String] = [
-        "OCRReviewView.swift":
-            "the reflow call, the third of the three #707 listed. It sits on its "
-            + "own surface rather than in a collapsing section, so it is the "
-            + "least exposed, and its result lands somewhere different again.",
         "CaptionReviewView.swift":
             "regenerate, revise, analyse edits and the audio swap. Not yet "
             + "converted: each writes to a different part of the week's result "

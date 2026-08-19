@@ -5,19 +5,10 @@ struct PostRollApp: App {
     @State private var appState = AppState()
     @State private var hashtagStore = HashtagStore()
     @State private var analyticsStore = AnalyticsStore()
-    @State private var generationManager = GenerationManager()
-    @State private var ocrManager = OCRManager()
-    @State private var exportManager = ExportManager()
-    /// App scoped, so a programme notes search survives the section it was
-    /// started from being collapsed and the screen being replaced (#693).
-    @State private var notesManager = ProgramNotesManager()
-    /// App scoped for the same reason (#707): the two performer lookups must
-    /// survive their section being collapsed and the screen being replaced.
-    @State private var lookupManager = PerformerLookupManager()
-    /// App scoped for the same reason again (#718): the CSV import and the paid
-    /// analysis must survive the sidebar moving off Insights, which destroys
-    /// the screen they were started from.
-    @State private var insightsWork = InsightsWorkManager()
+    /// Every owner of work that outlives a screen, in one list rather than
+    /// seven declarations here and the same seven again in the test harness
+    /// that renders whole screens (#718). See `AppOwners`.
+    @State private var owners = AppOwners()
 
     init() {
         NotificationService.shared.requestPermission()
@@ -29,12 +20,7 @@ struct PostRollApp: App {
                 .environment(appState)
                 .environment(hashtagStore)
                 .environment(analyticsStore)
-                .environment(generationManager)
-                .environment(ocrManager)
-                .environment(exportManager)
-                .environment(notesManager)
-                .environment(lookupManager)
-                .environment(insightsWork)
+                .withAppOwners(owners)
                 .preferredColorScheme(.light)
                 // The accent every system control inherits: a spinner's arc, a
                 // slider's filled track, a picker's selection. Named as the

@@ -121,15 +121,15 @@ final class NoScreenForcesTheWindowBiggerTests: XCTestCase {
 
     private func hosted(_ event: Event, _ screen: some View) -> some View {
         let state = state(event)
+        // Through the same list the app uses, never a copy of it. This test
+        // spelled the owners out itself, and adding one to the app then left
+        // every screen here crashing on a missing environment value, which is
+        // not a failing assertion but a trap (#718, L41).
         return screen
             .environment(state)
             .environment(HashtagStore())
             .environment(AnalyticsStore())
-            .environment(GenerationManager())
-            .environment(OCRManager())
-            .environment(ExportManager())
-            .environment(ProgramNotesManager())
-            .environment(PerformerLookupManager())
+            .withAppOwners(AppOwners())
     }
 
     // MARK: - The sweep

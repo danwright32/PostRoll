@@ -11,6 +11,11 @@ struct OCRReviewView: View {
     @Environment(PerformerLookupManager.self) private var lookupManager
     /// For the rescan of pages an earlier run could not read (#518).
     @Environment(OCRManager.self) private var ocrManager
+    /// Owns the "describe the correction" reflow, so a paid model call is not
+    /// thrown away by an event switch (#718). This one LOST work rather than
+    /// merely failing to report it: the corrected result was handed back into
+    /// the draft below, which is destroyed with the screen.
+    @Environment(OCRReflowManager.self) private var reflowManager
     @State private var ocr: OCRResult
     @State private var orgHandles: String
     @State private var venueHandles: String
@@ -147,9 +152,7 @@ struct OCRReviewView: View {
                             },
                             onApply: { flag, newValue in applyFlag(flag, newValue: newValue) },
                             onDismiss: { flag in dismissFlag(flag) },
-                            onReflow: { flag, message in
-                                try await reflowFlag(flag, userMessage: message)
-                            }
+                            eventID: event.id
                         )
                         .padding(.horizontal, Spacing.xl)
                         .padding(.bottom, Spacing.md)
@@ -207,6 +210,10 @@ struct OCRReviewView: View {
         // often lands while this section is closed or after Dan has been to
         // another event and back (#693).
         .onChange(of: notesManager.isRunning(event.id)) { adoptStoredResultIfNeeded() }
+        // The reflow writes to the stored event the same way, and it is the one
+        // that most often lands after Dan has been to another event and back,
+        // since it is a pair of model calls (#718).
+        .onChange(of: reflowManager.isRunning(event.id)) { adoptStoredResultIfNeeded() }
         .onChange(of: orgHandles) {
             HandleBook.shared.record(org: event.org, handles: orgHandles)
         }
@@ -229,6 +236,10 @@ struct OCRReviewView: View {
         // (#693): the draft on screen predates the notes that run is about to
         // write, so persisting it now would put the older list back over them.
         guard !notesManager.isRunning(event.id) else { return }
+        // And never while a reflow is in flight, for the same reason again
+        // (#718): it returns a whole replacement result, so persisting the
+        // draft now would put the pre-correction list back over it.
+        guard !reflowManager.isRunning(event.id) else { return }
         live.ocrResult = ocr
         live.pendingFlags = flags
         appState.updateEvent(live)
@@ -243,7 +254,8 @@ struct OCRReviewView: View {
         guard OCRDraftRefresh.shouldAdopt(
                 stored: live.ocrResult, draft: ocr,
                 isRunning: ocrManager.isRunning(event.id)
-                    || notesManager.isRunning(event.id))
+                    || notesManager.isRunning(event.id)
+                    || reflowManager.isRunning(event.id))
         else { return }
         ocr = live.ocrResult ?? ocr
         flags = live.pendingFlags
@@ -401,34 +413,6 @@ struct OCRReviewView: View {
 
     private func dismissFlag(_ flag: OCRFlag) {
         markResolved(flag)
-    }
-
-    /// Natural-language reflow: hand the flag + user feedback to Claude and
-    /// let it produce a multi-op patch. Returns the assistant's reply text
-    /// so the FlagRow can show it inline. Throws on bridge / patch failure.
-    @discardableResult
-    private func reflowFlag(_ flag: OCRFlag, userMessage: String) async throws -> String {
-        let liveImages = (appState.events.first(where: { $0.id == event.id }) ?? event)
-            .programImagePaths
-        let response = try await PythonBridge.shared.reviewFlag(
-            flag: flag,
-            ocr: ocr,
-            imagePaths: liveImages,
-            userMessage: userMessage
-        )
-        if let patch = response.patch, !patch.isEmpty {
-            let newOCR = try await PythonBridge.shared.applyFlagPatch(
-                patch: patch,
-                flag: flag,
-                ocr: ocr,
-                imagePaths: liveImages
-            )
-            ocr = newOCR
-        }
-        if response.resolved {
-            markResolved(flag)
-        }
-        return response.assistantReply
     }
 
     private func markResolved(_ flag: OCRFlag) {
@@ -1335,7 +1319,10 @@ private struct FlagReviewSection: View {
     let isStringLeaf: (OCRFlag) -> Bool
     let onApply: (OCRFlag, String) -> Bool
     let onDismiss: (OCRFlag) -> Void
-    let onReflow: (OCRFlag, String) async throws -> String
+    /// Which programme these concerns are about, so each row can find its own
+    /// correction on the owner rather than being handed a closure that dies
+    /// with this screen (#718).
+    let eventID: Event.ID
 
     private var unresolvedCount: Int { flags.filter { !$0.resolved }.count }
 
@@ -1363,7 +1350,7 @@ private struct FlagReviewSection: View {
                         isStringLeaf: isStringLeaf(flag),
                         onApply:   { newValue in onApply(flag, newValue) },
                         onDismiss: { onDismiss(flag) },
-                        onReflow:  { message in try await onReflow(flag, message) }
+                        eventID: eventID
                     )
                 }
             }
@@ -1383,18 +1370,30 @@ private struct FlagRow: View {
     let isStringLeaf: Bool
     let onApply: (String) -> Bool
     let onDismiss: () -> Void
-    let onReflow: (String) async throws -> String
+    let eventID: Event.ID
+
+    @Environment(OCRReflowManager.self) private var reflowManager
+    @Environment(AppState.self) private var appState
 
     @State private var draftValue: String = ""
     @State private var didInitDraft = false
     @State private var applyError: String? = nil
 
-    // Reflow ("describe the correction") state
+    // Reflow ("describe the correction"): only the composer is this row's
+    // business. Whether a correction is running, what Claude replied and why
+    // one failed all belong to the owner, because this row is destroyed
+    // whenever the event changes and all three used to go with it (#718).
     @State private var reflowOpen: Bool = false
     @State private var reflowText: String = ""
-    @State private var isReflowing: Bool = false
-    @State private var reflowError: String? = nil
-    @State private var reflowConfirmation: String? = nil
+
+    /// A correction running for THIS concern. Several rows are on screen, so a
+    /// spinner on all of them would be a lie on all but one.
+    private var isReflowing: Bool { reflowManager.isRunning(eventID, flag: flag.id) }
+    private var reflowError: String? { reflowManager.failure(for: eventID, flag: flag.id) }
+    private var reflowConfirmation: String? { reflowManager.reply(for: eventID, flag: flag.id) }
+    /// A correction running for a DIFFERENT concern on this programme. The
+    /// button is unavailable then, and says so.
+    private var busyElsewhere: Bool { !reflowManager.canStart(eventID) && !isReflowing }
 
     private var pathLabel: String {
         flag.fieldPath.map(\.displayString).joined(separator: " · ")
@@ -1441,7 +1440,7 @@ private struct FlagRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.top, 4)
-            } else if reflowOpen {
+            } else if reflowOpen || isReflowing {
                 Text("Describe the correction in your own words (e.g. \"Ordway is the arranger; composer is Traditional Chinese\"). Claude can update multiple fields at once.")
                     .font(.light(10))
                     .foregroundStyle(PaintedSurfaces.tertiaryText)
@@ -1467,6 +1466,12 @@ private struct FlagRow: View {
                         .foregroundStyle(PaintedSurfaces.pageAccentText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if busyElsewhere {
+                    Text(OCRReflowText.busyElsewhere)
+                        .font(.light(10))
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 HStack(spacing: 8) {
                     if isReflowing {
                         ProgressView().controlSize(.small)
@@ -1474,17 +1479,18 @@ private struct FlagRow: View {
                             .font(.light(11))
                             .foregroundStyle(PaintedSurfaces.secondaryText)
                     } else {
-                        Button("Send to Claude") { Task { await runReflow() } }
+                        let nothingTyped = reflowText
+                            .trimmingCharacters(in: .whitespaces).isEmpty
+                        Button("Send to Claude") { startReflow() }
                             .buttonStyle(.plain)
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(reflowText.trimmingCharacters(in: .whitespaces).isEmpty
+                            .foregroundStyle(nothingTyped || busyElsewhere
                                              ? PaintedSurfaces.disabledControlLabel
                                              : PaintedSurfaces.pageAccentText)
-                            .disabled(reflowText.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .disabled(nothingTyped || busyElsewhere)
                         Button("Cancel") {
                             reflowOpen = false
                             reflowText = ""
-                            reflowError = nil
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 11))
@@ -1494,7 +1500,10 @@ private struct FlagRow: View {
             } else {
                 Button {
                     reflowOpen = true
-                    reflowError = nil
+                    // The last attempt's outcome lives on the owner now, so
+                    // opening a fresh composer clears it there rather than in
+                    // this row's own state.
+                    reflowManager.clearOutcome(for: eventID)
                     if reflowText.trimmingCharacters(in: .whitespaces).isEmpty,
                        hasRealSuggestion {
                         reflowText = flag.suggestedValue
@@ -1514,21 +1523,25 @@ private struct FlagRow: View {
         }
     }
 
-    @MainActor
-    private func runReflow() async {
+    /// Hand the correction to the owner and let go of it.
+    ///
+    /// Nothing is awaited here on purpose. This row is destroyed whenever the
+    /// event changes, and it used to be holding the only copy of the run's
+    /// progress, its error and Claude's answer (#718).
+    private func startReflow() {
         let msg = reflowText.trimmingCharacters(in: .whitespaces)
         guard !msg.isEmpty else { return }
-        isReflowing = true
-        reflowError = nil
-        do {
-            let reply = try await onReflow(msg)
-            reflowConfirmation = reply.isEmpty ? "Updated." : reply
-            reflowOpen = false
-            reflowText = ""
-        } catch {
-            reflowError = error.localizedDescription
-        }
-        isReflowing = false
+        // The button is already unavailable in this case; refusing here as well
+        // means a press that slips through cannot silently drop what Dan typed.
+        guard reflowManager.canStart(eventID) else { return }
+        // Forget the previous attempt, so its failure does not sit beside a run
+        // that is going.
+        reflowManager.clearOutcome(for: eventID)
+        reflowManager.start(eventID: eventID, flag: flag.id,
+                            userMessage: msg, appState: appState)
+        // Kept, not cleared: the panel stays open showing the correction that
+        // was sent while it runs, and Cancel is what throws it away.
+        reflowOpen = true
     }
 
     var body: some View {

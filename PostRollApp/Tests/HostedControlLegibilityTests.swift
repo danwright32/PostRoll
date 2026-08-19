@@ -231,9 +231,7 @@ final class HostedControlLegibilityTests: XCTestCase {
                            width: CGFloat,
                            wordless: Bool) throws -> NSBitmapImageRep {
         let row = EventListRowPreview(event: sampleEvent, isSelected: isSelected)
-            .environment(GenerationManager())
-            .environment(OCRManager())
-            .environment(ExportManager())
+            .withAppOwners(AppOwners())
             .background(PaintedSurfaces.deepPage)
             .frame(width: width)
 
