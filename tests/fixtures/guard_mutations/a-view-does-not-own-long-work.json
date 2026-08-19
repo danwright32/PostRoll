@@ -1,0 +1,8 @@
+{
+  "name": "a-view-does-not-own-long-work",
+  "file": "PostRollApp/Sources/Views/OutdatedDesignsSheet.swift",
+  "find": "    @State private var isScanning = false",
+  "replace": "    @State private var isScanning = false\n    // A call across to Python, held by the view: exactly the shape the rule forbids.\n    private func probe() async { _ = try? await PythonBridge.shared.fetchPieceNotes(pieces: [], org: \"\", event: \"\") }",
+  "test": "PostRollTests/LongWorkOwnershipTests/testNoNewScreenHoldsTheProgressOfWorkThatOutlivesIt",
+  "breaks": "a screen goes back to holding the progress of a call that takes minutes, in state destroyed the moment a section collapses or the event changes. That has already produced the same defect twice (#693, #707): the indicator vanishes, the error vanishes with it, and on an event switch the results complete into nothing (#713)"
+}
