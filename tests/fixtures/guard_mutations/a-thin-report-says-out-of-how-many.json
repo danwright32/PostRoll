@@ -1,0 +1,8 @@
+{
+  "name": "a-thin-report-says-out-of-how-many",
+  "file": "PostRollApp/Sources/Services/AudienceControlNotice.swift",
+  "find": "        let headline = \"\\(uncontrolled) of the \\(analyzed) posts in this report \"",
+  "replace": "        let headline = \"\\(uncontrolled) posts in this report \"",
+  "test": "PostRollTests/AudienceControlNoticeTests/testAThinReportSaysHowManyAndOutOfHowMany",
+  "breaks": "the count loses its denominator, and twelve is most of a fifteen post report and a rounding error in a four hundred post one. Telling those apart is the whole reason the number is shown (#720)"
+}

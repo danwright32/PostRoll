@@ -1,0 +1,8 @@
+{
+  "name": "the-audience-measurement-reaches-the-report",
+  "file": "postroll/ai/analyze_posts.py",
+  "find": "    if control:\n        result.update(control)",
+  "replace": "    if False:\n        result.update(control)",
+  "test": "tests/test_analyze_posts.py::TestAudienceControl::test_the_measurement_reaches_the_finished_report",
+  "breaks": "the count is measured and never reaches the finished report, so every report says nothing was measured while the code that measures it runs on every generation. Built is not wired (#720, L3)"
+}

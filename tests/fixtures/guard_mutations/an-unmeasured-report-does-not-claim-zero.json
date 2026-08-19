@@ -1,0 +1,8 @@
+{
+  "name": "an-unmeasured-report-does-not-claim-zero",
+  "file": "PostRollApp/Sources/Services/AudienceControlNotice.swift",
+  "find": "        guard let analyzed = report.analyzedCount,\n              let uncontrolled = report.uncontrolledCount else {",
+  "replace": "        let analyzed = report.analyzedCount ?? 0\n        let uncontrolled = report.uncontrolledCount ?? 0\n        if false {",
+  "test": "PostRollTests/AudienceControlNoticeTests/testAnOlderReportSaysItWasNeverMeasuredRatherThanZero",
+  "breaks": "a report nobody measured reports zero uncontrolled posts, which is indistinguishable from one where every comparison was controlled. That is the most reassuring possible reading of the least informative state, on the one screen whose job is to say how much a report can be trusted (#720, L90)"
+}

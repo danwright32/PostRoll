@@ -1,0 +1,8 @@
+{
+  "name": "a-personal-post-is-not-an-uncontrolled-observation",
+  "file": "postroll/ai/analyze_posts.py",
+  "find": "        if post.get(\"is_personal\"):\n            continue\n        analyzed += 1",
+  "replace": "        if False:\n            continue\n        analyzed += 1",
+  "test": "tests/test_analyze_posts.py::TestAudienceControl::test_a_personal_post_is_neither_controlled_nor_uncontrolled",
+  "breaks": "personal posts, which the prompt drops from craft analysis entirely, are counted as observations the report could not control. That inflates the very number added to make a thin report recognisable, so a sound report reads as unreliable (#720)"
+}
