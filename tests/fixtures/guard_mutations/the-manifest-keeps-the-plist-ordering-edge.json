@@ -1,0 +1,8 @@
+{
+  "name": "the-manifest-keeps-the-plist-ordering-edge",
+  "file": "PostRollApp/project.yml",
+  "find": "          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+  "replace": "          - $(SRCROOT)/project.yml",
+  "test": "tests/test_project_root_recorded.py::test_the_manifest_declares_the_same_ordering_edge",
+  "breaks": "the committed .xcodeproj still carries the ordering edge, so every build keeps working and the manifest reads as fine, right up until the next `xcodegen generate` regenerates the project without it and the intermittently unstamped build comes back (#719)"
+}

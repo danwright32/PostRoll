@@ -1,0 +1,8 @@
+{
+  "name": "the-checkout-stamp-is-written-after-the-plist-is-regenerated",
+  "file": "PostRollApp/PostRoll.xcodeproj/project.pbxproj",
+  "find": "\"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)\",",
+  "replace": "\"$(SRCROOT)/project.yml\",",
+  "test": "tests/test_project_root_recorded.py::test_the_recording_phase_runs_after_the_plist_is_regenerated",
+  "breaks": "the build graph no longer knows this phase reads what ProcessInfoPlistFile writes, so the two are unordered. Measured on one machine in one afternoon, Xcode ran them both ways: in two Release builds out of three the plist was regenerated AFTER the stamp, which erases the key and ships an app that cannot find the Python checkout. The phase reads its own write back and the write really does land, so nothing inside it can notice (#719, #648, L12)"
+}

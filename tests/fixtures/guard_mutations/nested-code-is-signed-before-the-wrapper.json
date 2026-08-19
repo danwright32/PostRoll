@@ -1,0 +1,8 @@
+{
+  "name": "nested-code-is-signed-before-the-wrapper",
+  "file": "PostRollApp/PostRoll.xcodeproj/project.pbxproj",
+  "find": "[ \\\"${FOUND}\\\" = \\\"${MAIN}\\\" ] && continue",
+  "replace": "continue",
+  "test": "tests/test_debug_build_signs_nested_code.py::test_a_bundle_with_nested_code_is_left_signed_and_sealed",
+  "breaks": "nothing inside the bundle gets signed, only the wrapper, and codesign REFUSES to seal a bundle containing unsigned nested code. Every Debug build of the app scheme then dies in this phase with \"code object is not signed at all\", so pressing Run in Xcode cannot work, and the message names signing rather than the script that caused it (#719)"
+}
