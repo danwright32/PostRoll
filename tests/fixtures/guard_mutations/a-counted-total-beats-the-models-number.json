@@ -1,0 +1,8 @@
+{
+  "name": "a-counted-total-beats-the-models-number",
+  "file": "postroll/ai/analyze_posts.py",
+  "find": "    result.update(counts)",
+  "replace": "    result.setdefault(\"__unused\", counts)",
+  "test": "tests/test_analyze_posts.py::TestAnalyzePostsCLI::test_a_miscounted_total_from_claude_does_not_reach_the_file",
+  "breaks": "the posts are counted on every generation and the count never reaches the written report, so a total Claude made up is what the insights screen renders as fact (#723, L3, L161)"
+}

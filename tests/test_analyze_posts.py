@@ -204,8 +204,18 @@ class TestFinalize:
             "caveats": ["Small dataset — low confidence on hashtag patterns."],
         }
 
+    def _counts(self) -> dict:
+        """The measured counts, which `_finalize` now requires (#723).
+
+        Measured from an empty prep rather than written by hand, so these tests
+        cannot be the place a made-up number gets treated as a measurement.
+        """
+        from postroll.ai.analyze_posts import report_counts
+        return report_counts([], [])
+
     def test_adds_report_metadata(self):
-        result = _finalize(self._minimal_claude_output(), "2026-01-01", "2026-04-09")
+        result = _finalize(self._minimal_claude_output(), "2026-01-01", "2026-04-09",
+                           self._counts())
         assert "id" in result
         uuid.UUID(result["id"])
         assert "generated_at" in result
@@ -213,7 +223,7 @@ class TestFinalize:
         assert result["date_range_end"] == "2026-04-09"
 
     def test_findings_get_ids(self):
-        result = _finalize(self._minimal_claude_output(), "", "")
+        result = _finalize(self._minimal_claude_output(), "", "", self._counts())
         finding = result["feed_findings"]["caption_patterns"][0]
         assert "id" in finding
         uuid.UUID(finding["id"])
@@ -221,7 +231,7 @@ class TestFinalize:
     def test_missing_findings_get_defaults(self):
         minimal = {"summary": "ok", "post_count": 5, "story_count": 0, "feed_count": 5,
                    "brand_voice_suggestions": [], "caveats": []}
-        result = _finalize(minimal, "", "")
+        result = _finalize(minimal, "", "", self._counts())
         assert result["feed_findings"]["caption_patterns"] == []
         assert result["story_findings"]["timing_patterns"] == []
 
@@ -250,9 +260,6 @@ class TestAnalyzePostsCLI:
         """A minimal valid InsightReport shape (no UUIDs — Python assigns them)."""
         return {
             "summary": "Based on the 15 posts analyzed...",
-            "post_count": 15,
-            "story_count": 5,
-            "feed_count": 10,
             "feed_findings": {
                 "caption_patterns": [
                     {"headline": "Opening questions outperform statements",
@@ -308,7 +315,11 @@ class TestAnalyzePostsCLI:
         assert "generated_at" in report
         assert "date_range_start" in report
         assert "date_range_end" in report
+        # Measured from the fixture posts, not supplied by the mock, which no
+        # longer returns a count at all (#723).
         assert report["post_count"] == 15
+        assert report["feed_count"] == 10
+        assert report["story_count"] == 5
         assert isinstance(report["brand_voice_suggestions"], list)
         assert len(report["brand_voice_suggestions"]) >= 1
 
@@ -320,6 +331,42 @@ class TestAnalyzePostsCLI:
         valid_confidence = {"low", "medium", "high"}
         for finding in report["feed_findings"]["caption_patterns"]:
             assert finding["confidence"] in valid_confidence
+
+    def test_a_miscounted_total_from_claude_does_not_reach_the_file(self, tmp_path):
+        """Built is not wired (L3).
+
+        The measurement existing and the written report still carrying Claude's
+        number is the same as not having it. The mock deliberately claims totals
+        nothing in the fixture supports, so this cannot pass by the two numbers
+        happening to agree (L70).
+        """
+        import sys
+        from unittest.mock import patch as mock_patch
+
+        manifest_path = self._make_manifest(tmp_path)
+        out_file = tmp_path / "report.json"
+        response = self._mock_claude_response()
+        response.update({"post_count": 999, "story_count": 42, "feed_count": 957})
+
+        with mock_patch("postroll.ai.analyze_posts.run_json_prompt",
+                        return_value=response), \
+             mock_patch("postroll.ai.analyze_posts.load_brand_voice",
+                        return_value="# Brand voice"), \
+             mock_patch.object(sys, "argv", [
+                 "analyze_posts",
+                 "--manifest", str(manifest_path),
+                 "--output",   str(out_file),
+             ]):
+            from postroll.ai.analyze_posts import main
+            main()
+
+        report = json.loads(out_file.read_text())
+        assert report["post_count"] == 15, (
+            "the report on disk states a total nobody measured, and the screen "
+            "renders it as fact"
+        )
+        assert report["feed_count"] == 10
+        assert report["story_count"] == 5
 
     def test_global_tags_excluded_from_analysis(self, tmp_path):
         """#dwphotony should be stripped from hashtag lists passed to Claude."""
@@ -455,8 +502,9 @@ class TestAudienceControl:
         feed, stories, start, end = _prep(
             [self._post(org="newchoir"), self._post(org="dciny")],
             {"dciny": "k1to10"}, set())
-        from postroll.ai.analyze_posts import audience_control
+        from postroll.ai.analyze_posts import audience_control, report_counts
         report = _finalize({"summary": "ok"}, start, end,
+                           report_counts(feed, stories),
                            control=audience_control(feed, stories))
         assert report["uncontrolled_count"] == 1
         assert report["uncontrolled_orgs"] == ["newchoir"]
@@ -467,6 +515,96 @@ class TestAudienceControl:
         # produced is indistinguishable from a report where every comparison was
         # controlled (L90). The optional argument exists for the tests and the
         # older stored reports that predate this.
-        report = _finalize({"summary": "ok"}, "2026-01-01", "2026-01-02")
+        from postroll.ai.analyze_posts import report_counts
+        report = _finalize({"summary": "ok"}, "2026-01-01", "2026-01-02",
+                           report_counts([], []))
         assert report["uncontrolled_count"] is None
         assert report["analyzed_count"] is None
+
+
+# ---------------------------------------------------------------------------
+# The three counts on a report are measured, not asserted (#723)
+# ---------------------------------------------------------------------------
+
+class TestReportCounts:
+    """`post_count`, `story_count` and `feed_count` are counted here (#723).
+
+    They used to be whatever Claude returned, even though `_prep` had already
+    split and counted the exact posts the prompt was given. A model that
+    miscounts, or that answers about a subset, produced a report stating a total
+    nobody measured, and the screen rendered it as fact (L161).
+    """
+
+    def _post(self, **over) -> dict:
+        base = {
+            "published_at": "2026-03-01T18:00:00Z",
+            "media_type": "image",
+            "caption": "c",
+            "hashtags": [],
+            "reach": 100,
+            "likes": 10,
+        }
+        base.update(over)
+        return base
+
+    def _measure(self, posts):
+        from postroll.ai.analyze_posts import report_counts
+        feed, stories, _, _ = _prep(posts, {}, set())
+        return report_counts(feed, stories)
+
+    def test_each_track_is_counted_and_the_total_is_their_sum(self):
+        got = self._measure([
+            self._post(), self._post(),
+            self._post(media_type="story"),
+        ])
+        assert got["feed_count"] == 2
+        assert got["story_count"] == 1
+        assert got["post_count"] == 3
+
+    def test_a_personal_post_still_counts_as_a_post_in_the_report(self):
+        # These three count what the report COVERS. `analyzed_count` (#720) is
+        # the separate, narrower denominator that excludes personal posts from
+        # craft analysis, and the two are deliberately different numbers, so
+        # neither may be quietly used as the other (L118).
+        got = self._measure([self._post(is_personal=True)])
+        assert got["post_count"] == 1
+        assert got["feed_count"] == 1
+
+    def test_a_count_claude_made_up_is_overwritten_by_the_measurement(self):
+        feed, stories, start, end = _prep(
+            [self._post(), self._post(media_type="story")], {}, set())
+        from postroll.ai.analyze_posts import report_counts
+        report = _finalize(
+            {"summary": "ok", "post_count": 999, "story_count": 42, "feed_count": 500},
+            start, end, report_counts(feed, stories))
+        assert report["post_count"] == 2, (
+            "the report states a total nobody measured, and the screen renders "
+            "it as fact"
+        )
+        assert report["story_count"] == 1
+        assert report["feed_count"] == 1
+
+    def test_a_report_cannot_be_finalized_without_counting_its_posts(self):
+        # Not an optional argument: a caller that forgets it would receive
+        # Claude's number back, silently, which is the whole defect (L168).
+        with pytest.raises(TypeError):
+            _finalize({"summary": "ok"}, "2026-01-01", "2026-01-02")
+
+    def test_the_prompt_does_not_ask_claude_for_a_count_the_code_holds(self):
+        from postroll.ai.analyze_posts import _build_prompt
+        prompt = _build_prompt(
+            brand_voice="v",
+            compact_feed=[self._post()],
+            compact_stories=[],
+            org_bands={},
+            global_exclude=set(),
+            date_start="2026-01-01",
+            date_end="2026-01-02",
+        )
+        for key in ("post_count", "story_count", "feed_count"):
+            assert key not in prompt, (
+                f"the prompt still asks for {key}, so the model is being asked "
+                "to supply a fact the code already measured, and cannot tell a "
+                "model that ignored the instruction from one that judged it "
+                "inapplicable (L128)"
+            )
