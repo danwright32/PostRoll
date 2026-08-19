@@ -2083,10 +2083,29 @@ private struct BeforeAfterPicker: View {
                                 .font(.system(size: 14))
                         }
                         .buttonStyle(.plain)
+                        // Named after what pressing it does, and named with the
+                        // slot it belongs to, since there is one of these per
+                        // picker and "Clear" alone would announce four
+                        // identical buttons (L20).
+                        .accessibilityLabel("Clear the \(label.lowercased()) photo")
+                        .help("Clear the \(label.lowercased()) photo")
                     }
                 }
                 .padding(.vertical, 4)
             } else {
+                // A scrolling strip, not a plain row (#708). One 40pt thumbnail
+                // per photo of the day, laid end to end with nothing bounding
+                // them, is a row that answers "how wide do you need to be" with
+                // the sum of all of them: measured at 2078pt for a Tuesday with
+                // 40 photos, against a display 1728 wide, and SwiftUI hands
+                // that demand straight to the window. Selecting the event then
+                // widened the window on its own.
+                //
+                // FadingScrollView rather than a bare ScrollView because a
+                // clipped strip that does not say it continues is one whose
+                // rest is never found (L76, #539 added its horizontal case for
+                // exactly this shape).
+                FadingScrollView(axis: .horizontal, background: .cream) {
                 HStack(spacing: 6) {
                     ForEach(availablePhotos, id: \.self) { url in
                         BeforeAfterThumb(
@@ -2117,6 +2136,9 @@ private struct BeforeAfterPicker: View {
                     .buttonStyle(.plain)
                     .help("Pick from a different folder")
                 }
+                .padding(.vertical, 2)
+                }
+                .frame(height: 48)
             }
             Spacer()
         }

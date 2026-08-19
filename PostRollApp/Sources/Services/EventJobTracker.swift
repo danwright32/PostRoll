@@ -1,6 +1,40 @@
 import Foundation
 import Observation
 
+/// # Work that outlives the screen that started it
+///
+/// The rule, written here because this is the mechanism every such run is built
+/// on, and because a rule recorded only in an issue reaches nobody writing the
+/// next one (#713, L27).
+///
+/// **A call that can take longer than a glance does not belong to a view.** Its
+/// in flight flag, its start time, its error and its result belong to an owner
+/// keyed by the event, and the view READS them rather than storing them.
+///
+/// Why, from three separate defects rather than from taste. A SwiftUI view is
+/// destroyed whenever the thing showing it goes away, and two ordinary actions
+/// do that here: the programme review screen is an accordion, so opening one
+/// section destroys another, and every event detail screen is id tagged, so
+/// switching events remounts the lot. When the run state lived in the view:
+///
+/// * the progress vanished, and a run still going, one that finished and one
+///   that failed all looked identical, which is nothing at all (#693, #707);
+/// * the error message vanished with it, so a failure that happened while the
+///   section was closed could never be read (L148);
+/// * the results were written through a binding into the destroyed view, so on
+///   an event switch the work completed into nothing and was lost (#693);
+/// * the button came back looking idle, so a second run could be stacked on the
+///   first.
+///
+/// **The shape to copy** is `ProgramNotesManager` and `PerformerLookupManager`:
+/// an `@Observable` owner holding one `Run` per event on this tracker, results
+/// written to the STORED event rather than through a binding, a deadline so a
+/// call that never returns becomes an error rather than an indicator that sits
+/// there forever (L110), and a refusal to start twice.
+///
+/// `LongWorkOwnershipTests` fails the build when a view goes back to holding
+/// this state itself, so the rule above is enforced rather than remembered.
+///
 /// Per-event bookkeeping shared by the background-work managers
 /// ([GenerationManager], [OCRManager], [ExportManager]). Holds one in-flight or
 /// just-finished job per event id and drives a single shared 1s elapsed ticker.
