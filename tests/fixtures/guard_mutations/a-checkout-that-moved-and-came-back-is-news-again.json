@@ -1,0 +1,8 @@
+{
+  "name": "a-checkout-that-moved-and-came-back-is-news-again",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "        if message != dismissedCheckoutNotice { dismissedCheckoutNotice = nil }",
+  "replace": "        if false { dismissedCheckoutNotice = nil }",
+  "test": "PostRollTests/CheckoutNoticeDismissalTests/testGoingBackToACleanMainAndAwayAgainReArmsIt",
+  "breaks": "a dismissal is never re-armed, so a checkout put back on a clean main and taken off again in the same session says nothing the second time. Dismissing means not now about one state, and the episode ends when there is nothing to say (#696)"
+}

@@ -265,8 +265,33 @@ final class AppState {
     /// rather than leave the previous one standing (L11). The whole point of
     /// re-reading is lost if the notice only ever appears.
     func apply(_ reading: CheckoutRevision.Reading) {
-        checkoutNotice = CheckoutNotice.message(for: reading)
+        let message = CheckoutNotice.message(for: reading)
+        // A dismissal is about the state it was given for (#696). Anything else
+        // is a different thing to say and has not been dismissed, so the
+        // record is dropped the moment the sentence changes, which also
+        // re-arms it: going back to a clean main ends the episode, and the next
+        // time the checkout moves it is news again.
+        if message != dismissedCheckoutNotice { dismissedCheckoutNotice = nil }
+        checkoutNotice = message == dismissedCheckoutNotice ? nil : message
     }
+
+    /// Take the notice away for the checkout state it was shown for.
+    ///
+    /// The sentence itself is the identity, rather than a second definition of
+    /// what counts as the same state living beside the one that composes it
+    /// (L41). It is derived from the branch and whether the folder is dirty, so
+    /// two readings produce the same sentence exactly when they are the same
+    /// thing to say: a commit made on that branch is not, and switching branch
+    /// or leaving an edit is.
+    ///
+    /// Not persisted. A launch is a fresh chance to notice.
+    func dismissCheckoutNotice() {
+        dismissedCheckoutNotice = checkoutNotice
+        checkoutNotice = nil
+    }
+
+    /// The sentence Dan has waved away, or nil when none has been.
+    private var dismissedCheckoutNotice: String?
 
     /// Listen for readings taken anywhere, so a run refreshes what the window
     /// says about the code folder.
