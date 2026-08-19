@@ -174,16 +174,40 @@ final class AnalyticsStore {
 
     // MARK: - Org bands
 
-    func setOrgBand(_ org: String, _ band: OrgFollowerBand) {
+    /// Returns what the save did, for the same reason `mergePosts` does: the
+    /// picker moves the moment it is clicked, so a refused write looks exactly
+    /// like a saved one unless the screen is told (#712, L12).
+    @discardableResult
+    func setOrgBand(_ org: String, _ band: OrgFollowerBand) -> StoreSaveOutcome {
         orgFollowerBands[org] = band
-        save()
+        return save()
+    }
+
+    /// Forget a stored band entirely.
+    ///
+    /// The key is removed rather than set to `.unknown`, because storing
+    /// unknown leaves a row that says nothing and can never be got rid of,
+    /// which is the state #712 exists to end.
+    ///
+    /// Only ever called from a person clearing one entry. Nothing sweeps these
+    /// automatically: a band is a judgement that cannot be recovered from the
+    /// data.
+    @discardableResult
+    func clearOrgBand(_ org: String) -> StoreSaveOutcome {
+        orgFollowerBands.removeValue(forKey: org)
+        return save()
     }
 
     // MARK: - Derived
 
-    /// Unique orgs from post captions (first @-mention), sorted alphabetically.
-    var uniqueOrgs: [String] {
-        Array(Set(posts.compactMap(\.org))).sorted()
+    /// Every account the accounts screen has to show, credited and stranded.
+    ///
+    /// This replaced a plain list of the accounts the posts credit. That list
+    /// could not see a band whose key no post carries, so those entries had no
+    /// row and could be neither corrected nor cleared. There is deliberately no
+    /// posts-only list left to reach for (#712).
+    var orgBandAudit: OrgBandAudit.Audit {
+        OrgBandAudit.audit(orgsInPosts: posts.map(\.org), bands: orgFollowerBands)
     }
 
     var feedPosts: [IGPost] { posts.filter { $0.mediaType != .story } }

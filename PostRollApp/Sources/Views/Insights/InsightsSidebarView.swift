@@ -46,7 +46,7 @@ struct InsightsSidebarView: View {
                                 .foregroundStyle(PaintedSurfaces.secondaryText)
                         }
                     } else if section == .orgs {
-                        let count = analyticsStore.uniqueOrgs.count
+                        let count = analyticsStore.orgBandAudit.count
                         if count > 0 {
                             Text("\(count)")
                                 .font(.system(size: 10))

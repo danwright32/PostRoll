@@ -99,6 +99,44 @@ enum InsightsDisplay {
         }
     }
 
+    /// Which edit was refused. The two leave opposite states behind: a band
+    /// that was not saved is gone at next launch, an entry that was not cleared
+    /// is back at next launch. One message for both would be wrong for one of
+    /// them (L11).
+    enum BandEdit {
+        case set
+        case cleared
+    }
+
+    /// What to say when a follower band edit could not be written, or nil when
+    /// it was. Same rule as `unsavedReportNotice`: the picker moves the instant
+    /// it is clicked, so a refused write is otherwise indistinguishable from a
+    /// saved one (#712).
+    static func unsavedBandNotice(save: StoreSaveOutcome, org: String,
+                                  edit: BandEdit) -> String? {
+        let subject: String
+        let ending: String
+        switch edit {
+        case .set:
+            subject = "The follower band for @\(org) was changed here"
+            ending = " This change will be gone when you quit."
+        case .cleared:
+            subject = "The stored band for @\(org) was removed here"
+            ending = " It will be back when you quit."
+        }
+
+        switch save {
+        case .saved:
+            return nil
+        case .blocked:
+            return subject + " but not saved: your imported history could not be "
+                 + "read, so PostRoll will not write over it." + ending
+        case .failed(let reason):
+            return subject + " but could not be saved: "
+                 + Sentence.closed(reason) + ending
+        }
+    }
+
     // MARK: - What a post row says (#469, #490)
 
     /// One engagement figure, as an SF Symbol plus a number.
