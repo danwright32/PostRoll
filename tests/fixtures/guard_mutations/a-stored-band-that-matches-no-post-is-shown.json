@@ -1,0 +1,8 @@
+{
+  "name": "a-stored-band-that-matches-no-post-is-shown",
+  "file": "PostRollApp/Sources/Services/OrgBandAudit.swift",
+  "find": "        let stranded = bands.keys.filter { counts[$0] == nil }.sorted().map {",
+  "replace": "        let stranded = bands.keys.filter { _ in false }.sorted().map {",
+  "test": "PostRollTests/OrgBandAuditTests/testABandNoPostCreditsIsReportedWithTheBandItHolds",
+  "breaks": "a follower band whose key no imported post carries goes back to having no row on any screen. The analytics run reads org_bands.get(org, \"unknown\"), so such a band is applied to nothing and produces no complaint, and the entry goes on reading as a judgement that was recorded (#712, L90)"
+}

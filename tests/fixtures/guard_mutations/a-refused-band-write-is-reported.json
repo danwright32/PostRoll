@@ -1,0 +1,8 @@
+{
+  "name": "a-refused-band-write-is-reported",
+  "file": "PostRollApp/Sources/Services/InsightsDisplay.swift",
+  "find": "        case .blocked:\n            return subject + \" but not saved: your imported history could not be \"\n                 + \"read, so PostRoll will not write over it.\" + ending",
+  "replace": "        case .blocked:\n            return nil",
+  "test": "PostRollTests/OrgBandEditingTests/testARefusedChangeSaysItWillNotSurviveQuitting",
+  "breaks": "a follower band the store refused to write is shown as set. The picker moves the instant it is clicked, so the change looks done and is gone at the next launch (#712, L12)"
+}
