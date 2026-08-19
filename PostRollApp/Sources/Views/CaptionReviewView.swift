@@ -107,15 +107,23 @@ struct CaptionReviewView: View {
     // Friday graphic stacks all three (RAW / color / B&W).
     @State private var inlineBWPhoto: URL? = nil
 
-    // Learning flow
-    @State private var isAnalyzingEdits = false
-    @State private var analyzeStartedAt: Date? = nil
+    // Learning flow. The PASS belongs to `captionWork` (#718): it is a paid
+    // Claude call, and its three outcomes used to live here, so pressing "Looks
+    // good" and then clicking another event lost the answer entirely, week
+    // unadvanced and nothing said.
+    //
+    // What stays here is what the screen does with the answer, because two of
+    // the three are a sheet and an alert.
     @State private var learningSuggestion: String? = nil
     @State private var showLearnSheet = false
     /// Set when the learn-from-edits pass could not be run at all (#526). Its
     /// own field rather than a shared one, so a failed review cannot be read as
     /// a failed export or erase some other notice (L53).
     @State private var learningFailure: String? = nil
+
+    private var isAnalyzingEdits: Bool {
+        captionWork.isRunning(event.id, .learnFromEdits)
+    }
 
     // Preview graphics generation
     // Preview-graphic runs are owned by PreviewGraphicsManager, not this view:
@@ -193,9 +201,16 @@ struct CaptionReviewView: View {
                             caption: captionBinding(day),
                             isExpanded: expanded == section,
                             onToggle: { expanded = expanded == section ? nil : section },
-                            onRevise: { feedback in
-                                try await reviseCaption(day: day, feedback: feedback)
+                            onRevise: { feedback, saveNote in
+                                captionWork.startRevisingCaption(
+                                    eventID: event.id, day: day, feedback: feedback,
+                                    saveToBrandVoice: saveNote, appState: appState)
                             },
+                            isRevising: captionWork.isRunning(event.id, .reviseCaption(day)),
+                            revisionError: revision(day)?.failure,
+                            brandVoiceError: revision(day)?.noteFailure,
+                            undoCaption: revision(day)?.previousCaption,
+                            onUndoRevision: { undoRevision(day: day) },
                             onPreview: { previewURL = $0 },
                             isRegeneratingGraphic: regeneratingDays.contains(day),
                             graphicVersion: graphicVersions[day] ?? 0,
@@ -298,6 +313,13 @@ struct CaptionReviewView: View {
                             } : nil
                         )
                         .disabled(isRegenerating)
+                        // Take up the caption a revision wrote underneath this
+                        // screen (#718). One day, because Dan is very often
+                        // editing another while it runs and the whole draft
+                        // would take those edits with it.
+                        .onChange(of: captionWork.isRunning(event.id, .reviseCaption(day))) {
+                            adoptRevisedDay(day)
+                        }
 
                         // Beside the day's section rather than inside it: that
                         // initializer is already at the view builder's
@@ -323,9 +345,31 @@ struct CaptionReviewView: View {
                             metadataFields: BlogMeta.copyFields(event: event),
                             isExpanded: expanded == .blog,
                             onToggle: { expanded = expanded == .blog ? nil : .blog },
-                            onRevise: { feedback in try await reviseBlog(feedback: feedback) },
-                            onSwapPhotos: { urls in try await swapBlogPhotos(urls: urls) }
+                            onRevise: { feedback, saveNote in
+                                captionWork.startRevisingBlog(
+                                    eventID: event.id, feedback: feedback,
+                                    saveToBrandVoice: saveNote, appState: appState)
+                            },
+                            onSwapPhotos: { urls in
+                                captionWork.startSwappingBlogPhotos(
+                                    eventID: event.id, urls: urls, appState: appState)
+                            },
+                            isRevising: captionWork.isRunning(event.id, .reviseBlog),
+                            revisionError: blogRevision?.failure,
+                            brandVoiceError: blogRevision?.noteFailure,
+                            isSwappingPhotos: captionWork.isRunning(event.id, .swapBlogPhotos),
+                            photoSwapError: photoSwap?.failure,
+                            undoBlog: blogRevision?.previousBlog ?? photoSwap?.previousBlog,
+                            onUndoBlogChange: { undoBlogChange() }
                         )
+                        // Take up whatever a blog run wrote underneath this
+                        // screen (#718).
+                        .onChange(of: captionWork.isRunning(event.id, .reviseBlog)) {
+                            adoptStoredBlog()
+                        }
+                        .onChange(of: captionWork.isRunning(event.id, .swapBlogPhotos)) {
+                            adoptStoredBlog()
+                        }
                         .disabled(isRegenerating)
                     }
 
@@ -373,7 +417,7 @@ struct CaptionReviewView: View {
                     actionBar(.waitingOnRebuild(reason: waiting))
                 } else if isAnalyzingEdits {
                     LongRunIndicator(label: "Reviewing your edits…",
-                                     startedAt: analyzeStartedAt)
+                                     startedAt: captionWork.startedAt(event.id, .learnFromEdits))
                         .padding(Spacing.xl)
                 } else {
                     actionBar(.ready(graphicsError: graphics.failure(for: event.id)))
@@ -383,6 +427,9 @@ struct CaptionReviewView: View {
             .background(PaintedSurfaces.page)
             .onAppear {
                 mergeGlobalTags()
+                // A pass that finished while Dan was on another screen still
+                // has an answer waiting (#718).
+                learningSettled()
                 // Which accounts keep coming back, so the panel can ask for
                 // numbers on those and stop competing for attention on the
                 // one-offs (#289). Once on arrival: it walks every event's tag
@@ -410,6 +457,9 @@ struct CaptionReviewView: View {
             // failed save, it became one.
             .onChange(of: captionWork.isRunning(event.id, .regenerateWeek)) {
                 adoptStoredWeekIfNeeded()
+            }
+            .onChange(of: captionWork.isRunning(event.id, .learnFromEdits)) {
+                learningSettled()
             }
             .alert("Regenerate all captions?", isPresented: $showRegenerateConfirm) {
                 Button("Regenerate", role: .destructive) {
@@ -603,6 +653,74 @@ struct CaptionReviewView: View {
                                    for: liveEvent) else { return }
         result = week
         save()
+    }
+
+    // MARK: - Revisions
+
+    private func revision(_ day: DayName) -> CaptionWorkManager.Outcome? {
+        captionWork.outcome(for: event.id, .reviseCaption(day))
+    }
+
+    /// Bring a revised day into the draft this screen shows.
+    ///
+    /// One day, not the week: Dan is very often editing another day while a
+    /// revision runs, and replacing the whole draft would take those edits with
+    /// it. That is why the manager writes one day too.
+    private func adoptRevisedDay(_ day: DayName) {
+        guard let stored = liveEvent.weekResult?[day], stored != result[day] else { return }
+        result[day] = stored
+    }
+
+    /// Put back the caption as it stood before the last revision.
+    ///
+    /// Written to the STORED event rather than through the day's binding: the
+    /// revision it undoes was written there too, and an undo that only changed
+    /// the draft would be reversed by the next thing that read the store (L14).
+    private func undoRevision(day: DayName) {
+        guard let previous = revision(day)?.previousCaption else { return }
+        guard var live = appState.events.first(where: { $0.id == event.id }),
+              var week = live.weekResult else { return }
+        week[day] = previous
+        live.weekResult = week
+        appState.updateEvent(live)
+        result[day] = previous
+        // The offer goes with it, so Restore cannot be pressed twice and put
+        // back a caption that is already there.
+        captionWork.clearOutcome(for: event.id, .reviseCaption(day))
+    }
+
+    // MARK: - The blog's two runs
+
+    private var blogRevision: CaptionWorkManager.Outcome? {
+        captionWork.outcome(for: event.id, .reviseBlog)
+    }
+    private var photoSwap: CaptionWorkManager.Outcome? {
+        captionWork.outcome(for: event.id, .swapBlogPhotos)
+    }
+
+    private func adoptStoredBlog() {
+        guard let stored = liveEvent.weekResult?.blog, stored != result.blog else { return }
+        result.blog = stored
+    }
+
+    /// Put back the blog as it stood before the last revision or photo swap.
+    ///
+    /// Written to the STORED event, because that is where the change it undoes
+    /// was written; an undo that only changed the draft would be reversed by
+    /// the next read (L14). Whichever of the two ran most recently is the one
+    /// with an outcome, so there is one Restore rather than two competing ones.
+    private func undoBlogChange() {
+        let job: CaptionWorkManager.Job = blogRevision?.previousBlog != nil
+            ? .reviseBlog : .swapBlogPhotos
+        guard let previous = captionWork.outcome(for: event.id, job)?.previousBlog
+        else { return }
+        guard var live = appState.events.first(where: { $0.id == event.id }),
+              var week = live.weekResult else { return }
+        week.blog = previous
+        live.weekResult = week
+        appState.updateEvent(live)
+        result.blog = previous
+        captionWork.clearOutcome(for: event.id, job)
     }
 
     private func regenerateAll() {
@@ -1273,54 +1391,6 @@ struct CaptionReviewView: View {
         }
     }
 
-    // MARK: - Caption revision
-
-    private func reviseCaption(day: DayName, feedback: String) async throws {
-        guard let current = result[day] else { return }
-        let revised = try await PythonBridge.shared.runCaptionRevision(
-            event: liveEvent,
-            day: day,
-            feedback: feedback,
-            currentCaption: current
-        )
-        result[day] = revised
-        save()
-    }
-
-    private func reviseBlog(feedback: String) async throws {
-        guard let current = result.blog else { return }
-        let revised = try await PythonBridge.shared.runBlogRevision(
-            event: liveEvent,
-            feedback: feedback,
-            currentBlog: current
-        )
-        var next = revised
-        next.applyFindings(revised.findings, checkedBody: revised.body)
-        result.blog = next
-        save()
-    }
-
-    private func swapBlogPhotos(urls: [URL]) async throws {
-        guard let current = result.blog else { return }
-        let updated = try await PythonBridge.shared.runBlogPhotoSwap(
-            currentBody: current.body,
-            photoPaths: urls,
-            event: liveEvent
-        )
-        var updatedBlog = current
-        updatedBlog.body = updated.body
-        updatedBlog.photoCount = urls.count
-        // The swap rewrites every alt text, so its checks describe THIS body.
-        updatedBlog.applyFindings(updated.findings, checkedBody: updated.body)
-        result.blog = updatedBlog
-        save()
-        // blogPhotoPaths lives outside weekResult — re-read live event so
-        // this write lands on top of what save() just persisted.
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        ev.blogPhotoPaths = urls
-        appState.updateEvent(ev)
-    }
-
     // MARK: - Persistence
 
     /// Persist on a pause in typing rather than on every keystroke.
@@ -1382,33 +1452,36 @@ struct CaptionReviewView: View {
             finalizeAdvance()
             return
         }
-        isAnalyzingEdits = true
-        analyzeStartedAt = Date()
-        Task {
-            // Not `try?`. A pass that FAILED used to return the same nil as one
-            // with nothing to say, so a paid Claude call that never ran looked
-            // exactly like a model that had no note to add, and the week
-            // advanced either way (#526).
-            var suggestion: String? = nil
-            var failure: String? = nil
-            do {
-                suggestion = try await PythonBridge.shared.runLearnFromEdits(result: result)
-            } catch {
-                failure = error.localizedDescription
-            }
-            await MainActor.run {
-                isAnalyzingEdits = false
-                analyzeStartedAt = nil
-                switch LearnFromEditsOutcome.decide(suggestion: suggestion, failure: failure) {
-                case .offerSuggestion(let s):
-                    learningSuggestion = s
-                    showLearnSheet = true
-                case .advance:
-                    finalizeAdvance()
-                case .reportFailure(let message):
-                    learningFailure = message
-                }
-            }
+        captionWork.startLearningFromEdits(eventID: event.id, appState: appState)
+    }
+
+    /// Act on the learn-from-edits pass once it has finished.
+    ///
+    /// Driven by the run ending AND by the screen appearing, because the run
+    /// outlives the screen now: the answer to a pass Dan started before
+    /// clicking another event is waiting for him when he comes back, rather
+    /// than having been thrown away with the view (#718).
+    ///
+    /// The three outcomes stay apart (#526, L11): a pass that FAILED is not a
+    /// pass with nothing to add, and only the second of those may advance the
+    /// week silently.
+    private func learningSettled() {
+        guard !isAnalyzingEdits else { return }
+        guard let outcome = captionWork.outcome(for: event.id, .learnFromEdits)
+        else { return }
+        // Taken once. Left in place it would fire again on every redraw, and
+        // re-advance a week Dan had navigated back into.
+        captionWork.clearOutcome(for: event.id, .learnFromEdits)
+
+        switch LearnFromEditsOutcome.decide(suggestion: outcome.suggestion,
+                                            failure: outcome.failure) {
+        case .offerSuggestion(let s):
+            learningSuggestion = s
+            showLearnSheet = true
+        case .advance:
+            finalizeAdvance()
+        case .reportFailure(let message):
+            learningFailure = message
         }
     }
 
@@ -1444,7 +1517,21 @@ struct CaptionSection: View {
     @Binding var caption: DayCaption
     let isExpanded: Bool
     let onToggle: () -> Void
-    let onRevise: (String) async throws -> Void
+    /// Start a revision. It is not awaited and nothing is returned: this row is
+    /// destroyed on every event switch, and it used to be holding the only copy
+    /// of the run's progress, its error and the caption to undo to (#718).
+    let onRevise: (String, Bool) -> Void
+    /// The run's state, read from `CaptionWorkManager` by the screen above.
+    var isRevising: Bool = false
+    var revisionError: String? = nil
+    /// The revision landed and only the brand voice note did not (#462). Its
+    /// own value rather than a second meaning for `revisionError`, which would
+    /// say the revision failed when it did not (L53).
+    var brandVoiceError: String? = nil
+    /// The caption as it stood before the last revision, so Restore is offered
+    /// after the screen has been rebuilt (L97).
+    var undoCaption: DayCaption? = nil
+    var onUndoRevision: (() -> Void)? = nil
     var onPreview: ((URL) -> Void)? = nil
     var isRegeneratingGraphic: Bool = false
     var graphicVersion: Int = 0
@@ -1515,15 +1602,10 @@ struct CaptionSection: View {
     /// every other manual override in this app).
     var onChooseCoverOverride: (() -> Void)? = nil
 
+    // What Dan is typing is this row's business; the run it starts is not.
     @State private var showingRevision = false
     @State private var feedbackText = ""
     @State private var saveToBrandVoice = false
-    @State private var isRevising = false
-    @State private var revisionError: String?
-    /// A brand voice note that would not write, kept apart from the revision's
-    /// own outcome (#462).
-    @State private var brandVoiceError: String?
-    @State private var undoCaption: DayCaption? = nil
     @State private var mockupWidth: CGFloat = 480
 
     // Tuesday reel card: size the reel so that when the day is expanded, the
@@ -1838,8 +1920,6 @@ struct CaptionSection: View {
                                             showingRevision = false
                                             feedbackText = ""
                                             saveToBrandVoice = false
-                                            revisionError = nil
-                                brandVoiceError = nil
                                         }
                                     )
                                 } else {
@@ -1995,8 +2075,6 @@ struct CaptionSection: View {
                                             showingRevision = false
                                             feedbackText = ""
                                             saveToBrandVoice = false
-                                            revisionError = nil
-                                brandVoiceError = nil
                                         }
                                     )
                                 } else {
@@ -2007,8 +2085,7 @@ struct CaptionSection: View {
                                             .foregroundStyle(PaintedSurfaces.pageAccentText)
                                         if undoCaption != nil {
                                             Button("Restore previous") {
-                                                caption = undoCaption!
-                                                undoCaption = nil
+                                                onUndoRevision?()
                                             }
                                             .buttonStyle(.plain)
                                             .font(.system(size: 12))
@@ -2103,8 +2180,6 @@ struct CaptionSection: View {
                                         showingRevision = false
                                         feedbackText = ""
                                         saveToBrandVoice = false
-                                        revisionError = nil
-                                brandVoiceError = nil
                                     }
                                 )
                             } else {
@@ -2115,8 +2190,7 @@ struct CaptionSection: View {
                                         .foregroundStyle(PaintedSurfaces.pageAccentText)
                                     if undoCaption != nil {
                                         Button("Restore previous") {
-                                            caption = undoCaption!
-                                            undoCaption = nil
+                                            onUndoRevision?()
                                         }
                                         .buttonStyle(.plain)
                                         .font(.system(size: 12))
@@ -2421,8 +2495,6 @@ struct CaptionSection: View {
                                     showingRevision = false
                                     feedbackText = ""
                                     saveToBrandVoice = false
-                                    revisionError = nil
-                                brandVoiceError = nil
                                 }
                             )
                         } else {
@@ -2433,8 +2505,7 @@ struct CaptionSection: View {
                                     .foregroundStyle(PaintedSurfaces.pageAccentText)
                                 if undoCaption != nil {
                                     Button("Restore previous") {
-                                        caption = undoCaption!
-                                        undoCaption = nil
+                                        onUndoRevision?()
                                     }
                                     .buttonStyle(.plain)
                                     .font(.system(size: 12))
@@ -2450,50 +2521,34 @@ struct CaptionSection: View {
 
             RoseGoldDivider(opacity: 0.3)
         }
+        // The panel is closed by the run finishing, not by the press that
+        // started it: this row no longer knows when the work is done, and
+        // clearing on the press would throw away the text a failed brand voice
+        // note still needs (#462, #718).
+        .onChange(of: isRevising) { revisionSettled() }
     }
 
+    /// Hand the feedback over and let go of it.
+    ///
+    /// Nothing is awaited. The panel stays open while it runs so the spinner
+    /// and any failure have somewhere to appear, and it is closed by
+    /// `revisionSettled` below once the run has finished cleanly.
     private func applyRevision() {
         let trimmed = feedbackText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let snapshot = caption
-        isRevising = true
-        revisionError = nil
-        let shouldSave = saveToBrandVoice
-        Task {
-            do {
-                try await onRevise(trimmed)
-                // The revision has landed. A note that will not write is its own
-                // failure and gets its own field: reporting it as the revision
-                // failing would tell Dan his edit had not happened when it had
-                // (#462, L53).
-                var noteFailure: String? = nil
-                if shouldSave {
-                    do {
-                        try PythonBridge.shared.appendBrandVoiceNote(trimmed)
-                    } catch {
-                        noteFailure = BrandVoiceSaveText
-                            .revisionLandedButNoteDidNot(error.localizedDescription)
-                    }
-                }
-                await MainActor.run {
-                    undoCaption = snapshot
-                    isRevising = false
-                    brandVoiceError = noteFailure
-                    // Held open on a failed note, because the note is the text
-                    // in this sheet and dismissing is what threw it away.
-                    showingRevision = (noteFailure != nil)
-                    if noteFailure == nil {
-                        feedbackText = ""
-                        saveToBrandVoice = false
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isRevising = false
-                    revisionError = error.localizedDescription
-                }
-            }
-        }
+        onRevise(trimmed, saveToBrandVoice)
+    }
+
+    /// Clear the composer once a revision has finished with nothing left to say.
+    ///
+    /// Held open on a failed brand voice note, because the note IS the text in
+    /// this panel and clearing it is what threw it away (#462).
+    private func revisionSettled() {
+        guard !isRevising, brandVoiceError == nil else { return }
+        guard revisionError == nil else { return }
+        showingRevision = false
+        feedbackText = ""
+        saveToBrandVoice = false
     }
 }
 
@@ -2603,20 +2658,30 @@ private struct BlogSection: View {
     var metadataFields: [BlogMeta.CopyField] = []
     let isExpanded: Bool
     let onToggle: () -> Void
-    let onRevise: (String) async throws -> Void
-    var onSwapPhotos: (([URL]) async throws -> Void)? = nil
+    /// Start a revision. Not awaited, and nothing comes back: this section is
+    /// destroyed on every event switch and used to hold the only copy of the
+    /// run's progress, its error and the blog to undo to (#718).
+    let onRevise: (String, Bool) -> Void
+    var onSwapPhotos: (([URL]) -> Void)? = nil
+    /// The two runs' state, read from `CaptionWorkManager` by the screen above.
+    var isRevising: Bool = false
+    var revisionError: String? = nil
+    /// The revision landed and only the brand voice note did not (#462). Its
+    /// own value rather than a second meaning for `revisionError` (L53).
+    var brandVoiceError: String? = nil
+    var isSwappingPhotos: Bool = false
+    var photoSwapError: String? = nil
+    /// The blog as it stood before the last revision or swap, so Restore is
+    /// offered after this section has been rebuilt (L97).
+    var undoBlog: BlogOutput? = nil
+    var onUndoBlogChange: (() -> Void)? = nil
     @State private var showingPreview = false
     @State private var showingRevision = false
     @State private var feedbackText = ""
     @State private var saveToBrandVoice = false
-    @State private var isRevising = false
-    @State private var revisionError: String?
-    /// A brand voice note that would not write, kept apart from the revision's
-    /// own outcome (#462).
-    @State private var brandVoiceError: String?
-    @State private var isSwappingPhotos = false
-    @State private var photoSwapError: String?
-    @State private var undoBlog: BlogOutput? = nil
+    /// A photo import that could not be copied into app storage. Local,
+    /// because it happens before any run starts and is over in an instant.
+    @State private var photoImportError: String? = nil
     /// Confirms the copy landed. Reset whenever the text changes, so it never
     /// claims the clipboard holds something it no longer does.
     @State private var copiedDraft = false
@@ -2833,8 +2898,6 @@ private struct BlogSection: View {
                                 showingRevision = false
                                 feedbackText = ""
                                 saveToBrandVoice = false
-                                revisionError = nil
-                                brandVoiceError = nil
                             }
                         )
                     } else {
@@ -2860,15 +2923,22 @@ private struct BlogSection: View {
                             }
                             if undoBlog != nil {
                                 Button("Restore previous") {
-                                    if let prev = undoBlog {
-                                        blog = prev
-                                        undoBlog = nil
-                                    }
+                                    onUndoBlogChange?()
                                 }
                                 .buttonStyle(.plain)
                                 .font(.system(size: 12))
                                 .foregroundStyle(PaintedSurfaces.secondaryText)
                             }
+                        }
+                        // Two different causes, two rows. A file that could
+                        // not be copied into app storage and a swap the model
+                        // refused are different problems with different next
+                        // steps, and one row for both would say the wrong thing
+                        // for one of them (L11).
+                        if let err = photoImportError {
+                            Text(err)
+                                .font(.system(size: 11))
+                                .foregroundStyle(PaintedSurfaces.stateErrorText)
                         }
                         if let err = photoSwapError {
                             Text(err)
@@ -2883,6 +2953,9 @@ private struct BlogSection: View {
 
             RoseGoldDivider(opacity: 0.3)
         }
+        // The panel is closed by the run finishing, not by the press that
+        // started it (#718).
+        .onChange(of: isRevising) { revisionSettled() }
         // A stale "Copied" would claim the clipboard holds text that has since
         // changed (#205).
         .onChange(of: blog.body) { copiedDraft = false }
@@ -2899,75 +2972,36 @@ private struct BlogSection: View {
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.jpeg, .png, .heic, .image]
         panel.title = "Select Blog Photos"
-        panel.message = "Choose photos for the blog post (4–7 recommended)"
+        panel.message = "Choose photos for the blog post (4\u{2013}7 recommended)"
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
         // Copy into app storage before these become the blog's photo paths, so
         // a later render can't fail on a folder the user renamed (#77).
         let outcome = ImportedPicks.copy(panel.urls)
-        if let message = outcome.failureMessage { photoSwapError = message }
+        photoImportError = outcome.failureMessage
         let urls = outcome.stored
         guard !urls.isEmpty else { return }
-        let snapshot = blog
-        isSwappingPhotos = true
-        photoSwapError = nil
-        Task {
-            do {
-                try await onSwapPhotos?(urls)
-                await MainActor.run {
-                    undoBlog = snapshot
-                    isSwappingPhotos = false
-                }
-            } catch {
-                await MainActor.run {
-                    isSwappingPhotos = false
-                    photoSwapError = error.localizedDescription
-                }
-            }
-        }
+        onSwapPhotos?(urls)
     }
 
+    /// Hand the feedback over and let go of it.
     private func applyRevision() {
         let trimmed = feedbackText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let snapshot = blog
-        isRevising = true
-        revisionError = nil
-        let shouldSave = saveToBrandVoice
-        Task {
-            do {
-                try await onRevise(trimmed)
-                // The revision has landed. A note that will not write is its own
-                // failure and gets its own field: reporting it as the revision
-                // failing would tell Dan his edit had not happened when it had
-                // (#462, L53).
-                var noteFailure: String? = nil
-                if shouldSave {
-                    do {
-                        try PythonBridge.shared.appendBrandVoiceNote(trimmed)
-                    } catch {
-                        noteFailure = BrandVoiceSaveText
-                            .revisionLandedButNoteDidNot(error.localizedDescription)
-                    }
-                }
-                await MainActor.run {
-                    undoBlog = snapshot
-                    isRevising = false
-                    brandVoiceError = noteFailure
-                    showingRevision = (noteFailure != nil)
-                    if noteFailure == nil {
-                        feedbackText = ""
-                        saveToBrandVoice = false
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isRevising = false
-                    revisionError = error.localizedDescription
-                }
-            }
-        }
+        onRevise(trimmed, saveToBrandVoice)
+    }
+
+    /// Clear the composer once a revision has finished with nothing left to say.
+    ///
+    /// Held open on a failed brand voice note, because the note IS the text in
+    /// this panel and clearing it is what threw it away (#462).
+    private func revisionSettled() {
+        guard !isRevising, brandVoiceError == nil, revisionError == nil else { return }
+        showingRevision = false
+        feedbackText = ""
+        saveToBrandVoice = false
     }
 }
+
 
 private struct BlogBodyEditor: View {
     @Binding var text: String
@@ -5472,7 +5506,9 @@ private struct CollageCellOverlay: View {
 // MARK: - Collage Divider Model + Helpers
 
 /// A draggable boundary between adjacent collage rows (horizontal) or columns (vertical).
-private struct CollageDivider {
+/// Internal rather than private since `CollageDividerHandle` moved to its own
+/// file (#718): the handle is the only thing that draws one.
+struct CollageDivider {
     enum Kind { case horizontal, vertical }
     let kind: Kind
     let canvasPos: Int      // boundary position in canvas px: y for H, x for V
@@ -5564,86 +5600,6 @@ private func applyCollageDividerDelta(
 
 // MARK: - Collage Divider Handle View
 
-/// Thin interactive line drawn across a row/column boundary.
-///
-/// Drag state is managed entirely inside this view via @GestureState, so the
-/// parent never re-renders during the drag. Only the handle itself re-renders
-/// on each frame — giving smooth, jank-free dragging regardless of how many
-/// CollageCellOverlay views are in the parent.
-///
-/// The line offsets visually while dragging (clamped to minDelta…maxDelta in
-/// display pixels). On gesture end the final delta is passed to `onEnded` so
-/// the parent can commit the new cell layout once.
-private struct CollageDividerHandle: View {
-    let kind: CollageDivider.Kind
-    let displayLength: CGFloat   // width (H) or height (V) in display pixels
-    let minDelta: CGFloat        // minimum visual offset in display pixels
-    let maxDelta: CGFloat        // maximum visual offset in display pixels
-    var onEnded: (CGFloat) -> Void   // called once with the final clamped delta
-
-    @GestureState private var liveDelta: CGFloat = 0
-    @State private var isHovering = false
-
-    private var isH: Bool { kind == .horizontal }
-    private var isDragging: Bool { liveDelta != 0 }
-    private var clampedDelta: CGFloat { min(max(liveDelta, minDelta), maxDelta) }
-
-    var body: some View {
-        let hitThickness: CGFloat = 20
-        ZStack {
-            // Wide transparent hit target
-            Color.clear
-                .frame(
-                    width:  isH ? displayLength : hitThickness,
-                    height: isH ? hitThickness  : displayLength
-                )
-
-            // Visible line — always present; brighter on hover/drag so it persists after release
-            Rectangle()
-                .fill(isDragging || isHovering
-                      ? Color.roseGold.opacity(0.9)
-                      : Color.white.opacity(0.6))
-                .frame(
-                    width:  isH ? displayLength : 2,
-                    height: isH ? 2             : displayLength
-                )
-
-            // Directional pill — appears on hover or during drag
-            if isDragging || isHovering {
-                Image(systemName: isH ? "arrow.up.arrow.down" : "arrow.left.arrow.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(PaintedSurfaces.dragHandleIcon)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(isDragging ? PaintedSurfaces.dragHandleActiveFill : PaintedSurfaces.dragHandleFill)
-                    .clipShape(Capsule())
-            }
-        }
-        // Visually offset the line during drag — hit area stays at resting position
-        .offset(
-            x: isH ? 0 : clampedDelta,
-            y: isH ? clampedDelta : 0
-        )
-        .contentShape(
-            Rectangle().size(CGSize(
-                width:  isH ? displayLength : hitThickness,
-                height: isH ? hitThickness  : displayLength
-            ))
-        )
-        .onHover { isHovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovering)
-        .gesture(
-            DragGesture(minimumDistance: 2)
-                .updating($liveDelta) { val, state, _ in
-                    state = isH ? val.translation.height : val.translation.width
-                }
-                .onEnded { val in
-                    let raw = isH ? val.translation.height : val.translation.width
-                    onEnded(min(max(raw, minDelta), maxDelta))
-                }
-        )
-    }
-}
 
 private struct LabeledReviewThumb: View {
     let url: URL
@@ -5878,123 +5834,3 @@ private struct InlineReelPhotoAssignment: View {
 }
 
 // MARK: - Collage layout gallery (#57)
-
-/// Renders several candidate collage layouts for a day and lets the user pick
-/// one. The picked layout's seed is stored as the day's collage seed so the
-/// final render reproduces it.
-private struct CollageLayoutGallery: View {
-    let event: Event
-    let day: DayName
-    var onPick: (Int) -> Void
-    var onCancel: () -> Void
-
-    @State private var candidates: [CollageCandidate] = []
-    @State private var isLoading = true
-    @State private var error: String?
-
-    private let columns = [GridItem(.adaptive(minimum: 150), spacing: Spacing.md)]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Choose a layout — \(day.displayName)")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(PaintedSurfaces.bodyText)
-                Spacer()
-                Button("Cancel") { onCancel() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(PaintedSurfaces.pageAccentText)
-            }
-            .padding(Spacing.lg)
-
-            Divider()
-
-            if isLoading {
-                VStack(spacing: Spacing.md) {
-                    ProgressView().controlSize(.large).tint(PaintedSurfaces.iconAccent)
-                    Text("Rendering layout options…")
-                        .font(.system(size: 12))
-                        .foregroundStyle(PaintedSurfaces.secondaryText)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let error {
-                Text(error)
-                    .font(.system(size: 12))
-                    .foregroundStyle(PaintedSurfaces.pageAccentText)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding()
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: Spacing.md) {
-                        ForEach(candidates, id: \.seed) { candidate in
-                            Button { onPick(candidate.seed) } label: {
-                                candidateThumb(candidate)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Use this layout")
-                        }
-                    }
-                    .padding(Spacing.lg)
-                }
-            }
-        }
-        .frame(width: 580, height: 660)
-        .background(PaintedSurfaces.page)
-        .task { await load() }
-    }
-
-    @ViewBuilder
-    private func candidateThumb(_ candidate: CollageCandidate) -> some View {
-        if let img = NSImage(contentsOfFile: candidate.path) {
-            Image(nsImage: img)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                        .stroke(PaintedSurfaces.treatmentTileBorder, lineWidth: 1)
-                )
-        } else {
-            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .fill(PaintedSurfaces.imagePlaceholderFill)
-                .frame(height: 220)
-        }
-    }
-
-    /// Identity of the layout inputs: the day, its photos (in order), and their
-    /// crop offsets. When this is unchanged the cached candidates still apply.
-    private func fingerprint() -> String {
-        guard let pd = event.days[day.rawValue] else { return day.rawValue }
-        let count = event.effectivePostingPreset.format(for: day)?.count ?? pd.photoPaths.count
-        let parts = pd.photoPaths.prefix(count).map { url -> String in
-            let o = pd.collageCropOffsets[url.absoluteString] ?? CropOffset()
-            return "\(url.path)|\(o.x),\(o.y),\(o.scale)"
-        }
-        return ([day.rawValue] + parts).joined(separator: "~")
-    }
-
-    private func load() async {
-        let fp = fingerprint()
-        // Reuse the same options on reopen (issue #61) when nothing changed.
-        if let cached = CollageCandidateCache.shared.cached(day: day, fingerprint: fp) {
-            candidates = cached
-            isLoading = false
-            return
-        }
-        isLoading = true
-        error = nil
-        do {
-            let result = try await PythonBridge.shared.renderCollageCandidates(event: event, day: day)
-            candidates = result
-            if result.isEmpty {
-                error = "Couldn't render layout options. Make sure this day has photos assigned."
-            } else {
-                CollageCandidateCache.shared.store(day: day, fingerprint: fp, candidates: result)
-            }
-        } catch {
-            self.error = error.localizedDescription
-        }
-        isLoading = false
-    }
-}

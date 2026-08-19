@@ -287,6 +287,279 @@ final class CaptionWorkManagerTests: XCTestCase {
         XCTAssertFalse(manager.hasWorkInFlight)
     }
 
+    // MARK: - Revising one day's caption
+
+    nonisolated private static func caption(_ text: String) -> DayCaption {
+        DayCaption(caption: text)
+    }
+
+    func testARevisedCaptionLandsOnTheStoredEventWithNoScreenWatching() async throws {
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.reviseCaption = { _, _, _, _ in Self.caption("revised sun") }
+
+        manager.startRevisingCaption(eventID: event.id, day: .sunday,
+                                     feedback: "warmer", saveToBrandVoice: false,
+                                     appState: state)
+        await settle()
+
+        XCTAssertEqual(state.events.first?.weekResult?.sunday?.caption, "revised sun",
+                       "a paid revision completed into a view that was gone")
+    }
+
+    func testARevisionTouchesOnlyTheDayItWasAbout() async throws {
+        // The reason it writes one day rather than the whole week: Dan is very
+        // often editing another day while this runs, and replacing the week
+        // would take those edits with it.
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.reviseCaption = { _, _, _, _ in Self.caption("revised sun") }
+
+        manager.startRevisingCaption(eventID: event.id, day: .sunday,
+                                     feedback: "warmer", saveToBrandVoice: false,
+                                     appState: state)
+        await settle()
+
+        XCTAssertEqual(state.events.first?.weekResult?.monday?.caption, "old mon",
+                       "revising Sunday rewrote Monday")
+    }
+
+    func testTheCaptionBeforeARevisionIsKeptSoUndoOutlivesTheScreen() async throws {
+        // The change lands in the store and survives the screen, so the undo
+        // for it has to as well. An undo whose only copy died with the view is
+        // not an undo (L97).
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.reviseCaption = { _, _, _, _ in Self.caption("revised sun") }
+
+        manager.startRevisingCaption(eventID: event.id, day: .sunday,
+                                     feedback: "warmer", saveToBrandVoice: false,
+                                     appState: state)
+        await settle()
+
+        XCTAssertEqual(
+            manager.outcome(for: event.id, .reviseCaption(.sunday))?.previousCaption?.caption,
+            "old sun")
+    }
+
+    func testAFailedRevisionKeepsItsReasonAndChangesNothing() async throws {
+        struct Refused: LocalizedError {
+            var errorDescription: String? { "the model refused the request" }
+        }
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.reviseCaption = { _, _, _, _ in throw Refused() }
+
+        manager.startRevisingCaption(eventID: event.id, day: .sunday,
+                                     feedback: "warmer", saveToBrandVoice: false,
+                                     appState: state)
+        await settle()
+
+        XCTAssertEqual(state.events.first?.weekResult?.sunday?.caption, "old sun")
+        XCTAssertEqual(manager.outcome(for: event.id, .reviseCaption(.sunday))?.failure,
+                       "the model refused the request")
+    }
+
+    func testTwoDaysReviseIndependently() async throws {
+        // Keyed by day, so revising Sunday must not make Monday's button read
+        // as busy.
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.reviseCaption = { _, _, _, _ in
+            try await Task.sleep(for: .milliseconds(200))
+            return Self.caption("revised")
+        }
+
+        manager.startRevisingCaption(eventID: event.id, day: .sunday,
+                                     feedback: "warmer", saveToBrandVoice: false,
+                                     appState: state)
+
+        XCTAssertTrue(manager.isRunning(event.id, .reviseCaption(.sunday)))
+        XCTAssertFalse(manager.isRunning(event.id, .reviseCaption(.monday)))
+        await settle()
+    }
+
+    // MARK: - The brand voice note, which is a different fact (#462)
+
+    func testANoteThatWouldNotWriteDoesNotReportTheRevisionAsFailed() async throws {
+        // Telling Dan his edit had not happened when it had is the defect. The
+        // two outcomes get two fields (L53).
+        struct NoteRefused: LocalizedError {
+            var errorDescription: String? { "the brand voice file is read only" }
+        }
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.reviseCaption = { _, _, _, _ in Self.caption("revised sun") }
+        manager.appendBrandVoiceNote = { _ in throw NoteRefused() }
+
+        manager.startRevisingCaption(eventID: event.id, day: .sunday,
+                                     feedback: "warmer", saveToBrandVoice: true,
+                                     appState: state)
+        await settle()
+
+        let outcome = try XCTUnwrap(manager.outcome(for: event.id, .reviseCaption(.sunday)))
+        XCTAssertNil(outcome.failure, "a revision that landed was reported as failed")
+        XCTAssertNotNil(outcome.noteFailure)
+        XCTAssertEqual(state.events.first?.weekResult?.sunday?.caption, "revised sun")
+    }
+
+    func testTheNoteIsNotWrittenWhenItWasNotAskedFor() async throws {
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        let notes = Counter()
+        manager.reviseCaption = { _, _, _, _ in Self.caption("revised sun") }
+        manager.appendBrandVoiceNote = { _ in await notes.bump() }
+
+        manager.startRevisingCaption(eventID: event.id, day: .sunday,
+                                     feedback: "warmer", saveToBrandVoice: false,
+                                     appState: state)
+        await settle()
+
+        let count = await notes.value
+        XCTAssertEqual(count, 0)
+    }
+
+    func testTheNoteIsNotWrittenWhenTheRevisionFailed() async throws {
+        // A note about a revision that never happened is a note about nothing,
+        // and it would go into the brand voice file permanently.
+        struct Refused: Error {}
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        let notes = Counter()
+        manager.reviseCaption = { _, _, _, _ in throw Refused() }
+        manager.appendBrandVoiceNote = { _ in await notes.bump() }
+
+        manager.startRevisingCaption(eventID: event.id, day: .sunday,
+                                     feedback: "warmer", saveToBrandVoice: true,
+                                     appState: state)
+        await settle()
+
+        let count = await notes.value
+        XCTAssertEqual(count, 0)
+    }
+
+    // MARK: - The blog
+
+    private func eventWithBlog() -> Event {
+        var event = event()
+        var week = Self.week([.sunday: "old sun"])
+        week.blog = BlogOutput(title: "t", body: "old body")
+        event.weekResult = week
+        return event
+    }
+
+    func testARevisedBlogLandsOnTheStoredEvent() async throws {
+        let event = eventWithBlog()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.reviseBlog = { _, _, _ in BlogOutput(title: "t", body: "new body") }
+
+        manager.startRevisingBlog(eventID: event.id, feedback: "shorter",
+                                  saveToBrandVoice: false, appState: state)
+        await settle()
+
+        XCTAssertEqual(state.events.first?.weekResult?.blog?.body, "new body")
+    }
+
+    func testSwappedBlogPhotosLandWithTheirPaths() async throws {
+        // The paths live OUTSIDE weekResult, so a swap that wrote only the body
+        // would leave the post describing photos the event does not have.
+        let event = eventWithBlog()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.swapBlogPhotos = { _, _, _ in BlogOutput(title: "t", body: "body with new photos") }
+        let urls = [URL(fileURLWithPath: "/tmp/a.jpg"), URL(fileURLWithPath: "/tmp/b.jpg")]
+
+        manager.startSwappingBlogPhotos(eventID: event.id, urls: urls, appState: state)
+        await settle()
+
+        XCTAssertEqual(state.events.first?.weekResult?.blog?.body, "body with new photos")
+        XCTAssertEqual(state.events.first?.blogPhotoPaths, urls)
+        XCTAssertEqual(state.events.first?.weekResult?.blog?.photoCount, 2)
+    }
+
+    func testAFailedPhotoSwapLeavesTheOldPathsAlone() async throws {
+        struct Refused: LocalizedError {
+            var errorDescription: String? { "could not read the photos" }
+        }
+        var event = eventWithBlog()
+        event.blogPhotoPaths = [URL(fileURLWithPath: "/tmp/old.jpg")]
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.swapBlogPhotos = { _, _, _ in throw Refused() }
+
+        manager.startSwappingBlogPhotos(
+            eventID: event.id, urls: [URL(fileURLWithPath: "/tmp/a.jpg")], appState: state)
+        await settle()
+
+        XCTAssertEqual(state.events.first?.blogPhotoPaths,
+                       [URL(fileURLWithPath: "/tmp/old.jpg")],
+                       "a failed swap replaced the photo paths anyway, so the "
+                       + "post now describes photos it does not have")
+        XCTAssertEqual(manager.outcome(for: event.id, .swapBlogPhotos)?.failure,
+                       "could not read the photos")
+    }
+
+    // MARK: - Learning from the edits (#526)
+
+    func testASuggestionSurvivesTheScreenThatAskedForIt() async throws {
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.learnFromEdits = { _ in "Dan prefers shorter openings." }
+
+        manager.startLearningFromEdits(eventID: event.id, appState: state)
+        await settle()
+
+        XCTAssertEqual(manager.outcome(for: event.id, .learnFromEdits)?.suggestion,
+                       "Dan prefers shorter openings.")
+        XCTAssertNil(manager.outcome(for: event.id, .learnFromEdits)?.failure)
+    }
+
+    func testAFailedLearningPassIsNotTheSameAsHavingNothingToSay() async throws {
+        // The #526 defect exactly. Behind `try?` a pass that FAILED returned
+        // the same nil as one that succeeded with nothing to add, and the week
+        // advanced either way with Dan told nothing.
+        struct Refused: LocalizedError {
+            var errorDescription: String? { "the model refused the request" }
+        }
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.learnFromEdits = { _ in throw Refused() }
+
+        manager.startLearningFromEdits(eventID: event.id, appState: state)
+        await settle()
+
+        let outcome = try XCTUnwrap(manager.outcome(for: event.id, .learnFromEdits))
+        XCTAssertNil(outcome.suggestion)
+        let failure = try XCTUnwrap(outcome.failure)
+        XCTAssertTrue(failure.contains("the model refused the request"),
+                      "the reason was lost: \(failure)")
+    }
+
+    func testAPassWithNothingToSayIsNeitherASuggestionNorAFailure() async throws {
+        let event = event()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.learnFromEdits = { _ in nil }
+
+        manager.startLearningFromEdits(eventID: event.id, appState: state)
+        await settle()
+
+        let outcome = try XCTUnwrap(manager.outcome(for: event.id, .learnFromEdits))
+        XCTAssertNil(outcome.suggestion)
+        XCTAssertNil(outcome.failure)
+    }
+
     private actor Counter {
         private(set) var value = 0
         func bump() { value += 1 }

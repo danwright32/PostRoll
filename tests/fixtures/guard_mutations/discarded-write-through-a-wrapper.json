@@ -1,8 +1,8 @@
 {
   "name": "discarded-write-through-a-wrapper",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
-  "find": "suggestion = try await PythonBridge.shared.runLearnFromEdits(result: result)",
-  "replace": "suggestion = try? await PythonBridge.shared.runLearnFromEdits(result: result)",
+  "file": "PostRollApp/Sources/Services/CaptionWorkManager.swift",
+  "find": "    let learnFromEdits: @Sendable (WeekGenerationResult) async throws -> String? = {\n        try await PythonBridge.shared.runLearnFromEdits(result: $0)",
+  "replace": "    let learnFromEdits: @Sendable (WeekGenerationResult) async throws -> String? = {\n        try? await PythonBridge.shared.runLearnFromEdits(result: $0)",
   "test": "PostRollTests/DiscardedFileWriteGuardTests/testNoFileProducingWriteHasItsFailureThrownAway",
-  "breaks": "a throwing call that writes a file one level deeper is discarded, so a failed paid pass reads as one with nothing to say (#526)"
+  "breaks": "a throwing call that writes a file one level deeper is discarded, so a failed paid pass reads as one with nothing to say (#526). The pass moved off the view and onto its owner in #718, taking this anchor with it"
 }

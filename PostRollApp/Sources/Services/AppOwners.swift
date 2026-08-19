@@ -32,8 +32,10 @@ struct AppOwners {
     var insights = InsightsWorkManager()
     /// The "describe the correction" reflow on the review screen (#718).
     var reflow = OCRReflowManager()
-    /// The whole-week regeneration started from the caption screen (#718).
+    /// The runs started from the caption review screen (#718).
     var captionWork = CaptionWorkManager()
+    /// The layout gallery's render of a day's candidate collages (#718).
+    var collageLayouts = CollageLayoutLoader()
 }
 
 extension View {
@@ -52,5 +54,6 @@ extension View {
             .environment(owners.insights)
             .environment(owners.reflow)
             .environment(owners.captionWork)
+            .environment(owners.collageLayouts)
     }
 }

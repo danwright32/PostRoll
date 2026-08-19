@@ -20,12 +20,14 @@ final class LongWorkOwnershipTests: XCTestCase {
     /// Written down rather than fixed silently, so what remains is visible and
     /// countable rather than being rediscovered. An entry here is a statement
     /// that somebody looked, not that it is fine (L129, L65).
-    private static let known: [String: String] = [
-        "CaptionReviewView.swift":
-            "regenerate, revise, analyse edits and the audio swap. Not yet "
-            + "converted: each writes to a different part of the week's result "
-            + "and needs its own decision about where that lands.",
-    ]
+    ///
+    /// It is EMPTY as of #718, and that is a measurement, not a proof that this
+    /// cannot happen: a count driven to zero stops being read as a number and
+    /// starts being read as an impossibility, and then nobody re-examines it
+    /// (L182). What keeps it honest is `testTheScannerCanStillSeeOne` below,
+    /// which fails if the scanner has stopped matching. Without that control an
+    /// empty list and a broken scanner look exactly alike.
+    private static let known: [String: String] = [:]
 
     private static func viewSources() throws -> [URL] {
         let views = URL(fileURLWithPath: #filePath)

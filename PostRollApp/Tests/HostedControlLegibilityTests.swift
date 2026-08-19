@@ -1277,7 +1277,7 @@ extension HostedControlLegibilityTests {
                            caption: .constant(caption),
                            isExpanded: true,
                            onToggle: {},
-                           onRevise: { _ in })
+                           onRevise: { _, _ in })
                 .padding(Spacing.lg)
         }
         .environment(hashtags)
