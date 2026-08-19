@@ -36,6 +36,10 @@ final class OCRManager {
 
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isRunning(_ id: Event.ID) -> Bool { tracker.isActive(id) }
+
+    /// Whether anything at all is running here, asked before the app updates
+    /// itself: installing quits PostRoll (#686).
+    var hasWorkInFlight: Bool { tracker.hasWorkInFlight }
     func hasFailed(_ id: Event.ID) -> Bool { tracker.hasFailed(id) }
 
     /// Why the last attempt to run OCR was refused, or nil.

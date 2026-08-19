@@ -1,0 +1,8 @@
+{
+  "name": "no-update-outcome-is-not-a-successful-update",
+  "file": "PostRollApp/Sources/Services/AppUpdate.swift",
+  "find": "guard let data = try? Data(contentsOf: url) else { return nil }",
+  "replace": "guard let data = try? Data(contentsOf: url) else { return Outcome(ok: true, exitCode: 0, phase: \"\", message: \"\", finishedAt: Date()) }",
+  "test": "PostRollTests/AppUpdateTests/testNoOutcomeFileIsNotSuccess",
+  "breaks": "an update with no recorded ending reads as one that finished successfully, which is the state for the whole several minutes a build takes and also the state when the updater died without writing anything. The progress would come off the screen while the work carried on, and a failure nobody recorded would report as a success (L98, #686)"
+}

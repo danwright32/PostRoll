@@ -24,6 +24,13 @@ struct LongRunIndicator: View {
     /// nil gives elapsed time only, which is still three states better than a
     /// bare spinner.
     var eventID: UUID? = nil
+    /// A step file named outright, for work that belongs to no event.
+    ///
+    /// Updating the app is the one such thing (#686): there is one PostRoll, so
+    /// its progress has nowhere to be keyed. Given its own file rather than a
+    /// second indicator grown beside this one, because the three states this
+    /// draws are exactly the three that update needs.
+    var stepFile: URL? = nil
     /// Which of that event's two runs to read. Captions and graphics report to
     /// separate files because they run at the same time (#234).
     var run: Run = .captions
@@ -52,9 +59,11 @@ struct LongRunIndicator: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            let step = eventID.flatMap {
-                LongRunState.readStep(at: run.file(forEventID: $0))
-            }
+            // A named file wins over the event's own, because a caller passing
+            // one has said where to look and falling back would read somebody
+            // else's run.
+            let file = stepFile ?? eventID.map { run.file(forEventID: $0) }
+            let step = file.flatMap { LongRunState.readStep(at: $0) }
             let status = LongRunState.status(
                 startedAt: startedAt, step: step, now: context.date,
                 failedMessage: failedMessage,

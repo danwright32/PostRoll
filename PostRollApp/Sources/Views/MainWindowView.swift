@@ -2,6 +2,13 @@ import SwiftUI
 
 struct MainWindowView: View {
     @Environment(AppState.self) private var appState
+    // Handed on to the out of date sheet, which asks all three whether work is
+    // mid flight before it lets PostRoll update itself (#686). Reading the
+    // managers themselves registers no dependency on what is inside them, so
+    // this costs the window nothing per tick.
+    @Environment(GenerationManager.self) private var generationManager
+    @Environment(OCRManager.self) private var ocrManager
+    @Environment(ExportManager.self) private var exportManager
 
     var body: some View {
         @Bindable var appState = appState
@@ -111,10 +118,14 @@ struct MainWindowView: View {
             get: { appState.buildBehind },
             set: { if $0 == nil { appState.dismissBuildBehind() } }
         )) { behind in
-            BuildBehindSheet(builtAt: behind.builtAt,
-                             latestCommit: behind.latestCommit,
-                             remedy: behind.remedy,
-                             repo: behind.repo)
+            BuildBehindSheet(behind: behind)
+                .environment(appState)
+                // The three managers that own background work. The sheet asks
+                // them whether anything is mid flight before it lets an update
+                // start, because installing quits the app (#686).
+                .environment(generationManager)
+                .environment(ocrManager)
+                .environment(exportManager)
         }
         .task { await checkTheCodeFolder() }
         // A checkout moves while the app is open, which is the case the notice
@@ -215,6 +226,12 @@ struct MainWindowView: View {
     /// the same folder (#668, #675), which is what makes them true of the folder
     /// as it is rather than as it was when the app opened.
     private func checkTheCodeFolder() async {
+        // First, and deliberately before the checkout is resolved: an update
+        // that got as far as installing QUIT the app that started it, so this
+        // launch is usually the first chance to say why it did not work, and a
+        // checkout that has become unreachable must not take that reason with
+        // it (#686, L164).
+        appState.checkUpdateOutcome()
         // Subscribed before anything is read, so the reading taken below and
         // every one a generation takes afterwards land the same way (#668).
         appState.watchCheckoutReadings()

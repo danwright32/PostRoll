@@ -31,6 +31,12 @@ final class EventJobTracker<Job> {
 
     func job(for id: Event.ID) -> Job? { runs[id] }
     func isActive(_ id: Event.ID) -> Bool { activeIDs.contains(id) }
+
+    /// Whether ANY event has work running, for the decisions that are about the
+    /// app rather than about one event. Updating PostRoll is the first: it
+    /// quits the app to install, so anything mid flight loses whatever it has
+    /// not written back (#686).
+    var hasWorkInFlight: Bool { !activeIDs.isEmpty }
     func hasFailed(_ id: Event.ID) -> Bool { failedIDs.contains(id) }
 
     // MARK: - Transitions

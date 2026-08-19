@@ -101,6 +101,138 @@ final class AppState {
         dismissedBuildBehind = buildBehind?.id
         buildBehind = nil
     }
+
+    // MARK: - Updating the app itself (#686)
+
+    /// When the update the sheet started began, or nil when none is running.
+    ///
+    /// The clock the progress line is measured from, and the single flight
+    /// latch: a second press while this is set would put two xcodebuilds in one
+    /// derived data folder and two installs on one /Applications bundle.
+    private(set) var updateStartedAt: Date?
+
+    /// The ending of an update that did not work, kept until Dan has seen it.
+    ///
+    /// Read from a file rather than held only here, because the update outlives
+    /// the app: build-install.sh quits PostRoll before replacing it, so a
+    /// failure at the install step has no window left to appear in and the next
+    /// launch is the first chance to say anything (L148, L164).
+    private(set) var updateFailure: AppUpdate.Outcome?
+
+    /// Why a press of Update did nothing, which is not the same thing as an
+    /// update that ran and failed (L53). Cleared by the next press.
+    private(set) var updateRefusal: String?
+
+    /// Where the running update reports its step, for the sheet to read.
+    var updateProgressFile: URL { layout.updateProgressFile }
+    /// Where it records how it ended.
+    var updateOutcomeFile: URL { layout.updateOutcomeFile }
+    /// The update's own log, as it should appear in a sentence to Dan.
+    ///
+    /// Derived from the same layout the updater is handed rather than written
+    /// out by hand, because a path spelled into a message is one that keeps
+    /// pointing at the old place after a move and sends him to a folder with
+    /// nothing in it (#101).
+    var updateLogDisplayPath: String {
+        (layout.updateLogFile.path as NSString).abbreviatingWithTildeInPath
+    }
+
+    #if POSTROLL_TESTS
+    /// Test seam: how an update is actually started.
+    ///
+    /// The real one runs xcodebuild against the checkout and reinstalls
+    /// /Applications/PostRoll.app. A suite able to reach that is a suite that
+    /// can replace the app it is running under (L2), so tests hand this a
+    /// recorder instead.
+    var launchUpdate: @Sendable (AppUpdate.LaunchPlan) throws -> Void = {
+        try AppUpdate.launch($0)
+    }
+    #else
+    let launchUpdate: @Sendable (AppUpdate.LaunchPlan) throws -> Void = {
+        try AppUpdate.launch($0)
+    }
+    #endif
+
+    /// Do what the sheet's command said, rather than asking Dan to type it.
+    ///
+    /// `busyReason` is the caller's answer to "is anything mid flight", because
+    /// the managers that know live in the window's environment rather than
+    /// here. A non-nil one refuses: installing quits the app, and a generation
+    /// part way through loses everything it has not written back.
+    func startUpdate(for behind: BuildBehind, busyReason: String?) {
+        updateRefusal = nil
+        // Assume it runs twice. A button can always be pressed twice, and the
+        // second press would be indistinguishable from the first right up until
+        // two installs raced for the same bundle.
+        guard updateStartedAt == nil else { return }
+        if let busyReason {
+            updateRefusal = busyReason
+            return
+        }
+
+        // The previous attempt's files, cleared before this one starts. A retry
+        // that inherited them would report the old failure the moment it began,
+        // and show the phase the old run died in as though it were this one's
+        // (L133). The updater clears the outcome too: this is here because a
+        // launch that never happens leaves it standing.
+        updateFailure = nil
+        try? FileManager.default.removeItem(at: layout.updateOutcomeFile)
+        try? FileManager.default.removeItem(at: layout.updateProgressFile)
+
+        let plan = AppUpdate.plan(repo: behind.repo, remedy: behind.remedy,
+                                  layout: layout)
+        do {
+            try launchUpdate(plan)
+            updateStartedAt = Date()
+        } catch {
+            // Nothing will ever write an outcome for a run that never started,
+            // so an update left looking like it is working would spin until Dan
+            // gave up on it (L110). Recorded in the same shape a real failure
+            // arrives in, so one surface renders both.
+            updateFailure = AppUpdate.Outcome(
+                ok: false, exitCode: -1, phase: "Starting the update",
+                message: error.localizedDescription, finishedAt: Date())
+        }
+    }
+
+    /// Look for an ending, whether or not this session started the update.
+    ///
+    /// Called on a timer while one is running and once at launch. The launch
+    /// call is not belt and braces: an update that got as far as installing
+    /// quit the app that started it, so the app reading this file is usually a
+    /// different one from the app that pressed the button.
+    func checkUpdateOutcome() {
+        guard let outcome = AppUpdate.readOutcome(at: layout.updateOutcomeFile) else {
+            // No file is the normal state for the several minutes a build
+            // takes. Reading it as a finished update would take the progress
+            // off the screen while the work carried on (L98).
+            return
+        }
+
+        updateStartedAt = nil
+        guard !outcome.ok else {
+            // The ordinary end: quit, replaced, reopened, and this IS the new
+            // build. Nothing to tell him, and a file left behind would be read
+            // again at every launch from here on.
+            updateFailure = nil
+            try? FileManager.default.removeItem(at: layout.updateOutcomeFile)
+            return
+        }
+        updateFailure = outcome
+    }
+
+    /// Dan has seen the failure. Only now is the record removed: reading it
+    /// must not consume it, or an app opened and closed before he looked at the
+    /// sheet takes the only copy of the reason with it.
+    func dismissUpdateFailure() {
+        updateFailure = nil
+        try? FileManager.default.removeItem(at: layout.updateOutcomeFile)
+    }
+
+    func dismissUpdateRefusal() {
+        updateRefusal = nil
+    }
+
     /// Set at launch when PostRoll cannot reach its code folder, so the app
     /// says so before Dan has picked a day and pressed a button on something
     /// that was never going to run (#652).
