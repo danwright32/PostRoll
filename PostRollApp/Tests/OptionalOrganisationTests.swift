@@ -87,23 +87,47 @@ final class OptionalOrganisationTests: XCTestCase {
     }
 
     private func book() throws -> HandleBook {
-        let name = "OptionalOrganisationTests-\(UUID().uuidString)"
-        suiteNames.append(name)
-        return HandleBook(defaults: try XCTUnwrap(UserDefaults(suiteName: name)))
+        try bookAndStore().0
     }
 
-    func testTwoEventsWithNoOrganisationDoNotShareOneHandleEntry() throws {
+    private func bookAndStore() throws -> (HandleBook, UserDefaults) {
+        let name = "OptionalOrganisationTests-\(UUID().uuidString)"
+        suiteNames.append(name)
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        return (HandleBook(defaults: defaults), defaults)
+    }
+
+    func testNothingIsWrittenAgainstABlankOrganisation() throws {
         // The book is keyed by the normalised name. A blank key is one bucket
         // every event with no organisation shares, so handles saved while
         // working on one play would be prepended to the captions of every other
         // one. That is not a memory, it is a collision (L15).
-        let book = try book()
+        let (book, defaults) = try bookAndStore()
 
         book.record(org: "", handles: "@merkinhall")
 
+        // Read from the STORE, not back through the book: the read side refuses
+        // a blank key as well, so asking the book would report an empty answer
+        // whether or not anything was written, and the two guards would mask
+        // each other (L70).
+        let stored = defaults.dictionary(forKey: HandleBook.orgKey) as? [String: String]
+        XCTAssertNil(stored?[""],
+                     "handles were saved against a blank organisation, so the "
+                     + "next event without one inherits them")
+    }
+
+    func testABlankKeyAlreadyInTheBookIsNeverRead() throws {
+        // The other half, and the only way to exercise it: nothing this type
+        // does can produce a book holding a blank key, so the read guard could
+        // never be seen to fail without one being planted (L1). It is also the
+        // honest scenario, because a book written by an older build is not
+        // something this one can assume the shape of.
+        let (book, defaults) = try bookAndStore()
+        defaults.set(["": "@stale"], forKey: HandleBook.orgKey)
+
         XCTAssertEqual(book.handles(forOrg: ""), "",
-                       "handles were remembered against a blank organisation, "
-                       + "so every event without one now carries them")
+                       "a blank key left in the book is handed to every event "
+                       + "that has no organisation")
     }
 
     func testABlankVenueIsRefusedTheSameWay() throws {

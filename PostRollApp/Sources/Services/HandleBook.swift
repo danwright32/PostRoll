@@ -4,8 +4,16 @@ import Foundation
 /// on every future event at the same org or venue.
 final class HandleBook: @unchecked Sendable {
     nonisolated(unsafe) static let shared = HandleBook()
-    private let orgKey   = "postroll.handlebook.org.v1"
-    private let venueKey = "postroll.handlebook.venue.v1"
+    /// Not private, so a test can plant a value directly in the store.
+    ///
+    /// The blank key guard exists in two places on purpose, at the write and at
+    /// the read, and each masks the other: nothing a test does through this
+    /// type can produce a book that holds a blank key, so the read guard could
+    /// never be seen to fail (L1). Planting one is the only way to exercise it,
+    /// and it is also the honest scenario, since a book written by any older
+    /// build is not something this one can assume the shape of.
+    static let orgKey   = "postroll.handlebook.org.v1"
+    static let venueKey = "postroll.handlebook.venue.v1"
 
     /// Where the book is kept. A property rather than `UserDefaults.standard`
     /// reached for inline, so a test can point it at a scratch suite: a test
@@ -28,8 +36,8 @@ final class HandleBook: @unchecked Sendable {
     // MARK: - Org handles
 
     private var orgBook: [String: String] {
-        get { defaults.dictionary(forKey: orgKey) as? [String: String] ?? [:] }
-        set { defaults.set(newValue, forKey: orgKey) }
+        get { defaults.dictionary(forKey: Self.orgKey) as? [String: String] ?? [:] }
+        set { defaults.set(newValue, forKey: Self.orgKey) }
     }
 
     /// Nothing is remembered against a blank name, in either direction (#689).
@@ -58,8 +66,8 @@ final class HandleBook: @unchecked Sendable {
     // MARK: - Venue handles
 
     private var venueBook: [String: String] {
-        get { defaults.dictionary(forKey: venueKey) as? [String: String] ?? [:] }
-        set { defaults.set(newValue, forKey: venueKey) }
+        get { defaults.dictionary(forKey: Self.venueKey) as? [String: String] ?? [:] }
+        set { defaults.set(newValue, forKey: Self.venueKey) }
     }
 
     /// Blank keys are refused here for the same reason as above: a venue can be
