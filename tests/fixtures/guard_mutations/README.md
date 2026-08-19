@@ -37,6 +37,29 @@ not `<name>.json` (this README aside) rather than globbing past it, because an
 entry skipped in silence is a guard nobody checks while the sweep still reports
 a clean run.
 
+## Nothing may be anchored on a GENERATED file
+
+`.github/workflows/guards.yml` runs `xcodegen generate` before the sweep, which
+can leave `PostRollApp/PostRoll.xcodeproj/project.pbxproj` modified, and
+`check_guards.py` correctly refuses to perturb a file with uncommitted changes.
+An entry anchored there therefore reports ERROR on every sweep and is never
+proved on the machine that matters, while passing locally where the tree is
+clean. Two #719 entries did exactly that and were caught only by reading a
+failed run's log.
+
+So a guard over generated output is anchored on the SOURCE the generator reads,
+`PostRollApp/project.yml`, and a separate test holds the generated file to it.
+`tests/test_debug_build_signs_nested_code.py` is the worked example: it runs the
+build phase out of the manifest, and
+`test_the_generated_project_carries_the_same_script_as_the_manifest` proves the
+committed `.xcodeproj` carries character for character the same script, so what
+Xcode runs is proved equal to what was exercised.
+
+`test_the_recording_phase_runs_after_the_plist_is_regenerated` is deliberately
+unregistered for this reason: it reads the generated project by design, and its
+sibling `the-manifest-keeps-the-plist-ordering-edge` proves the same rule from
+the manifest, which is where a person edits.
+
 ## Guards deliberately not registered
 
 Guards deliberately NOT registered, because no compile-safe one line perturbation expresses the defect they catch: UploadPageCropRemovalTests (adding a real crop control is not one line; prose would trip it but proves nothing), the absence guards test_blog_draft_text.py::test_no_module_builds_the_heading_by_hand / test_layout_sidecar.py::test_no_generator_builds_the_name_by_hand / test_blog_meta.py::test_neither_string_can_reach_the_ai_round_trip (their only one line trip is planting the banned text artificially), test_suite_hygiene.py and test_guard_mutation_registry.py (they protect the test suite and this registry themselves), test_bridge_payload_contract.py / test_manifest_contract.py (the one line rename anchor is ambiguous in PythonBridge.swift), test_brand_text.py (removing the route in one line breaks the module's own names), test_event_slug_parity.py (slug internals are not safely one line perturbable), and the measured pixel thresholds in test_golden_frames.py / test_frame_legibility.py / test_screen_reel_logo_contrast.py's contrast checks (failing them takes a rendering change, not a text edit).

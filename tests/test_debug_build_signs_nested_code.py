@@ -29,11 +29,19 @@ hand-kept list of what to sign is exempt from the very check meant to catch it
 (L96), so the phase discovers nested code by reading what is actually in the
 bundle.
 
-These tests run the REAL script, taken out of the generated project, against a
-fixture bundle shaped like a Debug build. `project.yml` is a manifest;
-`PostRoll.xcodeproj` is generated from it and committed, and it is the generated
-file Xcode builds (L3), so that is the copy under test and the two are held to
-each other separately.
+These tests run the REAL script against a fixture bundle shaped like a Debug
+build. They take it from `project.yml`, and a separate check holds the generated
+`PostRoll.xcodeproj` to be character for character the same script, so what
+Xcode actually runs is proved equal to what was exercised here (L3).
+
+Taking it from the manifest rather than straight from the generated project is
+deliberate, and it was the other way round first. `.github/workflows/guards.yml`
+runs `xcodegen generate` before re-proving the guards, which can leave
+`project.pbxproj` modified, and `check_guards.py` correctly refuses to perturb a
+file with uncommitted changes. A guard anchored there therefore reported ERROR
+on every sweep and could never be proved on the machine that matters. Anchoring
+on the manifest, which nothing regenerates, and proving the two are identical
+separately, gives the same coverage with nothing to rewrite it underneath.
 """
 
 from __future__ import annotations
@@ -225,7 +233,7 @@ def _run_phase(tmp_path: Path, app: Path) -> subprocess.CompletedProcess:
         "EXPANDED_CODE_SIGN_IDENTITY": "-",
     }
     return subprocess.run(
-        ["/bin/sh", "-c", _script_from_generated_project()],
+        ["/bin/sh", "-c", _script_from_manifest()],
         env=env,
         capture_output=True,
         text=True,
