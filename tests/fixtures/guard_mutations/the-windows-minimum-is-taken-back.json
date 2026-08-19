@@ -1,0 +1,8 @@
+{
+  "name": "the-windows-minimum-is-taken-back",
+  "file": "PostRollApp/Sources/Services/WindowFit.swift",
+  "find": "window.minSize = floor",
+  "replace": "_ = floor",
+  "test": "PostRollTests/WindowFitTests/testTheWindowsMinimumIsTakenBackFromTheContent",
+  "breaks": "the window keeps whatever minimum size SwiftUI derived from its content, so Dan still cannot drag it smaller however the frame is corrected. #687 measured that minimum at 2834pt against a usable screen height of 984, which is why no edge, corner or window command could recover it (L188)"
+}

@@ -323,7 +323,32 @@ private struct WelcomeDetailView: View {
 /// oversight: it is the app's only window, it dies with the app, and every
 /// change here is idempotent. The async block captures the view rather than
 /// the reverse, so there is nothing to dangle either.
+///
+/// One thing here DOES outlive a single call, and it is held rather than
+/// registered and forgotten: the window fit watch (#690) observes the window on
+/// the default notification centre, which holds its observers unowned and
+/// outlives whatever registered with them (L86). It lives on the coordinator,
+/// so it is created once and released with this view rather than accumulating
+/// one more observer every time SwiftUI rebuilds.
 private struct WindowConfigurator: NSViewRepresentable {
+
+    @MainActor
+    final class Coordinator {
+        /// Held, not registered and forgotten.
+        ///
+        /// Nothing tears it down, and that is the decision rather than the
+        /// omission: this is the app's only window and it dies with the app, so
+        /// there is no moment where the watch should stop. It is deliberately
+        /// NOT stopped in `deinit` either, because a deinit is nonisolated and
+        /// can run on any thread, and asserting an isolation that does not hold
+        /// is a crash at teardown in exchange for cleanup nobody needs. The
+        /// observers hold the window weakly, so the worst case if this object
+        /// ever does go away first is a handful of blocks that do nothing.
+        var watch: WindowFitWatch?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
@@ -339,7 +364,10 @@ private struct WindowConfigurator: NSViewRepresentable {
             // above the toolbar when titlebarAppearsTransparent is true
             window.backgroundColor = NSColor(Color.creamDeep)
             window.isOpaque = true
-            window.minSize = NSSize(width: 760, height: 500)
+            // One spelling of the floor, shared with the guard that puts it
+            // back. Two copies could disagree, and the one that lost would be
+            // this one, silently (#690).
+            window.minSize = WindowFit.floor
 
             // NavigationSplitView's sidebar uses NSVisualEffectView with
             // .behindWindow blending, which composites against whatever app
@@ -357,6 +385,24 @@ private struct WindowConfigurator: NSViewRepresentable {
                 let x = (visible.minX + (visible.width - w) / 2).rounded()
                 let y = (visible.minY + (visible.height - h) / 2).rounded()
                 window.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true, animate: false)
+            }
+
+            // Last, so it judges the frame this method leaves behind rather
+            // than the one it started with (#690).
+            //
+            // Both halves, and both are needed: a window restored from a
+            // previous session already outside the usable area is pulled back
+            // in here, so a broken window heals on open instead of reopening
+            // broken, and the watch keeps it inside on every later resize,
+            // move and screen change. A check that runs only at window
+            // creation is exactly what was already here and it could not help,
+            // because the layout pass that breaks it comes later.
+            if let visible = WindowFit.visibleFrame(for: window) {
+                WindowFit.fit(window, into: visible,
+                              isFullScreen: window.styleMask.contains(.fullScreen))
+            }
+            if context.coordinator.watch == nil {
+                context.coordinator.watch = WindowFit.watch(window)
             }
         }
         return view

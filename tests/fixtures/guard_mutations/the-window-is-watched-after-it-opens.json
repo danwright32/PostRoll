@@ -1,0 +1,8 @@
+{
+  "name": "the-window-is-watched-after-it-opens",
+  "file": "PostRollApp/Sources/Views/MainWindowView.swift",
+  "find": "context.coordinator.watch = WindowFit.watch(window)",
+  "replace": "context.coordinator.watch = nil",
+  "test": "PostRollTests/WindowFitWiringTests/testTheWindowKeepsBeingHeldAfterItOpens",
+  "breaks": "the window is checked once at creation and then never again, which is exactly the code that was already there and could not help: the layout pass that pushes the window off the screen comes later (#690)"
+}
