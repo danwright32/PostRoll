@@ -42,9 +42,19 @@ enum CheckoutNotice {
         // Three short sentences rather than one long one with two "and"s in it,
         // read cold off the rendered banner (L21): what the folder is for, what
         // state it is in, and what that means for the next thing he does.
+        //
+        // The last one names WHICH half (#692). It used to say "anything you
+        // generate now runs that code", which is true of the pipeline and false
+        // of the parts the app draws itself: the finished Wednesday collage is
+        // composited by PostRoll and is frozen into this build. The banner is
+        // read at the exact moment its claim is being relied on, so switching
+        // to a branch to test a collage change and reading the old sentence
+        // said the change was under test when it was not, and the output looked
+        // like the branch failing to work.
         return "PostRoll generates using the code in your PostRoll folder. That "
-             + "folder \(states.joined(separator: ", and ")). Anything you "
-             + "generate now runs that code rather than the code this app was "
-             + "built from."
+             + "folder \(states.joined(separator: ", and ")). Captions, blog "
+             + "posts and reels will use that code; what PostRoll draws itself, "
+             + "like the finished Wednesday collage, still comes from this "
+             + "build until you rebuild it."
     }
 }
