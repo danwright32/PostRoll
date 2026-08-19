@@ -8,6 +8,9 @@ struct PostRollApp: App {
     @State private var generationManager = GenerationManager()
     @State private var ocrManager = OCRManager()
     @State private var exportManager = ExportManager()
+    /// App scoped, so a programme notes search survives the section it was
+    /// started from being collapsed and the screen being replaced (#693).
+    @State private var notesManager = ProgramNotesManager()
 
     init() {
         NotificationService.shared.requestPermission()
@@ -22,6 +25,7 @@ struct PostRollApp: App {
                 .environment(generationManager)
                 .environment(ocrManager)
                 .environment(exportManager)
+                .environment(notesManager)
                 .preferredColorScheme(.light)
                 // The accent every system control inherits: a spinner's arc, a
                 // slider's filled track, a picker's selection. Named as the

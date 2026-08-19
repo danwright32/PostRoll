@@ -1,0 +1,8 @@
+{
+  "name": "a-typed-note-survives-the-web-search",
+  "file": "PostRollApp/Sources/Services/ProgramNotesManager.swift",
+  "find": "                    && needsNotes($0)",
+  "replace": "                    && true",
+  "test": "PostRollTests/ProgramNotesManagerTests/testANoteTypedWhileTheSearchRanIsNotOverwritten",
+  "breaks": "a note Dan typed while waiting for the search is overwritten by what the web returned, so the search destroys the work it exists to save him. The search takes minutes, which is exactly long enough to write one by hand (#693)"
+}

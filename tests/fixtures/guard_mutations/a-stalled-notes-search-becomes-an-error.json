@@ -1,0 +1,8 @@
+{
+  "name": "a-stalled-notes-search-becomes-an-error",
+  "file": "PostRollApp/Sources/Services/ProgramNotesManager.swift",
+  "find": "                try await Task.sleep(for: .seconds(seconds))",
+  "replace": "                try await Task.sleep(for: .seconds(seconds * 100_000))",
+  "test": "PostRollTests/ProgramNotesManagerTests/testAStalledSearchBecomesSomethingToActOnRatherThanAnIndicatorForever",
+  "breaks": "a web search that never comes back is shown as still running forever. A wait with no deadline cannot fail, it can only hang, and a hang is indistinguishable from slowness (#693, L110)"
+}
