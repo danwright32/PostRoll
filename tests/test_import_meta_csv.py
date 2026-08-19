@@ -134,6 +134,18 @@ class TestParsers:
         caption = "A personal post by @dwphotony."
         assert _extract_org(caption) is None
 
+    def test_extract_org_is_none_rather_than_empty_when_nobody_is_credited(self):
+        """An event can have no organisation (#689), so its captions can carry
+        no organisation handle at all.
+
+        None, never "": Insights groups posts by this value, and an empty string
+        is a group. Every post from every event with no organisation would be
+        filed together under a heading that names nothing, and the follower band
+        of that phantom group would be applied to all of them.
+        """
+        for caption in ["A quiet night at the theatre.", "", "#dwphotony only"]:
+            assert _extract_org(caption) is None, caption
+
     def test_normalize_media_type(self):
         assert _normalize_media_type("IG reel") == "reel"
         assert _normalize_media_type("IG story") == "story"

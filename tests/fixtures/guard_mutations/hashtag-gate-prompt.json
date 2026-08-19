@@ -1,8 +1,8 @@
 {
   "name": "hashtag-gate-prompt",
   "file": "postroll/ai/generate_captions.py",
-  "find": "org/show, composer/playwright/band, genre.",
-  "replace": "org/show, composer/playwright/band, performers visible, genre.",
+  "find": "show, composer/playwright/band, genre.",
+  "replace": "show, composer/playwright/band, performers visible, genre.",
   "test": "tests/test_performer_hashtag_gate.py::test_the_prompt_no_longer_demands_performer_hashtags",
   "breaks": "the caption prompt contradicts the performer hashtag fame gate"
 }

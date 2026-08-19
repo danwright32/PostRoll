@@ -1,0 +1,8 @@
+{
+  "name": "the-venue-leads-when-there-is-no-organisation",
+  "file": "PostRollApp/Sources/Services/EventFolder.swift",
+  "find": "        let lead = slugify(venue)",
+  "replace": "        let lead = \"\"",
+  "test": "PostRollTests/EventSlugParityTests/testSwiftBuildsTheSlugPythonRecorded",
+  "breaks": "an event with no organisation gets a folder name this side builds differently from the one Python creates, so the archive sweep looks for a folder that is not there and leaks it forever while the export writes another (#689, #108)"
+}

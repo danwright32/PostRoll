@@ -13,19 +13,23 @@ enum NewEventValidation {
     /// Returns the sentence rather than a bool so the button and its explanation
     /// cannot disagree: `canCreate` is defined as this being nil, so a state that
     /// blocks creation without a reason is not representable.
-    static func refusal(name: String, org: String) -> String? {
-        var missing: [String] = []
-        if FieldText.isBlank(name) {
-            missing.append("a name")
-        }
-        if FieldText.isBlank(org) {
-            missing.append("an organisation")
-        }
-        guard !missing.isEmpty else { return nil }
-        return "Add \(missing.joined(separator: " and ")) to create this event."
+    /// The organisation is deliberately NOT asked for (#689).
+    ///
+    /// A director hiring Dan to shoot a play is not an organisation, and there
+    /// is nothing to type. It used to be required, so an event like that could
+    /// not be created at all without inventing one, which is worse than leaving
+    /// it out: an invented organisation is a fact that goes on to reach a
+    /// caption, a folder name and the handle book.
+    ///
+    /// The parameter is gone rather than kept and ignored. A predicate that
+    /// still takes a value it does not read is one every caller believes is
+    /// being checked.
+    static func refusal(name: String) -> String? {
+        guard FieldText.isBlank(name) else { return nil }
+        return "Add a name to create this event."
     }
 
-    static func canCreate(name: String, org: String) -> Bool {
-        refusal(name: name, org: org) == nil
+    static func canCreate(name: String) -> Bool {
+        refusal(name: name) == nil
     }
 }

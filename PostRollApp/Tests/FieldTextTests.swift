@@ -40,8 +40,12 @@ final class FieldTextTests: XCTestCase {
     }
 
     func testTheFormRefusesAValueThatIsOnlyANewline() {
-        XCTAssertNotNil(NewEventValidation.refusal(name: "\n", org: "Decoda"),
+        // The name only. The organisation stopped being required (#689), so an
+        // organisation of just a newline is now the same as not typing one,
+        // which is a legitimate event rather than a refusal.
+        XCTAssertNotNil(NewEventValidation.refusal(name: "\n"),
                         "a name of just a newline was accepted")
-        XCTAssertFalse(NewEventValidation.canCreate(name: "Show", org: " \n "))
+        XCTAssertFalse(NewEventValidation.canCreate(name: " \n "))
+        XCTAssertTrue(NewEventValidation.canCreate(name: "Show"))
     }
 }

@@ -440,8 +440,11 @@ struct AssetGenerationView: View {
     private func downloadProgramPDF() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.pdf]
+        // The same billing rule as the event's own folder (#689): the
+        // organisation when there is one, the venue when there is not, and
+        // neither rather than a name that opens with a bare underscore.
         panel.nameFieldStringValue =
-            "\(EventExporter.slug(event.org))_\(EventExporter.slug(event.name))_program.pdf"
+            "\(EventFolder.stem(org: event.org, venue: event.venue, name: event.name))_program.pdf"
         panel.title = "Save Program PDF"
 
         guard panel.runModal() == .OK, let dest = panel.url else { return }

@@ -40,6 +40,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from . import org_prompt
 from .ai_tells import (
     BLOG_HUMANIZER_EXTRA_BANS,
     BLOG_VOICE_EXTRA_CHECKS,
@@ -1225,11 +1226,7 @@ short paragraphs, continuous prose, no headings, no bullets, no section
 breaks.
 
 Event details:
-- Event name: {event}
-- Organization: {org}  ← write this name EXACTLY as given when you name
-  the organization. Do not abbreviate, expand, re-order, or drop words
-  (e.g. "Teachers College Singers' Workshop" must not become "Teachers
-  The Singers' Workshop").
+- Event name: {event}{org_line}
 - Venue: {venue}{venue_context_line}
 - Date: {date}
 - Shoot type: {shoot_type}  ← CRITICAL: the prose MUST match what Dan
@@ -1735,7 +1732,17 @@ def generate_blog(
             blog_structure=BLOG_STRUCTURE,
             blog_writing_rules=BLOG_WRITING_RULES,
             event=event,
-            org=org,
+            # The organisation names itself or states its absence (#689). An
+            # event can have none, and a line reading "- Organization: " above
+            # an instruction to write the name exactly as given is one the model
+            # answers by inventing a name.
+            org_line=org_prompt.detail_line(
+                org,
+                note="  ← write this name EXACTLY as given when you name\n"
+                     "  the organization. Do not abbreviate, expand, re-order, "
+                     "or drop words\n"
+                     "  (e.g. \"Teachers College Singers' Workshop\" must not "
+                     "become \"Teachers\n  The Singers' Workshop\")."),
             venue=venue,
             venue_context_line=venue_context_line,
             date=date,

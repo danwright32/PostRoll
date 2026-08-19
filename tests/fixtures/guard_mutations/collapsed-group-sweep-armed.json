@@ -1,7 +1,7 @@
 {
   "name": "collapsed-group-sweep-armed",
   "file": "PostRollApp/Sources/Views/EventListView.swift",
-  "find": "        .accessibilityLabel(\"\\(event.name), \\(event.org), \\(event.displayDate), \\(event.shootType.rawValue), stage \\(event.stage.rawValue)\")",
+  "find": "        .accessibilityLabel(EventCredit.spokenRow(\n            name: event.name, org: event.org, venue: event.venue,\n            date: event.displayDate, shootType: event.shootType.rawValue,\n            stage: event.stage.rawValue))",
   "replace": "        .accessibilityIdentifier(\"eventRow\")",
   "test": "PostRollTests/CollapsedGroupLabelTests/testEveryCollapsedGroupSaysWhatItIs",
   "breaks": "the event row folds its three visual sub rows into one VoiceOver stop and gives that stop no name, so the row Dan navigates the whole app by announces as a group with nothing to say about which show it is (#608)"

@@ -32,15 +32,26 @@ final class HandleBook: @unchecked Sendable {
         set { defaults.set(newValue, forKey: orgKey) }
     }
 
+    /// Nothing is remembered against a blank name, in either direction (#689).
+    ///
+    /// An event can have no organisation, and the book is keyed by the
+    /// normalised name. A blank key is one bucket that every such event shares,
+    /// so the handles saved while working on one play would be prepended to the
+    /// captions of every other event with no organisation. That is not a
+    /// lookup, it is a collision that looks like a memory (L15).
     func handles(forOrg org: String) -> String {
-        orgBook[normalize(org)] ?? ""
+        let key = normalize(org)
+        guard !key.isEmpty else { return "" }
+        return orgBook[key] ?? ""
     }
 
     func record(org: String, handles: String) {
+        let key = normalize(org)
+        guard !key.isEmpty else { return }
         var b = orgBook
         let trimmed = handles.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { b.removeValue(forKey: normalize(org)) }
-        else               { b[normalize(org)] = trimmed }
+        if trimmed.isEmpty { b.removeValue(forKey: key) }
+        else               { b[key] = trimmed }
         orgBook = b
     }
 
@@ -51,15 +62,21 @@ final class HandleBook: @unchecked Sendable {
         set { defaults.set(newValue, forKey: venueKey) }
     }
 
+    /// Blank keys are refused here for the same reason as above: a venue can be
+    /// left empty too, and one shared bucket is worse than no memory at all.
     func handles(forVenue venue: String) -> String {
-        venueBook[normalize(venue)] ?? ""
+        let key = normalize(venue)
+        guard !key.isEmpty else { return "" }
+        return venueBook[key] ?? ""
     }
 
     func record(venue: String, handles: String) {
+        let key = normalize(venue)
+        guard !key.isEmpty else { return }
         var b = venueBook
         let trimmed = handles.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { b.removeValue(forKey: normalize(venue)) }
-        else               { b[normalize(venue)] = trimmed }
+        if trimmed.isEmpty { b.removeValue(forKey: key) }
+        else               { b[key] = trimmed }
         venueBook = b
     }
 

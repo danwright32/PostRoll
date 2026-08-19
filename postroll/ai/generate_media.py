@@ -142,6 +142,41 @@ def _slug(text: str) -> str:
     return result.strip("_")
 
 
+def event_folder_name(*, org: str, venue: str, event: str, date: str) -> str:
+    """The per-event folder name, shared with the Swift side.
+
+    Python creates this folder; Swift re-derives the same name months later in
+    order to delete it, and again to name an export. Nothing but
+    tests/fixtures/event_slug.json forces the three to agree (#108).
+
+    The organisation leads when there is one. An event can have none (#689): a
+    director hiring Dan to shoot a play is not an organisation, and there is
+    nothing to name. The venue takes its place there, because the folder still
+    has to say something about where the work came from, and a name starting
+    with a bare underscore says nothing while looking like a mistake. When
+    neither survives slugging, the name and the date stand alone rather than
+    carrying an empty segment.
+
+    The fallback is keyed on the organisation being BLANK, never on it slugging
+    away to nothing, and that distinction is load bearing. An organisation
+    written in a non latin script slugs to an empty string today and produces a
+    name with a leading underscore, and folders with those names already exist
+    on disk. Falling back for them would have Swift derive a different name for
+    a folder Python created months ago: it would miss it, leak it forever, and
+    the event would quietly keep two. So an organisation that is there keeps
+    exactly the name it has always had, underscore and all.
+
+    Only the genuinely absent case falls through, and there the empty segment is
+    not owed to anyone: when the venue slugs to nothing either, the name and the
+    date stand alone rather than carrying a leading underscore.
+    """
+    tail = f"{_slug(event)}_{date}"
+    if org.strip():
+        return f"{_slug(org)}_{tail}"
+    venue_lead = _slug(venue)
+    return f"{venue_lead}_{tail}" if venue_lead else tail
+
+
 from ..media.ffmpeg_check import ffmpeg_status, ffmpeg_version_line  # noqa: E402
 
 
@@ -371,7 +406,8 @@ def generate_media(
     days_data  = manifest.get("days", {})
     preset     = manifest.get("preset", DEFAULT_PRESET)
 
-    folder_name = f"{_slug(org)}_{_slug(event)}_{manifest.get('date', 'undated')}"
+    folder_name = event_folder_name(org=org, venue=venue, event=event,
+                                    date=manifest.get("date", "undated"))
     base_dir = output_dir / folder_name
     base_dir.mkdir(parents=True, exist_ok=True)
 
