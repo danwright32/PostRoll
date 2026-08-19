@@ -1,0 +1,8 @@
+{
+  "name": "staleness-ignores-code-that-is-not-in-the-app",
+  "file": "PostRollApp/Sources/Services/BuildFreshness.swift",
+  "find": "        \"postroll\",                  // the generation pipeline, run from the checkout",
+  "replace": "        // the pipeline is deliberately not excluded",
+  "test": "PostRollTests/BuildFreshnessScopeTests/testAPythonOnlyChangeDoesNotCount",
+  "breaks": "a week of Python only commits makes the running app read as out of date, and the remedy the warning names cannot clear it: the pipeline is read live off the checkout, so rebuilding produces a new build and the same verdict at the next launch. That is how a warning becomes something to dismiss on reflex, taking the real one with it (#691, L36, L144)"
+}
