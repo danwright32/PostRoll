@@ -76,6 +76,14 @@ _EMPTY_REPORT_SHELL: dict[str, Any] = {
     "story_findings":        _EMPTY_FINDINGS.copy(),
     "brand_voice_suggestions": [],
     "caveats":               [],
+    # How much of this report rests on comparisons that could not be made fair
+    # (#720). None, never 0: a zero nothing produced is indistinguishable from a
+    # report where every comparison was controlled (L90), and reports written
+    # before this existed have no measurement at all.
+    "analyzed_count":        None,
+    "uncontrolled_count":    None,
+    "uncredited_count":      None,
+    "uncontrolled_orgs":     [],
 }
 
 
@@ -146,6 +154,68 @@ def _compact_post(post: dict[str, Any], org_bands: dict[str, str],
         summary["is_personal"] = True
     # Drop None values to reduce token count
     return {k: v for k, v in summary.items() if v is not None}
+
+
+def audience_control(
+    compact_feed: list[dict[str, Any]],
+    compact_stories: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """How much of a report could not be controlled for audience size (#720).
+
+    Posts whose credited account has no follower band are analysed as
+    uncontrolled observations rather than compared within a tier, which is the
+    right treatment. What was missing was any way to tell how much of a report
+    rested on them: the finished text read the same whether it applied to two
+    posts or two hundred.
+
+    Measured from the compacted posts, which is exactly what Claude is given, so
+    this counts the same population the prompt reasons over rather than a
+    second, nearby idea of it (L107). Deliberately NOT asked of the model: a
+    field whose only writer is a prompt, and whose absence is itself a
+    legitimate value, cannot tell a model that ignored the instruction from one
+    that judged it inapplicable (L128).
+
+    Personal posts are excluded, because rule 4 of the prompt drops them from
+    craft analysis entirely; counting one as an observation the report could not
+    control would inflate the very number this exists to make honest.
+
+    The two ways a post ends up uncontrolled are counted apart, because they
+    have different remedies (L11). An account with no band is fixed by setting
+    one, and is named so Dan knows which. A post with no account credited at all
+    cannot be fixed that way, and naming it as an account to go and correct
+    would send him somewhere that cannot help (L111).
+    """
+    analyzed = 0
+    uncontrolled = 0
+    uncredited = 0
+    orgs: set[str] = set()
+
+    for post in list(compact_feed) + list(compact_stories):
+        if post.get("is_personal"):
+            continue
+        analyzed += 1
+        # `_compact_post` drops None values, so an absent band and the literal
+        # "unknown" both arrive as not-a-band. An empty string does too: it
+        # would otherwise read as tagged here while Claude, reading the same
+        # value, treats it as unknown.
+        band = (post.get("org_band") or "").strip()
+        if band and band != "unknown":
+            continue
+        uncontrolled += 1
+        org = (post.get("org") or "").strip()
+        if org:
+            orgs.add(org)
+        else:
+            uncredited += 1
+
+    return {
+        "analyzed_count":     analyzed,
+        "uncontrolled_count": uncontrolled,
+        "uncredited_count":   uncredited,
+        # Sorted, so the same report does not read differently on each
+        # generation and a reader can tell a changed list from a reshuffled one.
+        "uncontrolled_orgs":  sorted(orgs),
+    }
 
 
 def _prep(
@@ -294,14 +364,25 @@ def _assign_ids(obj: Any) -> None:
             _assign_ids(item)
 
 
-def _finalize(result: dict[str, Any], date_start: str, date_end: str) -> dict[str, Any]:
-    """Add server-generated metadata and ensure all required fields exist."""
+def _finalize(result: dict[str, Any], date_start: str, date_end: str,
+              control: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Add server-generated metadata and ensure all required fields exist.
+
+    `control` is what this code MEASURED about how much of the report could be
+    compared within a follower tier (#720). It overwrites whatever Claude may
+    have said about the same numbers: a fact the system already holds is checked
+    against, never taken from, the model (L161). Left out, the report says
+    nothing rather than zero.
+    """
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     # Ensure required top-level keys are present (Claude may omit some on small data)
     for key, default in _EMPTY_REPORT_SHELL.items():
         if key not in result:
             result[key] = default
+
+    if control:
+        result.update(control)
 
     for track in ("feed_findings", "story_findings"):
         if not isinstance(result.get(track), dict):
@@ -383,7 +464,8 @@ def main() -> None:
     if not isinstance(result, dict):
         raise ValueError(f"Expected dict from Claude, got {type(result)}")
 
-    report = _finalize(result, date_start, date_end)
+    report = _finalize(result, date_start, date_end,
+                       control=audience_control(compact_feed, compact_stories))
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)

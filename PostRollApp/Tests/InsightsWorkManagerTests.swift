@@ -54,7 +54,9 @@ final class InsightsWorkManagerTests: XCTestCase {
             dateRangeEnd: Date(timeIntervalSince1970: 1_800_000_000),
             postCount: 1, storyCount: 0, feedCount: 1, summary: summary,
             feedFindings: empty, storyFindings: empty,
-            brandVoiceSuggestions: [], caveats: [])
+            brandVoiceSuggestions: [], caveats: [],
+            analyzedCount: 1, uncontrolledCount: 0, uncreditedCount: 0,
+            uncontrolledOrgs: [])
     }
 
     private func settle() async {

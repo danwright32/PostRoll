@@ -351,7 +351,9 @@ final class BridgePayloadContractTests: XCTestCase {
             dateRangeEnd: Date(timeIntervalSince1970: 1_700_000_000),
             postCount: 10, storyCount: 4, feedCount: 6, summary: "what worked",
             feedFindings: findings, storyFindings: findings,
-            brandVoiceSuggestions: ["shorter openings"], caveats: ["small sample"])
+            brandVoiceSuggestions: ["shorter openings"], caveats: ["small sample"],
+            analyzedCount: 10, uncontrolledCount: 3, uncreditedCount: 1,
+            uncontrolledOrgs: ["newchoir"])
 
         // `id` is stamped by Python's own uuid pass rather than named in the
         // report shell, so it is not part of the declared key set.

@@ -140,7 +140,9 @@ struct InsightsOverviewView: View {
 
                     // Latest report
                     if let report = analyticsStore.reports.first {
-                        InsightReportView(report: report)
+                        InsightReportView(report: report) {
+                            appState.insightsSection = .orgs
+                        }
                     }
                 }
             }
@@ -232,6 +234,13 @@ private struct InstructionRow: View {
 /// and would go to disk (L2).
 struct InsightReportView: View {
     let report: InsightReport
+    /// Take the reader to the screen where follower bands are set.
+    ///
+    /// A closure rather than a direct write to `AppState`, so this view keeps
+    /// reading nothing it was not handed and can still be drawn by the review
+    /// sheet (#645). A notice that names a fixable problem and offers no way to
+    /// reach the fix is half a notice (L80).
+    var onShowAccounts: (() -> Void)? = nil
     @Environment(AnalyticsStore.self) private var analyticsStore
 
     private let dateFormatter: DateFormatter = {
@@ -257,6 +266,14 @@ struct InsightReportView: View {
             }
 
             RoseGoldDivider()
+
+            // How much of this report could be compared within a follower tier
+            // (#720). Above the findings on purpose: it is the thing that
+            // decides how much weight the rest of the page deserves, and a
+            // caveat read after the conclusions has already lost.
+            if let notice = AudienceControlNotice.forReport(report) {
+                AudienceControlRow(notice: notice, onShowAccounts: onShowAccounts)
+            }
 
             // Summary
             if !report.summary.isEmpty {
@@ -327,6 +344,80 @@ struct InsightReportView: View {
                 }
             }
         }
+    }
+}
+
+/// Says how much of a report rests on comparisons that could not be made fair.
+///
+/// Its own view so it can be rendered and measured like every other notice, and
+/// so the three states it has to keep apart are visible in the review sheet
+/// rather than only in a test (#559, #623).
+private struct AudienceControlRow: View {
+    let notice: AudienceControlNotice.Notice
+    var onShowAccounts: (() -> Void)? = nil
+
+    /// Fully controlled is good news and reads as a confirmation; the other two
+    /// are things to weigh the report against. Different marks, because a
+    /// reader takes the icon in before the sentence.
+    private var icon: String {
+        switch notice.kind {
+        case .allControlled:    return "checkmark.circle.fill"
+        case .someUncontrolled: return "exclamationmark.triangle"
+        case .notMeasured:      return "questionmark.circle"
+        }
+    }
+
+    private var tint: Color {
+        notice.kind == .allControlled
+            ? PaintedSurfaces.insightConfidenceHigh
+            : PaintedSurfaces.iconAccent
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundStyle(tint)
+                // The sentence beside it says the same thing in words, so the
+                // mark is decoration to a screen reader (L20).
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(notice.headline)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(PaintedSurfaces.bodyText)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail = notice.detail {
+                    Text(detail)
+                        .font(.light(11))
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !notice.accounts.isEmpty {
+                    // Named, so the notice says WHICH accounts rather than only
+                    // that some are missing a band.
+                    Text(notice.accounts.map { "@\($0)" }.joined(separator: ", "))
+                        .font(.light(11))
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if notice.showsAccountsLink, let onShowAccounts {
+                    Button("Set their follower bands") { onShowAccounts() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
+                }
+            }
+        }
+        .padding(Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.sm)
+                .fill(PaintedSurfaces.deepPage)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.sm)
+                        .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)
+                )
+        )
     }
 }
 

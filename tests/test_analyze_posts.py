@@ -347,3 +347,126 @@ class TestAnalyzePostsCLI:
         assert len(captured_prompt) == 1
         # The global exclusion tag should appear in the prompt's exclusion section
         assert "#dwphotony" in captured_prompt[0]
+
+
+# ---------------------------------------------------------------------------
+# How much of a report could not be controlled for audience size (#720)
+# ---------------------------------------------------------------------------
+
+class TestAudienceControl:
+    """A report has to say how much of itself rests on comparisons it could not
+    make fair.
+
+    Posts whose credited account has no follower band are analysed as
+    uncontrolled observations rather than compared within a tier. That is the
+    right treatment, and #712 made the stored bands visible and correctable. The
+    gap this closes is the output side: a finished report read exactly the same
+    whether that applied to two posts or two hundred, so a thin report was
+    indistinguishable from one where every comparison was controlled.
+
+    Measured here rather than asked of Claude. A field whose only writer is a
+    prompt, and whose absence is itself a legitimate value, cannot tell a model
+    that ignored the instruction from one that judged the field inapplicable, so
+    it stays dormant forever while every reader reports its honest default
+    (L128). This is a count the code already holds.
+    """
+
+    def _post(self, **over) -> dict:
+        base = {
+            "media_type": "image",
+            "published_at": "2026-04-09T11:00:00",
+            "caption": "a caption",
+            "hashtags": [],
+            "reach": 100,
+            "likes": 10,
+        }
+        base.update(over)
+        return base
+
+    def _measure(self, posts, bands):
+        from postroll.ai.analyze_posts import audience_control
+        feed, stories, _, _ = _prep(posts, bands, set())
+        return audience_control(feed, stories)
+
+    def test_a_post_whose_account_has_a_band_is_controlled(self):
+        got = self._measure([self._post(org="dciny")], {"dciny": "k1to10"})
+        assert got["uncontrolled_count"] == 0
+        assert got["uncontrolled_orgs"] == []
+        assert got["analyzed_count"] == 1
+
+    def test_a_post_whose_account_has_no_band_is_counted_and_named(self):
+        got = self._measure([self._post(org="newchoir")], {})
+        assert got["uncontrolled_count"] == 1
+        assert got["uncontrolled_orgs"] == ["newchoir"], (
+            "the account is not named, so the count says a report is thin "
+            "without saying what would fix it"
+        )
+
+    def test_an_account_is_named_once_however_many_posts_it_has(self):
+        posts = [self._post(org="newchoir"), self._post(org="newchoir"),
+                 self._post(org="newchoir")]
+        got = self._measure(posts, {})
+        assert got["uncontrolled_count"] == 3
+        assert got["uncontrolled_orgs"] == ["newchoir"]
+
+    def test_accounts_are_named_in_a_stable_order(self):
+        # Otherwise the same report reads differently on each generation, and a
+        # reader cannot tell a changed list from a reshuffled one.
+        posts = [self._post(org="zeta"), self._post(org="alpha")]
+        got = self._measure(posts, {})
+        assert got["uncontrolled_orgs"] == ["alpha", "zeta"]
+
+    def test_a_post_with_no_account_credited_counts_but_names_nobody(self):
+        # A different cause with a different remedy: no band can be set for an
+        # account that was never credited, so listing it as an account to go and
+        # fix would send Dan somewhere that cannot help (L11, L111).
+        got = self._measure([self._post()], {})
+        assert got["uncontrolled_count"] == 1
+        assert got["uncontrolled_orgs"] == []
+        assert got["uncredited_count"] == 1
+
+    def test_a_personal_post_is_neither_controlled_nor_uncontrolled(self):
+        # Personal posts are excluded from craft analysis entirely, so counting
+        # one as an observation the report could not control would inflate the
+        # very number this exists to make honest.
+        got = self._measure([self._post(is_personal=True)], {})
+        assert got["uncontrolled_count"] == 0
+        assert got["analyzed_count"] == 0
+
+    def test_stories_are_counted_too(self):
+        # The confounder rule applies to both tracks, and a report that counted
+        # only feed posts would understate how much of itself is uncontrolled.
+        got = self._measure(
+            [self._post(media_type="story", org="newchoir")], {})
+        assert got["uncontrolled_count"] == 1
+        assert got["analyzed_count"] == 1
+
+    def test_an_empty_band_string_is_not_a_band(self):
+        # A stored band of "" would otherwise read as tagged, and the post would
+        # be counted as controlled while Claude, reading the same value, treats
+        # it as unknown.
+        got = self._measure([self._post(org="newchoir")], {"newchoir": ""})
+        assert got["uncontrolled_count"] == 1
+        assert got["uncontrolled_orgs"] == ["newchoir"]
+
+    def test_the_measurement_reaches_the_finished_report(self):
+        # Built is not wired (L3). The count existing and no report carrying it
+        # is the same as not having it.
+        feed, stories, start, end = _prep(
+            [self._post(org="newchoir"), self._post(org="dciny")],
+            {"dciny": "k1to10"}, set())
+        from postroll.ai.analyze_posts import audience_control
+        report = _finalize({"summary": "ok"}, start, end,
+                           control=audience_control(feed, stories))
+        assert report["uncontrolled_count"] == 1
+        assert report["uncontrolled_orgs"] == ["newchoir"]
+        assert report["analyzed_count"] == 2
+
+    def test_a_report_finalized_without_a_measurement_says_nothing_rather_than_zero(self):
+        # Zero and "nobody measured" are different facts, and a zero nothing
+        # produced is indistinguishable from a report where every comparison was
+        # controlled (L90). The optional argument exists for the tests and the
+        # older stored reports that predate this.
+        report = _finalize({"summary": "ok"}, "2026-01-01", "2026-01-02")
+        assert report["uncontrolled_count"] is None
+        assert report["analyzed_count"] is None

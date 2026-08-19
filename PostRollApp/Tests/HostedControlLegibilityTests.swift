@@ -1225,7 +1225,12 @@ extension HostedControlLegibilityTests {
             ],
             caveats: [
                 "Eight stories is not many, so treat the story findings as a hint.",
-            ])
+            ],
+            // A report that is partly uncontrolled, so the notice #720 added is
+            // one of the surfaces this sheet renders and measures rather than a
+            // state nothing ever draws.
+            analyzedCount: 26, uncontrolledCount: 7, uncreditedCount: 2,
+            uncontrolledOrgs: ["newchoir"])
     }
 
     private func renderInsightsReport(width: CGFloat = 700) throws -> NSBitmapImageRep {
@@ -1234,7 +1239,10 @@ extension HostedControlLegibilityTests {
                 .appendingPathComponent("review-sheet-analytics-\(UUID().uuidString).json"))
 
         let view = ScrollView {
-            InsightReportView(report: Self.insightsReport)
+            // A link handler is passed so the notice's control DRAWS in
+            // the sheet. Left nil the button is absent, and a surface
+            // that never renders cannot be reviewed or measured (#720).
+            InsightReportView(report: Self.insightsReport) {}
                 .padding(Spacing.lg)
         }
         .environment(store)

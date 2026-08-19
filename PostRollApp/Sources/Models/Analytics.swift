@@ -151,6 +151,23 @@ struct InsightReport: Identifiable, Codable, Hashable {
     var brandVoiceSuggestions: [String]
     var caveats: [String]
 
+    // How much of this report rests on comparisons that could not be made fair
+    // (#720). Measured by the Python side from the posts Claude was actually
+    // given, never asked of Claude itself.
+    //
+    // Optional, and nil is NOT zero: a report generated before this existed has
+    // no measurement, and rendering that as zero would be indistinguishable
+    // from one where every comparison was controlled, which is the most
+    // reassuring possible reading of the least informative state (L90).
+    var analyzedCount: Int?
+    var uncontrolledCount: Int?
+    /// Of the uncontrolled ones, how many credited no account at all. A
+    /// different cause with a different remedy, so it is counted apart (L11).
+    var uncreditedCount: Int?
+    /// The credited accounts with no follower band set, so the notice can name
+    /// what would fix it rather than only that something is wrong (L80).
+    var uncontrolledOrgs: [String]
+
     enum CodingKeys: String, CodingKey {
         case id
         case generatedAt            = "generated_at"
@@ -164,6 +181,10 @@ struct InsightReport: Identifiable, Codable, Hashable {
         case storyFindings          = "story_findings"
         case brandVoiceSuggestions  = "brand_voice_suggestions"
         case caveats
+        case analyzedCount          = "analyzed_count"
+        case uncontrolledCount      = "uncontrolled_count"
+        case uncreditedCount        = "uncredited_count"
+        case uncontrolledOrgs       = "uncontrolled_orgs"
     }
 }
 
@@ -182,6 +203,12 @@ extension InsightReport {
         storyFindings          = try c.decodeIfPresent(InsightFindings.self,   forKey: .storyFindings)          ?? InsightFindings(captionPatterns: [], hashtagPatterns: [], contentTypePatterns: [], timingPatterns: [])
         brandVoiceSuggestions  = try c.decodeIfPresent([String].self,          forKey: .brandVoiceSuggestions)  ?? []
         caveats                = try c.decodeIfPresent([String].self,          forKey: .caveats)                ?? []
+        // No `?? 0` on these three: absent means nobody measured, and that is a
+        // different fact from a measured zero (#720, L90).
+        analyzedCount          = try c.decodeIfPresent(Int.self,               forKey: .analyzedCount)
+        uncontrolledCount      = try c.decodeIfPresent(Int.self,               forKey: .uncontrolledCount)
+        uncreditedCount        = try c.decodeIfPresent(Int.self,               forKey: .uncreditedCount)
+        uncontrolledOrgs       = try c.decodeIfPresent([String].self,          forKey: .uncontrolledOrgs)       ?? []
     }
 }
 

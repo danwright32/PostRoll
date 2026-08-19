@@ -374,7 +374,11 @@
       "feed_findings": "swift",
       "story_findings": "swift",
       "brand_voice_suggestions": "swift",
-      "caveats": "swift"
+      "caveats": "swift",
+      "analyzed_count": "swift",
+      "uncontrolled_count": "swift",
+      "uncredited_count": "swift",
+      "uncontrolled_orgs": "swift"
     }
   },
   "flag_review": {
