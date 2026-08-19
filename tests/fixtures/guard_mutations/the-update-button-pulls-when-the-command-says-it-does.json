@@ -1,0 +1,8 @@
+{
+  "name": "the-update-button-pulls-when-the-command-says-it-does",
+  "file": "PostRollApp/Sources/Services/AppUpdate.swift",
+  "find": "if remedy == .pullThenRebuild { arguments.append(\"--pull\") }",
+  "replace": "if false { arguments.append(\"--pull\") }",
+  "test": "PostRollTests/AppUpdateTests/testTheButtonPullsExactlyWhenTheWrittenCommandSaysItWill",
+  "breaks": "the update button stops pulling while the sentence above it still says the change has not reached this Mac yet, so it rebuilds the old code, reports success, and leaves the app exactly as out of date as before: the loop BuildFreshness.Remedy exists to break (#686)"
+}

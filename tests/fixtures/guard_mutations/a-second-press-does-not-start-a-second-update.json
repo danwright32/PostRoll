@@ -1,0 +1,8 @@
+{
+  "name": "a-second-press-does-not-start-a-second-update",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "guard updateStartedAt == nil else { return }",
+  "replace": "if false { return }",
+  "test": "PostRollTests/AppUpdateStateTests/testASecondPressDoesNotStartASecondBuild",
+  "breaks": "pressing Update twice starts two builds into one derived data folder, two installs racing for /Applications/PostRoll.app, and two runs writing one progress file. A button can always be pressed twice, and until the installs collided the second press would look identical to the first (#686)"
+}

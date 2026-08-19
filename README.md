@@ -69,6 +69,15 @@ That runs `PostRollApp/build-install.sh`, which is the only supported way to
 install: it clears extended attributes, signs with the stable identity, and
 refuses to finish if the installed bundle fails signature verification.
 
+After the first install you do not need this command again. When the running
+app is older than the code, PostRoll says so on launch and offers to update
+itself: the button runs `PostRollApp/update-postroll.sh`, which pulls if the
+checkout is behind and then runs the same `build-install.sh`, so the tests
+still gate the install. It runs as a separate process because installing quits
+PostRoll and reopens it, and it records how it ended in
+`app-update-outcome.json` under the data root, which is how a failure that
+happened after the app was quit is reported at the next launch.
+
 **6. Point git at the repo's own hooks, once per clone.**
 
 ```

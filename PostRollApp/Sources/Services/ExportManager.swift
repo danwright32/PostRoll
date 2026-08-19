@@ -47,6 +47,10 @@ final class ExportManager {
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isExporting(_ id: Event.ID) -> Bool { tracker.isActive(id) }
 
+    /// Whether anything at all is exporting, asked before the app updates
+    /// itself: installing quits PostRoll (#686).
+    var hasWorkInFlight: Bool { tracker.hasWorkInFlight }
+
     /// The done screen is up and the media step is still running behind it.
     /// Distinct from `isExporting` so the sidebar can say what is actually
     /// happening without blocking Done (#182).

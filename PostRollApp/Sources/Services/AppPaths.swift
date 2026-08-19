@@ -291,6 +291,35 @@ enum AppPaths {
         var previewDir: URL { root.appendingPathComponent("preview") }
         var logsDir: URL { root.appendingPathComponent("logs") }
         var progressDir: URL { root.appendingPathComponent("progress") }
+
+        /// Where an in-flight app update reports the step it is on (#686).
+        ///
+        /// The same shape as a generation's step file, so the sheet shows it
+        /// through the one progress indicator this app has rather than a second
+        /// one grown beside it. Not keyed by event: there is one PostRoll and
+        /// only ever one update of it.
+        var updateProgressFile: URL {
+            progressDir.appendingPathComponent("app-update.json")
+        }
+
+        /// Where an app update records how it ended.
+        ///
+        /// Separate from the step file because they answer different questions
+        /// and are read at different times: the step file says where the work
+        /// is and is read on a timer while the app is open, this says how it
+        /// finished and is read at the next launch, which is usually the only
+        /// place a failure after the install step can still be seen (L148).
+        var updateOutcomeFile: URL {
+            progressDir.appendingPathComponent("app-update-outcome.json")
+        }
+
+        /// Everything the update said, for when the outcome's last lines are
+        /// not enough. Its own file rather than the shared postroll.log: a run
+        /// diagnosed from an unscoped tail of a shared log is how a UUID
+        /// containing "413" once turned a 401 into "photos too large" (#90).
+        var updateLogFile: URL {
+            logsDir.appendingPathComponent("app-update.log")
+        }
     }
 
     static var layout: Layout { Layout(root: root) }
