@@ -25,13 +25,38 @@ import SwiftUI
 /// real arrangement with its own content and measure the overlap. The
 /// assertion is then about what the window actually does, not about the shape
 /// of its source (L3).
+/// The narrowest the banner strip will agree to be. Its own type because a
+/// generic one cannot hold a static, and it is a value a test asserts.
+enum BottomBannerWidth {
+    static let narrowest: CGFloat = 700
+}
+
 struct BottomBanners<Banners: View>: ViewModifier {
     @ViewBuilder var banners: () -> Banners
 
+    /// The narrowest the banners will agree to be.
+    ///
+    /// This is what stops a banner from setting the window's minimum HEIGHT
+    /// (#687), and the mechanism is worth writing down because it is not
+    /// obvious. A banner's message carries `fixedSize(vertical:)` so it is
+    /// never clipped, which is right: a notice that gets cut off is one that
+    /// was never shipped (L76). But SwiftUI works out a window's minimum size
+    /// by asking the content how TALL it must be at its narrowest, and left
+    /// unconstrained that width was 353pt, where the message wraps into dozens
+    /// of lines. Measured in the running app: 3854pt of demanded minimum height
+    /// against a usable screen of 984, which is a window that cannot be made to
+    /// fit and cannot be dragged back.
+    ///
+    /// Every other banner in the app sits inside a scroll view, which correctly
+    /// reports a minimum of zero, so this strip is the only one that can do it.
+    ///
+    /// Just under the window's own floor, so the two never argue: the window
+    /// will not be narrower than 760 anyway, and asking the message to wrap at
+    /// 700 gives a height a window can hold.
     func body(content: Content) -> some View {
         VStack(spacing: 0) {
             content
-            banners()
+            banners().frame(minWidth: BottomBannerWidth.narrowest)
         }
     }
 }

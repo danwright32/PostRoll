@@ -1,0 +1,8 @@
+{
+  "name": "a-banner-cannot-set-the-windows-minimum-height",
+  "file": "PostRollApp/Sources/Views/BottomBanners.swift",
+  "find": "            banners().frame(minWidth: BottomBannerWidth.narrowest)",
+  "replace": "            banners()",
+  "test": "PostRollTests/BannerWindowMinimumTests/testTheBannerStripDoesNotDemandMoreHeightThanAScreenHolds",
+  "breaks": "the banner's message is asked how tall it must be at the narrowest width SwiftUI will consider, where it wraps into dozens of lines, and that becomes the window's minimum height. Measured in the running app at 3854pt against a usable screen of 984: a window that cannot be made to fit and that no drag can recover, because AppKit will not size a window under its minimum (#687)"
+}
