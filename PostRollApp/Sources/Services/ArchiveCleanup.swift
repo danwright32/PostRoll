@@ -210,39 +210,18 @@ enum ArchiveCleanup {
         return (previewRemoved, programsRemoved, removedPaths)
     }
 
-    /// Matches the Python slug in postroll/ai/generate_media.py so we hit the
-    /// exact folder generate_media created. Held to that by the shared fixture
-    /// rather than by this comment (#108).
+    /// Matches the Python folder name in postroll/ai/generate_media.py so we hit
+    /// the exact folder generate_media created. Held to that by the shared
+    /// fixture rather than by this comment (#108).
+    ///
+    /// Forwarded to `EventFolder` rather than spelled again here. It was spelled
+    /// three times, twice in this language with two different sluggers, and they
+    /// agreed, which is why nobody noticed there were three (#689).
     static func slug(event: Event) -> String {
-        slug(org: event.org, name: event.name, isoDate: event.isoDate)
+        EventFolder.name(for: event)
     }
 
-    /// The same rule from raw strings, so the parity fixture can exercise it
-    /// without building an Event around every vector.
-    static func slug(org: String, name: String, isoDate: String) -> String {
-        "\(slugify(org))_\(slugify(name))_\(isoDate)"
-    }
-
-    static func slugify(_ text: String) -> String {
-        var out: [Character] = []
-        var lastWasUnderscore = false
-        for scalar in text.lowercased().unicodeScalars {
-            let isAlphaNum =
-                (scalar.value >= 0x61 && scalar.value <= 0x7A) ||
-                (scalar.value >= 0x30 && scalar.value <= 0x39)
-            if isAlphaNum {
-                out.append(Character(scalar))
-                lastWasUnderscore = false
-            } else if !lastWasUnderscore {
-                out.append("_")
-                lastWasUnderscore = true
-            }
-        }
-        var s = String(out)
-        while s.hasPrefix("_") { s.removeFirst() }
-        while s.hasSuffix("_") { s.removeLast() }
-        return s
-    }
+    static func slugify(_ text: String) -> String { EventFolder.slugify(text) }
 
     private static func isInside(_ url: URL, parent: URL) -> Bool {
         let u = url.standardizedFileURL.path

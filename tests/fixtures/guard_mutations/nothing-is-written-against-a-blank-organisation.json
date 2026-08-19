@@ -1,0 +1,8 @@
+{
+  "name": "nothing-is-written-against-a-blank-organisation",
+  "file": "PostRollApp/Sources/Services/HandleBook.swift",
+  "find": "    func record(org: String, handles: String) {\n        let key = normalize(org)\n        guard !key.isEmpty else { return }",
+  "replace": "    func record(org: String, handles: String) {\n        let key = normalize(org)",
+  "test": "PostRollTests/OptionalOrganisationTests/testNothingIsWrittenAgainstABlankOrganisation",
+  "breaks": "handles typed while working on an event with no organisation are saved under a blank key, which is one bucket every such event shares. The read side refuses that key today, so nothing shows immediately, and the collision sits in the book waiting for the day either guard is relaxed (#689, L15)"
+}

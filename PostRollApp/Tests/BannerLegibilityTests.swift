@@ -333,7 +333,7 @@ final class BannerLegibilityTests: XCTestCase {
                     in: Event(name: "Spring Gala", org: "Ballet", venue: "City Center",
                               date: Date(), shootType: .fullShow)) ?? ""))),
             ("new event refusal, nothing filled in", AnyView(RefusalNote(
-                message: NewEventValidation.refusal(name: "", org: "") ?? ""))),
+                message: NewEventValidation.refusal(name: "") ?? ""))),
 
             // Two surfaces that shipped with nothing rendering them (#559).
             // Both had a source scan asserting the screen references the shared

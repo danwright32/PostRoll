@@ -1302,11 +1302,19 @@ private struct EventHandlesField: View {
                 .foregroundStyle(PaintedSurfaces.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HandleRow(
-                label: "Organization",
-                placeholder: "@\(orgName.lowercased().replacingOccurrences(of: " ", with: ""))",
-                text: $orgHandles
-            )
+            // Only when there is an organisation to hold handles (#689). An
+            // event can have none, and the row then showed a placeholder of a
+            // bare "@" over a field whose value the handle book refuses to
+            // store, because it is keyed by the organisation's name. A control
+            // that cannot do anything is worse than an absent one: it invites
+            // Dan to type something and then loses it (L109).
+            if !orgName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HandleRow(
+                    label: "Organization",
+                    placeholder: "@\(orgName.lowercased().replacingOccurrences(of: " ", with: ""))",
+                    text: $orgHandles
+                )
+            }
             HandleRow(
                 label: "Venue",
                 placeholder: "@\(venueName.lowercased().replacingOccurrences(of: " ", with: ""))",

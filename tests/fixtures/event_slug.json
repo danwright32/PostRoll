@@ -15,6 +15,15 @@
     "with a single underscore, strip leading and trailing underscores. The",
     "slug is then '<org>_<name>_<ISO date>'.",
     "",
+    "An event can have NO organisation (#689). The venue leads instead, and",
+    "when neither is there the name and the date stand alone rather than",
+    "carrying an empty leading segment. The fallback is keyed on the",
+    "organisation being BLANK, never on it slugging away to nothing: an org",
+    "in a non latin script already produces a leading underscore and those",
+    "folders exist on disk, so falling back for them would have Swift derive",
+    "a name for a folder Python created months ago, miss it, and leak it.",
+    "slug is then '<org>_<name>_<ISO date>'.",
+    "",
     "Every `slug` below was MEASURED by running Python's _slug, not written",
     "by hand, so the file cannot record a shape the real function does not",
     "produce.",
@@ -26,6 +35,7 @@
     {
       "_what": "an ordinary name",
       "org": "DCINY",
+      "venue": "Carnegie Hall",
       "name": "Perpetual Light",
       "date": "2026-04-04",
       "slug": "dciny_perpetual_light_2026-04-04"
@@ -33,6 +43,7 @@
     {
       "_what": "punctuation the org and name share",
       "org": "Home'r Bust!",
+      "venue": "The Town Hall",
       "name": "Home'r Bust!",
       "date": "2026-05-01",
       "slug": "home_r_bust_home_r_bust_2026-05-01"
@@ -40,6 +51,7 @@
     {
       "_what": "an accented letter, which is not a-z",
       "org": "Café Wha?",
+      "venue": "Kaufman Music Center",
       "name": "Vocal Colors",
       "date": "2026-06-12",
       "slug": "caf_wha_vocal_colors_2026-06-12"
@@ -47,6 +59,7 @@
     {
       "_what": "runs of separators collapse to one underscore",
       "org": "A  &  B",
+      "venue": "David Geffen Hall",
       "name": "Sing / Play",
       "date": "2026-01-31",
       "slug": "a_b_sing_play_2026-01-31"
@@ -54,6 +67,7 @@
     {
       "_what": "leading and trailing separators are stripped",
       "org": "  Leading",
+      "venue": "Merkin Hall",
       "name": "Trailing  ",
       "date": "2026-02-02",
       "slug": "leading_trailing_2026-02-02"
@@ -61,6 +75,7 @@
     {
       "_what": "a colon",
       "org": "DCINY",
+      "venue": "St Ann's Warehouse",
       "name": "Bach: St Matthew Passion",
       "date": "2026-03-03",
       "slug": "dciny_bach_st_matthew_passion_2026-03-03"
@@ -68,6 +83,7 @@
     {
       "_what": "German sharp s and umlauts",
       "org": "Grüße",
+      "venue": "Roulette",
       "name": "Straße",
       "date": "2026-07-07",
       "slug": "gr_e_stra_e_2026-07-07"
@@ -75,6 +91,7 @@
     {
       "_what": "a name with no latin letters at all, so the org slugs away to nothing",
       "org": "東京フィル",
+      "venue": "The Shed",
       "name": "Symphony No 5",
       "date": "2026-08-08",
       "slug": "_symphony_no_5_2026-08-08"
@@ -82,6 +99,7 @@
     {
       "_what": "digits survive",
       "org": "The 5th",
+      "venue": "Jazz at Lincoln Center",
       "name": "Beethoven 9",
       "date": "2026-09-09",
       "slug": "the_5th_beethoven_9_2026-09-09"
@@ -89,6 +107,7 @@
     {
       "_what": "an org made only of separators",
       "org": "---",
+      "venue": "Bargemusic",
       "name": "Untitled",
       "date": "2026-10-10",
       "slug": "_untitled_2026-10-10"
@@ -96,6 +115,7 @@
     {
       "_what": "an em dash inside the name",
       "org": "O'Brien & Sons",
+      "venue": "National Sawdust",
       "name": "Sing\u2014Play",
       "date": "2026-11-11",
       "slug": "o_brien_sons_sing_play_2026-11-11"
@@ -103,9 +123,42 @@
     {
       "_what": "whitespace other than spaces",
       "org": "Tab\tSeparated",
+      "venue": "Le Poisson Rouge",
       "name": "New\nLine",
       "date": "2026-12-12",
       "slug": "tab_separated_new_line_2026-12-12"
+    },
+    {
+      "_what": "no organisation, so the venue leads",
+      "org": "",
+      "venue": "Kaufman Music Center",
+      "name": "Hamlet",
+      "date": "2026-08-20",
+      "slug": "kaufman_music_center_hamlet_2026-08-20"
+    },
+    {
+      "_what": "no organisation and no venue, so the name and date stand alone",
+      "org": "",
+      "venue": "",
+      "name": "Twelfth Night",
+      "date": "2026-08-21",
+      "slug": "twelfth_night_2026-08-21"
+    },
+    {
+      "_what": "no organisation, and a venue that slugs away to nothing",
+      "org": "   ",
+      "venue": "!!!",
+      "name": "Uncle Vanya",
+      "date": "2026-08-22",
+      "slug": "uncle_vanya_2026-08-22"
+    },
+    {
+      "_what": "no organisation, and a venue sharing the event's words",
+      "org": "",
+      "venue": "The Town Hall",
+      "name": "The Town Hall Sessions",
+      "date": "2026-09-02",
+      "slug": "the_town_hall_the_town_hall_sessions_2026-09-02"
     }
   ]
 }

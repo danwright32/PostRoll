@@ -1,0 +1,8 @@
+{
+  "name": "a-blank-organisation-is-not-a-handle-book-key",
+  "file": "PostRollApp/Sources/Services/HandleBook.swift",
+  "find": "    func handles(forOrg org: String) -> String {\n        let key = normalize(org)\n        guard !key.isEmpty else { return \"\" }\n        return orgBook[key] ?? \"\"\n    }",
+  "replace": "    func handles(forOrg org: String) -> String { orgBook[normalize(org)] ?? \"\" }",
+  "test": "PostRollTests/OptionalOrganisationTests/testABlankKeyAlreadyInTheBookIsNeverRead",
+  "breaks": "every event with no organisation shares one handle book entry through the blank key, so handles saved while working on one play are prepended to the captions of every other event that has no organisation. That is not a memory, it is a collision that looks like one (#689, L15)"
+}

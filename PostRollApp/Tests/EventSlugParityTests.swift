@@ -20,6 +20,7 @@ final class EventSlugParityTests: XCTestCase {
         struct Vector: Decodable {
             let _what: String
             let org: String
+            let venue: String
             let name: String
             let date: String
             let slug: String
@@ -38,7 +39,8 @@ final class EventSlugParityTests: XCTestCase {
                                     "a gutted fixture would pass vacuously")
 
         for v in fixture.vectors {
-            XCTAssertEqual(ArchiveCleanup.slug(org: v.org, name: v.name, isoDate: v.date),
+            XCTAssertEqual(EventFolder.name(org: v.org, venue: v.venue,
+                                            name: v.name, isoDate: v.date),
                            v.slug,
                            "\(v._what): org \(v.org.debugDescription), "
                            + "name \(v.name.debugDescription)")
@@ -54,7 +56,49 @@ final class EventSlugParityTests: XCTestCase {
                           shootType: .fullShow)
         event.venueContext = ""
         XCTAssertEqual(ArchiveCleanup.slug(event: event),
-                       ArchiveCleanup.slug(org: event.org, name: event.name,
-                                           isoDate: event.isoDate))
+                       EventFolder.name(org: event.org, venue: event.venue,
+                                        name: event.name, isoDate: event.isoDate))
+    }
+
+    /// Every route to this name is the SAME name (#689).
+    ///
+    /// It was spelled three times, twice in this language with two different
+    /// sluggers, and they agreed, which is precisely why nobody noticed there
+    /// were three. The day one moved, the archive sweep would have stopped
+    /// finding the folder the export wrote.
+    func testTheExportFolderAndTheArchiveSweepAgreeOnTheName() {
+        let event = Event(name: "Sing / Play", org: "", venue: "Kaufman Center",
+                          date: Date(timeIntervalSince1970: 1_800_000_000),
+                          shootType: .fullShow)
+        XCTAssertEqual(ArchiveCleanup.slug(event: event),
+                       EventFolder.name(for: event),
+                       "the sweep looks for a folder the export does not write")
+        XCTAssertEqual(EventExporter.slug("Sing / Play"),
+                       EventFolder.slugify("Sing / Play"),
+                       "the exporter still slugs text its own way")
+    }
+
+    /// An organisation that is there keeps the name it has always had, even
+    /// when it slugs away to nothing (#689).
+    ///
+    /// The folders are on disk. An organisation in a non latin script already
+    /// produces a leading underscore, and falling back to the venue for it
+    /// would have this side derive a name for a folder Python created months
+    /// ago, miss it, and leak it forever.
+    func testAnOrganisationThatIsThereIsNeverReplacedByTheVenue() {
+        let built = EventFolder.name(org: "!!!", venue: "Roulette",
+                                     name: "Hamlet", isoDate: "2026-08-20")
+        XCTAssertEqual(built, "_hamlet_2026-08-20")
+        XCTAssertFalse(built.contains("roulette"))
+    }
+
+    /// And the other direction: nothing is owed a segment it does not have.
+    func testNoOrganisationNeverLeavesAnEmptyLeadingSegment() {
+        for venue in ["", "   ", "!!!"] {
+            let built = EventFolder.name(org: "", venue: venue, name: "Hamlet",
+                                         isoDate: "2026-08-20")
+            XCTAssertEqual(built, "hamlet_2026-08-20",
+                           "a venue of \(venue.debugDescription) produced \(built)")
+        }
     }
 }

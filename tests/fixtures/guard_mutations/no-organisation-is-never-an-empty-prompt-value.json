@@ -1,0 +1,8 @@
+{
+  "name": "no-organisation-is-never-an-empty-prompt-value",
+  "file": "postroll/ai/org_prompt.py",
+  "find": "    if org.strip():\n        return f\"\\n- Organization: {org}{note}\"",
+  "replace": "    if True:\n        return f\"\\n- Organization: {org}{note}\"",
+  "test": "tests/test_optional_organisation.py::test_the_built_prompt_never_says_organization_with_nothing_after_it",
+  "breaks": "the caption and blog prompts go back to carrying an Organization line with nothing after it for an event that has none, and a model asked about a value that is not there fills the gap itself. An invented organisation goes out on a real post reading as a fact, which is worse than an omission, because an omission at least reads as missing (#689, L161)"
+}

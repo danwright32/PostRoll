@@ -14,7 +14,7 @@ struct NewEventSheet: View {
     /// Why this cannot be created yet, from the same predicate that disables the
     /// button, so a greyed control can never sit beside nothing (#402).
     private var refusal: String? {
-        NewEventValidation.refusal(name: name, org: org)
+        NewEventValidation.refusal(name: name)
     }
 
     private var isValid: Bool { refusal == nil }
@@ -40,7 +40,11 @@ struct NewEventSheet: View {
                         VStack(alignment: .leading, spacing: Spacing.sm) {
                             BrandSectionLabel("Event Details")
                             BrandTextField("Event name", text: $name)
-                            BrandTextField("Organization", text: $org)
+                            // Named as optional in the field itself rather
+                            // than in a hint beside it, so the one place Dan
+                            // looks while filling the form is the place that
+                            // says so (#689).
+                            BrandTextField("Organization (optional)", text: $org)
                             BrandTextField("Venue (optional)", text: $venue)
                             BrandTextField("Specific hall/room (optional, for blog context)", text: $venueContext)
 

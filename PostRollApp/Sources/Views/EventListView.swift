@@ -322,11 +322,18 @@ struct EventRow: View {
             }
 
             HStack(spacing: 3) {
-                Text(event.org)
-                // Decoration between two facts, so it is taken out of the
-                // accessibility tree rather than read out as "middle dot"
-                // between every row's organisation and date (#538).
-                Text("·").accessibilityHidden(true)
+                // The organisation when there is one, the venue when there is
+                // not, and nothing at all when there is neither (#689). An
+                // event with no organisation used to print a blank here with a
+                // separator still beside it, which reads as a bug rather than
+                // as an absence.
+                if let credit = EventCredit.leading(org: event.org, venue: event.venue) {
+                    Text(credit)
+                    // Decoration between two facts, so it is taken out of the
+                    // accessibility tree rather than read out as "middle dot"
+                    // between every row's organisation and date (#538).
+                    Text("·").accessibilityHidden(true)
+                }
                 Text(event.displayDate)
             }
             .font(.light(10))
@@ -369,7 +376,10 @@ struct EventRow: View {
         // Collapse the three visual sub-rows into one VoiceOver stop with a
         // natural spoken label, avoiding the "·" separator and step-number prefix.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(event.name), \(event.org), \(event.displayDate), \(event.shootType.rawValue), stage \(event.stage.rawValue)")
+        .accessibilityLabel(EventCredit.spokenRow(
+            name: event.name, org: event.org, venue: event.venue,
+            date: event.displayDate, shootType: event.shootType.rawValue,
+            stage: event.stage.rawValue))
         .onChange(of: isRenaming) { _, renaming in
             if renaming { renameFocused = true }
         }

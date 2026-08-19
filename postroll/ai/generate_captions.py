@@ -66,6 +66,7 @@ from .caption_credits import (
     rewrite_lost_a_credit,
 )
 from .caption_quality import problems_in, REWRITE_PROMPT
+from . import org_prompt
 from .performer_hashtags import ensure_brand_hashtag, strip_performer_hashtags
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -85,8 +86,7 @@ individual frame. The alt text is per-photo, but the caption is one
 shared post-level caption.
 
 Event details:
-- Event name: {event}
-- Organization: {org}
+- Event name: {event}{org_line}
 - Venue: {venue}{venue_context_line}
 - Date: {date}
 - Day of week posting: {day}
@@ -205,7 +205,7 @@ list in the brand voice doc above.
 These are targets for the BODY only, excluding the credit stanza.
 
 **Stage 4 — hashtags.** 6–12 hashtags. Required: #dwphotony, venue,
-org/show, composer/playwright/band, genre. Do NOT add a hashtag for a
+show, composer/playwright/band, genre. Do NOT add a hashtag for a
 performer, cast member, conductor or choreographer unless that person
 is genuinely famous (a household name or a major figure in their
 field); credit everyone else inline in the caption body instead. Plus
@@ -234,7 +234,7 @@ read by the check that removes ordinary performers' name tags.
 Hashtag rules (re-stated for emphasis):
 - ALWAYS include #dwphotony.
 - Include a venue hashtag derived from "{venue}".
-- Include an organization hashtag derived from "{org}".
+{org_hashtag_rule}
 - Performer, cast, conductor and choreographer hashtags ONLY when the
   person is genuinely famous (a household name or a major figure in
   their field), so the tag actually aids discovery. Do not turn
@@ -639,6 +639,20 @@ def _alt_text_instruction_for(post_type: str) -> str:
     return ALT_TEXT_INSTRUCTION.get(post_type, DEFAULT_ALT_TEXT_INSTRUCTION)
 
 
+def org_prompt_lines(org: str) -> tuple[str, str]:
+    """What this prompt says about the organisation: the detail line, and the
+    hashtag rule (#689).
+
+    Both come from `org_prompt`, which the blog prompt uses too: the same two
+    branches written in two files would drift, and the one that drifts is the
+    one nobody is looking at.
+
+    Returned as a pair rather than formatted in place so both cases can be read
+    and asserted without running a caption (L151).
+    """
+    return (org_prompt.detail_line(org), org_prompt.hashtag_rule(org))
+
+
 def generate_caption(
     *,
     event: str,
@@ -783,10 +797,12 @@ def generate_caption(
         )
 
         # === Pass 1: generate the draft ===
+        org_line, org_hashtag_rule = org_prompt_lines(org)
         prompt = PROMPT_TEMPLATE.format(
             brand_voice=brand_voice_text,
             event=event,
-            org=org,
+            org_line=org_line,
+            org_hashtag_rule=org_hashtag_rule,
             venue=venue,
             venue_context_line=venue_context_line,
             date=date,
@@ -1113,7 +1129,10 @@ def format_for_post(result: dict[str, Any]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate a caption for one post")
     parser.add_argument("--event", required=True, help="Event name")
-    parser.add_argument("--org", required=True, help="Organization")
+    # Optional: an event can have no organisation (#689). Defaulting to empty
+    # rather than refusing, because the caption pipeline's job then is to say
+    # nothing about one rather than to stop.
+    parser.add_argument("--org", default="", help="Organization (may be empty)")
     parser.add_argument("--venue", required=True, help="Venue")
     parser.add_argument("--date", required=True, help="Event date (YYYY-MM-DD)")
     parser.add_argument(

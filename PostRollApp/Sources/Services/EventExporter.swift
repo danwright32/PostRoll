@@ -82,7 +82,10 @@ struct EventExporter {
             }
         }
 
-        let folderName = "\(slug(event.org))_\(slug(event.name))_\(event.isoDate)"
+        // The same rule the archive sweep uses to find this folder again, and
+        // the same one Python uses to make the preview folder. Three spellings
+        // of it agreed until the day one changed (#689).
+        let folderName = EventFolder.name(for: event)
         let destination = root.appendingPathComponent(folderName)
 
         let result = event.weekResult
@@ -266,13 +269,7 @@ struct EventExporter {
 
     // MARK: - Slug
 
-    static func slug(_ text: String) -> String {
-        var result = text.lowercased()
-        result = result.replacingOccurrences(
-            of: "[^a-z0-9]+",
-            with: "_",
-            options: .regularExpression
-        )
-        return result.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-    }
+    /// Kept as a name because the program PDF file name is built from it, but
+    /// no longer a second implementation of the rule (#689).
+    static func slug(_ text: String) -> String { EventFolder.slugify(text) }
 }
