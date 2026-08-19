@@ -124,4 +124,126 @@ final class LongWorkOwnershipTests: XCTestCase {
         """
         XCTAssertFalse(LongWorkOwnershipTests.holdsLongWork(innocent))
     }
+
+    // MARK: - Nor the FAILURE of that work (#721)
+    //
+    // The in flight flag was only half of it. `CaptionReviewView` handed every
+    // long run's progress to a manager in #718 and kept writing their failure
+    // messages into one `@State` string of its own: five independent actions
+    // sharing one status field, so whichever failed last erased the reason
+    // before it (L53), and a run that failed after Dan had gone to another
+    // event left nothing behind at all, because the run survived the remount
+    // and its message did not (L148).
+
+    /// The names of the view's own error state, which a long run must not write.
+    private static func ownedErrorNames(_ text: String) -> [String] {
+        let pattern = #"@State\s+(private\s+)?var\s+(\w*([eE]rror|[fF]ailure)\w*)"#
+        var names: [String] = []
+        var rest = Substring(text)
+        while let found = rest.range(of: pattern, options: .regularExpression) {
+            let declaration = rest[found]
+            if let name = declaration.split(separator: " ").last {
+                names.append(String(name))
+            }
+            rest = rest[found.upperBound...]
+        }
+        return names
+    }
+
+    /// The bodies of every `Task {` in `text`, brace balanced.
+    private static func taskBodies(_ text: String) -> [String] {
+        var bodies: [String] = []
+        var search = text.startIndex
+        while let start = text.range(of: "Task {", range: search..<text.endIndex) {
+            var depth = 0
+            var i = start.lowerBound
+            var end: String.Index? = nil
+            while i < text.endIndex {
+                if text[i] == "{" { depth += 1 }
+                if text[i] == "}" {
+                    depth -= 1
+                    if depth == 0 { end = text.index(after: i); break }
+                }
+                i = text.index(after: i)
+            }
+            bodies.append(String(text[start.lowerBound..<(end ?? text.endIndex)]))
+            search = start.upperBound
+        }
+        return bodies
+    }
+
+    /// The view's own error fields that a call across to Python writes into.
+    ///
+    /// Scoped to the Task rather than the file, because the SHORT failures on
+    /// these screens legitimately stay on the view: a file that could not be
+    /// copied is over before the next redraw. What must not be view state is
+    /// the outcome of a run that outlives the screen (L53, L148).
+    static func failuresOfLongWork(_ text: String) -> [String] {
+        let owned = Set(ownedErrorNames(text))
+        guard !owned.isEmpty else { return [] }
+        var offenders: Set<String> = []
+        for body in taskBodies(text) where body.contains("PythonBridge.shared.") {
+            for name in owned where body.range(
+                of: "\\b" + name + #"\s*="#, options: .regularExpression) != nil {
+                offenders.insert(name)
+            }
+        }
+        return offenders.sorted()
+    }
+
+    func testNoScreenKeepsTheFailureOfWorkThatOutlivesIt() throws {
+        var offenders: [String] = []
+        for url in try Self.viewSources() {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            let found = Self.failuresOfLongWork(text)
+            guard !found.isEmpty else { continue }
+            offenders.append("\(url.lastPathComponent): \(found.joined(separator: ", "))")
+        }
+
+        XCTAssertTrue(offenders.isEmpty, """
+            These screens write the failure of a call that goes across to Python \
+            into their own state: \(offenders.joined(separator: "; ")).
+
+            That state dies with the screen while the run does not, so a failure \
+            arriving after an event switch leaves nothing behind, and several \
+            actions sharing one field erase each other's reasons. Keep the \
+            outcome on the manager that owns the run, the way \
+            PreviewGraphicsManager.failDayRegen and CaptionWorkManager.Outcome do.
+            """)
+    }
+
+    func testTheFailureScannerCanStillSeeOne() {
+        // The control. This scanner reported one offender when it was written
+        // and nothing after the fix, and those two look identical if it has
+        // simply stopped matching (L98, L1).
+        let offender = """
+        struct SomeScreen: View {
+            @State private var swapError: String?
+            func go() {
+                Task {
+                    do { _ = try await PythonBridge.shared.runSwapReelAudio(event: e, day: d) }
+                    catch { swapError = error.localizedDescription }
+                }
+            }
+        }
+        """
+        XCTAssertEqual(LongWorkOwnershipTests.failuresOfLongWork(offender), ["swapError"])
+    }
+
+    func testAShortFailureOnTheViewIsNoneOfItsBusiness() {
+        // The other control, and the reason the scan is scoped to the Task: a
+        // file that could not be copied is a local failure, over before the
+        // next redraw, and a rule that moved those onto a manager would be
+        // unusable and would be turned off (L104).
+        let innocent = """
+        struct SomeScreen: View {
+            @State private var pickError: String?
+            func pick(_ url: URL) {
+                if let message = ImportedPicks.copy([url]).failureMessage { pickError = message }
+                Task { _ = try? await PythonBridge.shared.runPreviewGeneration(event: e) }
+            }
+        }
+        """
+        XCTAssertEqual(LongWorkOwnershipTests.failuresOfLongWork(innocent), [])
+    }
 }

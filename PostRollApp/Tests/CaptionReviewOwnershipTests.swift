@@ -170,6 +170,149 @@ final class CaptionReviewOwnershipTests: XCTestCase {
         XCTAssertNil(manager.thursdayEditorURL(id))
     }
 
+    // MARK: - A short action's failure outlives the screen too (#721)
+    //
+    // Every one of these ran through `regenerateError`, one string on the view,
+    // written from the audio swap, the cover rebuild, the Friday reel edit and
+    // the per-day rebuild alike. Whichever failed last erased the reason before
+    // it (L53), and the runs owned here already outlive the screen, so an audio
+    // swap that failed while Dan was on another event left nothing at all
+    // (L148).
+
+    @MainActor
+    func testAFailedDayRebuildKeepsItsReasonAndReleasesTheSlot() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        _ = manager.beginDayRegen(.tuesday, for: id)
+
+        manager.failDayRegen(.tuesday, for: id, reason: "Tuesday audio swap failed: no track.")
+
+        XCTAssertEqual(manager.dayFailure(.tuesday, for: id),
+                       "Tuesday audio swap failed: no track.")
+        XCTAssertFalse(manager.regeneratingDays(id).contains(.tuesday),
+                       "the slot is still held, so nothing can rebuild that day again")
+    }
+
+    @MainActor
+    func testTwoDaysFailuresDoNotEraseEachOther() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        defer { DayName.allCases.forEach { manager.clearDayFailure($0, for: id) } }
+
+        manager.failDayRegen(.tuesday, for: id, reason: "Tuesday audio swap failed.")
+        manager.failDayRegen(.thursday, for: id, reason: "Thursday regeneration failed.")
+
+        XCTAssertEqual(manager.dayFailure(.tuesday, for: id), "Tuesday audio swap failed.",
+                       "the second failure erased the first, which is the whole defect")
+        XCTAssertEqual(manager.dayFailure(.thursday, for: id), "Thursday regeneration failed.")
+    }
+
+    @MainActor
+    func testACoverFailureAndADayFailureOnOneDayAreKeptApart() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        defer {
+            manager.clearDayFailure(.friday, for: id)
+            manager.clearCoverFailure(.friday, for: id)
+        }
+
+        manager.failDayRegen(.friday, for: id, reason: "Friday reel edit failed.")
+        manager.failCoverRegen(.friday, for: id, reason: "Friday cover regeneration failed.")
+
+        // Two different runs on one day, with two different remedies. Reporting
+        // the cover's failure as the reel's would send Dan to rebuild the wrong
+        // thing (L11).
+        XCTAssertEqual(manager.dayFailure(.friday, for: id), "Friday reel edit failed.")
+        XCTAssertEqual(manager.coverFailure(.friday, for: id),
+                       "Friday cover regeneration failed.")
+    }
+
+    @MainActor
+    func testRetryingADayClearsItsOwnFailureAndNobodyElses() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        defer {
+            manager.endDayRegen(.tuesday, for: id)
+            manager.clearDayFailure(.thursday, for: id)
+            manager.clearCoverFailure(.tuesday, for: id)
+        }
+        manager.failDayRegen(.tuesday, for: id, reason: "Tuesday regeneration failed.")
+        manager.failDayRegen(.thursday, for: id, reason: "Thursday regeneration failed.")
+        manager.failCoverRegen(.tuesday, for: id, reason: "Tuesday cover failed.")
+
+        XCTAssertTrue(manager.beginDayRegen(.tuesday, for: id))
+
+        // A stored error that outlives the run it was about reads as a failure
+        // happening now.
+        XCTAssertNil(manager.dayFailure(.tuesday, for: id))
+        XCTAssertEqual(manager.dayFailure(.thursday, for: id), "Thursday regeneration failed.",
+                       "retrying one day wiped another day's reason")
+        XCTAssertEqual(manager.coverFailure(.tuesday, for: id), "Tuesday cover failed.",
+                       "rebuilding the reel cleared the cover's reason, which is "
+                       + "still true and still needs acting on")
+    }
+
+    @MainActor
+    func testRetryingACoverClearsOnlyTheCoversFailure() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        defer {
+            manager.endCoverRegen(.friday, for: id)
+            manager.clearDayFailure(.friday, for: id)
+        }
+        manager.failDayRegen(.friday, for: id, reason: "Friday reel edit failed.")
+        manager.failCoverRegen(.friday, for: id, reason: "Friday cover failed.")
+
+        XCTAssertTrue(manager.beginCoverRegen(.friday, for: id))
+
+        XCTAssertNil(manager.coverFailure(.friday, for: id))
+        XCTAssertEqual(manager.dayFailure(.friday, for: id), "Friday reel edit failed.")
+    }
+
+    @MainActor
+    func testOneEventsFailureIsNotAnothers() {
+        let manager = PreviewGraphicsManager.shared
+        let a = UUID(), b = UUID()
+        defer { manager.clearDayFailure(.tuesday, for: a) }
+
+        manager.failDayRegen(.tuesday, for: a, reason: "Tuesday audio swap failed.")
+
+        XCTAssertNil(manager.dayFailure(.tuesday, for: b))
+        XCTAssertTrue(manager.dayFailures(for: b).isEmpty)
+    }
+
+    @MainActor
+    func testTheFailuresAreListedInTheWeeksOwnOrder() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        defer { DayName.allCases.forEach { manager.clearDayFailure($0, for: id) } }
+
+        // Recorded out of order on purpose: a dictionary's order is not stable,
+        // and a list that reshuffles between redraws cannot be told from one
+        // that changed.
+        manager.failDayRegen(.thursday, for: id, reason: "Thursday failed.")
+        manager.failDayRegen(.tuesday, for: id, reason: "Tuesday failed.")
+
+        XCTAssertEqual(manager.dayFailures(for: id),
+                       [.init(day: .tuesday, reason: "Tuesday failed."),
+                        .init(day: .thursday, reason: "Thursday failed.")])
+    }
+
+    @MainActor
+    func testDismissingOneFailureLeavesTheRest() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        defer { manager.clearDayFailure(.thursday, for: id) }
+        manager.failDayRegen(.tuesday, for: id, reason: "Tuesday failed.")
+        manager.failDayRegen(.thursday, for: id, reason: "Thursday failed.")
+
+        manager.clearDayFailure(.tuesday, for: id)
+
+        XCTAssertNil(manager.dayFailure(.tuesday, for: id))
+        XCTAssertEqual(manager.dayFailures(for: id),
+                       [.init(day: .thursday, reason: "Thursday failed.")])
+    }
+
     @MainActor
     func testRetryingClearsTheFailureSoTheCardStopsShowingIt() {
         let manager = PreviewGraphicsManager.shared

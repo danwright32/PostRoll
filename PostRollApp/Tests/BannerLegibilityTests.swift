@@ -282,7 +282,16 @@ final class BannerLegibilityTests: XCTestCase {
                 },
                 mediaWarnings: [CaptionReviewDayNotice(
                     id: "tuesday",
-                    message: "Tuesday: the chosen black and white photo has moved")]))),
+                    message: "Tuesday: the chosen black and white photo has moved")],
+                // The per-slot rebuild failures (#721). Drawn here so the rows
+                // that now outlive the screen are measured like every other
+                // banner, including their Dismiss.
+                dayRebuildFailures: [CaptionReviewDayNotice(
+                    id: "thursday",
+                    message: "Thursday audio swap failed: the track could not be fetched")],
+                coverRebuildFailures: [CaptionReviewDayNotice(
+                    id: "friday",
+                    message: "Friday cover regeneration failed: the chosen frame has moved")]))),
 
             // OCR review's notices and the bar that ends it (#396).
             ("ocr notices, all five", AnyView(OCRReviewNotices(

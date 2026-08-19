@@ -20,16 +20,18 @@ struct CaptionReviewView: View {
     /// does not recompute on every redraw.
     @State private var suggestionsAsOf = Date()
     @State private var showRegenerateConfirm = false
-    /// Whatever the SHORT actions on this screen last failed at: an audio swap,
-    /// a cover rebuild, a photo import. Still view state, because each is
-    /// seconds and none outlives a glance.
+    /// What the last PICK on this screen refused: a file that would not copy
+    /// into app storage, or a photo selection too small to build a collage
+    /// from. View state, and rightly: each is decided synchronously, before the
+    /// next redraw, and none of it outlives a glance.
     ///
-    /// The whole-week regeneration is NOT one of them and no longer writes
-    /// here. It is three to six minutes of paid Claude output whose two early
-    /// endings hand back a banner saying which days survived (#262), and that
-    /// banner has to be readable after Dan has been to another event and back.
-    /// It lives on `captionWork` (#718).
-    @State private var regenerateError: String?
+    /// Nothing that goes across to Python writes here any more. Those runs are
+    /// owned by `captionWork` (#718) and `graphics` (#721), because they outlive
+    /// this screen, and so must whatever they have to say about a failure: five
+    /// of them shared one field here, so whichever failed last erased the
+    /// reason before it, and one that failed after an event switch left nothing
+    /// at all (L53, L148).
+    @State private var pickError: String?
 
     /// Owns the whole-week regeneration, so neither the run nor what it has to
     /// say about a halt dies with this screen (#718).
@@ -42,7 +44,23 @@ struct CaptionReviewView: View {
     /// failure. One row on screen, and the run's own outcome wins: it is the
     /// one that costs money to rediscover.
     private var noticeToShow: String? {
-        captionWork.outcome(for: event.id, .regenerateWeek)?.failure ?? regenerateError
+        captionWork.outcome(for: event.id, .regenerateWeek)?.failure ?? pickError
+    }
+
+    /// What the per-day rebuilds and cover rebuilds have left to say, each on
+    /// its own row so none can erase another (#721). Read from the manager that
+    /// owns those runs, so a failure that arrived while Dan was elsewhere is
+    /// still here when he comes back.
+    private var dayRebuildNotices: [CaptionReviewDayNotice] {
+        graphics.dayFailures(for: event.id).map {
+            CaptionReviewDayNotice(id: $0.day.rawValue, message: $0.reason)
+        }
+    }
+
+    private var coverRebuildNotices: [CaptionReviewDayNotice] {
+        graphics.coverFailures(for: event.id).map {
+            CaptionReviewDayNotice(id: $0.day.rawValue, message: $0.reason)
+        }
     }
 
     enum ReviewSection: Equatable {
@@ -241,7 +259,8 @@ struct CaptionReviewView: View {
                             onRecutFridayWithAI: day == .friday ? { recutFridayWithAI() } : nil,
                             onToggleFridayTitleCard: day == .friday ? { toggleFridayTitleCard() } : nil,
                             fridayRegenStartedAt: day == .friday ? graphics.dayStartedAt(.friday, for: event.id) : nil,
-                            fridayRegenerateError: day == .friday ? regenerateError : nil,
+                            fridayRegenerateError: day == .friday
+                                ? graphics.dayFailure(.friday, for: event.id) : nil,
                             onSkipFridayClips: day == .friday ? { skipFridayClipsKeepStoryOnly() } : nil,
                             onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
                             onChooseLayout: isCollageDay(day) ? { layoutGalleryTarget = GalleryTarget(day: day) } : nil,
@@ -307,7 +326,7 @@ struct CaptionReviewView: View {
                                     case .failure(let error):
                                         // Refuse rather than regenerate off the
                                         // external path, and say so (#179).
-                                        regenerateError = ImportFailureText.message([error])
+                                        pickError = ImportFailureText.message([error])
                                     }
                                 }
                             } : nil
@@ -389,6 +408,14 @@ struct CaptionReviewView: View {
                             CaptionReviewDayNotice(id: day.rawValue,
                                                    message: "\(day.displayName): \($0)")
                         }
+                    },
+                    dayRebuildFailures: dayRebuildNotices,
+                    coverRebuildFailures: coverRebuildNotices,
+                    onDismissDayFailure: { day in
+                        graphics.clearDayFailure(day, for: event.id)
+                    },
+                    onDismissCoverFailure: { day in
+                        graphics.clearCoverFailure(day, for: event.id)
                     }
                 )
                 .padding(.horizontal, Spacing.xl)
@@ -793,7 +820,6 @@ struct CaptionReviewView: View {
         appState.updateEvent(cleared)
 
         graphics.beginDayRegen(day, for: event.id)
-        regenerateError = nil
         Task {
             do {
                 let swapped = try await PythonBridge.shared.runSwapReelAudio(event: liveEvent, day: day)
@@ -813,7 +839,6 @@ struct CaptionReviewView: View {
                 }
             } catch {
                 await MainActor.run {
-                    graphics.endDayRegen(day, for: event.id)
                     // Put back the uploaded track this swap cleared. Without
                     // it a failed fetch left the event worse than it found it:
                     // the next retry fetched Jamendo instead of using Dan's own
@@ -824,7 +849,10 @@ struct CaptionReviewView: View {
                         appState.updateEvent(
                             ReelAudioSwap.restoringAudio(previousAudio, in: liveNow, day: day))
                     }
-                    regenerateError = "\(day.displayName) audio swap failed: \(error.localizedDescription)"
+                    graphics.failDayRegen(
+                        day, for: event.id,
+                        reason: "\(day.displayName) audio swap failed: "
+                              + "\(error.localizedDescription)")
                 }
             }
         }
@@ -850,14 +878,14 @@ struct CaptionReviewView: View {
     /// failed copy is what made that invisible (#179).
     private func storedPick(_ url: URL) -> URL? {
         let outcome = ImportedPicks.copy([url])
-        if let message = outcome.failureMessage { regenerateError = message }
+        if let message = outcome.failureMessage { pickError = message }
         return outcome.stored.first
     }
 
     /// Batch form of `storedPick`: keeps what copied, reports what didn't.
     private func storedPicks(_ urls: [URL]) -> [URL] {
         let outcome = ImportedPicks.copy(urls)
-        if let message = outcome.failureMessage { regenerateError = message }
+        if let message = outcome.failureMessage { pickError = message }
         return outcome.stored
     }
 
@@ -875,7 +903,7 @@ struct CaptionReviewView: View {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try FileManager.default.copyItem(at: url, to: dest)
         } catch {
-            regenerateError = "Couldn't copy the audio file: \(error.localizedDescription)"
+            pickError = "Couldn't copy the audio file: \(error.localizedDescription)"
             return
         }
 
@@ -887,7 +915,6 @@ struct CaptionReviewView: View {
         appState.updateEvent(ev)
 
         graphics.beginDayRegen(day, for: event.id)
-        regenerateError = nil
         Task {
             do {
                 let swapped = try await PythonBridge.shared.runSwapReelAudioWithFile(
@@ -906,8 +933,10 @@ struct CaptionReviewView: View {
                 }
             } catch {
                 await MainActor.run {
-                    graphics.endDayRegen(day, for: event.id)
-                    regenerateError = "\(day.displayName) audio upload failed: \(error.localizedDescription)"
+                    graphics.failDayRegen(
+                        day, for: event.id,
+                        reason: "\(day.displayName) audio upload failed: "
+                              + "\(error.localizedDescription)")
                 }
             }
         }
@@ -1022,7 +1051,7 @@ struct CaptionReviewView: View {
             case .failure(let error):  failures.append(error)
             }
         }
-        if !failures.isEmpty { regenerateError = ImportFailureText.message(failures) }
+        if !failures.isEmpty { pickError = ImportFailureText.message(failures) }
         // Every pick failed to copy: nothing was imported, so don't kick off a
         // render that would produce the same reel as before (#179).
         guard !copied.isEmpty else { return }
@@ -1045,17 +1074,18 @@ struct CaptionReviewView: View {
         appState.updateEvent(ev)
 
         graphics.beginDayRegen(.friday, for: event.id)
-        regenerateError = nil
         Task {
             do {
                 let liveEvent = appState.events.first(where: { $0.id == event.id }) ?? ev
                 let reelPath = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
                 await MainActor.run {
-                    graphics.endDayRegen(.friday, for: event.id)
                     guard let reelPath else {
-                        regenerateError = "Friday reel edit couldn't be applied: no reel to update"
+                        graphics.failDayRegen(
+                            .friday, for: event.id,
+                            reason: "Friday reel edit couldn't be applied: no reel to update")
                         return
                     }
+                    graphics.endDayRegen(.friday, for: event.id)
                     var current = appState.events.first(where: { $0.id == event.id }) ?? liveEvent
                     var paths = current.previewMediaPaths[DayName.friday.rawValue] ?? [:]
                     paths["reel"] = reelPath
@@ -1065,8 +1095,9 @@ struct CaptionReviewView: View {
                 }
             } catch {
                 await MainActor.run {
-                    graphics.endDayRegen(.friday, for: event.id)
-                    regenerateError = "Friday reel edit failed: \(error.localizedDescription)"
+                    graphics.failDayRegen(
+                        .friday, for: event.id,
+                        reason: "Friday reel edit failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -1099,7 +1130,7 @@ struct CaptionReviewView: View {
         case .failure(let error):
             // Refuse the swap rather than pointing the override at a file
             // outside app storage (#179).
-            regenerateError = ImportFailureText.message([error])
+            pickError = ImportFailureText.message([error])
             return
         }
 
@@ -1130,7 +1161,9 @@ struct CaptionReviewView: View {
             ev.days[DayName.friday.rawValue] = fri.clearingFridayClips()
         }
         appState.updateEvent(ev)
-        regenerateError = nil
+        // The banner this answers is Friday's own rebuild failure, which now
+        // lives with the run that produced it (#721).
+        graphics.clearDayFailure(.friday, for: event.id)
     }
 
     /// Replace the entire Wednesday collage photo set from the review screen.
@@ -1150,7 +1183,7 @@ struct CaptionReviewView: View {
         if let message = CollagePhotoSelection.validationError(
             selectedCount: panel.urls.count, dayDisplayName: day.displayName
         ) {
-            regenerateError = message
+            pickError = message
             return
         }
 
@@ -1261,7 +1294,6 @@ struct CaptionReviewView: View {
         }
 
         graphics.beginDayRegen(day, for: event.id)
-        regenerateError = nil
         Task {
             // For Thursday, try to adopt a speculative pre-render that was kicked
             // off when the user edited. `newLayout` randomizes the seed, so there's
@@ -1293,11 +1325,14 @@ struct CaptionReviewView: View {
             }
 
             await MainActor.run {
-                graphics.endDayRegen(day, for: event.id)
                 switch outcome {
                 case .failure(let error):
-                    regenerateError = "\(day.displayName) regeneration failed: \(error.localizedDescription)"
+                    graphics.failDayRegen(
+                        day, for: event.id,
+                        reason: "\(day.displayName) regeneration failed: "
+                              + "\(error.localizedDescription)")
                 case .success(let result):
+                    graphics.endDayRegen(day, for: event.id)
                     applyRegenResult(result, day: day)
                 }
             }
@@ -1315,7 +1350,8 @@ struct CaptionReviewView: View {
                            warning: result.warnings[day.rawValue])
 
         if let pyError = result.errors[day.rawValue] {
-            regenerateError = "\(day.displayName) regeneration failed: \(pyError)"
+            graphics.failDayRegen(day, for: event.id,
+                                  reason: "\(day.displayName) regeneration failed: \(pyError)")
         } else if let dayPaths = result.paths[day.rawValue], !dayPaths.isEmpty {
             // Read the CURRENT event — not self.event which may be stale
             // (e.g. after assignReelPhotosAndGenerate saved new photos).
@@ -1330,7 +1366,9 @@ struct CaptionReviewView: View {
                 what: day.displayName
             )
         } else {
-            regenerateError = "\(day.displayName) regeneration produced no output"
+            graphics.failDayRegen(
+                day, for: event.id,
+                reason: "\(day.displayName) regeneration produced no output")
         }
     }
 
@@ -1372,11 +1410,14 @@ struct CaptionReviewView: View {
             }
 
             await MainActor.run {
-                graphics.endCoverRegen(day, for: event.id)
                 switch outcome {
                 case .failure(let error):
-                    regenerateError = "\(day.displayName) cover regeneration failed: \(error.localizedDescription)"
+                    graphics.failCoverRegen(
+                        day, for: event.id,
+                        reason: "\(day.displayName) cover regeneration failed: "
+                              + "\(error.localizedDescription)")
                 case .success(let result):
+                    graphics.endCoverRegen(day, for: event.id)
                     var ev = appState.events.first(where: { $0.id == event.id }) ?? event
                     ev.previewMediaPaths[day.rawValue, default: [:]]["cover"] = result.coverPath
                     if let pick = result.coverPick {
@@ -1561,9 +1602,12 @@ struct CaptionSection: View {
     /// started, so the elapsed-timer status view can show real progress
     /// instead of a bare spinner. nil when nothing is running.
     var fridayRegenStartedAt: Date? = nil
-    /// The parent's regenerateError, passed down so Friday's card can show
-    /// the fail-loud "< 3 usable clips" banner with its two escape hatches
-    /// instead of relying on the generic top-of-screen error text (#135).
+    /// Friday's own rebuild failure, read from the manager that owns that run,
+    /// so the card can show the fail-loud "< 3 usable clips" banner with its two
+    /// escape hatches instead of relying on the generic top-of-screen error
+    /// text (#135). It used to be the screen's one shared error string, which
+    /// any other day's failure could overwrite between the run and the reading
+    /// (#721, L53).
     var fridayRegenerateError: String? = nil
     /// "Skip clips, keep story-only": clears clipPaths so future regens
     /// don't retry the clip pipeline, and dismisses the error.

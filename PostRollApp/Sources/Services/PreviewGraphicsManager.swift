@@ -78,7 +78,12 @@ final class PreviewGraphicsManager {
     /// the caller skips launching a duplicate.
     @discardableResult
     func beginDayRegen(_ day: DayName, for eventID: UUID) -> Bool {
-        state.beginDay(day, for: eventID)
+        guard state.beginDay(day, for: eventID) else { return false }
+        // This slot's own reason only. A stored error outliving the run it was
+        // about reads as a failure happening now, and clearing the day's
+        // neighbours would take away reasons that are still true (#721).
+        clearDayFailure(day, for: eventID)
+        return true
     }
 
     func endDayRegen(_ day: DayName, for eventID: UUID) {
@@ -94,7 +99,9 @@ final class PreviewGraphicsManager {
 
     @discardableResult
     func beginCoverRegen(_ day: DayName, for eventID: UUID) -> Bool {
-        state.beginCover(day, for: eventID)
+        guard state.beginCover(day, for: eventID) else { return false }
+        clearCoverFailure(day, for: eventID)
+        return true
     }
 
     func endCoverRegen(_ day: DayName, for eventID: UUID) {
@@ -107,6 +114,89 @@ final class PreviewGraphicsManager {
 
     func coverStartedAt(_ day: DayName, for eventID: UUID) -> Date? {
         state.coverStartedAt(day, for: eventID)
+    }
+
+    // MARK: - What a failed rebuild left to say (#721)
+
+    /// One rebuild slot: an event and a day.
+    private struct DaySlot: Hashable {
+        let eventID: UUID
+        let day: DayName
+    }
+
+    /// A slot that failed, and why. Ordered by the week rather than by a
+    /// dictionary, so a list of them cannot reshuffle between redraws.
+    struct DayFailure: Equatable {
+        let day: DayName
+        let reason: String
+    }
+
+    /// Why a day's rebuild failed, and why a day's cover rebuild failed, kept
+    /// apart per slot (#721).
+    ///
+    /// All of this used to be one `@State` string on the caption review screen,
+    /// written by the audio swap, the cover rebuild, the Friday reel edit and
+    /// the per-day rebuild alike. Two things were wrong with that. Independent
+    /// actions sharing one status field means whichever failed last erased the
+    /// reason before it (L53). And these runs are owned HERE precisely because
+    /// they outlive the screen, so a swap that failed while Dan was on another
+    /// event had its message destroyed with the view while the run itself
+    /// carried on (L148).
+    ///
+    /// One field per in flight SLOT, not per message: a day's rebuild and its
+    /// cover rebuild are two separate slots that can run at once, and two
+    /// actions occupying one slot cannot both be running to disagree.
+    private var dayFailures: [DaySlot: String] = [:]
+    private var coverFailures: [DaySlot: String] = [:]
+
+    func dayFailure(_ day: DayName, for eventID: UUID) -> String? {
+        dayFailures[DaySlot(eventID: eventID, day: day)]
+    }
+
+    func coverFailure(_ day: DayName, for eventID: UUID) -> String? {
+        coverFailures[DaySlot(eventID: eventID, day: day)]
+    }
+
+    /// The day rebuild ended badly. Records why AND releases the slot, in one
+    /// call, because a failure that forgot to release leaves that day unable to
+    /// rebuild ever again, and the two were remembered separately at five call
+    /// sites.
+    func failDayRegen(_ day: DayName, for eventID: UUID, reason: String) {
+        dayFailures[DaySlot(eventID: eventID, day: day)] = reason
+        endDayRegen(day, for: eventID)
+    }
+
+    func failCoverRegen(_ day: DayName, for eventID: UUID, reason: String) {
+        coverFailures[DaySlot(eventID: eventID, day: day)] = reason
+        endCoverRegen(day, for: eventID)
+    }
+
+    func clearDayFailure(_ day: DayName, for eventID: UUID) {
+        dayFailures.removeValue(forKey: DaySlot(eventID: eventID, day: day))
+    }
+
+    func clearCoverFailure(_ day: DayName, for eventID: UUID) {
+        coverFailures.removeValue(forKey: DaySlot(eventID: eventID, day: day))
+    }
+
+    /// Every day of this event whose rebuild failed, in the week's own order.
+    func dayFailures(for eventID: UUID) -> [DayFailure] {
+        Self.listed(dayFailures, for: eventID)
+    }
+
+    /// The same for the cover rebuilds, which are their own slot with their own
+    /// remedy: rebuilding the reel is not rebuilding the thumbnail (L11).
+    func coverFailures(for eventID: UUID) -> [DayFailure] {
+        Self.listed(coverFailures, for: eventID)
+    }
+
+    private static func listed(_ store: [DaySlot: String],
+                               for eventID: UUID) -> [DayFailure] {
+        DayName.allCases.compactMap { day in
+            store[DaySlot(eventID: eventID, day: day)].map {
+                DayFailure(day: day, reason: $0)
+            }
+        }
     }
 
     // MARK: - Thursday reel editor (#456)
