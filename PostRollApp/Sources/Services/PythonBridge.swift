@@ -1436,12 +1436,24 @@ actor PythonBridge {
 
     // MARK: - Handle Suggestions
 
-    struct HandleSuggestion: Codable {
+    struct HandleSuggestion: Codable, Sendable {
         var name: String
         var handle: String?
         var profileURL: String?
         var confidence: String
         var note: String?
+
+        /// The custom decoder below removes the memberwise one, and a test that
+        /// has to hand build JSON to make a value is asserting against its own
+        /// idea of the payload rather than against the type (#707).
+        init(name: String, handle: String?, profileURL: String? = nil,
+             confidence: String = "high", note: String? = nil) {
+            self.name = name
+            self.handle = handle
+            self.profileURL = profileURL
+            self.confidence = confidence
+            self.note = note
+        }
 
         enum CodingKeys: String, CodingKey {
             case name, handle, confidence, note

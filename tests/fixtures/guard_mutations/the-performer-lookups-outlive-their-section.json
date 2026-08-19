@@ -1,0 +1,8 @@
+{
+  "name": "the-performer-lookups-outlive-their-section",
+  "file": "PostRollApp/Sources/Services/PerformerLookupManager.swift",
+  "find": "        tracker(.fromWeb).update(eventID) { $0.replaced = stored.performers }",
+  "replace": "        // the list this replaced is deliberately not kept",
+  "test": "PostRollTests/PerformerLookupManagerTests/testTheUndoSurvivesTheScreenThatOfferedIt",
+  "breaks": "the cast list a web fetch replaced is not kept anywhere, so the undo it offers has nothing to put back. The list it overwrote is often one Dan typed by hand off the printed programme, and the fetch is the one action on that screen that destroys the lot in one press (#707, L97)"
+}
