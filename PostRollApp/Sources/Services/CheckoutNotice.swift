@@ -16,6 +16,13 @@ enum CheckoutNotice {
     /// the surface it lands on cannot be described in two places.
     static let icon = "arrow.triangle.branch"
 
+    /// The dismiss control's label, spelled once (#696).
+    ///
+    /// A word rather than a bare cross: a control has to look like a control at
+    /// rest, and an icon with no accessible name is something VoiceOver can only
+    /// describe as a button (L20, L49).
+    static let dismissLabel = "Dismiss"
+
     /// What to say, or nil when there is nothing worth saying.
     ///
     /// nil for a clean main, which is every ordinary day, and nil for a reading

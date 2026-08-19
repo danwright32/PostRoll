@@ -79,9 +79,18 @@ struct MainWindowView: View {
             if appState.checkoutNotice != nil || appState.saveFailure != nil {
                 VStack(spacing: Spacing.sm) {
                     if let notice = appState.checkoutNotice {
+                        // Dismissable, unlike the one below it (#696). The
+                        // state this was shown for is remembered, so waving it
+                        // away is not undone by the next reading of the folder,
+                        // and a branch switch or a new edit brings it back
+                        // because that is a different thing to say.
                         BrandBanner(icon: CheckoutNotice.icon,
                                     message: notice,
-                                    style: .warning)
+                                    style: .warning,
+                                    actions: [BrandBannerAction(
+                                        label: CheckoutNotice.dismissLabel) {
+                                            appState.dismissCheckoutNotice()
+                                        }])
                     }
                     if let failure = appState.saveFailure {
                         BrandBanner(

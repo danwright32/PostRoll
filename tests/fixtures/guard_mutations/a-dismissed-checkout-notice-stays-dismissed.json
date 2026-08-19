@@ -1,0 +1,8 @@
+{
+  "name": "a-dismissed-checkout-notice-stays-dismissed",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "        checkoutNotice = message == dismissedCheckoutNotice ? nil : message",
+  "replace": "        checkoutNotice = message",
+  "test": "PostRollTests/CheckoutNoticeDismissalTests/testTheNoticeStaysHiddenWhileTheCheckoutIsAsItWas",
+  "breaks": "the code folder banner comes back on the very next reading of the folder, which happens every time the app is brought forward, so waving it away does nothing and it becomes something to click on reflex (#696, L36)"
+}
