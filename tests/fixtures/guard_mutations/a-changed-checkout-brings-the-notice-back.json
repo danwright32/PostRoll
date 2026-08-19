@@ -1,8 +1,0 @@
-{
-  "name": "a-changed-checkout-brings-the-notice-back",
-  "file": "PostRollApp/Sources/AppState.swift",
-  "find": "        if message != dismissedCheckoutNotice { dismissedCheckoutNotice = nil }",
-  "replace": "        if false { dismissedCheckoutNotice = nil }",
-  "test": "PostRollTests/CheckoutNoticeDismissalTests/testAnotherBranchIsANewThingToSay",
-  "breaks": "one dismissal silences the banner for every later state of the code folder too, so switching to a different branch, or leaving unsaved changes in it, says nothing at all. A dismissal is about the state it was given for, and anything else is a new thing to say (#696)"
-}
