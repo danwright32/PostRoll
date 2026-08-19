@@ -139,11 +139,43 @@ enum BuildFreshness {
         commitTime(inRepo: repo, ref: "origin/main")
     }
 
+    /// The parts of the checkout that are read LIVE rather than frozen into the
+    /// app, and therefore cannot make a build stale (#691).
+    ///
+    /// Only the Swift half is compiled into the bundle. `postroll/` is the
+    /// generation pipeline and it is read off the checkout on every run, so a
+    /// week of Python only commits leaves the running app entirely current
+    /// while the old comparison called it stale and told Dan to rebuild. That
+    /// is the worst shape a warning can take: a false alarm whose named remedy
+    /// cannot clear it, because rebuilding produces the same verdict at the
+    /// next launch (L36, L144).
+    ///
+    /// Written as what to LEAVE OUT rather than as what to include, and that
+    /// direction is the decision. Both lists go stale, but they fail in
+    /// opposite ways: something new and bundled that an include list forgot
+    /// would be silently exempt from the whole warning, which is the shipped
+    /// fix nobody can see that #675 is about, while something new and live that
+    /// this list forgets merely warns when it need not. The second is the error
+    /// to make.
+    ///
+    /// Each entry is here because the app READS it at runtime or because it is
+    /// not in the bundle at all, never because it seems unimportant.
+    static let livePaths = [
+        "postroll",                  // the generation pipeline, run from the checkout
+        "tests",                     // the Python suite
+        "tools",                     // the Python tooling
+        "scripts",                   // helper scripts, none of them bundled
+        ".github",                   // CI
+        "PostRollApp/*.sh",          // build and update scripts, run from the checkout
+        "*.md",                      // documentation
+    ]
+
     /// When a named commit was made, or nil for every reason the read can fail.
     ///
     /// One implementation for both refs, so a change to how the time is parsed
     /// or how a failure is treated cannot apply to one of them and not the
-    /// other.
+    /// other. That includes the pathspec: judging the local ref and the remote
+    /// one by different rules would have the remedy disagree with the verdict.
     static func commitTime(inRepo repo: URL, ref: String) -> Date? {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: repo.path, isDirectory: &isDirectory),
@@ -151,7 +183,8 @@ enum BuildFreshness {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", repo.path, "log", "-1", "--format=%ct", ref]
+        process.arguments = ["-C", repo.path, "log", "-1", "--format=%ct", ref, "--"]
+            + livePaths.map { ":(exclude)\($0)" }
         let out = Pipe()
         process.standardOutput = out
         process.standardError = Pipe()
@@ -163,6 +196,10 @@ enum BuildFreshness {
         }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        // An empty answer means no commit has ever touched what goes into the
+        // app, which is not a failure and not a time either. It falls through
+        // the parse below to nil, and the verdict turns that into cannotTell
+        // rather than into good news (L98).
         guard process.terminationStatus == 0,
               let text = String(data: data, encoding: .utf8)?
                   .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -192,10 +229,16 @@ enum BuildFreshness {
     /// message that only said "rebuild" would send him round that loop with the
     /// symptom unchanged.
     static func message(builtAt: Date, latestCommit: Date, remedy: Remedy) -> String {
+        // "the app's own code", not "the code": the comparison deliberately
+        // ignores the Python pipeline, which is read live off the checkout and
+        // is therefore already running whatever was last committed to it
+        // (#691). A sentence claiming more than was measured is one Dan would
+        // read as a contradiction the first time a Python only week said
+        // nothing (L11).
         let opening =
             "The PostRoll you are running was built \(when(builtAt)). The newest "
-            + "change to the code is from \(when(latestCommit)), so this copy may "
-            + "be missing work that has already shipped.\n\n"
+            + "change to the app's own code is from \(when(latestCommit)), so "
+            + "this copy may be missing work that has already shipped.\n\n"
 
         switch remedy {
         case .rebuild:
