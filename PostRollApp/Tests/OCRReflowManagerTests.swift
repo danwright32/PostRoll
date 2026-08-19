@@ -27,6 +27,13 @@ final class OCRReflowManagerTests: XCTestCase {
     }
 
     private static let flagID = "flag-1"
+    /// A SECOND concern that really is on the event.
+    ///
+    /// The refusal test below used an id that was not on the fixture at all,
+    /// so the second run was stopped by the flag lookup rather than by the
+    /// refusal, and the test passed with the refusal deleted. Caught by the
+    /// mutation registry, which is the whole reason it exists (L1).
+    private static let otherFlagID = "flag-2"
 
     private func flag(_ id: String = flagID) -> OCRFlag {
         OCRFlag(id: id, fieldPath: [.key("performers")],
@@ -43,7 +50,7 @@ final class OCRReflowManagerTests: XCTestCase {
         event.ocrResult = OCRResult(pieces: [
             Piece(composer: "Beethoven", title: pieceTitle),
         ])
-        event.pendingFlags = [flag()]
+        event.pendingFlags = [flag(), flag(Self.otherFlagID)]
         return event
     }
 
@@ -297,7 +304,7 @@ final class OCRReflowManagerTests: XCTestCase {
 
         manager.start(eventID: event.id, flag: Self.flagID,
                       userMessage: "fix it", appState: state)
-        manager.start(eventID: event.id, flag: "another-flag",
+        manager.start(eventID: event.id, flag: Self.otherFlagID,
                       userMessage: "and this", appState: state)
         await settle()
 
