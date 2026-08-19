@@ -1,0 +1,8 @@
+{
+  "name": "the-reflow-outlives-the-row-that-started-it",
+  "file": "PostRollApp/Sources/Services/OCRReflowManager.swift",
+  "find": "                self?.tracker.deactivate(eventID)",
+  "replace": "                self?.tracker.remove(eventID)",
+  "test": "PostRollTests/OCRReflowManagerTests/testTheReplySurvivesTheRowThatAskedForIt",
+  "breaks": "Claude's answer is thrown away the moment the run ends, so a pair of paid model calls Dan waited on leave nothing behind and the row he comes back to looks as though nothing ever happened (#718, L148)"
+}

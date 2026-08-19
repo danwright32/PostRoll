@@ -1,0 +1,8 @@
+{
+  "name": "a-second-reflow-on-one-program-is-refused",
+  "file": "PostRollApp/Sources/Services/OCRReflowManager.swift",
+  "find": "        guard !tracker.isActive(eventID) else { return }",
+  "replace": "        if false { return }",
+  "test": "PostRollTests/OCRReflowManagerTests/testASecondReflowOnTheSameEventIsRefusedWhileOneIsGoing",
+  "breaks": "two corrections run at once on one program. Each returns a WHOLE replacement OCRResult computed from the state it started with, so whichever lands second silently discards the other's correction and the paid call that produced it (#718, L5)"
+}

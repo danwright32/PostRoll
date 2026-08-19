@@ -1,0 +1,8 @@
+{
+  "name": "a-reply-is-not-shown-against-the-wrong-concern",
+  "file": "PostRollApp/Sources/Services/OCRReflowManager.swift",
+  "find": "        guard let job = tracker.job(for: id), job.flagID == flag else { return nil }\n        return job.reply",
+  "replace": "        return tracker.job(for: id)?.reply",
+  "test": "PostRollTests/OCRReflowManagerTests/testTheReplyBelongsToTheFlagItWasAbout",
+  "breaks": "Claude's answer about one concern is drawn under every other concern on the screen, so a correction that was never made reads as having been made (#718, L11)"
+}

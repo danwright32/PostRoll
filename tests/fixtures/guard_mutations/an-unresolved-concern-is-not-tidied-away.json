@@ -1,0 +1,8 @@
+{
+  "name": "an-unresolved-concern-is-not-tidied-away",
+  "file": "PostRollApp/Sources/Services/OCRReflowManager.swift",
+  "find": "        if resolved,\n           let index = live.pendingFlags.firstIndex(where: { $0.id == flagID }),",
+  "replace": "        if true,\n           let index = live.pendingFlags.firstIndex(where: { $0.id == flagID }),",
+  "test": "PostRollTests/OCRReflowManagerTests/testAnUnresolvedFlagIsLeftAloneRatherThanQuietlyCleared",
+  "breaks": "a reflow that only ANSWERED a question marks the concern resolved, so a real problem with the programme text is taken off the screen with nothing having addressed it (#718)"
+}

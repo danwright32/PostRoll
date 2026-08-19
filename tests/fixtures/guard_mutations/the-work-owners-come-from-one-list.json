@@ -1,0 +1,8 @@
+{
+  "name": "the-work-owners-come-from-one-list",
+  "file": "PostRollApp/Sources/PostRollApp.swift",
+  "find": "                .withAppOwners(owners)",
+  "replace": "                .environment(GenerationManager())",
+  "test": "PostRollTests/AppOwnersTests/testNothingInjectsAWorkOwnerOutsideTheOneList",
+  "breaks": "a second hand-kept list of the work owners comes back. SwiftUI TRAPS on a missing environment value, so the copy that falls behind does not fail a check, it crashes whatever screen reads the missing owner and the run blames an unrelated test (#718, L41, L96)"
+}

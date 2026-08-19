@@ -1,0 +1,8 @@
+{
+  "name": "every-declared-owner-is-actually-injected",
+  "file": "PostRollApp/Sources/Services/AppOwners.swift",
+  "find": "            .environment(owners.reflow)",
+  "replace": "            .environment(owners.generation)",
+  "test": "PostRollTests/AppOwnersTests/testEveryOwnerInTheListIsActuallyInjected",
+  "breaks": "an owner declared in the list is never put into the environment. It compiles, and the screen that reads it traps at render time rather than failing a check (#718)"
+}
