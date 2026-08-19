@@ -1,0 +1,8 @@
+{
+  "name": "single-line-fields-keep-no-line-breaks",
+  "file": "PostRollApp/Sources/Models/OCRResult.swift",
+  "find": "        title     = FieldText.singleLine((try? c.decode(String.self, forKey: .title)) ?? \"\")",
+  "replace": "        title     = (try? c.decode(String.self, forKey: .title)) ?? \"\"",
+  "test": "PostRollTests/SingleLineFieldTests/testSingleLineFieldsComeBackAsOneLine",
+  "breaks": "a piece title that wrapped across two lines on the printed page is stored as a two line value, and the single line editor renders the break as a gap that looks like a space, so nothing on screen says it is broken. Titles reach captions and blog posts that a stranger reads (#688)"
+}

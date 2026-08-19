@@ -387,7 +387,8 @@ struct EventHeader: View {
     }
 
     private func commitRename() {
-        let trimmed = FieldText.normalized(editName)
+        // One line, not merely trimmed (#688), the same as the sidebar rename.
+        let trimmed = FieldText.singleLine(editName)
         if !trimmed.isEmpty,
            var ev = appState.events.first(where: { $0.id == event.id }) {
             // Live read (#103): renaming must not revert other saved work.

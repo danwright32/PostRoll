@@ -88,11 +88,16 @@ struct Performer: Identifiable, Codable, Hashable, Sendable {
     // Python JSON won't include id — generate one on decode
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        // Folded to one line on the way in (#688). These arrive from the
+        // Python side's reading of the printed pages, where a performer
+        // credited across two printed lines is an everyday occurrence rather
+        // than a paste accident, and none of them passed through FieldText in
+        // either direction before.
         id                = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
-        name              = (try? c.decode(String.self, forKey: .name)) ?? ""
-        role              = (try? c.decode(String.self, forKey: .role)) ?? ""
-        voiceOrInstrument = (try? c.decode(String.self, forKey: .voiceOrInstrument)) ?? ""
-        handle            = (try? c.decode(String.self, forKey: .handle)) ?? ""
+        name              = FieldText.singleLine((try? c.decode(String.self, forKey: .name)) ?? "")
+        role              = FieldText.singleLine((try? c.decode(String.self, forKey: .role)) ?? "")
+        voiceOrInstrument = FieldText.singleLine((try? c.decode(String.self, forKey: .voiceOrInstrument)) ?? "")
+        handle            = FieldText.singleLine((try? c.decode(String.self, forKey: .handle)) ?? "")
     }
 
     enum CodingKeys: String, CodingKey {
@@ -124,10 +129,15 @@ struct Piece: Identifiable, Codable, Hashable, Sendable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        // notes is the exception and it is deliberate (#688): it is bound to
+        // the multi line editor on the review screen and line breaks in it are
+        // meaningful. Everything else here is one line, including each movement
+        // title, which wraps on a printed page like any other.
         id        = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
-        composer  = (try? c.decode(String.self, forKey: .composer)) ?? ""
-        title     = (try? c.decode(String.self, forKey: .title)) ?? ""
-        movements = (try? c.decode([String].self, forKey: .movements)) ?? []
+        composer  = FieldText.singleLine((try? c.decode(String.self, forKey: .composer)) ?? "")
+        title     = FieldText.singleLine((try? c.decode(String.self, forKey: .title)) ?? "")
+        movements = ((try? c.decode([String].self, forKey: .movements)) ?? [])
+            .map(FieldText.singleLine)
         notes     = (try? c.decode(String.self, forKey: .notes)) ?? ""
     }
 
@@ -297,10 +307,13 @@ struct ProgramScene: Identifiable, Codable, Hashable, Sendable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        // description is the exception here, for the same reason notes is on a
+        // piece (#688): it is prose about the scene, and a line break in it is
+        // something somebody meant.
         id          = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
-        name        = (try? c.decode(String.self, forKey: .name)) ?? ""
-        location    = (try? c.decode(String.self, forKey: .location)) ?? ""
-        visualCues  = (try? c.decode(String.self, forKey: .visualCues)) ?? ""
+        name        = FieldText.singleLine((try? c.decode(String.self, forKey: .name)) ?? "")
+        location    = FieldText.singleLine((try? c.decode(String.self, forKey: .location)) ?? "")
+        visualCues  = FieldText.singleLine((try? c.decode(String.self, forKey: .visualCues)) ?? "")
         description = (try? c.decode(String.self, forKey: .description)) ?? ""
     }
 
