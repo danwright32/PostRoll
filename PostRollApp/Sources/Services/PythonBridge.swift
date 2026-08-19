@@ -1515,10 +1515,19 @@ actor PythonBridge {
 
     /// One result from fetch-piece-notes — title/composer echo the input so we
     /// can match by content in case the Claude call returns them out of order.
-    struct PieceNoteResult: Codable {
+    struct PieceNoteResult: Codable, Sendable {
         var title: String
         var composer: String
         var notes: String?
+
+        /// The custom decoder below removes the memberwise one, and a test that
+        /// has to hand build JSON to make a value is a test asserting against
+        /// its own idea of the payload rather than against the type (#693).
+        init(title: String, composer: String, notes: String?) {
+            self.title = title
+            self.composer = composer
+            self.notes = notes
+        }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)

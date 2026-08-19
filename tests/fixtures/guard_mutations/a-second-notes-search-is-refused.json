@@ -1,0 +1,8 @@
+{
+  "name": "a-second-notes-search-is-refused",
+  "file": "PostRollApp/Sources/Services/ProgramNotesManager.swift",
+  "find": "        guard !tracker.isActive(eventID) else { return }",
+  "replace": "        if false { return }",
+  "test": "PostRollTests/ProgramNotesManagerTests/testASecondSearchIsNotStackedOnTheFirst",
+  "breaks": "a second web search can be stacked on the first for one event, which is one click away because reopening the Program section mid run shows the idle button again. Two runs then merge into the same list and each pays for its own model call (#693)"
+}

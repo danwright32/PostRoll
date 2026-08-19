@@ -1,8 +1,8 @@
 {
   "name": "review-draft-takes-up-the-rescan",
   "file": "PostRollApp/Sources/Views/OCRReviewView.swift",
-  "find": "        guard !ocrManager.isRunning(event.id) else { return }\n        live.ocrResult = ocr",
-  "replace": "        live.ocrResult = ocr",
+  "find": "        guard !ocrManager.isRunning(event.id) else { return }\n        // And never while the notes search is in flight, for the same reason",
+  "replace": "        // And never while the notes search is in flight, for the same reason",
   "test": "PostRollTests/UnreadProgramPagesTests/testTheReviewScreenAdoptsAndStopsPersistingDuringARescan",
   "breaks": "the review screen keeps writing its own older copy of the cast list to the event while a rescan is reading the missing pages, so the merge that lands is overwritten and the pages just read and paid for are discarded (#518)"
 }

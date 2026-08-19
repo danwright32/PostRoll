@@ -3,6 +3,9 @@ import SwiftUI
 struct OCRReviewView: View {
     let event: Event
     @Environment(AppState.self) private var appState
+    /// Owns the programme notes search, so it survives this section being
+    /// collapsed and this screen being replaced (#693).
+    @Environment(ProgramNotesManager.self) private var notesManager
     /// For the rescan of pages an earlier run could not read (#518).
     @Environment(OCRManager.self) private var ocrManager
     @State private var ocr: OCRResult
@@ -197,6 +200,10 @@ struct OCRReviewView: View {
         // older list, and the next keystroke persisted that list back over the
         // merge and discarded them.
         .onChange(of: ocrManager.isRunning(event.id)) { adoptStoredResultIfNeeded() }
+        // The notes search writes to the stored event the same way, and it very
+        // often lands while this section is closed or after Dan has been to
+        // another event and back (#693).
+        .onChange(of: notesManager.isRunning(event.id)) { adoptStoredResultIfNeeded() }
         .onChange(of: orgHandles) {
             HandleBook.shared.record(org: event.org, handles: orgHandles)
         }
@@ -215,6 +222,10 @@ struct OCRReviewView: View {
         // pages that run is reading, so persisting it now would write the older
         // list over a merge that is about to land, or has just landed (#518).
         guard !ocrManager.isRunning(event.id) else { return }
+        // And never while the notes search is in flight, for the same reason
+        // (#693): the draft on screen predates the notes that run is about to
+        // write, so persisting it now would put the older list back over them.
+        guard !notesManager.isRunning(event.id) else { return }
         live.ocrResult = ocr
         live.pendingFlags = flags
         appState.updateEvent(live)
@@ -226,8 +237,10 @@ struct OCRReviewView: View {
     /// disagree about when it is safe (#518).
     private func adoptStoredResultIfNeeded() {
         let live = appState.events.first(where: { $0.id == event.id }) ?? event
-        guard OCRDraftRefresh.shouldAdopt(stored: live.ocrResult, draft: ocr,
-                                          isRunning: ocrManager.isRunning(event.id))
+        guard OCRDraftRefresh.shouldAdopt(
+                stored: live.ocrResult, draft: ocr,
+                isRunning: ocrManager.isRunning(event.id)
+                    || notesManager.isRunning(event.id))
         else { return }
         ocr = live.ocrResult ?? ocr
         flags = live.pendingFlags
@@ -306,7 +319,18 @@ struct OCRReviewView: View {
             PiecesEditor(
                 pieces: $ocr.pieces,
                 org: event.org,
-                eventName: event.name
+                eventName: event.name,
+                // Read from the manager rather than held here (#693): this view
+                // is destroyed every time another section is opened, and with
+                // it went the indicator, the clock and the error message.
+                isFetchingNotes: notesManager.isRunning(event.id),
+                fetchStartedAt: notesManager.run(for: event.id)?.startedAt,
+                fetchError: notesManager.failure(for: event.id),
+                onFetchNotes: {
+                    notesManager.clearFailure(for: event.id)
+                    notesManager.start(eventID: event.id, org: event.org,
+                                       eventName: event.name, appState: appState)
+                }
             ) { piece, idx in
                 scheduleUndo(message: "Work removed") {
                     ocr.pieces.insert(piece, at: min(idx, ocr.pieces.count))
@@ -921,11 +945,15 @@ private struct PiecesEditor: View {
     @Binding var pieces: [Piece]
     let org: String
     let eventName: String
+    /// The notes search, as the manager that owns it sees it (#693). Passed in
+    /// rather than held here, because this view goes away whenever another
+    /// section is opened and every piece of run state with it.
+    let isFetchingNotes: Bool
+    let fetchStartedAt: Date?
+    let fetchError: String?
+    let onFetchNotes: () -> Void
     let onDeleted: (Piece, Int) -> Void
 
-    @State private var isFetchingNotes = false
-    @State private var fetchNotesStartedAt: Date? = nil
-    @State private var fetchError: String?
     @State private var reorderTargetID: UUID?
 
     private var missingNotesCount: Int {
@@ -980,10 +1008,11 @@ private struct PiecesEditor: View {
                 VStack(alignment: .leading, spacing: 4) {
                     if isFetchingNotes {
                         LongRunIndicator(label: "Searching the web…",
-                                         startedAt: fetchNotesStartedAt)
+                                         startedAt: fetchStartedAt,
+                                         silenceThreshold: LongRunState.localWorkSilenceThreshold)
                     } else {
                         Button {
-                            Task { await fetchMissingNotes() }
+                            onFetchNotes()
                         } label: {
                             Label(
                                 "Fetch missing notes from web (\(missingNotesCount))",
@@ -1008,41 +1037,6 @@ private struct PiecesEditor: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, Spacing.xs)
             }
-        }
-    }
-
-    @MainActor
-    private func fetchMissingNotes() async {
-        fetchError = nil
-        isFetchingNotes = true
-        fetchNotesStartedAt = Date()
-        defer { isFetchingNotes = false; fetchNotesStartedAt = nil }
-
-        let missing = pieces.filter {
-            $0.notes.trimmingCharacters(in: .whitespaces).isEmpty
-        }
-        guard !missing.isEmpty else { return }
-
-        do {
-            let results = try await PythonBridge.shared.fetchPieceNotes(
-                pieces: missing,
-                org: org,
-                event: eventName
-            )
-            // Match results back by content (title + composer) — order isn't
-            // guaranteed and the live `pieces` may have been edited mid-fetch.
-            for r in results {
-                guard let note = r.notes?.trimmingCharacters(in: .whitespaces),
-                      !note.isEmpty else { continue }
-                let idx = pieces.firstIndex {
-                    $0.title.caseInsensitiveCompare(r.title) == .orderedSame
-                        && $0.composer.caseInsensitiveCompare(r.composer) == .orderedSame
-                        && $0.notes.trimmingCharacters(in: .whitespaces).isEmpty
-                }
-                if let idx { pieces[idx].notes = note }
-            }
-        } catch {
-            fetchError = error.localizedDescription
         }
     }
 }
