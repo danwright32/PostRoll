@@ -2050,7 +2050,8 @@ struct CaptionSection: View {
                                     onSwap: onSwapFridayClip,
                                     onRecutWithAI: onRecutFridayWithAI,
                                     titleCardMuted: postingDay?.titleCardMuted ?? false,
-                                    onToggleTitleCard: onToggleFridayTitleCard
+                                    onToggleTitleCard: onToggleFridayTitleCard,
+                                    isRegenerating: isRegeneratingGraphic
                                 )
                                 if fridayRegenStartedAt != nil {
                                     PipelineStatusView(startedAt: fridayRegenStartedAt)
@@ -3736,7 +3737,8 @@ private struct PipelineStatusView: View {
 /// re-renders locally via render_friday_override.py - never re-invokes
 /// Claude (feedback_collage_edits_no_python_regen). "Re-cut with AI" is the
 /// only action that clears the override and re-runs Stage 1 + 2.
-private struct FridayClipEditor: View {
+/// Internal rather than private so the rendering check can host it (#732).
+struct FridayClipEditor: View {
     let entries: [ReelClipOverride]
     let hasOverride: Bool
     var onApply: (([ReelClipOverride]) -> Void)? = nil
@@ -3746,6 +3748,18 @@ private struct FridayClipEditor: View {
     /// toggled off here without re-invoking Claude.
     var titleCardMuted: Bool = false
     var onToggleTitleCard: (() -> Void)? = nil
+    /// Whether Friday is rebuilding right now (#732).
+    ///
+    /// Every control in here rebuilds Friday, so the whole editor is disabled
+    /// rather than each button in turn: a control added tomorrow inherits it
+    /// instead of needing to be remembered (L96). Since #728 these actions are
+    /// refused while a run is in flight, and a control that looks available and
+    /// then declines teaches Dan to distrust it, which is worse than one that
+    /// plainly cannot be used while he can see why.
+    ///
+    /// Disabled, not hidden: the clips stay legible, which is what he is
+    /// watching during the rebuild they are being cut into (L10).
+    var isRegenerating: Bool = false
 
     @State private var cropPopoverIndex: Int? = nil
 
@@ -3838,6 +3852,7 @@ private struct FridayClipEditor: View {
                 }
                 .padding(.top, Spacing.xs)
             }
+            .disabled(isRegenerating)
         )
     }
 

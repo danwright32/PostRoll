@@ -1,0 +1,8 @@
+{
+  "name": "a-rebuilding-days-clips-are-not-editable",
+  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "find": "            .disabled(isRegenerating)\n        )\n    }",
+  "replace": "        )\n    }",
+  "test": "PostRollTests/RebuildingDayControlsTests/testTheClipEditorLooksUnavailableWhileTheDayRebuilds",
+  "breaks": "Friday's clip reorder, include and exclude, crop, swap, title card mute and re-cut are live again for the whole minute-plus a rebuild takes, so each one invites a click that #728 will refuse, and a control that looks available and then declines teaches Dan to distrust it (#732)"
+}
