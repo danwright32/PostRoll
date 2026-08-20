@@ -35,6 +35,16 @@ enum WindowFit {
     /// nothing downstream can quietly raise it.
     static let floor = NSSize(width: 760, height: 500)
 
+    /// The narrowest the sidebar column is allowed to be, set on the split view
+    /// in `MainWindowView`.
+    static let sidebarFloor: CGFloat = 230
+
+    /// What a stage screen is drawn in at the smallest window the app allows,
+    /// with the sidebar at its own floor. Named here, once, so a check about
+    /// how a screen behaves when narrow cannot be measuring a width the app
+    /// never produces (L41).
+    static var detailFloorWidth: CGFloat { floor.width - sidebarFloor }
+
     /// `frame` made to fit inside `visible`, or `frame` itself when it already
     /// does.
     ///

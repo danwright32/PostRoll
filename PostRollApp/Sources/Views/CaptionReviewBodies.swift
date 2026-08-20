@@ -155,6 +155,30 @@ struct CaptionReviewNotices: View {
     var onDismissDayFailure: (DayName) -> Void = { _ in }
     var onDismissCoverFailure: (DayName) -> Void = { _ in }
 
+    /// How tall this stack is allowed to grow before it scrolls in place
+    /// (#743).
+    ///
+    /// Six kinds of row can stand at once and four of them are lists, so the
+    /// stack has no natural bound. Measured on 2026-08-20 at the narrowest
+    /// column the app can be dragged to: the six kinds together came to 680pt,
+    /// and a week where every day's rebuild AND cover failed, which one missing
+    /// ffmpeg produces and which #740 now records in full, came to 1885pt.
+    /// Dan's own display holds 984. So the notices alone were most of a
+    /// screenful in the ordinary bad case and nearly two in the bad one, with
+    /// the captions he came to read starting underneath.
+    ///
+    /// 240 rather than a share of the window because this view is drawn inside
+    /// a scrolling column, where the height on offer is unbounded and a
+    /// fraction of it means nothing. It is about three rows at the narrowest
+    /// column and four at the widest, and under half the smallest window the
+    /// app allows, which is the case where the room runs out first.
+    ///
+    /// A cap, not a limit on what is SHOWN: everything is still here and still
+    /// dismissable, one scroll away, because a reason nobody can reach is a
+    /// reason nobody has (L11).
+    static let maximumHeight: CGFloat = 240
+
+
     /// The banner about failed days, worded here so the count and the sentence
     /// cannot disagree.
     var failedDaysMessage: String? {
@@ -164,6 +188,36 @@ struct CaptionReviewNotices: View {
     }
 
     var body: some View {
+        // Scrolled rather than clipped, and through FadingScrollView rather
+        // than a bare ScrollView, because macOS hides its scrollbars until a
+        // gesture starts: a region that overflows silently looks exactly like a
+        // complete one, and the rows below the edge would be rows nobody knows
+        // are there (#190, L76). The fade appears while content continues and
+        // goes once the end is reached.
+        //
+        // Sized by a layout rather than by measuring the rows into `@State`,
+        // which is how this was written first. A height that arrives on the
+        // NEXT pass is no height at all to a single-pass renderer: the whole
+        // stack measured as blank under `ImageRenderer`, which is what the
+        // legibility harness draws with, and the running app would have shown
+        // an empty band for a frame before the notices appeared.
+        CappedHeight(maximum: Self.maximumHeight) {
+            FadingScrollView(background: PaintedSurfaces.page) {
+                noticeRows
+            }
+        }
+    }
+
+    /// The rows themselves, with nothing holding their height.
+    ///
+    /// Internal rather than private because the legibility harnesses measure
+    /// the CONTRAST and the WRAPPING of every row, and the region above shows
+    /// only what fits: a harness hosting that would be measuring whichever
+    /// three rows happen to be at the top and reporting the rest as absent, and
+    /// a capped region stops getting taller when squeezed, which is the exact
+    /// signature those harnesses read as truncation. What the cap itself does
+    /// is measured in `CaptionNoticeStackTests`.
+    @ViewBuilder var noticeRows: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             if let failedDaysMessage {
                 BrandBanner(icon: "exclamationmark.triangle",

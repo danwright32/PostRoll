@@ -41,7 +41,7 @@ struct MainWindowView: View {
                     }
                 }
             }
-            .navigationSplitViewColumnWidth(min: 230, ideal: 265)
+            .navigationSplitViewColumnWidth(min: WindowFit.sidebarFloor, ideal: 265)
         } detail: {
             if appState.sidebarMode == .events {
                 if let id = appState.selectedEventID,

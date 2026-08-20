@@ -271,6 +271,14 @@ final class BannerLegibilityTests: XCTestCase {
             ("caption bar, waiting on rebuild", AnyView(CaptionReviewActionBar(
                 activity: .waitingOnRebuild(reason: ExportReadiness.blockedReason(
                     regeneratingDays: [.thursday, .wednesday]) ?? "")))),
+            // The rows rather than the region that holds them (#743). The stack
+            // is capped and scrolls past `CaptionReviewNotices.maximumHeight`,
+            // so hosting it here would measure the contrast of whichever three
+            // rows happened to be at the top and report the rest as absent,
+            // and a capped region stops getting taller when squeezed, which is
+            // exactly the signature the truncation harness next door reads as
+            // dropped words. What the cap does is measured in
+            // CaptionNoticeStackTests; what these measure is every row's text.
             ("caption notices", AnyView(CaptionReviewNotices(
                 failedDayCount: failedWeek.errorCount,
                 regenerateError: "Regeneration failed: exit 1",
@@ -297,7 +305,8 @@ final class BannerLegibilityTests: XCTestCase {
                     message: "Thursday audio swap failed: the track could not be fetched")],
                 coverRebuildFailures: [CaptionReviewDayNotice(
                     id: "friday",
-                    message: "Friday cover regeneration failed: the chosen frame has moved")]))),
+                    message: "Friday cover regeneration failed: the chosen frame has moved")])
+                .noticeRows)),
 
             // OCR review's notices and the bar that ends it (#396).
             ("ocr notices, all five", AnyView(OCRReviewNotices(
