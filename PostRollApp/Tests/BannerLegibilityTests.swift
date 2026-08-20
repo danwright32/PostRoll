@@ -274,6 +274,11 @@ final class BannerLegibilityTests: XCTestCase {
             ("caption notices", AnyView(CaptionReviewNotices(
                 failedDayCount: failedWeek.errorCount,
                 regenerateError: "Regeneration failed: exit 1",
+                // The refusal row, drawn alongside the week's banner rather
+                // than instead of it (#731), so the row that says a click did
+                // nothing is measured for contrast like every other banner and
+                // is pictured WITH the notice that used to hide it.
+                refusal: "Friday is already rebuilding, so nothing was changed.",
                 skippedPhotoNotices: DayName.allCases.compactMap { day in
                     failedWeek.warningMessage(for: day).map {
                         CaptionReviewDayNotice(id: day.rawValue,

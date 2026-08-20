@@ -41,11 +41,16 @@ struct CaptionReviewView: View {
     private var isRegenerating: Bool {
         captionWork.isRunning(event.id, .regenerateWeek)
     }
-    /// The banner from a run that stopped early, or the last short action's
-    /// failure. One row on screen, and the run's own outcome wins: it is the
-    /// one that costs money to rediscover.
-    private var noticeToShow: String? {
-        captionWork.outcome(for: event.id, .regenerateWeek)?.failure ?? refusedAction
+    /// The banner from a week run that stopped early.
+    ///
+    /// The last refused action used to share this, with the run's outcome
+    /// winning, on the reasoning that the run is the one that costs money to
+    /// rediscover. That is true and it made every refusal AFTERWARDS silent, so
+    /// a control that declined looked broken and pressing it again was the only
+    /// diagnosis available (#731, L148). They are independent things and get a
+    /// row each.
+    private var weekRunFailure: String? {
+        captionWork.outcome(for: event.id, .regenerateWeek)?.failure
     }
 
     /// Claim a day's rebuild slot BEFORE anything is written for it, or refuse.
@@ -72,6 +77,20 @@ struct CaptionReviewView: View {
             refusedAction = DayRebuildRefusal.message(for: days.filter { busy.contains($0) })
             return false
         }
+        // Deliberately NOT clearing the refusal here.
+        //
+        // #731 asked for it to be cleared when the next action is accepted, and
+        // this looked like the one funnel to do it in. It destroys a message the
+        // same click just recorded: `importFridayClips` copies the picks first,
+        // says so when some of them failed to copy, and then rebuilds with the
+        // ones that landed, and `changeCollagePhotos` has the same shape through
+        // `storedPicks`. Clearing on the grant erased exactly the half of a
+        // partly failed batch that nothing else reports (L47).
+        //
+        // So it is cleared by its own Dismiss, and replaced by the next refusal.
+        // It is `@State`, so it also dies with the screen, which is right for a
+        // failure that is over before the next redraw and is why the rule about
+        // long work living on a manager does not cover it.
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         change(&ev)
         appState.updateEvent(ev)
@@ -427,7 +446,8 @@ struct CaptionReviewView: View {
                 // view taking plain values, so the days that need a moved file or
                 // a dead run to reach can be rendered and measured (#396).
                 CaptionReviewNotices(
-                    regenerateError: noticeToShow,
+                    regenerateError: weekRunFailure,
+                    refusal: refusedAction,
                     skippedPhotoNotices: daysWithSkippedPhotos.compactMap { day in
                         event.weekResult?.warningMessage(for: day).map {
                             CaptionReviewDayNotice(id: day.rawValue,
@@ -442,6 +462,7 @@ struct CaptionReviewView: View {
                     },
                     dayRebuildFailures: dayRebuildNotices,
                     coverRebuildFailures: coverRebuildNotices,
+                    onDismissRefusal: { refusedAction = nil },
                     onDismissDayFailure: { day in
                         graphics.clearDayFailure(day, for: event.id)
                     },

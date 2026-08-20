@@ -1,0 +1,8 @@
+{
+  "name": "a-refusal-is-not-swallowed-by-another-notice",
+  "file": "PostRollApp/Sources/Views/CaptionReviewBodies.swift",
+  "find": "            if let refusal {\n                BrandBanner(\n                    icon: \"exclamationmark.triangle\",\n                    message: Sentence.closed(refusal),\n                    style: .error,\n                    actions: [BrandBannerAction(label: \"Dismiss\") { onDismissRefusal() }])\n            }\n",
+  "replace": "",
+  "test": "PostRollTests/RefusalRowTests/testARefusalReachesThePageWithAWeekBannerAlreadyOnIt",
+  "breaks": "the refusal has no row of its own again, so anything declined while another notice is on screen says nothing at all and the control that declined looks broken, leaving pressing it again as the only diagnosis (#731, L148)"
+}
