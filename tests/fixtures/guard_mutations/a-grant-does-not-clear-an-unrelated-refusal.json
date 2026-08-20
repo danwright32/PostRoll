@@ -1,0 +1,8 @@
+{
+  "name": "a-grant-does-not-clear-an-unrelated-refusal",
+  "file": "PostRollApp/Sources/Services/DayRebuildRefusal.swift",
+  "find": "    -> (action: String?, rebuild: String?) {\n        (action, nil)\n    }",
+  "replace": "    -> (action: String?, rebuild: String?) {\n        (nil, nil)\n    }",
+  "test": "PostRollTests/DayRebuildRefusalTests/testAGrantedRebuildLeavesAnUnrelatedRefusalAlone",
+  "breaks": "a granted rebuild takes away every standing refusal, including one about something a rebuild does not answer, so importing five clips where two fail to copy reports that and then erases it in the same click (#731, L47)"
+}

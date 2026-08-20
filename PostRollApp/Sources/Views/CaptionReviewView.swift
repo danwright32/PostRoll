@@ -33,6 +33,23 @@ struct CaptionReviewView: View {
     /// reason before it, and one that failed after an event switch left nothing
     /// at all (L53, L148).
     @State private var refusedAction: String?
+    /// A rebuild refused because that day was already rebuilding (#728).
+    ///
+    /// Its own field rather than sharing `refusedAction`, for the reason the
+    /// per-day failures got their own rows in #721: these two are cleared by
+    /// different things. This one stops being true the moment that day is free,
+    /// so a granted rebuild takes it away. The other is about a file that would
+    /// not copy or a set of photos too small to lay out, which a rebuild
+    /// starting says nothing about, and clearing it on a grant destroyed the
+    /// half of a partly failed batch that nothing else reports: importing five
+    /// clips where two fail to copy records that and then rebuilds with the
+    /// three that landed (L47).
+    ///
+    /// A second String rather than one field carrying its own kind, so both
+    /// stay the shape `LongWorkOwnershipTests` looks for: it finds a screen's
+    /// message state by TYPE, and a struct here would put both of these outside
+    /// the rule that stops a long run's failure being written into view state.
+    @State private var refusedRebuild: String?
 
     /// Owns the whole-week regeneration, so neither the run nor what it has to
     /// say about a halt dies with this screen (#718).
@@ -41,11 +58,16 @@ struct CaptionReviewView: View {
     private var isRegenerating: Bool {
         captionWork.isRunning(event.id, .regenerateWeek)
     }
-    /// The banner from a run that stopped early, or the last short action's
-    /// failure. One row on screen, and the run's own outcome wins: it is the
-    /// one that costs money to rediscover.
-    private var noticeToShow: String? {
-        captionWork.outcome(for: event.id, .regenerateWeek)?.failure ?? refusedAction
+    /// The banner from a week run that stopped early.
+    ///
+    /// The last refused action used to share this, with the run's outcome
+    /// winning, on the reasoning that the run is the one that costs money to
+    /// rediscover. That is true and it made every refusal AFTERWARDS silent, so
+    /// a control that declined looked broken and pressing it again was the only
+    /// diagnosis available (#731, L148). They are independent things and get a
+    /// row each.
+    private var weekRunFailure: String? {
+        captionWork.outcome(for: event.id, .regenerateWeek)?.failure
     }
 
     /// Claim a day's rebuild slot BEFORE anything is written for it, or refuse.
@@ -69,9 +91,16 @@ struct CaptionReviewView: View {
                               writing change: (inout Event) -> Void = { _ in }) -> Bool {
         guard graphics.beginDayRegen(days, for: event.id) else {
             let busy = graphics.regeneratingDays(event.id)
-            refusedAction = DayRebuildRefusal.message(for: days.filter { busy.contains($0) })
+            refusedRebuild = DayRebuildRefusal.message(for: days.filter { busy.contains($0) })
             return false
         }
+        // A day that was busy is not busy any more, so the refusal that said so
+        // is taken away: set on the branch above, cleared here, in the one funnel
+        // every rebuild goes through. Which of the two slots that means is
+        // decided by DayRebuildRefusal, where it can be asserted, rather than
+        // here where the first version of it was wrong and untestable.
+        (refusedAction, refusedRebuild) = DayRebuildRefusal.afterRebuildGranted(
+            action: refusedAction, rebuild: refusedRebuild)
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         change(&ev)
         appState.updateEvent(ev)
@@ -427,7 +456,9 @@ struct CaptionReviewView: View {
                 // view taking plain values, so the days that need a moved file or
                 // a dead run to reach can be rendered and measured (#396).
                 CaptionReviewNotices(
-                    regenerateError: noticeToShow,
+                    regenerateError: weekRunFailure,
+                    refusal: refusedAction,
+                    rebuildRefusal: refusedRebuild,
                     skippedPhotoNotices: daysWithSkippedPhotos.compactMap { day in
                         event.weekResult?.warningMessage(for: day).map {
                             CaptionReviewDayNotice(id: day.rawValue,
@@ -442,6 +473,8 @@ struct CaptionReviewView: View {
                     },
                     dayRebuildFailures: dayRebuildNotices,
                     coverRebuildFailures: coverRebuildNotices,
+                    onDismissRefusal: { refusedAction = nil },
+                    onDismissRebuildRefusal: { refusedRebuild = nil },
                     onDismissDayFailure: { day in
                         graphics.clearDayFailure(day, for: event.id)
                     },

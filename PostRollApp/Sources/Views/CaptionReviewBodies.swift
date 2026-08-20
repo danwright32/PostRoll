@@ -115,8 +115,21 @@ struct CaptionReviewDayNotice: Identifiable, Equatable {
 struct CaptionReviewNotices: View {
     /// A run count that failed on the generation step, worded by the screen.
     var failedDayCount: Int = 0
-    /// The week regeneration's banner, or the last pick this screen refused.
+    /// The week regeneration's banner. Its own field, and no longer shared with
+    /// the last refusal (#731): one slot meant that anything refused while this
+    /// was on screen said nothing at all, and the action did not happen either.
     var regenerateError: String? = nil
+    /// The last action this screen refused, on its own row.
+    ///
+    /// A refusal is the only signal that a click did nothing, so it cannot be
+    /// something another notice outranks. It carries a dismiss for the same
+    /// reason the per-day rows do (#721): it is about a moment, and it would
+    /// otherwise sit there until the next refusal replaced it.
+    var refusal: String? = nil
+    /// A rebuild refused because that day was already rebuilding, on its own
+    /// row (#731). Separate from the one above because the screen clears the two
+    /// on different events, never together.
+    var rebuildRefusal: String? = nil
     /// Days that generated but left a photo out because the file would not open
     /// (#228). Without this the skip is invisible, because a short alt text list
     /// looks like an ordinary one.
@@ -136,6 +149,8 @@ struct CaptionReviewNotices: View {
     /// day can have both at once, which a single list keyed by day could not
     /// even render (L11).
     var coverRebuildFailures: [CaptionReviewDayNotice] = []
+    var onDismissRefusal: () -> Void = {}
+    var onDismissRebuildRefusal: () -> Void = {}
     /// Called with the day, so the screen clears that slot alone.
     var onDismissDayFailure: (DayName) -> Void = { _ in }
     var onDismissCoverFailure: (DayName) -> Void = { _ in }
@@ -157,6 +172,20 @@ struct CaptionReviewNotices: View {
             if let regenerateError {
                 BrandBanner(icon: "exclamationmark.triangle",
                             message: regenerateError, style: .error)
+            }
+            if let refusal {
+                BrandBanner(
+                    icon: "exclamationmark.triangle",
+                    message: Sentence.closed(refusal),
+                    style: .error,
+                    actions: [BrandBannerAction(label: "Dismiss") { onDismissRefusal() }])
+            }
+            if let rebuildRefusal {
+                BrandBanner(
+                    icon: "exclamationmark.triangle",
+                    message: Sentence.closed(rebuildRefusal),
+                    style: .error,
+                    actions: [BrandBannerAction(label: "Dismiss") { onDismissRebuildRefusal() }])
             }
             ForEach(dayRebuildFailures) { notice in
                 BrandBanner(

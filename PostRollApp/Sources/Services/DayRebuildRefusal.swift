@@ -28,6 +28,24 @@ enum DayRebuildRefusal {
              + "changed. Wait for \(plural ? "them" : "it") to finish, then try again."
     }
 
+    /// What the screen's two refusal slots hold once a rebuild HAS been granted.
+    ///
+    /// The rule, in one place because it was wrong the first time and the code
+    /// that got it wrong was three lines inside a two thousand line screen
+    /// (#731).
+    ///
+    /// A rebuild refused because that day was already rebuilding stops being
+    /// true the moment the day is free, so a grant takes it away. A refusal
+    /// about something else does not: a file that would not copy, or a photo set
+    /// too small to lay out, is not answered by a rebuild starting. Clearing
+    /// both on a grant destroyed exactly the half of a partly failed batch that
+    /// nothing else reports, because `importFridayClips` says which picks failed
+    /// to copy and then rebuilds with the ones that landed, in that order (L47).
+    static func afterRebuildGranted(action: String?, rebuild: String?)
+    -> (action: String?, rebuild: String?) {
+        (action, nil)
+    }
+
     /// "Tuesday", "Tuesday and Friday", "Tuesday, Thursday and Friday".
     private static func list(_ named: [String]) -> String {
         guard let last = named.last else { return "" }
