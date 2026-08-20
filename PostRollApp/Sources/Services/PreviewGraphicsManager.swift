@@ -76,13 +76,42 @@ final class PreviewGraphicsManager {
 
     /// Marks a single day as regenerating. Returns false when it already is, so
     /// the caller skips launching a duplicate.
-    @discardableResult
+    ///
+    /// Deliberately NOT `@discardableResult`. It was, and four of the five
+    /// callers on the caption review screen started their run regardless, which
+    /// nothing anywhere reported: two subprocesses writing one MP4, and the
+    /// annotation is what stopped the compiler naming who (#728). A caller that
+    /// genuinely means to ignore the answer has to write `_ =` and say why.
     func beginDayRegen(_ day: DayName, for eventID: UUID) -> Bool {
         guard state.beginDay(day, for: eventID) else { return false }
         // This slot's own reason only. A stored error outliving the run it was
         // about reads as a failure happening now, and clearing the day's
         // neighbours would take away reasons that are still true (#721).
         clearDayFailure(day, for: eventID)
+        return true
+    }
+
+    /// Claim several days at once, all of them or none (#728).
+    ///
+    /// Two actions on the review screen rebuild Tuesday and Friday from one
+    /// shared write, and half of that write landing is the state this prevents:
+    /// Friday carrying the new photos with the old graphic still rendered.
+    ///
+    /// Checked before anything is claimed rather than claimed and rolled back,
+    /// because claiming a day CLEARS its stored failure (#721) and a rollback
+    /// cannot put that back: a refused pair would take away a reason Dan has not
+    /// read yet while starting nothing at all. Two steps are safe here because
+    /// this is the main actor throughout, so nothing can interleave between
+    /// them.
+    ///
+    /// An empty list is refused. Nothing to rebuild is not a rebuild, and
+    /// answering yes would have the caller persist its write and wait for a run
+    /// nobody started (L98).
+    func beginDayRegen(_ days: [DayName], for eventID: UUID) -> Bool {
+        guard !days.isEmpty else { return false }
+        let busy = state.regeneratingDays(for: eventID)
+        guard days.allSatisfy({ !busy.contains($0) }) else { return false }
+        for day in days { _ = beginDayRegen(day, for: eventID) }
         return true
     }
 
@@ -97,7 +126,8 @@ final class PreviewGraphicsManager {
 
     // MARK: - Cover regeneration (#141, moved here by #456)
 
-    @discardableResult
+    /// Not `@discardableResult`, for the same reason as `beginDayRegen`: the
+    /// answer is the only thing stopping two runs on one file (#728).
     func beginCoverRegen(_ day: DayName, for eventID: UUID) -> Bool {
         guard state.beginCover(day, for: eventID) else { return false }
         clearCoverFailure(day, for: eventID)

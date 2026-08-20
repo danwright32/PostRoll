@@ -95,3 +95,41 @@ def test_every_named_test_still_exists(entry: Entry):
                 f"{entry.name} entry")
         assert f"def {method}(" in source, (
             f"{path_part} no longer defines {method}")
+
+
+@pytest.mark.parametrize("entry", entries(), ids=lambda e: e.name)
+def test_no_swift_mutation_assigns_to_a_name_nothing_declares(entry: Entry):
+    """A perturbation that cannot COMPILE is not a perturbation (#730).
+
+    `a-failed-rebuild-keeps-its-reason` wrote its failure into `pickError`,
+    the review screen's own state at the time. #728 renamed that field and the
+    entry kept the old name, so the mutated tree stopped building and
+    `check_guards` reported the guard as unproven. That is the honest answer,
+    and it arrives only when somebody runs the sweep: the anchor still matched,
+    the named test still existed, and every check in this file passed while the
+    perturbation had been dead for a commit.
+
+    Narrow on purpose. It reads only bare assignment targets, `name = value` at
+    the start of a line, and asks whether the file being perturbed (or the
+    replacement itself) declares that name at all. That is the one shape a
+    rename breaks, and it says nothing about a call to a method that has moved,
+    so the failure message claims only what was measured (L11). Measured across
+    all 289 entries while it was written: it named exactly the one dead
+    perturbation and nothing else (L147).
+    """
+    if not entry.file.endswith(".swift"):
+        return
+    target = REPO_ROOT / entry.file
+    assert target.is_file(), f"{entry.file} has moved; update the registry"
+    # The replacement's own locals count as declared: a perturbation may
+    # introduce a variable and then write to it.
+    declared = target.read_text() + entry.replace
+    for name in sorted(set(re.findall(r"(?m)^\s*([a-z_][A-Za-z0-9_]*)\s*=\s*[^=]",
+                                      entry.replace))):
+        if name == "_":
+            continue
+        assert re.search(rf"\b(var|let)\s+{re.escape(name)}\b", declared), (
+            f"the {entry.name} perturbation assigns to `{name}`, which "
+            f"{entry.file} does not declare, so the mutated tree cannot build "
+            f"and the guard can only ever report as unproven rather than as "
+            f"kept or broken")

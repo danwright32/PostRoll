@@ -2,7 +2,7 @@
   "name": "a-failed-rebuild-keeps-its-reason",
   "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
   "find": "                    graphics.failDayRegen(\n                        day, for: event.id,\n                        reason: \"\\(day.displayName) audio swap failed: \"\n                              + \"\\(error.localizedDescription)\")",
-  "replace": "                    graphics.endDayRegen(day, for: event.id)\n                    pickError = \"\\(day.displayName) audio swap failed: \\(error.localizedDescription)\"",
+  "replace": "                    graphics.endDayRegen(day, for: event.id)\n                    refusedAction = \"\\(day.displayName) audio swap failed: \\(error.localizedDescription)\"",
   "test": "PostRollTests/LongWorkOwnershipTests/testNoScreenKeepsTheFailureOfWorkThatOutlivesIt",
-  "breaks": "the audio swap's failure goes back into the screen's own state, which dies with the screen while the run does not, so a swap that failed after Dan moved to another event leaves nothing behind and any other action's failure overwrites this one (#721, L53, L148)"
+  "breaks": "the audio swap's failure goes back into the screen's own notice state, which dies with the screen while the run does not, so a swap that failed after Dan moved to another event leaves nothing behind and any other action's failure overwrites this one (#721, #730, L53, L148)"
 }

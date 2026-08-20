@@ -20,10 +20,11 @@ struct CaptionReviewView: View {
     /// does not recompute on every redraw.
     @State private var suggestionsAsOf = Date()
     @State private var showRegenerateConfirm = false
-    /// What the last PICK on this screen refused: a file that would not copy
-    /// into app storage, or a photo selection too small to build a collage
-    /// from. View state, and rightly: each is decided synchronously, before the
-    /// next redraw, and none of it outlives a glance.
+    /// Why this screen refused what was just asked: a file that would not copy
+    /// into app storage, a photo selection too small to build a collage from, or
+    /// a day already rebuilding (#728). View state, and rightly: each is decided
+    /// synchronously, before the next redraw, and none of it outlives a glance
+    /// because the action never started.
     ///
     /// Nothing that goes across to Python writes here any more. Those runs are
     /// owned by `captionWork` (#718) and `graphics` (#721), because they outlive
@@ -31,7 +32,7 @@ struct CaptionReviewView: View {
     /// of them shared one field here, so whichever failed last erased the
     /// reason before it, and one that failed after an event switch left nothing
     /// at all (L53, L148).
-    @State private var pickError: String?
+    @State private var refusedAction: String?
 
     /// Owns the whole-week regeneration, so neither the run nor what it has to
     /// say about a halt dies with this screen (#718).
@@ -44,7 +45,37 @@ struct CaptionReviewView: View {
     /// failure. One row on screen, and the run's own outcome wins: it is the
     /// one that costs money to rediscover.
     private var noticeToShow: String? {
-        captionWork.outcome(for: event.id, .regenerateWeek)?.failure ?? pickError
+        captionWork.outcome(for: event.id, .regenerateWeek)?.failure ?? refusedAction
+    }
+
+    /// Claim a day's rebuild slot BEFORE anything is written for it, or refuse.
+    ///
+    /// `beginDayRegen` answers whether that day is already rebuilding, and two
+    /// runs are two subprocesses writing one MP4. Four of the five callers on
+    /// this screen used to throw the answer away (#728). Honouring it after the
+    /// write would be no better: the event would carry new photos, a fresh seed
+    /// or a cleared audio track with nothing rendered to match, which is a reel
+    /// that silently disagrees with the screen. So the claim comes first and the
+    /// write happens only once it is granted.
+    ///
+    /// `days` is a list because two actions rebuild Tuesday and Friday from one
+    /// shared write, and the manager claims those together or not at all.
+    ///
+    /// A refusal says which day is busy rather than doing nothing visible: a
+    /// control that silently declines leaves pressing it again as the only
+    /// diagnosis available (L148).
+    @discardableResult
+    private func claimRebuild(_ days: [DayName],
+                              writing change: (inout Event) -> Void = { _ in }) -> Bool {
+        guard graphics.beginDayRegen(days, for: event.id) else {
+            let busy = graphics.regeneratingDays(event.id)
+            refusedAction = DayRebuildRefusal.message(for: days.filter { busy.contains($0) })
+            return false
+        }
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        change(&ev)
+        appState.updateEvent(ev)
+        return true
     }
 
     /// What the per-day rebuilds and cover rebuilds have left to say, each on
@@ -326,7 +357,7 @@ struct CaptionReviewView: View {
                                     case .failure(let error):
                                         // Refuse rather than regenerate off the
                                         // external path, and say so (#179).
-                                        pickError = ImportFailureText.message([error])
+                                        refusedAction = ImportFailureText.message([error])
                                     }
                                 }
                             } : nil
@@ -815,11 +846,14 @@ struct CaptionReviewView: View {
         // Clear any uploaded audio so regeneration fetches fresh Jamendo, and
         // hold on to what was cleared: this is persisted BEFORE the fetch that
         // justifies it, so a failed fetch has to put it back (#118).
+        //
+        // Computed here and written only once the day is claimed (#728). The
+        // clear used to be persisted first, so a swap refused because Tuesday
+        // was already rebuilding left the reel with no audio and no run to fetch
+        // any.
         let live = appState.events.first(where: { $0.id == event.id }) ?? event
         let (cleared, previousAudio) = ReelAudioSwap.clearingAudio(in: live, day: day)
-        appState.updateEvent(cleared)
-
-        graphics.beginDayRegen(day, for: event.id)
+        guard claimRebuild([day], writing: { $0 = cleared }) else { return }
         Task {
             do {
                 let swapped = try await PythonBridge.shared.runSwapReelAudio(event: liveEvent, day: day)
@@ -862,13 +896,13 @@ struct CaptionReviewView: View {
     /// frames depends on `scrollDuration`, so a full regenerate is required
     /// (regenerateGraphic reads the updated value from the live event).
     private func changeReelLength(day: DayName, to seconds: Double) {
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
-        guard pd.scrollDuration != seconds else { return }
-        pd.scrollDuration = seconds
-        ev.days[day.rawValue] = pd
-        appState.updateEvent(ev)
-        regenerateGraphic(day: day)
+        let live = appState.events.first(where: { $0.id == event.id }) ?? event
+        guard live.days[day.rawValue]?.scrollDuration != seconds else { return }
+        regenerateGraphic(day: day) { ev in
+            var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
+            pd.scrollDuration = seconds
+            ev.days[day.rawValue] = pd
+        }
     }
 
     /// Copies one picked file into app storage, or reports the failure and
@@ -878,14 +912,14 @@ struct CaptionReviewView: View {
     /// failed copy is what made that invisible (#179).
     private func storedPick(_ url: URL) -> URL? {
         let outcome = ImportedPicks.copy([url])
-        if let message = outcome.failureMessage { pickError = message }
+        if let message = outcome.failureMessage { refusedAction = message }
         return outcome.stored.first
     }
 
     /// Batch form of `storedPick`: keeps what copied, reports what didn't.
     private func storedPicks(_ urls: [URL]) -> [URL] {
         let outcome = ImportedPicks.copy(urls)
-        if let message = outcome.failureMessage { pickError = message }
+        if let message = outcome.failureMessage { refusedAction = message }
         return outcome.stored
     }
 
@@ -897,24 +931,32 @@ struct CaptionReviewView: View {
         // reused by later regenerations, so it cannot live in the temp
         // directory (macOS purges it). Fail loudly if the copy fails; the
         // persisted path is only valid when the copy succeeded.
+        // Claimed before the copy, so a refused upload leaves nothing behind:
+        // no orphan file in app storage and no audio path pointing at one
+        // (#728).
+        guard claimRebuild([day]) else { return }
+
         let dir = AppPaths.audioDir
         let dest = dir.appendingPathComponent("upload_\(UUID().uuidString)_\(url.lastPathComponent)")
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try FileManager.default.copyItem(at: url, to: dest)
         } catch {
-            pickError = "Couldn't copy the audio file: \(error.localizedDescription)"
+            // Release the slot that was claimed for a run now not happening.
+            // Holding it would leave this day unable to rebuild ever again.
+            graphics.endDayRegen(day, for: event.id)
+            refusedAction = "Couldn't copy the audio file: \(error.localizedDescription)"
             return
         }
 
-        // Persist the audio path on the event so regeneration reuses it
+        // Persist the audio path on the event so regeneration reuses it. After
+        // the claim, so the path and the run that renders it arrive together.
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
         pd.audioPath = dest
         ev.days[day.rawValue] = pd
         appState.updateEvent(ev)
 
-        graphics.beginDayRegen(day, for: event.id)
         Task {
             do {
                 let swapped = try await PythonBridge.shared.runSwapReelAudioWithFile(
@@ -947,23 +989,28 @@ struct CaptionReviewView: View {
         // `bw` is the optional B&W after; when set it flips both the Tuesday reel
         // and the Friday graphic into the 3-photo treatment. When nil it clears
         // any previously assigned B&W.
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        var tue = ev.days[DayName.tuesday.rawValue] ?? PostingDay(day: .tuesday)
-        tue.rawPhotoPath = raw
-        tue.editedPhotoPath = edited
-        tue.bwPhotoPath = bw
-        ev.days[DayName.tuesday.rawValue] = tue
-        // Friday reuses Tuesday's RAW/Edited (and B&W) for before/after
-        var fri = ev.days[DayName.friday.rawValue] ?? PostingDay(day: .friday)
-        fri.rawPhotoPath = raw
-        fri.editedPhotoPath = edited
-        fri.bwPhotoPath = bw
-        ev.days[DayName.friday.rawValue] = fri
-        appState.updateEvent(ev)
+        // One write covering two days, so both are claimed together or neither
+        // is: Friday carrying the new photos with the old graphic still rendered
+        // is exactly the half-landed state to avoid (#728).
+        guard claimRebuild([.tuesday, .friday], writing: { ev in
+            var tue = ev.days[DayName.tuesday.rawValue] ?? PostingDay(day: .tuesday)
+            tue.rawPhotoPath = raw
+            tue.editedPhotoPath = edited
+            tue.bwPhotoPath = bw
+            ev.days[DayName.tuesday.rawValue] = tue
+            // Friday reuses Tuesday's RAW/Edited (and B&W) for before/after
+            var fri = ev.days[DayName.friday.rawValue] ?? PostingDay(day: .friday)
+            fri.rawPhotoPath = raw
+            fri.editedPhotoPath = edited
+            fri.bwPhotoPath = bw
+            ev.days[DayName.friday.rawValue] = fri
+        }) else { return }
 
-        // Now generate the reel for Tuesday and the Friday before/after story
-        regenerateGraphic(day: .tuesday)
-        regenerateGraphic(day: .friday)
+        // Now generate the reel for Tuesday and the Friday before/after story.
+        // Both slots are already claimed, so these render rather than claim
+        // again, which would refuse its own caller.
+        renderClaimedDay(.tuesday)
+        renderClaimedDay(.friday)
     }
 
     /// Add or change the optional B&W after on an already-generated before/after.
@@ -1024,12 +1071,11 @@ struct CaptionReviewView: View {
 
             let picks = storedPicks(panel.urls)
             guard !picks.isEmpty else { return }
-            var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-            var thu = ev.days[DayName.thursday.rawValue] ?? PostingDay(day: .thursday)
-            thu.photoPaths = picks.sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending }
-            ev.days[DayName.thursday.rawValue] = thu
-            appState.updateEvent(ev)
-            regenerateGraphic(day: .thursday)
+            regenerateGraphic(day: .thursday) { ev in
+                var thu = ev.days[DayName.thursday.rawValue] ?? PostingDay(day: .thursday)
+                thu.photoPaths = picks.sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending }
+                ev.days[DayName.thursday.rawValue] = thu
+            }
         }
     }
 
@@ -1051,32 +1097,36 @@ struct CaptionReviewView: View {
             case .failure(let error):  failures.append(error)
             }
         }
-        if !failures.isEmpty { pickError = ImportFailureText.message(failures) }
+        if !failures.isEmpty { refusedAction = ImportFailureText.message(failures) }
         // Every pick failed to copy: nothing was imported, so don't kick off a
         // render that would produce the same reel as before (#179).
         guard !copied.isEmpty else { return }
 
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        let fri = ev.days[DayName.friday.rawValue] ?? PostingDay(day: .friday)
-        ev.days[DayName.friday.rawValue] = fri.addingClips(copied)
-        appState.updateEvent(ev)
-
-        regenerateGraphic(day: .friday)
+        regenerateGraphic(day: .friday) { ev in
+            let fri = ev.days[DayName.friday.rawValue] ?? PostingDay(day: .friday)
+            ev.days[DayName.friday.rawValue] = fri.addingClips(copied)
+        }
     }
 
     /// Reorder/include-exclude edit to the Friday clip selection (#135).
     /// Writes only to fridayClipOverride and re-renders locally via
     /// render_friday_override.py - never re-invokes Claude
     /// (feedback_collage_edits_no_python_regen).
-    private func applyFridayOverride(_ override: [ReelClipOverride]) {
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        ev.days[DayName.friday.rawValue]?.fridayClipOverride = override
-        appState.updateEvent(ev)
-
-        graphics.beginDayRegen(.friday, for: event.id)
+    /// `togglingTitleCard` folds the mute into the same claimed write. It used
+    /// to be persisted by the caller first, so a toggle refused because Friday
+    /// was already rebuilding left the card muted with the unmuted reel still on
+    /// screen (#728).
+    private func applyFridayOverride(_ override: [ReelClipOverride],
+                                    togglingTitleCard: Bool = false) {
+        guard claimRebuild([.friday], writing: { ev in
+            if togglingTitleCard {
+                ev.days[DayName.friday.rawValue]?.titleCardMuted.toggle()
+            }
+            ev.days[DayName.friday.rawValue]?.fridayClipOverride = override
+        }) else { return }
         Task {
             do {
-                let liveEvent = appState.events.first(where: { $0.id == event.id }) ?? ev
+                let liveEvent = appState.events.first(where: { $0.id == event.id }) ?? event
                 let reelPath = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
                 await MainActor.run {
                     guard let reelPath else {
@@ -1109,12 +1159,9 @@ struct CaptionReviewView: View {
     /// override render path picks up the new mute state, same policy as
     /// any other Friday manual edit (feedback_collage_edits_no_python_regen).
     private func toggleFridayTitleCard() {
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        guard let fri = ev.days[DayName.friday.rawValue] else { return }
-        ev.days[DayName.friday.rawValue]?.titleCardMuted.toggle()
-        appState.updateEvent(ev)
-
-        applyFridayOverride(fri.effectiveFridayOverride)
+        let live = appState.events.first(where: { $0.id == event.id }) ?? event
+        guard let fri = live.days[DayName.friday.rawValue] else { return }
+        applyFridayOverride(fri.effectiveFridayOverride, togglingTitleCard: true)
     }
 
     /// Replace one clip in the Friday override with a freshly picked file.
@@ -1130,7 +1177,7 @@ struct CaptionReviewView: View {
         case .failure(let error):
             // Refuse the swap rather than pointing the override at a file
             // outside app storage (#179).
-            pickError = ImportFailureText.message([error])
+            refusedAction = ImportFailureText.message([error])
             return
         }
 
@@ -1145,10 +1192,9 @@ struct CaptionReviewView: View {
     /// Clear the manual override and re-run the full AI pipeline
     /// (Stage 1 scoring + Stage 2 Claude selection + render).
     private func recutFridayWithAI() {
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        ev.days[DayName.friday.rawValue]?.fridayClipOverride = nil
-        appState.updateEvent(ev)
-        regenerateGraphic(day: .friday)
+        regenerateGraphic(day: .friday) { ev in
+            ev.days[DayName.friday.rawValue]?.fridayClipOverride = nil
+        }
     }
 
     /// Escape hatch for the "< 3 usable clips" error banner: drop the
@@ -1183,30 +1229,30 @@ struct CaptionReviewView: View {
         if let message = CollagePhotoSelection.validationError(
             selectedCount: panel.urls.count, dayDisplayName: day.displayName
         ) {
-            pickError = message
+            refusedAction = message
             return
         }
 
         let picks = storedPicks(panel.urls)
         guard !picks.isEmpty else { return }
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
-        pd.photoPaths = picks.sorted {
-            $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending
-        }
-        // Crop offsets and the cell layout are keyed to the old photo paths, so
-        // discard them for a clean rebuild from the new set.
-        pd.collageCropOffsets = [:]
-        pd.collageCellOverride = nil
-        ev.days[day.rawValue] = pd
-        appState.updateEvent(ev)
+        guard regenerateGraphic(day: day, persisting: { ev in
+            var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
+            pd.photoPaths = picks.sorted {
+                $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedAscending
+            }
+            // Crop offsets and the cell layout are keyed to the old photo paths,
+            // so discard them for a clean rebuild from the new set.
+            pd.collageCropOffsets = [:]
+            pd.collageCellOverride = nil
+            ev.days[day.rawValue] = pd
+        }) else { return }
 
         // Keep the in-memory editor state in sync so the live overlay doesn't
-        // reference photos that no longer exist.
+        // reference photos that no longer exist. Only once the rebuild is
+        // actually going: clearing it for a refused rebuild would drop Dan's
+        // crops while the old photos stay on the event (#728).
         dayCollageCropOffsets[day.rawValue] = [:]
         dayCollageCellOverrides.removeValue(forKey: day.rawValue)
-
-        regenerateGraphic(day: day)
     }
 
     /// Apply a layout chosen from the gallery: store its seed as the day's
@@ -1236,14 +1282,13 @@ struct CaptionReviewView: View {
     }
 
     private func applyCollageLayout(day: DayName, seed: Int) {
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
-        pd.collageSeed = seed
-        pd.collageCellOverride = nil
-        ev.days[day.rawValue] = pd
-        appState.updateEvent(ev)
+        guard regenerateGraphic(day: day, persisting: { ev in
+            var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
+            pd.collageSeed = seed
+            pd.collageCellOverride = nil
+            ev.days[day.rawValue] = pd
+        }) else { return }
         dayCollageCellOverrides.removeValue(forKey: day.rawValue)
-        regenerateGraphic(day: day)
     }
 
     /// Swap two photos in a day's photoPaths. Persists the new order but
@@ -1266,34 +1311,55 @@ struct CaptionReviewView: View {
         if day == .thursday { graphics.speculativeReel(for: event.id).schedule(for: liveEvent) }
     }
 
-    private func regenerateGraphic(day: DayName, newLayout: Bool = false) {
+    /// Claim the day, persist what the rebuild is for, and render it.
+    ///
+    /// `persisting` carries the caller's own write: the new photos, the new clip
+    /// list, the new reel length. It used to be persisted by the caller BEFORE
+    /// this was called, so a rebuild refused because that day was already
+    /// running left the event describing a graphic nobody was making (#728).
+    /// Nothing here writes until the claim is granted.
+    ///
+    /// Returns false when the day was refused, so a caller with in-memory state
+    /// to keep in step knows not to.
+    @discardableResult
+    private func regenerateGraphic(day: DayName, newLayout: Bool = false,
+                                   persisting change: (inout Event) -> Void = { _ in }) -> Bool {
         // Always read the CURRENT event from AppState — not self.event.
         // self.event is captured by value in the closure that calls this function and
         // may be stale (pre-save snapshot). appState is a reference type so .events
         // always reflects the latest write from save().
-        guard let live = appState.events.first(where: { $0.id == event.id }) else { return }
-        var eventSnapshot = live
+        guard appState.events.contains(where: { $0.id == event.id }) else { return false }
 
-        // For a collage day, lock the collage seed before the first regen so
-        // Python always produces the same grid layout when only crop offsets
-        // change. When `newLayout` is true, force a fresh seed regardless.
-        if isCollageDay(day),
-           newLayout || eventSnapshot.days[day.rawValue]?.collageSeed == nil {
-            var pd = eventSnapshot.days[day.rawValue] ?? PostingDay(day: day)
-            pd.collageSeed = Int.random(in: 1...999_999_999)
-            // Drop any per-cell overrides — they're keyed to the previous layout.
-            pd.collageCellOverride = nil
-            eventSnapshot.days[day.rawValue] = pd
-            appState.updateEvent(eventSnapshot)
-        }
-        if day == .thursday, newLayout {
-            var pd = eventSnapshot.days[DayName.thursday.rawValue] ?? PostingDay(day: .thursday)
-            pd.reelSeed = Int.random(in: 1...999_999_999)
-            eventSnapshot.days[DayName.thursday.rawValue] = pd
-            appState.updateEvent(eventSnapshot)
-        }
+        guard claimRebuild([day], writing: { ev in
+            change(&ev)
+            // For a collage day, lock the collage seed before the first regen so
+            // Python always produces the same grid layout when only crop offsets
+            // change. When `newLayout` is true, force a fresh seed regardless.
+            if isCollageDay(day), newLayout || ev.days[day.rawValue]?.collageSeed == nil {
+                var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
+                pd.collageSeed = Int.random(in: 1...999_999_999)
+                // Drop any per-cell overrides: they are keyed to the previous layout.
+                pd.collageCellOverride = nil
+                ev.days[day.rawValue] = pd
+            }
+            if day == .thursday, newLayout {
+                var pd = ev.days[DayName.thursday.rawValue] ?? PostingDay(day: .thursday)
+                pd.reelSeed = Int.random(in: 1...999_999_999)
+                ev.days[DayName.thursday.rawValue] = pd
+            }
+        }) else { return false }
 
-        graphics.beginDayRegen(day, for: event.id)
+        renderClaimedDay(day, newLayout: newLayout)
+        return true
+    }
+
+    /// Render a day whose slot is ALREADY claimed.
+    ///
+    /// Split from the claim because two actions claim Tuesday and Friday
+    /// together and then render both, and a second claim in here would refuse
+    /// its own caller.
+    private func renderClaimedDay(_ day: DayName, newLayout: Bool = false) {
+        let eventSnapshot = appState.events.first(where: { $0.id == event.id }) ?? event
         Task {
             // For Thursday, try to adopt a speculative pre-render that was kicked
             // off when the user edited. `newLayout` randomizes the seed, so there's
