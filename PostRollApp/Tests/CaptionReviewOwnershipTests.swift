@@ -170,6 +170,65 @@ final class CaptionReviewOwnershipTests: XCTestCase {
         XCTAssertNil(manager.thursdayEditorURL(id))
     }
 
+    // MARK: - Two days claimed together, or not at all (#728)
+
+    @MainActor
+    func testClaimingTwoFreeDaysClaimsBoth() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        defer { [DayName.tuesday, .friday].forEach { manager.endDayRegen($0, for: id) } }
+
+        XCTAssertTrue(manager.beginDayRegen([.tuesday, .friday], for: id))
+
+        XCTAssertEqual(manager.regeneratingDays(id), [.tuesday, .friday])
+    }
+
+    @MainActor
+    func testClaimingTwoDaysWhenOneIsBusyClaimsNeither() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        defer { manager.endDayRegen(.friday, for: id) }
+        _ = manager.beginDayRegen(.friday, for: id)
+
+        XCTAssertFalse(manager.beginDayRegen([.tuesday, .friday], for: id))
+
+        // Half a claim is the state this exists to prevent: the action's write
+        // covers both days, so Tuesday rebuilding alone would leave Friday
+        // carrying new photos with the old graphic rendered.
+        XCTAssertFalse(manager.regeneratingDays(id).contains(.tuesday),
+                       "Tuesday was claimed and left claimed by a refused pair, "
+                       + "so nothing can ever rebuild it again")
+    }
+
+    @MainActor
+    func testARefusedPairLeavesTheFreeDaysStoredReasonAlone() {
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        defer {
+            manager.endDayRegen(.friday, for: id)
+            manager.clearDayFailure(.tuesday, for: id)
+        }
+        manager.failDayRegen(.tuesday, for: id, reason: "Tuesday regeneration failed.")
+        _ = manager.beginDayRegen(.friday, for: id)
+
+        XCTAssertFalse(manager.beginDayRegen([.tuesday, .friday], for: id))
+
+        // Claiming clears a day's reason, so a pair that claims and rolls back
+        // would take away a failure Dan has not read while starting nothing
+        // (#721, L148).
+        XCTAssertEqual(manager.dayFailure(.tuesday, for: id), "Tuesday regeneration failed.")
+    }
+
+    @MainActor
+    func testClaimingAnEmptyListStartsNothing() {
+        // Nothing to rebuild is not a rebuild. Answering true would have the
+        // caller persist its write and wait for a run nobody started.
+        let manager = PreviewGraphicsManager.shared
+        let id = UUID()
+        XCTAssertFalse(manager.beginDayRegen([], for: id))
+        XCTAssertTrue(manager.regeneratingDays(id).isEmpty)
+    }
+
     // MARK: - A short action's failure outlives the screen too (#721)
     //
     // Every one of these ran through `regenerateError`, one string on the view,

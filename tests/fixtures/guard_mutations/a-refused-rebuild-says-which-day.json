@@ -1,0 +1,8 @@
+{
+  "name": "a-refused-rebuild-says-which-day",
+  "file": "PostRollApp/Sources/Services/DayRebuildRefusal.swift",
+  "find": "        let subject = list(named)",
+  "replace": "        let subject = \"That day\"",
+  "test": "PostRollTests/DayRebuildRefusalTests/testItNamesTheDayAndSaysNothingWasChanged",
+  "breaks": "the refusal does not say which day is busy, so Dan is told his change did not happen and not which control to wait on (#728, L80)"
+}

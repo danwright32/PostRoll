@@ -1,0 +1,8 @@
+{
+  "name": "a-half-claimed-pair-starts-nothing",
+  "file": "PostRollApp/Sources/Services/PreviewGraphicsManager.swift",
+  "find": "        let busy = state.regeneratingDays(for: eventID)\n        guard days.allSatisfy({ !busy.contains($0) }) else { return false }",
+  "replace": "        let busy = state.regeneratingDays(for: eventID)\n        if false { _ = busy }",
+  "test": "PostRollTests/CaptionReviewOwnershipTests/testClaimingTwoDaysWhenOneIsBusyClaimsNeither",
+  "breaks": "a pair claimed for one shared write is granted while one of the two days is already rebuilding, so that day gets a second run and the other is left claimed by a caller that never started (#728)"
+}

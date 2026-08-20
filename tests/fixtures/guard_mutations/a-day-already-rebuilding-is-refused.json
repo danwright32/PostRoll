@@ -1,0 +1,8 @@
+{
+  "name": "a-day-already-rebuilding-is-refused",
+  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "find": "        guard graphics.beginDayRegen(days, for: event.id) else {",
+  "replace": "        graphics.beginDayRegen(days, for: event.id)\n        if false {",
+  "test": "PostRollTests/RebuildClaimScanTests/testNoScreenStartsARunWithoutClaimingItFirst",
+  "breaks": "the screen asks whether those days are already rebuilding and throws the answer away, so a second run starts beside the first and two subprocesses write one MP4 (#728, L197)"
+}
