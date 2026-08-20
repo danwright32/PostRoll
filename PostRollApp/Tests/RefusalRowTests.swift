@@ -25,9 +25,11 @@ final class RefusalRowTests: XCTestCase {
     private let weekFailure = "The week stopped early: Claude returned no captions for Wednesday."
     private let refusal = "The Wednesday collage needs at least 2 photos (you picked 1)."
 
-    private func rendered(week: String?, refused: String?) throws -> NSBitmapImageRep {
+    private func rendered(week: String?, refused: String? = nil,
+                          rebuildRefused: String? = nil) throws -> NSBitmapImageRep {
         try WordFootprint.hosted(
-            CaptionReviewNotices(regenerateError: week, refusal: refused)
+            CaptionReviewNotices(regenerateError: week, refusal: refused,
+                                 rebuildRefusal: rebuildRefused)
                 .padding(Spacing.lg)
                 .frame(width: canvas.width, height: canvas.height, alignment: .top)
                 .background(PaintedSurfaces.page),
@@ -56,6 +58,21 @@ final class RefusalRowTests: XCTestCase {
 
         XCTAssertGreaterThan(WordFootprint.share(alone, empty), WordFootprint.drawn,
                              "a refusal with nothing else on screen does not draw")
+    }
+
+    func testABusyDayRefusalReachesThePageBesideTheOtherOne() throws {
+        // The two refusals are separate fields because the screen clears them on
+        // different events (#728's busy day stops being true the moment that day
+        // is free; a file that would not copy does not). Separate fields are two
+        // rows, and the one added second is the one that can quietly fail to
+        // draw.
+        let one = try rendered(week: weekFailure, refused: refusal)
+        let both = try rendered(week: weekFailure, refused: refusal,
+                                rebuildRefused: "Friday is already rebuilding, so nothing was changed.")
+
+        XCTAssertGreaterThan(WordFootprint.share(both, one), WordFootprint.drawn,
+                             "the busy-day refusal does not draw when another "
+                             + "refusal is already on screen")
     }
 
     func testTheMeasurementSeesNothingWhenNothingChanged() throws {

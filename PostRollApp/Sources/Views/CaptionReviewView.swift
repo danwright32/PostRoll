@@ -33,6 +33,23 @@ struct CaptionReviewView: View {
     /// reason before it, and one that failed after an event switch left nothing
     /// at all (L53, L148).
     @State private var refusedAction: String?
+    /// A rebuild refused because that day was already rebuilding (#728).
+    ///
+    /// Its own field rather than sharing `refusedAction`, for the reason the
+    /// per-day failures got their own rows in #721: these two are cleared by
+    /// different things. This one stops being true the moment that day is free,
+    /// so a granted rebuild takes it away. The other is about a file that would
+    /// not copy or a set of photos too small to lay out, which a rebuild
+    /// starting says nothing about, and clearing it on a grant destroyed the
+    /// half of a partly failed batch that nothing else reports: importing five
+    /// clips where two fail to copy records that and then rebuilds with the
+    /// three that landed (L47).
+    ///
+    /// A second String rather than one field carrying its own kind, so both
+    /// stay the shape `LongWorkOwnershipTests` looks for: it finds a screen's
+    /// message state by TYPE, and a struct here would put both of these outside
+    /// the rule that stops a long run's failure being written into view state.
+    @State private var refusedRebuild: String?
 
     /// Owns the whole-week regeneration, so neither the run nor what it has to
     /// say about a halt dies with this screen (#718).
@@ -74,23 +91,16 @@ struct CaptionReviewView: View {
                               writing change: (inout Event) -> Void = { _ in }) -> Bool {
         guard graphics.beginDayRegen(days, for: event.id) else {
             let busy = graphics.regeneratingDays(event.id)
-            refusedAction = DayRebuildRefusal.message(for: days.filter { busy.contains($0) })
+            refusedRebuild = DayRebuildRefusal.message(for: days.filter { busy.contains($0) })
             return false
         }
-        // Deliberately NOT clearing the refusal here.
-        //
-        // #731 asked for it to be cleared when the next action is accepted, and
-        // this looked like the one funnel to do it in. It destroys a message the
-        // same click just recorded: `importFridayClips` copies the picks first,
-        // says so when some of them failed to copy, and then rebuilds with the
-        // ones that landed, and `changeCollagePhotos` has the same shape through
-        // `storedPicks`. Clearing on the grant erased exactly the half of a
-        // partly failed batch that nothing else reports (L47).
-        //
-        // So it is cleared by its own Dismiss, and replaced by the next refusal.
-        // It is `@State`, so it also dies with the screen, which is right for a
-        // failure that is over before the next redraw and is why the rule about
-        // long work living on a manager does not cover it.
+        // A day that was busy is not busy any more, so the refusal that said so
+        // is taken away: set on the branch above, cleared here, in the one funnel
+        // every rebuild goes through. Which of the two slots that means is
+        // decided by DayRebuildRefusal, where it can be asserted, rather than
+        // here where the first version of it was wrong and untestable.
+        (refusedAction, refusedRebuild) = DayRebuildRefusal.afterRebuildGranted(
+            action: refusedAction, rebuild: refusedRebuild)
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         change(&ev)
         appState.updateEvent(ev)
@@ -448,6 +458,7 @@ struct CaptionReviewView: View {
                 CaptionReviewNotices(
                     regenerateError: weekRunFailure,
                     refusal: refusedAction,
+                    rebuildRefusal: refusedRebuild,
                     skippedPhotoNotices: daysWithSkippedPhotos.compactMap { day in
                         event.weekResult?.warningMessage(for: day).map {
                             CaptionReviewDayNotice(id: day.rawValue,
@@ -463,6 +474,7 @@ struct CaptionReviewView: View {
                     dayRebuildFailures: dayRebuildNotices,
                     coverRebuildFailures: coverRebuildNotices,
                     onDismissRefusal: { refusedAction = nil },
+                    onDismissRebuildRefusal: { refusedRebuild = nil },
                     onDismissDayFailure: { day in
                         graphics.clearDayFailure(day, for: event.id)
                     },

@@ -278,7 +278,8 @@ final class BannerLegibilityTests: XCTestCase {
                 // than instead of it (#731), so the row that says a click did
                 // nothing is measured for contrast like every other banner and
                 // is pictured WITH the notice that used to hide it.
-                refusal: "Friday is already rebuilding, so nothing was changed.",
+                refusal: "Two of the five clips could not be copied, so they were left out.",
+                rebuildRefusal: "Friday is already rebuilding, so nothing was changed.",
                 skippedPhotoNotices: DayName.allCases.compactMap { day in
                     failedWeek.warningMessage(for: day).map {
                         CaptionReviewDayNotice(id: day.rawValue,

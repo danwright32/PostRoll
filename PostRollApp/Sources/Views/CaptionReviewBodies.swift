@@ -126,6 +126,10 @@ struct CaptionReviewNotices: View {
     /// reason the per-day rows do (#721): it is about a moment, and it would
     /// otherwise sit there until the next refusal replaced it.
     var refusal: String? = nil
+    /// A rebuild refused because that day was already rebuilding, on its own
+    /// row (#731). Separate from the one above because the screen clears the two
+    /// on different events, never together.
+    var rebuildRefusal: String? = nil
     /// Days that generated but left a photo out because the file would not open
     /// (#228). Without this the skip is invisible, because a short alt text list
     /// looks like an ordinary one.
@@ -146,6 +150,7 @@ struct CaptionReviewNotices: View {
     /// even render (L11).
     var coverRebuildFailures: [CaptionReviewDayNotice] = []
     var onDismissRefusal: () -> Void = {}
+    var onDismissRebuildRefusal: () -> Void = {}
     /// Called with the day, so the screen clears that slot alone.
     var onDismissDayFailure: (DayName) -> Void = { _ in }
     var onDismissCoverFailure: (DayName) -> Void = { _ in }
@@ -174,6 +179,13 @@ struct CaptionReviewNotices: View {
                     message: Sentence.closed(refusal),
                     style: .error,
                     actions: [BrandBannerAction(label: "Dismiss") { onDismissRefusal() }])
+            }
+            if let rebuildRefusal {
+                BrandBanner(
+                    icon: "exclamationmark.triangle",
+                    message: Sentence.closed(rebuildRefusal),
+                    style: .error,
+                    actions: [BrandBannerAction(label: "Dismiss") { onDismissRebuildRefusal() }])
             }
             ForEach(dayRebuildFailures) { notice in
                 BrandBanner(

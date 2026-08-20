@@ -21,6 +21,39 @@ final class DayRebuildRefusalTests: XCTestCase {
                       "the refusal does not say the change did not happen: \(message)")
     }
 
+    // MARK: - What a granted rebuild takes back (#731)
+
+    func testAGrantedRebuildClearsTheRefusalThatSaidTheDayWasBusy() {
+        let after = DayRebuildRefusal.afterRebuildGranted(
+            action: nil, rebuild: "Friday is still rebuilding, so nothing was changed.")
+
+        XCTAssertNil(after.rebuild,
+                     "the day is being rebuilt now, so the message saying it was "
+                     + "already rebuilding is no longer true and must not sit there")
+    }
+
+    func testAGrantedRebuildLeavesAnUnrelatedRefusalAlone() {
+        // The half that was wrong first time round. importFridayClips reports
+        // which picks failed to copy and THEN rebuilds with the ones that
+        // landed, so clearing everything on the grant erased the only report of
+        // the failed half, in the same click that produced it (L47).
+        let copyFailure = "2 of 5 clips could not be copied, so they were left out."
+        let after = DayRebuildRefusal.afterRebuildGranted(
+            action: copyFailure,
+            rebuild: "Friday is still rebuilding, so nothing was changed.")
+
+        XCTAssertEqual(after.action, copyFailure,
+                       "a rebuild starting says nothing about a file that would "
+                       + "not copy, so it must not take that message away")
+        XCTAssertNil(after.rebuild)
+    }
+
+    func testAGrantWithNothingRefusedChangesNothing() {
+        let after = DayRebuildRefusal.afterRebuildGranted(action: nil, rebuild: nil)
+        XCTAssertNil(after.action)
+        XCTAssertNil(after.rebuild)
+    }
+
     func testItReadsAsOneSentencePerNumberOfDays() throws {
         let one = try XCTUnwrap(DayRebuildRefusal.message(for: [.friday]))
         let two = try XCTUnwrap(DayRebuildRefusal.message(for: [.tuesday, .friday]))
