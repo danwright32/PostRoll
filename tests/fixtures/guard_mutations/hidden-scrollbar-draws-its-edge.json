@@ -1,6 +1,6 @@
 {
   "name": "hidden-scrollbar-draws-its-edge",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "file": "PostRollApp/Sources/Views/CaptionReview/CaptionSection.swift",
   "find": "                        FadingScrollView {",
   "replace": "                        ScrollView(.vertical, showsIndicators: false) {",
   "test": "PostRollTests/HiddenScrollbarGuardTests/testNoViewHidesAScrollbarWithoutDrawingTheEdge",

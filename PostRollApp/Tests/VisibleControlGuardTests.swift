@@ -28,7 +28,7 @@ final class VisibleControlGuardTests: XCTestCase {
     private static let decisions = [
         "GenerationScreenBodies.swift|Use previous results",
         "GenerationScreenBodies.swift|Regenerate all",
-        "CaptionReviewView.swift|Re-cut with AI",
+        "FridayClipEditor.swift|Re-cut with AI",
         "ExportView.swift|Skip, text export only",
         "OCRReviewView.swift|Keep OCR Text",
         "PhotoAssignmentBodies.swift|Remove missing",

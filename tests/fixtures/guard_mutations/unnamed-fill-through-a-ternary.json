@@ -1,6 +1,6 @@
 {
   "name": "unnamed-fill-through-a-ternary",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "file": "PostRollApp/Sources/Views/CaptionReview/CaptionSection.swift",
   "find": "            let findings = PaintedSurfaces.captionFindings(stale: caption.findingsAreStale)\n            Text(summary)\n                .font(.system(size: 10, weight: .medium))\n                .foregroundStyle(findings.ink)\n                .padding(.horizontal, 8)\n                .padding(.vertical, 3)\n                .background(Capsule().fill(findings.badge))",
   "replace": "            let findings = PaintedSurfaces.captionFindings(stale: caption.findingsAreStale)\n            Text(summary)\n                .font(.system(size: 10, weight: .medium))\n                .foregroundStyle(findings.ink)\n                .padding(.horizontal, 8)\n                .padding(.vertical, 3)\n                .background(Capsule().fill((caption.findingsAreStale ? Color.warmMid : Color.roseDeep).opacity(0.12)))",
   "test": "PostRollTests/BannerLegibilityTests/testEveryPaintedFileDrawsFromTheNamedColours",

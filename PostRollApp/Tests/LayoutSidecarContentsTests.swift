@@ -86,15 +86,21 @@ final class LayoutSidecarContentsTests: XCTestCase {
     /// only changes when the day is regenerated. The export screen had taken
     /// the cached shape an hour earlier for exactly this reason (#247).
     ///
-    /// Checked structurally because the view is private to its file and cannot
-    /// be built in a test: what is guarded is that the answer comes from stored
-    /// state and the read happens in a named refresh, not in `body`.
+    /// Checked structurally rather than by building the view: what is guarded
+    /// is that the answer comes from stored state and the read happens in a
+    /// named refresh, not in `body`.
+    ///
+    /// Read from the ONE file that owns the badge rather than from the caption
+    /// review sources as a set. The pair below (a named refresh, and something
+    /// calling it) is satisfied by two unrelated files if the text is read as
+    /// one body, which would prove neither half (L178, L135). The strip moved
+    /// out of `CaptionReviewView.swift` when the screen was split (#741).
     func testTheReviewScreenReadsTheStampOnceRatherThanEveryRedraw() throws {
         let source = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
-                .appendingPathComponent("Sources/Views/CaptionReviewView.swift"),
+                .appendingPathComponent("Sources/Views/CaptionReview/ReviewMediaStrip.swift"),
             encoding: .utf8)
 
         // #286 widened this from the collage to every template the day cached,
