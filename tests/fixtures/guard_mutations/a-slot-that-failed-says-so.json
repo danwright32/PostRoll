@@ -1,0 +1,8 @@
+{
+  "name": "a-slot-that-failed-says-so",
+  "file": "PostRollApp/Sources/Services/PreviewGraphicsManager.swift",
+  "find": "        dayFailures[DaySlot(eventID: eventID, day: day)] = reason\n        endDayRegen(day, for: eventID)",
+  "replace": "        endDayRegen(day, for: eventID)",
+  "test": "PostRollTests/CaptionReviewOwnershipTests/testAFailedDayRebuildKeepsItsReasonAndReleasesTheSlot",
+  "breaks": "a rebuild that failed releases its slot and records no reason, so the screen shows an idle day and Dan is told nothing at all, which is the spinner-over-a-failure shape one step further on (#721, L10)"
+}

@@ -115,7 +115,7 @@ struct CaptionReviewDayNotice: Identifiable, Equatable {
 struct CaptionReviewNotices: View {
     /// A run count that failed on the generation step, worded by the screen.
     var failedDayCount: Int = 0
-    /// The last regeneration error, if one is still current.
+    /// The week regeneration's banner, or the last pick this screen refused.
     var regenerateError: String? = nil
     /// Days that generated but left a photo out because the file would not open
     /// (#228). Without this the skip is invisible, because a short alt text list
@@ -123,6 +123,22 @@ struct CaptionReviewNotices: View {
     var skippedPhotoNotices: [CaptionReviewDayNotice] = []
     /// Days whose assets finished while an OPTIONAL input had moved (#265).
     var mediaWarnings: [CaptionReviewDayNotice] = []
+    /// Days whose rebuild failed, one row each (#721).
+    ///
+    /// A list rather than one string: these are separate runs on separate days,
+    /// and they shared a single field until whichever failed last was the only
+    /// one Dan could read (L53). Each carries a dismiss, because the reason now
+    /// outlives the screen and would otherwise sit there until that day is
+    /// rebuilt.
+    var dayRebuildFailures: [CaptionReviewDayNotice] = []
+    /// Days whose COVER rebuild failed. Its own list, because a cover rebuild
+    /// and a reel rebuild are different runs with different remedies, and one
+    /// day can have both at once, which a single list keyed by day could not
+    /// even render (L11).
+    var coverRebuildFailures: [CaptionReviewDayNotice] = []
+    /// Called with the day, so the screen clears that slot alone.
+    var onDismissDayFailure: (DayName) -> Void = { _ in }
+    var onDismissCoverFailure: (DayName) -> Void = { _ in }
 
     /// The banner about failed days, worded here so the count and the sentence
     /// cannot disagree.
@@ -141,6 +157,24 @@ struct CaptionReviewNotices: View {
             if let regenerateError {
                 BrandBanner(icon: "exclamationmark.triangle",
                             message: regenerateError, style: .error)
+            }
+            ForEach(dayRebuildFailures) { notice in
+                BrandBanner(
+                    icon: "exclamationmark.triangle",
+                    message: Sentence.closed(notice.message),
+                    style: .error,
+                    actions: DayName(rawValue: notice.id).map { day in
+                        [BrandBannerAction(label: "Dismiss") { onDismissDayFailure(day) }]
+                    } ?? [])
+            }
+            ForEach(coverRebuildFailures) { notice in
+                BrandBanner(
+                    icon: "exclamationmark.triangle",
+                    message: Sentence.closed(notice.message),
+                    style: .error,
+                    actions: DayName(rawValue: notice.id).map { day in
+                        [BrandBannerAction(label: "Dismiss") { onDismissCoverFailure(day) }]
+                    } ?? [])
             }
             ForEach(skippedPhotoNotices) { notice in
                 BrandBanner(icon: "photo.badge.exclamationmark", message: notice.message)
