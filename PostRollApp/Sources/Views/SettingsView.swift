@@ -9,7 +9,13 @@ struct SettingsView: View {
 
     // Default posting layout for new events (#66). Per-event overrides live on
     // the Export page; this is the fallback an event uses until it's overridden.
-    @State private var presetStore = PostingPresetStore()
+    //
+    // Taken from the environment rather than built here, the way the analytics
+    // and hashtag stores are (#727). This screen is compiled into the test
+    // bundle, so a store it built itself was one reading Dan's real preference
+    // from inside any test that rendered the screen; the app provides the one
+    // store in PostRollApp.
+    @Environment(PostingPresetStore.self) private var presetStore
 
     // Legacy-data reclaim (#47): nil until probed; 0 means nothing to reclaim.
     @State private var reclaimableBytes: Int64? = nil

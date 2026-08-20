@@ -166,14 +166,31 @@ enum CollagePhotoSelection {
 final class PostingPresetStore {
     var selected: PostingPreset = .balanced
 
-    /// Defaults to the real store; a test passes its own scratch suite so the
-    /// live preference is never written (#116).
     private let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard) {
+    /// The one initializer, and every caller says which preferences it reads.
+    ///
+    /// It used to default to `.standard`, and `SettingsView` built its own
+    /// store and took that default while being compiled into the test bundle,
+    /// so any test rendering that screen read Dan's real posting layout and
+    /// would have written it back the moment a rendered control moved the
+    /// picker (#727). A test passing its own scratch suite was already the
+    /// convention (#116), and a convention is not a structure (L2).
+    init(defaults: UserDefaults) {
         self.defaults = defaults
         selected = PostingPreset.current(in: defaults)
     }
+
+    #if !POSTROLL_TESTS
+    /// The app's own store, on Dan's real preferences.
+    ///
+    /// Compiled out of the test bundle, so a test that does not say which
+    /// preferences it means is a build error rather than a silent read of the
+    /// live one. The condition is set on the test target only, in project.yml.
+    convenience init() {
+        self.init(defaults: .standard)
+    }
+    #endif
 
     func save() {
         defaults.set(selected.rawValue, forKey: PostingPreset.storageKey)

@@ -5,6 +5,9 @@ struct PostRollApp: App {
     @State private var appState = AppState()
     @State private var hashtagStore = HashtagStore()
     @State private var analyticsStore = AnalyticsStore()
+    /// The default posting layout, owned here and handed to the Settings scene
+    /// that edits it (#727).
+    @State private var presetStore = PostingPresetStore()
     /// Every owner of work that outlives a screen, in one list rather than
     /// seven declarations here and the same seven again in the test harness
     /// that renders whole screens (#718). See `AppOwners`.
@@ -20,6 +23,7 @@ struct PostRollApp: App {
                 .environment(appState)
                 .environment(hashtagStore)
                 .environment(analyticsStore)
+                .environment(presetStore)
                 .withAppOwners(owners)
                 .preferredColorScheme(.light)
                 // The accent every system control inherits: a spinner's arc, a
@@ -71,6 +75,7 @@ struct PostRollApp: App {
 
         Settings {
             SettingsView()
+                .environment(presetStore)
         }
     }
 }
