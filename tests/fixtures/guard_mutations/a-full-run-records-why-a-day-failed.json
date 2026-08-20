@@ -1,0 +1,8 @@
+{
+  "name": "a-full-run-records-why-a-day-failed",
+  "file": "PostRollApp/Sources/Services/PreviewGraphicsManager.swift",
+  "find": "                failDayRegen(day, for: eventID, pipelineError: pipelineError)",
+  "replace": "                _ = pipelineError",
+  "test": "PostRollTests/FullRunDayOutcomeTests/testAFailedDayIsRecordedOnTheManager",
+  "breaks": "a day that failed inside the whole week rebuild records no reason at all, so the screen shows nothing about it and Friday's clip shortfall escape hatch, which is reached from the recorded failure, is unreachable for exactly the run that produces most of them (#740, #730, #721)"
+}
