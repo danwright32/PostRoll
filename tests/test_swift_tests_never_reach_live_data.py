@@ -187,6 +187,31 @@ def test_the_app_still_has_preferences_of_its_own():
         "#if !POSTROLL_TESTS")
 
 
+def test_the_scratch_suite_is_not_one_of_the_apps_own_domains():
+    """A suite named after a bundle id IS that bundle's own preferences.
+
+    `UserDefaults(suiteName:)` is documented as not accepting the caller's own
+    bundle identifier, and the two names sit in different files, so nothing
+    otherwise holds them apart. If they ever met, every test would be writing
+    the domain this arrangement exists to protect while reading as isolated,
+    which is the one failure this cannot report on its own (L70).
+    """
+    home = (REPO / "PostRollApp" / "Sources" / "Services"
+            / "AppPreferences.swift").read_text(encoding="utf-8")
+    named = re.search(r'testSuiteName\s*=\s*"([^"]+)"', home)
+    assert named, "AppPreferences no longer names the suite the tests get"
+    suite = named.group(1)
+    assert suite.strip(), "the test suite name is blank"
+
+    project = (REPO / "PostRollApp" / "project.yml").read_text(encoding="utf-8")
+    bundles = re.findall(r"PRODUCT_BUNDLE_IDENTIFIER:\s*(\S+)", project)
+    assert bundles, "no bundle identifiers in project.yml to compare against"
+    assert suite not in bundles, (
+        f"the tests' scratch suite is {suite}, which is one of this project's "
+        f"own bundle identifiers ({', '.join(bundles)}), so it is not a scratch "
+        "suite at all")
+
+
 def test_the_app_still_has_a_store_of_its_own_to_build():
     # The other half of the rule. Compiling the live initializer out of the test
     # bundle is only correct if the app itself still has one, and a guard that
