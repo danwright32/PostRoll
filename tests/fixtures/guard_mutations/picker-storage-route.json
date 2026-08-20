@@ -1,6 +1,6 @@
 {
   "name": "picker-storage-route",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "file": "PostRollApp/Sources/Views/CaptionReview/BlogSection.swift",
   "find": "let outcome = ImportedPicks.copy(panel.urls)",
   "replace": "let outcome = ImportedPicks.Outcome(stored: panel.urls, failures: [])",
   "test": "PostRollTests/PickerStorageHygieneTests/testEveryPickerRoutesItsPickIntoAppStorage",

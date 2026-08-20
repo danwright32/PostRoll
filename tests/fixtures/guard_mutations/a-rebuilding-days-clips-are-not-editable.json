@@ -1,6 +1,6 @@
 {
   "name": "a-rebuilding-days-clips-are-not-editable",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "file": "PostRollApp/Sources/Views/CaptionReview/FridayClipEditor.swift",
   "find": "            .disabled(isRegenerating)\n        )\n    }",
   "replace": "        )\n    }",
   "test": "PostRollTests/RebuildingDayControlsTests/testTheClipEditorLooksUnavailableWhileTheDayRebuilds",

@@ -1,6 +1,6 @@
 {
   "name": "one-findings-panel",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "file": "PostRollApp/Sources/Views/CaptionReview/CaptionSection.swift",
   "find": "            FindingsPanel(summary: summary,\n                          findings: caption.findings,\n                          isStale: caption.findingsAreStale,\n                          subject: \"caption\")",
   "replace": "            ForEach(FindingsDisplay.grouped(findings: caption.findings), id: \\.code) { group in\n                Text(group.message)\n            }",
   "test": "PostRollTests/FindingsPanelTests/testOnlyOneViewGroupsTheFindings",

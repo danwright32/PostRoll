@@ -1,6 +1,6 @@
 {
   "name": "horizontal-strip-shows-its-edge",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "file": "PostRollApp/Sources/Views/CaptionReview/ReviewMediaStrip.swift",
   "find": "                FadingScrollView(axis: .horizontal) {\n                    HStack(spacing: 8) {\n                        ForEach(postingDay.photoPaths, id: \\.self) { url in",
   "replace": "                ScrollView(.horizontal, showsIndicators: false) {\n                    HStack(spacing: 8) {\n                        ForEach(postingDay.photoPaths, id: \\.self) { url in",
   "test": "PostRollTests/HiddenScrollbarGuardTests/testNoViewHidesAScrollbarWithoutDrawingTheEdge",

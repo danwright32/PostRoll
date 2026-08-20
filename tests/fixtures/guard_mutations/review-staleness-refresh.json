@@ -1,6 +1,6 @@
 {
   "name": "review-staleness-refresh",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "file": "PostRollApp/Sources/Views/CaptionReview/ReviewMediaStrip.swift",
   "find": ".onAppear { refreshDesignStaleness() }",
   "replace": ".onAppear { }",
   "test": "PostRollTests/LayoutSidecarContentsTests/testTheReviewScreenReadsTheStampOnceRatherThanEveryRedraw",

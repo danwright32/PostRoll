@@ -1,6 +1,6 @@
 {
   "name": "picker-storage-not-satisfied-by-a-comment",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "file": "PostRollApp/Sources/Views/CaptionReview/BlogSection.swift",
   "find": "        let outcome = ImportedPicks.copy(panel.urls)",
   "replace": "        // ImportedPicks.copy(panel.urls) used to be here\n        let outcome = ImportedPicks.Outcome(stored: panel.urls, failures: [])",
   "test": "PostRollTests/PickerStorageHygieneTests/testEveryPickerRoutesItsPickIntoAppStorage",
