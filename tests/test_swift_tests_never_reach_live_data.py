@@ -38,7 +38,14 @@ SWIFT_TESTS = REPO / "PostRollApp" / "Tests"
 # An initializer parameter whose default value is one of the app's live
 # locations. Derived from the source rather than a list of store names, so a
 # store added tomorrow is covered by the same rule (L96).
-LIVE_DEFAULT = re.compile(r"init\([^)]*=\s*AppPaths\.[A-Za-z]", re.S)
+# A live location is not only a path. `PostingPresetStore` defaulted its
+# `defaults:` parameter to `UserDefaults.standard`, which is Dan's real posting
+# preference, and `SettingsView` took that default while being compiled into the
+# test bundle (#727). Reading a preference is not reading a photo history, and
+# it is the same shape: the store the app runs on, reached by a test that said
+# nothing about where to look.
+LIVE_DEFAULT = re.compile(
+    r"init\([^)]*=\s*(?:AppPaths\.[A-Za-z]|UserDefaults\.standard|\.standard\b)", re.S)
 
 # The two stores the render sweep reached, each with what to pass instead. Their
 # no-argument form is what a future test reaches for, so it is named here in the
@@ -57,6 +64,10 @@ BARE_STORES = {
                       "InsightsWorkManagerTests does",
     "HashtagStore":   "pass loadingSaved: false, the way HostedControlLegibilityTests "
                       "does, so Dan's saved tags are not read",
+    "PostingPresetStore":
+                      "pass defaults: a UserDefaults(suiteName:) of your own, the "
+                      "way PostingPresetTests does, so Dan's real posting layout "
+                      "is neither read nor written",
 }
 
 
@@ -164,6 +175,19 @@ def test_the_scan_can_still_see_a_live_default():
     offender = swift_as_the_test_bundle_sees_it(swift_code_only(
         "final class Thing {\n    init(fileURL: URL = AppPaths.analyticsFile) {}\n}\n"))
     assert _hits(LIVE_DEFAULT, offender) == [2]
+
+
+def test_the_scan_can_still_see_the_live_preferences_as_a_default():
+    # The other half of what a live location is (#727). Written as both
+    # spellings, because the one that actually shipped was the inferred `.standard`
+    # and a rule reading only the qualified form would have passed it.
+    spelled = swift_as_the_test_bundle_sees_it(swift_code_only(
+        "final class Store {\n"
+        "    init(defaults: UserDefaults = UserDefaults.standard) {}\n}\n"))
+    assert _hits(LIVE_DEFAULT, spelled) == [2]
+    inferred = swift_as_the_test_bundle_sees_it(swift_code_only(
+        "final class Store {\n    init(defaults: UserDefaults = .standard) {}\n}\n"))
+    assert _hits(LIVE_DEFAULT, inferred) == [2]
 
 
 def test_a_live_default_the_app_alone_compiles_is_not_an_offence():
