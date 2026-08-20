@@ -1,0 +1,8 @@
+{
+  "name": "a-scratch-suite-opens-empty",
+  "file": "PostRollApp/Sources/Services/AppPreferences.swift",
+  "find": "        UserDefaults().removePersistentDomain(forName: name)",
+  "replace": "        _ = name",
+  "test": "PostRollTests/ScratchPreferencesTests/testOpeningAScratchSuiteLeavesNothingFromTheRunBefore",
+  "breaks": "the test bundle's scratch preferences suite keeps whatever the run before wrote, so a value left behind by one run is an input to the next and the failure reads as a flaky test rather than as leftover state (#744)"
+}

@@ -212,6 +212,64 @@ def test_the_scratch_suite_is_not_one_of_the_apps_own_domains():
         "suite at all")
 
 
+def _scratch_opener(code: str) -> str:
+    """The body of the function AppPreferences opens a scratch suite with."""
+    found = re.search(
+        r"static func openScratchSuite\([^)]*\)\s*->\s*UserDefaults\s*\{(.*?)\n    \}",
+        code, re.S)
+    assert found, (
+        "AppPreferences no longer has openScratchSuite, so nothing names the "
+        "one place a scratch preferences suite is opened")
+    return found.group(1)
+
+
+def test_the_scratch_suite_is_emptied_when_it_is_opened():
+    """A value one run left behind must not be an input to the next (#744).
+
+    Every other scratch suite in the Swift tests deletes itself in teardown.
+    This one is opened once per process and shared by the whole run, so the
+    clearing belongs where the suite is opened rather than in a teardown block
+    per test, which would take the value away from tests that deliberately
+    share it within a run.
+
+    Checked here rather than in Swift because `AppPreferences.store` is a
+    `static let`: nothing inside a run can watch the real suite being opened.
+    What Swift proves is that opening one empties it
+    (`ScratchPreferencesTests`); what this proves is that the store the whole
+    test bundle reads is opened that way.
+    """
+    home = (REPO / "PostRollApp" / "Sources" / "Services"
+            / "AppPreferences.swift").read_text(encoding="utf-8")
+    code = swift_as_the_test_bundle_sees_it(swift_code_only(home))
+
+    body = _scratch_opener(code)
+    assert "removePersistentDomain" in body, (
+        "openScratchSuite does not clear the domain it opens, so whatever a "
+        "test wrote stays in that suite's plist and is an input to the next "
+        "run of the suite, which is diagnosed as a flaky test rather than as "
+        "leftover state (#744)")
+    assert body.index("removePersistentDomain") < body.index("UserDefaults(suiteName:"), (
+        "openScratchSuite clears the domain after opening it, so the instance "
+        "it hands out can still be holding the values it just deleted")
+
+    assert re.search(r"static let store[^\n]*openScratchSuite", code), (
+        "AppPreferences.store no longer goes through openScratchSuite, so the "
+        "clearing above is not on the path the test bundle actually reads")
+
+
+def test_the_scan_can_still_see_a_suite_opened_without_clearing_it():
+    # The control, and the shape that shipped: the opener as it stood before
+    # #744, which a rule that had stopped matching would report as clean (L98).
+    before = (
+        "    static func openScratchSuite(named name: String) -> UserDefaults {\n"
+        "        guard let scratch = UserDefaults(suiteName: name) else {\n"
+        "            fatalError(\"no\")\n"
+        "        }\n"
+        "        return scratch\n"
+        "    }\n")
+    assert "removePersistentDomain" not in _scratch_opener(before)
+
+
 def test_the_app_still_has_a_store_of_its_own_to_build():
     # The other half of the rule. Compiling the live initializer out of the test
     # bundle is only correct if the app itself still has one, and a guard that
