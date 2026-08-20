@@ -216,7 +216,7 @@ final class CaptionReviewOwnershipTests: XCTestCase {
         // Claiming clears a day's reason, so a pair that claims and rolls back
         // would take away a failure Dan has not read while starting nothing
         // (#721, L148).
-        XCTAssertEqual(manager.dayFailure(.tuesday, for: id), "Tuesday regeneration failed.")
+        XCTAssertEqual(manager.dayFailure(.tuesday, for: id)?.reason, "Tuesday regeneration failed.")
     }
 
     @MainActor
@@ -246,7 +246,7 @@ final class CaptionReviewOwnershipTests: XCTestCase {
 
         manager.failDayRegen(.tuesday, for: id, reason: "Tuesday audio swap failed: no track.")
 
-        XCTAssertEqual(manager.dayFailure(.tuesday, for: id),
+        XCTAssertEqual(manager.dayFailure(.tuesday, for: id)?.reason,
                        "Tuesday audio swap failed: no track.")
         XCTAssertFalse(manager.regeneratingDays(id).contains(.tuesday),
                        "the slot is still held, so nothing can rebuild that day again")
@@ -261,9 +261,9 @@ final class CaptionReviewOwnershipTests: XCTestCase {
         manager.failDayRegen(.tuesday, for: id, reason: "Tuesday audio swap failed.")
         manager.failDayRegen(.thursday, for: id, reason: "Thursday regeneration failed.")
 
-        XCTAssertEqual(manager.dayFailure(.tuesday, for: id), "Tuesday audio swap failed.",
+        XCTAssertEqual(manager.dayFailure(.tuesday, for: id)?.reason, "Tuesday audio swap failed.",
                        "the second failure erased the first, which is the whole defect")
-        XCTAssertEqual(manager.dayFailure(.thursday, for: id), "Thursday regeneration failed.")
+        XCTAssertEqual(manager.dayFailure(.thursday, for: id)?.reason, "Thursday regeneration failed.")
     }
 
     @MainActor
@@ -281,7 +281,7 @@ final class CaptionReviewOwnershipTests: XCTestCase {
         // Two different runs on one day, with two different remedies. Reporting
         // the cover's failure as the reel's would send Dan to rebuild the wrong
         // thing (L11).
-        XCTAssertEqual(manager.dayFailure(.friday, for: id), "Friday reel edit failed.")
+        XCTAssertEqual(manager.dayFailure(.friday, for: id)?.reason, "Friday reel edit failed.")
         XCTAssertEqual(manager.coverFailure(.friday, for: id),
                        "Friday cover regeneration failed.")
     }
@@ -304,7 +304,7 @@ final class CaptionReviewOwnershipTests: XCTestCase {
         // A stored error that outlives the run it was about reads as a failure
         // happening now.
         XCTAssertNil(manager.dayFailure(.tuesday, for: id))
-        XCTAssertEqual(manager.dayFailure(.thursday, for: id), "Thursday regeneration failed.",
+        XCTAssertEqual(manager.dayFailure(.thursday, for: id)?.reason, "Thursday regeneration failed.",
                        "retrying one day wiped another day's reason")
         XCTAssertEqual(manager.coverFailure(.tuesday, for: id), "Tuesday cover failed.",
                        "rebuilding the reel cleared the cover's reason, which is "
@@ -325,7 +325,7 @@ final class CaptionReviewOwnershipTests: XCTestCase {
         XCTAssertTrue(manager.beginCoverRegen(.friday, for: id))
 
         XCTAssertNil(manager.coverFailure(.friday, for: id))
-        XCTAssertEqual(manager.dayFailure(.friday, for: id), "Friday reel edit failed.")
+        XCTAssertEqual(manager.dayFailure(.friday, for: id)?.reason, "Friday reel edit failed.")
     }
 
     @MainActor
@@ -353,8 +353,8 @@ final class CaptionReviewOwnershipTests: XCTestCase {
         manager.failDayRegen(.tuesday, for: id, reason: "Tuesday failed.")
 
         XCTAssertEqual(manager.dayFailures(for: id),
-                       [.init(day: .tuesday, reason: "Tuesday failed."),
-                        .init(day: .thursday, reason: "Thursday failed.")])
+                       [.init(day: .tuesday, reason: "Tuesday failed.", pipelineError: nil),
+                        .init(day: .thursday, reason: "Thursday failed.", pipelineError: nil)])
     }
 
     @MainActor
@@ -369,7 +369,7 @@ final class CaptionReviewOwnershipTests: XCTestCase {
 
         XCTAssertNil(manager.dayFailure(.tuesday, for: id))
         XCTAssertEqual(manager.dayFailures(for: id),
-                       [.init(day: .thursday, reason: "Thursday failed.")])
+                       [.init(day: .thursday, reason: "Thursday failed.", pipelineError: nil)])
     }
 
     @MainActor

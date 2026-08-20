@@ -290,7 +290,7 @@ struct CaptionReviewView: View {
                             onRecutFridayWithAI: day == .friday ? { recutFridayWithAI() } : nil,
                             onToggleFridayTitleCard: day == .friday ? { toggleFridayTitleCard() } : nil,
                             fridayRegenStartedAt: day == .friday ? graphics.dayStartedAt(.friday, for: event.id) : nil,
-                            fridayRegenerateError: day == .friday
+                            fridayFailure: day == .friday
                                 ? graphics.dayFailure(.friday, for: event.id) : nil,
                             onSkipFridayClips: day == .friday ? { skipFridayClipsKeepStoryOnly() } : nil,
                             onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
@@ -1416,8 +1416,10 @@ struct CaptionReviewView: View {
                            warning: result.warnings[day.rawValue])
 
         if let pyError = result.errors[day.rawValue] {
-            graphics.failDayRegen(day, for: event.id,
-                                  reason: "\(day.displayName) regeneration failed: \(pyError)")
+            // The pipeline's own text, not a sentence wrapped around it: the
+            // marker it uses for the cases with a remedy has to survive to the
+            // card that offers one (#730). The manager builds the wording.
+            graphics.failDayRegen(day, for: event.id, pipelineError: pyError)
         } else if let dayPaths = result.paths[day.rawValue], !dayPaths.isEmpty {
             // Read the CURRENT event — not self.event which may be stale
             // (e.g. after assignReelPhotosAndGenerate saved new photos).
@@ -1674,7 +1676,10 @@ struct CaptionSection: View {
     /// text (#135). It used to be the screen's one shared error string, which
     /// any other day's failure could overwrite between the run and the reading
     /// (#721, L53).
-    var fridayRegenerateError: String? = nil
+    ///
+    /// The whole failure rather than its sentence, so the decision below reads
+    /// the pipeline's marker (#730).
+    var fridayFailure: PreviewGraphicsManager.DayFailure? = nil
     /// "Skip clips, keep story-only": clears clipPaths so future regens
     /// don't retry the clip pipeline, and dismisses the error.
     var onSkipFridayClips: (() -> Void)? = nil
@@ -2097,7 +2102,7 @@ struct CaptionSection: View {
                             .padding(.horizontal, Spacing.xl)
                             .padding(.bottom, Spacing.md)
                     }
-                    if let err = fridayRegenerateError, FridayReviewDisplay.isInsufficientClipsError(err) {
+                    if FridayReviewDisplay.offersInsufficientClipsEscape(fridayFailure) {
                         BrandBanner(
                             icon: "exclamationmark.triangle",
                             message: "Not enough usable clips for an auto-cut reel. Import more, or skip clips and keep the story-only post.",

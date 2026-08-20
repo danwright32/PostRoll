@@ -22,8 +22,24 @@ enum FridayReviewDisplay {
     /// insufficient_clips: prefix, deliberately, so this check is an
     /// intentional wire contract rather than string-matching a message
     /// meant for humans.
-    static func isInsufficientClipsError(_ message: String) -> Bool {
-        message.hasPrefix("insufficient_clips:")
+    ///
+    /// It takes the day's whole failure rather than a string, and reads the
+    /// PIPELINE's error out of it (#730). It used to take a string, and the
+    /// screen handed it the sentence built for Dan, "Friday regeneration
+    /// failed: insufficient_clips: …", where the prefix is no longer a prefix.
+    /// So the card that offers the two ways out could never appear, and the day
+    /// stayed stuck: re-running the clip pipeline on the same clips produces the
+    /// same shortfall every time. Its own test fed the bare marker and passed,
+    /// which is why nothing reported it (L3, L178).
+    ///
+    /// A typed argument rather than a second string parameter, because the
+    /// defect was a caller passing the wrong string and there is no wording of
+    /// a `String` parameter that stops that.
+    static func offersInsufficientClipsEscape(
+        _ failure: PreviewGraphicsManager.DayFailure?
+    ) -> Bool {
+        guard let pipelineError = failure?.pipelineError else { return false }
+        return pipelineError.hasPrefix("insufficient_clips:")
     }
 
     /// What the review card says about the crops in the cut, or nil when there
