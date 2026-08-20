@@ -36,14 +36,14 @@ final class TimingStore: @unchecked Sendable {
 
     private var timings: Timings {
         get {
-            guard let data = UserDefaults.standard.data(forKey: key),
+            guard let data = AppPreferences.store.data(forKey: key),
                   let decoded = try? JSONDecoder().decode(Timings.self, from: data)
             else { return Timings() }
             return decoded
         }
         set {
             if let data = try? JSONEncoder().encode(newValue) {
-                UserDefaults.standard.set(data, forKey: key)
+                AppPreferences.store.set(data, forKey: key)
             }
         }
     }

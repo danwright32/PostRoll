@@ -1,0 +1,8 @@
+{
+  "name": "the-scratch-suite-is-not-the-apps-own-domain",
+  "file": "PostRollApp/Sources/Services/AppPreferences.swift",
+  "find": "    static let testSuiteName = \"com.dwphotony.PostRoll.tests\"",
+  "replace": "    static let testSuiteName = \"com.dwphotony.PostRoll\"",
+  "test": "tests/test_swift_tests_never_reach_live_data.py::test_the_scratch_suite_is_not_one_of_the_apps_own_domains",
+  "breaks": "the suite the test bundle is given IS the app's own preferences, so every test writes the domain this arrangement exists to protect while reading as isolated, and nothing else in the suite can tell the two apart (#738, L70)"
+}

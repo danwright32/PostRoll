@@ -84,7 +84,7 @@ struct ExportView: View {
         }
         .background(PaintedSurfaces.page)
         .onAppear {
-            if let path = UserDefaults.standard.string(forKey: "lastExportFolder") {
+            if let path = AppPreferences.store.string(forKey: "lastExportFolder") {
                 let candidate = URL(fileURLWithPath: path)
                 if FileManager.default.fileExists(atPath: candidate.path) {
                     lastExportFolder = candidate

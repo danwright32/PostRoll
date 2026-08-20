@@ -95,7 +95,7 @@ final class ExportManager {
             return
         }
 
-        UserDefaults.standard.set(destinationRoot.path, forKey: "lastExportFolder")
+        AppPreferences.store.set(destinationRoot.path, forKey: "lastExportFolder")
 
         tracker.begin(Run(phase: .exportingText, isFullExport: onlyDay == nil), for: eventID)
 

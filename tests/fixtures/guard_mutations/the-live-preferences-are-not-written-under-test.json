@@ -1,0 +1,8 @@
+{
+  "name": "the-live-preferences-are-not-written-under-test",
+  "file": "PostRollApp/Sources/Services/HashtagStore.swift",
+  "find": "        AppPreferences.store.set(globalTags, forKey: Self.globalKey)",
+  "replace": "        UserDefaults.standard.set(globalTags, forKey: Self.globalKey)",
+  "test": "tests/test_swift_tests_never_reach_live_data.py::test_no_code_the_test_bundle_compiles_names_the_live_preferences",
+  "breaks": "the hashtag store writes Dan's real global tags again from inside the test bundle, which is the half #722 left open: it compiled the live initializer out so a test has to say loadingSaved: false, and that gates the LOAD only (#738, L201)"
+}
