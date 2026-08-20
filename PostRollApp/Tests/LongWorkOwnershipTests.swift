@@ -136,6 +136,13 @@ final class LongWorkOwnershipTests: XCTestCase {
     // event left nothing behind at all, because the run survived the remount
     // and its message did not (L148).
 
+    /// Compiled once, and force-tried on purpose: the pattern is a literal on
+    /// the next line, so failing to compile it is a typo here and nothing else.
+    /// Handing back no names instead would report every screen as clean, which
+    /// is what this rule holding looks like (L98).
+    private static let messageState = try! NSRegularExpression(
+        pattern: #"@State\s+(?:private\s+)?var\s+(\w+)\s*:\s*String\?"#)
+
     /// The names of the view's own message state, which a long run must not
     /// write.
     ///
@@ -149,10 +156,8 @@ final class LongWorkOwnershipTests: XCTestCase {
     /// Measured when this was widened: it covers 18 fields across the views
     /// tree where the name rule covered 9, and flags none of them today.
     private static func ownedMessageNames(_ text: String) -> [String] {
-        let pattern = #"@State\s+(?:private\s+)?var\s+(\w+)\s*:\s*String\?"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let full = NSRange(text.startIndex..<text.endIndex, in: text)
-        return regex.matches(in: text, range: full).compactMap { match in
+        return Self.messageState.matches(in: text, range: full).compactMap { match in
             Range(match.range(at: 1), in: text).map { String(text[$0]) }
         }
     }
