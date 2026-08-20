@@ -1,0 +1,8 @@
+{
+  "name": "a-silent-run-erases-nothing",
+  "file": "PostRollApp/Sources/Services/PreviewGraphicsManager.swift",
+  "find": "        guard !result.paths.isEmpty || !result.errors.isEmpty || !result.warnings.isEmpty\n        else { return }",
+  "replace": "        guard true else { return }",
+  "test": "PostRollTests/FullRunDayOutcomeTests/testARunThatReportedNothingAtAllLeavesTheRecordAlone",
+  "breaks": "a preview run that reported nothing at all, which is what the bridge answers when Python wrote no output file or wrote something unreadable, is folded in as a full run's answer and erases every stored media error and warning the event had (#740, L105)"
+}

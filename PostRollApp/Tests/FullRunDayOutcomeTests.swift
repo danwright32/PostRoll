@@ -133,6 +133,52 @@ final class FullRunDayOutcomeTests: XCTestCase {
         XCTAssertNil(appState.events.first?.mediaErrors["wednesday"])
     }
 
+    func testARunThatReportedNothingAtAllLeavesTheRecordAlone() {
+        // Found in the running app on 2026-08-20, after #740 shipped. The
+        // caption screen auto-starts a graphics run when an event has no
+        // previews yet; `runPreviewGeneration` answers with a completely empty
+        // result when Python wrote no output file or wrote something
+        // unreadable, and folding THAT in as a full run's answer erased every
+        // stored error and warning the event had. Silence is not "every day is
+        // fine now": a read that answers empty when it fails erases the whole
+        // record the first time it fails, at the moment the record is worth
+        // having (L105, L98).
+        let manager = PreviewGraphicsManager()
+        var event = makeEvent()
+        event.mediaErrors["tuesday"] = "clip reel skipped: ffmpeg crashed"
+        event.mediaWarnings["wednesday"] = "an optional photo had moved"
+        let appState = state([event])
+        manager.failDayRegen(.friday, for: event.id, pipelineError: shortfall)
+
+        manager.applyFullRunResult(result(), for: event.id, appState: appState)
+
+        XCTAssertEqual(appState.events.first?.mediaErrors["tuesday"],
+                       "clip reel skipped: ffmpeg crashed",
+                       "a run that reported nothing erased a day's stored failure")
+        XCTAssertEqual(appState.events.first?.mediaWarnings["wednesday"],
+                       "an optional photo had moved",
+                       "a run that reported nothing erased a day's stored warning")
+        XCTAssertNotNil(manager.dayFailure(.friday, for: event.id),
+                        "a run that reported nothing took away a reason it never re-attempted")
+    }
+
+    func testARunThatRenderedWithNothingToSayStillClearsTheRecord() {
+        // The other side, and the reason the guard above is about SILENCE
+        // rather than about having no errors: a run that actually rendered the
+        // week and found nothing wrong must still take away the failures from
+        // the run before, or a fixed day reports as broken forever (L14).
+        let manager = PreviewGraphicsManager()
+        var event = makeEvent()
+        event.mediaErrors["tuesday"] = "clip reel skipped: ffmpeg crashed"
+        let appState = state([event])
+
+        manager.applyFullRunResult(
+            result(paths: ["tuesday": ["reel": "/tmp/reel.mp4"]]),
+            for: event.id, appState: appState)
+
+        XCTAssertNil(appState.events.first?.mediaErrors["tuesday"])
+    }
+
     // MARK: - What the run already did, still done
 
     func testTheDaysThatRenderedStillLand() {
