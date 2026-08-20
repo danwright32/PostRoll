@@ -1,0 +1,8 @@
+{
+  "name": "the-notice-stack-cannot-bury-the-captions",
+  "file": "PostRollApp/Sources/Views/CaptionReviewBodies.swift",
+  "find": "        CappedHeight(maximum: Self.maximumHeight) {",
+  "replace": "        CappedHeight(maximum: .infinity) {",
+  "test": "PostRollTests/CaptionNoticeStackTests/testAWeekWhereEveryDayFailedDoesNotBuryTheEditor",
+  "breaks": "the caption screen's notice stack grows without bound again, so a week where every day failed puts nearly two screenfuls of warnings above the captions Dan came to read (#743)"
+}
