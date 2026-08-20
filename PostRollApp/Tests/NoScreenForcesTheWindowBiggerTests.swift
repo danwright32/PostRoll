@@ -127,8 +127,13 @@ final class NoScreenForcesTheWindowBiggerTests: XCTestCase {
         // not a failing assertion but a trap (#718, L41).
         return screen
             .environment(state)
-            .environment(HashtagStore())
-            .environment(AnalyticsStore())
+            // Both stores read live data on their no-argument form, so both are
+            // handed a source of their own: the analytics file goes in this
+            // test's own temporary root, and the tags are not read at all
+            // (#722). Neither form still compiles here, so the next screen
+            // added to the sweep cannot quietly reach Dan's history either.
+            .environment(HashtagStore(loadingSaved: false))
+            .environment(AnalyticsStore(fileURL: root.appendingPathComponent("analytics.json")))
             .withAppOwners(AppOwners())
     }
 

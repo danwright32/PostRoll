@@ -1,0 +1,8 @@
+{
+  "name": "a-render-test-cannot-open-the-live-history",
+  "file": "PostRollApp/Tests/NoScreenForcesTheWindowBiggerTests.swift",
+  "find": "            .environment(AnalyticsStore(fileURL: root.appendingPathComponent(\"analytics.json\")))",
+  "replace": "            .environment(AnalyticsStore(fileURL: AppPaths.analyticsFile))",
+  "test": "tests/test_swift_tests_never_reach_live_data.py::test_no_swift_test_hands_a_store_one_of_the_live_locations",
+  "breaks": "the screen rendering sweep opens Dan's real imported Instagram history, whose only other copy is a Meta export he has to re-download. It only reads today, and a rendered screen picking up a write would have nothing structural stopping it (#722, L2, L5)"
+}

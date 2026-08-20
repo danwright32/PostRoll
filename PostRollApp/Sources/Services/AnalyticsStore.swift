@@ -33,10 +33,28 @@ final class AnalyticsStore {
     /// screens.
     var recoveryMessage: String?
 
-    init(fileURL: URL = AppPaths.analyticsFile) {
+    /// The one initializer, and every caller says where the file is.
+    ///
+    /// The default used to be `AppPaths.analyticsFile`, and the screen
+    /// rendering sweep took it: `AnalyticsStore()` in a test opened Dan's real
+    /// imported Instagram history, whose only other copy is a Meta export he
+    /// has to re-download (#722). It only read, which is why nothing had gone
+    /// wrong yet, and "remember to pass a temp path" is not structural (L2).
+    init(fileURL: URL) {
         self.fileURL = fileURL
         load()
     }
+
+    #if !POSTROLL_TESTS
+    /// The app's own store, on the live analytics file.
+    ///
+    /// Compiled out of the test bundle, so a test that omits the file is a
+    /// build error rather than a silent read of live data. The condition is set
+    /// on the test target only, in project.yml.
+    convenience init() {
+        self.init(fileURL: AppPaths.analyticsFile)
+    }
+    #endif
 
     /// nonisolated: pure text, and the tests that pin its wording have no
     /// reason to hop to the main actor to read a string.
