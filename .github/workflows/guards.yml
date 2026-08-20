@@ -50,6 +50,48 @@ jobs:
   # because a diff usually touches none or one, and it is the half that catches
   # the case that matters most: a guard edited into uselessness in the same
   # change that edits it.
+  #
+  # ── what it costs, measured 2026-08-20 (#742) ───────────────────────────────
+  #
+  # "Usually none or one" is true of most diffs and not of the caption review
+  # screen, which is where most of the recent work has been. A pull request
+  # touching it affected 44 entries at about 29s each: 21 minutes of proving.
+  #
+  # On top of that, 0 to 22 minutes waiting for a macOS runner before the job
+  # starts at all. This repository runs six macOS jobs per pull request and
+  # GitHub allows five concurrent macOS runners, so the sixth waits, and with
+  # three pull requests open everything does. Measured on 2026-08-20: 2s and 3s
+  # of queue with one pull request in flight, 6m51s, 13m45s and 19m11s with
+  # three. The queue is the half nothing in this file controls.
+  #
+  # What drives the entry count is which TEST files a diff touches, not which
+  # sources. 31 of the 298 entries name BannerLegibilityTests, so any change to
+  # that harness re-proves all 31, and a screen change usually edits its
+  # fixture. That is correct, and it is why a screen change costs what it does.
+  #
+  # Of the three ways #742 proposed to cut it, two are measured dead ends and
+  # are recorded here so nobody derives them again:
+  #
+  # * Reducing what a perturbation rebuilds. #741 split CaptionReviewView.swift
+  #   from 5,999 lines into fourteen, and the per-entry time did not move: 18 to
+  #   21s before, 18 to 23s after, measured on the entries that moved. The cost
+  #   is xcodebuild's fixed overhead plus linking the whole test bundle, not
+  #   compiling the file that was perturbed.
+  # * A warm cache carried between jobs. The cold first build is about 45s of
+  #   the 21 minutes: entry 1 took 72s and the rest took 29s.
+  #
+  # The third, grouping entries that perturb the same file into one build, is
+  # not slow but unsound: each entry is a different perturbation, and a batch
+  # big enough to break everything makes every named test fail, which is
+  # indistinguishable from the one that should have (L154).
+  #
+  # What is left costs something real, which is why it is written down rather
+  # than done. Sharding this job the way `full` is sharded below buys wall clock
+  # by consuming more of the very runners the queue above is short of. Moving
+  # the source-scanning colour rules out of the Swift suite and into pytest
+  # would take 15 entries off the build entirely, at the price of
+  # reimplementing this project's strictest style enforcement, including the
+  # matcher controls that are what make those rules trustworthy.
   changed:
     if: github.event_name == 'pull_request'
     runs-on: macos-26
