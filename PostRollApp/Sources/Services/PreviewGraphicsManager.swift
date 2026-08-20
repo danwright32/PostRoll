@@ -70,6 +70,26 @@ final class PreviewGraphicsManager {
         // snapshot would revert anything edited in between.
         guard var ev = appState.events.first(where: { $0.id == eventID }) else { return }
 
+        // A run that said NOTHING is not a run that found nothing wrong.
+        // `runPreviewGeneration` answers with a wholly empty result when Python
+        // wrote no output file, or wrote something that would not parse, and
+        // folding that in as this run's answer erases every stored error and
+        // warning the event had: a read that comes back empty when it FAILS
+        // destroys the whole record the first time it fails, at the moment the
+        // record is worth having (L105).
+        //
+        // Caught in the running app after this method shipped in #740. The
+        // caption screen auto-starts a graphics run for an event with no
+        // previews yet, that run reported nothing, and every day's stored
+        // warning went with it.
+        //
+        // Emptiness in all three, deliberately: a run that rendered the week
+        // and found nothing wrong carries paths, and it MUST still take away
+        // the failures the run before recorded, or a day that has been fixed
+        // reports as broken forever (L14).
+        guard !result.paths.isEmpty || !result.errors.isEmpty || !result.warnings.isEmpty
+        else { return }
+
         // The same fold a generation run's graphics pass uses, with the same
         // argument: a full run owns every day, so its answer replaces the lot
         // and a day it fixed stops reporting an error from the run before.
