@@ -1,8 +1,8 @@
 {
   "name": "a-days-failure-is-not-anothers",
   "file": "PostRollApp/Sources/Services/PreviewGraphicsManager.swift",
-  "find": "        dayFailures[DaySlot(eventID: eventID, day: day)] = reason\n        endDayRegen(day, for: eventID)",
-  "replace": "        dayFailures = [DaySlot(eventID: eventID, day: day): reason]\n        endDayRegen(day, for: eventID)",
+  "find": "        dayFailures[DaySlot(eventID: eventID, day: day)] =\n            Recorded(reason: reason, pipelineError: nil)\n        endDayRegen(day, for: eventID)",
+  "replace": "        dayFailures = [DaySlot(eventID: eventID, day: day):\n            Recorded(reason: reason, pipelineError: nil)]\n        endDayRegen(day, for: eventID)",
   "test": "PostRollTests/CaptionReviewOwnershipTests/testTwoDaysFailuresDoNotEraseEachOther",
   "breaks": "one day's rebuild failure erases every other day's, which is the shared status field #721 was filed about: whichever action failed last is the only reason Dan can read (L53)"
 }

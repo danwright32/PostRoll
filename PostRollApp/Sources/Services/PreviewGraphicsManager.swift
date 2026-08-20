@@ -158,7 +158,24 @@ final class PreviewGraphicsManager {
     /// dictionary, so a list of them cannot reshuffle between redraws.
     struct DayFailure: Equatable {
         let day: DayName
+        /// The sentence Dan reads.
         let reason: String
+        /// The Python side's own error, when that is what failed, kept beside
+        /// the sentence rather than only inside it (#730).
+        ///
+        /// `generate_media.py` marks the cases it has a remedy for with a
+        /// prefix, `insufficient_clips:` being the one with an escape hatch on
+        /// screen. The screen used to wrap that into "Friday regeneration
+        /// failed: …" and record only the wrapping, so the prefix sat mid
+        /// sentence, the card's prefix check could never match, and the one
+        /// failure with a way out was the one shown without it.
+        ///
+        /// nil for the failures that have no marker to keep: a track that could
+        /// not be fetched, a copy that failed, a run that produced no output.
+        /// Those are prose by nature, and an empty value here is that fact
+        /// rather than a forgotten argument, which is why the two ways of
+        /// recording a failure are separate calls below.
+        let pipelineError: String?
     }
 
     /// Why a day's rebuild failed, and why a day's cover rebuild failed, kept
@@ -176,11 +193,24 @@ final class PreviewGraphicsManager {
     /// One field per in flight SLOT, not per message: a day's rebuild and its
     /// cover rebuild are two separate slots that can run at once, and two
     /// actions occupying one slot cannot both be running to disagree.
-    private var dayFailures: [DaySlot: String] = [:]
+    private var dayFailures: [DaySlot: Recorded] = [:]
     private var coverFailures: [DaySlot: String] = [:]
 
-    func dayFailure(_ day: DayName, for eventID: UUID) -> String? {
-        dayFailures[DaySlot(eventID: eventID, day: day)]
+    /// One day slot's failure as stored: the day is the key, so only what the
+    /// key does not already say is kept here.
+    private struct Recorded {
+        let reason: String
+        let pipelineError: String?
+    }
+
+    /// This day's failure whole, so a caller deciding from it reads the marker
+    /// rather than the sentence (#730). `FridayReviewDisplay` takes this type
+    /// and not a string for that reason: prose cannot be handed to a prefix
+    /// check by mistake if the check does not accept prose.
+    func dayFailure(_ day: DayName, for eventID: UUID) -> DayFailure? {
+        dayFailures[DaySlot(eventID: eventID, day: day)].map {
+            DayFailure(day: day, reason: $0.reason, pipelineError: $0.pipelineError)
+        }
     }
 
     func coverFailure(_ day: DayName, for eventID: UUID) -> String? {
@@ -192,8 +222,33 @@ final class PreviewGraphicsManager {
     /// rebuild ever again, and the two were remembered separately at five call
     /// sites.
     func failDayRegen(_ day: DayName, for eventID: UUID, reason: String) {
-        dayFailures[DaySlot(eventID: eventID, day: day)] = reason
+        dayFailures[DaySlot(eventID: eventID, day: day)] =
+            Recorded(reason: reason, pipelineError: nil)
         endDayRegen(day, for: eventID)
+    }
+
+    /// The same, for a rebuild the PIPELINE reported an error for (#730).
+    ///
+    /// Its own call rather than an optional argument on the one above. The
+    /// pipeline's marker is the only thing the Friday card can decide from, and
+    /// an argument that could be left out would be left out: a default standing
+    /// for absent turns a forgotten value into silently missing data rather
+    /// than a compile error (L168). Here the two callers mean different things,
+    /// so they say different things.
+    ///
+    /// The sentence is built HERE rather than by the caller, so there is one
+    /// wording for a pipeline failure and no way to record the wrapping without
+    /// the marker it was wrapped around.
+    func failDayRegen(_ day: DayName, for eventID: UUID, pipelineError: String) {
+        dayFailures[DaySlot(eventID: eventID, day: day)] = Recorded(
+            reason: Self.pipelineFailureSentence(day: day, error: pipelineError),
+            pipelineError: pipelineError)
+        endDayRegen(day, for: eventID)
+    }
+
+    /// What Dan reads when the pipeline reported an error for a day.
+    static func pipelineFailureSentence(day: DayName, error: String) -> String {
+        "\(day.displayName) regeneration failed: \(error)"
     }
 
     func failCoverRegen(_ day: DayName, for eventID: UUID, reason: String) {
@@ -211,7 +266,7 @@ final class PreviewGraphicsManager {
 
     /// Every day of this event whose rebuild failed, in the week's own order.
     func dayFailures(for eventID: UUID) -> [DayFailure] {
-        Self.listed(dayFailures, for: eventID)
+        listedDays(for: eventID)
     }
 
     /// The same for the cover rebuilds, which are their own slot with their own
@@ -220,11 +275,15 @@ final class PreviewGraphicsManager {
         Self.listed(coverFailures, for: eventID)
     }
 
+    private func listedDays(for eventID: UUID) -> [DayFailure] {
+        DayName.allCases.compactMap { dayFailure($0, for: eventID) }
+    }
+
     private static func listed(_ store: [DaySlot: String],
                                for eventID: UUID) -> [DayFailure] {
         DayName.allCases.compactMap { day in
             store[DaySlot(eventID: eventID, day: day)].map {
-                DayFailure(day: day, reason: $0)
+                DayFailure(day: day, reason: $0, pipelineError: nil)
             }
         }
     }
