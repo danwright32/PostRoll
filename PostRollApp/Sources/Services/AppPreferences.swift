@@ -31,18 +31,42 @@ enum AppPreferences {
     /// anything that cares which values it reads passes its own suite anyway.
     static let testSuiteName = "com.dwphotony.PostRoll.tests"
 
-    nonisolated(unsafe) static let store: UserDefaults = {
-        guard let scratch = UserDefaults(suiteName: testSuiteName) else {
+    nonisolated(unsafe) static let store: UserDefaults = openScratchSuite(named: testSuiteName)
+
+    /// Opens a scratch preferences suite, empty (#744).
+    ///
+    /// Nothing used to clear this suite, so whatever a test wrote stayed in its
+    /// plist and was there for the next run of the suite, and every run after
+    /// that. Every other scratch suite in the tests deletes itself in teardown;
+    /// this one was the odd one out. Nothing was wrong on the day, because a
+    /// test that cares which value it reads passes its own suite, but a value
+    /// left behind by one run silently becoming an input to the next is how
+    /// order dependent flakiness starts, and it is diagnosed as a flaky test
+    /// rather than as leftover state.
+    ///
+    /// Cleared once per RUN rather than per test: `store` is opened once per
+    /// process, so tests that deliberately share this suite within a run still
+    /// can, which a teardown block per test would take away.
+    ///
+    /// Cleared BEFORE the suite is opened, so the instance handed out cannot be
+    /// holding the values just deleted.
+    ///
+    /// Its own function so what happens at the moment a scratch suite is opened
+    /// can be tested against a suite of the test's own, which is the only way
+    /// to see it: nothing inside a run can watch `store` being opened.
+    static func openScratchSuite(named name: String) -> UserDefaults {
+        UserDefaults().removePersistentDomain(forName: name)
+        guard let scratch = UserDefaults(suiteName: name) else {
             // Deliberately fatal. Falling back to `.standard` here would reach
             // the exact store this exists to keep the suite away from, and it
             // would do it silently, at the moment the safe store could not be
             // opened (L93, L173).
-            fatalError("the test suite \(testSuiteName) could not be opened, and "
+            fatalError("the test suite \(name) could not be opened, and "
                        + "falling back to the live preferences is the one thing "
                        + "this must not do")
         }
         return scratch
-    }()
+    }
     #else
     /// Dan's real preferences. Compiled out of the test bundle, so a test that
     /// reaches for the app's preferences gets the scratch suite above and there
