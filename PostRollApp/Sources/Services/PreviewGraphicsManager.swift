@@ -42,18 +42,79 @@ final class PreviewGraphicsManager {
             guard let live = appState.events.first(where: { $0.id == eventID }) else { return }
             do {
                 let result = try await PythonBridge.shared.runPreviewGeneration(event: live)
-                guard !result.paths.isEmpty else { return }
-                // Live read at write-back: the run takes a minute or more and a
-                // snapshot would revert anything edited in between.
-                guard var ev = appState.events.first(where: { $0.id == eventID }) else { return }
-                ev.previewMediaPaths = result.paths
-                ev.applyFridayClipPlan(result.fridayClipPlan)
-                for (day, pick) in result.coverPicks { ev.applyCoverPick(pick, forDay: day) }
-                appState.updateEvent(ev)
+                applyFullRunResult(result, for: eventID, appState: appState)
             } catch {
                 // Loud, not silent: this used to be a `try?`, so a failed run
                 // left the screen looking like a finished one with no graphics.
                 failures[eventID] = error.localizedDescription
+            }
+        }
+    }
+
+    /// Land a finished full run: the days that rendered, and the days that did
+    /// not (#740).
+    ///
+    /// This used to write `result.paths` and stop, behind a `guard
+    /// !result.paths.isEmpty`, so the run where every day failed was the one
+    /// that recorded nothing at all. A day that died inside the whole week
+    /// rebuild left no failure here, no `mediaErrors` entry, and nothing on
+    /// screen saying why, while the same failure from the per-day rebuild was
+    /// reported in all three places.
+    ///
+    /// Its own method rather than a closure body inside `startFullRun`, because
+    /// what a finished result MEANS is the half that was missing and the half
+    /// worth testing: the run itself goes to a real subprocess.
+    func applyFullRunResult(_ result: PythonBridge.PreviewGenerationResult,
+                            for eventID: UUID, appState: AppState) {
+        // Live read at write-back: the run takes a minute or more and a
+        // snapshot would revert anything edited in between.
+        guard var ev = appState.events.first(where: { $0.id == eventID }) else { return }
+
+        // The same fold a generation run's graphics pass uses, with the same
+        // argument: a full run owns every day, so its answer replaces the lot
+        // and a day it fixed stops reporting an error from the run before.
+        // One implementation, so the two full-run paths cannot drift.
+        ev.mediaErrors = PreviewMergePolicy.mergeMediaErrors(
+            existing: ev.mediaErrors, fresh: result.errors, renderedDays: nil)
+        // Same merge rule, its own store: a day that rendered without an
+        // optional photo is not a day with no graphics (#265).
+        ev.mediaWarnings = PreviewMergePolicy.mergeMediaErrors(
+            existing: ev.mediaWarnings, fresh: result.warnings, renderedDays: nil)
+
+        if !result.paths.isEmpty {
+            ev.previewMediaPaths = result.paths
+            ev.applyFridayClipPlan(result.fridayClipPlan)
+            for (day, pick) in result.coverPicks { ev.applyCoverPick(pick, forDay: day) }
+        }
+        appState.updateEvent(ev)
+
+        // Walked in the week's own order rather than over the dictionary, so a
+        // key that names no day (the run-level `graphics` key a generation run
+        // can write) is skipped by construction rather than by a filter.
+        let rebuildingOnTheirOwn = state.regeneratingDays(for: eventID)
+        for day in DayName.allCases {
+            // A per-day rebuild claimed while this run was in flight owns that
+            // day's outcome. This run's answer for it is about the inputs as
+            // they stood before that rebuild started, and `failDayRegen`
+            // records AND releases the slot, so landing it here would take down
+            // a live rebuild's in-flight marker while its subprocess ran on,
+            // leaving the day free to be started a third time: two writers on
+            // one MP4, which is the hazard #75 exists for.
+            guard !rebuildingOnTheirOwn.contains(day) else { continue }
+            if let pipelineError = result.errors[day.rawValue] {
+                // Through the recording call the per-day path uses, not a
+                // second implementation beside it: the pipeline marks the cases
+                // it has a remedy for with a prefix, and Friday's "< 3 usable
+                // clips" escape hatch is reached from the recorded failure, so
+                // the marker has to survive to the card that offers it (#730).
+                failDayRegen(day, for: eventID, pipelineError: pipelineError)
+            } else if result.paths[day.rawValue]?.isEmpty == false {
+                // This run rebuilt the day and it worked, so the reason left by
+                // the run before is no longer true. Only for a day that
+                // actually produced something: a day this run never reached
+                // must keep its failure, or a rebuild would silently erase a
+                // reason it never re-attempted (L5).
+                clearDayFailure(day, for: eventID)
             }
         }
     }
