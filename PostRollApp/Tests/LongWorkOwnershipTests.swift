@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 /// A view does not own work that outlives it (#713).
@@ -135,19 +136,25 @@ final class LongWorkOwnershipTests: XCTestCase {
     // event left nothing behind at all, because the run survived the remount
     // and its message did not (L148).
 
-    /// The names of the view's own error state, which a long run must not write.
-    private static func ownedErrorNames(_ text: String) -> [String] {
-        let pattern = #"@State\s+(private\s+)?var\s+(\w*([eE]rror|[fF]ailure)\w*)"#
-        var names: [String] = []
-        var rest = Substring(text)
-        while let found = rest.range(of: pattern, options: .regularExpression) {
-            let declaration = rest[found]
-            if let name = declaration.split(separator: " ").last {
-                names.append(String(name))
-            }
-            rest = rest[found.upperBound...]
+    /// The names of the view's own message state, which a long run must not
+    /// write.
+    ///
+    /// Found by TYPE rather than by name: any `@State` optional string on a
+    /// screen is a sentence waiting to be shown to Dan, whatever it is called.
+    /// This used to match names containing "error" or "failure", and #728
+    /// renamed this screen's notice field from `pickError` to `refusedAction`,
+    /// a better name that sits outside that convention. A rule keyed on a
+    /// naming convention only ever checks the names somebody remembered to
+    /// follow, and the one it stops seeing is the one just renamed (L96).
+    /// Measured when this was widened: it covers 18 fields across the views
+    /// tree where the name rule covered 9, and flags none of them today.
+    private static func ownedMessageNames(_ text: String) -> [String] {
+        let pattern = #"@State\s+(?:private\s+)?var\s+(\w+)\s*:\s*String\?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let full = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.matches(in: text, range: full).compactMap { match in
+            Range(match.range(at: 1), in: text).map { String(text[$0]) }
         }
-        return names
     }
 
     /// The bodies of every `Task {` in `text`, brace balanced.
@@ -179,7 +186,7 @@ final class LongWorkOwnershipTests: XCTestCase {
     /// copied is over before the next redraw. What must not be view state is
     /// the outcome of a run that outlives the screen (L53, L148).
     static func failuresOfLongWork(_ text: String) -> [String] {
-        let owned = Set(ownedErrorNames(text))
+        let owned = Set(ownedMessageNames(text))
         guard !owned.isEmpty else { return [] }
         var offenders: Set<String> = []
         for body in taskBodies(text) where body.contains("PythonBridge.shared.") {
@@ -228,6 +235,28 @@ final class LongWorkOwnershipTests: XCTestCase {
         }
         """
         XCTAssertEqual(LongWorkOwnershipTests.failuresOfLongWork(offender), ["swapError"])
+    }
+
+    func testAMessageFieldNotNamedForFailureIsStillOneOfThem() {
+        // The third control, and the reason this reads the TYPE rather than the
+        // name. #728 renamed this screen's own notice field from `pickError` to
+        // `refusedAction`, which is a better name and put the field outside the
+        // convention the scan was keyed on, so a long run's failure written
+        // there became invisible to the rule written to catch exactly that
+        // (L96). Nothing reported it: the list of offenders was empty before
+        // and after, and an empty list is what the rule holding looks like.
+        let offender = """
+        struct SomeScreen: View {
+            @State private var refusedAction: String?
+            func go() {
+                Task {
+                    do { _ = try await PythonBridge.shared.runSwapReelAudio(event: e, day: d) }
+                    catch { refusedAction = error.localizedDescription }
+                }
+            }
+        }
+        """
+        XCTAssertEqual(LongWorkOwnershipTests.failuresOfLongWork(offender), ["refusedAction"])
     }
 
     func testAShortFailureOnTheViewIsNoneOfItsBusiness() {
