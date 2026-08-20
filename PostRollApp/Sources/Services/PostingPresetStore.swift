@@ -55,7 +55,7 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
 
     /// The currently persisted app wide preset, readable from any thread.
     /// Defaults to `.balanced` when nothing is stored yet.
-    static var current: PostingPreset { current(in: .standard) }
+    static var current: PostingPreset { current(in: AppPreferences.store) }
 
     /// Where the preset is read from, injectable so a test never touches the
     /// real preference (#116).

@@ -21,7 +21,7 @@ final class HandleBook: @unchecked Sendable {
     /// across every event he has shot (L2).
     private let defaults: UserDefaults
 
-    private init() { defaults = .standard }
+    private init() { defaults = AppPreferences.store }
 
     #if POSTROLL_TESTS
     /// A book on its own storage. Compiled only into the test bundle, so the

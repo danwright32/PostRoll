@@ -65,7 +65,7 @@ struct Event: Identifiable, Codable, Hashable {
     /// The layout this event actually uses: its own override, or the app wide
     /// default when it has none.
     var effectivePostingPreset: PostingPreset {
-        effectivePostingPreset(in: .standard)
+        effectivePostingPreset(in: AppPreferences.store)
     }
 
     /// This event's layout, reading the app wide default from a given store.

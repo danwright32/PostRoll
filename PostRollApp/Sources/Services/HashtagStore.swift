@@ -43,15 +43,15 @@ final class HashtagStore {
     #endif
 
     func save() {
-        UserDefaults.standard.set(globalTags, forKey: Self.globalKey)
+        AppPreferences.store.set(globalTags, forKey: Self.globalKey)
         if let data = try? JSONEncoder().encode(presets) {
-            UserDefaults.standard.set(data, forKey: Self.presetsKey)
+            AppPreferences.store.set(data, forKey: Self.presetsKey)
         }
     }
 
     private func load() {
-        globalTags = UserDefaults.standard.stringArray(forKey: Self.globalKey) ?? []
-        if let data = UserDefaults.standard.data(forKey: Self.presetsKey),
+        globalTags = AppPreferences.store.stringArray(forKey: Self.globalKey) ?? []
+        if let data = AppPreferences.store.data(forKey: Self.presetsKey),
            let loaded = try? JSONDecoder().decode([HashtagPreset].self, from: data) {
             presets = loaded
         }

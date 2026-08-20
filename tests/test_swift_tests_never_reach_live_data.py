@@ -59,6 +59,21 @@ LIVE_DEFAULT = re.compile(
 # to pass the very path it was protecting.
 LIVE_ARGUMENT = re.compile(r"(?:fileURL|storeURL|dataRoot|root)\s*:\s*AppPaths\.[A-Za-z]")
 
+# Dan's real preferences, named anywhere in code the test bundle compiles (#738).
+#
+# Eleven places named this inline, and four of them WROTE: the hashtag store's
+# save, the timing store's setter, the export folder ExportManager remembers, and
+# every write through HandleBook.shared, whose store is a property precisely so a
+# test can point it elsewhere and whose singleton is built by an initializer that
+# takes the live one anyway.
+#
+# A rule about the DOMAIN rather than a list of stores, because the list is what
+# went out of date: #722 closed the two stores it knew about, and the eight that
+# reached the same store without an initializer to compile out were untouched
+# (L96). One named home for it, `AppPreferences.store`, whose live branch is the
+# only thing the app compiles and the test bundle does not.
+LIVE_PREFERENCES = re.compile(r"UserDefaults\.standard|(?<![\w.])\.standard\b")
+
 BARE_STORES = {
     "AnalyticsStore": "hand it a fileURL in a temporary directory, the way "
                       "InsightsWorkManagerTests does",
@@ -138,6 +153,40 @@ def test_no_store_the_test_bundle_compiles_defaults_to_a_live_location():
     )
 
 
+def test_no_code_the_test_bundle_compiles_names_the_live_preferences():
+    offenders = []
+    for path in _swift_files(SOURCES):
+        text = swift_as_the_test_bundle_sees_it(
+            swift_code_only(path.read_text(encoding="utf-8")))
+        offenders += [f"{path.relative_to(REPO)}:{line}"
+                      for line in _hits(LIVE_PREFERENCES, text)]
+
+    assert not offenders, (
+        "these name Dan's real UserDefaults in code the test bundle compiles: "
+        f"{', '.join(offenders)}. Reading them makes a test's result depend on "
+        "his machine, and the saves among them write his global hashtags, his "
+        "handle book and his export folder for real. Go through "
+        "AppPreferences.store, whose live branch is compiled out of the test "
+        "bundle (L2, L201)."
+    )
+
+
+def test_the_app_still_has_preferences_of_its_own():
+    # The other half, on the same reasoning as the analytics one below: a rule
+    # that only ever checks the ABSENCE of something is satisfied by deleting
+    # both halves, and then the app has no preferences at all (L159).
+    home = REPO / "PostRollApp" / "Sources" / "Services" / "AppPreferences.swift"
+    assert home.is_file(), "AppPreferences no longer exists, so nothing names the app's own store"
+    code = swift_code_only(home.read_text(encoding="utf-8"))
+    assert "UserDefaults.standard" in code, (
+        "AppPreferences no longer names UserDefaults.standard anywhere, so the "
+        "shipping app has no preferences to read")
+    assert not LIVE_PREFERENCES.search(swift_as_the_test_bundle_sees_it(code)), (
+        "AppPreferences names the live preferences in code the test bundle "
+        "compiles, which is the one file where that must be behind "
+        "#if !POSTROLL_TESTS")
+
+
 def test_the_app_still_has_a_store_of_its_own_to_build():
     # The other half of the rule. Compiling the live initializer out of the test
     # bundle is only correct if the app itself still has one, and a guard that
@@ -199,6 +248,25 @@ def test_a_live_default_the_app_alone_compiles_is_not_an_offence():
         "    convenience init() { self.init(fileURL: AppPaths.analyticsFile) }\n"
         "#endif\n}\n"))
     assert _hits(LIVE_DEFAULT, allowed) == []
+
+
+def test_the_scan_can_still_see_the_live_preferences_named_inline():
+    """Both spellings, and the inferred one is the one that shipped."""
+    spelled = swift_as_the_test_bundle_sees_it(swift_code_only(
+        "    func save() { UserDefaults.standard.set(tags, forKey: key) }\n"))
+    assert _hits(LIVE_PREFERENCES, spelled) == [1]
+    inferred = swift_as_the_test_bundle_sees_it(swift_code_only(
+        "    private init() { defaults = .standard }\n"))
+    assert _hits(LIVE_PREFERENCES, inferred) == [1]
+
+
+def test_a_scratch_suite_is_not_the_live_preferences():
+    # The other direction. A control that only proves the rule FIRES will accept
+    # one that fires on everything, and the arrangement the fix relies on is a
+    # store built from a suite name (L104).
+    allowed = swift_as_the_test_bundle_sees_it(swift_code_only(
+        '    static let store = UserDefaults(suiteName: "postroll.tests")\n'))
+    assert _hits(LIVE_PREFERENCES, allowed) == []
 
 
 def test_the_scan_can_still_see_a_live_location_handed_over():
