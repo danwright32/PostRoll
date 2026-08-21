@@ -132,10 +132,17 @@ def scroll_regions() -> list[TextRegion]:
     """
     from . import generate_reel_scroll as s
 
+    # From the template's own TITLE_TOP_Y, not a copy of it. This said 35 while
+    # the template drew at 35, and when #752 moved the title clear of the
+    # phone's status bar a literal here would have kept measuring the band the
+    # title had left, which is a band of plain cream: a comfortable reading of
+    # nothing at all.
     return [
-        TextRegion("scroll title", _band(0, 35, s.CANVAS_W, 70), s.TEXT_DARK),
+        TextRegion("scroll title",
+                   _band(0, s.TITLE_TOP_Y, s.CANVAS_W, 70), s.TEXT_DARK),
         TextRegion("scroll detail lines",
-                   (0, 35 + int(70 * 1.35), s.CANVAS_W, s.HEADER_H),
+                   (0, s.TITLE_TOP_Y + int(70 * 1.35), s.CANVAS_W,
+                    s.TITLE_BAND_BOTTOM),
                    s.TEXT_DARK),
     ]
 
@@ -165,7 +172,7 @@ def scroll_moving_regions(logo_path: str | Path | None) -> list[MovingTextRegion
     return [
         MovingTextRegion(
             name="scroll colophon wordmark",
-            search=(logo_x, s.HEADER_H, logo_x + s.LOGO_WIDTH,
+            search=(logo_x, s.TITLE_BAND_BOTTOM, logo_x + s.LOGO_WIDTH,
                     s.CANVAS_H - s.FOOTER_H),
             ink=logo_ink(logo_path),
             backdrop=s.CREAM,

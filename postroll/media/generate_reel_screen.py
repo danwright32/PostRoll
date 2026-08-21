@@ -27,16 +27,17 @@ from PIL import Image, ImageDraw
 from .audio_fit import fit_audio_to_duration
 
 from .design_tokens import (
-    load_font,
+    # ROSE_GOLD is read by the chrome tests through this module's,
+    # cannot see the use.,
+    # namespace rather than by the template itself, so the linter,
     CREAM,
     FONT_DETAIL,
     FONT_DETAIL_LIGHT,
     FONT_SCRIPT,
-    # ROSE_GOLD is read by the chrome tests through this module's
-    # namespace rather than by the template itself, so the linter
-    # cannot see the use.
-    ROSE_GOLD,  # noqa: F401
+    ROSE_GOLD,  # noqa: F401,
+    SAFE_TOP,
     TEXT_DARK,
+    load_font,
 )
 from .brand_text import detail_lines
 
@@ -55,7 +56,15 @@ TARGET_EDIT_DURATION = 20.0
 # Branded chrome
 CREAM_OPACITY = 210
 HEADER_H = 340  # tall enough to push title clear of the iPhone notch / Dynamic Island
-TITLE_TOP_Y = 170  # clears notch (~120px) + Dynamic Island with breathing room
+#: From the shared token since #752, not a copy of it. This file and
+#: generate_before_after each had their own 170 and their own comment, and the
+#: scroll reel and the story, written later, had neither.
+TITLE_TOP_Y = SAFE_TOP
+
+#: Where the top chrome ends. Its header covers the top of the frame, so that
+#: is its height; the scroll reel's band is inset and computes the same fact a
+#: different way (#752). One name, so a check can ask both templates.
+CHROME_BOTTOM_Y = HEADER_H
 FOOTER_H = 100
 LOGO_WIDTH = 200
 

@@ -30,7 +30,9 @@ from PIL import Image, ImageDraw
 from .generate_collage import DEFAULT_CROP_OFFSET, crop_to_fill as _crop_to_fill
 
 from .design_tokens import (
-    load_font,
+    # ROSE_GOLD is read by the chrome tests through this module's,
+    # cannot see the use.,
+    # namespace rather than by the template itself, so the linter,
     CREAM,
     FONT_DETAIL,
     FONT_DETAIL_LIGHT,
@@ -38,11 +40,10 @@ from .design_tokens import (
     GUTTER as GAP,
     HAIRLINE,
     MAT_GALLERY as MAT,
-    # ROSE_GOLD is read by the chrome tests through this module's
-    # namespace rather than by the template itself, so the linter
-    # cannot see the use.
-    ROSE_GOLD,  # noqa: F401
+    ROSE_GOLD,  # noqa: F401,
+    SAFE_TOP,
     TEXT_DARK,
+    load_font,
 )
 from .brand_text import detail_lines
 from .layout_sidecar import layout_sidecar_path
@@ -80,7 +81,35 @@ HOLD_END = 1.0           # hold at bottom before closing
 CLOSING_FRAME_DURATION = 5.0
 
 # Branded chrome
-HEADER_H = 220
+# ── The title band (#752) ─────────────────────────────────────────────────────
+#
+# The title used to be drawn at y=35 in a cream header that started at the very
+# top of the frame, which put the show's name under the phone's status bar and
+# Dynamic Island on every reel published.
+#
+# The band is laid ON the photography rather than covering the top of the
+# frame. Pushing the cream down instead would have left 170px of empty cream
+# above the title, which is dead space in the one place a viewer looks first;
+# the prints run to the top edge instead, and the part the phone covers is
+# photograph, which is what it covers on every other story in the feed.
+
+#: Where the cream band starts: immediately below the band the phone covers.
+TITLE_BAND_TOP = SAFE_TOP
+
+#: How tall it is: the padding above the title, the 70pt title at its tallest
+#: (76px), the 20px gap, two detail lines at 36px, and room below them.
+TITLE_BAND_H = 220
+
+#: Where the photography is clear of the chrome again. What the strip lays its
+#: prints below, what the colophon search starts at, and what the tests read.
+TITLE_BAND_BOTTOM = TITLE_BAND_TOP + TITLE_BAND_H
+
+#: The same fact under the name the screen reel uses for it, so a check that
+#: asks "where does the top chrome end" reads one name across both templates.
+CHROME_BOTTOM_Y = TITLE_BAND_BOTTOM
+
+#: Where the title sits inside the band.
+TITLE_TOP_Y = TITLE_BAND_TOP + 26
 # The footer is only a cream mask now: it softens photos scrolling in at the bottom
 # edge. The colophon no longer lives here (it is baked into the strip right under
 # the last photo), so this is back to a thin band.
@@ -212,7 +241,14 @@ def build_collage_strip(
     # bottom padding has to reserve room for it: a gap under the photos, the mark,
     # then even breathing room and the frame's bottom mask below it.
     logo = load_logo(logo_path)
-    top_pad = HEADER_H + ROW_GAP * 3  # extra breathing room below header
+    # The prints run all the way to the top of the frame and the title band is
+    # laid over them (#752). Starting them below the band instead leaves the
+    # covered strip showing the collage's cream mat until the strip has
+    # scrolled past it, which is most of the first stretch of the reel and
+    # reads as the dead space this redesign exists to remove. What the band
+    # hides of the top row is the price, and it is what makes the band read as
+    # a plate on photography rather than a lid on it.
+    top_pad = ROW_GAP * 4
     if logo:
         bottom_pad = (COLOPHON_GAP_ABOVE + logo.height
                       + COLOPHON_GAP_BELOW + FOOTER_H)
@@ -274,18 +310,25 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
     """Draw cream header and footer."""
     frame_rgba = frame.convert("RGBA")
 
-    header = Image.new("RGBA", (CANVAS_W, HEADER_H), (*CREAM, 255))
-    frame_rgba.paste(header, (0, 0), header)
+    band = Image.new("RGBA", (CANVAS_W, TITLE_BAND_H), (*CREAM, 255))
+    frame_rgba.paste(band, (0, TITLE_BAND_TOP), band)
     draw = ImageDraw.Draw(frame_rgba)
+    # A hairline at each edge, because the band now meets photography rather
+    # than the top of the frame and cream against a bright print has nothing to
+    # say where one ends and the other begins.
+    draw.line([(0, TITLE_BAND_TOP), (CANVAS_W, TITLE_BAND_TOP)],
+              fill=HAIRLINE, width=2)
+    draw.line([(0, TITLE_BAND_BOTTOM - 1), (CANVAS_W, TITLE_BAND_BOTTOM - 1)],
+              fill=HAIRLINE, width=2)
 
     title_font = load_font(FONT_SCRIPT, 70)
     detail_font = load_font(FONT_DETAIL, 26, index=FONT_DETAIL_LIGHT)
     bbox = draw.textbbox((0, 0), event_name, font=title_font)
     tw = bbox[2] - bbox[0]
-    draw.text(((CANVAS_W - tw) // 2, 35), event_name, font=title_font, fill=TEXT_DARK)
+    draw.text(((CANVAS_W - tw) // 2, TITLE_TOP_Y), event_name, font=title_font, fill=TEXT_DARK)
 
     title_h = bbox[3] - bbox[1]
-    info_y = 35 + title_h + 20
+    info_y = TITLE_TOP_Y + title_h + 20
     for j, line in enumerate(detail_lines(event_name, org, venue)):
         if line:
             total_w = sum(draw.textbbox((0, 0), ch, font=detail_font)[2] -
