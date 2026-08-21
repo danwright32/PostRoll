@@ -591,18 +591,49 @@ def test_the_scheduled_sweep_is_admitted_by_the_full_job(guards):
 # ── what the legs actually ran against is recorded (#552) ─────────────────────
 
 
+def _jobs(text: str) -> dict[str, str]:
+    """Each job in a workflow, by name, so a claim about one cannot be met by
+    another (L135)."""
+    found = {m.group(1): m.group(2) for m in re.finditer(
+        r"^  ([a-z0-9-]+):[ \t]*$(.*?)(?=^  \S|\Z)", text, re.M | re.S)}
+    assert found, "no jobs found at all, so every check over them is vacuous"
+    return found
+
+
 def test_both_legs_record_the_ffmpeg_version_they_ran_against():
     """Both legs install whatever ffmpeg is current on the day. The Mac leg
     exists to catch differences in ffmpeg builds and codecs between platforms,
     so an unrecorded version on either side makes its result ambiguous: when it
     goes red there is no way to tell our own change from ffmpeg having moved,
     and the reflex is to read the diff, which is where the answer is not.
+
+    Asked per JOB, and asked for the ffmpeg version specifically. This used to
+    count occurrences of GITHUB_STEP_SUMMARY across the whole file and want two
+    of them, which is a proxy rather than the thing it protects (L63). #787 then
+    added two unrelated steps writing to that summary, and deleting the ffmpeg
+    recording outright left the count at two: the registered mutation SURVIVED,
+    on a guard that had passed every day since #552.
+
+    Which jobs have to record it is derived from which jobs install it, so a
+    third leg is covered the day it lands rather than the day somebody
+    remembers this file (L96).
     """
-    text = TESTS.read_text(encoding="utf-8")
-    recorded = re.findall(r"GITHUB_STEP_SUMMARY", text)
-    assert len(recorded) >= 2, (
-        f"expected each test leg to record its ffmpeg version in the job "
-        f"summary, found {len(recorded)} such steps")
+    jobs = _jobs(TESTS.read_text(encoding="utf-8"))
+    installing = {name: body for name, body in jobs.items()
+                  if re.search(r"install ffmpeg", body, re.I)}
+    assert len(installing) >= 2, (
+        f"expected both test legs to install ffmpeg, found {sorted(installing)}")
+
+    unrecorded = [
+        name for name, body in sorted(installing.items())
+        if not any("ffmpeg -version" in step and "GITHUB_STEP_SUMMARY" in step
+                   for step in body.split("- name:"))
+    ]
+    assert not unrecorded, (
+        f"these legs install ffmpeg and never write the version they got into "
+        f"the job summary: {unrecorded}. A red run on that leg then cannot be "
+        "attributed: our own change and ffmpeg having moved underneath us look "
+        "identical.")
 
 
 def test_the_guard_job_says_whether_the_schedule_is_still_alive(guards):
