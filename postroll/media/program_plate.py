@@ -33,6 +33,7 @@ from .design_tokens import (
     FONT_SCRIPT,
     MAT_PRINT as MAT,
     ROSE_GOLD,
+    SAFE_BOTTOM,
     TEXT_DARK,
     WARM_MID,
 )
@@ -50,25 +51,23 @@ RULE_Y = 338
 PRINT_Y = 430                  # the print is hung here
 #: The colophon rule, with the wordmark centred beneath it.
 #:
-#: NOT yet lifted clear of the band Instagram covers, and the reason is worth
-#: keeping (#753). The mark ends inside that band, so the signature on both
-#: plate reels is under Instagram's caption: 2069 pixels of branding measured
+#: Lifted clear of the band Instagram lays its account row and caption over
+#: (#753). Before this the mark ended inside that band, so the signature on both
+#: plate reels was under Instagram's own words: 2069 pixels of branding measured
 #: in the band on 2026-08-20.
 #:
-#: Lifting it is one line, `CANVAS_H - SAFE_BOTTOM - 214`, and it works: the
-#: band reading goes to zero and the reference frames re-record cleanly. What
-#: it breaks is one layer down. MAX_PRINT_H is derived from this line, so the
-#: print shrinks by the same amount and the placard caption, which hangs off
-#: the bottom of the print, rises with it. The photograph ZOOMS during the
-#: reel, and at the higher position it covers the caption:
-#: tests/test_frame_legibility.py reports the BEFORE and AFTER words at 1.76
-#: to 1 against the photograph rather than the mat, under the 3.0 minimum.
+#: It was recorded here for months as blocked, and the recorded reason was wrong
+#: in both halves (#778). It said that lifting the rule shrinks MAX_PRINT_H, so
+#: the placard caption hanging off the print rises with it, and the photograph's
+#: zoom then covers the caption at 1.76 to 1 against a 3.0 minimum.
 #:
-#: So the fix needs the placard to move independently of the print, or the
-#: zoom to be bounded, and that is a layout decision rather than a constant.
-#: #753 carries it, and tests/test_phone_safe_area.py names both reels with the
-#: issue against them so neither can be forgotten.
-FOOTER_RULE_Y = CANVAS_H - 214
+#: There is no zoom. `generate_reel_morph` sets ZOOM_START == ZOOM_END == 1.0
+#: and `apply_zoom` returns the frame untouched; the slider has no zoom at all.
+#: And the 1.76 reading came from somewhere else entirely: a check sampling the
+#: closing BEFORE/AFTER graphic through this reel's bands, which is a different
+#: template with a different layout (#777, since fixed). Re-measured after that
+#: fix, with the rule lifted: every legibility band on both reels is green.
+FOOTER_RULE_Y = CANVAS_H - SAFE_BOTTOM - 214
 LOGO_WIDTH = 340
 
 # The caption placard sits under the print: a gap, the state word, then the
@@ -80,8 +79,17 @@ PLACARD_BLOCK_H = 66           # word at +0, subtitle at +32, descenders below
 #: The tallest a print may be before its caption would reach the colophon rule.
 #:
 #: Unbounded until #322. A 2:3 portrait produced a 1404px print and put the
-#: caption at y=1920, past the rule at 1706 and off the bottom of the canvas,
-#: and nothing refused it: the reel rendered broken and reported success.
+#: caption at y=1920, past the rule and off the bottom of the canvas, and
+#: nothing refused it: the reel rendered broken and reported success.
+#:
+#: Derived from FOOTER_RULE_Y on purpose, so lifting the rule cannot leave a
+#: tall print's caption overrunning it. That coupling is what #778 was filed
+#: about, and it is narrower than it reads: the print only shrinks for a
+#: photograph tall enough to be CLAMPED. Measured at the SAFE_BOTTOM lift, print
+#: heights before and after: 3:2 landscape 624 and 624, square 936 and 936, 4:5
+#: portrait 1170 and 1016, 2:3 portrait 1176 and 1016. So the caption of what
+#: Dan actually shoots does not move at all, and the two portrait shapes lose
+#: 154 and 160 pixels of print to keep their caption off the colophon.
 MAX_PRINT_H = FOOTER_RULE_Y - PRINT_Y - PLACARD_TOP_GAP - PLACARD_BLOCK_H
 
 

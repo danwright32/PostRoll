@@ -98,12 +98,23 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # 2 is the same move on this template: its cream footer sits above the band
     # now rather than at the very foot of the frame.
     "reel_screen": 2,
-    # NOT moved by #753: their colophon is still inside the band Instagram
-    # covers, because lifting it costs the placard caption its clearance from
-    # the photograph's zoom. program_plate.FOOTER_RULE_Y carries the whole
-    # reason.
-    "reel_morph": 2,
-    "reel_slider": 2,
+    # 3 is the colophon lifted clear of Instagram's caption band (#753), the
+    # last two templates to move.
+    #
+    # It waited on nothing in this file. The reason recorded here for months,
+    # that lifting the footer rule shrinks MAX_PRINT_H and pushes the placard
+    # caption up into the photograph's zoom, was wrong in both halves: the zoom
+    # is disabled on the morph (ZOOM_START == ZOOM_END) and the slider has none
+    # at all, and the 1.76 to 1 contrast reading that was blamed on it came from
+    # a check reading the closing before/after graphic through this reel's bands
+    # (#777, fixed). Measured after that fix: lifting the rule leaves every
+    # legibility band green.
+    #
+    # The print does shrink by SAFE_BOTTOM, but only for a photograph tall
+    # enough to be clamped, and the caption of a 3:2 landscape does not move at
+    # all. program_plate.MAX_PRINT_H carries that reading.
+    "reel_morph": 3,
+    "reel_slider": 3,
     # 2 is the taller header that keeps the title out of the band the phone
     # covers (#752): it drew at y=35, under the status bar, on every reel.
     "reel_scroll": 2,
@@ -182,12 +193,14 @@ SAFE_TOP = 170
 #: to escape a gradient would cost the photograph a seventh of the frame to buy
 #: very little.
 #:
-#: What is inside it today, measured on real renders of a real show rather than
-#: on fixtures: before_after's wordmark, the two plate reels' footer colophon,
-#: the screen reel's wordmark, and the last line of the story's wordmark. The
-#: scroll reel and the collage clear it. Each of the four is named in
-#: tests/test_phone_safe_area.py with #753 against it, because moving a colophon
-#: costs photograph and that is Dan's decision to make, not a nudge.
+#: What WAS inside it, measured on real renders of a real show rather than on
+#: fixtures: before_after's wordmark, the two plate reels' footer colophon, the
+#: screen reel's wordmark, and the last line of the story's wordmark. The scroll
+#: reel and the collage always cleared it.
+#:
+#: All four have been moved above it now, the plate reels last (#778). Nothing
+#: is exempt: `tests/test_phone_safe_area.py` measures every template against
+#: this band, and its exemption table is empty.
 SAFE_BOTTOM = 160
 
 #: How much of the RIGHT EDGE Instagram's action rail covers (#753).
