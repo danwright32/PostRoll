@@ -19,6 +19,8 @@ them. What belongs here is anything two templates are supposed to agree on.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from PIL import ImageFont
 
 
@@ -214,19 +216,98 @@ SAFE_BOTTOM = 160
 #: would cost every template a column it does not need to give up.
 SAFE_RIGHT = 240
 
+#: The width of a full-frame asset, which every side-crop reading is scaled to.
+#:
+#: Named here rather than restated inside the arithmetic below, because that
+#: conversion is the whole of what a reading does and a second spelling of 1080
+#: is one the two could disagree over.
+FULL_FRAME_W = 1080
+
+
+@dataclass(frozen=True)
+class SideCropReading:
+    """One phone's measurement of how much of each side Instagram cuts off (#775).
+
+    Instagram shows a 1080 wide frame at `shown` of the phone's own pixels
+    inside a window of `window` of them. Anything wider than the window is cut
+    off, half from each side, and `canvas_pixels_per_side` converts that back to
+    canvas pixels through the same scale.
+
+    The raw screen figures are kept rather than only the answer, so a reading can
+    be re-derived and checked. A table of bare results cannot be argued with:
+    a scale fitted wrongly and a phone that really does crop that much produce
+    the same number.
+    """
+
+    #: The phone, named the way Dan would name it.
+    device: str
+    #: The day the reading was taken, as YYYY-MM-DD.
+    measured: str
+    #: The phone's screen in its own pixels, recorded for context rather than
+    #: used: two phones with the same screen can still show a reel differently.
+    screen: tuple[int, int]
+    #: Screen pixels Instagram draws the 1080 wide frame at.
+    shown: int
+    #: Screen pixels actually visible, which is the narrower of the two.
+    window: int
+
+    @property
+    def screen_pixels_per_side(self) -> float:
+        """How much of the phone's own screen is cut off at each edge."""
+        return max(0, self.shown - self.window) / 2
+
+    @property
+    def canvas_pixels_per_side(self) -> float:
+        """The same crop, in canvas pixels of the 1080 wide asset."""
+        return self.screen_pixels_per_side * (FULL_FRAME_W / self.shown)
+
+
+#: Every side-crop reading taken, one per phone, newest last (#775).
+#:
+#: A table rather than prose, because this is the one safe-area token that is
+#: genuinely device dependent: how much is cropped follows from the phone's
+#: aspect ratio against the asset's 9:16, so a 16:9 screen crops nothing and
+#: letterboxes instead, and a taller screen crops more. The other three tokens
+#: describe furniture whose size barely moves between phones.
+#:
+#: So the token below has to be the widest crop SEEN rather than the only crop
+#: measured. Add a phone here as it becomes available, measured the same way
+#: (fit the scale on landmarks in the rendered chrome, then convert), and leave
+#: the readings already here alone: `tests/test_side_crop_readings.py` raises
+#: the floor rather than letting a wider reading sit beside the token doing
+#: nothing.
+SIDE_CROP_READINGS: tuple[SideCropReading, ...] = (
+    # The reading SAFE_SIDE was set from, taken off two published reels (#768).
+    # 78 screen pixels a side, which is 57 canvas pixels a side, so the visible
+    # canvas is x 57 to 1023 rather than 0 to 1080.
+    SideCropReading(device="iPhone 16 Pro Max", measured="2026-08-20",
+                    screen=(1320, 2868), shown=1476, window=1320),
+)
+
+
+def widest_side_crop(
+    readings: tuple[SideCropReading, ...] | None = None,
+) -> float:
+    """The largest crop any recorded phone showed, in canvas pixels.
+
+    Takes the table rather than reading the module's own, so the guard that
+    holds SAFE_SIDE to it can be shown failing on a phone that crops more
+    without the committed readings being edited (L1).
+    """
+    return max(reading.canvas_pixels_per_side
+               for reading in (SIDE_CROP_READINGS if readings is None
+                               else readings))
+
+
 #: How much of EACH SIDE of a full-frame asset the phone never shows (#768).
 #:
-#: Measured on 2026-08-20 from the same two published reels on Dan's iPhone 16
-#: Pro Max. Instagram shows the 1080 wide frame at 1476 screen px in a 1320 px
-#: window, so 156 screen px are cut off, 78 a side, which is 57 canvas px each.
-#: The visible canvas is x 57 to 1023, not 0 to 1080.
-#:
-#: 60 is that rounded up. It is the one token here that is genuinely device
-#: dependent rather than roughly constant: how much is cropped follows from the
-#: phone's aspect ratio against the asset's, so a 16:9 screen would crop none
-#: and letterbox instead. This is the widest crop measured so far and should
-#: become the widest crop SEEN, with each figure recorded against the phone it
-#: came from, rather than staying one device's number forever.
+#: The widest reading in SIDE_CROP_READINGS above, rounded up: 57.1 canvas
+#: pixels on the only phone measured so far, so 60. Not computed from the table,
+#: because a token that moved on its own would change what every template is
+#: held to the moment a phone was added, and that is a decision rather than an
+#: arithmetic result. What IS enforced is that it can never be NARROWER than the
+#: widest reading, which is the direction that would quietly declare a column
+#: safe while a phone in use cuts it off.
 #:
 #: What it already tells us, which nothing recorded before: MAT_GALLERY is 48,
 #: so the gallery mat down the left and right of the collage and the scroll reel
