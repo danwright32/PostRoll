@@ -61,7 +61,10 @@ from postroll.media.design_tokens import SAFE_TOP
 from postroll.media.generate_before_after import generate_before_after
 from postroll.media.generate_collage import generate_collage
 from postroll.media.generate_reel_screen import build_chrome_overlay
+from postroll.media.generate_reel_morph import draw_branded_chrome as morph_chrome
 from postroll.media.generate_reel_scroll import draw_branded_chrome
+from postroll.media.generate_reel_slider import draw_branded_chrome as slider_chrome
+from postroll.media.generate_reel_slider import hang_the_states
 from postroll.media.generate_story import generate_story
 
 #: Out of `make test-python-fast`, which deselects this marker.
@@ -157,6 +160,36 @@ def _reel_screen_chrome(tmp_path: Path, named: bool) -> Image.Image:
                                 VENUE if named else "", None)
 
 
+def _reel_morph_chrome(tmp_path: Path, named: bool) -> Image.Image:
+    """One frame of the morph reel's chrome, drawn by the render's own call.
+
+    #759: these two were checked only against the coordinates declared in
+    `text_regions.py`, which is a check of what those files SAY rather than of
+    what the template draws. #752 found exactly that failure one file over,
+    where `scroll_regions` carried its own copy of the old y=35 and would have
+    gone on measuring a band the title had left.
+    """
+    frame = Image.new("RGB", CANVAS, (128, 128, 128))
+    return morph_chrome(frame, EVENT if named else "", ORG if named else "",
+                        VENUE if named else "", None)
+
+
+def _reel_slider_chrome(tmp_path: Path, named: bool) -> Image.Image:
+    """The same for the slider, through the rect its own layout produces.
+
+    The rect only positions the placards, which sit far below the band, but it
+    is taken from `hang_the_states` rather than invented so that this renders
+    the arrangement the reel actually renders (L48).
+    """
+    photos = [Image.open(_photo(tmp_path / f"s{i}.jpg", 90 + i * 30))
+              for i in range(3)]
+    rect, _ = hang_the_states(*photos)
+    frame = Image.new("RGB", CANVAS, (128, 128, 128))
+    return slider_chrome(frame, EVENT if named else "", ORG if named else "",
+                         VENUE if named else "", None, rect,
+                         "RAW", "Edit", 0.0)
+
+
 #: Every template that fills a phone screen, and how to render one.
 #:
 #: Exempt templates are in here too, with a renderer, rather than named in a
@@ -173,6 +206,8 @@ RENDERERS = {
     "before_after": _before_after,
     "reel_scroll": _reel_scroll_chrome,
     "reel_screen": _reel_screen_chrome,
+    "reel_morph": _reel_morph_chrome,
+    "reel_slider": _reel_slider_chrome,
     "story": _story,
 }
 
@@ -210,6 +245,30 @@ def test_no_template_draws_text_under_the_phone_chrome(name, tmp_path):
         "or reel. Whatever is there is printed under the clock and the battery "
         "and nobody can read it (#752). Move it below "
         "design_tokens.SAFE_TOP rather than nudging a number.")
+
+
+@needs_mac_fonts
+@pytest.mark.parametrize("name", sorted(RENDERERS))
+def test_every_render_actually_draws_its_words(name, tmp_path):
+    """The control for the band check, one per template.
+
+    The measurement above asks whether anything changed inside the top band. A
+    renderer that drew NO words at all changes nothing there either, and reports
+    exactly what a template that clears the band reports (L98, L159). So each
+    render is first proved to put its words somewhere on the page.
+
+    It earns its keep on the two plate reels #759 added: their titles sit at
+    MASTHEAD_Y=176, six pixels below a 170px band, so their band reading is zero
+    whether the chrome drew a masthead or drew nothing at all.
+    """
+    render = RENDERERS[name]
+    marked = _text_pixels_in_band(render(tmp_path, True), render(tmp_path, False),
+                                  CANVAS[1])
+
+    assert marked > 0, (
+        f"{name} renders identically with its event name, org and venue and "
+        "without them, so it drew none of them anywhere on the frame. Every "
+        "measurement of this template is then a measurement of nothing.")
 
 
 @needs_mac_fonts
@@ -268,10 +327,11 @@ def test_every_full_frame_template_is_accounted_for():
     """
     from postroll.media.design_tokens import MEDIA_DESIGN_VERSIONS
 
-    # The video-only templates draw their chrome through functions this file
-    # cannot call without encoding a file; their bands are declared in
-    # text_regions.py and measured by the reel legibility suites instead.
-    ELSEWHERE = {"reel_morph", "reel_slider", "reel_clip", "reel_preview", "cover"}
+    # What is measured somewhere else, and why. The two plate reels came OUT of
+    # this list in #759: they draw their chrome through a pure function like
+    # every other template here, so they are rendered and differenced above
+    # rather than trusted to the coordinates text_regions.py declares.
+    ELSEWHERE = {"reel_clip", "reel_preview", "cover"}
 
     covered = set(RENDERERS) | set(EXEMPT) | ELSEWHERE
     missing = sorted(set(MEDIA_DESIGN_VERSIONS) - covered)
