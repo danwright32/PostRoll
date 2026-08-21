@@ -177,17 +177,19 @@ RENDERERS = {
 }
 
 
-#: The story, exempted by name and by issue (#756).
+#: Templates allowed to draw in the covered band, by name and by issue.
 #:
-#: Its title hangs off the top of the photograph with no floor under it, so an
-#: UPRIGHT photograph puts it in the covered band. Deferred on Dan's call: he
-#: does not shoot upright photos for stories, and with a landscape photograph
-#: the photo is centred lower and the title clears the band by hundreds of
-#: pixels. Named here rather than left out, because a template that is simply
-#: absent from the table is exempt from the check written to cover it and
-#: nobody can see that it is (L129, L96). `test_every_full_frame_template_is_
-#: accounted_for` below holds the two lists together.
-EXEMPT = {"story": "#756, deferred: only upright photographs reach it"}
+#: Empty since #756 put a floor under the story's title, which was the one
+#: entry. `test_every_exemption_is_still_needed` is what emptied it: the story
+#: started clearing the band and that test went red naming itself, which is
+#: exactly what #760 added it to do.
+#:
+#: A template named here is excused from the check written to cover it, so the
+#: entry has to say which issue will end it, and that issue has to be open. A
+#: template simply MISSING from RENDERERS would be excused with nobody able to
+#: see that it is (L129, L96); `test_every_full_frame_template_is_accounted_for`
+#: below holds the two lists together.
+EXEMPT: dict[str, str] = {}
 
 #: What the measurement actually holds to the token, derived rather than
 #: written out beside RENDERERS: a second hand-kept list is a second place for
