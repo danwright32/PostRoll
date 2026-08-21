@@ -69,14 +69,17 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # collage's number, and two copies maintained by hand drift the moment one
     # is bumped.
     "collage": COLLAGE_DESIGN_VERSION,
-    # Unchanged by #752, deliberately: the story's title has no top clamp, but
-    # only an upright photograph puts it in the covered band and Dan does not
-    # shoot those for stories. #756 carries the fix, and the number moves with
-    # it rather than badging every story stale for a change nobody made.
-    "story": 1,
+    # 2 is the top clamp #756 put under the title. It hung off the top edge of
+    # the print with no floor, so an upright photograph put it inside the band
+    # the phone covers. #752 left this deliberately and said the number would
+    # move with the fix rather than badging every story for a change nobody had
+    # made; this is that move. A landscape story renders pixel for pixel as it
+    # did, which is every story shot so far, but the geometry is not the same
+    # geometry and an asset cannot say which one drew it without this.
+    "story": 2,
     # Rendered through generate_story's exact template, so it moves with the
     # story rather than carrying a number of its own.
-    "cover": 1,
+    "cover": 2,
     "before_after": 1,
     "reel_screen": 1,
     "reel_morph": 2,

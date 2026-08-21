@@ -36,8 +36,8 @@ enum CollageDesign {
 enum MediaDesign {
     static let mediaDesignVersions: [String: Int] = [
         "collage": 1,
-        "story": 1,
-        "cover": 1,
+        "story": 2,
+        "cover": 2,
         "before_after": 1,
         "reel_screen": 1,
         "reel_morph": 2,
