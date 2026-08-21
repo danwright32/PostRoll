@@ -161,6 +161,26 @@ from postroll.ai.audio_tags import TUESDAY_DEFAULT_TAGS as _DEFAULT_AUDIO_TAGS  
 from .missing_media import require_present  # noqa: E402
 
 
+def draw_branded_chrome(frame, event_name: str, org: str, venue: str, logo,
+                        rect: tuple[int, int, int, int],
+                        outgoing: str, incoming: str, progress: float):
+    """Program-plate chrome: masthead, footer colophon, crossfading placards.
+
+    Module level rather than a closure inside the render, so a check can draw
+    one frame of this template's chrome without encoding a reel (#759). The
+    render calls it too, so what is measured is what ships rather than a second
+    copy of the same call written beside it (L107).
+
+    Named to match `generate_reel_morph.draw_branded_chrome`, which is the same
+    idea for the other plate reel, so a check that wants both can ask both the
+    same question.
+    """
+    before_alpha, after_alpha = placard_alphas(progress)
+    return draw_plate_chrome(
+        frame, event_name, org, venue, logo, rect,
+        [(outgoing, before_alpha), (incoming, after_alpha)])
+
+
 def generate_reel_slider(
     raw_path: str,
     edit_path: str,
@@ -217,10 +237,8 @@ def generate_reel_slider(
     logo = load_logo(logo_path)
 
     def chrome(frame, outgoing: str, incoming: str, progress: float):
-        before_alpha, after_alpha = placard_alphas(progress)
-        return draw_plate_chrome(
-            frame, event_name, org, venue, logo, rect,
-            [(outgoing, before_alpha), (incoming, after_alpha)])
+        return draw_branded_chrome(frame, event_name, org, venue, logo, rect,
+                                   outgoing, incoming, progress)
 
     marks = [int(s * FPS) for s in
              (HOLD_RAW, SWEEP_DURATION, HOLD_COLOUR, SWEEP_DURATION, HOLD_BW,
