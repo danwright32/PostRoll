@@ -240,3 +240,23 @@ clean:
 	@rm -rf "$(BUILD_DIR)"
 	@echo "Build cache cleared: $(BUILD_DIR)"
 
+
+# The one supported way to record a DELIBERATE design change (#786).
+#
+# Changing what a template renders takes several steps that only work in one
+# order, and the tools refuse when it is wrong, correctly, but each refusal costs
+# a re-run of a suite that takes minutes. On 2026-08-20 it was done five times
+# and the order was wrong twice.
+#
+# This checks the version bump has been made, regenerates the shared design stamp
+# from its writer, re-records the reference frames, and then STOPS, handing back
+# the frames that moved. Looking at them is the step nothing downstream can do
+# for you: the re-record flag is the single way a broken frame becomes the
+# expectation. Commit them, then `make record-fingerprints`, which refuses to
+# vouch for a frame with uncommitted changes and is what makes the order matter.
+#
+# The other door is `make record-fingerprints` on its own, for a change that
+# moved a template's source without moving a pixel. This refuses, by name, when
+# that is the case it is looking at.
+record-design-change:
+	@venv/bin/python tools/record_design_change.py
