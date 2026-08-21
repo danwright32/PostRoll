@@ -1,0 +1,8 @@
+{
+  "name": "every-make-target-is-in-the-readme",
+  "file": "Makefile",
+  "find": "record-fingerprints:\n\t@venv/bin/python tools/record_design_fingerprints.py",
+  "replace": "record-fingerprint:\n\t@venv/bin/python tools/record_design_fingerprints.py",
+  "test": "tests/test_readme_documents_every_make_target.py::test_the_readme_names_every_target",
+  "breaks": "a make target exists that the README never names, so the only way to find out the command is to read the Makefile, which is the thing the README is for. Eight of thirteen targets were in that state before #796"
+}
