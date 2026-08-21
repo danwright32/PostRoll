@@ -70,7 +70,7 @@ enum MediaDesign {
         "story": 2,
         "cover": 2,
         "before_after": 1,
-        "reel_screen": 1,
+        "reel_screen": 2,
         "reel_morph": 2,
         "reel_slider": 2,
         "reel_scroll": 2,
