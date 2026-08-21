@@ -196,6 +196,99 @@ final class GenerationRunDayOutcomeTests: XCTestCase {
                        "the run-level crash has to reach the asset screen even so")
     }
 
+    // MARK: - A run that said nothing takes nothing away (#763)
+
+    func testAGraphicsPassThatReportedNothingLeavesTheRecordAlone() {
+        // The same defect #740 fixed in applyFullRunResult, at the other entry
+        // point, and it was never fixed here.
+        //
+        // `runPreviewGeneration` answers with a wholly empty result when Python
+        // wrote no output file, or wrote something that would not parse. On a
+        // full run `renderedDays` is nil, which means "this run owns every
+        // day", so folding that silence in as the run's answer erased every
+        // stored mediaError and mediaWarning the event had. A read that comes
+        // back empty when it FAILS destroys the whole record, at the moment the
+        // record is worth having (L105).
+        let (generation, graphics) = managers()
+        var event = makeEvent()
+        event.mediaErrors["tuesday"] = "clip reel skipped: ffmpeg crashed"
+        event.mediaWarnings["wednesday"] = "an optional photo had moved"
+        let appState = state([event])
+        graphics.failDayRegen(.friday, for: event.id, pipelineError: shortfall)
+
+        generation.finishSuccess(
+            eventID: event.id, snapshot: event, onlyDays: nil,
+            result: WeekGenerationResult(), mediaPaths: nil, mediaErrors: [:],
+            renderedDays: nil, appState: appState)
+
+        XCTAssertEqual(appState.events.first?.mediaErrors["tuesday"],
+                       "clip reel skipped: ffmpeg crashed",
+                       "a graphics pass that reported nothing erased a day's stored failure")
+        XCTAssertEqual(appState.events.first?.mediaWarnings["wednesday"],
+                       "an optional photo had moved",
+                       "a graphics pass that reported nothing erased a day's stored warning")
+        XCTAssertNotNil(graphics.dayFailure(.friday, for: event.id),
+                        "it took away a reason it never re-attempted")
+    }
+
+    func testASalvagedRunThatReportedNothingLeavesTheRecordAlone() {
+        // The same fold, the same silence, the other completion path.
+        let (generation, _) = managers()
+        var event = makeEvent()
+        event.mediaErrors["tuesday"] = "clip reel skipped: ffmpeg crashed"
+        let appState = state([event])
+
+        generation.saveSalvagedDays(
+            eventID: event.id, snapshot: event, week: WeekGenerationResult(),
+            mediaPaths: nil, mediaErrors: [:], mediaWarnings: [:],
+            renderedDays: nil, appState: appState)
+
+        XCTAssertEqual(appState.events.first?.mediaErrors["tuesday"],
+                       "clip reel skipped: ffmpeg crashed")
+    }
+
+    func testARunThatRenderedWithNothingToSayStillClearsTheRecord() {
+        // The other side, and the reason the guard is about SILENCE rather than
+        // about having no errors: a run that actually rendered the week and
+        // found nothing wrong must still take away the failures the run before
+        // recorded, or a day that has been fixed reports as broken forever (L14).
+        let (generation, graphics) = managers()
+        var event = makeEvent()
+        event.mediaErrors["tuesday"] = "clip reel skipped: ffmpeg crashed"
+        let appState = state([event])
+        graphics.failDayRegen(.tuesday, for: event.id, pipelineError: shortfall)
+
+        generation.finishSuccess(
+            eventID: event.id, snapshot: event, onlyDays: nil,
+            result: WeekGenerationResult(),
+            mediaPaths: ["tuesday": ["reel": "/tmp/reel.mp4"]],
+            mediaErrors: [:], renderedDays: nil, appState: appState)
+
+        XCTAssertNil(appState.events.first?.mediaErrors["tuesday"])
+        XCTAssertNil(graphics.dayFailure(.tuesday, for: event.id))
+    }
+
+    func testAWarningAloneIsEnoughToCountAsHavingSpoken() {
+        // A run whose only news is a warning HAS reported, so it owns the days
+        // it rendered and its answer replaces what came before. Treating a
+        // warning-only run as silence would keep failures it had just cleared.
+        let (generation, _) = managers()
+        var event = makeEvent()
+        event.mediaErrors["tuesday"] = "clip reel skipped: ffmpeg crashed"
+        let appState = state([event])
+
+        generation.finishSuccess(
+            eventID: event.id, snapshot: event, onlyDays: nil,
+            result: WeekGenerationResult(), mediaPaths: nil, mediaErrors: [:],
+            mediaWarnings: ["wednesday": "an optional photo had moved"],
+            renderedDays: nil, appState: appState)
+
+        XCTAssertNil(appState.events.first?.mediaErrors["tuesday"],
+                     "a run that spoke was treated as silent, so it cleared nothing")
+        XCTAssertEqual(appState.events.first?.mediaWarnings["wednesday"],
+                       "an optional photo had moved")
+    }
+
     // MARK: - What the completion already did, still done
 
     func testTheDaysThatRenderedStillLand() {

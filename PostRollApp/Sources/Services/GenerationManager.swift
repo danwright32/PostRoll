@@ -244,21 +244,29 @@ final class GenerationManager {
         saved.previewMediaPaths = PreviewMergePolicy.merge(
             existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: onlyDays == nil)
 
+        // Which days this graphics pass is allowed to speak for (#763). A pass
+        // that said nothing at all owns none, whatever it was asked to render:
+        // folding its silence in as a full run's answer erased every stored
+        // error and warning the event had.
+        let spokenFor = PreviewMergePolicy.daysOwned(
+            renderedDays: renderedDays, paths: mediaPaths,
+            errors: mediaErrors, warnings: mediaWarnings)
+
         // Graphics failures are recorded, not dropped: a day whose collage or reel
         // died has to say so on the asset screen instead of just showing nothing.
         saved.mediaErrors = PreviewMergePolicy.mergeMediaErrors(
-            existing: saved.mediaErrors, fresh: mediaErrors, renderedDays: renderedDays)
+            existing: saved.mediaErrors, fresh: mediaErrors, renderedDays: spokenFor)
         // Same merge rule, its own store: a warning about a day this run never
         // re-rendered must not be erased either (#265).
         saved.mediaWarnings = PreviewMergePolicy.mergeMediaErrors(
-            existing: saved.mediaWarnings, fresh: mediaWarnings, renderedDays: renderedDays)
+            existing: saved.mediaWarnings, fresh: mediaWarnings, renderedDays: spokenFor)
 
         // And where the caption review screen reads it (#750). The event's
         // `mediaErrors` above is the asset screen's list; a day failure row on
         // the review screen, and Friday's "< 3 usable clips" escape hatch that
         // is reached from it, come from the manager and nothing here told it.
         graphics.recordDayOutcomes(errors: mediaErrors, paths: mediaPaths ?? [:],
-                                   renderedDays: renderedDays, for: eventID)
+                                   renderedDays: spokenFor, for: eventID)
 
         // A re-rendered reel carries music this run fetched, so a label written
         // by an earlier manual swap now names a track the file does not contain.
@@ -302,17 +310,23 @@ final class GenerationManager {
         // keeping them means re-rendering work that is already done.
         saved.previewMediaPaths = PreviewMergePolicy.merge(
             existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: false)
+        // The same decision as the ordinary completion (#763): a pass that said
+        // nothing owns no days, and a run the watchdog killed is exactly when
+        // its graphics are most likely to have said nothing.
+        let spokenFor = PreviewMergePolicy.daysOwned(
+            renderedDays: renderedDays, paths: mediaPaths,
+            errors: mediaErrors, warnings: mediaWarnings)
         saved.mediaErrors = PreviewMergePolicy.mergeMediaErrors(
-            existing: saved.mediaErrors, fresh: mediaErrors, renderedDays: renderedDays)
+            existing: saved.mediaErrors, fresh: mediaErrors, renderedDays: spokenFor)
         saved.mediaWarnings = PreviewMergePolicy.mergeMediaErrors(
-            existing: saved.mediaWarnings, fresh: mediaWarnings, renderedDays: renderedDays)
+            existing: saved.mediaWarnings, fresh: mediaWarnings, renderedDays: spokenFor)
         saved = ReelAudioSwap.clearingStaleAudioLabels(in: saved, freshMedia: mediaPaths)
         appState.updateEvent(saved)
 
         // The graphics finished in their own process, so their per-day answers
         // are as real as a finished run's and are recorded the same way (#750).
         graphics.recordDayOutcomes(errors: mediaErrors, paths: mediaPaths ?? [:],
-                                   renderedDays: renderedDays, for: eventID)
+                                   renderedDays: spokenFor, for: eventID)
     }
 
     private func finishFailure(eventID: Event.ID, message: String) {
