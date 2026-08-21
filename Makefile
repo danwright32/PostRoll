@@ -99,9 +99,15 @@ test-python:
 # deselected, so a fast suite that has quietly become a run of almost nothing is
 # visible rather than silent (#413). On its own this is NOT the gate:
 # `make test-python` and CI run everything.
+#
+# `-n auto` since #766, which is a plain oversight corrected: the full target has
+# always been parallel and this one never was. It matters more now, because the
+# measured set is three files rather than the eight the matrix named, so the fast
+# run carries five more files than it did. Measured on this Mac on 2026-08-21:
+# 138s serial against 34.7s with the workers, on the same 3168 tests.
 
 test-python-fast:
-	@venv/bin/python -m pytest tests/ -q -m "not slow"
+	@venv/bin/python -m pytest tests/ -q -m "not slow" -n auto
 
 # Re-measure what each test file costs, which is what decides the set above. Run
 # it after adding a file heavy enough to belong to the full run only; a file's

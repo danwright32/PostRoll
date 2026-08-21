@@ -30,6 +30,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 MAKEFILE = REPO_ROOT / "Makefile"
@@ -108,17 +110,27 @@ def test_nothing_overrides_the_scheduler_back():
         f"pyproject.toml: {overriding}. Remove it, or move the decision there.")
 
 
-def test_the_full_local_run_is_still_parallel_at_all():
+#: The local targets that run pytest, both of which have to be parallel.
+#:
+#: The fast one was NOT, until #766, and had never been: the full target has been
+#: parallel since #497 and this one was simply missed. It cost 138s against 34.7s
+#: on the same 3168 tests, measured on this Mac on 2026-08-21, on the target
+#: whose entire reason for existing is being quick.
+PARALLEL_TARGETS = ("test-python", "test-python-fast")
+
+
+@pytest.mark.parametrize("name", PARALLEL_TARGETS)
+def test_the_local_targets_are_parallel_at_all(name):
     """The measurement above is about how the parallelism is DEALT OUT.
 
-    None of it means anything if the full target stopped passing `-n`: the
-    scheduler would then be a setting on a run with one worker, and the whole
-    tail this issue is about would be the entire run.
+    None of it means anything on a target that never asked for workers: the
+    scheduler would then be a setting on a run with one process, and the tail
+    this issue is about would be the entire run.
     """
     makefile = MAKEFILE.read_text(encoding="utf-8")
-    target = re.search(r"^test-python:\n((?:\t.*\n)+)", makefile, re.M)
+    target = re.search(rf"^{re.escape(name)}:\n((?:\t.*\n)+)", makefile, re.M)
 
-    assert target, "there is no test-python target in the Makefile"
+    assert target, f"there is no {name} target in the Makefile"
     assert re.search(r"-n\s+\S+", target.group(1)), (
-        f"the full local target runs pytest with no -n, so it is serial: "
+        f"the {name} target runs pytest with no -n, so it is serial: "
         f"{target.group(1).strip()}")
