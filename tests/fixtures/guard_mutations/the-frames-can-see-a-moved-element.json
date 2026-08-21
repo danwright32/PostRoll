@@ -1,0 +1,8 @@
+{
+  "name": "the-frames-can-see-a-moved-element",
+  "file": "tests/test_golden_frames.py",
+  "find": "MAX_CHANGED_FRACTION = 0.0002",
+  "replace": "MAX_CHANGED_FRACTION = 0.005",
+  "test": "tests/test_golden_drift_is_reported.py::test_the_limit_sits_between_the_noise_and_the_defect",
+  "breaks": "the reference frames go back to the limit that let a whole footer colophon move 160 pixels up the frame and still report no difference: 7336 pixels is 0.3538% of the canvas against a 0.5% limit (#787)"
+}

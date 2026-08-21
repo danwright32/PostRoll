@@ -296,6 +296,15 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
 
+      # Collect the drift readings the reference frames take (#787) into one
+      # file, then publish it twice below. Into a file rather than straight
+      # into the step summary because the readings have two audiences: a
+      # person opening the run reads the summary, and anything asking the API
+      # what a run measured can only read the LOG, since a step summary is
+      # not fetchable.
+      - name: Collect reference-frame drift readings
+        run: echo "POSTROLL_GOLDEN_DRIFT_LOG=${RUNNER_TEMP}/golden-drift.txt" >> "${GITHUB_ENV}"
+
       # Both variables turn a skip into a hard failure. A reference-frame check
       # that quietly skips for want of ffmpeg or a system font is
       # indistinguishable from one that passed, which is the whole failure mode
@@ -332,3 +341,21 @@ jobs:
         run: >
           pytest ${{ matrix.shard.files }}
           -n auto -v -ra
+
+      # Both audiences, and on a failed run too: a red run is when the numbers
+      # are most worth having, and a step that only ran on success would drop
+      # them exactly then. A run that collected NOTHING says so rather than
+      # publishing an empty list, which would read as a run in which nothing
+      # drifted (L98).
+      - name: Publish the reference-frame drift readings
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -s "${POSTROLL_GOLDEN_DRIFT_LOG:-/nonexistent}" ]; then
+            echo "no reference-frame drift readings were taken, so this run measured nothing"
+            exit 0
+          fi
+          echo "### reference-frame drift: pixels differing from the committed frame by more than the per-channel tolerance, as a share of the canvas (#787)" >> "${GITHUB_STEP_SUMMARY}"
+          cat "${POSTROLL_GOLDEN_DRIFT_LOG}" >> "${GITHUB_STEP_SUMMARY}"
+          cat "${POSTROLL_GOLDEN_DRIFT_LOG}"
+

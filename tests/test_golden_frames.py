@@ -40,6 +40,8 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageChops, ImageStat
 
+import golden_drift
+
 from conftest import needs_ffmpeg, needs_mac_fonts as requires_mac_fonts
 from postroll.media import design_tokens as tokens
 from postroll.media import frame_legibility as legibility
@@ -82,10 +84,57 @@ UPDATING = os.environ.get("POSTROLL_UPDATE_GOLDENS") == "1"
 #: about 250,249,245, a worst channel delta of 2) with headroom.
 CHANNEL_TOLERANCE = 6
 
-#: Share of pixels allowed past that tolerance. A moved element, a label that
-#: has lost its contrast, or a shadow streaking the mat all cover far more of
-#: the frame than this; anti-aliasing along unchanged edges covers less.
-MAX_CHANGED_FRACTION = 0.005
+#: The worst reading an UNCHANGED design produces on the CI runner (#787).
+#:
+#: Measured, not assumed, and it is the number the limit below is chosen from.
+#: Every reference-frame comparison writes its reading down now, so this came
+#: off two independent macos-15 jobs on 2026-08-21, `Tests / macos` and
+#: `macOS / reference-frames (goldens)`, against frames recorded on Dan's Mac.
+#: The two agree to the pixel:
+#:
+#:     nine of the ten frames    0 of 2073600 px    0.0000%
+#:     clip_reel                26 of 2073600 px    0.0013%
+#:
+#: So the runner's own ffmpeg, which is the entire reason a share is allowed at
+#: all rather than demanding an exact match, costs 26 pixels on one template and
+#: nothing on the other nine. Reproducible to the pixel across two runs, so it is
+#: a stable property of that template's encode rather than randomness; why it is
+#: that template and not the others is not established and does not need to be
+#: for this to be the floor.
+#:
+#: On this Mac the reading is 0 for all ten, which is why the limit could not be
+#: chosen here (L177).
+UNCHANGED_ON_CI = 26 / (1080 * 1920)
+
+#: The smallest change the reference frames actually have to CATCH (#787).
+#:
+#: Also measured: lifting `program_plate.FOOTER_RULE_Y` by `SAFE_BOTTOM` moves
+#: the entire footer colophon of both plate reels, the rose-gold rule and the
+#: wordmark under it, 160 pixels up the frame. That is 7336 pixels, 0.3538% of
+#: the canvas, and it is the whole signature block of a template.
+#:
+#: It is the smallest REAL defect there is a reading for, so the limit has to sit
+#: under it. It did not: the limit was 0.005, fourteen times this, and both reels
+#: passed their reference frames unchanged while their colophon moved a tenth of
+#: the frame's height. That is #787.
+SMALLEST_REAL_MOVE = 7336 / (1080 * 1920)
+
+#: Share of pixels allowed past the per-channel tolerance.
+#:
+#: Chosen from the two measurements above rather than picked round, and it sits
+#: at their geometric middle: 415 pixels, sixteen times the worst unchanged
+#: reading and eighteen times under the smallest real move. Out of the dense
+#: part of the distribution in both directions, so neither a slightly noisier
+#: encode nor a slightly smaller layout change lands anywhere near it (L172).
+#:
+#: The comment that stood here said a moved element covers far more of the frame
+#: than the limit. That was the claim, never a reading, and it was wrong by a
+#: factor of fourteen in the direction that matters.
+#:
+#: `test_the_limit_sits_between_the_noise_and_the_defect` holds the gap open, so
+#: a new reading that closes it from either side asks for the limit to be chosen
+#: again rather than letting it drift.
+MAX_CHANGED_FRACTION = 0.0002
 
 
 # ── comparison ────────────────────────────────────────────────────────────────
@@ -121,6 +170,13 @@ def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> Non
     changed = mask.histogram()[255]
     total = actual.width * actual.height
     fraction = changed / total
+
+    # Written down on EVERY comparison, not only the failing ones (#787). A
+    # reading taken only when a check fails says nothing about where the healthy
+    # ones sit, and that is the whole distribution MAX_CHANGED_FRACTION has to
+    # be chosen from (L172). See tests/golden_drift.py for what is wrong with
+    # the number today and why it cannot be fixed from this Mac.
+    golden_drift.report(name, changed, total)
 
     if fraction > MAX_CHANGED_FRACTION:
         # Write the evidence out rather than only reporting a number, because a
