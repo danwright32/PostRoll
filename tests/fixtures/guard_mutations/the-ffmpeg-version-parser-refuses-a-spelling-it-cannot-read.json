@@ -1,0 +1,8 @@
+{
+  "name": "the-ffmpeg-version-parser-refuses-a-spelling-it-cannot-read",
+  "file": "tests/test_golden_frames.py",
+  "find": "    match = re.match(r\"n?(\\d+)\\.\", version.strip())",
+  "replace": "    match = re.match(r\"n?(\\d+)\", version.strip())",
+  "test": "tests/test_golden_drift_is_reported.py::test_the_version_parser_reads_the_spellings_this_repo_has_actually_seen",
+  "breaks": "the version parser reads a leading number out of any string, so a truncated or unfamiliar spelling is accepted as a real major version and the check comparing the frames to the ffmpeg the limit was measured against compares a number nobody measured (#792, L108)"
+}
