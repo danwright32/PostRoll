@@ -289,23 +289,23 @@ RAIL_BAND = (CANVAS[0] - SAFE_RIGHT, int(CANVAS[1] * SAFE_RIGHT_FROM),
 
 #: Templates allowed to draw branding in the bottom band, by name and by issue.
 #:
-#: The screen reel came out when its footer was moved above the band. The other
-#: three were tried and put back, and what stopped each is worth keeping.
+#: EMPTY, and it is meant to stay that way: every template that draws a
+#: signature now draws it above the band (#753). The screen reel came out first,
+#: then before_after and the story, and the two plate reels last.
 #:
-#: The plate reels: the lift is one line and the band reading goes to zero, but
-#: MAX_PRINT_H is derived from that line, so the print shrinks, the placard
-#: caption hanging off it rises, and the photograph's zoom then covers the
-#: caption. Measured at 1.76 to 1 against a 3.0 minimum.
-#:
-#: All three are layout decisions rather than constants, which is why they are
-#: here rather than done.
+#: What is worth keeping is why the plate reels sat here longest. The entry read
+#: "lifting it costs the placard its clearance from the zoom", measured at 1.76
+#: to 1 against a 3.0 minimum, and that reason was wrong: neither plate reel has
+#: a working zoom, and the 1.76 reading came from a check sampling the closing
+#: before/after graphic through the reel's own bands (#777, since fixed). An
+#: exemption records a measurement, and this one outlived the thing it measured
+#: by four commits with nothing able to notice, because an exemption's REASON is
+#: prose while only its EFFECT is checked.
 #:
 #: `test_every_bottom_exemption_is_still_needed` turns an entry red the moment
-#: it stops being true (L129, #760).
-EXEMPT_BOTTOM = {
-    "reel_morph": "#753, lifting it costs the placard its clearance from the zoom",
-    "reel_slider": "#753, lifting it costs the placard its clearance from the zoom",
-}
+#: the template stops putting ink in the band (L129, #760). It is what caught
+#: this pair being ready: it went from skipping to naming both.
+EXEMPT_BOTTOM: dict[str, str] = {}
 
 MEASURED_BOTTOM = sorted(set(RENDERERS) - set(EXEMPT_BOTTOM))
 
