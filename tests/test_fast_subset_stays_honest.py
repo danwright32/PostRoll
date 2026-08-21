@@ -46,6 +46,9 @@ from file_durations import (
     files_on_disk,
     recorded,
     shares,
+    smallest_expensive_share,
+    unmeasured,
+    worst_case_unmeasured_share,
 )
 
 
@@ -94,6 +97,54 @@ def test_the_record_names_only_files_that_still_exist():
         "these files are in the duration record and are not in tests/ any "
         f"more: {vanished}. Re-record with "
         "`venv/bin/python tools/record_test_durations.py`.")
+
+
+def test_the_record_still_covers_the_suite():
+    """The record has to keep up with the suite, not merely not contradict it (#794).
+
+    `test_the_record_names_only_files_that_still_exist` catches a file that has
+    gone. Nothing caught a file that ARRIVED: it is simply absent from the
+    record, and absent is read as cheap everywhere downstream. That direction is
+    safe for the fast run, which then pays for a file it might have skipped, and
+    the full run is the gate either way.
+
+    What goes quietly wrong is the reasoning. `EXPENSIVE_SHARE` and the gap it
+    sits in are computed over the RECORDED files alone, so a record covering 80
+    of 140 files reports a healthy gap while describing a suite that no longer
+    exists, and it reads green for exactly the reason it always did (L182).
+
+    The limit is derived rather than typed: the unmeasured files, stood at the
+    largest ordinary file in the record, may not add up to the smallest file the
+    fast run skips. Past that, files nobody has measured could between them be a
+    bigger part of the run than the cheapest thing being skipped, and the
+    distribution the floor was chosen from is not this suite's.
+    """
+    worst_case, scale = worst_case_unmeasured_share(), smallest_expensive_share()
+
+    assert worst_case < scale, (
+        f"{len(unmeasured())} test files have never been measured: "
+        f"{sorted(unmeasured())}. Stood at the largest ordinary file in the "
+        f"record they would be {worst_case:.0%} of the run, which is more than "
+        f"the {scale:.0%} of the smallest file the fast run skips, so the "
+        "distribution EXPENSIVE_SHARE was chosen from is no longer this suite's. "
+        "Re-record with `make record-test-durations`.")
+
+
+def test_the_coverage_check_is_measuring_something():
+    """The floor above is a ratio of two recorded shares, so it can go vacuous.
+
+    A record whose files were all expensive, or all ordinary, has no scale to
+    judge an unmeasured file against, and both helpers raise rather than
+    answering. This proves the pair they are asking about is really there, so a
+    green run above means the comparison happened rather than that there was
+    nothing to compare (L98).
+    """
+    assert 0 < smallest_expensive_share() < 1, (
+        "the smallest expensive file is not a share of a real run: "
+        f"{smallest_expensive_share()}")
+    assert unmeasured() <= files_on_disk(), (
+        "the unmeasured set names files that are not in tests/, so it is not "
+        f"the difference it claims to be: {sorted(unmeasured() - files_on_disk())}")
 
 
 def test_the_floor_still_sits_in_a_gap_in_the_real_distribution():
