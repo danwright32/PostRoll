@@ -40,6 +40,8 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageChops, ImageStat
 
+import golden_drift
+
 from conftest import needs_ffmpeg, needs_mac_fonts as requires_mac_fonts
 from postroll.media import design_tokens as tokens
 from postroll.media import frame_legibility as legibility
@@ -82,9 +84,22 @@ UPDATING = os.environ.get("POSTROLL_UPDATE_GOLDENS") == "1"
 #: about 250,249,245, a worst channel delta of 2) with headroom.
 CHANNEL_TOLERANCE = 6
 
-#: Share of pixels allowed past that tolerance. A moved element, a label that
-#: has lost its contrast, or a shadow streaking the mat all cover far more of
-#: the frame than this; anti-aliasing along unchanged edges covers less.
+#: Share of pixels allowed past that tolerance.
+#:
+#: It used to say a moved element covers far more of the frame than this.
+#: Measured on 2026-08-21, that is not true (#787): lifting the plate reels'
+#: entire footer colophon 160 pixels moved 7336 pixels, 0.3537% of a 1080 by
+#: 1920 canvas, and both reels passed their reference frames unchanged. The
+#: whole signature block of two templates can move a tenth of the frame's height
+#: with this reporting no difference.
+#:
+#: It is deliberately unchanged until there is something to choose a new one
+#: from. An unchanged render on this Mac re-records byte for byte identically,
+#: so the local floor is zero and a number set from here would be set from the
+#: machine the question is not about; the share exists for the CI runner's
+#: different ffmpeg (L177). `golden_drift.report` below now writes every
+#: reading, passing ones included, so the runner's real distribution shows up on
+#: the run's own summary page.
 MAX_CHANGED_FRACTION = 0.005
 
 
@@ -121,6 +136,13 @@ def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> Non
     changed = mask.histogram()[255]
     total = actual.width * actual.height
     fraction = changed / total
+
+    # Written down on EVERY comparison, not only the failing ones (#787). A
+    # reading taken only when a check fails says nothing about where the healthy
+    # ones sit, and that is the whole distribution MAX_CHANGED_FRACTION has to
+    # be chosen from (L172). See tests/golden_drift.py for what is wrong with
+    # the number today and why it cannot be fixed from this Mac.
+    golden_drift.report(name, changed, total)
 
     if fraction > MAX_CHANGED_FRACTION:
         # Write the evidence out rather than only reporting a number, because a

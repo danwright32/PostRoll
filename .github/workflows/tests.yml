@@ -218,6 +218,15 @@ jobs:
             echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
+      # Head the drift readings the reference frames write onto this run's
+      # summary page (#787). Written here rather than by the checks themselves
+      # because they are appended by several xdist workers during the run and
+      # none of them is first. Without it the summary carries a list of
+      # percentages with nothing saying what they are.
+      - name: Head the reference-frame drift readings
+        run: |
+          echo "### reference-frame drift: pixels differing from the committed frame by more than the per-channel tolerance, as a share of the canvas (#787)" >> "${GITHUB_STEP_SUMMARY}"
+
       # The SAME command as the Linux leg. A narrower one here would make this
       # job a different check wearing the same name, and the platform
       # differences it exists to catch are exactly the ones a subset drops.
