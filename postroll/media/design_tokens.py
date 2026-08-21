@@ -69,23 +69,21 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # collage's number, and two copies maintained by hand drift the moment one
     # is bumped.
     "collage": COLLAGE_DESIGN_VERSION,
-    # NOT bumped by #756, on Dan's call (2026-08-20), and the reason is worth
-    # keeping because it is the same reason #752 gave for deferring the fix.
+    # 2 is the wordmark lifted clear of Instagram's caption band (#753).
     #
-    # #756 put a floor under the title, which had none: an upright photograph
-    # pushed it into the band the phone covers. The floor only ever moves
-    # anything for an upright photograph. Every story Dan shoots is landscape,
-    # and tests/test_story_title_clamp.py holds that case to the pixel, so
-    # bumping the number would badge a whole library stale and offer to
-    # re-render every one of them for a change none of them would show.
+    # Its ink ended at y=1780 against a band starting at 1760, measured on a
+    # published post on 2026-08-20, so the last line of the signature,
+    # PHOTOGRAPHY.COM, was under Instagram's own words on every story ever
+    # made. Every one of them looks different now.
     #
-    # This is the second of the two answers the fingerprint guard asks for: the
-    # code changed, the rendering did not, so the fingerprint is re-recorded on
-    # its own and the reason is said out loud rather than left implicit.
-    "story": 1,
+    # Which is why this moves where #756 deliberately did not, four commits
+    # earlier on the same template. That fix put a floor under the title, and
+    # the floor only ever moves anything for an upright photograph, which Dan
+    # does not shoot. This one moves every story.
+    "story": 2,
     # Rendered through generate_story's exact template, so it moves with the
     # story rather than carrying a number of its own.
-    "cover": 1,
+    "cover": 2,
     "before_after": 1,
     "reel_screen": 1,
     "reel_morph": 2,
@@ -139,12 +137,61 @@ UNVERSIONED_DAY_FILES: frozenset[str] = frozenset({
 #: (L96), so it lives here, and `tests/test_phone_safe_area.py` holds every
 #: template to it by rendering the frame rather than by reading the source.
 #:
-#: Deliberately NOT paired with a bottom inset yet. Instagram draws its caption,
-#: its account row and its right hand action rail over the foot of the frame
-#: too, and nobody has measured how much: #753 is that measurement, and a
-#: number invented here to look symmetrical would be a made up one that every
-#: template would then be held to.
+#: Confirmed by measurement on 2026-08-20 (#761), from two published reels
+#: photographed on Dan's iPhone 16 Pro Max, screen 1320 by 2868.
+#:
+#: Instagram displays the 1080 wide frame at 1476 screen px. That scale, 1.3667,
+#: was fitted on seven landmarks in the rendered chrome and puts the title's
+#: centre at canvas x 541.5 against a true centre of 540, so the mapping is good
+#: to about a pixel. At that scale the iOS clock, signal and battery occupy
+#: canvas y 54 to 86. The Dynamic Island covers canvas y 24 to 105; its geometry
+#: comes from the device rather than from the screenshot, because it is a
+#: physical cut out and a screenshot renders app content there.
+#:
+#: So the lowest phone furniture ends at canvas y 105 and this clears it by
+#: 65px. The estimate this number started as was close, and it is a reading now.
 SAFE_TOP = 170
+
+#: How much of the FOOT of a full-frame asset Instagram covers (#753).
+#:
+#: Measured the same way, the same day, from the same two posts. Instagram lays
+#: its account row and the caption over the bottom of a reel: its text begins at
+#: canvas y 1770 and runs to the bottom edge, so 150px of the frame carries
+#: Instagram's words rather than ours. A gradient scrim fades in above that,
+#: faintly readable from about canvas y 1660 and reaching a darkening of 50 in
+#: 255 at the foot.
+#:
+#: 160 is the measured text band plus a little. Deliberately not the scrim: it
+#: reduces contrast without hiding anything, and holding every template to 260
+#: to escape a gradient would cost the photograph a seventh of the frame to buy
+#: very little.
+#:
+#: What is inside it today, measured on real renders of a real show rather than
+#: on fixtures: before_after's wordmark, the two plate reels' footer colophon,
+#: the screen reel's wordmark, and the last line of the story's wordmark. The
+#: scroll reel and the collage clear it. Each of the four is named in
+#: tests/test_phone_safe_area.py with #753 against it, because moving a colophon
+#: costs photograph and that is Dan's decision to make, not a nudge.
+SAFE_BOTTOM = 160
+
+#: How much of the RIGHT EDGE Instagram's action rail covers (#753).
+#:
+#: The like, comment, share and save column with its counts, from the same
+#: posts: it occupies canvas x 847 to the right edge. 240 is that rounded up.
+#:
+#: Paired with SAFE_RIGHT_FROM rather than applied to the whole edge, because a
+#: rail over the bottom half is what it actually is. A template putting ink in
+#: the top right corner is covered by nothing, and a token that said otherwise
+#: would cost every template a column it does not need to give up.
+SAFE_RIGHT = 240
+
+#: Where the action rail starts, as a fraction of the frame's height (#753).
+#:
+#: Measured at canvas y 1045 of 1920, so 0.54. Held as a fraction rather than a
+#: pixel because it is the only one of these that is naturally proportional: the
+#: rail is anchored to the bottom of the screen and grows upward with however
+#: many controls Instagram is showing.
+SAFE_RIGHT_FROM = 0.54
 
 
 #: The gallery mat and every cream surface. The one background colour.

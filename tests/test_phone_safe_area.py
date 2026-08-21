@@ -57,7 +57,12 @@ import pytest
 from PIL import Image, ImageChops
 
 from conftest import needs_mac_fonts
-from postroll.media.design_tokens import SAFE_TOP
+from postroll.media.design_tokens import (
+    SAFE_BOTTOM,
+    SAFE_RIGHT,
+    SAFE_RIGHT_FROM,
+    SAFE_TOP,
+)
 from postroll.media.generate_before_after import generate_before_after
 from postroll.media.generate_collage import generate_collage
 from postroll.media.generate_reel_screen import build_chrome_overlay
@@ -66,6 +71,7 @@ from postroll.media.generate_reel_scroll import draw_branded_chrome
 from postroll.media.generate_reel_slider import draw_branded_chrome as slider_chrome
 from postroll.media.generate_reel_slider import hang_the_states
 from postroll.media.generate_story import generate_story
+from postroll.media.program_plate import load_logo as plate_logo
 
 #: Out of `make test-python-fast`, which deselects this marker.
 #:
@@ -102,9 +108,23 @@ def _photo(path: Path, shade: int = 128, portrait: bool = False) -> str:
 def _text_pixels_in_band(with_text: Image.Image, without_text: Image.Image,
                          inset: int) -> int:
     """How many pixels of the top `inset` rows this template's text changed."""
+    return _branding_pixels(with_text, without_text,
+                            (0, 0, with_text.width, inset))
+
+
+def _branding_pixels(with_text: Image.Image, without_text: Image.Image,
+                     box: tuple[int, int, int, int]) -> int:
+    """How many pixels inside `box` this template's own branding changed.
+
+    The difference of two renders of one template, one carrying its event name,
+    org, venue and wordmark and one carrying none of them. Whatever changed is
+    what this template put there, which is the only thing a covered band is
+    about: the photograph underneath is Dan's, and Instagram covering part of it
+    is a fact of the platform rather than a defect (L146).
+    """
     assert with_text.size == without_text.size, "two sizes cannot be differenced"
-    a = with_text.convert("RGB").crop((0, 0, with_text.width, inset))
-    b = without_text.convert("RGB").crop((0, 0, without_text.width, inset))
+    a = with_text.convert("RGB").crop(box)
+    b = without_text.convert("RGB").crop(box)
     difference = ImageChops.difference(a, b)
     # A tolerance, because the script face is anti-aliased and its faintest
     # edge pixels are a rounding difference rather than a mark anybody sees.
@@ -150,14 +170,21 @@ def _before_after(tmp_path: Path, named: bool) -> Image.Image:
 
 
 def _reel_scroll_chrome(tmp_path: Path, named: bool) -> Image.Image:
+    """The scroll reel's fixed chrome, with no wordmark, which is how the reel
+    renders it: every call site in `generate_reel_scroll` passes None here. Its
+    colophon is baked into the scrolling strip instead, and rides with it, so it
+    is not a fixed band and `test_the_scroll_reels_colophon_is_measured_elsewhere`
+    says where it IS measured rather than leaving the gap unnamed."""
     frame = Image.new("RGB", CANVAS, (128, 128, 128))
     return draw_branded_chrome(frame, EVENT if named else "",
                                ORG if named else "", VENUE if named else "", None)
 
 
 def _reel_screen_chrome(tmp_path: Path, named: bool) -> Image.Image:
+    """With the wordmark, which its render passes: measuring this chrome without
+    one would measure a frame the product never makes (L48)."""
     return build_chrome_overlay(EVENT if named else "", ORG if named else "",
-                                VENUE if named else "", None)
+                                VENUE if named else "", LOGO if named else None)
 
 
 def _reel_morph_chrome(tmp_path: Path, named: bool) -> Image.Image:
@@ -171,7 +198,7 @@ def _reel_morph_chrome(tmp_path: Path, named: bool) -> Image.Image:
     """
     frame = Image.new("RGB", CANVAS, (128, 128, 128))
     return morph_chrome(frame, EVENT if named else "", ORG if named else "",
-                        VENUE if named else "", None)
+                        VENUE if named else "", plate_logo(LOGO) if named else None)
 
 
 def _reel_slider_chrome(tmp_path: Path, named: bool) -> Image.Image:
@@ -186,8 +213,8 @@ def _reel_slider_chrome(tmp_path: Path, named: bool) -> Image.Image:
     rect, _ = hang_the_states(*photos)
     frame = Image.new("RGB", CANVAS, (128, 128, 128))
     return slider_chrome(frame, EVENT if named else "", ORG if named else "",
-                         VENUE if named else "", None, rect,
-                         "RAW", "Edit", 0.0)
+                         VENUE if named else "", plate_logo(LOGO) if named else None,
+                         rect, "RAW", "Edit", 0.0)
 
 
 #: Every template that fills a phone screen, and how to render one.
@@ -245,6 +272,150 @@ def test_no_template_draws_text_under_the_phone_chrome(name, tmp_path):
         "or reel. Whatever is there is printed under the clock and the battery "
         "and nobody can read it (#752). Move it below "
         "design_tokens.SAFE_TOP rather than nudging a number.")
+
+
+#: The other two bands, measured on the same day from the same posts (#753).
+#:
+#: Instagram lays its account row and caption over the foot of the frame, and
+#: its like, comment, share and save rail down the right of the lower half.
+#:
+#: The bottom band is enforced: what it covers is the signature, which is the
+#: reason the chrome exists at all. The rail is measured and NOT enforced, for
+#: the reason `test_the_action_rail_is_measured_but_not_enforced` gives.
+BOTTOM_BAND = (0, CANVAS[1] - SAFE_BOTTOM, CANVAS[0], CANVAS[1])
+RAIL_BAND = (CANVAS[0] - SAFE_RIGHT, int(CANVAS[1] * SAFE_RIGHT_FROM),
+             CANVAS[0], CANVAS[1])
+
+#: Templates whose branding is inside the bottom band and has not been moved
+#: yet, by name and by issue.
+#:
+#: Measured on real renders of a real show on 2026-08-20. Moving a colophon
+#: costs photograph, which makes it a layout decision rather than a nudge, and
+#: Dan takes those one at a time: he took the story's on the night, and these
+#: four are still his to take. Named here rather than left out, so each one is
+#: measured and visible, and `test_every_bottom_exemption_is_still_needed`
+#: below turns any of them red the moment it stops being true (L129, #760).
+EXEMPT_BOTTOM = {
+    "before_after": "#753, the wordmark sits in the band",
+    "reel_morph": "#753, the plate's footer colophon sits in the band",
+    "reel_slider": "#753, the plate's footer colophon sits in the band",
+    "reel_screen": "#753, the wordmark sits in the band",
+}
+
+MEASURED_BOTTOM = sorted(set(RENDERERS) - set(EXEMPT_BOTTOM))
+
+
+@needs_mac_fonts
+@pytest.mark.parametrize("name", MEASURED_BOTTOM)
+def test_no_template_draws_branding_under_instagrams_caption(name, tmp_path):
+    render = RENDERERS[name]
+    marked = _branding_pixels(render(tmp_path, True), render(tmp_path, False),
+                              BOTTOM_BAND)
+
+    assert marked == 0, (
+        f"{name} puts {marked} pixels of its own branding in the bottom "
+        f"{SAFE_BOTTOM}px, which is where Instagram lays its account row and "
+        "its caption. Whatever is there is printed under Instagram's own words "
+        "and nobody reads it (#753). Move it above "
+        "design_tokens.SAFE_BOTTOM rather than nudging a number.")
+
+
+@needs_mac_fonts
+@pytest.mark.parametrize("name", sorted(RENDERERS))
+def test_the_action_rail_is_measured_but_not_enforced(name, tmp_path):
+    """The rail is drawn on the app preview and is deliberately not a rule.
+
+    Every template here centres its wordmark and its detail lines, so any of
+    them wide enough runs into the right 240px column somewhere below 54% of the
+    height. Measured: before_after puts 42290 pixels there and the story 34550,
+    and both are simply the ends of centred type, not branding hidden in a
+    corner.
+
+    A rule of "no branding under the rail" would therefore fail every correct
+    render, and the first false alarm is what gets a check switched off (L36,
+    L104). There is no evidence of harm either: on the published post this was
+    measured from, what the rail covers is photograph.
+
+    So the token exists, #758 draws it on the preview where Dan can see it, and
+    this records the measurement rather than pretending to a rule. What IS
+    asserted is that the reading can still be taken at all: a measurement that
+    had silently stopped working would report every template clear, and this
+    file would then be enforcing the bottom band on renders nothing had checked.
+    """
+    render = RENDERERS[name]
+    under_rail = _branding_pixels(render(tmp_path, True), render(tmp_path, False),
+                                  RAIL_BAND)
+    whole_frame = _branding_pixels(render(tmp_path, True), render(tmp_path, False),
+                                   (0, 0, CANVAS[0], CANVAS[1]))
+
+    assert whole_frame > 0, (
+        f"{name} drew none of its branding anywhere, so this measurement is of "
+        "nothing at all")
+    assert 0 <= under_rail <= whole_frame, (
+        f"{name} measures {under_rail} pixels under the rail out of "
+        f"{whole_frame} on the whole frame, which is not a possible reading")
+
+
+@needs_mac_fonts
+def test_every_bottom_exemption_is_still_needed(tmp_path):
+    """The same rule #760 wrote for the top band, applied to this one.
+
+    An exemption dies with the defect it was written about. Fixing a template
+    turns this red, naming itself and asking to be deleted, so the four above
+    cannot sit on unmeasured after Dan has taken the layout decision each of
+    them is waiting for.
+    """
+    if not EXEMPT_BOTTOM:
+        pytest.skip("nothing is exempt from the bottom band, so no exemption "
+                    "can have outlived its reason")
+
+    outlived = []
+    for name in sorted(EXEMPT_BOTTOM):
+        render = RENDERERS[name]
+        if _branding_pixels(render(tmp_path, True), render(tmp_path, False),
+                            BOTTOM_BAND) == 0:
+            outlived.append(name)
+
+    assert not outlived, (
+        f"these templates are exempt from the bottom band check and no longer "
+        f"need to be: {outlived}. Whatever put branding under Instagram's "
+        "caption is gone, so the exemption now excuses nothing and hides the "
+        "template from the check. Delete its entry from EXEMPT_BOTTOM.")
+
+
+def test_every_bottom_exemption_names_a_template_that_can_be_rendered():
+    unrenderable = sorted(set(EXEMPT_BOTTOM) - set(RENDERERS))
+
+    assert not unrenderable, (
+        f"these templates are exempt from the bottom band but have no renderer: "
+        f"{unrenderable}, so nothing can ever check whether the exemption is "
+        "still needed.")
+
+
+def test_the_scroll_reels_colophon_is_measured_elsewhere():
+    """Named rather than silently uncovered (L129).
+
+    `_reel_scroll_chrome` draws the reel's FIXED chrome, and that chrome carries
+    no wordmark: every call site in the render passes None. The reel's colophon
+    is baked into the scrolling strip under the last print, so it rides with the
+    strip and is not a fixed band at all. This check cannot see it.
+
+    Measured by hand on 2026-08-20 on a 20 photo strip: at the end of the scroll
+    its lowest ink is at y=1714 against a band starting at 1760, so it clears by
+    46px. That is a reading on one photo count, and the strip's height moves with
+    the number of photos, which is why it is written down here as a gap rather
+    than left to look like coverage.
+    """
+    from postroll.media import generate_reel_scroll as scroll
+    import inspect
+
+    source = inspect.getsource(scroll.generate_reel_scroll)
+
+    assert "draw_branded_chrome(frame, event_name, org, venue, None)" in source, (
+        "the scroll reel now passes a logo to its fixed chrome, so its footer "
+        "carries a wordmark inside the band Instagram covers, and this file's "
+        "renderer measures the chrome without one. Either take the logo back "
+        "out or render this template with it here.")
 
 
 @needs_mac_fonts

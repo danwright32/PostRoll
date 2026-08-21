@@ -11,6 +11,12 @@ struct PreviewGraphicThumbnail: View {
     var maxHeight: CGFloat? = nil
     @State private var load: ImageLoad = .loading
 
+    /// Whether the covered bands are drawn over this preview (#758). Read here
+    /// rather than passed in, so every surface showing a full frame answers to
+    /// the one switch.
+    @AppStorage(PhoneChromePreference.key, store: AppPreferences.store)
+    private var showPhoneChrome = PhoneChromePreference.defaultOn
+
     private var resolvedMaxHeight: CGFloat {
         maxHeight ?? max(440, (NSScreen.main?.visibleFrame.height ?? 800) * 0.82)
     }
@@ -21,6 +27,11 @@ struct PreviewGraphicThumbnail: View {
         }
         .aspectRatio(9/16, contentMode: .fit)
         .frame(maxWidth: .infinity, maxHeight: resolvedMaxHeight)
+        // Before the clip, so the bands are cut to the same rounded rectangle
+        // the preview is and cannot square off its corners.
+        .overlay {
+            if showPhoneChrome { PhoneChromeOverlay() }
+        }
         .clipShape(RoundedRectangle(cornerRadius: Radius.md))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.md)
