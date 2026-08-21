@@ -28,7 +28,6 @@ from .missing_media import require_present
 from .brand_text import detail_lines
 
 from .design_tokens import (
-    load_font,
     CREAM,
     CREAM_EDGE,
     FONT_DETAIL,
@@ -36,8 +35,10 @@ from .design_tokens import (
     FONT_DETAIL_MEDIUM,
     MAT_PRINT as MAT,
     ROSE_GOLD,
+    SAFE_TOP,
     TEXT_DARK,
     WARM_MID,
+    load_font,
 )
 
 # MAT is the even side mat; the photos are hung as matted prints inside it, and
@@ -72,7 +73,7 @@ LOGO_TOP_GAP = 32
 LOGO_BOTTOM_MARGIN = 24
 BOTTOM_CREAM_H = 130  # taller bottom to balance the top
 HEADER_MIN_H = 400  # min header height to accommodate notch-safe title + org + venue
-TITLE_TOP_PADDING = 170  # clears iPhone notch/Dynamic Island (~120px) with breathing room
+TITLE_TOP_PADDING = SAFE_TOP  # from the shared token since #752
 
 # The placard subtitle in Light read too thin at phone size; Medium holds up.
 SUBTITLE_WEIGHT = FONT_DETAIL_MEDIUM

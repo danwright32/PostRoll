@@ -23,9 +23,9 @@
     "cover": 1,
     "reel_clip": 1,
     "reel_morph": 2,
-    "reel_preview": 1,
+    "reel_preview": 2,
     "reel_screen": 1,
-    "reel_scroll": 1,
+    "reel_scroll": 2,
     "reel_slider": 2,
     "story": 1
   }

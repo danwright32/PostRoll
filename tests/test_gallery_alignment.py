@@ -67,7 +67,7 @@ def _assert_no_chrome_rules(mod, *extra):
     frame = mod.draw_branded_chrome(
         _blank_frame(mod), "Test Event", "Org", "Venue", None, *extra
     )
-    assert not _row_has_color(frame, mod.HEADER_H - 1, mod.ROSE_GOLD), \
+    assert not _row_has_color(frame, mod.CHROME_BOTTOM_Y - 1, mod.ROSE_GOLD), \
         f"{mod.__name__}: rose-gold rule still at header boundary"
     assert not _row_has_color(frame, mod.CANVAS_H - mod.FOOTER_H, mod.ROSE_GOLD), \
         f"{mod.__name__}: rose-gold rule still at footer boundary"
@@ -92,7 +92,7 @@ def test_screen_chrome_has_no_rose_gold_rules():
     # screen builds a transparent chrome overlay; extracted to build_chrome_overlay
     # so it is testable and consistent with its siblings.
     chrome = screen_mod.build_chrome_overlay("Test Event", "Org", "Venue", None)
-    assert not _row_has_color(chrome, screen_mod.HEADER_H - 1, screen_mod.ROSE_GOLD)
+    assert not _row_has_color(chrome, screen_mod.CHROME_BOTTOM_Y - 1, screen_mod.ROSE_GOLD)
     assert not _row_has_color(chrome, screen_mod.CANVAS_H - screen_mod.FOOTER_H, screen_mod.ROSE_GOLD)
 
 

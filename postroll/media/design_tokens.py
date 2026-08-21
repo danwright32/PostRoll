@@ -69,6 +69,10 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # collage's number, and two copies maintained by hand drift the moment one
     # is bumped.
     "collage": COLLAGE_DESIGN_VERSION,
+    # Unchanged by #752, deliberately: the story's title has no top clamp, but
+    # only an upright photograph puts it in the covered band and Dan does not
+    # shoot those for stories. #756 carries the fix, and the number moves with
+    # it rather than badging every story stale for a change nobody made.
     "story": 1,
     # Rendered through generate_story's exact template, so it moves with the
     # story rather than carrying a number of its own.
@@ -77,10 +81,12 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     "reel_screen": 1,
     "reel_morph": 2,
     "reel_slider": 2,
-    "reel_scroll": 1,
+    # 2 is the taller header that keeps the title out of the band the phone
+    # covers (#752): it drew at y=35, under the status bar, on every reel.
+    "reel_scroll": 2,
     # The still the Thursday crop editor draws over. Same layout maths as the
     # reel it previews, so a redesign of one dates the other.
-    "reel_preview": 1,
+    "reel_preview": 2,
     # Friday's auto-cut clip reel. The feature is retired (2026-07-09) but the
     # renderer is still reachable, and an asset that can still be produced
     # still needs to say which design produced it.
@@ -100,6 +106,36 @@ UNVERSIONED_DAY_FILES: frozenset[str] = frozenset({
     # regenerating the day cannot make it look newer.
     "cover_frame",
 })
+
+
+# ── Phone safe area ───────────────────────────────────────────────────────────
+
+#: How much of the top of a full-frame asset the phone itself covers (#752).
+#:
+#: Every template here is 1080 by 1920, which is what Instagram shows full
+#: screen as a story or a reel, and the phone draws its own furniture over the
+#: top of that: the status bar with the clock, the signal and the battery, and
+#: on a modern iPhone the Dynamic Island cut out of the display. Measured
+#: against a 1080 wide frame, that furniture occupies roughly the top 120px;
+#: 170 is that plus breathing room, so a title does not sit tight against the
+#: island either.
+#:
+#: The number is not new. `generate_reel_screen` and `generate_before_after`
+#: have both cleared exactly this band since they were written, each with its
+#: own copy of it and a comment explaining why. The scroll reel and the story
+#: were written without it: the scroll reel drew its title at y=35, printed
+#: under the clock on every reel published, and the story anchors its title to
+#: the photograph with no floor at all (#756). A rule that lives in a comment
+#: in the two files that honour it is a rule the next two files do not have
+#: (L96), so it lives here, and `tests/test_phone_safe_area.py` holds every
+#: template to it by rendering the frame rather than by reading the source.
+#:
+#: Deliberately NOT paired with a bottom inset yet. Instagram draws its caption,
+#: its account row and its right hand action rail over the foot of the frame
+#: too, and nobody has measured how much: #753 is that measurement, and a
+#: number invented here to look symmetrical would be a made up one that every
+#: template would then be held to.
+SAFE_TOP = 170
 
 
 #: The gallery mat and every cream surface. The one background colour.

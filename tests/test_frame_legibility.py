@@ -349,7 +349,7 @@ def test_the_colophon_search_starts_below_the_header():
     # frame while the colophon was missing entirely.
     region = text_regions.scroll_moving_regions(LOGO)[0]
 
-    assert region.search[1] >= scroll_mod.HEADER_H
+    assert region.search[1] >= scroll_mod.CHROME_BOTTOM_Y
 
 
 # ── the reels themselves, read back out of the encoded file ──────────────────
