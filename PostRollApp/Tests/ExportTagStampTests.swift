@@ -16,13 +16,13 @@ final class ExportTagStampTests: XCTestCase {
     private var book: AccountBook!
 
     override func setUpWithError() throws {
-        file = FileManager.default.temporaryDirectory
-            .appendingPathComponent("accounts-\(UUID().uuidString).json")
+        // A sandboxed DIRECTORY, not a bare path (#781). The tearDown here used
+        // to remove the book file it created, which read as balanced and was
+        // not: `AccountBook` rotates a BACKUP beside that file, which this
+        // suite never named and so never removed. One survived every run, in a
+        // folder macOS only clears at boot.
+        file = temporaryFile(named: "accounts.json", in: "account-book")
         book = AccountBook(fileURL: file)
-    }
-
-    override func tearDownWithError() throws {
-        try? FileManager.default.removeItem(at: file)
     }
 
     private let runStartedAt = Date(timeIntervalSince1970: 1_760_000_000)
