@@ -29,6 +29,24 @@ deliberate. A story's title is drawn over a photograph with a drop shadow, so
 there is no flat background to compare against and no single colour to search
 for: any quantity computed over the band as a whole counts the photograph too
 (L146).
+
+## Why the rendering checks are font gated
+
+Everything measured here is the SIZE and POSITION of type set in HelveticaNeue
+and SignPainter, which are macOS system faces. On a Linux runner `load_font`
+degrades to Pillow's tiny default, so every title renders a fraction of its
+real height, clears the band comfortably, and the check reports a clean sweep
+over a rendering the app never produces (L504).
+
+That is not hypothetical. This file shipped ungated in #752 and the Linux leg
+measured Pillow's default the whole time; #760's exemption check is what said
+so out loud, by reporting the story as no longer needing its exemption on a
+runner where its title had never been drawn at the real size.
+
+So the renders carry `needs_mac_fonts`, which skips them where the faces are
+absent, and `tests/test_ci_runs_the_font_dependent_checks.py` then requires this
+file to be named in the reference-frames matrix, so they actually run somewhere
+rather than skipping everywhere (L98, L3).
 """
 
 from __future__ import annotations
@@ -38,12 +56,23 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageChops
 
+from conftest import needs_mac_fonts
 from postroll.media.design_tokens import SAFE_TOP
 from postroll.media.generate_before_after import generate_before_after
 from postroll.media.generate_collage import generate_collage
 from postroll.media.generate_reel_screen import build_chrome_overlay
 from postroll.media.generate_reel_scroll import draw_branded_chrome
 from postroll.media.generate_story import generate_story
+
+#: Out of `make test-python-fast`, which deselects this marker.
+#:
+#: Not because these renders are expensive, they are about a second all told.
+#: `test_fast_subset_stays_honest.py` derives the fast run's exclusions from the
+#: reference-frames matrix rather than keeping a second list beside it, and this
+#: file has to be IN that matrix, because everything it measures is the size of
+#: type in the macOS system faces and those exist on no other runner. So the one
+#: marker carries both meanings here. #766 is about separating them.
+pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LOGO = str(REPO_ROOT / "postroll" / "assets" / "logo-black.png")
@@ -166,6 +195,7 @@ EXEMPT = {"story": "#756, deferred: only upright photographs reach it"}
 MEASURED = sorted(set(RENDERERS) - set(EXEMPT))
 
 
+@needs_mac_fonts
 @pytest.mark.parametrize("name", MEASURED)
 def test_no_template_draws_text_under_the_phone_chrome(name, tmp_path):
     render = RENDERERS[name]
@@ -180,6 +210,7 @@ def test_no_template_draws_text_under_the_phone_chrome(name, tmp_path):
         "design_tokens.SAFE_TOP rather than nudging a number.")
 
 
+@needs_mac_fonts
 def test_every_exemption_is_still_needed(tmp_path):
     """An exemption dies with the defect it was written about (#760).
 
