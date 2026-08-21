@@ -24,6 +24,7 @@ from .design_tokens import (
     FONT_DETAIL_LIGHT,
     FONT_SCRIPT,
     ROSE_GOLD as ROSE_GOLD_ON_CREAM,
+    SAFE_TOP,
     TEXT_DARK,
 )
 from .brand_text import detail_lines
@@ -121,32 +122,47 @@ def create_blurred_background(photo: Image.Image) -> Image.Image:
     return bg
 
 
-def place_photo(canvas: Image.Image, photo: Image.Image) -> tuple[Image.Image, int]:
+def place_photo(canvas: Image.Image, photo: Image.Image,
+                min_top_y: int = PHOTO_TOP_Y) -> tuple[Image.Image, int]:
     """Place the original photo in the upper portion of the canvas.
+
     Returns (canvas, actual_photo_top_y) so callers can layout against the
-    photo's real top edge instead of the wider available band."""
-    # Available area for the photo
-    avail_w = CANVAS_W - (2 * PHOTO_SIDE_MARGIN)
-    avail_h = PHOTO_BOTTOM_Y - PHOTO_TOP_Y
+    photo's real top edge instead of the wider available band.
 
-    # Scale photo to fit within available area, maintaining aspect ratio
-    photo_ratio = photo.width / photo.height
-    avail_ratio = avail_w / avail_h
+    `min_top_y` is a floor the title asks for (#756), not a position. It is
+    applied by shrinking the band the photograph is fitted into, so a
+    photograph that already sits below it is untouched: a landscape story is
+    centred hundreds of pixels lower than any title needs and must render
+    exactly as it did before this existed.
+    """
+    def fitted(top_y: int) -> tuple[int, int, int]:
+        """The photograph's size and top edge when the band starts at `top_y`."""
+        avail_w = CANVAS_W - (2 * PHOTO_SIDE_MARGIN)
+        avail_h = PHOTO_BOTTOM_Y - top_y
+        photo_ratio = photo.width / photo.height
+        if photo_ratio > avail_w / avail_h:
+            # Photo is wider than the available area, so fit to width
+            w = avail_w
+            h = int(avail_w / photo_ratio)
+        else:
+            # Photo is taller, so fit to height
+            h = avail_h
+            w = int(avail_h * photo_ratio)
+        return w, h, top_y + (avail_h - h) // 2
 
-    if photo_ratio > avail_ratio:
-        # Photo is wider than available area — fit to width
-        new_w = avail_w
-        new_h = int(avail_w / photo_ratio)
-    else:
-        # Photo is taller — fit to height
-        new_h = avail_h
-        new_w = int(avail_h * photo_ratio)
+    # The natural placement first, and the floor applied only if it misses.
+    #
+    # Raising the band's top unconditionally would re-centre a photograph that
+    # already clears the floor by hundreds of pixels, because the band it is
+    # centred in gets shorter as its top rises. A landscape story is exactly
+    # that case, and it is every story Dan shoots: the clamp exists for the
+    # upright photograph he does not, and it must not move the ones he does.
+    new_w, new_h, y = fitted(PHOTO_TOP_Y)
+    if y < min_top_y:
+        new_w, new_h, y = fitted(min_top_y)
 
     resized = photo.resize((new_w, new_h), Image.LANCZOS)
-
-    # Center horizontally, vertically within the photo area
     x = (CANVAS_W - new_w) // 2
-    y = PHOTO_TOP_Y + (avail_h - new_h) // 2
 
     # Drop shadow — soft cast behind the photo so it lifts off the background
     shadow_layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
@@ -242,13 +258,21 @@ def _fit_script_title(
     return [line1, line2], load_font(FONT_SCRIPT, min_size)
 
 
-def draw_title(canvas: Image.Image, event_name: str, photo_top_y: int):
-    """Draw the event name with inline rose-gold rules — editorial framing device.
+#: How far the title's last line sits above the top edge of the print.
+GAP_TO_PHOTO = 32
 
-    Bottom-anchored to the actual photo top so the gap between title and image
-    stays tight regardless of line count or photo aspect ratio. Single-line
-    titles and two-line titles both end ~32px above the photo; multi-line
-    titles grow upward toward the canvas top."""
+
+def title_block(canvas: Image.Image, event_name: str):
+    """The laid-out title: its lines, its face, and the two heights.
+
+    One measurement, read by the drawing below and by `required_photo_top`
+    above it. Measuring the block twice, once to decide where the photograph
+    goes and once to draw, is two definitions of the same quantity and they
+    drift in whichever direction flatters the caller (L107).
+
+    Returns (lines, font, line_metrics, text_h_single, line_gap), where
+    `line_metrics` is (x, width) per line.
+    """
     margin = PHOTO_SIDE_MARGIN + 30
     max_text_w = CANVAS_W - 2 * margin - 2 * 28  # room for inline rules + gap
     lines, event_font = _fit_script_title(event_name, canvas, max_text_w)
@@ -262,10 +286,69 @@ def draw_title(canvas: Image.Image, event_name: str, photo_top_y: int):
         text_h_single = max(text_h_single, bbox[3] - bbox[1])
         line_metrics.append(((CANVAS_W - line_w) // 2, line_w))
     line_gap = int(text_h_single * 0.85)
+    return lines, event_font, line_metrics, text_h_single, line_gap
+
+
+def required_photo_top(canvas: Image.Image, event_name: str) -> int:
+    """The lowest the photograph may start for the title to clear the phone.
+
+    The title is anchored bottom-up off the top edge of the print, so where it
+    STARTS is decided by where the photograph ends up, and nothing put a floor
+    under it. With an upright photograph the print fills its area and sits at
+    `PHOTO_TOP_Y`, which puts a two-line title around y=33, inside the band the
+    status bar and Dynamic Island cover (#756).
+
+    So the block is measured first and the photograph is started below it. This
+    is a floor, not a position: `place_photo` takes the LOWER of this and the
+    photograph's natural placement, so a landscape story, which already clears
+    the band by hundreds of pixels, is not moved at all.
+
+    The title fitter never returns more than two lines and shrinks the face
+    until they fit, so the deepest block this can ask for is about 360, leaving
+    the print over a thousand pixels of height. There is no case where this
+    squeezes the photograph to nothing.
+    """
+    if not event_name:
+        return PHOTO_TOP_Y
+    lines, _, _, text_h_single, line_gap = title_block(canvas, event_name)
+    block_h = text_h_single + (len(lines) - 1) * line_gap
+    # Where the INK starts relative to the y the glyphs are drawn at, which is
+    # not the same number: Pillow anchors at the ascender and the script face
+    # can carry a swash above it. Clamping the anchor to SAFE_TOP would leave
+    # whatever rises above it inside the covered band, one pixel of it being
+    # exactly as unreadable as fifty (L67).
+    ink_offset = _title_ink_offset(canvas, event_name)
+    return SAFE_TOP - ink_offset + block_h + GAP_TO_PHOTO
+
+
+def _title_ink_offset(canvas: Image.Image, event_name: str) -> int:
+    """How far the title's topmost ink sits below the y it is drawn at.
+
+    Negative when a glyph reaches ABOVE the anchor, which is the case that
+    matters: it is what has to be added back to the clearance.
+    """
+    lines, font, _, _, _ = title_block(canvas, event_name)
+    draw = ImageDraw.Draw(canvas)
+    return min(draw.textbbox((0, 0), line, font=font)[1] for line in lines)
+
+
+def draw_title(canvas: Image.Image, event_name: str, photo_top_y: int):
+    """Draw the event name with inline rose-gold rules, an editorial framing device.
+
+    Bottom-anchored to the actual photo top so the gap between title and image
+    stays tight regardless of line count or photo aspect ratio. Single-line
+    titles and two-line titles both end ~32px above the photo; multi-line
+    titles grow upward toward the canvas top.
+
+    The floor under it is `required_photo_top`, applied when the photograph is
+    placed rather than here: clamping the TITLE would detach it from the top
+    edge of the print, which is the whole shape of this template.
+    """
+    lines, event_font, line_metrics, text_h_single, line_gap = title_block(
+        canvas, event_name)
 
     # Anchor the last line ~32px above the photo's actual top. Previous lines
     # stack upward.
-    GAP_TO_PHOTO = 32
     last_line_y = photo_top_y - GAP_TO_PHOTO - text_h_single
     first_line_y = last_line_y - (len(lines) - 1) * line_gap
 
@@ -281,6 +364,7 @@ def draw_title(canvas: Image.Image, event_name: str, photo_top_y: int):
     canvas_rgba = Image.alpha_composite(canvas_rgba, shadow)
 
     # Inline rose-gold rules — only on the LAST line (most natural editorial framing)
+    margin = PHOTO_SIDE_MARGIN + 30
     last_x, last_w = line_metrics[-1]
     line_y = last_line_y + int(text_h_single * 0.52)
     gap = 28
@@ -389,8 +473,9 @@ def generate_story(
     # 1. Create blurred background
     canvas = create_blurred_background(photo)
 
-    # 2. Place original photo
-    canvas, photo_top_y = place_photo(canvas, photo)
+    # 2. Place original photo, below whatever room the title needs (#756)
+    canvas, photo_top_y = place_photo(
+        canvas, photo, min_top_y=required_photo_top(canvas, event_name))
 
     # 3. Draw title with shadow (returns new RGBA canvas)
     canvas = draw_title(canvas, event_name, photo_top_y=photo_top_y)
