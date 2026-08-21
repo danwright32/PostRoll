@@ -1,0 +1,8 @@
+{
+  "name": "an-idle-worker-can-take-work-from-a-busy-one",
+  "file": "pyproject.toml",
+  "find": "addopts = \"-ra --strict-markers --dist worksteal\"",
+  "replace": "addopts = \"-ra --strict-markers --dist load\"",
+  "test": "tests/test_the_suite_spreads_its_slowest_work.py::test_the_scheduler_lets_an_idle_worker_take_work",
+  "breaks": "the suite goes back to pinning a whole expensive file to one worker, so the run takes that worker's share while the rest sit idle: 224s against 121s measured (#783)"
+}
