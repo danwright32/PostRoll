@@ -108,11 +108,37 @@ final class PreviewGraphicsManager {
         }
         appState.updateEvent(ev)
 
+        // A full run owns every day, so it speaks for all of them.
+        recordDayOutcomes(errors: result.errors, paths: result.paths,
+                          renderedDays: nil, for: eventID)
+    }
+
+    /// Land a graphics pass's per-day outcomes: a failure recorded for every
+    /// day it reported one, and the reason from the run before taken away from
+    /// every day it rebuilt successfully.
+    ///
+    /// Shared by the two entry points a full preview pass has, rather than one
+    /// implementation each. `applyFullRunResult` above is the run started from
+    /// the caption review screen (#740); `GenerationManager` runs its own pass
+    /// alongside the captions and recorded none of this, so a day that died
+    /// during a whole week generation left no failure row on that screen and
+    /// Friday's "< 3 usable clips" escape hatch, which is reached FROM the
+    /// recorded failure, was unreachable for it (#750). Two implementations is
+    /// two places for the next fix to land in only one.
+    ///
+    /// `renderedDays` is the set of days this pass actually re-rendered, in the
+    /// same currency `PreviewMergePolicy.mergeMediaErrors` takes: nil for a full
+    /// run, which owns every day, and empty for a caption-only retry that
+    /// skipped graphics entirely and may therefore take nothing away (L5).
+    func recordDayOutcomes(errors: [String: String],
+                           paths: [String: [String: String]],
+                           renderedDays: Set<String>?, for eventID: UUID) {
         // Walked in the week's own order rather than over the dictionary, so a
         // key that names no day (the run-level `graphics` key a generation run
         // can write) is skipped by construction rather than by a filter.
         let rebuildingOnTheirOwn = state.regeneratingDays(for: eventID)
         for day in DayName.allCases {
+            guard renderedDays?.contains(day.rawValue) ?? true else { continue }
             // A per-day rebuild claimed while this run was in flight owns that
             // day's outcome. This run's answer for it is about the inputs as
             // they stood before that rebuild started, and `failDayRegen`
@@ -121,14 +147,14 @@ final class PreviewGraphicsManager {
             // leaving the day free to be started a third time: two writers on
             // one MP4, which is the hazard #75 exists for.
             guard !rebuildingOnTheirOwn.contains(day) else { continue }
-            if let pipelineError = result.errors[day.rawValue] {
+            if let pipelineError = errors[day.rawValue] {
                 // Through the recording call the per-day path uses, not a
                 // second implementation beside it: the pipeline marks the cases
                 // it has a remedy for with a prefix, and Friday's "< 3 usable
                 // clips" escape hatch is reached from the recorded failure, so
                 // the marker has to survive to the card that offers it (#730).
                 failDayRegen(day, for: eventID, pipelineError: pipelineError)
-            } else if result.paths[day.rawValue]?.isEmpty == false {
+            } else if paths[day.rawValue]?.isEmpty == false {
                 // This run rebuilt the day and it worked, so the reason left by
                 // the run before is no longer true. Only for a day that
                 // actually produced something: a day this run never reached

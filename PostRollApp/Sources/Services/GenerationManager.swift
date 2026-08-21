@@ -15,6 +15,16 @@ import Observation
 @Observable
 final class GenerationManager {
 
+    /// Where a run's per-day graphics outcomes are recorded, received rather
+    /// than reached for (#750). This used to call `PreviewGraphicsManager.shared`
+    /// from inside the run, which is a dependency no test can stand in front of
+    /// (L196), and the recording this manager owes it was missing entirely.
+    private let graphics: PreviewGraphicsManager
+
+    init(graphics: PreviewGraphicsManager = .shared) {
+        self.graphics = graphics
+    }
+
     struct Run {
         var status: AssetGenerationDisplay.RunStatus
         var elapsedSeconds: Int
@@ -62,6 +72,10 @@ final class GenerationManager {
         // them unless explicitly requested (preset switch).
         let doGraphics = PreviewMergePolicy.shouldRenderGraphics(
             regenerateGraphics: regenerateGraphics, isFullRun: onlyDays == nil)
+        // Captured by value, so the claim and its release cannot go missing
+        // with a torn-down manager: a full run that claimed the slot and never
+        // released it leaves the event unable to render previews ever again.
+        let graphics = self.graphics
         let task = Task { [weak self] in
             // Result, not `try?`: a graphics crash used to vanish here, and so did
             // the per-day errors of a run that exited cleanly. Either way the run
@@ -73,10 +87,10 @@ final class GenerationManager {
             // started here and one started from the review screen are two
             // writers on the same MP4s and PNGs, which is the exact hazard that
             // guard exists for.
-            let claimed = doGraphics && PreviewGraphicsManager.shared.beginFullRun(eventID)
+            let claimed = doGraphics && graphics.beginFullRun(eventID)
             let graphicsTask: Task<Result<PythonBridge.PreviewGenerationResult, Error>?, Never>? = claimed
                 ? Task {
-                    defer { PreviewGraphicsManager.shared.endFullRun(eventID) }
+                    defer { graphics.endFullRun(eventID) }
                     do { return .success(try await PythonBridge.shared.runPreviewGeneration(
                         event: ev, days: onlyDays.map { Array($0) })) }
                     catch { return .failure(error) }
@@ -186,7 +200,7 @@ final class GenerationManager {
         }
     }
 
-    private func finishSuccess(eventID: Event.ID, snapshot ev: Event, onlyDays: Set<String>?,
+    func finishSuccess(eventID: Event.ID, snapshot ev: Event, onlyDays: Set<String>?,
                                result: WeekGenerationResult, mediaPaths: [String: [String: String]]?,
                                mediaErrors: [String: String] = [:],
                                mediaWarnings: [String: String] = [:],
@@ -239,6 +253,13 @@ final class GenerationManager {
         saved.mediaWarnings = PreviewMergePolicy.mergeMediaErrors(
             existing: saved.mediaWarnings, fresh: mediaWarnings, renderedDays: renderedDays)
 
+        // And where the caption review screen reads it (#750). The event's
+        // `mediaErrors` above is the asset screen's list; a day failure row on
+        // the review screen, and Friday's "< 3 usable clips" escape hatch that
+        // is reached from it, come from the manager and nothing here told it.
+        graphics.recordDayOutcomes(errors: mediaErrors, paths: mediaPaths ?? [:],
+                                   renderedDays: renderedDays, for: eventID)
+
         // A re-rendered reel carries music this run fetched, so a label written
         // by an earlier manual swap now names a track the file does not contain.
         saved = ReelAudioSwap.clearingStaleAudioLabels(in: saved, freshMedia: mediaPaths)
@@ -266,7 +287,7 @@ final class GenerationManager {
     /// send a completion notification, or replace the saved previews. The run
     /// failed. The only claim being made is that these particular days exist,
     /// which is a claim the results file supports.
-    private func saveSalvagedDays(eventID: Event.ID, snapshot ev: Event,
+    func saveSalvagedDays(eventID: Event.ID, snapshot ev: Event,
                                   week: WeekGenerationResult,
                                   mediaPaths: [String: [String: String]]?,
                                   mediaErrors: [String: String],
@@ -287,6 +308,11 @@ final class GenerationManager {
             existing: saved.mediaWarnings, fresh: mediaWarnings, renderedDays: renderedDays)
         saved = ReelAudioSwap.clearingStaleAudioLabels(in: saved, freshMedia: mediaPaths)
         appState.updateEvent(saved)
+
+        // The graphics finished in their own process, so their per-day answers
+        // are as real as a finished run's and are recorded the same way (#750).
+        graphics.recordDayOutcomes(errors: mediaErrors, paths: mediaPaths ?? [:],
+                                   renderedDays: renderedDays, for: eventID)
     }
 
     private func finishFailure(eventID: Event.ID, message: String) {
