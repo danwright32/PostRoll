@@ -1,7 +1,7 @@
 {
   "before_after": {
-    "fingerprint": "519691650cd7fcf2ebda671870d244b435e371424238aa9c2d9c22a2630b44c2",
-    "version": 1
+    "fingerprint": "ecdf5819d1457faf6fc493dcee531b0ada9d5a70915435e630033363f85489b8",
+    "version": 2
   },
   "collage": {
     "fingerprint": "d7b966daf9205cb47e589d42afaf97d869359aa1e933124ca1e92025031c143a",
@@ -16,7 +16,7 @@
     "version": 1
   },
   "reel_morph": {
-    "fingerprint": "e4dd6387b9dbd507edd3c7d51655316165d3430bc3f0fb247000926249e49d31",
+    "fingerprint": "0e9e6ceace1bbbfef0c24d704334724d313839bd5ebfc340bbe935ff267b6698",
     "version": 2
   },
   "reel_preview": {
@@ -32,7 +32,7 @@
     "version": 2
   },
   "reel_slider": {
-    "fingerprint": "8f83fe27e4337d6f7f1c43263813fadc91dd24e15e1773bcf9b46aa2a40e83d0",
+    "fingerprint": "02587563bab62732a14447aed8a33477cd50ca5087c1586f424f377cb24f4a36",
     "version": 2
   },
   "story": {

@@ -1,0 +1,8 @@
+{
+  "name": "a-reel-band-is-judged-on-the-reels-own-frames",
+  "file": "tests/test_frame_legibility.py",
+  "find": "    frames = legibility.sample_frames_between(\n        video, 0.0, morph_mod.CLOSING_CROSSFADE_START, SAMPLES)",
+  "replace": "    frames = legibility.sample_frames(video, SAMPLES)",
+  "test": "tests/test_frame_legibility.py::test_the_tuesday_reel_reads_all_the_way_through",
+  "breaks": "the morph reel's declared caption band is judged across the whole encoded file, including the closing hold, which is a before/after graphic. One template's picture is then measured against another template's expectations, which says nothing about either, and it reports the reel as unreadable when the reel is correct (#777)"
+}

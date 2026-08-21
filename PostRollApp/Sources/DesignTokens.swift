@@ -69,7 +69,7 @@ enum MediaDesign {
         "collage": 1,
         "story": 2,
         "cover": 2,
-        "before_after": 1,
+        "before_after": 2,
         "reel_screen": 2,
         "reel_morph": 2,
         "reel_slider": 2,

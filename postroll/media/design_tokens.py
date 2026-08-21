@@ -84,13 +84,17 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # Rendered through generate_story's exact template, so it moves with the
     # story rather than carrying a number of its own.
     "cover": 2,
-    # NOT moved by #753. Its whole footer block sits inside the strip Instagram
-    # lays its caption over, 31587 pixels of branding measured in the band on
-    # 2026-08-20, and lifting it is one constant that works. What stops it is
-    # that this graphic is also the plate reels' CLOSING HOLD, and their
-    # legibility suite judges their own caption band across that frame.
-    # tests/test_phone_safe_area.py carries the whole reason.
-    "before_after": 1,
+    # 2 is the colophon lifted clear of Instagram's caption band (#753).
+    #
+    # Its whole footer block, the rose-gold rule and the mark under it, sat
+    # inside the strip Instagram lays its account row and caption over: 31587
+    # pixels of branding measured in the band on 2026-08-20. The photographs
+    # shrink by SAFE_BOTTOM to pay for it, so every before/after ever made looks
+    # different and is badged.
+    #
+    # It waited on #777 and #779, which is what the lift broke rather than the
+    # design: two checks were reading the wrong part of the frame.
+    "before_after": 2,
     # 2 is the same move on this template: its cream footer sits above the band
     # now rather than at the very foot of the frame.
     "reel_screen": 2,

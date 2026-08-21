@@ -297,20 +297,12 @@ RAIL_BAND = (CANVAS[0] - SAFE_RIGHT, int(CANVAS[1] * SAFE_RIGHT_FROM),
 #: caption hanging off it rises, and the photograph's zoom then covers the
 #: caption. Measured at 1.76 to 1 against a 3.0 minimum.
 #:
-#: before_after: the lift works on its own, and it moves the plate reels'
-#: CLOSING HOLD, which is a before/after graphic. Those reels' legibility suite
-#: judges their own declared caption band across every sampled frame including
-#: that hold, and the two layouts happened to line up on mat before. So the
-#: before/after fix needs that suite to stop judging one template's bands
-#: against another template's frame first.
-#:
 #: All three are layout decisions rather than constants, which is why they are
 #: here rather than done.
 #:
 #: `test_every_bottom_exemption_is_still_needed` turns an entry red the moment
 #: it stops being true (L129, #760).
 EXEMPT_BOTTOM = {
-    "before_after": "#753, lifting it moves the reels' closing hold under them",
     "reel_morph": "#753, lifting it costs the placard its clearance from the zoom",
     "reel_slider": "#753, lifting it costs the placard its clearance from the zoom",
 }
