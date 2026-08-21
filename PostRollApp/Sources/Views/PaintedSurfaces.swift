@@ -531,6 +531,17 @@ enum PaintedSurfaces {
     static let photoScrimIcon = Color.white.opacity(0.9)
     static let photoScrimText = Color.white
 
+    /// What the phone and Instagram cover, drawn over a full-frame preview
+    /// (#758). A wash, not a mask: what is underneath has to stay readable or
+    /// the preview stops being a preview and the overlay gets switched off.
+    static let phoneChrome = Color.black.opacity(0.34)
+    /// The action rail, which covers less than the bands do: it is a column of
+    /// controls with gaps, not a solid strip.
+    static let phoneChromeFaint = Color.black.opacity(0.18)
+    /// Where a covered band ends, so the line a template has to stay clear of
+    /// is visible rather than inferred from a gradient edge.
+    static let phoneChromeEdge = Color.white.opacity(0.5)
+
     /// The panel that explains why cell editing is off, over the collage.
     static let photoHintPanel = Color.black.opacity(0.65)
 
@@ -818,6 +829,9 @@ enum PaintedSurfaces {
         "nextStepFill": nextStepFill,
         "nextStepLabel": nextStepLabel,
         "brightestPhoto": brightestPhoto,
+        "phoneChrome": phoneChrome,
+        "phoneChromeEdge": phoneChromeEdge,
+        "phoneChromeFaint": phoneChromeFaint,
         "photoScrim": photoScrim,
         "photoScrimIcon": photoScrimIcon,
         "photoScrimText": photoScrimText,

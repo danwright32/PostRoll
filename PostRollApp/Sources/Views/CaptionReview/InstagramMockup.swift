@@ -44,19 +44,21 @@ struct InstagramMockup: View {
         return isReelDay ? "Regenerate reel" : "Regenerate graphic"
     }
 
-    private var menuHasItems: Bool {
-        onRegenerate != nil
-            || onReviseCaption != nil
-            || onNewLayout != nil
-            || onSwapAudio != nil
-            || onUploadAudio != nil
-            || onChangePhotos != nil
-            || onChangeReelLength != nil
-            || onChangeBW != nil
-    }
+    /// Always true since #758 put the phone-chrome switch in this menu.
+    ///
+    /// Kept as a name rather than inlined, because the alternative branch below
+    /// draws a dead ellipsis that looks like a control and is not (L49), and
+    /// whoever next makes this conditional again should have to look at that.
+    private var menuHasItems: Bool { true }
 
     @State private var photo: NSImage? = nil
     @State private var carouselIndex: Int = 0
+
+    /// Whether the covered bands are drawn over the media (#758). The same
+    /// switch PreviewGraphicThumbnail reads, so the two surfaces cannot
+    /// disagree about whether Dan is being shown what the phone covers.
+    @AppStorage(PhoneChromePreference.key, store: AppPreferences.store)
+    private var showPhoneChrome = PhoneChromePreference.defaultOn
 
     private var hashtagLine: String {
         hashtags.map { $0.hasPrefix("#") ? $0 : "#\($0)" }.joined(separator: " ")
@@ -188,6 +190,21 @@ struct InstagramMockup: View {
                             }
                             .disabled(isRegenerating)
                         }
+                        Divider()
+                        // Always offered, whatever else this day can do (#758).
+                        // The overlay is what makes a template that draws into
+                        // a covered band visible before it is published, so the
+                        // way to turn it off has to be somewhere Dan can find
+                        // it, and this is the menu beside the preview it covers.
+                        Button {
+                            showPhoneChrome.toggle()
+                        } label: {
+                            if showPhoneChrome {
+                                Label("Showing what the phone covers", systemImage: "checkmark")
+                            } else {
+                                Label("Show what the phone covers", systemImage: "iphone")
+                            }
+                        }
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 14, weight: .medium))
@@ -216,6 +233,12 @@ struct InstagramMockup: View {
                     // to a screen-proportional value so height is controlled.
                     ReelPreviewPlayer(url: url, version: videoVersion, onRegenerate: nil, isRegenerating: isRegenerating)
                         .frame(width: cardWidth, height: cardWidth * 16.0 / 9.0)
+                        // What the phone and Instagram cover (#758). On the reel
+                        // branch only: this is the one that is shown at 9:16,
+                        // which is the frame the bands were measured against.
+                        .overlay {
+                            if showPhoneChrome { PhoneChromeOverlay() }
+                        }
                         .overlay {
                             if isRegenerating {
                                 ZStack {
