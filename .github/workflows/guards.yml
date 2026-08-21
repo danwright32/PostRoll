@@ -131,6 +131,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Needed to prove any guard whose test renders a reel (#777).
+      #
+      # Without it those tests SKIP, and check_guards reports ERROR rather than
+      # a verdict, which is correct of it and useless as a proof: the guard
+      # cannot be registered at all, so the most expensive visual checks in the
+      # project are the ones the registry cannot cover. This runner already
+      # selects an Xcode and installs XcodeGen, so ffmpeg is a small addition to
+      # a job that was never cheap.
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
       # Prints what it skipped and why, because "0 entries affected" is a real
       # answer here and has to be told apart from a run that found nothing to do
       # because it was broken (L98).
@@ -230,6 +241,11 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      # Same reason as the `changed` job above: a guard whose test renders a
+      # reel skips without ffmpeg, and a skip is not a proof (#777).
+      - name: Install ffmpeg
+        run: brew install ffmpeg
 
       - name: Re-prove this shard of the guards
         # The deadline sits well under `timeout-minutes` on purpose. Whichever
