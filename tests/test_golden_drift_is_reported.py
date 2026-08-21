@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from golden_drift import LOG_VARIABLE, destination, line, report
@@ -121,10 +122,16 @@ def test_a_passing_comparison_still_writes_its_reading(tmp_path, monkeypatch):
 
 def test_a_frame_that_moved_a_little_reports_the_share_it_moved(tmp_path,
                                                                 monkeypatch):
-    """A change under the threshold passes and is still worth writing down.
+    """A change UNDER the limit passes and is still worth writing down.
 
-    This is exactly the shape of the defect #787 was filed about: 0.35% of the
-    canvas, under the 0.5% limit, and the entire colophon of a template.
+    This is the reading that matters most and the one nothing was taking: a
+    healthy run produces only these, so a threshold can only be chosen from
+    them.
+
+    Full canvas rather than a token one, because the limit is now small enough
+    that no change at all fits under it on a 40 by 30 image: 26 pixels is what
+    the CI runner really produces on the noisiest template, and this sits in the
+    same territory.
     """
     log = tmp_path / "log.txt"
     monkeypatch.setenv(LOG_VARIABLE, str(log))
@@ -132,19 +139,43 @@ def test_a_frame_that_moved_a_little_reports_the_share_it_moved(tmp_path,
     goldens.mkdir()
     monkeypatch.setattr("test_golden_frames.GOLDEN_DIR", goldens)
 
-    reference = Image.new("RGB", (40, 30), (250, 248, 245))
+    reference = Image.new("RGB", (1080, 1920), (250, 248, 245))
     reference.save(goldens / "nudged.png")
     rendered = reference.copy()
-    # Four pixels of 1200, a third of a percent, well past the per-channel
-    # tolerance so they count as changed rather than as codec noise.
-    for x in range(4):
+    # Twenty-six pixels, which is exactly what clip_reel reads on the runner,
+    # and well past the per-channel tolerance so they count as changed rather
+    # than as codec noise.
+    for x in range(26):
         rendered.putpixel((x, 0), (0, 0, 0))
 
     assert_matches_golden(rendered, "nudged", tmp_path)
 
     written = log.read_text(encoding="utf-8").strip()
-    assert "4 of 1200 px" in written, written
+    assert "26 of 2073600 px" in written, written
     assert CHANNEL_TOLERANCE < 255, "the tolerance would count nothing as changed"
+
+
+def test_a_frame_that_moved_an_element_now_fails(tmp_path, monkeypatch):
+    """The defect #787 was filed about, at the size it really was.
+
+    7336 pixels is a whole footer colophon moving 160 pixels up the frame. Under
+    the old limit this passed. It has to fail, or the limit was not fixed.
+    """
+    monkeypatch.setenv(LOG_VARIABLE, str(tmp_path / "log.txt"))
+    goldens = tmp_path / "goldens"
+    goldens.mkdir()
+    monkeypatch.setattr("test_golden_frames.GOLDEN_DIR", goldens)
+
+    reference = Image.new("RGB", (1080, 1920), (250, 248, 245))
+    reference.save(goldens / "moved.png")
+    rendered = reference.copy()
+    for i in range(7336):
+        rendered.putpixel((i % 1080, i // 1080), (0, 0, 0))
+
+    with pytest.raises(BaseException) as failure:
+        assert_matches_golden(rendered, "moved", tmp_path)
+
+    assert "0.35%" in str(failure.value), str(failure.value)
 
 
 # ── the workflows collect and publish what the checks measure ─────────────────
@@ -252,3 +283,54 @@ def test_the_readings_reach_the_log_and_not_only_the_summary():
                    for line in step.splitlines()), (
             f"{workflow}'s {name} job writes the readings to the step summary "
             "only, so nothing but a person opening the page can ever read them")
+
+
+# ── the limit is held to the readings it was chosen from ─────────────────────
+
+from test_golden_frames import (  # noqa: E402
+    MAX_CHANGED_FRACTION,
+    SMALLEST_REAL_MOVE,
+    UNCHANGED_ON_CI,
+)
+
+#: How much clear air the limit needs either side, as a multiplier.
+#:
+#: Four each way, against real margins of sixteen and eighteen. Deliberately
+#: looser than the margins so an ordinary wobble in either reading does not fire
+#: this; what it catches is the two closing on each other far enough that the
+#: limit stops separating them.
+GAP = 4.0
+
+
+def test_the_limit_sits_between_the_noise_and_the_defect():
+    """The whole of #787 in one assertion.
+
+    The limit has to be above what an unchanged design produces, or every
+    correct run fails and the check gets switched off (L36). It has to be below
+    the smallest change the frames exist to catch, or it passes on exactly that.
+    It was not: at 0.005 it sat ABOVE a whole colophon moving 160 pixels.
+    """
+    assert UNCHANGED_ON_CI * GAP <= MAX_CHANGED_FRACTION, (
+        f"the limit {MAX_CHANGED_FRACTION:.4%} is close to what an unchanged "
+        f"design already reads on the runner, {UNCHANGED_ON_CI:.4%}, so correct "
+        "runs will start failing. Re-measure from a CI run's published readings "
+        "and choose the limit again.")
+    assert MAX_CHANGED_FRACTION * GAP <= SMALLEST_REAL_MOVE, (
+        f"the limit {MAX_CHANGED_FRACTION:.4%} is close to the smallest real "
+        f"change there is a reading for, {SMALLEST_REAL_MOVE:.4%}, so the "
+        "reference frames are back to passing on a moved element. That is #787.")
+
+
+def test_the_two_readings_are_far_enough_apart_to_put_a_limit_between():
+    """The control for the check above.
+
+    A limit can only separate them while they ARE separated. If a future
+    template's encode became as noisy as a real layout change, no threshold over
+    the whole canvas would work and the check would need a different shape
+    entirely, which is a decision rather than a number.
+    """
+    assert UNCHANGED_ON_CI * GAP * GAP <= SMALLEST_REAL_MOVE, (
+        f"an unchanged design reads {UNCHANGED_ON_CI:.4%} and the smallest real "
+        f"change reads {SMALLEST_REAL_MOVE:.4%}. There is no longer room for a "
+        "limit between them, so a share of the canvas has stopped being able to "
+        "tell noise from a moved element at all.")
