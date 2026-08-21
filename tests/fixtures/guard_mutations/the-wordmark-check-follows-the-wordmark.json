@@ -1,0 +1,8 @@
+{
+  "name": "the-wordmark-check-follows-the-wordmark",
+  "file": "tests/test_gallery_alignment.py",
+  "find": "    footer_top = ba_mod.CANVAS_H - ba_mod.SAFE_BOTTOM - 200",
+  "replace": "    footer_top = ba_mod.CANVAS_H - 120",
+  "test": "tests/test_gallery_alignment.py::test_before_after_logo_is_large_enough_to_read",
+  "breaks": "the wordmark check goes back to naming a distance from the bottom of the frame rather than the band the mark is in, so it reports no logo found the moment the colophon moves, while the mark is on the frame and correct. That is the failure #752 found in scroll_regions (#779)"
+}
