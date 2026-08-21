@@ -221,25 +221,41 @@ jobs:
     # Once every pull request started running this job it became the entire merge
     # wait: about 6m15s against the Swift half's 2m. It was already parallel, so
     # the ceiling was the runner rather than the checks. A standard GitHub macOS
-    # runner has 3 cores, and these four files are roughly 14 minutes of measured
-    # CPU (846s summed on a 10-core Mac, where they finish in 152s wall), so
-    # `-n auto` inside one job could only ever divide that by three.
+    # runner has 3 cores, so `-n auto` inside one job could only ever divide
+    # these files by three.
     #
     # A larger runner is the other way to do it and is deliberately not used:
     # larger runners bill on a private repo, which this one becomes.
     #
     # Three shards since #512, which split the scrolling reel's checks out of
-    # test_frame_legibility.py. That file was 580s of the 846s the four summed
-    # to, so it was a shard on its own and nothing could divide it further while
-    # it was one file. Measured after the split on a 10 core Mac with -n auto:
-    # the Tuesday half 60s, the Thursday half 141s run serially, three tests.
+    # test_frame_legibility.py. Until that split the one file was most of the
+    # job and nothing could divide it further.
     #
-    # The shards are balanced by MEASURED time, not by file count. Summed
-    # durations on this Mac: the legibility file 580s, the golden frames 221s,
-    # the program plate 40s, the gallery alignment 5s. One file is 69% of the
-    # work, so it sets the floor on its own and a third shard would buy nothing
-    # but another runner's start-up. Splitting that file is what would let the
-    # balance go further; until then two shards are the whole of the win.
+    # ── how the balance is decided (#795) ────────────────────────────────────
+    #
+    # By MEASURED time, not by file count, and the measurement is not written
+    # here. It lives in tests/fixtures/test_file_durations.json, recorded by
+    # `make record-test-durations` for #766, and
+    # tests/test_reference_frame_shards_are_balanced.py reads BOTH this matrix
+    # and that record and fails when the two are far apart, naming the split it
+    # would suggest.
+    #
+    # The figures that used to be in this comment are gone rather than updated.
+    # They were measured once, before #512 and before #753 changed what several
+    # of these files render, and by the time anyone compared them they described
+    # a job that no longer existed while reading as a current fact (L32, L41).
+    #
+    # What the guard compares: a shard's cost is the summed cost of its files,
+    # and the job's wall clock is its heaviest shard. It is judged against the
+    # best any split COULD do, which is bounded by the largest single file,
+    # since a file cannot be divided, and by a perfect third of the total. One
+    # file is about a third of the work, so it sets that floor on its own and
+    # the current split reaches it exactly.
+    #
+    # `--dist worksteal` (#783) is deliberately not part of this. It changed how
+    # work spreads WITHIN a shard, across the runner's own cores, and not how
+    # files are divided BETWEEN them, which is the only thing this matrix
+    # decides.
     #
     # Note what changed in #783 and what did not. `-n auto` inside each shard now
     # runs under `--dist worksteal`, set in pyproject.toml, so an idle core takes
