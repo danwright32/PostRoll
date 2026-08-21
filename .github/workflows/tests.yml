@@ -136,7 +136,6 @@ jobs:
         # full-suite parallel runs before this landed.
         run: pytest -v -n auto --durations=25
 
-
   # The same suite on a Mac, which is the platform the app that calls it runs
   # on (#510). Everything above this runs on Linux only, so anything that
   # differs between the two stays invisible until it is hit locally: path and
