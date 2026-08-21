@@ -1,0 +1,8 @@
+{
+  "name": "both-design-change-doors-in-one-section",
+  "file": "README.md",
+  "find": "```\nmake record-design-change\n```",
+  "replace": "```\nmake record-fingerprints --for-a-real-change\n```",
+  "test": "tests/test_readme_documents_every_make_target.py::test_both_doors_for_a_design_change_are_in_one_section",
+  "breaks": "the section a red fingerprint guard sends a person to names one of the two commands that answer it, and the one it omits is the door for a deliberate redesign, which is the sequence that kept being done in the wrong order (#786)"
+}
