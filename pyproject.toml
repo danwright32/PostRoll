@@ -16,14 +16,36 @@ pythonpath = ["."]
 # -ra reports every skip, so a suite that quietly stops running is visible
 # rather than reading as a pass. --strict-markers turns a typo in a marker name
 # into an error instead of a silently unfiltered test.
-addopts = "-ra --strict-markers"
+#
+# --dist worksteal is the third, and it is about wall clock rather than honesty
+# (#783). Plain `-n auto` is a shortcut for `--dist load`, which does NOT deal
+# tests out one at a time: it gives each worker an initial CONTIGUOUS chunk of
+# the collection, `len(collection) // numprocesses // 4` items, and only refills
+# singly after that. A test file's tests are contiguous, so a whole expensive
+# file fits inside one chunk and lands on one worker.
+#
+# Measured on this Mac on 2026-08-21, 3327 tests over 12 workers, 770s of summed
+# CPU. Under `--dist load` one worker carried 220.9s, two carried about 150s, and
+# the remaining nine carried 22 to 37s each. The run took 224s, which is that one
+# worker's share: everything else had finished and was idle.
+#
+# `worksteal` starts the same way and then lets an idle worker take pending work
+# off a busy one. Same suite, same machine, same day: 121s. It costs a little CPU
+# (886s to 929s of user time) for nearly half the wall clock.
+#
+# Set here rather than on each command, so the local targets, the CI legs and the
+# reference-frame shards cannot disagree about it (L41). Harmless with no `-n`:
+# a run with one process ignores it.
+addopts = "-ra --strict-markers --dist worksteal"
 
-# Declared so --strict-markers accepts it. `slow` means a test that renders a
-# real reel through ffmpeg and reads pixels back: 8m15s of the suite's 9m53s
-# sits in the four files carrying it. `make test-python-fast` deselects them for
-# the loop between edits; CI still runs everything (#413).
+# Declared so --strict-markers accepts it. `slow` means EXPENSIVE, and nothing
+# else since #766: which files carry it is derived from a measurement in
+# tests/fixtures/test_file_durations.json rather than from which files need the
+# macOS system faces, which is a different property that has its own guard.
+# `make test-python-fast` deselects them for the loop between edits; CI still
+# runs everything (#413).
 markers = [
-    "slow: renders real video, so it belongs to the full run rather than the fast one",
+    "slow: measured above the floor in tests/file_durations.py, so the fast run may skip it",
 ]
 
 [tool.ruff]

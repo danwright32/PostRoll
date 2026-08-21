@@ -241,6 +241,13 @@ jobs:
     # but another runner's start-up. Splitting that file is what would let the
     # balance go further; until then two shards are the whole of the win.
     #
+    # Note what changed in #783 and what did not. `-n auto` inside each shard now
+    # runs under `--dist worksteal`, set in pyproject.toml, so an idle core takes
+    # pending work off a busy one instead of a whole file pinning to one worker.
+    # That is worth about half the wall clock on a 12 core Mac. It cannot help a
+    # shard whose work is one long test, and it does not change how the FILES are
+    # divided here, which is still this matrix.
+    #
     # The extra cost is small and worth naming: each shard pays the ~16s of
     # checkout, pip and ffmpeg install again, so the billed minutes go up by
     # about that while the wall clock nearly halves. That matters at the 10x

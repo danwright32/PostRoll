@@ -92,14 +92,22 @@ test:
 test-python:
 	@venv/bin/python -m pytest tests/ -q -n auto
 
-# The loop between edits: the fast subset alone, for when even three and a half
-# minutes is too long to wait on a one line change. Deselects the four files
-# that render real reels. pytest prints how many it deselected, so a fast suite
-# that has quietly become a run of almost nothing is visible rather than silent
-# (#413). On its own this is NOT the gate: `make test-python` and CI run
-# everything.
+# The loop between edits: the fast subset alone, for when even two minutes is too
+# long to wait on a one line change. Deselects the files measured above the floor
+# in tests/file_durations.py, which since #766 is three of them rather than the
+# eight the reference-frames matrix happened to name. pytest prints how many it
+# deselected, so a fast suite that has quietly become a run of almost nothing is
+# visible rather than silent (#413). On its own this is NOT the gate:
+# `make test-python` and CI run everything.
+
 test-python-fast:
 	@venv/bin/python -m pytest tests/ -q -m "not slow"
+
+# Re-measure what each test file costs, which is what decides the set above. Run
+# it after adding a file heavy enough to belong to the full run only; a file's
+# cost does not drift on its own, so nothing else needs it (#766).
+record-test-durations:
+	@venv/bin/python tools/record_test_durations.py
 
 # Proves the registered guard tests still go red on deliberately broken code
 # (#416). Not part of `make test`: it mutates the working tree, and each entry
@@ -231,3 +239,4 @@ review-sheet:
 clean:
 	@rm -rf "$(BUILD_DIR)"
 	@echo "Build cache cleared: $(BUILD_DIR)"
+

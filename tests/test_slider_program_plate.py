@@ -27,10 +27,12 @@ from conftest import needs_ffmpeg, needs_mac_fonts
 from postroll.media import generate_reel_slider as slider_mod
 from postroll.media import program_plate as plate_mod
 
-# Every check in this file renders a real reel and reads pixels back, which is
-# where the suite's time goes. `make test-python-fast` deselects it; CI and
-# `make test-python` still run it (#413).
-pytestmark = pytest.mark.slow
+# Deliberately NOT marked slow, despite rendering real reels. Measured on
+# 2026-08-21 it costs 25.7s of the suite's 785s, which is under the floor
+# `tests/file_durations.py` sets, so `make test-python-fast` runs it. It carried
+# the marker until #766 because the fast run's exclusions were derived from the
+# reference-frames matrix, and this file is in that matrix for a different
+# reason: its renders need the macOS system faces.
 
 
 
