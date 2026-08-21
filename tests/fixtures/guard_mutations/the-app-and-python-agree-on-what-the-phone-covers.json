@@ -1,0 +1,8 @@
+{
+  "name": "the-app-and-python-agree-on-what-the-phone-covers",
+  "file": "PostRollApp/Sources/DesignTokens.swift",
+  "find": "    static let bottom: CGFloat = 160",
+  "replace": "    static let bottom: CGFloat = 100",
+  "test": "tests/test_safe_area_tokens.py::test_swift_mirrors_the_python_value",
+  "breaks": "the app thinks Instagram covers the bottom 100px of a frame while the generators are held to 160, so the preview overlay draws the covered band 60px lower than it is and reports a template as clear when its wordmark is under Instagram's caption. That is worse than drawing no overlay at all, because the reassuring answer is the wrong one (#753, #758)"
+}
