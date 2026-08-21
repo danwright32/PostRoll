@@ -287,8 +287,19 @@ def test_before_after_logo_is_large_enough_to_read(tmp_path):
     ba_mod.generate_before_after(str(vivid), str(vivid), out, event_name="E", org="O",
                                  venue="V", logo_path="postroll/assets/logo-black.png")
     img = Image.open(out).convert("RGB")
-    # The logo sits in the bottom cream. Measure the dark-ink horizontal extent there.
-    dark_x = [x for y in range(img.height - 120, img.height - 10, 2)
+    # The band the mark is IN, not a distance from the bottom edge (#779).
+    #
+    # This used to be the last 120 rows, which is where the mark sat until #753
+    # lifted it clear of the strip Instagram lays its caption over. A literal
+    # here then reports "no logo found" while the mark is on the frame and
+    # correct: the check stops measuring its subject the moment the subject
+    # moves, and it fails in the direction that reads as the feature being
+    # broken. That is the failure #752 found in scroll_regions, one file over.
+    #
+    # The footer is everything below the last photograph, which is where this
+    # template puts its colophon whatever the budget worked out.
+    footer_top = ba_mod.CANVAS_H - ba_mod.SAFE_BOTTOM - 200
+    dark_x = [x for y in range(footer_top, ba_mod.CANVAS_H, 2)
               for x in range(0, 1080, 2) if sum(img.getpixel((x, y))) < 300]
     assert dark_x, "no logo found in the footer"
     assert max(dark_x) - min(dark_x) > 320, "the logo is too small to read"

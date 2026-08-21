@@ -35,6 +35,7 @@ from .design_tokens import (
     FONT_DETAIL_MEDIUM,
     MAT_PRINT as MAT,
     ROSE_GOLD,
+    SAFE_BOTTOM,
     SAFE_TOP,
     TEXT_DARK,
     WARM_MID,
@@ -70,7 +71,21 @@ LOGO_WIDTH = 460  # readable at phone size, including the small PHOTOGRAPHY.COM 
 # needing 170, so the PHOTOGRAPHY.COM line and half the wordmark were cut off
 # the canvas (found by the reference frame in #163).
 LOGO_TOP_GAP = 32
-LOGO_BOTTOM_MARGIN = 24
+#: The room reserved BELOW the wordmark when the footer is budgeted.
+#:
+#: Carries SAFE_BOTTOM since #753. Instagram lays its account row and caption
+#: over the bottom 160px of a story or reel, measured on a published post on
+#: 2026-08-20, and the mark's ink ended at y=1867, so the signature was under
+#: Instagram's own words on every before/after.
+#:
+#: The budget has to reserve the band, not just the clamp below. A clamp can
+#: only pull the colophon block UP inside the footer strip it was given, and if
+#: the strip itself starts too low, `max(rule_y, y)` puts the block straight
+#: back down. The 24 is the gap under the mark that was there before.
+#:
+#: The photographs shrink by SAFE_BOTTOM. That is the cost, and there is
+#: nowhere else on this layout for the signature to go.
+LOGO_BOTTOM_MARGIN = SAFE_BOTTOM + 24
 BOTTOM_CREAM_H = 130  # taller bottom to balance the top
 HEADER_MIN_H = 400  # min header height to accommodate notch-safe title + org + venue
 TITLE_TOP_PADDING = SAFE_TOP  # from the shared token since #752
@@ -299,10 +314,16 @@ def generate_before_after(
     block_h = LOGO_TOP_GAP + logo_h + LOGO_BOTTOM_MARGIN if logo else 0
     rule_y = y + max(20, (footer_cream_h - block_h) // 2)
     if logo:
-        # Last line of defence. Whatever the budget above worked out, the mark
-        # does not leave the page: a clipped wordmark is worse than a footer
-        # that sits a little high, and it shipped once because nothing checked.
-        rule_y = min(rule_y, CANVAS_H - LOGO_BOTTOM_MARGIN - logo_h - LOGO_TOP_GAP)
+        # Last line of defence, now against the band rather than the page edge
+        # (#753). Whatever the budget above worked out, the whole colophon
+        # block stays above the strip Instagram lays its account row and its
+        # caption over.
+        #
+        # The RULE is clamped rather than the mark, because the mark is placed
+        # from the rule. Raising LOGO_BOTTOM_MARGIN alone lifted the mark and
+        # left the rule behind, sitting on its own inside the covered band,
+        # which is a worse picture than the one it was meant to fix.
+        rule_y = min(rule_y, CANVAS_H - SAFE_BOTTOM - logo_h - LOGO_TOP_GAP)
         rule_y = max(rule_y, y)
     draw.line([(MAT, rule_y), (CANVAS_W - MAT, rule_y)], fill=ROSE_GOLD, width=1)
     if logo:

@@ -369,7 +369,19 @@ def test_the_tuesday_reel_reads_all_the_way_through(
         event_name="Reference Event", org="Reference Org", venue="Reference Venue",
         closing_frame_path=closing_graphic, logo_path=LOGO)
 
-    frames = legibility.sample_frames(video, SAMPLES)
+    # The reel's own phases, not the whole file (#777).
+    #
+    # The last few seconds are the closing hold, which is a BEFORE/AFTER
+    # graphic: a different template, with its own layout. Judging it against
+    # this reel's declared bands measures one template's picture against
+    # another template's expectations, and it passed only because the two
+    # happened to put plain mat at the same coordinates. Moving the
+    # before/after colophon in #753 made the placard band land on that
+    # graphic's photograph and read 1.76 to 1 (L135).
+    #
+    # The closing hold has its own checks: the two below this one.
+    frames = legibility.sample_frames_between(
+        video, 0.0, morph_mod.CLOSING_CROSSFADE_START, SAMPLES)
     # The print's height is set from the photograph's aspect during the render,
     # and the placard hangs off the bottom of the print, so it is read back from
     # the module rather than guessed.
@@ -393,7 +405,11 @@ def test_the_three_photo_tuesday_reel_reads_all_the_way_through(
         event_name="Reference Event", org="Reference Org", venue="Reference Venue",
         closing_frame_path=closing_graphic, logo_path=LOGO)
 
-    frames = legibility.sample_frames(video, SAMPLES)
+    # The reel's own phases, for the reason the morph test above gives (#777):
+    # the last few seconds are a before/after graphic, and this reel's bands say
+    # nothing about it.
+    frames = legibility.sample_frames_between(
+        video, 0.0, slider_mod.CLOSING_CROSSFADE_START, SAMPLES)
     regions = text_regions.slider_regions(
         LOGO, slider_mod.print_rect(PHOTO_SIZE)[3])
 
@@ -519,8 +535,25 @@ def test_something_is_readable_at_every_moment_of_the_closing_crossfade(
         f"passes through a moment with no readable text at all")
 
     # Both ENDS of the dissolve are moments a design is at full strength, so
-    # they are the ones that can be held to the contrast bar.
-    assert legibility.illegible([frames[0], frames[-1]], regions) == []
+    # they are the ones that can be held to a bar. They are held to DIFFERENT
+    # bars, because they are different designs (#777).
+    #
+    # The start is the reel's own last plate, so the reel's declared bands are
+    # the right question. The end is the before/after graphic, and asking the
+    # REEL's bands about it measures one template against another's
+    # expectations: it passed only because the two happened to put plain mat at
+    # the same coordinates, and #753 moving the before/after colophon is what
+    # showed that up. The honest claim about that moment is that the dissolve
+    # has arrived at the graphic it was given, which is what is asserted here;
+    # whether that graphic reads is the before/after's own business, held by
+    # tests/test_gallery_alignment.py and the goldens.
+    assert legibility.illegible([frames[0]], regions) == []
+
+    graphic = Image.open(closing_graphic).convert("RGB")
+    arrived = legibility.mean_difference(frames[-1], graphic)
+    assert arrived < SAME_PICTURE, (
+        f"the {which} reel's dissolve ends {arrived:.1f} of 255 away from the "
+        "closing graphic it was handed, so it is not arriving at it")
 
 
 @needs_ffmpeg
