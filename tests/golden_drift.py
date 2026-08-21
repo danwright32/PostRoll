@@ -65,21 +65,55 @@ def destination(environment: dict[str, str] | None = None) -> Path | None:
     return Path(value) if value else None
 
 
-def line(name: str, changed: int, total: int) -> str:
+def where_they_are(box: tuple[int, int, int, int] | None, changed: int) -> str:
+    """How the changed pixels are arranged, said in words a reading can carry (#793).
+
+    A count alone cannot tell scattered codec noise from a moved element, and
+    that is the one question outstanding about `clip_reel`, which reads 26
+    pixels on the runner while the other nine templates read 0. Reproducible to
+    the pixel across two runs, so it is a property of that template's encode
+    rather than randomness, and nothing establishes what it is.
+
+    The box says WHERE and the fill says HOW SPREAD. 26 pixels inside a box of
+    30 by 20 are one mark; the same 26 inside a box the size of the canvas are
+    dust over the whole frame, and the two want completely different
+    explanations.
+
+    None is its own answer rather than an empty box: `getbbox()` returns None
+    for a mask with nothing set, and a box of zeros would read as a real region
+    at the top-left corner (L11).
+    """
+    if box is None:
+        return "no changed region"
+    left, top, right, bottom = box
+    width, height = right - left, bottom - top
+    area = width * height
+    spread = f", {changed / area:.1%} of it" if area else ""
+    return f"region {width}x{height} at ({left},{top}){spread}"
+
+
+def line(name: str, changed: int, total: int,
+         box: tuple[int, int, int, int] | None = None) -> str:
     """One reading, as it is written.
 
     Carries the raw count as well as the share. The share is what the threshold
     is compared against and the count is what it was derived from, and a record
     of shares alone could not be re-derived if the canvas size ever changed
     (L192).
+
+    And it carries where the pixels are (#793). The comparison already builds
+    the mask, so the box costs nothing to take, and without it every reading is
+    a number with no way to ask what produced it.
     """
     # A markdown bullet, because a step summary renders what it is given and
     # consecutive plain lines are run together into one paragraph. A plain text
     # reader loses nothing by it.
-    return f"- {name}: {changed} of {total} px, {changed / total:.4%}"
+    return (f"- {name}: {changed} of {total} px, {changed / total:.4%}, "
+            f"{where_they_are(box, changed)}")
 
 
-def report(name: str, changed: int, total: int,
+def report(name: str, changed: int, total: int, *,
+           box: tuple[int, int, int, int] | None = None,
            environment: dict[str, str] | None = None) -> str | None:
     """Write one reading down, and hand back what was written.
 
@@ -87,8 +121,14 @@ def report(name: str, changed: int, total: int,
     "there was nowhere to write it" rather than reading silence as success
     (L11). Appended in one write, since several xdist workers and three matrix
     shards append to the same file with nothing sequencing them.
+
+    `box` and `environment` are keyword only. They were not when `box` was added
+    (#793), and a caller passing an environment positionally would have bound a
+    dict to `box` and written a reading about a region nobody measured, with
+    nothing raising. A wrong argument has to be a TypeError at the call rather
+    than a plausible value downstream (L168).
     """
-    written = line(name, changed, total)
+    written = line(name, changed, total, box)
     where = destination(environment)
     if where is None:
         return None

@@ -211,7 +211,10 @@ def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> Non
     # ones sit, and that is the whole distribution MAX_CHANGED_FRACTION has to
     # be chosen from (L172). See tests/golden_drift.py for what is wrong with
     # the number today and why it cannot be fixed from this Mac.
-    golden_drift.report(name, changed, total)
+    # The box comes off the mask the comparison already built, so it costs
+    # nothing (#793). A count alone cannot tell scattered codec noise from a
+    # moved element, which is the one thing not established about `clip_reel`.
+    golden_drift.report(name, changed, total, box=mask.getbbox())
 
     if fraction > MAX_CHANGED_FRACTION:
         # Write the evidence out rather than only reporting a number, because a

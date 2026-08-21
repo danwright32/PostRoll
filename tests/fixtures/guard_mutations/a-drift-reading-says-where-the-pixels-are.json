@@ -1,0 +1,8 @@
+{
+  "name": "a-drift-reading-says-where-the-pixels-are",
+  "file": "tests/golden_drift.py",
+  "find": "            f\"{where_they_are(box, changed)}\")",
+  "replace": "            f\"{where_they_are(None, changed)}\")",
+  "test": "tests/test_golden_drift_is_reported.py::test_a_reading_says_where_the_changed_pixels_are",
+  "breaks": "every drift reading reports no changed region whatever moved, so a count is again the only thing recorded and scattered codec noise cannot be told from a moved element, which is the one thing not established about clip_reel (#793)"
+}
