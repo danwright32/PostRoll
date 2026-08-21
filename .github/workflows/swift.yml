@@ -312,6 +312,31 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
 
+      # Recorded, not just installed (#792, the same record tests.yml keeps
+      # since #552). This job is where MAX_CHANGED_FRACTION's reading was taken,
+      # and the runner image is pinned while ffmpeg is not: `brew install
+      # ffmpeg` takes whatever Homebrew has that day. Without this the number
+      # the limit rests on can move with nothing here saying which tool produced
+      # it, and a red run cannot be attributed: our own change and ffmpeg having
+      # moved underneath us look identical.
+      #
+      # On every shard, not only the one that compares. All three render through
+      # ffmpeg and all three can be moved by it.
+      #
+      # `test_golden_drift_is_reported.py` derives which jobs need this from
+      # which jobs could take a reading, so a third one is covered the day it
+      # lands rather than the day somebody remembers this file (L96).
+      - name: Record the ffmpeg version this leg ran against
+        run: |
+          set -euo pipefail
+          {
+            echo "### ffmpeg on ${{ runner.os }} (${{ runner.arch }}), shard ${{ matrix.shard.name }}"
+            echo '```'
+            ffmpeg -version | head -n 1
+            ffprobe -version | head -n 1
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
       # Collect the drift readings the reference frames take (#787) into one
       # file, then publish it twice below. Into a file rather than straight
       # into the step summary because the readings have two audiences: a

@@ -1,0 +1,8 @@
+{
+  "name": "the-frames-name-the-ffmpeg-that-judged-them",
+  "file": "tests/test_golden_frames.py",
+  "find": "MEASURED_AGAINST_FFMPEG = \"8.1.2_1\"",
+  "replace": "MEASURED_AGAINST_FFMPEG = \"9.0.1\"",
+  "test": "tests/test_golden_frames.py::test_the_frames_are_compared_by_the_ffmpeg_the_limit_was_measured_against",
+  "breaks": "the reading MAX_CHANGED_FRACTION was chosen from is recorded against an ffmpeg a major version away from the one comparing the frames, so the limit rests on a measurement nothing here took, and at 16x of headroom a different encoder fails all ten frames at once (#792)"
+}
