@@ -69,23 +69,21 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # collage's number, and two copies maintained by hand drift the moment one
     # is bumped.
     "collage": COLLAGE_DESIGN_VERSION,
-    # NOT bumped by #756, on Dan's call (2026-08-20), and the reason is worth
-    # keeping because it is the same reason #752 gave for deferring the fix.
+    # 2 is the wordmark lifted clear of Instagram's caption band (#753).
     #
-    # #756 put a floor under the title, which had none: an upright photograph
-    # pushed it into the band the phone covers. The floor only ever moves
-    # anything for an upright photograph. Every story Dan shoots is landscape,
-    # and tests/test_story_title_clamp.py holds that case to the pixel, so
-    # bumping the number would badge a whole library stale and offer to
-    # re-render every one of them for a change none of them would show.
+    # Its ink ended at y=1780 against a band starting at 1760, measured on a
+    # published post on 2026-08-20, so the last line of the signature,
+    # PHOTOGRAPHY.COM, was under Instagram's own words on every story ever
+    # made. Every one of them looks different now.
     #
-    # This is the second of the two answers the fingerprint guard asks for: the
-    # code changed, the rendering did not, so the fingerprint is re-recorded on
-    # its own and the reason is said out loud rather than left implicit.
-    "story": 1,
+    # Which is why this moves where #756 deliberately did not, four commits
+    # earlier on the same template. That fix put a floor under the title, and
+    # the floor only ever moves anything for an upright photograph, which Dan
+    # does not shoot. This one moves every story.
+    "story": 2,
     # Rendered through generate_story's exact template, so it moves with the
     # story rather than carrying a number of its own.
-    "cover": 1,
+    "cover": 2,
     "before_after": 1,
     "reel_screen": 1,
     "reel_morph": 2,

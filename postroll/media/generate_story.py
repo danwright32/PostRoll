@@ -24,6 +24,7 @@ from .design_tokens import (
     FONT_DETAIL_LIGHT,
     FONT_SCRIPT,
     ROSE_GOLD as ROSE_GOLD_ON_CREAM,
+    SAFE_BOTTOM,
     SAFE_TOP,
     TEXT_DARK,
 )
@@ -47,7 +48,23 @@ PHOTO_SIDE_MARGIN = 20
 PHOTO_BOTTOM_Y = 1450  # larger photo area (~1190px tall)
 ORG_VENUE_Y = 1530  # in the cream caption band below the photo
 ORG_VENUE_LINE_SPACING = 55  # slightly tighter line height
-LOGO_BOTTOM_MARGIN = 100
+#: How far the wordmark's box sits above the bottom edge.
+#:
+#: Derived from SAFE_BOTTOM rather than set on its own (#753). Instagram lays
+#: its account row and caption over the bottom 160px of a story, measured on a
+#: published post on 2026-08-20, and at the old 100 the mark's ink ended at
+#: y=1780, so the last line of it, PHOTOGRAPHY.COM, was under Instagram's own
+#: words on every story.
+#:
+#: The 20 is the transparent tail the wordmark asset carries at this width,
+#: measured rather than assumed: it means the mark's INK lands 20px clear of
+#: the band rather than exactly on it. `tests/test_story_title_clamp.py`
+#: asserts the ink, not this number, because a check on the number would pass
+#: while the visible mark sat in the band.
+#:
+#: Derived, so a corrected measurement moves the mark with it instead of
+#: leaving a constant here that used to be right (L41).
+LOGO_BOTTOM_MARGIN = SAFE_BOTTOM - 20
 
 # Background blur
 BG_BLUR_RADIUS = 40

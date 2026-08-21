@@ -30,7 +30,7 @@ from PIL import Image, ImageChops
 
 from conftest import needs_mac_fonts
 from postroll.media import generate_story as story
-from postroll.media.design_tokens import SAFE_TOP
+from postroll.media.design_tokens import SAFE_BOTTOM, SAFE_TOP
 
 pytestmark = pytest.mark.slow
 
@@ -192,6 +192,57 @@ def test_the_title_lands_between_the_floor_and_the_print(tmp_path):
     assert max(rows) <= photo_top, (
         f"the title's lowest ink is at {max(rows)}, below the top of the "
         f"photograph at {photo_top}, so it is printed over the picture")
+
+
+# ── The other end of the frame ───────────────────────────────────────────────
+
+@needs_mac_fonts
+def test_the_wordmark_clears_the_band_instagram_covers(tmp_path):
+    """The story's signature is above Instagram's caption, not under it (#753).
+
+    Measured on a published post on 2026-08-20: Instagram lays its account row
+    and caption over the bottom 160px of the frame. The wordmark's ink ended at
+    y=1780, so the last line of it, PHOTOGRAPHY.COM, was under Instagram's own
+    words on every story. Dan saw it on the app preview overlay #758 added,
+    which is the whole point of that overlay.
+
+    Asserted on the rendered ink rather than on LOGO_BOTTOM_MARGIN, because the
+    wordmark asset carries a transparent tail and the margin positions its BOX.
+    A check on the number would pass while the visible mark sat in the band.
+    """
+    rendered = _render(tmp_path, ONE_LINE, portrait=False, tag="wordmark")
+    pixels = rendered.convert("RGB").load()
+    lowest = max(y for y in range(1400, rendered.height)
+                 if sum(1 for x in range(0, rendered.width, 2)
+                        if sum(pixels[x, y][:3]) < 330) > 3)
+
+    assert lowest < rendered.height - SAFE_BOTTOM, (
+        f"the story's lowest ink is at {lowest}, inside the "
+        f"{SAFE_BOTTOM}px band Instagram covers with its account row and "
+        f"caption, which starts at {rendered.height - SAFE_BOTTOM}. The "
+        "signature is under Instagram's own words.")
+
+
+@needs_mac_fonts
+def test_the_wordmark_still_sits_under_the_org_and_venue(tmp_path):
+    """Lifting it may not close the gap it hangs in.
+
+    The caption block reads org, venue, then the mark. Raising the mark far
+    enough would crowd or collide with the two lines above it, which is what
+    the naive lift did when this was first rendered, and it would pass the
+    check above while looking broken.
+    """
+    rendered = _render(tmp_path, ONE_LINE, portrait=False, tag="gap")
+    pixels = rendered.convert("RGB").load()
+    rows = [y for y in range(1400, rendered.height)
+            if sum(1 for x in range(0, rendered.width, 2)
+                   if sum(pixels[x, y][:3]) < 330) > 3]
+    breaks = [(a, b) for a, b in zip(rows, rows[1:]) if b - a > 8]
+
+    assert breaks, "the caption block and the wordmark run together with no gap"
+    assert breaks[-1][1] - breaks[-1][0] >= 30, (
+        f"only {breaks[-1][1] - breaks[-1][0]}px between the venue line and the "
+        "wordmark, which reads as a collision rather than a signature")
 
 
 @needs_mac_fonts
