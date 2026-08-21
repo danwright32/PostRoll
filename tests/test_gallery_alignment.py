@@ -20,10 +20,10 @@ from postroll.media import generate_reel_screen as screen_mod
 from postroll.media import generate_story as story_mod
 from postroll.media import generate_before_after as ba_mod
 
-# Every check in this file renders a real reel and reads pixels back, which is
-# where the suite's time goes. `make test-python-fast` deselects it; CI and
-# `make test-python` still run it (#413).
-pytestmark = pytest.mark.slow
+# Deliberately NOT marked slow. Measured on 2026-08-21 at 4.4s, which is one of
+# the cheapest files in the reference-frames matrix: it is in that matrix
+# because its renders need the macOS system faces, not because it is expensive.
+# It carried the marker until #766, when the two properties were separated.
 
 
 

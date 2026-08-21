@@ -74,15 +74,13 @@ from postroll.media.generate_reel_slider import hang_the_states
 from postroll.media.generate_story import generate_story
 from postroll.media.program_plate import load_logo as plate_logo
 
-#: Out of `make test-python-fast`, which deselects this marker.
-#:
-#: Not because these renders are expensive, they are about a second all told.
-#: `test_fast_subset_stays_honest.py` derives the fast run's exclusions from the
-#: reference-frames matrix rather than keeping a second list beside it, and this
-#: file has to be IN that matrix, because everything it measures is the size of
-#: type in the macOS system faces and those exist on no other runner. So the one
-#: marker carries both meanings here. #766 is about separating them.
-pytestmark = pytest.mark.slow
+# In `make test-python-fast` again since #766, which separated the two
+# properties this file used to sit between: it is in the reference-frames matrix
+# because everything it measures is the size of type in the macOS system faces,
+# and that is not the same claim as being expensive. Measured on 2026-08-21 at
+# 24.5s, under the floor `tests/file_durations.py` sets. The comment that stood
+# here said "about a second all told", which was an impression rather than a
+# reading and was out by a factor of twenty.
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LOGO = str(REPO_ROOT / "postroll" / "assets" / "logo-black.png")

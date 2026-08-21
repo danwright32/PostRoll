@@ -1,16 +1,19 @@
 """Where the macOS job's reference-frame work is declared, read in one place.
 
-Three separate guards need to know which test files that job runs, and each one
-used to work it out with its own regex over the workflow text:
+Separate guards need to know which test files that job runs, and each one used
+to work it out with its own regex over the workflow text:
 
 * `test_ci_runs_the_font_dependent_checks.py` asserts the job RUNS every file
   carrying a macOS font marker.
 * `test_reference_frames_are_safe_to_parallelise.py` asserts those files stay
   safe to run concurrently.
-* `test_fast_subset_stays_honest.py` derives the SLOW marker set from them, and
-  the fast local target depends on that derivation being right.
 
-Three copies of one derivation is three chances to spell it differently, and the
+`test_fast_subset_stays_honest.py` was a third reader, deriving the SLOW marker
+set from these files. It is not any more (#766): the matrix says which files need
+the macOS system faces, which is a different property from being expensive, and
+it derives its set from a measurement now.
+
+Copies of one derivation are chances to spell it differently, and the
 failure is silent in the worst way: a copy that matches nothing reports a clean
 run over an empty set (L98), which is precisely what happened to the font guard
 once already when it matched one remembered marker name. So the derivation lives

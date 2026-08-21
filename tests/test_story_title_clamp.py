@@ -32,7 +32,9 @@ from conftest import needs_mac_fonts
 from postroll.media import generate_story as story
 from postroll.media.design_tokens import SAFE_BOTTOM, SAFE_TOP
 
-pytestmark = pytest.mark.slow
+# Deliberately NOT marked slow: 3.9s, measured 2026-08-21. It carried the marker
+# until #766 only because it is in the reference-frames matrix, which it is in
+# for needing the macOS system faces.
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LOGO = str(REPO_ROOT / "postroll" / "assets" / "logo-black.png")

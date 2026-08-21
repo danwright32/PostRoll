@@ -1,10 +1,23 @@
 """Every check that needs macOS fonts is actually run by the macOS job.
 
 A font-gate marker skips a test unless the runner has SignPainter and
-HelveticaNeue, which only the macOS job has. So a font-dependent check placed in
-a file that job does not invoke never executes anywhere: it passes locally on
-Dan's Mac, and on Linux it skips. A skipped check is indistinguishable from a
-passing one, which is the failure mode `swift.yml` was written to close.
+HelveticaNeue. A skipped check is indistinguishable from a passing one, which is
+the failure mode `swift.yml` was written to close.
+
+What this job is for, stated accurately (#766). It is NOT that a file it does
+not name executes nowhere: `tests.yml`'s `macos` job runs the WHOLE suite on
+macos-15 and is a required check, so a font-gated file runs there whether or not
+a shard names it. That was true from #571 onwards and the reason recorded here
+went on saying otherwise, which is the kind of sentence that gets a gate loosened
+on the strength of a comment (L210).
+
+The real reason is one line of that job: it sets `POSTROLL_REQUIRE_FFMPEG` and
+NOT `POSTROLL_REQUIRE_GOLDENS`. That second variable is what turns a missing
+system face from a skip into a hard failure (`tests/conftest.py`). So the whole
+suite run on the Mac executes these files today and cannot tell you if it ever
+stops: if the runner image dropped SignPainter, every font-gated check there
+would skip and that job would stay green. This job sets both variables, so it is
+the only place where a font-gated file going quiet is a failure.
 
 There is more than one such marker, which is why this matches on the SHAPE of
 the name rather than on a spelling. `conftest.py` exports `needs_mac_fonts`, and
@@ -28,9 +41,8 @@ it.
 This used to check two things: that the job RUNS every font-gated file, and that
 it TRIGGERS on changes to them. The second is gone with the paths filter it was
 about (#431), since every pull request now runs the job whatever it touched, and
-`test_ci_gates.py` holds that. Running them is still checked here, because that is
-a separate claim: a file the job does not name executes nowhere while reporting
-green.
+`test_ci_gates.py` holds that. Running them is still checked here, for the reason
+given above: this is the only job where a font-gated file going quiet fails.
 
 Since #507 the job is fanned out over a matrix, so the file names live in the
 matrix rather than in the pytest command. This reads them through
@@ -133,10 +145,13 @@ def test_the_macos_job_runs_every_font_dependent_test_file():
     missing = sorted(font_dependent_test_files() - reference_frame_files())
 
     assert not missing, (
-        "these test files carry @needs_mac_fonts, so they skip everywhere "
-        "except the macOS job, and no shard of the macOS job runs them: "
-        f"{missing}. They therefore execute nowhere in CI while reporting "
-        "green. Add them to a shard in .github/workflows/swift.yml.")
+        "these test files carry @needs_mac_fonts and no shard of the "
+        f"reference-frame job runs them: {missing}. They do still run in "
+        "tests.yml's `macos` job, which runs the whole suite on a Mac, but that "
+        "job does not set POSTROLL_REQUIRE_GOLDENS, so if the runner ever lost "
+        "the system faces every one of them would skip there and report green. "
+        "This job is the only place a font-gated file going quiet is a failure. "
+        "Add them to a shard in .github/workflows/swift.yml.")
 
 
 def test_no_test_file_is_run_by_two_shards():

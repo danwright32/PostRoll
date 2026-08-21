@@ -1,0 +1,8 @@
+{
+  "name": "a-design-change-refuses-an-unbumped-template",
+  "file": "tools/record_design_change.py",
+  "find": "    if unbumped:\n        raise Refused(",
+  "replace": "    if False:\n        raise Refused(",
+  "test": "tests/test_record_design_change.py::test_an_unbumped_template_is_refused_before_anything_is_rendered",
+  "breaks": "the sequence re-records the reference frames before noticing the version was never bumped, so the refusal arrives minutes later from the fingerprint tool instead of instantly, which is the cost #786 is about"
+}

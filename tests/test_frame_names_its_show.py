@@ -58,12 +58,9 @@ from postroll.media.generate_reel_scroll import draw_branded_chrome
 from postroll.media.generate_story import generate_story
 from postroll.media.text_regions import scroll_regions
 
-#: Out of `make test-python-fast`, for the reason given in
-#: tests/test_phone_safe_area.py: the fast run's exclusions are derived from the
-#: reference-frames matrix, and a file whose renders need the macOS system faces
-#: has to be in that matrix to run anywhere at all. These renders do also cost
-#: real seconds, four templates plus a reader call each.
-pytestmark = pytest.mark.slow
+# Deliberately NOT marked slow: 6.2s, measured 2026-08-21. It is in the
+# reference-frames matrix for needing the macOS system faces, which #766
+# separated from being expensive.
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LOGO = str(REPO_ROOT / "postroll" / "assets" / "logo-black.png")
