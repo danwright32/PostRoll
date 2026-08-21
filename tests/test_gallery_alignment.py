@@ -64,8 +64,11 @@ def _blank_frame(mod):
 
 
 def _assert_no_chrome_rules(mod, *extra):
+    # No logo argument: the scroll reel's chrome cannot be given one since #774,
+    # because the only thing it did with it was draw the signature into the band
+    # Instagram covers with its caption.
     frame = mod.draw_branded_chrome(
-        _blank_frame(mod), "Test Event", "Org", "Venue", None, *extra
+        _blank_frame(mod), "Test Event", "Org", "Venue", *extra
     )
     assert not _row_has_color(frame, mod.CHROME_BOTTOM_Y - 1, mod.ROSE_GOLD), \
         f"{mod.__name__}: rose-gold rule still at header boundary"

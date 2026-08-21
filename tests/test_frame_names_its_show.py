@@ -112,7 +112,7 @@ def _before_after(tmp_path: Path, name: str) -> Path:
 def _reel_scroll_header(tmp_path: Path, name: str) -> Path:
     out = tmp_path / "reel-scroll-header.png"
     frame = Image.new("RGB", CANVAS, (128, 128, 128))
-    draw_branded_chrome(frame, name, ORG, VENUE, None).save(out)
+    draw_branded_chrome(frame, name, ORG, VENUE).save(out)
     return out
 
 
