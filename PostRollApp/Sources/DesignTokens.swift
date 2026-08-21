@@ -11,6 +11,37 @@ import SwiftUI
 // The colours below with no Python counterpart (creamDeep, roseDeep, warmFaint,
 // the stage pills) are app chrome that no generator paints, and stay Swift-only.
 
+/// What the phone and Instagram draw over a full-frame asset (#753).
+///
+/// Mirrors `design_tokens.SAFE_TOP`, `SAFE_BOTTOM`, `SAFE_RIGHT` and
+/// `SAFE_RIGHT_FROM`; nothing but the parity test in
+/// tests/test_safe_area_tokens.py keeps the two in step. The Python side is the
+/// source and carries the measurement, its date and the phone it came from.
+///
+/// The app needs them so the caption review screen can show a preview the way
+/// Instagram will show it. That gap is how #752 survived: the show title had
+/// been printed under the clock on every scroll reel published, every local
+/// render looked perfect, and the only detector was Dan seeing a live story on
+/// his phone.
+///
+/// In canvas pixels of a 1080 by 1920 frame, so a view scales them by whatever
+/// it is drawing that frame at rather than carrying its own copy in points.
+enum PhoneSafeArea {
+    /// The status bar and the Dynamic Island.
+    static let top: CGFloat = 170
+    /// Instagram's account row and caption.
+    static let bottom: CGFloat = 160
+    /// Instagram's like, comment, share and save rail.
+    static let right: CGFloat = 240
+    /// Where that rail starts, as a fraction of the frame's height.
+    static let rightFrom: CGFloat = 0.54
+
+    /// The frame these are measured against, so a view scaling them has the
+    /// denominator to hand rather than restating 1080 by 1920 itself.
+    static let canvas = CGSize(width: 1080, height: 1920)
+}
+
+
 /// Which generation of the collage design this build renders (#160).
 ///
 /// Mirrors `design_tokens.COLLAGE_DESIGN_VERSION`; nothing but the parity test
