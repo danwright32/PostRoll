@@ -271,7 +271,7 @@ jobs:
           - name: thursday-reel
             files: tests/test_thursday_reel_legibility.py
           - name: goldens
-            files: tests/test_golden_frames.py tests/test_slider_program_plate.py tests/test_gallery_alignment.py tests/test_phone_safe_area.py tests/test_story_title_clamp.py
+            files: tests/test_golden_frames.py tests/test_slider_program_plate.py tests/test_gallery_alignment.py tests/test_phone_safe_area.py tests/test_story_title_clamp.py tests/test_frame_names_its_show.py
     steps:
       - uses: actions/checkout@v5
 
