@@ -185,6 +185,27 @@ SAFE_BOTTOM = 160
 #: would cost every template a column it does not need to give up.
 SAFE_RIGHT = 240
 
+#: How much of EACH SIDE of a full-frame asset the phone never shows (#768).
+#:
+#: Measured on 2026-08-20 from the same two published reels on Dan's iPhone 16
+#: Pro Max. Instagram shows the 1080 wide frame at 1476 screen px in a 1320 px
+#: window, so 156 screen px are cut off, 78 a side, which is 57 canvas px each.
+#: The visible canvas is x 57 to 1023, not 0 to 1080.
+#:
+#: 60 is that rounded up. It is the one token here that is genuinely device
+#: dependent rather than roughly constant: how much is cropped follows from the
+#: phone's aspect ratio against the asset's, so a 16:9 screen would crop none
+#: and letterbox instead. This is the widest crop measured so far and should
+#: become the widest crop SEEN, with each figure recorded against the phone it
+#: came from, rather than staying one device's number forever.
+#:
+#: What it already tells us, which nothing recorded before: MAT_GALLERY is 48,
+#: so the gallery mat down the left and right of the collage and the scroll reel
+#: is entirely off screen. The prints run edge to edge on the phone, which is
+#: not what the layout draws and not what any local render shows. Whether that
+#: is a problem is a design question; that it is happening is now written down.
+SAFE_SIDE = 60
+
 #: Where the action rail starts, as a fraction of the frame's height (#753).
 #:
 #: Measured at canvas y 1045 of 1920, so 0.54. Held as a fraction rather than a

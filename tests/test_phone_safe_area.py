@@ -61,6 +61,7 @@ from postroll.media.design_tokens import (
     SAFE_BOTTOM,
     SAFE_RIGHT,
     SAFE_RIGHT_FROM,
+    SAFE_SIDE,
     SAFE_TOP,
 )
 from postroll.media.generate_before_after import generate_before_after
@@ -303,6 +304,76 @@ EXEMPT_BOTTOM = {
 }
 
 MEASURED_BOTTOM = sorted(set(RENDERERS) - set(EXEMPT_BOTTOM))
+
+
+#: The two columns the phone never shows at all (#768).
+#:
+#: Not covered, CROPPED: Instagram scales the frame wider than the screen, so
+#: these pixels are not drawn anywhere. That makes this the strictest of the
+#: bands, and the cheapest to satisfy, since every template centres what it
+#: draws.
+SIDE_BANDS = {
+    "left": (0, 0, SAFE_SIDE, CANVAS[1]),
+    "right": (CANVAS[0] - SAFE_SIDE, 0, CANVAS[0], CANVAS[1]),
+}
+
+
+#: How much branding may fall off a side before it counts.
+#:
+#: Not zero, and the reason is measured. Three templates run a decorative
+#: rose-gold hairline from their mat edge, which is 48 or 50px in, so its first
+#: ten pixels are cropped: 20 and 22 for the story's inline title rules, 35 for
+#: the plate reels' masthead rule. A hairline losing its last ten pixels at the
+#: screen edge is not something anybody can see, and a rule that failed on it
+#: would fail every correct render, which is what gets a check switched off
+#: (L36, L104).
+#:
+#: 500 is far above those and far below anything that carries meaning: a
+#: wordmark or a line of type reaching this far measures in the thousands. The
+#: gap between the real readings and the floor is more than an order of
+#: magnitude in both directions, which is what keeps it out of the dense middle
+#: where a small shift would carry templates across it (L172).
+SIDE_ALLOWANCE = 500
+
+
+@needs_mac_fonts
+@pytest.mark.parametrize("side", sorted(SIDE_BANDS))
+@pytest.mark.parametrize("name", sorted(RENDERERS))
+def test_no_template_draws_words_off_the_side_of_the_screen(name, side, tmp_path):
+    render = RENDERERS[name]
+    marked = _branding_pixels(render(tmp_path, True), render(tmp_path, False),
+                              SIDE_BANDS[side])
+
+    assert marked <= SIDE_ALLOWANCE, (
+        f"{name} puts {marked} pixels of its own branding in the {side} "
+        f"{SAFE_SIDE}px, over the {SIDE_ALLOWANCE} a cropped hairline accounts "
+        "for. The phone crops that column off entirely: Instagram scales a 1080 "
+        "wide frame to 1476 screen px in a 1320 px window, so those pixels are "
+        "not drawn anywhere at all (#768). This is not something a viewer has "
+        "to read past; it is something no viewer ever sees.")
+
+
+@needs_mac_fonts
+def test_the_side_measurement_can_still_see_something_there(tmp_path):
+    """The control.
+
+    Every reading above is under an allowance, and a measurement that had
+    stopped seeing anything would report every template clear while sitting
+    comfortably under it (L98, L159). This puts a wordmark's worth of ink in the
+    cropped column and checks the reading rises past the allowance.
+    """
+    from PIL import ImageDraw
+
+    plain = Image.new("RGB", CANVAS, (128, 128, 128))
+    marked = plain.copy()
+    ImageDraw.Draw(marked).rectangle([0, 400, SAFE_SIDE - 1, 1400],
+                                     fill=(20, 20, 20))
+
+    reading = _branding_pixels(marked, plain, SIDE_BANDS["left"])
+
+    assert reading > SIDE_ALLOWANCE, (
+        f"a solid block filling the cropped column measures {reading}, under "
+        f"the {SIDE_ALLOWANCE} allowance, so the check above could not fail")
 
 
 @needs_mac_fonts
