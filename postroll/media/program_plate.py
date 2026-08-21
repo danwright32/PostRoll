@@ -48,7 +48,27 @@ MASTHEAD_Y = 176               # SignPainter title
 VENUE_Y = 285
 RULE_Y = 338
 PRINT_Y = 430                  # the print is hung here
-FOOTER_RULE_Y = CANVAS_H - 214  # colophon rule; logo centred beneath
+#: The colophon rule, with the wordmark centred beneath it.
+#:
+#: NOT yet lifted clear of the band Instagram covers, and the reason is worth
+#: keeping (#753). The mark ends inside that band, so the signature on both
+#: plate reels is under Instagram's caption: 2069 pixels of branding measured
+#: in the band on 2026-08-20.
+#:
+#: Lifting it is one line, `CANVAS_H - SAFE_BOTTOM - 214`, and it works: the
+#: band reading goes to zero and the reference frames re-record cleanly. What
+#: it breaks is one layer down. MAX_PRINT_H is derived from this line, so the
+#: print shrinks by the same amount and the placard caption, which hangs off
+#: the bottom of the print, rises with it. The photograph ZOOMS during the
+#: reel, and at the higher position it covers the caption:
+#: tests/test_frame_legibility.py reports the BEFORE and AFTER words at 1.76
+#: to 1 against the photograph rather than the mat, under the 3.0 minimum.
+#:
+#: So the fix needs the placard to move independently of the print, or the
+#: zoom to be bounded, and that is a layout decision rather than a constant.
+#: #753 carries it, and tests/test_phone_safe_area.py names both reels with the
+#: issue against them so neither can be forgotten.
+FOOTER_RULE_Y = CANVAS_H - 214
 LOGO_WIDTH = 340
 
 # The caption placard sits under the print: a gap, the state word, then the

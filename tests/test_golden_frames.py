@@ -612,8 +612,16 @@ def test_the_closing_hold_matches_its_reference_frame(
     # masthead, and the wordmark that has shipped invisible three times.
     assert_ink_reads_against_its_background(
         frame, (0, 120, frame.width, 380), f"{name} masthead")
+    # The colophon band, taken from the template's own FOOTER_RULE_Y rather
+    # than as a distance from the bottom of the frame (#753). It used to be the
+    # last 200 rows, which was where the colophon sat until it was lifted clear
+    # of the strip Instagram lays its caption over. A literal here would have
+    # gone on measuring the band the mark had LEFT, which is plain cream, and
+    # reported that as unreadable: exactly the failure #752 found one file over
+    # (L107).
+    from postroll.media.program_plate import FOOTER_RULE_Y
     assert_ink_reads_against_its_background(
-        frame, (0, frame.height - 200, frame.width, frame.height),
+        frame, (0, FOOTER_RULE_Y, frame.width, FOOTER_RULE_Y + 200),
         f"{name} colophon")
 
 

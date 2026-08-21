@@ -287,20 +287,32 @@ BOTTOM_BAND = (0, CANVAS[1] - SAFE_BOTTOM, CANVAS[0], CANVAS[1])
 RAIL_BAND = (CANVAS[0] - SAFE_RIGHT, int(CANVAS[1] * SAFE_RIGHT_FROM),
              CANVAS[0], CANVAS[1])
 
-#: Templates whose branding is inside the bottom band and has not been moved
-#: yet, by name and by issue.
+#: Templates allowed to draw branding in the bottom band, by name and by issue.
 #:
-#: Measured on real renders of a real show on 2026-08-20. Moving a colophon
-#: costs photograph, which makes it a layout decision rather than a nudge, and
-#: Dan takes those one at a time: he took the story's on the night, and these
-#: four are still his to take. Named here rather than left out, so each one is
-#: measured and visible, and `test_every_bottom_exemption_is_still_needed`
-#: below turns any of them red the moment it stops being true (L129, #760).
+#: The screen reel came out when its footer was moved above the band. The other
+#: three were tried and put back, and what stopped each is worth keeping.
+#:
+#: The plate reels: the lift is one line and the band reading goes to zero, but
+#: MAX_PRINT_H is derived from that line, so the print shrinks, the placard
+#: caption hanging off it rises, and the photograph's zoom then covers the
+#: caption. Measured at 1.76 to 1 against a 3.0 minimum.
+#:
+#: before_after: the lift works on its own, and it moves the plate reels'
+#: CLOSING HOLD, which is a before/after graphic. Those reels' legibility suite
+#: judges their own declared caption band across every sampled frame including
+#: that hold, and the two layouts happened to line up on mat before. So the
+#: before/after fix needs that suite to stop judging one template's bands
+#: against another template's frame first.
+#:
+#: All three are layout decisions rather than constants, which is why they are
+#: here rather than done.
+#:
+#: `test_every_bottom_exemption_is_still_needed` turns an entry red the moment
+#: it stops being true (L129, #760).
 EXEMPT_BOTTOM = {
-    "before_after": "#753, the wordmark sits in the band",
-    "reel_morph": "#753, the plate's footer colophon sits in the band",
-    "reel_slider": "#753, the plate's footer colophon sits in the band",
-    "reel_screen": "#753, the wordmark sits in the band",
+    "before_after": "#753, lifting it moves the reels' closing hold under them",
+    "reel_morph": "#753, lifting it costs the placard its clearance from the zoom",
+    "reel_slider": "#753, lifting it costs the placard its clearance from the zoom",
 }
 
 MEASURED_BOTTOM = sorted(set(RENDERERS) - set(EXEMPT_BOTTOM))

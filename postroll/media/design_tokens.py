@@ -84,8 +84,20 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # Rendered through generate_story's exact template, so it moves with the
     # story rather than carrying a number of its own.
     "cover": 2,
+    # NOT moved by #753. Its whole footer block sits inside the strip Instagram
+    # lays its caption over, 31587 pixels of branding measured in the band on
+    # 2026-08-20, and lifting it is one constant that works. What stops it is
+    # that this graphic is also the plate reels' CLOSING HOLD, and their
+    # legibility suite judges their own caption band across that frame.
+    # tests/test_phone_safe_area.py carries the whole reason.
     "before_after": 1,
-    "reel_screen": 1,
+    # 2 is the same move on this template: its cream footer sits above the band
+    # now rather than at the very foot of the frame.
+    "reel_screen": 2,
+    # NOT moved by #753: their colophon is still inside the band Instagram
+    # covers, because lifting it costs the placard caption its clearance from
+    # the photograph's zoom. program_plate.FOOTER_RULE_Y carries the whole
+    # reason.
     "reel_morph": 2,
     "reel_slider": 2,
     # 2 is the taller header that keeps the title out of the band the phone

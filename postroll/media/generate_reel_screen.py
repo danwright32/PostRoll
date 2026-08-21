@@ -35,6 +35,7 @@ from .design_tokens import (
     FONT_DETAIL_LIGHT,
     FONT_SCRIPT,
     ROSE_GOLD,  # noqa: F401,
+    SAFE_BOTTOM,
     SAFE_TOP,
     TEXT_DARK,
     load_font,
@@ -130,7 +131,13 @@ def build_chrome_overlay(event_name: str, org: str, venue: str,
                 cb = draw.textbbox((0, 0), ch, font=detail_font)
                 x += (cb[2] - cb[0]) + 6
 
-    footer_y = CANVAS_H - FOOTER_H
+    # Above the band Instagram lays its account row and caption over (#753).
+    #
+    # Moved, not grown. The mark is centred INSIDE this footer, so making the
+    # footer taller just grows it in both directions and leaves the mark where
+    # it was: measured at 1105 pixels of branding still in the band either way.
+    # What has to change is where the footer sits.
+    footer_y = CANVAS_H - SAFE_BOTTOM - FOOTER_H
     footer = Image.new("RGBA", (CANVAS_W, FOOTER_H), (*CREAM, CREAM_OPACITY))
     chrome.paste(footer, (0, footer_y), footer)
 
