@@ -302,7 +302,20 @@ jobs:
       # person opening the run reads the summary, and anything asking the API
       # what a run measured can only read the LOG, since a step summary is
       # not fetchable.
+      #
+      # Only on the shard that runs the comparisons. The other two collected
+      # nothing and announced it on every run, which is a permanent line rather
+      # than news, and a permanent warning is one people learn to read past
+      # (#797, L36).
+      #
+      # Selected by the FILE the shard runs, not by the shard's name. A name
+      # here would be a second copy of the split above, so rebalancing the
+      # matrix would move the comparisons to another shard and leave these two
+      # steps behind, collecting where nothing measures (L41).
+      # tests/test_golden_drift_is_reported.py evaluates this condition against
+      # the real matrix and fails when the two disagree.
       - name: Collect reference-frame drift readings
+        if: contains(matrix.shard.files, 'tests/test_golden_frames.py')
         run: echo "POSTROLL_GOLDEN_DRIFT_LOG=${RUNNER_TEMP}/golden-drift.txt" >> "${GITHUB_ENV}"
 
       # Both variables turn a skip into a hard failure. A reference-frame check
@@ -348,7 +361,7 @@ jobs:
       # publishing an empty list, which would read as a run in which nothing
       # drifted (L98).
       - name: Publish the reference-frame drift readings
-        if: always()
+        if: always() && contains(matrix.shard.files, 'tests/test_golden_frames.py')
         run: |
           set -euo pipefail
           if [ ! -s "${POSTROLL_GOLDEN_DRIFT_LOG:-/nonexistent}" ]; then

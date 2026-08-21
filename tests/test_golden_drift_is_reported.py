@@ -285,6 +285,174 @@ def test_the_readings_reach_the_log_and_not_only_the_summary():
             "only, so nothing but a person opening the page can ever read them")
 
 
+# ── the collecting is scoped to the shard that measures ──────────────────────
+#
+# The reference-frame job is fanned out over three matrix shards and only one of
+# them runs the file that takes readings. The other two collected nothing and
+# said so on every run: "no reference-frame drift readings were taken, so this
+# run measured nothing" (#797, seen on job 96897833537).
+#
+# That sentence is right when a shard that SHOULD have measured did not, which is
+# why it stays. It was wrong here only because two of the three can never take a
+# reading, so it was a permanent line rather than news, and a permanent warning
+# is one people learn to read past (L36).
+
+import ci_workflow  # noqa: E402
+
+TESTS_DIR = REPO_ROOT / "tests"
+
+#: The call a comparison makes to write down what it measured.
+READING_CALL = re.compile(r"\bgolden_drift\.report\(")
+
+#: What a step's condition may test to work out whether its shard measures.
+#:
+#: The matrix's FILES, never its name. A condition naming the shard is a second
+#: copy of the split: rebalancing the matrix would move the file to another
+#: shard and leave the steps behind, collecting on a shard that measures nothing
+#: and not on the one that does (L41).
+SHARD_FILES = "matrix.shard.files"
+
+
+def reading_files() -> set[str]:
+    """Test files whose comparisons write a drift reading, by bare name.
+
+    Derived from the call rather than named here. A list would be a third place
+    the same fact lives, beside the matrix and the workflow condition, and the
+    one that gets forgotten (L96).
+
+    Comment lines stripped, because a guard satisfiable by prose about the call
+    is indistinguishable from one that works (L103).
+    """
+    found = set()
+    for path in sorted(TESTS_DIR.glob("test_*.py")):
+        code = "\n".join(
+            line for line in path.read_text(encoding="utf-8").splitlines()
+            if not line.strip().startswith("#"))
+        if READING_CALL.search(code):
+            found.add(path.name)
+    assert found, (
+        "no test file calls golden_drift.report(), so nothing takes a reading "
+        "at all and every check below would pass over an empty set (L98)")
+    return found
+
+
+def measuring_shards() -> list[str]:
+    """The matrix shards that actually run a file which takes readings."""
+    wanted = reading_files()
+    return [name for name, files in ci_workflow.shards()
+            if wanted & {Path(path).name for path in files}]
+
+
+def step_condition(step: str) -> str:
+    """One step's `if:` expression, or "" when it has none."""
+    body = ci_workflow.job_block().split(step, 1)
+    assert len(body) == 2, (
+        f"there is no step named {step!r} in the {ci_workflow.JOB} job any "
+        "more, so this check is reading nothing")
+    before_run = body[1].split("run:", 1)[0]
+    match = re.search(r"^\s*if:\s*(.+)$", before_run, re.M)
+    return match.group(1).strip() if match else ""
+
+
+def selected_by(condition: str) -> list[str]:
+    """Which shards a condition is true for, evaluated over the real matrix.
+
+    Only the one expression shape is understood, `contains(matrix.shard.files,
+    '<path>')`, and anything else raises rather than being read as selecting
+    everything. A parser that shrugged at an expression it did not know would
+    report a correctly scoped step for a condition that does nothing.
+    """
+    paths = re.findall(
+        rf"contains\(\s*{re.escape(SHARD_FILES)}\s*,\s*'([^']+)'\s*\)", condition)
+    assert paths, (
+        f"the condition {condition!r} tests no {SHARD_FILES} at all, so nothing "
+        "here can say which shards it selects")
+    stripped = re.sub(
+        rf"contains\(\s*{re.escape(SHARD_FILES)}\s*,\s*'[^']+'\s*\)", "", condition)
+    leftover = stripped.replace("always()", "").replace("&&", "").strip()
+    assert not leftover, (
+        f"the condition {condition!r} has a part this cannot evaluate: "
+        f"{leftover!r}. Rather than guess, which would report a step as scoped "
+        "when it is not, teach this the new shape.")
+    return [name for name, files in ci_workflow.shards()
+            if all(path in files for path in paths)]
+
+
+DRIFT_STEPS = ("Collect reference-frame drift readings",
+               "Publish the reference-frame drift readings")
+
+
+def test_exactly_one_shard_takes_the_readings():
+    """The premise the scoping rests on.
+
+    Not a fixed number: what matters is that SOME shard measures, so the steps
+    have somewhere to belong. If a rebalance ever spread the reading files over
+    two shards the condition below has to cover both, and this is what says so
+    rather than leaving it to be discovered from an empty summary.
+    """
+    measuring = measuring_shards()
+
+    assert measuring, (
+        f"no shard of the {ci_workflow.JOB} job runs any of {sorted(reading_files())}, "
+        "so the readings the limit is chosen from are taken nowhere in CI")
+    assert len(measuring) < len(ci_workflow.shards()), (
+        "every shard now takes readings, so there is nothing to scope and the "
+        "steps below should go back to running unconditionally")
+
+
+@pytest.mark.parametrize("step", DRIFT_STEPS)
+def test_the_drift_steps_run_only_on_the_shard_that_measures(step):
+    """Derived from the matrix, not from the shard's name.
+
+    The two shards that can never take a reading announced that they measured
+    nothing on every single run. Keeping the sentence and scoping the steps is
+    the fix: it is still the right thing to say when a shard that should have
+    measured did not.
+    """
+    condition = step_condition(step)
+
+    assert condition, (
+        f"the {step!r} step has no `if:`, so it runs on every shard. Two of "
+        "them can never take a reading and would report measuring nothing on "
+        "every run (#797).")
+    assert "matrix.shard.name" not in condition, (
+        f"the {step!r} step selects its shard by NAME: {condition}. A rebalance "
+        "that moves the reading file to another shard would leave the step "
+        "behind, collecting where nothing measures (L41).")
+    assert selected_by(condition) == measuring_shards(), (
+        f"the {step!r} step runs on {selected_by(condition)} and the shards that "
+        f"take readings are {measuring_shards()}.")
+
+
+def test_the_publish_step_still_runs_on_a_failed_run():
+    """Scoping must not have cost the other condition.
+
+    `always()` is what puts the readings on a RED run, which is when they are
+    most worth having. Adding a shard test beside it is the moment that is
+    easiest to lose (L173).
+    """
+    condition = step_condition("Publish the reference-frame drift readings")
+
+    assert "always()" in condition, (
+        f"the publish step's condition is {condition!r}, which drops the "
+        "readings on exactly the runs that need explaining")
+
+
+def test_a_shard_that_should_have_measured_and_did_not_still_says_so():
+    """The branch this deliberately keeps (L98).
+
+    An empty list published under a heading reads as a run in which nothing
+    drifted. The sentence is only noise on a shard that could never measure;
+    on the one that runs the comparisons it is the whole point.
+    """
+    step = ci_workflow.job_block().split(DRIFT_STEPS[1], 1)[1].split("- name:", 1)[0]
+
+    assert "measured nothing" in step, (
+        "the publish step no longer says anything when it collected nothing, so "
+        "a shard whose comparisons all failed to report is indistinguishable "
+        "from one where nothing drifted")
+
+
 # ── the limit is held to the readings it was chosen from ─────────────────────
 
 from test_golden_frames import (  # noqa: E402

@@ -1,0 +1,8 @@
+{
+  "name": "drift-publishing-is-scoped-to-its-shard",
+  "file": ".github/workflows/swift.yml",
+  "find": "        if: always() && contains(matrix.shard.files, 'tests/test_golden_frames.py')",
+  "replace": "        if: always()",
+  "test": "tests/test_golden_drift_is_reported.py::test_the_drift_steps_run_only_on_the_shard_that_measures[Publish the reference-frame drift readings]",
+  "breaks": "the publishing step runs on the two shards that can never take a reading, which is where the permanent `this run measured nothing` line came from (#797)"
+}

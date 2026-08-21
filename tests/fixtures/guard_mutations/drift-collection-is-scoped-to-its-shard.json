@@ -1,0 +1,8 @@
+{
+  "name": "drift-collection-is-scoped-to-its-shard",
+  "file": ".github/workflows/swift.yml",
+  "find": "      - name: Collect reference-frame drift readings\n        if: contains(matrix.shard.files, 'tests/test_golden_frames.py')",
+  "replace": "      - name: Collect reference-frame drift readings",
+  "test": "tests/test_golden_drift_is_reported.py::test_the_drift_steps_run_only_on_the_shard_that_measures[Collect reference-frame drift readings]",
+  "breaks": "the drift collection runs on all three matrix shards while only one of them runs the comparisons, so the other two report `no reference-frame drift readings were taken, so this run measured nothing` on every run, and a permanent warning is one people learn to read past (#797, L36)"
+}
