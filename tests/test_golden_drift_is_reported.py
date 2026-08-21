@@ -453,6 +453,37 @@ def test_a_shard_that_should_have_measured_and_did_not_still_says_so():
         "from one where nothing drifted")
 
 
+def test_every_rendering_job_records_the_ffmpeg_it_ran_against():
+    """The reading and the tool that produced it arrive together (#792).
+
+    `MAX_CHANGED_FRACTION` is 0.0002 since #787, twenty-five times tighter than
+    the 0.005 it replaced, and it was chosen from what an unchanged design reads
+    on the runner: 0 pixels on nine frames and 26 on `clip_reel`. That share
+    exists only because of the runner's ffmpeg, and both jobs pin the runner
+    IMAGE, deliberately, since the frames were recorded against its fonts, while
+    neither pins ffmpeg: `brew install ffmpeg` takes whatever Homebrew has that
+    day.
+
+    So the number the limit rests on can move with nothing in the repo saying
+    so. At the old limit there was 385x of headroom and it did not matter; at
+    16x, an ffmpeg rendering a few hundred pixels differently fails every
+    reference frame at once, and the first symptom reads as a design regression
+    on ten templates.
+
+    Derived from the same jobs that take the readings, so the two cannot be
+    scoped apart. tests.yml has kept this record since #552; swift.yml, which is
+    where the reading was actually taken, never did.
+    """
+    for (workflow, name), body in sorted(rendering_jobs().items()):
+        records = [step for step in body.split("- name:")
+                   if "ffmpeg -version" in step and "GITHUB_STEP_SUMMARY" in step]
+        assert records, (
+            f"{workflow}'s {name} job installs its own ffmpeg, takes the "
+            "readings MAX_CHANGED_FRACTION is chosen from, and never writes "
+            "down which ffmpeg produced them. A run that fails every frame then "
+            "cannot be told from a redesign (#792).")
+
+
 # ── the limit is held to the readings it was chosen from ─────────────────────
 
 from test_golden_frames import (  # noqa: E402

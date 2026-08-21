@@ -34,6 +34,7 @@ that flag is the one way a broken frame becomes the expectation.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -43,6 +44,7 @@ from PIL import Image, ImageChops, ImageStat
 import golden_drift
 
 from conftest import needs_ffmpeg, needs_mac_fonts as requires_mac_fonts
+from postroll.media.ffmpeg_check import ffmpeg_versions
 from postroll.media import design_tokens as tokens
 from postroll.media import frame_legibility as legibility
 from postroll.media import generate_before_after as ba_mod
@@ -105,6 +107,39 @@ CHANNEL_TOLERANCE = 6
 #: On this Mac the reading is 0 for all ten, which is why the limit could not be
 #: chosen here (L177).
 UNCHANGED_ON_CI = 26 / (1080 * 1920)
+
+#: The ffmpeg that produced the reading above (#792).
+#:
+#: The share exists only because of the runner's ffmpeg, so the number the limit
+#: was derived from can move without a commit here: both jobs that take the
+#: reading pin the runner image, deliberately, since the frames were recorded
+#: against its fonts, and neither pins ffmpeg. `brew install ffmpeg` takes
+#: whatever Homebrew has that day.
+#:
+#: Read off the `Install ffmpeg` step of `macOS / reference-frames (goldens)`,
+#: run 32526414536 on 2026-08-21, the same run the 26 above came from:
+#: `Pouring ffmpeg--8.1.2_1.arm64_sequoia.bottle.tar.gz`. Dan's Mac was on 8.1
+#: for the recording, so the 26 pixels are already the difference between two
+#: builds of the same major version, which is what the tolerance is for.
+#:
+#: At the old limit of 0.005 there was 385x of headroom and none of this
+#: mattered. At 0.0002 there is 16x, which is deliberate and correct against
+#: this reading, and it means an ffmpeg that renders a few hundred pixels
+#: differently fails every reference frame at once. The check below turns that
+#: into one failure naming ffmpeg rather than ten reading as a design
+#: regression on ten templates.
+MEASURED_AGAINST_FFMPEG = "8.1.2_1"
+
+
+def ffmpeg_major(version: str) -> int | None:
+    """The major version of an ffmpeg version string, or None if it has none.
+
+    None rather than a guess: `8.1.2_1`, `6.1.1-3ubuntu5` and `n7.0` are all
+    real spellings this repo has seen, and a parser that fell back to a number
+    on an unfamiliar one would compare two things it had made up (L11).
+    """
+    match = re.match(r"n?(\d+)\.", version.strip())
+    return int(match.group(1)) if match else None
 
 #: The smallest change the reference frames actually have to CATCH (#787).
 #:
@@ -190,6 +225,50 @@ def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> Non
             f"  rendered: {rendered_path}\n"
             f"  reference: {golden_path}\n"
             f"  changed pixels: {tmp_path / f'{name}-changed.png'}")
+
+
+# ── the tool the reading was taken against ───────────────────────────────────
+
+@needs_ffmpeg
+@requires_mac_fonts
+def test_the_frames_are_compared_by_the_ffmpeg_the_limit_was_measured_against():
+    """One failure naming ffmpeg, rather than ten reading as a redesign (#792).
+
+    `MAX_CHANGED_FRACTION` is chosen from a reading taken on a runner whose
+    ffmpeg nothing pins. A Homebrew update that renders a few hundred pixels
+    differently would fail every reference frame at once, and the first symptom
+    is ten templates reporting a design regression that did not happen.
+
+    Judged on the MAJOR version alone, which is what the evidence supports.
+    The 26 pixels are already the gap between 8.1 on Dan's Mac and 8.1.2_1 on
+    the runner, so a patch release is inside what the tolerance was measured
+    across; a major release is not, and nothing here has ever measured one.
+
+    Gated the same way the comparisons are, so it runs exactly where they run
+    and skips where they skip. The Linux leg carries ffmpeg 6 and renders none
+    of these frames; failing there would be a false alarm about a tool that
+    compares nothing (L144).
+    """
+    running = ffmpeg_versions().get("ffmpeg")
+
+    assert running, (
+        "ffmpeg is on PATH for the frames to render and would not say what "
+        "version it is, so nothing can say whether the limit's reading applies "
+        "to this run")
+    here, measured = ffmpeg_major(running), ffmpeg_major(MEASURED_AGAINST_FFMPEG)
+    assert measured is not None, (
+        f"MEASURED_AGAINST_FFMPEG is {MEASURED_AGAINST_FFMPEG!r}, which has no "
+        "major version in it, so this check can compare nothing")
+    assert here == measured, (
+        f"these frames are being compared by ffmpeg {running} and the reading "
+        f"MAX_CHANGED_FRACTION was chosen from was taken against "
+        f"{MEASURED_AGAINST_FFMPEG}. A major version apart is outside anything "
+        "measured here, and at 16x of headroom the limit is tight enough that "
+        "a different encoder fails all ten frames at once, which reads as a "
+        "design regression rather than as a new toolchain.\n"
+        "  This run publishes its own drift readings; take the new numbers from "
+        "them, re-choose MAX_CHANGED_FRACTION from UNCHANGED_ON_CI and "
+        "SMALLEST_REAL_MOVE, and record the version here.")
 
 
 # ── what the frame must actually show ─────────────────────────────────────────

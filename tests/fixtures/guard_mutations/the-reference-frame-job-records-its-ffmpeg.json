@@ -1,0 +1,8 @@
+{
+  "name": "the-reference-frame-job-records-its-ffmpeg",
+  "file": ".github/workflows/swift.yml",
+  "find": "            echo \"### ffmpeg on ${{ runner.os }} (${{ runner.arch }}), shard ${{ matrix.shard.name }}\"\n            echo '```'\n            ffmpeg -version | head -n 1",
+  "replace": "            echo \"### shard ${{ matrix.shard.name }}\"\n            echo '```'\n            true",
+  "test": "tests/test_golden_drift_is_reported.py::test_every_rendering_job_records_the_ffmpeg_it_ran_against",
+  "breaks": "the job where MAX_CHANGED_FRACTION's reading was taken stops writing down which ffmpeg produced it, so a run that fails every reference frame cannot be told from a deliberate redesign (#792, #552)"
+}
