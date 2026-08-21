@@ -100,9 +100,27 @@ CHANNEL_TOLERANCE = 6
 #: So the runner's own ffmpeg, which is the entire reason a share is allowed at
 #: all rather than demanding an exact match, costs 26 pixels on one template and
 #: nothing on the other nine. Reproducible to the pixel across two runs, so it is
-#: a stable property of that template's encode rather than randomness; why it is
-#: that template and not the others is not established and does not need to be
-#: for this to be the floor.
+#: a stable property of that template's encode rather than randomness.
+#:
+#: WHERE those 26 pixels are, measured once the readings carried a region (#793,
+#: and again on two independent jobs, `Tests / macos` and `macOS /
+#: reference-frames (goldens)`, agreeing to the pixel AND to the box):
+#:
+#:     clip_reel: 26 of 2073600 px, 0.0013%, region 363x17 at (308,320), 0.4% of it
+#:
+#: They are not dust over the frame and they are not a moved element, which
+#: would fill its box. They sit in a band 363 wide and 17 tall, 0.4% filled, and
+#: that band is exactly the top of the title card's script lettering: measured
+#: on the committed frame, the lettering's ink begins at y=322 and runs to
+#: y=396, so the drift is the leading edge of its tallest strokes, thin
+#: near-white antialiasing against the mid-brown band behind them.
+#:
+#: What that does NOT establish is why this template's title and not another's.
+#: The guess in #793 was the title card, and the box says the guess was right
+#: about WHICH element; the reason the same lettering is stable elsewhere is
+#: still unread. What it does settle is the shape of the risk: this is one text
+#: element's antialiasing, so it does not grow with the canvas or spread to the
+#: other nine, and the headroom below is against a localised effect.
 #:
 #: On this Mac the reading is 0 for all ten, which is why the limit could not be
 #: chosen here (L177).
