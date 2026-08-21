@@ -25,12 +25,20 @@ on the failing ones. A reading taken only when a check fails cannot tell you
 where the passing ones sit, which is the whole distribution the threshold has to
 be chosen from (L172).
 
-It writes to `GITHUB_STEP_SUMMARY` when there is one, which is how `tests.yml`
-already records the ffmpeg version each leg ran against, so the numbers land on
-the run's own summary page rather than in a log nobody opens. One line per
-reading, appended, because the reference frames are spread over three matrix
-shards and several xdist workers and there is no moment when one process holds
-them all.
+Collecting is OPT IN, through one variable a job sets deliberately. It is not a
+fallback to `GITHUB_STEP_SUMMARY`, which was the first shape and is a trap: that
+variable is set on every GitHub runner, including the guard-proof job, which runs
+pytest against a tree it has deliberately broken. Readings taken there are
+readings of a template that is meant to be wrong, and they would be written to
+that job's summary with nothing saying so. A measurement that can be taken by
+accident is one that ends up in a distribution nobody chose (L191).
+
+One line per reading, appended, because the reference frames are spread over
+three matrix shards and several xdist workers and there is no moment when one
+process holds them all. Where the collected file then goes is the workflow's
+decision, and both jobs that collect publish it twice: to the run's summary for a
+person, and to the log, because a step summary is not fetchable and a reading
+only a person can open cannot answer a later question.
 """
 
 from __future__ import annotations
@@ -42,27 +50,19 @@ from pathlib import Path
 #: for this read them back without a GitHub runner.
 LOG_VARIABLE = "POSTROLL_GOLDEN_DRIFT_LOG"
 
-#: The heading each reading is written under, so a person opening the summary
-#: knows what the numbers are and does not have to find the code.
-HEADING = (
-    "reference-frame drift: pixels differing from the committed frame by more "
-    "than the per-channel tolerance, as a share of the canvas (#787)")
-
-
 def destination(environment: dict[str, str] | None = None) -> Path | None:
-    """Where readings go, or None when nothing is collecting them.
+    """Where readings go, or None when nothing asked for them.
 
-    None is an ordinary answer rather than a failure: an interactive local run
-    has nowhere to put them and does not need one. It is deliberately not a
-    fallback to some default path, because a file quietly written into the
-    checkout is a file nobody reads and nobody clears.
+    One variable, set deliberately. None is an ordinary answer rather than a
+    failure: an interactive local run has nowhere to put them and does not need
+    one. Deliberately not a fallback to `GITHUB_STEP_SUMMARY` or to a default
+    path in the checkout, for the reason the module docstring gives: a place
+    that is always available is a place readings get written by accident,
+    including from the job that runs pytest against a deliberately broken tree.
     """
     environment = os.environ if environment is None else environment
-    for name in (LOG_VARIABLE, "GITHUB_STEP_SUMMARY"):
-        value = environment.get(name, "").strip()
-        if value:
-            return Path(value)
-    return None
+    value = environment.get(LOG_VARIABLE, "").strip()
+    return Path(value) if value else None
 
 
 def line(name: str, changed: int, total: int) -> str:
