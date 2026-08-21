@@ -340,8 +340,8 @@ def test_the_install_gate_runs_the_fast_subset_and_ci_still_runs_everything():
         if not line.strip().startswith("#")
     )
     assert "not slow" not in ci, (
-        "CI is deselecting the slow files as well, so the four files that render "
-        "real reels now run nowhere: the install gate was relaxed on the promise "
+        "CI is deselecting the slow files as well, so the files the fast local "
+        "run skips now run nowhere: the install gate was relaxed on the promise "
         "that every merge still runs them")
 
 

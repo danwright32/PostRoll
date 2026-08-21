@@ -86,16 +86,19 @@ else
 
     # The FAST subset, not the whole suite (#432, approved 2026-08-13).
     #
-    # The four files that render real reels are most of the suite's runtime and
-    # this gate is paid on every install, several times an evening. They still run
-    # on every pull request and on every push to main, so a regression they catch
-    # still blocks the merge; what this gives up is that an install can briefly
-    # precede those checks. That is a deliberate relaxation of the full-suite gate
-    # chosen in #98, not an oversight.
+    # The files marked slow are most of the suite's runtime and this gate is paid
+    # on every install, several times an evening. They still run on every pull
+    # request and on every push to main, so a regression they catch still blocks
+    # the merge; what this gives up is that an install can briefly precede those
+    # checks. That is a deliberate relaxation of the full-suite gate chosen in
+    # #98, not an oversight.
     #
-    # Honest figure: this saves about two minutes per install, not the eight the
-    # issue was written with. #497 made the full suite one parallel pass, which
-    # took it from 9m53s to about 3m30s before this change was made.
+    # Honest figure, and it has moved twice. #497 made the full suite one parallel
+    # pass, 9m53s to about 3m30s, before this change was made. #766 and #783 then
+    # measured which files are actually expensive rather than assuming the
+    # reference-frames matrix named them, and made this target parallel too, which
+    # it had never been. Measured on this Mac on 2026-08-21: the full run 115s,
+    # this subset 34.7s. So it saves about eighty seconds per install.
     #
     # Through the Makefile target rather than a second copy of the pytest command
     # (#430). This script used to spell the invocation itself, so the day the run

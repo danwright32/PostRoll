@@ -1,9 +1,9 @@
 """The reference-frame checks stay safe to run in parallel (#412).
 
-Those four files are the whole of the macOS job's slow half, all of it rendering
-real reels through ffmpeg, so the job runs them with `-n auto` and, since #507,
-splits them across a matrix of runners as well: `-n auto` can only use the three
-cores one runner has, and the four files are about seventeen minutes of CPU.
+The macOS job's files are the whole of its slow half, most of it rendering real
+reels through ffmpeg, so the job runs them with `-n auto` and, since #507, splits
+them across a matrix of runners as well: `-n auto` can only use the three cores
+one runner has, and these files are most of the suite's measured cost.
 
 That is only safe while each test keeps its outputs to itself. Every one of them
 currently writes into pytest's `tmp_path`, which is unique per test, and reads
