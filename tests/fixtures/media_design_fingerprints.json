@@ -9,7 +9,7 @@
   },
   "cover": {
     "fingerprint": "b2d97364d54d4842e1bb6f8860f971e82ec6734f1d904bf754cc46aad1237d98",
-    "version": 2
+    "version": 1
   },
   "reel_clip": {
     "fingerprint": "166a1bdf0192c4308f627424fdc8f9e8d5aebe04756497a239137fa491e552a0",
@@ -37,6 +37,6 @@
   },
   "story": {
     "fingerprint": "b2d97364d54d4842e1bb6f8860f971e82ec6734f1d904bf754cc46aad1237d98",
-    "version": 2
+    "version": 1
   }
 }

@@ -69,17 +69,23 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # collage's number, and two copies maintained by hand drift the moment one
     # is bumped.
     "collage": COLLAGE_DESIGN_VERSION,
-    # 2 is the top clamp #756 put under the title. It hung off the top edge of
-    # the print with no floor, so an upright photograph put it inside the band
-    # the phone covers. #752 left this deliberately and said the number would
-    # move with the fix rather than badging every story for a change nobody had
-    # made; this is that move. A landscape story renders pixel for pixel as it
-    # did, which is every story shot so far, but the geometry is not the same
-    # geometry and an asset cannot say which one drew it without this.
-    "story": 2,
+    # NOT bumped by #756, on Dan's call (2026-08-20), and the reason is worth
+    # keeping because it is the same reason #752 gave for deferring the fix.
+    #
+    # #756 put a floor under the title, which had none: an upright photograph
+    # pushed it into the band the phone covers. The floor only ever moves
+    # anything for an upright photograph. Every story Dan shoots is landscape,
+    # and tests/test_story_title_clamp.py holds that case to the pixel, so
+    # bumping the number would badge a whole library stale and offer to
+    # re-render every one of them for a change none of them would show.
+    #
+    # This is the second of the two answers the fingerprint guard asks for: the
+    # code changed, the rendering did not, so the fingerprint is re-recorded on
+    # its own and the reason is said out loud rather than left implicit.
+    "story": 1,
     # Rendered through generate_story's exact template, so it moves with the
     # story rather than carrying a number of its own.
-    "cover": 2,
+    "cover": 1,
     "before_after": 1,
     "reel_screen": 1,
     "reel_morph": 2,
