@@ -122,8 +122,26 @@ Optional overrides, none of which need setting for normal use:
 
 ```
 make test          # Swift model and service suites
-make test-python   # the Python pipeline suites
+make test-python   # the Python pipeline suites, all of them
 ```
+
+Between edits, when even two minutes is too long to wait on a one line change:
+
+```
+make test-python-fast
+```
+
+That deselects the handful of test files measured above the floor in
+`tests/file_durations.py`, which is three of them today. It is a loop, not a
+gate: `make test-python` and CI still run everything. Which files it skips comes
+from a measurement rather than a guess (#766), so a new file heavy enough to
+belong to the full run only is added to it by re-measuring:
+
+```
+make record-test-durations
+```
+
+A file's cost does not drift on its own, so nothing else needs that command.
 
 The Python suite runs in `.github/workflows/tests.yml` and the Swift half in
 `.github/workflows/swift.yml`, and BOTH run on every pull request as well as
@@ -138,16 +156,36 @@ a headless runner cannot reliably drive a window, and a test nothing runs is
 indistinguishable from no test, so it was removed rather than left to rot
 (#524).
 
-## Re-recording a design fingerprint
-
-```
-make record-fingerprints
-```
+## Recording a design change
 
 `tests/test_media_design_fingerprint.py` fails whenever a media template's
 source moves, and asks which of two things happened: the template renders
 differently now, so `MEDIA_DESIGN_VERSIONS` has to be bumped, or it renders
-identically and only the record needs updating.
+identically and only the record needs updating. There is a command for each
+answer, and picking the wrong one is the mistake this section exists to stop.
+
+**The rendering changed, on purpose.** This is the door for a deliberate
+redesign:
+
+```
+make record-design-change
+```
+
+The steps only work in one order, and each refusal for getting it wrong costs a
+re-run of a suite that takes minutes: on 2026-08-20 the sequence was done five
+times and the order was wrong twice (#786). This checks the version bump has
+been made, regenerates the shared design stamp from its writer, re-records the
+reference frames, and then STOPS and hands back the frames that moved. Looking
+at them is the step nothing downstream can do for you, because the re-record is
+the single way a broken frame becomes the expectation. Commit them, then run
+`make record-fingerprints`, which refuses to vouch for a frame with uncommitted
+changes and is what makes the order matter.
+
+**The source moved and the rendering did not.** A rename, a refactor, a comment:
+
+```
+make record-fingerprints
+```
 
 Answer it with the command above rather than by editing
 `tests/fixtures/media_design_fingerprints.json`. It runs the reference frames
@@ -157,8 +195,34 @@ reference frame with uncommitted changes, or a check that skipped, failed or
 reported nothing. A hand written re-record cannot tell the two cases apart, and
 telling them apart is the entire job of the guard (#660).
 
-It renders real reels, so it takes minutes rather than seconds, and it needs
+Both render real reels, so they take minutes rather than seconds, and both need
 ffmpeg and the macOS system fonts.
+
+## The other commands
+
+```
+make build           # compile the app without installing it
+make install-force   # install WITHOUT running the test suites first
+make review-sheet    # render every screen the checks measure into one folder
+make check-guards    # prove the registered guard tests still go red
+make clean           # empty the build cache
+```
+
+`make review-sheet` keeps the previous run as a baseline and reports which
+screens moved, which is how a visual change reviews itself instead of being
+found by launching the app and navigating to each screen (#623). It says only
+that a screen CHANGED: whether a screen is correct stays the business of the ink
+and footprint checks.
+
+`make check-guards` breaks the code each registered guard is meant to catch and
+fails on any guard that stays green (#416). It is not part of `make test`: it
+mutates the working tree and recompiles per entry, so it costs about 12 to 22
+seconds each. Run it when a guard is added or changed; for just the entries your
+diff touches, `venv/bin/python tools/check_guards.py --changed`.
+
+`make install-force` skips the gate that `make install` runs. It exists for
+getting a build onto the machine while something unrelated is red, and using it
+means the installed app was never tested.
 
 ## Waiting for a pull request's checks
 

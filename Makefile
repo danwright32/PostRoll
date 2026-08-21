@@ -19,7 +19,9 @@ LOCKED = /usr/bin/env python3 tools/with_build_lock.py
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
-.PHONY: install install-force build test test-python test-python-fast check-guards check-toolchain record-fingerprints review-sheet clean
+.PHONY: install install-force build test test-python test-python-fast \
+	check-guards check-toolchain record-fingerprints record-test-durations \
+	record-design-change review-sheet clean
 
 # One build-and-install implementation, not two. This used to run its own
 # xcodebuild and cp, skipping the xattr clear, the stable-identity signing and
