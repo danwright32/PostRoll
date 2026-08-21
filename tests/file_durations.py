@@ -69,7 +69,7 @@ EXPENSIVE_SHARE = 0.08
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:
 #: 0.6 to 1.6 of the floor, so no file may sit between 4.8% and 12.8% of the run.
-#: The real margins today are 3.5% below and 17.3% above.
+#: The real margins on the record as it stands are 3.0% below and 17.5% above.
 GAP_BELOW, GAP_ABOVE = 0.6, 1.6
 
 
@@ -113,6 +113,64 @@ def shares() -> dict[str, float]:
 def expensive() -> set[str]:
     """Files the fast local run is allowed to skip."""
     return {name for name, share in shares().items() if share >= EXPENSIVE_SHARE}
+
+
+def unmeasured() -> set[str]:
+    """Test files on disk that the record has never seen.
+
+    The other direction of the comparison `files_on_disk()` was already used
+    for. A record naming a file that has gone is caught by
+    `test_fast_subset_stays_honest.py`; a file the record has never seen was
+    simply absent, and absent is read as cheap by everything downstream.
+
+    That is the safe direction for the fast run, which pays for a file it might
+    have skipped. It is not safe for the reasoning: `EXPENSIVE_SHARE` and the
+    gap it sits in are computed over the RECORDED files alone, so a record
+    covering half the suite reports a healthy gap while describing a suite that
+    no longer exists, and reads green for the same reason it always did.
+    """
+    return files_on_disk() - set(recorded())
+
+
+def worst_case_unmeasured_share() -> float:
+    """How much of the run the unmeasured files could account for.
+
+    Their real cost is exactly what nobody has measured, so this stands each of
+    them at the largest ORDINARY file in the record: the biggest a file can be
+    while the fast run still pays for it. That is a plausible worst case rather
+    than a true bound, since a new file can be heavier than any existing one,
+    and it is stated here rather than hidden so the number can be argued with.
+
+    Derived from the record instead of typed in, so it follows the suite. On the
+    record as it stands the largest ordinary file is 3.0% and the smallest
+    expensive one 17.5%, so five unmeasured files could between them be as much
+    of the run as the smallest file the fast run skips. Those are printed by the
+    check that reads this, so the failure carries the live numbers rather than
+    these (L210).
+    """
+    ordinary = [s for s in shares().values() if s < EXPENSIVE_SHARE]
+    if not ordinary:
+        raise AssertionError(
+            "every recorded file is at or above the floor, so there is no "
+            "ordinary file to size an unmeasured one against. The record or "
+            f"{EXPENSIVE_SHARE:.0%} is wrong.")
+    return len(unmeasured()) * max(ordinary)
+
+
+def smallest_expensive_share() -> float:
+    """The share of the cheapest file the fast run is allowed to skip.
+
+    The scale the worst case above is judged against: unmeasured files that
+    could add up to this are enough to change the picture the floor was chosen
+    from.
+    """
+    over = [s for s in shares().values() if s >= EXPENSIVE_SHARE]
+    if not over:
+        raise AssertionError(
+            f"no recorded file reaches {EXPENSIVE_SHARE:.0%} of the run, so "
+            "there is nothing for the fast run to skip and nothing here to "
+            "measure an unmeasured file against.")
+    return min(over)
 
 
 def files_on_disk() -> set[str]:
