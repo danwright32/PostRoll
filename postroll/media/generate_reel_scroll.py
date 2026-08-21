@@ -306,8 +306,17 @@ def build_collage_strip(
 
 
 def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
-                        venue: str, logo: Image.Image | None) -> Image.Image:
-    """Draw cream header and footer."""
+                        venue: str) -> Image.Image:
+    """Draw the cream title band and the footer mask.
+
+    No wordmark, and no parameter to pass one (#774). It used to take a logo
+    and paste it into the footer at `CANVAS_H - FOOTER_H`, which is inside the
+    band Instagram lays its account row and caption over (#753). Nothing ever
+    passed one, so it never shipped, but a dead parameter whose only effect is
+    to put the signature where nobody can read it is a trap rather than an
+    option. The reel's colophon is baked into the scrolling strip instead, well
+    clear of that band.
+    """
     frame_rgba = frame.convert("RGBA")
 
     band = Image.new("RGBA", (CANVAS_W, TITLE_BAND_H), (*CREAM, 255))
@@ -343,11 +352,6 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
     footer_y = CANVAS_H - FOOTER_H
     footer = Image.new("RGBA", (CANVAS_W, FOOTER_H), (*CREAM, 255))
     frame_rgba.paste(footer, (0, footer_y), footer)
-
-    if logo:
-        lx = (CANVAS_W - logo.width) // 2
-        ly = footer_y + (FOOTER_H - logo.height) // 2
-        frame_rgba.paste(logo, (lx, ly), logo)
 
     return frame_rgba.convert("RGB")
 
@@ -540,11 +544,11 @@ def generate_reel_scroll(
                 eased = ease_in_out(t)
                 scroll_y = int(eased * max_scroll)
                 frame = strip.crop((0, scroll_y, CANVAS_W, scroll_y + CANVAS_H))
-                frame = draw_branded_chrome(frame, event_name, org, venue, None)
+                frame = draw_branded_chrome(frame, event_name, org, venue)
 
             elif i < scroll_frames + hold_frames:
                 frame = strip.crop((0, max_scroll, CANVAS_W, max_scroll + CANVAS_H))
-                frame = draw_branded_chrome(frame, event_name, org, venue, None)
+                frame = draw_branded_chrome(frame, event_name, org, venue)
 
             else:
                 if closing_frame:
@@ -552,13 +556,13 @@ def generate_reel_scroll(
                     if closing_i < FPS:
                         blend = closing_i / FPS
                         last = strip.crop((0, max_scroll, CANVAS_W, max_scroll + CANVAS_H))
-                        last = draw_branded_chrome(last, event_name, org, venue, None)
+                        last = draw_branded_chrome(last, event_name, org, venue)
                         frame = Image.blend(last, closing_frame, blend)
                     else:
                         frame = closing_frame
                 else:
                     frame = strip.crop((0, max_scroll, CANVAS_W, max_scroll + CANVAS_H))
-                    frame = draw_branded_chrome(frame, event_name, org, venue, None)
+                    frame = draw_branded_chrome(frame, event_name, org, venue)
 
             frame.save(str(tmpdir / f"frame_{i:05d}.png"), "PNG")
 

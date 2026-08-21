@@ -178,7 +178,7 @@ def _reel_scroll_chrome(tmp_path: Path, named: bool) -> Image.Image:
     says where it IS measured rather than leaving the gap unnamed."""
     frame = Image.new("RGB", CANVAS, (128, 128, 128))
     return draw_branded_chrome(frame, EVENT if named else "",
-                               ORG if named else "", VENUE if named else "", None)
+                               ORG if named else "", VENUE if named else "")
 
 
 def _reel_screen_chrome(tmp_path: Path, named: bool) -> Image.Image:
@@ -470,27 +470,30 @@ def test_every_bottom_exemption_names_a_template_that_can_be_rendered():
 def test_the_scroll_reels_colophon_is_measured_elsewhere():
     """Named rather than silently uncovered (L129).
 
-    `_reel_scroll_chrome` draws the reel's FIXED chrome, and that chrome carries
-    no wordmark: every call site in the render passes None. The reel's colophon
-    is baked into the scrolling strip under the last print, so it rides with the
-    strip and is not a fixed band at all. This check cannot see it.
+    `_reel_scroll_chrome` draws the reel's FIXED chrome, which carries no
+    wordmark and since #774 has no way to be given one. The reel's colophon is
+    baked into the scrolling strip under the last print, so it rides with the
+    strip and is not a fixed band at all. This file cannot see it.
 
     Measured by hand on 2026-08-20 on a 20 photo strip: at the end of the scroll
     its lowest ink is at y=1714 against a band starting at 1760, so it clears by
-    46px. That is a reading on one photo count, and the strip's height moves with
-    the number of photos, which is why it is written down here as a gap rather
-    than left to look like coverage.
+    46px. That is a reading on one photo count, and the strip's height moves
+    with the number of photos, which is why it is written down here as a gap
+    rather than left to look like coverage.
+
+    What used to stand here was a check that the render passed no logo to the
+    chrome. That was a proxy for the parameter existing, and the parameter is
+    gone: the chrome cannot draw a wordmark now, so there is nothing to pin.
     """
-    from postroll.media import generate_reel_scroll as scroll
     import inspect
 
-    source = inspect.getsource(scroll.generate_reel_scroll)
+    from postroll.media import generate_reel_scroll as scroll
 
-    assert "draw_branded_chrome(frame, event_name, org, venue, None)" in source, (
-        "the scroll reel now passes a logo to its fixed chrome, so its footer "
-        "carries a wordmark inside the band Instagram covers, and this file's "
-        "renderer measures the chrome without one. Either take the logo back "
-        "out or render this template with it here.")
+    signature = inspect.signature(scroll.draw_branded_chrome)
+
+    assert "logo" not in signature.parameters, (
+        "the scroll reel's fixed chrome can be given a wordmark again, and it "
+        "draws it into the band Instagram covers with its caption (#753, #774)")
 
 
 @needs_mac_fonts
