@@ -128,6 +128,26 @@ def _reel_screen_chrome(tmp_path: Path, named: bool) -> Image.Image:
                                 VENUE if named else "", None)
 
 
+#: Every template that fills a phone screen, and how to render one.
+#:
+#: Exempt templates are in here too, with a renderer, rather than named in a
+#: list of their own with nothing able to draw them. An exemption whose
+#: template cannot be rendered is an exemption nothing can ever re-measure, and
+#: re-measuring it is the whole of `test_every_exemption_is_still_needed`
+#: below (#760).
+#:
+#: The reels are their chrome function rather than a rendered video: the
+#: header is drawn by a pure function, and encoding a file to read one band of
+#: one frame would put a check that runs in a second behind ffmpeg.
+RENDERERS = {
+    "collage": _collage,
+    "before_after": _before_after,
+    "reel_scroll": _reel_scroll_chrome,
+    "reel_screen": _reel_screen_chrome,
+    "story": _story,
+}
+
+
 #: The story, exempted by name and by issue (#756).
 #:
 #: Its title hangs off the top of the photograph with no floor under it, so an
@@ -140,23 +160,15 @@ def _reel_screen_chrome(tmp_path: Path, named: bool) -> Image.Image:
 #: accounted_for` below holds the two lists together.
 EXEMPT = {"story": "#756, deferred: only upright photographs reach it"}
 
-
-#: Every template that fills a phone screen, and how to render one.
-#:
-#: The reels are their chrome function rather than a rendered video: the
-#: header is drawn by a pure function, and encoding a file to read one band of
-#: one frame would put a check that runs in a second behind ffmpeg.
-TEMPLATES = {
-    "collage": _collage,
-    "before_after": _before_after,
-    "reel_scroll": _reel_scroll_chrome,
-    "reel_screen": _reel_screen_chrome,
-}
+#: What the measurement actually holds to the token, derived rather than
+#: written out beside RENDERERS: a second hand-kept list is a second place for
+#: a template to go missing from (L41).
+MEASURED = sorted(set(RENDERERS) - set(EXEMPT))
 
 
-@pytest.mark.parametrize("name", sorted(TEMPLATES))
+@pytest.mark.parametrize("name", MEASURED)
 def test_no_template_draws_text_under_the_phone_chrome(name, tmp_path):
-    render = TEMPLATES[name]
+    render = RENDERERS[name]
     marked = _text_pixels_in_band(render(tmp_path, True), render(tmp_path, False),
                                   SAFE_TOP)
 
@@ -166,6 +178,52 @@ def test_no_template_draws_text_under_the_phone_chrome(name, tmp_path):
         "or reel. Whatever is there is printed under the clock and the battery "
         "and nobody can read it (#752). Move it below "
         "design_tokens.SAFE_TOP rather than nudging a number.")
+
+
+def test_every_exemption_is_still_needed(tmp_path):
+    """An exemption dies with the defect it was written about (#760).
+
+    `EXEMPT` says a template is allowed to draw in the covered band, and gives
+    the issue that will one day stop that being true. Nothing noticed when an
+    exemption stopped being NEEDED: #756 lands, the story clears the band, and
+    the exemption sits on unmeasured, which is exactly the hole naming it here
+    rather than leaving it out was written to make visible (L129).
+
+    So each exemption is held to its own reason: the template it names must
+    still FAIL the measurement it is excused from. Fixing the template turns
+    this red, naming itself and asking to be deleted.
+    """
+    if not EXEMPT:
+        # Skipped rather than passed, because a check with nothing to check
+        # reports exactly what a check that found nothing wrong reports (L98).
+        pytest.skip("no template is exempt, so no exemption can have outlived "
+                    "its reason")
+
+    outlived = []
+    for name in sorted(EXEMPT):
+        render = RENDERERS[name]
+        marked = _text_pixels_in_band(render(tmp_path, True),
+                                      render(tmp_path, False), SAFE_TOP)
+        if marked == 0:
+            outlived.append(name)
+
+    assert not outlived, (
+        f"these templates are exempt from the top-band check and no longer "
+        f"need to be: {outlived}. Whatever put text under the phone's chrome "
+        "is gone, so the exemption now excuses nothing and hides the template "
+        "from the check. Delete its entry from EXEMPT (and close the issue it "
+        f"names: {[EXEMPT[name] for name in outlived]}).")
+
+
+def test_an_exemption_names_a_template_that_can_be_rendered():
+    """An exemption for a template nothing can draw is one nothing can ever
+    re-measure, so the test above would report it as still needed forever."""
+    unrenderable = sorted(set(EXEMPT) - set(RENDERERS))
+
+    assert not unrenderable, (
+        f"these templates are exempt but have no renderer in RENDERERS: "
+        f"{unrenderable}, so nothing can ever check whether the exemption is "
+        "still needed. Add a renderer beside the others.")
 
 
 def test_every_full_frame_template_is_accounted_for():
@@ -182,12 +240,12 @@ def test_every_full_frame_template_is_accounted_for():
     # text_regions.py and measured by the reel legibility suites instead.
     ELSEWHERE = {"reel_morph", "reel_slider", "reel_clip", "reel_preview", "cover"}
 
-    covered = set(TEMPLATES) | set(EXEMPT) | ELSEWHERE
+    covered = set(RENDERERS) | set(EXEMPT) | ELSEWHERE
     missing = sorted(set(MEDIA_DESIGN_VERSIONS) - covered)
 
     assert not missing, (
         f"these templates render a full phone screen and nothing here measures "
-        f"or exempts them: {missing}. Add a renderer to TEMPLATES, or name the "
+        f"or exempts them: {missing}. Add a renderer to RENDERERS, or name the "
         "reason and the issue in EXEMPT.")
 
 
