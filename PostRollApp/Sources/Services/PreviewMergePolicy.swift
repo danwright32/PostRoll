@@ -49,6 +49,38 @@ enum PreviewMergePolicy {
         return merged
     }
 
+    /// Which days a graphics pass may speak for (#763).
+    ///
+    /// A pass that said NOTHING AT ALL owns no days, whatever it was asked to
+    /// render. `runPreviewGeneration` answers with a wholly empty result when
+    /// Python wrote no output file, or wrote something that would not parse,
+    /// and on a full run `renderedDays` is nil, which means "this run owns
+    /// every day". Folding that silence in as the run's answer erased every
+    /// stored error and warning the event had: a read that comes back empty
+    /// when it FAILS destroys the whole record, at the moment the record is
+    /// worth having (L105).
+    ///
+    /// This is #740 one entry point over. That fixed the run started from the
+    /// caption screen, through `PreviewGraphicsManager.applyFullRunResult`, and
+    /// the generation run's own pass kept the hole.
+    ///
+    /// About SILENCE, not about having no errors. A run that rendered the week
+    /// and found nothing wrong carries paths, so it still owns its days and
+    /// still takes away the failures the run before recorded, or a day that has
+    /// been fixed reports as broken forever (L14). A warning alone counts as
+    /// having spoken for the same reason.
+    ///
+    /// One decision rather than a guard written separately at each of the four
+    /// folds it has to cover: two `mergeMediaErrors` calls and a
+    /// `recordDayOutcomes` call in each of the two completion paths.
+    static func daysOwned(renderedDays: Set<String>?,
+                          paths: [String: [String: String]]?,
+                          errors: [String: String],
+                          warnings: [String: String]) -> Set<String>? {
+        let saidNothing = (paths?.isEmpty ?? true) && errors.isEmpty && warnings.isEmpty
+        return saidNothing ? [] : renderedDays
+    }
+
     /// How to retry a set of failed keys. A graphics failure needs its day's media
     /// re-rendered, which the default partial retry skips, so the retry button
     /// would otherwise appear to do nothing. `days` nil means run the whole thing:
