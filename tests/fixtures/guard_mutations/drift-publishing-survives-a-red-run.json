@@ -1,0 +1,8 @@
+{
+  "name": "drift-publishing-survives-a-red-run",
+  "file": ".github/workflows/swift.yml",
+  "find": "if: always() && contains(matrix.shard.files, 'tests/test_golden_frames.py')",
+  "replace": "if: contains(matrix.shard.files, 'tests/test_golden_frames.py')",
+  "test": "tests/test_golden_drift_is_reported.py::test_the_publish_step_still_runs_on_a_failed_run",
+  "breaks": "the drift readings are published only on a green run, so they are dropped on exactly the runs whose numbers would explain the failure (#787)"
+}
