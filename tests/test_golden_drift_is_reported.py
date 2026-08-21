@@ -501,6 +501,27 @@ from test_golden_frames import (  # noqa: E402
 GAP = 4.0
 
 
+def test_the_version_parser_reads_the_spellings_this_repo_has_actually_seen():
+    """The comparison is only as good as what it can read (#792).
+
+    Every string here has been on a runner or a machine in this repo: `8.1` on
+    Dan's Mac, `8.1.2_1` from the Homebrew bottle the reading came from,
+    `6.1.1-3ubuntu5` on the Linux leg, and ffmpeg's own `n`-prefixed tags. The
+    last two are the ones that must answer None rather than a number, because a
+    parser that guessed would compare two things it made up.
+    """
+    from test_golden_frames import ffmpeg_major
+
+    assert ffmpeg_major("8.1") == 8
+    assert ffmpeg_major("8.1.2_1") == 8
+    assert ffmpeg_major("6.1.1-3ubuntu5") == 6
+    assert ffmpeg_major("n7.0") == 7
+    assert ffmpeg_major("N-12345-gabc") is None
+    assert ffmpeg_major("8") is None, (
+        "a bare major with no dot is not a spelling ffmpeg uses, and reading it "
+        "as one would accept a truncated or invented version (L108)")
+
+
 def test_the_limit_sits_between_the_noise_and_the_defect():
     """The whole of #787 in one assertion.
 

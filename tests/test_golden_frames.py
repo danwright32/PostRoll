@@ -259,6 +259,15 @@ def test_the_frames_are_compared_by_the_ffmpeg_the_limit_was_measured_against():
     assert measured is not None, (
         f"MEASURED_AGAINST_FFMPEG is {MEASURED_AGAINST_FFMPEG!r}, which has no "
         "major version in it, so this check can compare nothing")
+    # Its own message, not folded into the comparison below. An unreadable
+    # version and a version a major apart are different situations with
+    # different remedies, and reporting the first as the second would send
+    # somebody to re-measure a limit that is fine (L11).
+    assert here is not None, (
+        f"ffmpeg reports its version as {running!r}, which this does not know "
+        "how to read, so nothing can say whether the reading "
+        "MAX_CHANGED_FRACTION rests on applies to this run. Teach "
+        "`ffmpeg_major` the new spelling rather than widening the comparison.")
     assert here == measured, (
         f"these frames are being compared by ffmpeg {running} and the reading "
         f"MAX_CHANGED_FRACTION was chosen from was taken against "
