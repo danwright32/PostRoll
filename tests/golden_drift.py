@@ -13,12 +13,12 @@ pixels up the frame. The diff is 7336 pixels, 0.35% of a 1080 by 1920 canvas.
 Both reels passed their reference frames unchanged.
 
 The number cannot be fixed by picking a smaller one here. What an unchanged
-render really produces has never been measured on the runner that matters:
-re-recording all ten references on this Mac against an unchanged design rewrote
-eight of them byte for byte identically, so the local floor is zero, and the
-share was allowed in the first place for the CI runner's different ffmpeg. A
-threshold set from this Mac would be set from the machine the question is not
-about (L177).
+render really produces has never been measured on the runner that matters. On
+this Mac it is exactly nothing: with this reporting in place, all ten reference
+frames read 0 of 2073600 pixels changed, so the local floor is zero and there is
+no distribution here to choose from at all. The share was allowed in the first
+place for the CI runner's different ffmpeg, and a threshold set from this Mac
+would be set from the machine the question is not about (L177).
 
 So this is the measuring half, and it runs on every comparison rather than only
 on the failing ones. A reading taken only when a check fails cannot tell you
