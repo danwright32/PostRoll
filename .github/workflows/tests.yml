@@ -136,6 +136,7 @@ jobs:
         # full-suite parallel runs before this landed.
         run: pytest -v -n auto --durations=25
 
+
   # The same suite on a Mac, which is the platform the app that calls it runs
   # on (#510). Everything above this runs on Linux only, so anything that
   # differs between the two stays invisible until it is hit locally: path and
@@ -218,14 +219,14 @@ jobs:
             echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
-      # Head the drift readings the reference frames write onto this run's
-      # summary page (#787). Written here rather than by the checks themselves
-      # because they are appended by several xdist workers during the run and
-      # none of them is first. Without it the summary carries a list of
-      # percentages with nothing saying what they are.
-      - name: Head the reference-frame drift readings
-        run: |
-          echo "### reference-frame drift: pixels differing from the committed frame by more than the per-channel tolerance, as a share of the canvas (#787)" >> "${GITHUB_STEP_SUMMARY}"
+      # Collect the drift readings the reference frames take (#787) into one
+      # file, then publish it twice below. Into a file rather than straight
+      # into the step summary because the readings have two audiences: a
+      # person opening the run reads the summary, and anything asking the API
+      # what a run measured can only read the LOG, since a step summary is
+      # not fetchable.
+      - name: Collect reference-frame drift readings
+        run: echo "POSTROLL_GOLDEN_DRIFT_LOG=${RUNNER_TEMP}/golden-drift.txt" >> "${GITHUB_ENV}"
 
       # The SAME command as the Linux leg. A narrower one here would make this
       # job a different check wearing the same name, and the platform
@@ -234,3 +235,20 @@ jobs:
         env:
           POSTROLL_REQUIRE_FFMPEG: "1"
         run: pytest -v -n auto --durations=25
+
+      # Both audiences, and on a failed run too: a red run is when the numbers
+      # are most worth having, and a step that only ran on success would drop
+      # them exactly then. A run that collected NOTHING says so rather than
+      # publishing an empty list, which would read as a run in which nothing
+      # drifted (L98).
+      - name: Publish the reference-frame drift readings
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -s "${POSTROLL_GOLDEN_DRIFT_LOG:-/nonexistent}" ]; then
+            echo "no reference-frame drift readings were taken, so this run measured nothing"
+            exit 0
+          fi
+          echo "### reference-frame drift: pixels differing from the committed frame by more than the per-channel tolerance, as a share of the canvas (#787)" >> "${GITHUB_STEP_SUMMARY}"
+          cat "${POSTROLL_GOLDEN_DRIFT_LOG}" >> "${GITHUB_STEP_SUMMARY}"
+          cat "${POSTROLL_GOLDEN_DRIFT_LOG}"

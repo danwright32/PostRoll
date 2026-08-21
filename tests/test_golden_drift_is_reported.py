@@ -141,3 +141,74 @@ def test_a_frame_that_moved_a_little_reports_the_share_it_moved(tmp_path,
     written = log.read_text(encoding="utf-8").strip()
     assert "4 of 1200 px" in written, written
     assert CHANNEL_TOLERANCE < 255, "the tolerance would count nothing as changed"
+
+
+# ── the workflows collect and publish what the checks measure ─────────────────
+#
+# Built is not wired (L3). The reporting above is only worth having if the jobs
+# that render the reference frames actually collect it and put it somewhere a
+# person, or a query, can read.
+
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
+
+#: The jobs that render the reference frames, and therefore take readings.
+COLLECTING = {
+    "swift.yml": "reference-frames",
+    "tests.yml": "macos",
+}
+
+
+def _job(workflow: str, name: str) -> str:
+    import re
+
+    text = (WORKFLOWS / workflow).read_text(encoding="utf-8")
+    match = re.search(rf"^  {re.escape(name)}:[ \t]*$(.*?)(?=^  \S|\Z)",
+                      text, re.M | re.S)
+    assert match, (
+        f"there is no `{name}:` job in {workflow} any more, so the check below "
+        "is reading nothing at all")
+    return match.group(1)
+
+
+def test_every_rendering_job_collects_the_readings():
+    for workflow, name in sorted(COLLECTING.items()):
+        body = _job(workflow, name)
+        assert LOG_VARIABLE in body, (
+            f"{workflow}'s {name} job does not set {LOG_VARIABLE}, so its "
+            "reference-frame readings go to the step summary unheaded, or "
+            "nowhere at all")
+
+
+def test_every_rendering_job_publishes_them_even_when_it_fails():
+    """A red run is when the numbers are most worth having.
+
+    A publishing step without `if: always()` is skipped on exactly the runs
+    whose readings would explain the failure.
+    """
+    for workflow, name in sorted(COLLECTING.items()):
+        body = _job(workflow, name)
+        publish = body.split("Publish the reference-frame drift readings", 1)
+        assert len(publish) == 2, (
+            f"{workflow}'s {name} job collects readings and never publishes "
+            "them, so nothing reads the file it writes")
+        assert "if: always()" in publish[1].split("run:", 1)[0], (
+            f"{workflow}'s {name} job publishes the readings only on a green "
+            "run, which drops them exactly when they explain something")
+
+
+def test_the_readings_reach_the_log_and_not_only_the_summary():
+    """Two audiences, and only one of them is a person.
+
+    A step summary is not fetchable through the API, so a summary-only reading
+    can be looked at by hand and by nothing else. The log is what any later
+    question about what a run measured can actually read.
+    """
+    for workflow, name in sorted(COLLECTING.items()):
+        published = _job(workflow, name).split(
+            "Publish the reference-frame drift readings", 1)[1]
+        step = published.split("- name:", 1)[0]
+        assert "GITHUB_STEP_SUMMARY" in step, workflow
+        assert any(line.strip() == 'cat "${POSTROLL_GOLDEN_DRIFT_LOG}"'
+                   for line in step.splitlines()), (
+            f"{workflow}'s {name} job writes the readings to the step summary "
+            "only, so nothing but a person opening the page can ever read them")
