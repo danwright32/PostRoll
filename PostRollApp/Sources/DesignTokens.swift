@@ -75,7 +75,7 @@ enum MediaDesign {
         "reel_slider": 3,
         "reel_scroll": 2,
         "reel_preview": 2,
-        "reel_clip": 1,
+        "reel_clip": 2,
     ]
 
     /// The day each template's CURRENT design version was set (#804).
@@ -102,6 +102,7 @@ enum MediaDesign {
         "reel_slider": "2026-08-21",
         "reel_scroll": "2026-08-20",
         "reel_preview": "2026-08-20",
+        "reel_clip": "2026-08-22",
     ]
 
     /// Every template this build knows how to judge.

@@ -433,9 +433,20 @@ def test_an_asset_with_no_record_and_no_change_to_be_older_than_is_not_reported(
     # puts it before the day that template's design changed, which is evidence
     # rather than absence. A template with no recorded change still says
     # nothing, whatever the file date.
-    _cache(tmp_path, "collage", "reel_clip")
-    _aged(tmp_path, "collage", "2020-01-01")
-    _aged(tmp_path, "reel_clip", "2020-01-01")
+    #
+    # Named from the tables rather than typed here. It used to cache `collage`
+    # and `reel_clip` by hand, and #811 bumped reel_clip, so the test began
+    # asserting that a template WITH a recorded change says nothing, which is
+    # the opposite of what it is for (L41).
+    unrecorded = sorted(set(tokens.MEDIA_DESIGN_VERSIONS)
+                        - set(tokens.MEDIA_DESIGN_CHANGED))
+    assert unrecorded, (
+        "every template records a design change, so there is no template left "
+        "for this to be about and it would pass over nothing")
+
+    for name in unrecorded:
+        _cache(tmp_path, name)
+        _aged(tmp_path, name, "2020-01-01")
     assert design_stamp.stale_templates(tmp_path) == []
 
 

@@ -126,7 +126,23 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # Friday's auto-cut clip reel. The feature is retired (2026-07-09) but the
     # renderer is still reachable, and an asset that can still be produced
     # still needs to say which design produced it.
-    "reel_clip": 1,
+    #
+    # 2 is the title card's encode losing `-preset veryfast` (#811). Nothing
+    # about the DESIGN moved: no token, no geometry, and the two frames are
+    # indistinguishable side by side. What moved is fidelity, 0.27% of pixels
+    # as low-amplitude difference spread over the whole frame, mostly in the
+    # soft shadow behind the title, because the default preset keeps the
+    # trellis quantisation and subpixel refinement `veryfast` turns off.
+    #
+    # It is a bump rather than a fingerprint record because the reference frame
+    # genuinely does not match any more, which is the question
+    # `test_media_design_fingerprint` asks and the one `make record-fingerprints`
+    # refuses to answer for a frame that fails. Recorded here rather than argued
+    # around: the badge it switches on reaches nothing, since there is no cached
+    # clip reel anywhere under the preview library (measured 2026-08-22, zero
+    # reel_clip files across 30 day folders) and the feature that made them was
+    # retired six weeks ago.
+    "reel_clip": 2,
 }
 
 @dataclass(frozen=True)
@@ -163,7 +179,7 @@ class DesignChange:
 #: still at its first version has no design change to be older than, only a date
 #: on which somebody first wrote a number down, and badging an asset older than
 #: that would be an accusation from the absence of evidence (L98). That is why
-#: `collage` and `reel_clip` are absent, and
+#: `collage` is absent, and
 #: `test_every_bumped_template_records_when_it_changed` holds the pair together
 #: in both directions.
 #:
@@ -193,6 +209,7 @@ MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
     "reel_slider": DesignChange(version=3, day="2026-08-21"),
     "reel_scroll": DesignChange(version=2, day="2026-08-20"),
     "reel_preview": DesignChange(version=2, day="2026-08-20"),
+    "reel_clip": DesignChange(version=2, day="2026-08-22"),
 }
 
 

@@ -158,7 +158,20 @@ def apply_title_card(
             f"fade=t=out:st={fade_out_start:.2f}:d={TITLE_CARD_FADE_SECONDS:.2f}:alpha=1[titled];"
             f"[0:v][titled]overlay=0:0:enable='lte(t,{TITLE_CARD_TOTAL_SECONDS:.2f})'[vout]",
             "-map", "[vout]", "-map", "0:a?",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+            # No preset, which is ffmpeg's `medium` and what every other
+            # template's final encode uses (#811). `veryfast` was here, and it
+            # is the whole of why this template's reference frame drifted on CI
+            # while the other nine read 0: it turns off trellis quantisation,
+            # subpixel refinement and multiple reference frames, and two builds
+            # of x264 then disagree about the thin near-white antialiasing of
+            # the title's tallest strokes. Measured on the runner at 26 of
+            # 2073600 pixels with it and 0 without, `-crf 20` unchanged across
+            # both, so it is the preset and not the quality setting.
+            #
+            # This pass is the LAST encode the clip reel goes through, which is
+            # why it is the one that matters: render_clip_reel's own intermediate
+            # encodes are re-encoded by this one.
+            "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p",
             "-c:a", "copy",
             str(out),
         ]

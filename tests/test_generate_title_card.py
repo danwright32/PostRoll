@@ -9,8 +9,10 @@ ffmpeg isn't on PATH, same pattern as test_render_clip_reel.py.
 
 from __future__ import annotations
 
+import inspect
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -168,3 +170,50 @@ def test_apply_title_card_frame_matches_original_after_fade_out(tmp_path):
 def test_apply_title_card_raises_on_missing_source_video(tmp_path):
     with pytest.raises(TitleCardError):
         apply_title_card(tmp_path / "does-not-exist.mp4", "Sing Play", tmp_path / "out.mp4")
+
+
+#: x264 presets that turn off the decisions making its output reproducible
+#: between builds: trellis quantisation, subpixel refinement above the cheap
+#: levels, mixed and multiple reference frames (#811).
+#:
+#: Named rather than allowing a list of good ones, so a preset nobody has
+#: considered is caught rather than waved through by absence from a registry
+#: (L96). `medium` is ffmpeg's default and is what every other template's final
+#: encode uses.
+UNREPRODUCIBLE_PRESETS = ("ultrafast", "superfast", "veryfast", "faster", "fast")
+
+
+def test_the_title_card_pass_does_not_ask_x264_for_a_fast_preset():
+    """The one thing that made this template's reference frame drift (#811).
+
+    This pass is the LAST encode the clip reel goes through, so it is what
+    decides the pixels a reference frame is read from. It asked for
+    `-preset veryfast`, and every other template's final encode asks for no
+    preset at all, which is ffmpeg's `medium`.
+
+    Measured on the runner, not argued: with `veryfast` the clip reel read 26
+    of 2073600 pixels differing from the committed frame, in a 363x17 band at
+    the top of the title's script lettering, reproducible to the pixel across
+    four independent macos-15 jobs. With the preset dropped and `-crf 20` kept
+    it read 0, on the same runner and the same ffmpeg 8.1.2_1. That is one
+    variable, and it is this one. The nine other frames read 0 throughout.
+
+    A source check rather than a rendered one, for the reason
+    `test_font_loading.py` gives about the text shaper: the behaviour only
+    appears when two different ffmpeg builds encode the same frames, which no
+    single machine can do, so a rendered assertion here would be vacuous
+    everywhere it runs (L177).
+    """
+    source = Path(inspect.getsourcefile(apply_title_card)).read_text(encoding="utf-8")
+
+    asked = [preset for preset in UNREPRODUCIBLE_PRESETS
+             if f'"{preset}"' in source]
+
+    assert not asked, (
+        f"the title card pass asks x264 for {asked}, which turns off the "
+        "decisions that keep its output the same between builds. This is the "
+        "clip reel's FINAL encode, so those pixels are what its reference frame "
+        "is read from, and a fast preset is what put 26 of them outside the "
+        "tolerance on CI while the other nine templates read 0 (#811). Leave "
+        "the preset unset, which is ffmpeg's medium and what every other "
+        "template's last pass uses.")
