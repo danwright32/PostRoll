@@ -1,0 +1,8 @@
+{
+  "name": "the-delivered-reel-reference-is-not-the-titled-one",
+  "file": "tests/test_golden_frames.py",
+  "find": "    delivered_path = GOLDEN_DIR / \"clip_reel_delivered.png\"",
+  "replace": "    delivered_path = GOLDEN_DIR / \"clip_reel.png\"",
+  "test": "tests/test_golden_frames.py::test_the_two_clip_reel_references_are_two_different_pictures",
+  "breaks": "the reel that ships with no title is checked against a photograph of the titled one, so the reference defends the wrong variant while its name says otherwise and every check over it passes (#825, L84)"
+}
