@@ -1071,6 +1071,106 @@ def test_the_clip_reel_matches_its_reference_frame(source_clips, silent_audio,
     assert_matches_golden(frame, "clip_reel", tmp_path)
 
 
+@needs_ffmpeg
+@requires_mac_fonts
+def test_the_delivered_clip_reel_matches_its_reference_frame(source_clips, silent_audio,
+                                                             tmp_path):
+    """Friday's reel as `render_clip_reel` hands it over, with no title on it.
+
+    The title card is optional in both directions: `title_card_muted` skips it,
+    and a failure is caught and the untitled reel kept. On those runs this file
+    IS what Dan posts, and until #825 it had no reference frame at all, so its
+    layout, its crop and its legibility could regress with the suite green.
+
+    Not the same picture as the titled reference with the type removed: #819
+    established that this is a distinct ENCODE, re-encoded again by the title
+    card pass, so what the two references photograph is two different files.
+
+    Sampled at the same moment as the titled one, deliberately. Everything but
+    the title is common to both, which is what lets the check below say the two
+    references really are the two variants rather than one frame recorded twice.
+    """
+    reel = clip_mod.render_clip_reel(
+        [{"clip_path": clip, "trim_in": 0.0, "trim_out": 2.0,
+          "transition_after": "cut"} for clip in source_clips],
+        tmp_path / "clip_reel.mp4", audio_path=silent_audio)
+
+    at = card_mod.TITLE_CARD_FADE_SECONDS + 0.5
+    frame = _frame_from_encoded_video(reel, at, tmp_path / "clip_reel_delivered.png")
+
+    assert_shows_real_content(frame, "clip_reel_delivered")
+    assert_matches_golden(frame, "clip_reel_delivered", tmp_path)
+
+
+#: Where the title card draws, in the frame the two clip reel references share.
+#:
+#: TITLE_CARD_ANCHOR_Y is the baseline of the title's LAST line, and the card
+#: fits as many lines as it needs above that, so the band reaches well up the
+#: frame. Wider than the type on purpose: what is being asked is whether these
+#: two pictures differ where a title would be, and a box drawn tight around one
+#: recorded title would answer for that title rather than for the region.
+TITLE_CARD_BAND = (0, 120, 1080, card_mod.TITLE_CARD_ANCHOR_Y + 60)
+
+
+def test_the_two_clip_reel_references_are_two_different_pictures():
+    """The delivered reference must not be the titled one recorded twice.
+
+    Both are recorded by the same flag, from the same footage, at the same
+    moment, and the only thing separating them is which file the frame came out
+    of. Record the wrong one and the new reference defends the titled variant
+    while its name says otherwise, and every check over it passes: a recorded
+    expectation defends whatever it captured (L84).
+
+    Read off the committed frames, so it costs no render and cannot be answered
+    by a fixture. Both must exist: a missing file is not a difference.
+    """
+    titled_path = GOLDEN_DIR / "clip_reel.png"
+    delivered_path = GOLDEN_DIR / "clip_reel_delivered.png"
+    assert titled_path.is_file() and delivered_path.is_file(), (
+        "one of the clip reel references is missing, so nothing here compares "
+        "them and the pair is unchecked")
+
+    titled = Image.open(titled_path).convert("RGB")
+    delivered = Image.open(delivered_path).convert("RGB")
+    assert titled.size == delivered.size, (
+        f"the two references are different sizes ({titled.size} against "
+        f"{delivered.size}), so they are not a matched pair")
+
+    band_titled = titled.crop(TITLE_CARD_BAND)
+    band_delivered = delivered.crop(TITLE_CARD_BAND)
+    delta = _worst_channel_delta(band_titled, band_delivered)
+    moved = delta.point(lambda v: 255 if v > CHANNEL_TOLERANCE else 0).histogram()[255]
+    fraction = moved / (band_titled.width * band_titled.height)
+
+    # Measured rather than picked. The recorded pair reads 7.62% of the band at
+    # CHANNEL_TOLERANCE, which is what one line of script type and its two rules
+    # come to over this footage, and the same frame compared with itself reads
+    # exactly 0. The floor sits an order of magnitude below the real reading, so
+    # it catches the case it is for without becoming a second, accidental limit
+    # on how much of the band the title is allowed to cover.
+    assert fraction > 0.005, (
+        f"the two clip reel references differ over only {fraction:.2%} of the "
+        f"band the title is drawn in, so the delivered reference is very likely "
+        f"the titled reel recorded a second time under the other name")
+
+    # And the rest of the frame is the SAME footage, or the two references were
+    # taken from different moments and the band reading above is measuring that
+    # instead of the title.
+    below = (0, TITLE_CARD_BAND[3], 1080, 1920)
+    rest = _worst_channel_delta(titled.crop(below), delivered.crop(below))
+    rest_moved = rest.point(lambda v: 255 if v > CHANNEL_TOLERANCE else 0).histogram()[255]
+    rest_fraction = rest_moved / ((below[3] - below[1]) * below[2])
+    # The recorded pair reads exactly 0 here: below the title these are the same
+    # encoded moment of the same footage, twice. The limit is loose because what
+    # it has to catch is a frame taken from a different SECOND, which moves a
+    # band boundary and reads in the tens of percent, not the encoder noise
+    # between two renders of one moment.
+    assert rest_fraction < 0.02, (
+        f"below the title the two references differ over {rest_fraction:.2%} of "
+        f"the frame, so they are not the same moment of the same footage and "
+        f"the band reading above is not measuring the title")
+
+
 @requires_mac_fonts
 def test_the_title_card_type_is_drawn_light_enough_to_sit_over_footage(tmp_path):
     """The rule the reference frame above rests on, checked without rendering.
@@ -1115,7 +1215,7 @@ def test_the_title_card_type_is_drawn_light_enough_to_sit_over_footage(tmp_path)
 GOLDEN_NAMES = {
     "collage", "story", "before_after",
     "slider_reel", "morph_reel", "scroll_reel", "screen_reel",
-    "cover", "reel_preview", "clip_reel",
+    "cover", "reel_preview", "clip_reel", "clip_reel_delivered",
 }
 
 

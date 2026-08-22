@@ -100,8 +100,15 @@ REFERENCE_TESTS: dict[str, tuple[str, ...]] = {
     "reel_preview": (
         "tests/test_golden_frames.py::"
         "test_the_reel_preview_matches_its_reference_frame",),
+    # Both variants (#825). The title card is optional in both directions, so
+    # what `render_clip_reel` hands over is itself a delivered file, and #819
+    # established it is a distinct encode rather than the titled frame with the
+    # type taken off. A re-record that ran only the titled one would be blind to
+    # exactly the half the second reference was added for.
     "reel_clip": (
-        "tests/test_golden_frames.py::test_the_clip_reel_matches_its_reference_frame",),
+        "tests/test_golden_frames.py::test_the_clip_reel_matches_its_reference_frame",
+        "tests/test_golden_frames.py::"
+        "test_the_delivered_clip_reel_matches_its_reference_frame"),
 }
 
 

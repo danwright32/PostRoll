@@ -31,23 +31,50 @@ from test_record_design_fingerprints import build_tree, git, move_fingerprint
 from tools.record_codec_change import record
 from tools.record_design_fingerprints import GOLDEN_DIR, RECORD_PATH, REFERENCE_TESTS
 
-#: The template every case here moves. One node id, and it is the template #818
-#: was filed about.
+#: The template every case here moves. It is the template #818 was filed about,
+#: and since #825 it carries TWO reference frames: the reel with its title card
+#: and the reel as render_clip_reel hands it over, which is what ships whenever
+#: the card is muted or fails.
 TEMPLATE = "reel_clip"
 NODES = REFERENCE_TESTS[TEMPLATE]
 GOLDEN = "clip_reel"
+DELIVERED_GOLDEN = "clip_reel_delivered"
+GOLDENS = (GOLDEN, DELIVERED_GOLDEN)
+
 
 #: Measured on this Mac on 2026-08-22 by taking `-preset veryfast` off the clip
 #: reel's intermediate encodes and diffing against the committed frame. The
 #: shape a codec change really has, rather than one invented to pass (L48).
-CODEC_READING = golden_drift.line(GOLDEN, 7189, 2073600, (0, 127, 1080, 1903), 7)
+def _codec(name: str) -> str:
+    return golden_drift.line(name, 7189, 2073600, (0, 127, 1080, 1903), 7)
+
 
 #: The story's wordmark moved one pixel, measured the same day. A design change
 #: whose count is in the same territory, which is the point: the count cannot
 #: tell them apart and the shape can.
-DESIGN_READING = golden_drift.line(GOLDEN, 4624, 2073600, (266, 1654, 814, 1744), 65)
+def _design(name: str) -> str:
+    return golden_drift.line(name, 4624, 2073600, (266, 1654, 814, 1744), 65)
 
-UNCHANGED_READING = golden_drift.line(GOLDEN, 0, 2073600, None, None)
+
+def _unchanged(name: str) -> str:
+    return golden_drift.line(name, 0, 2073600, None, None)
+
+
+CODEC_READING = _codec(GOLDEN)
+DESIGN_READING = _design(GOLDEN)
+UNCHANGED_READING = _unchanged(GOLDEN)
+
+#: One reading per frame, which is what a real run of this template now writes,
+#: and what the tool refuses a run for producing fewer of.
+#:
+#: The second frame carries the SAME measured numbers under the other name. What
+#: these cases turn on is how many readings arrived and what SHAPE each one has,
+#: and a second set of numbers nobody measured would be a fixture shaped to make
+#: the rule fire (L48). The real reading for that frame is whatever the encoder
+#: does to it, which is the same encoder.
+CODEC_READINGS = tuple(_codec(name) for name in GOLDENS)
+DESIGN_READINGS = tuple(_design(name) for name in GOLDENS)
+UNCHANGED_READINGS = tuple(_unchanged(name) for name in GOLDENS)
 
 
 def _case(node_id: str, outcome: str) -> str:
@@ -72,10 +99,10 @@ class FakeRun:
     """
 
     def __init__(self, *, outcomes: dict[str, str] | None = None,
-                 readings: tuple[str, ...] = (CODEC_READING,),
+                 readings: tuple[str, ...] = CODEC_READINGS,
                  omit: tuple[str, ...] = (), report: bool = True,
                  returncode: int = 1, output: str = "one frame moved",
-                 rerecords: tuple[str, ...] = (GOLDEN,),
+                 rerecords: tuple[str, ...] = GOLDENS,
                  rerecord_returncode: int = 0) -> None:
         self.outcomes = outcomes or {node: "failed" for node in NODES}
         self.readings = readings
@@ -115,7 +142,7 @@ class FakeRun:
 def repo(tmp_path: Path) -> Path:
     """The media tree, its fingerprint record and stand-in reference frames."""
     build_tree(tmp_path)
-    for name in ("clip_reel", "cover", "reel_preview",
+    for name in ("clip_reel", "clip_reel_delivered", "cover", "reel_preview",
                  "morph_reel_closing", "slider_reel_closing"):
         (tmp_path / GOLDEN_DIR / f"{name}.png").write_bytes(b"reference frame")
     git(tmp_path, "init", "-q")
@@ -150,7 +177,12 @@ def test_a_render_that_moved_by_the_encoder_gets_its_frame_re_recorded(repo):
 
     assert code == 0, said
     assert runner.rerecorded, said
+    # BOTH of this template's frames, named (#825). A codec change moves the
+    # delivered reel and the titled one, since the second is an encode of the
+    # first, and a door that re-recorded one of them would leave the template
+    # half recorded and failing for the frame it skipped.
     assert f"{GOLDEN}.png" in said, said
+    assert f"{DELIVERED_GOLDEN}.png" in said, said
     assert "LOOK at those frames" in said, said
 
 
@@ -328,7 +360,7 @@ def test_frames_that_all_passed_are_sent_to_the_other_door(repo):
     # The source moved and no pixel did, which is `make record-fingerprints`.
     move_the_clip_reel(repo)
     runner = FakeRun(outcomes={node: "passed" for node in NODES},
-                     readings=(UNCHANGED_READING,), returncode=0)
+                     readings=UNCHANGED_READINGS, returncode=0)
 
     code, said = run(repo, runner)
 
@@ -342,7 +374,7 @@ def test_a_failure_with_the_frame_unchanged_is_refused(repo):
     # failing is not a frame that moved, and re-recording would record a frame
     # nobody has read.
     move_the_clip_reel(repo)
-    runner = FakeRun(readings=(UNCHANGED_READING,),
+    runner = FakeRun(readings=UNCHANGED_READINGS,
                      output="the title did not read against the footage")
 
     code, said = run(repo, runner)
@@ -360,7 +392,7 @@ def test_a_frame_that_moved_by_design_is_refused_with_its_reading(repo):
     of date for.
     """
     move_the_clip_reel(repo)
-    runner = FakeRun(readings=(DESIGN_READING,))
+    runner = FakeRun(readings=DESIGN_READINGS)
 
     code, said = run(repo, runner)
 
@@ -375,7 +407,7 @@ def test_one_design_shaped_frame_refuses_the_whole_template(repo):
     # Both frames of a two frame template, one of each. The template is refused
     # rather than half re-recorded, because a template is one design.
     move_the_clip_reel(repo)
-    runner = FakeRun(readings=(CODEC_READING, DESIGN_READING))
+    runner = FakeRun(readings=(CODEC_READING, _design(DELIVERED_GOLDEN)))
 
     code, said = run(repo, runner)
 
