@@ -1,0 +1,8 @@
+{
+  "name": "the-measured-table-names-what-really-ships",
+  "file": "postroll/media/render_clip_reel.py",
+  "find": "SEGMENT_PRESET = \"veryfast\"\nSEGMENT_CRF = \"20\"",
+  "replace": "SEGMENT_PRESET = \"veryfast\"\nSEGMENT_CRF = \"23\"",
+  "test": "tests/test_measure_clip_reel_encodes.py::test_the_shipping_row_is_what_actually_ships",
+  "breaks": "the encode comparison's baseline row measures a setting nothing renders, so the readings recorded beside the encode describe a pipeline that no longer exists while reading as what today costs (#826, L41)"
+}

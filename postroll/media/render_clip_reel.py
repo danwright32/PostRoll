@@ -102,6 +102,19 @@ def _scale_pad_filter(crop_x: float = 0.0, crop_y: float = 0.0) -> str:
     return f"scale={CANVAS_W}:{CANVAS_H}:force_original_aspect_ratio=increase,{crop},setsar=1"
 
 
+#: What the intermediate segment encodes ask x264 for.
+#:
+#: Named rather than written into the command, so the tool that measures what
+#: they cost moves the setting the encode really uses rather than a copy of it
+#: (`tools/measure_clip_reel_encodes.py`, #826). The readings recorded beside
+#: `_prepare_segment` were taken by moving these.
+#:
+#: The preset applies only when something downstream re-encodes these pixels;
+#: see `_prepare_segment` for why, and #819 for what it costs.
+SEGMENT_PRESET = "veryfast"
+SEGMENT_CRF = "20"
+
+
 def _validate_selections(selections: list[dict]) -> None:
     if not selections:
         raise RenderClipReelError("no selections to render")
@@ -147,9 +160,33 @@ def _prepare_segment(sel: dict, out_path: Path, *, has_audio: bool,
         # buys 1.0 dB of PSNR and 0.06 of SSIM on footage of pure noise, the
         # hardest case there is. So it more than doubles a Friday render for a
         # difference nothing has shown to be visible, and it stays.
+        #
+        # The OTHER lever was measured afterwards (#826), by
+        # `tools/measure_clip_reel_encodes.py`, which is the same comparison
+        # written down rather than done by hand. Keeping `veryfast` and lowering
+        # the intermediate's `-crf` was supposed to cost bitrate and disk rather
+        # than CPU. On this Mac on 2026-08-22, a 30s reel of panned footage with
+        # heavy grain, every row against lossless intermediates:
+        #
+        #     veryfast crf 20 (ships)    72.7s   36.86 dB   SSIM 0.9056
+        #     veryfast crf 16            81.7s   37.12 dB   SSIM 0.9150
+        #     medium   crf 20           122.1s   38.48 dB   SSIM 0.9410
+        #
+        # `crf 16` buys a sixth of what the preset buys, and it is not free: 12%
+        # more wall clock, because more bits take longer to write. The premise
+        # that it would cost no CPU is what the measurement disproved.
+        #
+        # The same table on ordinary footage (grain 8) separates no variant from
+        # another by more than 0.3 dB, with every render inside 8s of the
+        # others, so the question only has teeth on footage that barely
+        # compresses at all. The intermediates stay at veryfast crf 20.
+        #
+        # Both readings are synthetic: there were no real Friday clips on this
+        # machine to measure. The tool takes them with `--clips`, and re-takes
+        # the whole table.
         "-c:v", "libx264",
-        *(("-preset", "veryfast") if reencoded_downstream else ()),
-        "-crf", "20",
+        *(("-preset", SEGMENT_PRESET) if reencoded_downstream else ()),
+        "-crf", SEGMENT_CRF,
         "-pix_fmt", "yuv420p",
     ]
     if has_audio:

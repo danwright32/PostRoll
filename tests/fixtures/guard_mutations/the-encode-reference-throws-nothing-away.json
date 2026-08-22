@@ -1,0 +1,8 @@
+{
+  "name": "the-encode-reference-throws-nothing-away",
+  "file": "tools/measure_clip_reel_encodes.py",
+  "find": "    Variant(\"lossless\", \"veryfast\", \"0\",",
+  "replace": "    Variant(\"lossless\", \"veryfast\", \"18\",",
+  "test": "tests/test_measure_clip_reel_encodes.py::test_the_reference_row_throws_nothing_away",
+  "breaks": "every variant is measured against a reference that already lost something, so each one reads better than it is by exactly what the reference lost, and the whole table is wrong in the flattering direction (#826)"
+}

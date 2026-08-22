@@ -55,41 +55,54 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: of test code changing.
 #:
 #: The floor is chosen from where the distribution actually is, not picked round
-#: (L172), and it was re-chosen for #810. Sorted by share the suite now reads:
+#: (L172), and it has been re-chosen twice: for #810, and for #826. Sorted by
+#: share the suite now reads:
 #:
-#:     test_golden_frames.py                    23.9%
-#:     test_closing_crossfade_legibility.py     23.0%
-#:     test_thursday_reel_legibility.py         18.7%
-#:     test_frame_legibility.py                 10.2%
-#:     test_generate_media_friday_clips.py       2.9%    and a tail of 145 more
+#:     test_golden_frames.py                    22.3%
+#:     test_closing_crossfade_legibility.py     17.6%
+#:     test_thursday_reel_legibility.py         16.5%
+#:     test_frame_legibility.py                 11.1%
+#:     test_generate_media_friday_clips.py       5.1%
+#:     test_slider_program_plate.py              2.7%    and a tail of 150 more
 #:
-#: so the gap is between 10.2% and 2.9%, a factor of 3.5, and 5.4% is its
-#: geometric middle: 1.86x of clear air below and 1.88x above.
+#: so the gap is between 5.1% and 2.7%, and 3.7% is its geometric middle: 1.36x
+#: of clear air below and 1.35x above.
 #:
-#: It used to be 8%, chosen the same way against a distribution whose gap was
-#: between 17.3% and 3.5%. #810 split `test_frame_legibility.py`, which was
-#: 33.7% of the run and the largest file in it, into the closing crossfade and
-#: what was left; the remainder landed at 10.2%, inside the old floor's clear
-#: air, and the guard below said so. The set of files over the floor is the same
-#: four either way, so nothing moved in or out of the fast run: what changed is
-#: that the floor is back in a gap instead of beside a file.
+#: What moved, and why the gap is narrower than it was. The Friday clip gate was
+#: 2.9% of the run and is 5.1%, because #824 fixed a title card that had been
+#: failing on ffmpeg's first argument: that pass now really composites, and every
+#: check in that file pays for a real encode it used to get for nothing. So a
+#: file that was the top of the tail became an island of its own, and the old
+#: 5.4% floor was sitting on it: two readings of the same tree put that file at
+#: 5.05% and 5.76%, on either side of the floor.
 #:
-#: The margins are narrower than the old ones, which had more than a factor of
-#: two each side. That is the distribution, not a loosening: there is no
-#: placement in this gap with more than 1.88x, and both bounds below are still
-#: satisfied with room.
+#: It was 8% before #810, and 5.4% after it. Each time the shape of the run
+#: changed, not the rule.
 #:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.054
+EXPENSIVE_SHARE = 0.037
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:
-#: 0.6 to 1.6 of the floor, so no file may sit between 3.2% and 8.6% of the run.
-#: The real margins on the record as it stands are 2.9% below and 10.2% above.
-GAP_BELOW, GAP_ABOVE = 0.6, 1.6
+#: 0.8 to 1.25 of the floor, so no file may sit between 3.0% and 4.6% of the run.
+#: The real margins on the record as it stands are 2.7% below and 5.1% above.
+#:
+#: These were 0.6 and 1.6, chosen when the gap was a factor of 3.5. That band
+#: asks for 2.67x of clear air and this gap is 1.84x, so no placement in it
+#: could satisfy the old numbers: keeping them would leave the guard permanently
+#: red, or push the floor above a file that really does cost 5% of the run.
+#:
+#: So they are re-derived from what they exist to tolerate, which is how much a
+#: share moves between two readings of the SAME tree. Measured on this Mac on
+#: 2026-08-22, over the files at or above 2% of the run, the worst swing was
+#: 1.19x (test_frame_legibility and test_thursday_reel_legibility), and the file
+#: this floor sits beside swung 1.14x. A 1.25x band clears the noise this suite
+#: really has. It is a loosening, said plainly, and it is a loosening onto a
+#: measurement rather than onto a round number.
+GAP_BELOW, GAP_ABOVE = 0.8, 1.25
 
 
 def recorded() -> dict[str, float]:
