@@ -1484,16 +1484,13 @@ struct CaptionReviewView: View {
     @MainActor
     private func recordMediaOutcome(day: DayName, error: String?, warning: String? = nil) {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        let existingError = ev.mediaErrors[day.rawValue]
-        let existingWarning = ev.mediaWarnings[day.rawValue]
-        guard existingError != error || existingWarning != warning else { return }
-        if let error { ev.mediaErrors[day.rawValue] = error }
-        else { ev.mediaErrors.removeValue(forKey: day.rawValue) }
-        // Recorded alongside the error rather than folded into it: a day that
-        // rendered without an optional photo used to report as a failed
-        // regeneration, which was simply untrue (#265).
-        if let warning { ev.mediaWarnings[day.rawValue] = warning }
-        else { ev.mediaWarnings.removeValue(forKey: day.rawValue) }
+        // The recording itself is on the model (#824), so the rule that a note
+        // is CLEARED when the next render has nothing to say is one rule rather
+        // than one per screen. Recorded alongside the error rather than folded
+        // into it: a day that rendered without an optional photo used to report
+        // as a failed regeneration, which was simply untrue (#265).
+        guard ev.recordMediaOutcome(day: day.rawValue, error: error, warning: warning)
+        else { return }
         appState.updateEvent(ev)
     }
 

@@ -217,6 +217,29 @@ extension Event {
         guard let pick else { return }
         days[day]?.coverPick = pick
     }
+
+    /// Record what the graphics step said about one day: a failure, a note
+    /// about a day that rendered anyway, or neither. Returns whether anything
+    /// actually moved, so a caller can skip a save that writes the event back
+    /// unchanged.
+    ///
+    /// Both are passed every time, and nil CLEARS rather than leaves alone.
+    /// That is the point of it: these describe the last render of that day, and
+    /// a note kept past the render it was about is no longer merely stale, it
+    /// is false. The easy way to leave one behind is to write only the value
+    /// you happen to have, so there is one call that always writes both.
+    ///
+    /// On the model rather than in the screen that had it, because two screens
+    /// now report a Friday reel that came back without its title (#824), and a
+    /// rule about clearing that lives in a private method of one view is a rule
+    /// the other one has to remember.
+    @discardableResult
+    mutating func recordMediaOutcome(day: String, error: String?, warning: String?) -> Bool {
+        guard mediaErrors[day] != error || mediaWarnings[day] != warning else { return false }
+        if let error { mediaErrors[day] = error } else { mediaErrors.removeValue(forKey: day) }
+        if let warning { mediaWarnings[day] = warning } else { mediaWarnings.removeValue(forKey: day) }
+        return true
+    }
 }
 
 // MARK: - ShootType
