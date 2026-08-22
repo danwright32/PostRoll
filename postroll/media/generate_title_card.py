@@ -173,6 +173,15 @@ def apply_title_card(
             # encodes are re-encoded by this one.
             "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p",
             "-c:a", "copy",
+            # The muxer named rather than inferred from the filename (#824).
+            # Both callers stage this encode under a name ending `.tmp`, on
+            # purpose, so that nothing globbing a day folder picks a
+            # half-written file up as an asset. ffmpeg can choose no format
+            # from `.tmp` and refuses on its first argument, so every title
+            # card in the real app failed, was caught, printed, and thrown
+            # away, and every Friday reel shipped untitled. The reference
+            # frame never saw it because it passes a plain `.mp4` of its own.
+            "-f", "mp4",
             str(out),
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -185,3 +194,38 @@ def apply_title_card(
         return _run(str(tmp_dir))
     with tempfile.TemporaryDirectory(prefix="postroll-titlecard-") as tmp:
         return _run(tmp)
+
+
+def apply_title_card_in_place(
+    video_path: str | Path,
+    event_name: str,
+    *,
+    staging_path: str | Path,
+) -> str | None:
+    """Overlay `event_name`'s title card onto the reel at `video_path`, in place.
+
+    Returns None once the reel carries its title, or a sentence saying why it
+    does not, with the untitled reel left exactly as it was.
+
+    The title card is a finishing touch, not the product: a failure here must
+    never cost the reel Stage 1/2/3 already built. That much was always true.
+    What this adds is that the failure comes back as a RETURN VALUE rather than
+    a printed line (#824). Both callers used to print it and carry on, so the
+    only record that a reel had shipped untitled died with the process, and a
+    reel Dan posts with no title read as identical to one he chose to have no
+    title on. Each caller now has to put the reason somewhere he reads.
+
+    `staging_path` is where the titled encode is written before it replaces the
+    reel, and is removed either way: ffmpeg leaves a partial file behind when it
+    fails part way, and a half-written encode sitting beside a reel is a file
+    something downstream can pick up as an asset.
+    """
+    staging = Path(staging_path)
+    try:
+        apply_title_card(video_path, event_name, staging)
+        staging.replace(Path(video_path))
+        return None
+    except TitleCardError as e:
+        return f"title card skipped, so the reel carries no title: {e}"
+    finally:
+        staging.unlink(missing_ok=True)

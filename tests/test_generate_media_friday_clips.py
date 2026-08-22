@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 import postroll.ai.generate_media as gm_mod
+import postroll.media.generate_title_card as card_mod
 
 # One shared gate (#106): POSTROLL_REQUIRE_FFMPEG=1 turns a silent skip into
 # a loud failure, which is what CI needs.
@@ -116,7 +117,7 @@ def test_title_card_applied_by_default(tmp_path, monkeypatch):
         Path(output_path).write_bytes(Path(video_path).read_bytes())
         return str(output_path)
 
-    monkeypatch.setattr(gm_mod, "apply_title_card", fake_apply_title_card)
+    monkeypatch.setattr(card_mod, "apply_title_card", fake_apply_title_card)
 
     manifest = _base_manifest(clips, tmp_path)
     result = gm_mod.generate_media(manifest, tmp_path / "out")
@@ -137,7 +138,7 @@ def test_title_card_skipped_when_muted(tmp_path, monkeypatch):
         called["count"] += 1
         return str(output_path)
 
-    monkeypatch.setattr(gm_mod, "apply_title_card", fake_apply_title_card)
+    monkeypatch.setattr(card_mod, "apply_title_card", fake_apply_title_card)
 
     manifest = _base_manifest(clips, tmp_path, title_card_muted=True)
     result = gm_mod.generate_media(manifest, tmp_path / "out")
@@ -155,9 +156,9 @@ def test_title_card_failure_does_not_fail_the_whole_reel(tmp_path, monkeypatch):
     monkeypatch.setattr(gm_mod, "resolve_reel_audio", lambda audio_file, **kwargs: None)
 
     def failing_apply_title_card(video_path, event_name, output_path, **kwargs):
-        raise gm_mod.TitleCardError("boom")
+        raise card_mod.TitleCardError("boom")
 
-    monkeypatch.setattr(gm_mod, "apply_title_card", failing_apply_title_card)
+    monkeypatch.setattr(card_mod, "apply_title_card", failing_apply_title_card)
 
     manifest = _base_manifest(clips, tmp_path)
     result = gm_mod.generate_media(manifest, tmp_path / "out")
@@ -256,3 +257,60 @@ def test_static_only_skips_clip_reel_even_with_clips(tmp_path, monkeypatch):
     gm_mod.generate_media(manifest, out_dir, static_only=True)
 
     assert not called, "static_only must skip the clip reel attempt entirely"
+
+
+# ===================================================================
+# What happens to the fact that a reel shipped untitled (#824).
+#
+# Keeping the reel when the title card fails is right: the card is a
+# finishing touch and Stage 1/2/3 already did the expensive work. What was
+# wrong is that the only record of it was a console line, which is gone with
+# the process, so a reel Dan posts with no title looked identical to one he
+# chose to post with no title.
+# ===================================================================
+
+@needs_ffmpeg
+def test_title_card_failure_is_recorded_as_a_warning_on_the_day(tmp_path, monkeypatch):
+    clips = _make_usable_clips(tmp_path)
+    monkeypatch.setattr(gm_mod, "select_reel_clips", _fake_select_reel_clips)
+    monkeypatch.setattr(gm_mod, "resolve_reel_audio", lambda audio_file, **kwargs: None)
+
+    def failing_apply_title_card(video_path, event_name, output_path, **kwargs):
+        raise card_mod.TitleCardError("ffmpeg title card overlay failed: boom")
+
+    monkeypatch.setattr(card_mod, "apply_title_card", failing_apply_title_card)
+
+    manifest = _base_manifest(clips, tmp_path)
+    result = gm_mod.generate_media(manifest, tmp_path / "out")
+
+    # A warning, not an error: the day rendered and the folder is complete.
+    # The two get opposite responses downstream, and calling this a failure
+    # would suppress an export over a reel that is sitting right there.
+    assert "friday" not in result.get("errors", {})
+    warning = result.get("warnings", {}).get("friday", "")
+    assert "title card" in warning, (
+        "a title card that failed has to reach the app, not just the console: "
+        f"friday's warning was {warning!r}"
+    )
+    # The reason ffmpeg gave, carried through rather than flattened to
+    # "something went wrong": distinct causes get distinct messages.
+    assert "boom" in warning
+
+    assert Path(result["friday"]["reel"]).exists()
+
+
+@needs_ffmpeg
+def test_a_muted_title_card_is_not_a_warning(tmp_path, monkeypatch):
+    # Muting is Dan's own choice, made in the app, which already knows it.
+    # Reporting it back as a warning puts a note on every deliberately
+    # untitled reel, and a warning that fires on the normal case stops being
+    # read (L36).
+    clips = _make_usable_clips(tmp_path)
+    monkeypatch.setattr(gm_mod, "select_reel_clips", _fake_select_reel_clips)
+    monkeypatch.setattr(gm_mod, "resolve_reel_audio", lambda audio_file, **kwargs: None)
+
+    manifest = _base_manifest(clips, tmp_path, title_card_muted=True)
+    result = gm_mod.generate_media(manifest, tmp_path / "out")
+
+    assert "friday" not in result.get("errors", {})
+    assert "title card" not in result.get("warnings", {}).get("friday", "")

@@ -217,3 +217,91 @@ def test_the_title_card_pass_does_not_ask_x264_for_a_fast_preset():
         "tolerance on CI while the other nine templates read 0 (#811). Leave "
         "the preset unset, which is ffmpeg's medium and what every other "
         "template's last pass uses.")
+
+
+# ===================================================================
+# The staging name both callers actually pass (#824).
+#
+# generate_media.py writes the titled encode to `reel_clip_titled.mp4.tmp`
+# and render_friday_override.py to `<reel>.titled.tmp`, both deliberately
+# not plain .mp4 so nothing globbing a day folder picks a half-written
+# encode up as an asset. ffmpeg chooses its muxer from the filename unless
+# it is told, and it can choose nothing from `.tmp`: every title card in the
+# real app failed on the first ffmpeg argument, was caught, printed, and
+# thrown away, so every Friday reel shipped untitled and nothing said so.
+#
+# The reference frame missed it because it hands apply_title_card a plain
+# `.mp4` of its own, so the test exercised a filename production never uses
+# (L143).
+# ===================================================================
+
+@needs_ffmpeg
+def test_apply_title_card_writes_an_mp4_to_the_staging_name_its_callers_pass(tmp_path):
+    clip = tmp_path / "clip.mp4"
+    _make_clip(clip, seconds=3.0)
+    staging = tmp_path / "reel_clip_titled.mp4.tmp"
+
+    apply_title_card(clip, "Sing Play", staging, tmp_dir=tmp_path / "work")
+
+    assert staging.exists()
+    probed = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=format_name",
+         "-of", "default=nk=1:nw=1", str(staging)],
+        capture_output=True, text=True,
+    )
+    assert "mp4" in probed.stdout, (
+        "the encode has to be an MP4 whatever the file is called, or the "
+        f"staging name its callers pass produces nothing: {probed.stderr.strip()}")
+
+
+# ===================================================================
+# apply_title_card_in_place (#824): the one place that decides what
+# happens when the finishing touch fails.
+#
+# Both callers used to hold their own copy of this, and both answered a
+# failure by printing a line and carrying on. Keeping the reel is right.
+# Answering with a REASON rather than a print is what lets each caller put it
+# somewhere Dan reads, which a console line cannot do once the process ends.
+# ===================================================================
+
+@needs_ffmpeg
+def test_apply_title_card_in_place_titles_the_reel_and_reports_nothing(tmp_path):
+    from postroll.media.generate_title_card import apply_title_card_in_place
+
+    reel = tmp_path / "reel_clip.mp4"
+    _make_clip(reel, seconds=3.0)
+    before = reel.read_bytes()
+    staging = tmp_path / "reel_clip_titled.mp4.tmp"
+
+    skipped = apply_title_card_in_place(reel, "Sing Play", staging_path=staging)
+
+    assert skipped is None, f"a title card that worked has nothing to report: {skipped}"
+    assert reel.read_bytes() != before, "the reel at the same path must be the titled one"
+    assert not staging.exists(), "the staging file is working state, not an asset"
+
+
+def test_apply_title_card_in_place_keeps_the_reel_and_names_the_failure(tmp_path, monkeypatch):
+    import postroll.media.generate_title_card as card_mod
+
+    reel = tmp_path / "reel_clip.mp4"
+    reel.write_bytes(b"the reel three stages already built")
+    before = reel.read_bytes()
+    staging = tmp_path / "reel_clip_titled.mp4.tmp"
+
+    def failing(video_path, event_name, output_path, **kwargs):
+        # Half-written output, which is what a killed ffmpeg leaves behind: the
+        # staging file existing must not read as a titled reel.
+        Path(output_path).write_bytes(b"half an encode")
+        raise TitleCardError("ffmpeg title card overlay failed: no such filter")
+
+    monkeypatch.setattr(card_mod, "apply_title_card", failing)
+
+    skipped = card_mod.apply_title_card_in_place(reel, "Sing Play", staging_path=staging)
+
+    assert skipped, "a reel that shipped untitled has to say so"
+    # The reason ffmpeg gave, not a flattened "something went wrong": two
+    # different failures here need two different next moves.
+    assert "no such filter" in skipped
+    assert "title card" in skipped
+    assert reel.read_bytes() == before, "the reel Stage 1/2/3 built must survive untouched"
+    assert not staging.exists(), "a half-written encode must not be left on disk"

@@ -1160,18 +1160,24 @@ struct CaptionReviewView: View {
         Task {
             do {
                 let liveEvent = appState.events.first(where: { $0.id == event.id }) ?? event
-                let reelPath = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
+                let render = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
                 await MainActor.run {
-                    guard let reelPath else {
+                    guard let render else {
                         graphics.failDayRegen(
                             .friday, for: event.id,
                             reason: "Friday reel edit couldn't be applied: no reel to update")
                         return
                     }
                     graphics.endDayRegen(.friday, for: event.id)
+                    // A reel that came back with no title says so here (#824).
+                    // Passed even when nil, which is what clears the note from
+                    // the last render: a warning that outlives the thing it was
+                    // about is worse than none, because it is now false.
+                    recordMediaOutcome(day: .friday, error: nil,
+                                       warning: render.titleCardSkipped)
                     var current = appState.events.first(where: { $0.id == event.id }) ?? liveEvent
                     var paths = current.previewMediaPaths[DayName.friday.rawValue] ?? [:]
-                    paths["reel"] = reelPath
+                    paths["reel"] = render.reelPath
                     current.previewMediaPaths[DayName.friday.rawValue] = paths
                     appState.updateEvent(current)
                     graphicVersions[.friday] = (graphicVersions[.friday] ?? 0) + 1
@@ -1478,16 +1484,13 @@ struct CaptionReviewView: View {
     @MainActor
     private func recordMediaOutcome(day: DayName, error: String?, warning: String? = nil) {
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        let existingError = ev.mediaErrors[day.rawValue]
-        let existingWarning = ev.mediaWarnings[day.rawValue]
-        guard existingError != error || existingWarning != warning else { return }
-        if let error { ev.mediaErrors[day.rawValue] = error }
-        else { ev.mediaErrors.removeValue(forKey: day.rawValue) }
-        // Recorded alongside the error rather than folded into it: a day that
-        // rendered without an optional photo used to report as a failed
-        // regeneration, which was simply untrue (#265).
-        if let warning { ev.mediaWarnings[day.rawValue] = warning }
-        else { ev.mediaWarnings.removeValue(forKey: day.rawValue) }
+        // The recording itself is on the model (#824), so the rule that a note
+        // is CLEARED when the next render has nothing to say is one rule rather
+        // than one per screen. Recorded alongside the error rather than folded
+        // into it: a day that rendered without an optional photo used to report
+        // as a failed regeneration, which was simply untrue (#265).
+        guard ev.recordMediaOutcome(day: day.rawValue, error: error, warning: warning)
+        else { return }
         appState.updateEvent(ev)
     }
 

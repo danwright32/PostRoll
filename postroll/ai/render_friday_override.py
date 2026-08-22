@@ -36,14 +36,25 @@ from pathlib import Path
 from typing import Any
 
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
-from ..media.generate_title_card import apply_title_card, TitleCardError
+from ..media.generate_title_card import apply_title_card_in_place
 from .audio_tags import resolve_reel_audio
 
 
-def render_friday_override(manifest: dict[str, Any], output_path: str | Path) -> str:
+def render_friday_override(manifest: dict[str, Any], output_path: str | Path) -> dict[str, str]:
     """Render `manifest`'s selections (already reordered/filtered by the
     user's fridayClipOverride, transition carried over from the original
     AI plan by the caller) into the reel MP4 at `output_path`.
+
+    Returns:
+        {"reel": <path actually written>,
+         "title_card_skipped": <why the reel carries no title, "" when it does>}
+
+        `title_card_skipped` is empty for a reel that HAS its title and for one
+        Dan muted the title on, which are the two cases needing nothing said: he
+        made the second choice himself, in the app, which already knows it. It
+        carries a reason only when the card was meant to be there and is not
+        (#824), so that the app can say so rather than the process printing it
+        to a console nobody keeps.
 
     Raises ValueError if `selections` is empty.
     """
@@ -85,31 +96,41 @@ def render_friday_override(manifest: dict[str, Any], output_path: str | Path) ->
     # doesn't silently drop or restore it. A finishing touch, not the
     # product itself, so a failure here must never cost the reel already
     # rendered above.
+    title_card_skipped = ""
     if not bool(manifest.get("title_card_muted", False)):
-        titled_path = f"{reel_path}.titled.tmp"
-        try:
-            apply_title_card(reel_path, manifest.get("event_name", ""), titled_path)
-            Path(titled_path).replace(reel_path)
-        except TitleCardError as e:
-            print(f"[render_friday_override] title card skipped: {e}", flush=True)
-        finally:
-            Path(titled_path).unlink(missing_ok=True)
+        title_card_skipped = apply_title_card_in_place(
+            reel_path, manifest.get("event_name", ""),
+            staging_path=f"{reel_path}.titled.tmp",
+        ) or ""
+        if title_card_skipped:
+            print(f"[render_friday_override] WARNING: {title_card_skipped}",
+                  flush=True, file=sys.stderr)
 
-    return reel_path
+    return {"reel": str(reel_path), "title_card_skipped": title_card_skipped}
 
 
 def _main() -> int:
     parser = argparse.ArgumentParser(description="Render the Friday reel from a manual override")
     parser.add_argument("--manifest", required=True, help="JSON file (see module docstring)")
     parser.add_argument("--output", required=True, help="Where to write the rendered MP4")
+    # Optional, unlike swap_reel_audio.py's: the Swift half is frozen into the
+    # installed app while this half runs live from the checkout, so an app build
+    # predating this flag must keep working rather than failing on an argument
+    # it has never heard of. What such a build loses is only the title card
+    # report, and it gets that back on its next rebuild.
+    parser.add_argument("--result", default=None,
+                        help="Where to write the JSON result (reel + title_card_skipped)")
     args = parser.parse_args()
 
     try:
         manifest = json.loads(Path(args.manifest).read_text())
-        render_friday_override(manifest, args.output)
+        result = render_friday_override(manifest, args.output)
     except Exception as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+
+    if args.result:
+        Path(args.result).write_text(json.dumps(result, indent=2))
 
     print(f"[render_friday_override] wrote {args.output}", flush=True)
     return 0

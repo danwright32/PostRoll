@@ -1,0 +1,8 @@
+{
+  "name": "a-title-card-muxes-to-the-name-its-callers-pass",
+  "file": "postroll/media/generate_title_card.py",
+  "find": "            \"-f\", \"mp4\",\n            str(out),",
+  "replace": "            str(out),",
+  "test": "tests/test_generate_title_card.py::test_apply_title_card_writes_an_mp4_to_the_staging_name_its_callers_pass",
+  "breaks": "ffmpeg is left to choose a muxer from a filename ending .tmp, which is the name both callers stage this encode under, so it can choose none and every title card in the real app fails on the first argument and is thrown away (#824)"
+}

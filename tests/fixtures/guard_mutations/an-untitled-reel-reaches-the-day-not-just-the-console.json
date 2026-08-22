@@ -1,0 +1,8 @@
+{
+  "name": "an-untitled-reel-reaches-the-day-not-just-the-console",
+  "file": "postroll/ai/generate_media.py",
+  "find": "                            _record_warning(warnings, \"friday\", untitled)",
+  "replace": "                            pass",
+  "test": "tests/test_generate_media_friday_clips.py::test_title_card_failure_is_recorded_as_a_warning_on_the_day",
+  "breaks": "a reel that shipped with no title is printed and nothing else, so the record dies with the process and the app cannot tell it from a reel Dan chose to have no title on (#824)"
+}

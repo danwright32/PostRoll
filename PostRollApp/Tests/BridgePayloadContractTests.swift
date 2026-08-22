@@ -117,7 +117,8 @@ final class BridgePayloadContractTests: XCTestCase {
         "week_result", "week_timing", "run_progress", "day_caption", "blog_output",
         "revised_caption", "revised_blog", "swapped_blog", "ocr_result", "flag_review",
         "media_result", "media_day", "friday_clip_plan", "friday_clip_selection",
-        "cover_result", "swap_reel_audio", "meta_import", "learn_suggestion",
+        "cover_result", "swap_reel_audio", "friday_override_result",
+        "meta_import", "learn_suggestion",
         "web_performers", "handle_suggestions", "piece_notes", "ocr_flags",
         "collage_candidates", "insight_report",
         // The shapes one level DOWN (#274). The contract used to confirm that
@@ -528,6 +529,38 @@ final class BridgePayloadContractTests: XCTestCase {
         if parsed?.audioSource != nil { proved.insert("audio_source") }
         if parsed?.tags != nil { proved.insert("tags") }
         try assertCovers("swap_reel_audio", proved)
+    }
+
+    func testFridayOverrideResultReadsEveryDeclaredKey() throws {
+        let parsed = PythonBridge.parseFridayOverrideOutput([
+            "reel": "/p/reel.mp4",
+            "title_card_skipped": "title card skipped, so the reel carries no title: ffmpeg failed",
+        ])
+        var proved: Set<String> = []
+        if parsed?.reelPath != nil { proved.insert("reel") }
+        if parsed?.titleCardSkipped != nil { proved.insert("title_card_skipped") }
+        try assertCovers("friday_override_result", proved)
+    }
+
+    /// The other two shapes this parser has to tell apart (#824).
+    ///
+    /// An empty reason means the reel HAS its title, and must not read as a
+    /// reel that lost one: a caller checking only for a value would put a
+    /// notice on every successful render, and a notice that fires on the normal
+    /// case stops being read. A missing reel path is refused outright rather
+    /// than guessed at, because that path is what the player reloads.
+    func testFridayOverrideResultTellsATitledReelFromAnUntitledOne() throws {
+        let titled = PythonBridge.parseFridayOverrideOutput([
+            "reel": "/p/reel.mp4", "title_card_skipped": "",
+        ])
+        XCTAssertEqual(titled?.reelPath, "/p/reel.mp4")
+        XCTAssertNil(titled?.titleCardSkipped,
+                     "an empty reason means the title is on the reel, not that a title was lost")
+
+        XCTAssertNil(PythonBridge.parseFridayOverrideOutput(["title_card_skipped": ""]),
+                     "a result with no reel path says nothing the player can reload")
+        XCTAssertNil(PythonBridge.parseFridayOverrideOutput(["reel": ""]),
+                     "an empty reel path is not a path")
     }
 
     func testLearnSuggestionReadsEveryDeclaredKey() throws {
