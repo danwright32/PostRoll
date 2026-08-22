@@ -611,3 +611,90 @@ def test_the_two_readings_are_far_enough_apart_to_put_a_limit_between():
         f"change reads {SMALLEST_REAL_MOVE:.4%}. There is no longer room for a "
         "limit between them, so a share of the canvas has stopped being able to "
         "tell noise from a moved element at all.")
+
+
+# ── the encoder is named on the frame that failed ────────────────────────────
+#
+# #792 compares MAJOR versions, which is the wrong granularity (#817). The 26
+# pixel drift #811 diagnosed came from ffmpeg 8.1 against 8.1.2_1, so the size
+# of upgrade demonstrably able to move these pixels is the size that check
+# cannot name. It stays as it is, because a hard failure on any difference fires
+# on every Homebrew bottle revision; what is added is a sentence carried by the
+# comparison's OWN failure, on the full version string.
+
+from test_golden_frames import MEASURED_AGAINST_FFMPEG, ffmpeg_note  # noqa: E402
+
+
+def test_the_note_reads_a_patch_level_difference_the_major_check_cannot_see():
+    """The whole of #817 in one assertion.
+
+    `8.1` against `8.1.2_1` is the difference that really moved pixels here, and
+    it is the one `ffmpeg_major` answers 8 to on both sides. So the note has to
+    tell those two apart, and name both.
+    """
+    note = ffmpeg_note("8.1")
+
+    assert "8.1" in note and MEASURED_AGAINST_FFMPEG in note, note
+    assert note != ffmpeg_note(MEASURED_AGAINST_FFMPEG), (
+        "a build one patch release away reads the same as the build the limit "
+        "was measured against, which is exactly the granularity #817 is about")
+
+
+def test_a_bottle_revision_apart_is_still_a_difference():
+    # The commonest real case: same release, a rebuilt Homebrew bottle. It does
+    # not fail anything, and it is named, because it is the cheapest candidate
+    # explanation for ten frames failing at once.
+    note = ffmpeg_note("8.1.2_2")
+
+    assert "8.1.2_2" in note and MEASURED_AGAINST_FFMPEG in note, note
+
+
+def test_the_same_build_says_so_rather_than_hedging():
+    """The other half, and the one that has to be usable.
+
+    Read on a failed frame, "this is the encoder the limit was measured
+    against" is what rules the toolchain out and sends the reader to the
+    design instead. A note that hedged both ways would say nothing (L11).
+    """
+    note = ffmpeg_note(MEASURED_AGAINST_FFMPEG)
+
+    assert MEASURED_AGAINST_FFMPEG in note, note
+    assert "does not explain" in note, note
+
+
+def test_an_unreadable_version_claims_neither():
+    # An ffmpeg that will not say what it is has to read as unknown rather than
+    # as agreement: an absent answer and a matching one are different situations
+    # and only one of them rules the toolchain out (L11).
+    note = ffmpeg_note(None)
+
+    assert "does not explain" not in note, note
+    assert MEASURED_AGAINST_FFMPEG in note, note
+
+
+def test_a_failed_frame_carries_the_note(tmp_path, monkeypatch):
+    """Built is not wired (L3).
+
+    The note is only worth having inside the failure a person actually reads,
+    so the comparison itself has to carry it. Measured against what the function
+    says for whatever ffmpeg is on this machine, since the point is that the
+    message names the encoder that really did the comparing.
+    """
+    monkeypatch.setenv(LOG_VARIABLE, str(tmp_path / "log.txt"))
+    goldens = tmp_path / "goldens"
+    goldens.mkdir()
+    monkeypatch.setattr("test_golden_frames.GOLDEN_DIR", goldens)
+
+    reference = Image.new("RGB", (1080, 1920), (250, 248, 245))
+    reference.save(goldens / "moved.png")
+    rendered = reference.copy()
+    for i in range(7336):
+        rendered.putpixel((i % 1080, i // 1080), (0, 0, 0))
+
+    with pytest.raises(BaseException) as failure:
+        assert_matches_golden(rendered, "moved", tmp_path)
+
+    from postroll.media.ffmpeg_check import ffmpeg_versions
+
+    assert ffmpeg_note(ffmpeg_versions().get("ffmpeg")) in str(failure.value), (
+        str(failure.value))

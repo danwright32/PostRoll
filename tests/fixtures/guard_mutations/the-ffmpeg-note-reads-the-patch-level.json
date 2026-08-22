@@ -1,0 +1,8 @@
+{
+  "name": "the-ffmpeg-note-reads-the-patch-level",
+  "file": "tests/test_golden_frames.py",
+  "find": "    if running == MEASURED_AGAINST_FFMPEG:",
+  "replace": "    if ffmpeg_major(running) == ffmpeg_major(MEASURED_AGAINST_FFMPEG):",
+  "test": "tests/test_golden_drift_is_reported.py::test_the_note_reads_a_patch_level_difference_the_major_check_cannot_see",
+  "breaks": "the note goes back to the major version, which is the granularity that cannot see the difference that really moved these pixels: 8.1 against 8.1.2_1 put 26 of them outside the tolerance, and both read as 8 (#817)"
+}

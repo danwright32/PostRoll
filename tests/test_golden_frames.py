@@ -159,6 +159,44 @@ def ffmpeg_major(version: str) -> int | None:
     match = re.match(r"n?(\d+)\.", version.strip())
     return int(match.group(1)) if match else None
 
+def ffmpeg_note(running: str | None) -> str:
+    """One sentence about the encoder that actually compared these frames (#817).
+
+    On the FULL version string, which is the granularity the evidence sits at.
+    The 26 pixels #811 diagnosed were ffmpeg 8.1 on Dan's Mac against 8.1.2_1 on
+    the runner, one patch release apart, and `ffmpeg_major` answers 8 to both.
+    So the size of upgrade demonstrably able to move these pixels is the size
+    the check above cannot name.
+
+    A sentence rather than a check of its own, deliberately. A hard failure on
+    any difference would fire on every Homebrew bottle revision, which is a
+    rebuild of the same release, and a check that cries wolf is switched off
+    within a week (L36). This is spoken only where it is already too late to be
+    noise: inside the failure of a frame that really did move.
+
+    Every branch says which of the three states it is in, because "the same
+    build" and "nothing would say" are different situations with different next
+    steps and only one of them rules the toolchain out (L11).
+    """
+    if running is None:
+        return (
+            "ffmpeg would not say what version it is, so nothing here can say "
+            f"whether these frames were compared by the {MEASURED_AGAINST_FFMPEG} "
+            "the limit's reading was taken against.")
+    if running == MEASURED_AGAINST_FFMPEG:
+        return (
+            f"ffmpeg here is {running}, the build MAX_CHANGED_FRACTION's reading "
+            "was taken against, so a different encoder does not explain this.")
+    return (
+        f"ffmpeg here is {running} and the reading MAX_CHANGED_FRACTION was "
+        f"chosen from was taken against {MEASURED_AGAINST_FFMPEG}. A patch "
+        "release is enough to move these pixels: 8.1 against 8.1.2_1 put 26 of "
+        "them outside the tolerance on the clip reel while the other nine "
+        "templates read 0 (#811). So if the other reference frames failed in "
+        "this run too, read that as the toolchain before reading it as a "
+        "design change.")
+
+
 #: The smallest change the reference frames actually have to CATCH (#787).
 #:
 #: Also measured: lifting `program_plate.FOOTER_RULE_Y` by `SAFE_BOTTOM` moves
@@ -240,12 +278,17 @@ def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> Non
         rendered_path = tmp_path / f"{name}-rendered.png"
         actual.convert("RGB").save(rendered_path)
         mask.save(tmp_path / f"{name}-changed.png")
+        # And which ffmpeg did the comparing (#817). Read here rather than
+        # checked up front: on the full version string, where the evidence is,
+        # and only on a frame that already failed, where naming the encoder
+        # costs nothing and a check on every run would be noise.
         pytest.fail(
             f"{name}: {fraction:.2%} of pixels moved (limit "
             f"{MAX_CHANGED_FRACTION:.2%}), changed region {mask.getbbox()}.\n"
             f"  rendered: {rendered_path}\n"
             f"  reference: {golden_path}\n"
-            f"  changed pixels: {tmp_path / f'{name}-changed.png'}")
+            f"  changed pixels: {tmp_path / f'{name}-changed.png'}\n"
+            f"  {ffmpeg_note(ffmpeg_versions().get('ffmpeg'))}")
 
 
 # ── the tool the reading was taken against ───────────────────────────────────
