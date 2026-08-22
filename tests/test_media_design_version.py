@@ -670,9 +670,15 @@ def test_swift_reads_the_file_date_rather_than_only_the_stamp():
         "DesignStamp.swift never reads an asset's modification date, so an "
         "unstamped asset older than its design change is badged by nothing "
         "(#804)")
-    assert "predatesItsDesignChange" in text.split("static func staleTemplates", 1)[1], (
-        "staleTemplates does not reach the unstamped rule, so the date check "
-        "exists and decides nothing")
+    # The BODY of staleTemplates, cut at the next declaration. Searching
+    # everything after the signature is satisfied by the definition of
+    # predatesItsDesignChange, which sits below it: the mutation that replaces
+    # the CALL with `return false` left this green (L135, caught by
+    # check_guards on the first attempt at this guard).
+    body = text.split("static func staleTemplates", 1)[1].split("static func", 1)[0]
+    assert "predatesItsDesignChange(" in body, (
+        "staleTemplates does not call the unstamped rule, so the date check "
+        f"exists and decides nothing. Its body is: {body}")
 
 
 def test_swift_uses_the_same_stamp_filename():
