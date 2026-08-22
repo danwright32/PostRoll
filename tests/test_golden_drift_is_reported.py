@@ -834,3 +834,84 @@ def test_a_real_comparison_writes_the_amplitude(tmp_path, monkeypatch):
 
     read = parse(log.read_text(encoding="utf-8").strip())
     assert read is not None and read.median_delta == 50, read
+
+
+# ===================================================================
+# The frame a comparison rendered, kept for the tool that may record it
+# (#827).
+#
+# `record_codec_change` used to run each template's reference checks
+# twice: once to read what the frames did, and once with the re-record
+# flag set to write them. Two full renders of a reel for one decision,
+# and the frame it recorded was not the frame it judged, since the second
+# run rendered again. Keeping the first one settles both.
+# ===================================================================
+
+def test_no_frame_is_kept_when_nothing_asked_for_one(tmp_path, monkeypatch):
+    from golden_drift import CANDIDATE_VARIABLE, candidate_for
+    monkeypatch.delenv(CANDIDATE_VARIABLE, raising=False)
+
+    assert candidate_for("cover") is None, (
+        "an ordinary local run has nowhere to put a frame and must not invent "
+        "one, the same reason the readings are opt in")
+
+
+def test_the_frame_is_kept_where_the_tool_asked_for_it(tmp_path, monkeypatch):
+    from golden_drift import CANDIDATE_VARIABLE, candidate_for
+    monkeypatch.setenv(CANDIDATE_VARIABLE, str(tmp_path / "kept"))
+
+    assert candidate_for("cover") == tmp_path / "kept" / "cover.png"
+
+
+def test_a_comparison_keeps_the_bytes_a_re_record_would_have_written(tmp_path, monkeypatch):
+    """The property the whole change rests on (#827).
+
+    The tool now RECORDS this file rather than rendering the frame a second
+    time, so it has to be what the second render would have written. Checked
+    against a committed reference frame, which was written by the re-record path
+    itself: if the two ways of saving a frame ever produce different bytes, the
+    door starts recording something subtly unlike what it says it records.
+    """
+    from golden_drift import CANDIDATE_VARIABLE
+    from test_golden_frames import GOLDEN_DIR
+
+    committed = GOLDEN_DIR / "cover.png"
+    assert committed.is_file(), "no committed frame to compare a kept one against"
+
+    monkeypatch.setenv(CANDIDATE_VARIABLE, str(tmp_path / "kept"))
+    assert_matches_golden(Image.open(committed).convert("RGB"), "cover", tmp_path)
+
+    kept = tmp_path / "kept" / "cover.png"
+    assert kept.is_file(), "the comparison rendered a frame and kept nothing"
+    assert kept.read_bytes() == committed.read_bytes(), (
+        "the frame kept for the codec door is not byte for byte what a "
+        "re-record writes, so recording it would record something else")
+
+
+def test_the_frame_kept_is_the_one_that_was_rendered(tmp_path, monkeypatch):
+    """Not merely a frame with the right name (#827).
+
+    The whole value of keeping it is that the tool records what the run
+    RENDERED. A frame copied from the committed reference instead would be
+    byte-identical to it, so every check comparing the two would agree, the
+    door would re-record the same bytes back, and it would then refuse every
+    real codec change on the grounds that nothing moved.
+    """
+    from golden_drift import CANDIDATE_VARIABLE
+    from test_golden_frames import GOLDEN_DIR
+
+    committed = GOLDEN_DIR / "cover.png"
+    rendered = Image.open(committed).convert("RGB")
+    # Few enough to stay well inside MAX_CHANGED_FRACTION, so what this test
+    # measures is what was kept rather than whether the comparison passed.
+    for x in range(26):
+        rendered.putpixel((x, 0), (200, 198, 195))
+
+    monkeypatch.setenv(CANDIDATE_VARIABLE, str(tmp_path / "kept"))
+    assert_matches_golden(rendered, "cover", tmp_path)
+
+    kept = Image.open(tmp_path / "kept" / "cover.png").convert("RGB")
+    assert kept.getpixel((0, 0)) == (200, 198, 195), (
+        "the frame kept is not the one the comparison was handed, so the door "
+        "would record something nothing measured")
+    assert (tmp_path / "kept" / "cover.png").read_bytes() != committed.read_bytes()

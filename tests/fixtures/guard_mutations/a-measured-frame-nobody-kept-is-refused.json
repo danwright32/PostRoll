@@ -1,0 +1,8 @@
+{
+  "name": "a-measured-frame-nobody-kept-is-refused",
+  "file": "tools/record_codec_change.py",
+  "find": "            unkept = missing_frames(run, kept)\n            if unkept:",
+  "replace": "            unkept = ()\n            if unkept:",
+  "test": "tests/test_record_codec_change.py::test_a_measured_frame_that_was_never_kept_is_refused",
+  "breaks": "a template is half recorded: the frames the run kept are written, the one it did not is passed over silently, and the run reports success while that frame still fails (#827, L98)"
+}

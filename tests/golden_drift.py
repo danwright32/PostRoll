@@ -67,6 +67,33 @@ def destination(environment: dict[str, str] | None = None) -> Path | None:
     return Path(value) if value else None
 
 
+#: Set to a directory to KEEP the frame each comparison rendered (#827).
+#:
+#: `tools/record_codec_change.py` used to answer "may this frame be re-recorded"
+#: by running the reference checks, and then answer "record it" by running them
+#: again with `POSTROLL_UPDATE_GOLDENS` set. Two full renders of a reel for one
+#: decision, and the frame it recorded was not the frame it judged, because the
+#: second run rendered afresh. With the first render kept, the tool records
+#: exactly what it measured and renders once.
+#:
+#: Opt in through a variable a tool sets deliberately, for the same reason the
+#: readings are: a place that is always available is a place frames get written
+#: by accident, including from the job that runs pytest against a deliberately
+#: broken tree.
+CANDIDATE_VARIABLE = "POSTROLL_GOLDEN_CANDIDATES"
+
+
+def candidate_for(name: str, environment: dict[str, str] | None = None) -> Path | None:
+    """Where this comparison's rendered frame should be kept, or None.
+
+    Named for the reference frame rather than for the test, so a tool that has
+    decided to record it can find it by the name it will write it under.
+    """
+    environment = os.environ if environment is None else environment
+    value = environment.get(CANDIDATE_VARIABLE, "").strip()
+    return Path(value) / f"{name}.png" if value else None
+
+
 def where_they_are(box: tuple[int, int, int, int] | None, changed: int) -> str:
     """How the changed pixels are arranged, said in words a reading can carry (#793).
 

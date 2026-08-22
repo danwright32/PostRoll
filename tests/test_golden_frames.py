@@ -267,14 +267,33 @@ def _changed_mask(actual: Image.Image, golden: Image.Image) -> Image.Image:
         lambda v: 255 if v > CHANNEL_TOLERANCE else 0)
 
 
+def _write_frame(actual: Image.Image, path: Path) -> None:
+    """The one way a reference frame is written to disk.
+
+    Both writers go through it: the re-record, and the frame kept for
+    `record_codec_change`, which RECORDS that file rather than rendering the
+    template a second time (#827). Two spellings of "save the frame" would be
+    two files that are nearly, but not exactly, the same, and the door would
+    then record something subtly unlike what it measured.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    actual.convert("RGB").save(path)
+
+
 def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> None:
     """Diff `actual` against the committed reference frame for `name`."""
     golden_path = GOLDEN_DIR / f"{name}.png"
 
     if UPDATING:
-        GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
-        actual.convert("RGB").save(golden_path)
+        _write_frame(actual, golden_path)
         pytest.skip(f"re-recorded {golden_path.name}; unset POSTROLL_UPDATE_GOLDENS to check it")
+
+    # Kept before anything can fail, so a frame that MOVED is kept too: that is
+    # the only kind the codec door ever records, and one written after the
+    # comparison would exist for exactly the frames nobody needs it for.
+    candidate = golden_drift.candidate_for(name)
+    if candidate is not None:
+        _write_frame(actual, candidate)
 
     assert golden_path.is_file(), (
         f"no reference frame for {name}. Record one with "
