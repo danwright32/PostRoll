@@ -1,0 +1,8 @@
+{
+  "name": "the-title-card-pass-uses-no-fast-preset",
+  "file": "postroll/media/generate_title_card.py",
+  "find": "            \"-c:v\", \"libx264\", \"-crf\", \"20\", \"-pix_fmt\", \"yuv420p\",",
+  "replace": "            \"-c:v\", \"libx264\", \"-preset\", \"veryfast\", \"-crf\", \"20\", \"-pix_fmt\", \"yuv420p\",",
+  "test": "tests/test_generate_title_card.py::test_the_title_card_pass_does_not_ask_x264_for_a_fast_preset",
+  "breaks": "the clip reel's final encode goes back to a preset that turns off trellis quantisation, subpixel refinement and multiple reference frames, so two builds of x264 disagree about the title's antialiasing and this template alone drifts against its reference frame: 26 of 2073600 pixels measured on the runner, against 0 for the other nine (#811)"
+}
