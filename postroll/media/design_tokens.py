@@ -129,6 +129,21 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     "reel_clip": 1,
 }
 
+@dataclass(frozen=True)
+class DesignChange:
+    """The version a template was moved TO, and the day that move landed.
+
+    One record rather than two tables, because the date is only meaningful as
+    the day THAT version arrived: separated, the version moves and the date
+    stays, and nothing in the file shows it (#808).
+    """
+
+    #: The value of `MEDIA_DESIGN_VERSIONS[name]` this date is about.
+    version: int
+    #: An ISO calendar day, compared against an asset's own modification date.
+    day: str
+
+
 #: The day each template's CURRENT design version was set (#804).
 #:
 #: The staleness badge used to fire only on a recorded version, and measured on
@@ -152,26 +167,52 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
 #: `test_every_bumped_template_records_when_it_changed` holds the pair together
 #: in both directions.
 #:
-#: Each date is the commit that introduced the current value, read out of
-#: git rather than remembered:
+#: Each entry names the version its date belongs to, and that is the whole
+#: reason the pair can be trusted (#808). A date on its own is only held to the
+#: version beside it by `tools/record_design_change.py`, which runs when the
+#: bump goes through `make record-design-change`; a version edited straight into
+#: the table above, which is how several past bumps happened, kept whatever date
+#: the PREVIOUS bump left and every test passed. Writing the version here makes
+#: that drift a mismatch on one line rather than a silence, and
+#: `changes_recorded_for_another_version` below is what reads it.
 #:
-#:     story, cover, before_after, reel_screen   1a30f78 and 8e3013a, 2026-08-21
-#:     reel_morph, reel_slider                   f5b1a3c, 2026-08-21
-#:     reel_scroll, reel_preview                 0e748a8, 2026-08-20
+#: The Swift mirror carries the DAYS only: it is the reading half, and the
+#: version it would compare against is already mirrored above.
 #:
-#: `tools/record_design_change.py` refuses a bump whose date was not moved with
-#: it, so the two cannot drift apart the way a hand-kept pair otherwise would
-#: (L41).
-MEDIA_DESIGN_CHANGED: dict[str, str] = {
-    "story": "2026-08-21",
-    "cover": "2026-08-21",
-    "before_after": "2026-08-21",
-    "reel_screen": "2026-08-21",
-    "reel_morph": "2026-08-21",
-    "reel_slider": "2026-08-21",
-    "reel_scroll": "2026-08-20",
-    "reel_preview": "2026-08-20",
+#: Each date is the day the commit introducing that version landed, read out of
+#: git rather than remembered. Commit hashes are deliberately not recorded
+#: beside them: the ones written here when this table was added had already
+#: drifted by the next day, because a squash merge rewrites the hash the work
+#: was done under (measured 2026-08-21, three of the six named were wrong).
+MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
+    "story": DesignChange(version=2, day="2026-08-21"),
+    "cover": DesignChange(version=2, day="2026-08-21"),
+    "before_after": DesignChange(version=2, day="2026-08-21"),
+    "reel_screen": DesignChange(version=2, day="2026-08-21"),
+    "reel_morph": DesignChange(version=3, day="2026-08-21"),
+    "reel_slider": DesignChange(version=3, day="2026-08-21"),
+    "reel_scroll": DesignChange(version=2, day="2026-08-20"),
+    "reel_preview": DesignChange(version=2, day="2026-08-20"),
 }
+
+
+def changes_recorded_for_another_version(
+        versions: dict[str, int],
+        changed: dict[str, "DesignChange"]) -> list[str]:
+    """Templates whose recorded change describes a version they are not at.
+
+    A bump that left its date behind, which is the case a date alone cannot
+    show. Takes both tables rather than reading the module's own, so it can be
+    driven against a pair that is actually wrong: a check that only ever sees
+    correct data has never been shown to notice incorrect data (L1).
+
+    A template with no entry is not named here. That is the absent case, and
+    `test_every_bumped_template_records_when_it_changed` owns it, in both
+    directions. Two checks sharing one answer is how a distinct cause loses its
+    own message (L53).
+    """
+    return sorted(name for name, entry in changed.items()
+                  if name in versions and entry.version != versions[name])
 
 
 #: Files a day folder can hold that carry no design of their own (#286).

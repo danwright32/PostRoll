@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pytest
 
+from postroll.media.design_tokens import DesignChange
 from tools.record_design_change import (
     GOLDEN_DIR,
     Refused,
@@ -75,7 +76,7 @@ def test_a_bump_whose_date_did_not_move_with_it_is_named():
     undated = undated_bumps(
         record={"story": {"fingerprint": "a", "version": 1}},
         versions={"story": 2},
-        changed={"story": "2026-01-01"},
+        changed={"story": DesignChange(version=1, day="2026-01-01")},
         today="2026-08-21")
 
     assert undated == ["story"]
@@ -85,10 +86,28 @@ def test_a_bump_dated_today_is_not_named():
     undated = undated_bumps(
         record={"story": {"fingerprint": "a", "version": 1}},
         versions={"story": 2},
-        changed={"story": "2026-08-21"},
+        changed={"story": DesignChange(version=2, day="2026-08-21")},
         today="2026-08-21")
 
     assert undated == []
+
+
+def test_a_bump_dated_today_for_the_previous_version_is_named():
+    """Today's date against yesterday's version is the same stale pair (#808).
+
+    The entry records which version its date belongs to, so an edit that moves
+    the date without moving the version, or that copies the whole entry from a
+    template bumped on the same day, is describing a design change that is one
+    generation behind. It reads as freshly recorded, which is why it needs
+    catching here rather than by eye.
+    """
+    undated = undated_bumps(
+        record={"story": {"fingerprint": "a", "version": 1}},
+        versions={"story": 2},
+        changed={"story": DesignChange(version=1, day="2026-08-21")},
+        today="2026-08-21")
+
+    assert undated == ["story"]
 
 
 def test_a_first_bump_with_no_date_at_all_is_named():
@@ -117,7 +136,8 @@ def test_a_template_whose_version_did_not_move_is_not_asked_for_a_date():
         record={"story": {"fingerprint": "a", "version": 2},
                 "cover": {"fingerprint": "b", "version": 2}},
         versions={"story": 2, "cover": 2},
-        changed={"story": "2026-01-01", "cover": "2026-01-01"},
+        changed={"story": DesignChange(version=2, day="2026-01-01"),
+                 "cover": DesignChange(version=2, day="2026-01-01")},
         today="2026-08-21")
 
     assert undated == []

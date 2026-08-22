@@ -107,7 +107,8 @@ def unbumped_templates(current: dict[str, str], record: dict[str, dict],
 
 
 def undated_bumps(record: dict[str, dict], versions: dict[str, int],
-                  changed: dict[str, str], today: str) -> list[str]:
+                  changed: dict[str, tokens.DesignChange],
+                  today: str) -> list[str]:
     """Templates whose version moved while the date it moved on did not (#804).
 
     The badge reads two things now: a stamped day is judged by its version, and
@@ -124,13 +125,20 @@ def undated_bumps(record: dict[str, dict], versions: dict[str, int],
     Judged against the record's version rather than against git: the record is
     what the fingerprint check already reads, and a version that differs from it
     is a bump that has not been recorded yet, which is precisely this run.
+
+    Both halves of the entry have to be right, because an entry left naming the
+    PREVIOUS version is the same stale date wearing today's clothes (#808). They
+    share one refusal because they share one remedy: write the version being
+    shipped and today beside it.
     """
     late = []
     for template in sorted(versions):
         entry = record.get(template)
         if entry is None or entry.get("version") == versions[template]:
             continue
-        if changed.get(template) != today:
+        recorded = changed.get(template)
+        wanted = (versions[template], today)
+        if recorded is None or (recorded.version, recorded.day) != wanted:
             late.append(template)
     return late
 
@@ -213,14 +221,15 @@ def prepare(repo_root: Path, *, unbumped: list[str] | None = None,
 
     if undated:
         raise Refused(
-            "these templates have a bumped version and no record of the day it "
-            f"changed: {', '.join(undated)}.\n"
+            "these templates have a bumped version and no record of the day "
+            f"THAT version changed: {', '.join(undated)}.\n"
             "  MEDIA_DESIGN_CHANGED in postroll/media/design_tokens.py is what "
             "badges assets that carry no stamp, which is the whole existing "
             "library (#804). A bump without it leaves every one of them reading "
             "as current.\n"
-            "  Set each to today's date there and mirror it in "
-            "PostRollApp/Sources/DesignTokens.swift, then run this again.\n"
+            "  Set each entry there to the version being shipped and today's "
+            "date, mirror the date in PostRollApp/Sources/DesignTokens.swift, "
+            "then run this again.\n"
             "  Refusing here rather than after the render, which takes minutes.")
 
     already = changed_goldens(repo_root)

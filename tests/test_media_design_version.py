@@ -120,6 +120,68 @@ def test_every_bumped_template_records_when_it_changed():
         f"{unknown}. Nothing reads them, so the date is decorative.")
 
 
+def test_every_recorded_change_names_the_version_it_belongs_to():
+    """The half `test_every_bumped_template_records_when_it_changed` cannot see (#808).
+
+    That one asks only that a date EXISTS for a template past its first
+    version, so a version edited straight into the table, which is how several
+    past bumps happened rather than through `make record-design-change`, passes
+    with the date of the PREVIOUS bump. Every asset made between that date and
+    this one then reads as current, which is the silence #804 was filed about,
+    now with a guard in place that reads as protection.
+
+    Naming the version the date belongs to is what makes the drift visible in
+    the file itself: the two facts sit on one line, and moving one without the
+    other fails here rather than passing quietly.
+    """
+    stale = tokens.changes_recorded_for_another_version(
+        tokens.MEDIA_DESIGN_VERSIONS, tokens.MEDIA_DESIGN_CHANGED)
+    assert not stale, (
+        f"these templates record a design change for a version they are no "
+        f"longer at: {stale}. The date beside it is the day the OLD version "
+        "landed, so every unstamped asset made since then reads as current. "
+        "Set both halves of the entry in MEDIA_DESIGN_CHANGED to the version "
+        "being shipped and the day it shipped, and mirror the day in "
+        "PostRollApp/Sources/DesignTokens.swift.")
+
+
+def test_a_change_left_behind_by_a_bump_is_named():
+    """The guard, seen to fail (L1).
+
+    Driven against a made-up pair rather than the real table, which is expected
+    to be clean: a check that only ever runs on correct data has never been
+    shown to notice incorrect data.
+    """
+    stale = tokens.changes_recorded_for_another_version(
+        versions={"story": 3, "cover": 2},
+        changed={"story": tokens.DesignChange(version=2, day="2026-08-21"),
+                 "cover": tokens.DesignChange(version=2, day="2026-08-21")})
+
+    assert stale == ["story"]
+
+
+def test_a_change_recording_the_current_version_is_not_named():
+    stale = tokens.changes_recorded_for_another_version(
+        versions={"story": 3},
+        changed={"story": tokens.DesignChange(version=3, day="2026-08-22")})
+
+    assert stale == []
+
+
+def test_a_change_recorded_for_a_version_ahead_of_the_table_is_named():
+    """A rollback is the same drift in the other direction.
+
+    Putting a version back without putting its date back leaves the entry
+    describing a design that is no longer rendered, and the date it carries is
+    then for assets nobody can produce.
+    """
+    stale = tokens.changes_recorded_for_another_version(
+        versions={"story": 2},
+        changed={"story": tokens.DesignChange(version=3, day="2026-08-22")})
+
+    assert stale == ["story"]
+
+
 def test_every_recorded_change_is_a_date_that_has_happened():
     """A date is compared against a file's own; a bad one decides silently.
 
@@ -130,7 +192,8 @@ def test_every_recorded_change_is_a_date_that_has_happened():
     """
     from datetime import date as _date
 
-    for name, when in sorted(tokens.MEDIA_DESIGN_CHANGED.items()):
+    for name, entry in sorted(tokens.MEDIA_DESIGN_CHANGED.items()):
+        when = entry.day
         parsed = _date.fromisoformat(when)
         assert parsed <= _date.today(), (
             f"{name} records a design change on {when}, which has not happened "
@@ -254,7 +317,7 @@ def _aged(day_dir: Path, name: str, when: str) -> None:
 
 def _before(name: str) -> str:
     """The day before `name`'s design last changed."""
-    return (date.fromisoformat(tokens.MEDIA_DESIGN_CHANGED[name])
+    return (date.fromisoformat(tokens.MEDIA_DESIGN_CHANGED[name].day)
             - timedelta(days=1)).isoformat()
 
 
@@ -654,7 +717,8 @@ def test_swift_mirrors_every_recorded_design_change():
         "stays uncovered (#804)")
     body = text.split(marker, 1)[1].split("]", 1)[0]
     mirrored = dict(re.findall(r'"([a-z_]+)"\s*:\s*"(\d{4}-\d{2}-\d{2})"', body))
-    assert mirrored == tokens.MEDIA_DESIGN_CHANGED
+    assert mirrored == {name: entry.day
+                        for name, entry in tokens.MEDIA_DESIGN_CHANGED.items()}
 
 
 def test_swift_reads_the_file_date_rather_than_only_the_stamp():

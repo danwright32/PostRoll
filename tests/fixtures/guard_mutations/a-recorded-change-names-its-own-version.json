@@ -1,0 +1,8 @@
+{
+  "name": "a-recorded-change-names-its-own-version",
+  "file": "postroll/media/design_tokens.py",
+  "find": "                  if name in versions and entry.version != versions[name])",
+  "replace": "                  if False)",
+  "test": "tests/test_media_design_version.py::test_a_change_left_behind_by_a_bump_is_named",
+  "breaks": "a design version edited straight into MEDIA_DESIGN_VERSIONS keeps the date of the PREVIOUS bump, so every unstamped asset made between the two reads as current, which is the silence #804 was filed about with a guard in place that reads as protection (#808)"
+}
