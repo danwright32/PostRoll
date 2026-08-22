@@ -1,0 +1,8 @@
+{
+  "name": "a-failed-frame-names-its-ffmpeg",
+  "file": "tests/test_golden_frames.py",
+  "find": "            f\"  {ffmpeg_note(ffmpeg_versions().get('ffmpeg'))}\")",
+  "replace": "            \"\")",
+  "test": "tests/test_golden_drift_is_reported.py::test_a_failed_frame_carries_the_note",
+  "breaks": "a reference frame fails without saying which ffmpeg compared it, so the reader of the failure has no way to tell a toolchain that moved from a design that moved, which is the whole reason ten frames failing at once reads as a redesign (#817)"
+}
