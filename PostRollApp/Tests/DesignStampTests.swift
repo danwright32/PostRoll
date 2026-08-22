@@ -35,6 +35,35 @@ final class DesignStampTests: XCTestCase {
         }
     }
 
+    /// Set a cached asset's modification date, as an old render would have it.
+    private func age(_ name: String, to day: String) throws {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let when = try XCTUnwrap(formatter.date(from: day)).addingTimeInterval(12 * 3600)
+        let found = try FileManager.default.contentsOfDirectory(at: dir,
+                                                                includingPropertiesForKeys: nil)
+            .first { $0.deletingPathExtension().lastPathComponent == name }
+        try FileManager.default.setAttributes([.modificationDate: when],
+                                              ofItemAtPath: try XCTUnwrap(found).path)
+    }
+
+    /// A template whose design has actually changed, taken from the table
+    /// rather than typed here, so these follow the versions (L41).
+    private var bumped: String {
+        get throws { try XCTUnwrap(MediaDesign.mediaDesignChanged.keys.sorted().first) }
+    }
+
+    /// The day before `name`'s design last changed.
+    private func dayBefore(_ name: String) throws -> String {
+        let changed = try XCTUnwrap(MediaDesign.mediaDesignChanged[name])
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let date = try XCTUnwrap(formatter.date(from: changed))
+        return formatter.string(from: date.addingTimeInterval(-86400))
+    }
+
     private func stamp(_ templates: [String: Int]) throws {
         let doc = try JSONSerialization.data(withJSONObject: ["templates": templates])
         try doc.write(to: dir.appendingPathComponent(DesignStamp.stampName))
@@ -94,6 +123,82 @@ final class DesignStampTests: XCTestCase {
         try stamp(["story": 0])
 
         XCTAssertEqual(DesignStamp.staleTemplates(in: dir), ["story"])
+    }
+
+    // MARK: - An unstamped asset older than its design change (#804)
+
+    func testAnUnstampedAssetOlderThanItsDesignChangeIsStale() throws {
+        // The whole of #804, and the half the app actually runs. The colophon
+        // lift bumped before_after and nothing on disk could notice: there were
+        // zero stamps under the entire preview library, so the badge covered no
+        // asset that existed. Dan published the 7 August render of
+        // 6. Friday/before_after.png, wordmark clipped against the bottom edge,
+        // and the app had no way to say so.
+        let name = try bumped
+        try cache(name)
+        try age(name, to: try dayBefore(name))
+
+        XCTAssertEqual(DesignStamp.staleTemplates(in: dir), [name])
+    }
+
+    func testAnUnstampedAssetNewerThanItsDesignChangeIsNotStale() throws {
+        // What keeps this off the rest of the library: an asset rendered after
+        // the change was rendered by the current design.
+        let name = try bumped
+        try cache(name)
+
+        XCTAssertEqual(DesignStamp.staleTemplates(in: dir), [])
+    }
+
+    func testAnUnstampedTemplateWhoseDesignNeverChangedIsNotReported() throws {
+        // No bump, no claim. A template still at its first version has no
+        // recorded design CHANGE, only a date somebody first wrote a number
+        // down, and an asset older than that was made by the same design.
+        let never = MediaDesign.allTemplates.filter { MediaDesign.changed(of: $0) == nil }
+        XCTAssertFalse(never.isEmpty,
+                       "every template records a change, so this case cannot be reached")
+        for name in never {
+            try cache(name)
+            try age(name, to: "2020-01-01")
+        }
+
+        XCTAssertEqual(DesignStamp.staleTemplates(in: dir), [])
+    }
+
+    func testAStampStillDecidesOverTheFileDate() throws {
+        // A record beats an inference. The stamp measures what rendered the
+        // day; the file date is evidence about when.
+        let name = try bumped
+        try cache(name)
+        try age(name, to: try dayBefore(name))
+        try stamp([name: MediaDesign.version(of: name)!])
+
+        XCTAssertEqual(DesignStamp.staleTemplates(in: dir), [])
+    }
+
+    func testAnAssetWhoseDateCannotBeReadIsNotReported() throws {
+        // Unreadable is not old: reporting on it would be a claim this never
+        // measured. Proven beside the positive case in the same fixture, so a
+        // predicate that answered false for everything would not pass (L159).
+        let name = try bumped
+        XCTAssertFalse(DesignStamp.predatesItsDesignChange(
+            name, at: dir.appendingPathComponent("not-here.png")))
+
+        try cache(name)
+        try age(name, to: try dayBefore(name))
+        let real = try XCTUnwrap(DesignStamp.cachedAssets(in: dir)[name])
+        XCTAssertTrue(DesignStamp.predatesItsDesignChange(name, at: real))
+    }
+
+    func testTheTwoHalvesAgreeOnEveryRecordedChange() throws {
+        // The Swift table is what the app reads and the Python one is where the
+        // reasoning lives. tests/test_media_design_version.py holds them equal;
+        // this holds the Swift side to being usable at all, so a date that
+        // parses to nil badges nothing while the mirror test still passes.
+        for name in MediaDesign.mediaDesignChanged.keys {
+            XCTAssertNotNil(MediaDesign.changed(of: name),
+                            "\(name) records a design change this build cannot parse")
+        }
     }
 
     // MARK: - The collage already had a home for this

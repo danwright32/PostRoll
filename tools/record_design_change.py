@@ -46,6 +46,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -105,6 +106,35 @@ def unbumped_templates(current: dict[str, str], record: dict[str, dict],
     return unbumped
 
 
+def undated_bumps(record: dict[str, dict], versions: dict[str, int],
+                  changed: dict[str, str], today: str) -> list[str]:
+    """Templates whose version moved while the date it moved on did not (#804).
+
+    The badge reads two things now: a stamped day is judged by its version, and
+    an UNSTAMPED asset is judged by whether its own file date puts it before the
+    day that template's design changed. The second covers the whole existing
+    library, which the first cannot, and it is worth exactly as much as
+    `MEDIA_DESIGN_CHANGED` being kept up.
+
+    A hand-kept pair drifts the moment one half is edited (L41), and this is the
+    one door a version bump is supposed to come through, so it is where the pair
+    can be held together. A bump with a stale date silently leaves every asset
+    between the old date and today reading as current when it is not.
+
+    Judged against the record's version rather than against git: the record is
+    what the fingerprint check already reads, and a version that differs from it
+    is a bump that has not been recorded yet, which is precisely this run.
+    """
+    late = []
+    for template in sorted(versions):
+        entry = record.get(template)
+        if entry is None or entry.get("version") == versions[template]:
+            continue
+        if changed.get(template) != today:
+            late.append(template)
+    return late
+
+
 def _git(repo_root: Path, *arguments: str) -> str:
     finished = subprocess.run(["git", "-C", str(repo_root), *arguments],
                               capture_output=True, text=True)
@@ -158,14 +188,16 @@ def rerecord_goldens(repo_root: Path, environment: dict[str, str]) -> None:
 
 
 def prepare(repo_root: Path, *, unbumped: list[str] | None = None,
+            undated: list[str] | None = None,
             stamp=write_stamp, runner=rerecord_goldens) -> Outcome:
     """Steps 3 and 4, in order, having checked 1 and 2 were done.
 
-    `unbumped` is passed in rather than computed here so the check can be driven
-    against a tree that is not this checkout, which is what the tests do. The
-    caller below computes it from the real fingerprints.
+    `unbumped` and `undated` are passed in rather than computed here so the
+    checks can be driven against a tree that is not this checkout, which is what
+    the tests do. The caller below computes both from the real fingerprints.
     """
     unbumped = [] if unbumped is None else unbumped
+    undated = [] if undated is None else undated
     if unbumped:
         raise Refused(
             "these templates render differently and their version has not "
@@ -177,6 +209,18 @@ def prepare(repo_root: Path, *, unbumped: list[str] | None = None,
             "  If it renders identically and only the source moved, this is the "
             "wrong door: use `make record-fingerprints`, which records the "
             "fingerprint alone.\n"
+            "  Refusing here rather than after the render, which takes minutes.")
+
+    if undated:
+        raise Refused(
+            "these templates have a bumped version and no record of the day it "
+            f"changed: {', '.join(undated)}.\n"
+            "  MEDIA_DESIGN_CHANGED in postroll/media/design_tokens.py is what "
+            "badges assets that carry no stamp, which is the whole existing "
+            "library (#804). A bump without it leaves every one of them reading "
+            "as current.\n"
+            "  Set each to today's date there and mirror it in "
+            "PostRollApp/Sources/DesignTokens.swift, then run this again.\n"
             "  Refusing here rather than after the render, which takes minutes.")
 
     already = changed_goldens(repo_root)
@@ -221,8 +265,12 @@ def main(argv: list[str] | None = None) -> int:
     unbumped = unbumped_templates(current=fp.fingerprints(),
                                   record=record,
                                   versions=tokens.MEDIA_DESIGN_VERSIONS)
+    undated = undated_bumps(record=record,
+                            versions=tokens.MEDIA_DESIGN_VERSIONS,
+                            changed=tokens.MEDIA_DESIGN_CHANGED,
+                            today=date.today().isoformat())
     try:
-        outcome = prepare(REPO_ROOT, unbumped=unbumped)
+        outcome = prepare(REPO_ROOT, unbumped=unbumped, undated=undated)
     except Refused as refusal:
         print(f"refusing: {refusal}", file=sys.stderr)
         return 1

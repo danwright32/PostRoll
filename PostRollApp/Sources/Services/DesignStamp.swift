@@ -63,11 +63,28 @@ enum DesignStamp {
     /// claim about them, and a folder full of assets with no stamp at all is
     /// precisely the case this was written for.
     static func cachedTemplates(in dayDir: URL) -> [String] {
+        cachedAssets(in: dayDir).keys.sorted()
+    }
+
+    /// The same assets, with the file each one was found at (#804).
+    ///
+    /// The file is what carries the modification date the unstamped rule reads.
+    /// `cachedTemplates` is derived from this rather than scanning separately,
+    /// so the two cannot disagree about what a day folder holds (L41).
+    ///
+    /// One entry per template: a folder holding two files with the same stem
+    /// keeps whichever the scan reached last, which is the only arrangement a
+    /// render never produces.
+    static func cachedAssets(in dayDir: URL) -> [String: URL] {
         let entries = (try? FileManager.default.contentsOfDirectory(
             at: dayDir, includingPropertiesForKeys: nil)) ?? []
-        return Set(entries.map { $0.deletingPathExtension().lastPathComponent })
-            .filter { MediaDesign.version(of: $0) != nil }
-            .sorted()
+        var found: [String: URL] = [:]
+        for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            let stem = entry.deletingPathExtension().lastPathComponent
+            guard MediaDesign.version(of: stem) != nil else { continue }
+            found[stem] = entry
+        }
+        return found
     }
 
     /// Which cached assets in a day folder predate the design this build renders.
@@ -75,9 +92,10 @@ enum DesignStamp {
     /// Sorted, because the badge names them and a set's order would reword the
     /// message on every read.
     ///
-    /// Reported on EVIDENCE only: a version was recorded, and it is behind. An
-    /// asset with no record is not reported, even though that means an asset
-    /// older than the stamp itself goes unmentioned.
+    /// Reported on EVIDENCE only, and since #804 there are two kinds of it: a
+    /// version was recorded and is behind, or no version was recorded and the
+    /// file's own date puts it before the day that template's design changed.
+    /// An asset with neither is still not reported.
     ///
     /// That was measured rather than assumed (2026-08-10). Treating "no record"
     /// as stale badged all 66 day folders on Dan's machine at once, because none
@@ -118,11 +136,41 @@ enum DesignStamp {
 
     static func staleTemplates(in dayDir: URL) -> [String] {
         let recorded = recorded(in: dayDir)
-        return cachedTemplates(in: dayDir).filter { name in
+        // Scanned once. Asking inside the filter would re-read the folder for
+        // every template it holds.
+        let assets = cachedAssets(in: dayDir)
+        return assets.keys.sorted().filter { name in
             guard let current = MediaDesign.version(of: name),
-                  let stamped = recorded[name] else { return false }
-            return stamped < current
+                  let path = assets[name] else { return false }
+            // A record beats an inference, in both directions: an asset stamped
+            // current is not badged for being old, and one stamped behind is
+            // badged however new the file is.
+            if let stamped = recorded[name] { return stamped < current }
+            return predatesItsDesignChange(name, at: path)
         }
+    }
+
+    /// Whether an asset was written before the day its template's design
+    /// changed (#804).
+    ///
+    /// The half of the badge that needs no stamp. It answers false wherever
+    /// there is no evidence, and those are different situations that must not
+    /// be read as each other: a template with no recorded design CHANGE has
+    /// nothing to be older than, and a file whose date cannot be read says
+    /// nothing about when it was made.
+    ///
+    /// Compared as calendar days, matching the Python half. An asset written ON
+    /// the day of the change, before the change itself, reads as current, which
+    /// under-reports by less than a day. That is the safe direction for a badge
+    /// that sends somebody to re-render, and a copied or synced file carries a
+    /// date at or after its real render rather than before it, so the same
+    /// direction holds for a library that has been moved.
+    static func predatesItsDesignChange(_ template: String, at path: URL) -> Bool {
+        guard let changed = MediaDesign.changed(of: template) else { return false }
+        guard let written = try? path.resourceValues(forKeys: [.contentModificationDateKey])
+                .contentModificationDate else { return false }
+        let calendar = Calendar(identifier: .gregorian)
+        return calendar.startOfDay(for: written) < calendar.startOfDay(for: changed)
     }
 
     /// Fill in the collage's version from the sidecar #160 already writes.
@@ -180,9 +228,11 @@ enum DesignStamp {
     /// because a message that leaves the person to go and find its target is
     /// half a message (L80).
     ///
-    /// There is only one message because there is only one cause: this is
-    /// reached only when a version was recorded and is behind. A day with no
-    /// record says nothing at all, so there is no second sentence to write.
+    /// One message for what is now two causes (#804), because both establish
+    /// the same fact and carry the same remedy: a stamp behind the current
+    /// version, and a file written before the day the design changed, each mean
+    /// this asset was made by an older design and regenerating the day rebuilds
+    /// it. A day with neither still says nothing at all.
     static func staleMessage(for stale: [String]) -> String? {
         guard !stale.isEmpty else { return nil }
         let names = stale.map(label(for:))

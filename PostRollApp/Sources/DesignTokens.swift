@@ -78,8 +78,53 @@ enum MediaDesign {
         "reel_clip": 1,
     ]
 
+    /// The day each template's CURRENT design version was set (#804).
+    ///
+    /// Mirrors `MEDIA_DESIGN_CHANGED` in `postroll/media/design_tokens.py`,
+    /// which is where the reasoning lives and which
+    /// `tests/test_media_design_version.py` holds this to.
+    ///
+    /// The badge used to fire only on a recorded version, and there were zero
+    /// stamps under the whole preview library, so it covered no asset that
+    /// existed. A file's own modification date is evidence nobody has to
+    /// invent, so an UNSTAMPED asset older than the day its template's design
+    /// changed is badged too.
+    ///
+    /// Only templates whose version has actually been BUMPED are here. One
+    /// still at its first version has no change to be older than, only a date
+    /// on which a number was first written down.
+    static let mediaDesignChanged: [String: String] = [
+        "story": "2026-08-21",
+        "cover": "2026-08-21",
+        "before_after": "2026-08-21",
+        "reel_screen": "2026-08-21",
+        "reel_morph": "2026-08-21",
+        "reel_slider": "2026-08-21",
+        "reel_scroll": "2026-08-20",
+        "reel_preview": "2026-08-20",
+    ]
+
     /// Every template this build knows how to judge.
     static var allTemplates: [String] { mediaDesignVersions.keys.sorted() }
+
+    /// The day `template`'s design last changed, or nil for one that has never
+    /// been bumped and therefore has no change to be older than.
+    static func changed(of template: String) -> Date? {
+        guard let text = mediaDesignChanged[template] else { return nil }
+        return isoDay.date(from: text)
+    }
+
+    /// Dates are calendar days in the local zone, matching the Python half,
+    /// which compares `date.fromtimestamp` against `date.fromisoformat`.
+    private static let isoDay: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.calendar = Calendar(identifier: .gregorian)
+        // A fixed locale, or a device on a non-Gregorian calendar parses the
+        // same string into a different day.
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
 
     /// The design generation this build renders `template` at, or nil for one it
     /// does not know (an asset from a newer build, which regenerating here could

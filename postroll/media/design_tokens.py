@@ -129,6 +129,50 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     "reel_clip": 1,
 }
 
+#: The day each template's CURRENT design version was set (#804).
+#:
+#: The staleness badge used to fire only on a recorded version, and measured on
+#: 2026-08-21 there were zero stamp files under the whole preview library, so it
+#: covered no asset that existed. Dan published the 7 August render of
+#: `6. Friday/before_after.png` that day, with the wordmark clipped against the
+#: bottom edge, and the app had no way to say so.
+#:
+#: A stamp is still not written retroactively, for the reason #311 gives: it is
+#: a RECORD, and asserting an old folder was made by the current design is a
+#: claim the file dates contradict. But the file's own modification date is
+#: evidence nobody has to invent, so an UNSTAMPED asset older than the day its
+#: template's design changed is badged, and the whole existing library is
+#: covered rather than only renders from here on.
+#:
+#: Only templates whose version has actually been BUMPED appear here. A template
+#: still at its first version has no design change to be older than, only a date
+#: on which somebody first wrote a number down, and badging an asset older than
+#: that would be an accusation from the absence of evidence (L98). That is why
+#: `collage` and `reel_clip` are absent, and
+#: `test_every_bumped_template_records_when_it_changed` holds the pair together
+#: in both directions.
+#:
+#: Each date is the commit that introduced the current value, read out of
+#: git rather than remembered:
+#:
+#:     story, cover, before_after, reel_screen   1a30f78 and 8e3013a, 2026-08-21
+#:     reel_morph, reel_slider                   f5b1a3c, 2026-08-21
+#:     reel_scroll, reel_preview                 0e748a8, 2026-08-20
+#:
+#: `tools/record_design_change.py` refuses a bump whose date was not moved with
+#: it, so the two cannot drift apart the way a hand-kept pair otherwise would
+#: (L41).
+MEDIA_DESIGN_CHANGED: dict[str, str] = {
+    "story": "2026-08-21",
+    "cover": "2026-08-21",
+    "before_after": "2026-08-21",
+    "reel_screen": "2026-08-21",
+    "reel_morph": "2026-08-21",
+    "reel_slider": "2026-08-21",
+    "reel_scroll": "2026-08-20",
+    "reel_preview": "2026-08-20",
+}
+
 
 #: Files a day folder can hold that carry no design of their own (#286).
 #:

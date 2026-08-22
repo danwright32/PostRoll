@@ -18,7 +18,9 @@ regenerating a day rewrites all of it at once anyway.
 from __future__ import annotations
 
 import json
+import os
 import re
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -85,6 +87,54 @@ def test_the_collage_version_has_one_home():
     # sidecar #160 shipped reads it. Two numbers meant to agree, maintained by
     # hand beside each other, drift the moment one is bumped (L41).
     assert tokens.MEDIA_DESIGN_VERSIONS["collage"] == tokens.COLLAGE_DESIGN_VERSION
+
+
+def test_every_bumped_template_records_when_it_changed():
+    """The pair, in both directions (#804).
+
+    A bumped template with no date is not badged on any unstamped asset, so the
+    whole library stays uncovered for exactly the change that needed covering,
+    silently. A date on a template that was never bumped claims a design change
+    that did not happen, and would badge every asset older than the day
+    somebody first wrote a number down.
+    """
+    missing = sorted(name for name, version in tokens.MEDIA_DESIGN_VERSIONS.items()
+                     if version > 1 and name not in tokens.MEDIA_DESIGN_CHANGED)
+    assert not missing, (
+        f"these templates have been bumped past their first version and record "
+        f"no date it happened: {missing}. Unstamped assets of theirs are badged "
+        "by nothing, which is the state #804 was filed about. Add the date the "
+        "bump landed to MEDIA_DESIGN_CHANGED.")
+
+    invented = sorted(name for name in tokens.MEDIA_DESIGN_CHANGED
+                      if tokens.MEDIA_DESIGN_VERSIONS.get(name) == 1)
+    assert not invented, (
+        f"these templates are still at their first version and record a design "
+        f"change anyway: {invented}. There was no change; the date only says "
+        "when a number was first written down, and every asset older than it "
+        "would be badged for nothing.")
+
+    unknown = sorted(set(tokens.MEDIA_DESIGN_CHANGED) - set(tokens.MEDIA_DESIGN_VERSIONS))
+    assert not unknown, (
+        f"MEDIA_DESIGN_CHANGED names templates with no declared version: "
+        f"{unknown}. Nothing reads them, so the date is decorative.")
+
+
+def test_every_recorded_change_is_a_date_that_has_happened():
+    """A date is compared against a file's own; a bad one decides silently.
+
+    An unparseable date raises here rather than at the moment somebody opens a
+    day folder, and a date in the FUTURE would badge every asset there is,
+    including ones rendered by the current design, which is the alarm nobody
+    reads (L36).
+    """
+    from datetime import date as _date
+
+    for name, when in sorted(tokens.MEDIA_DESIGN_CHANGED.items()):
+        parsed = _date.fromisoformat(when)
+        assert parsed <= _date.today(), (
+            f"{name} records a design change on {when}, which has not happened "
+            "yet, so every cached asset is older than it and would be badged")
 
 
 def test_every_declared_version_is_a_real_version():
@@ -192,18 +242,137 @@ def test_a_template_stamped_older_than_the_current_design_is_stale(tmp_path):
     assert design_stamp.stale_templates(tmp_path) == ["reel_scroll"]
 
 
-def test_an_asset_with_no_record_is_not_reported(tmp_path):
+def _aged(day_dir: Path, name: str, when: str) -> None:
+    """Set a cached asset's modification date, as an old render would have it."""
+    stamp = datetime.fromisoformat(f"{when}T12:00:00").timestamp()
+    for path in day_dir.iterdir():
+        if path.stem == name:
+            os.utime(path, (stamp, stamp))
+            return
+    raise AssertionError(f"no cached asset for {name} in {day_dir}")
+
+
+def _before(name: str) -> str:
+    """The day before `name`'s design last changed."""
+    return (date.fromisoformat(tokens.MEDIA_DESIGN_CHANGED[name])
+            - timedelta(days=1)).isoformat()
+
+
+def _bumped() -> str:
+    """A template whose design has actually changed, taken from the record.
+
+    Named from the table rather than typed here, so these tests follow the
+    versions rather than pinning one template that may go back to being the
+    only one at its first version (L41).
+    """
+    return sorted(tokens.MEDIA_DESIGN_CHANGED)[0]
+
+
+def test_an_unstamped_asset_older_than_its_design_change_is_stale(tmp_path):
+    """The whole of #804.
+
+    The colophon lift bumped `before_after` to 2 and nothing on disk could
+    notice: the badge only fired on a recorded version, and measured that day
+    there were ZERO stamps under the preview library, so the check covered no
+    asset that existed. Dan published the 7 August render of
+    `6. Friday/before_after.png`, with the wordmark clipped against the bottom
+    edge, and the app had no way to say so.
+
+    The file's own modification date is evidence nobody has to invent.
+    """
+    name = _bumped()
+    _cache(tmp_path, name)
+    _aged(tmp_path, name, _before(name))
+
+    assert design_stamp.stale_templates(tmp_path) == [name]
+
+
+def test_an_unstamped_asset_newer_than_its_design_change_is_not_stale(tmp_path):
+    """The other direction, and it is what keeps this off the whole library.
+
+    An asset rendered after the change was rendered by the current design, and
+    badging it would send somebody to rebuild something that is not out of date.
+    """
+    name = _bumped()
+    _cache(tmp_path, name)
+    _aged(tmp_path, name, date.today().isoformat())
+
+    assert design_stamp.stale_templates(tmp_path) == []
+
+
+def test_an_unstamped_template_whose_design_never_changed_is_not_reported(tmp_path):
+    """No bump, no claim.
+
+    A template still at its first version has no recorded design CHANGE, only a
+    date on which somebody first wrote a number down, and an asset older than
+    that was made by the same design. Badging it would be an accusation from the
+    absence of evidence, which is the thing the version rule exists not to do
+    (L98, and the 66 folders badged at once on 2026-08-10).
+    """
+    unbumped = sorted(set(tokens.MEDIA_DESIGN_VERSIONS) - set(tokens.MEDIA_DESIGN_CHANGED))
+    assert unbumped, (
+        "every template has a recorded design change, so this case cannot be "
+        "reached and the rule it covers is untested rather than unnecessary")
+
+    for name in unbumped:
+        _cache(tmp_path, name)
+        _aged(tmp_path, name, "2020-01-01")
+    assert design_stamp.stale_templates(tmp_path) == []
+
+
+def test_a_stamp_still_decides_over_the_file_date(tmp_path):
+    """A record beats an inference, in both directions.
+
+    The stamp is a measurement of what rendered the day; the file date is
+    evidence about when. Where there is a record, it answers, so an asset
+    stamped CURRENT is not badged for being old and one stamped BEHIND is
+    badged however new the file is.
+    """
+    name = _bumped()
+    _cache(tmp_path, name)
+    _aged(tmp_path, name, _before(name))
+    design_stamp.write_design_stamp(tmp_path, [name])
+
+    assert design_stamp.stale_templates(tmp_path) == []
+
+
+def test_an_asset_whose_date_cannot_be_read_is_not_reported(tmp_path):
+    """Unreadable is not old.
+
+    `stat` failing says nothing about when the file was made, and reporting on
+    it would be a claim the check never measured (L11).
+
+    Driven at the predicate with a path that is not there, rather than by
+    replacing `Path.stat` for the whole scan: that also breaks the `iterdir`
+    and `is_file` the scan runs first, so the test would pass on a folder it
+    could not read at all rather than on the case it names (L140).
+    """
+    name = _bumped()
+
+    assert design_stamp.predates_its_design_change(name, tmp_path / "not-here.png") is False
+    # And the positive case in the same fixture, so the False above is the
+    # unreadable date rather than a predicate that answers False for everything
+    # (L159).
+    _cache(tmp_path, name)
+    _aged(tmp_path, name, _before(name))
+    real = design_stamp.cached_assets(tmp_path)[name]
+    assert design_stamp.predates_its_design_change(name, real) is True
+
+
+def test_an_asset_with_no_record_and_no_change_to_be_older_than_is_not_reported(tmp_path):
     # The badge fires on evidence, never on the absence of it. Measured on real
     # data (2026-08-10): every one of the 66 day folders on Dan's machine holds
     # assets and no stamp, so treating "no record" as stale badged all 66 at
-    # once, and a badge on every day is one nobody reads (L36). Those assets are
-    # not even old: the gallery redesign landed 2026-07-14 and the newest
-    # previews were rendered 2026-08-07.
+    # once, and a badge on every day is one nobody reads (L36).
     #
-    # The cost is real and accepted: an asset genuinely older than the redesign
-    # goes unreported. There are none on disk, and from here on every render
-    # leaves a stamp, so a future design change is caught by evidence.
-    _cache(tmp_path, "reel_scroll", "story", "collage")
+    # #804 narrowed that rather than reversed it. An unstamped asset is still
+    # not reported for being unstamped; it is reported when its own file date
+    # puts it before the day that template's design changed, which is evidence
+    # rather than absence. A template with no recorded change still says
+    # nothing, whatever the file date.
+    _cache(tmp_path, "collage", "reel_clip")
+    _aged(tmp_path, "collage", "2020-01-01")
+    _aged(tmp_path, "reel_clip", "2020-01-01")
     assert design_stamp.stale_templates(tmp_path) == []
 
 
@@ -467,6 +636,49 @@ def test_swift_mirrors_every_declared_version():
         for name, value in re.findall(r'"([a-z_]+)"\s*:\s*(\d+)', body)
     }
     assert mirrored == tokens.MEDIA_DESIGN_VERSIONS
+
+
+def test_swift_mirrors_every_recorded_design_change():
+    """Two tables in two languages, and the app runs the Swift one (#804).
+
+    A date missing on the Swift side badges nothing for that template, which is
+    exactly the silence #804 was filed about, while the Python suite stays
+    green. A date that differs badges a different slice of the library on the
+    two halves.
+    """
+    text = swift_without_comments(SWIFT_TOKENS.read_text(encoding="utf-8"))
+    marker = "static let mediaDesignChanged: [String: String] = ["
+    assert marker in text, (
+        "DesignTokens.swift does not declare mediaDesignChanged, so the app "
+        "badges nothing on an unstamped day and the whole existing library "
+        "stays uncovered (#804)")
+    body = text.split(marker, 1)[1].split("]", 1)[0]
+    mirrored = dict(re.findall(r'"([a-z_]+)"\s*:\s*"(\d{4}-\d{2}-\d{2})"', body))
+    assert mirrored == tokens.MEDIA_DESIGN_CHANGED
+
+
+def test_swift_reads_the_file_date_rather_than_only_the_stamp():
+    """Built is not wired (L3).
+
+    The table above can be mirrored perfectly while nothing reads it, and the
+    badge would go on firing only on a stamp. This asks that the staleness scan
+    actually consults the file's modification date.
+    """
+    text = swift_without_comments(SWIFT_STAMP.read_text(encoding="utf-8"))
+
+    assert "contentModificationDate" in text, (
+        "DesignStamp.swift never reads an asset's modification date, so an "
+        "unstamped asset older than its design change is badged by nothing "
+        "(#804)")
+    # The BODY of staleTemplates, cut at the next declaration. Searching
+    # everything after the signature is satisfied by the definition of
+    # predatesItsDesignChange, which sits below it: the mutation that replaces
+    # the CALL with `return false` left this green (L135, caught by
+    # check_guards on the first attempt at this guard).
+    body = text.split("static func staleTemplates", 1)[1].split("static func", 1)[0]
+    assert "predatesItsDesignChange(" in body, (
+        "staleTemplates does not call the unstamped rule, so the date check "
+        f"exists and decides nothing. Its body is: {body}")
 
 
 def test_swift_uses_the_same_stamp_filename():
