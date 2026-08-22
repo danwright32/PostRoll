@@ -1,0 +1,8 @@
+{
+  "name": "a-bumped-version-carries-the-day-it-changed",
+  "file": "tools/record_design_change.py",
+  "find": "        if changed.get(template) != today:",
+  "replace": "        if False:",
+  "test": "tests/test_record_design_change.py::test_a_bump_whose_date_did_not_move_with_it_is_named",
+  "breaks": "a design version can be bumped while MEDIA_DESIGN_CHANGED keeps an old date, so every asset made between that date and the bump reads as current on the whole unstamped library (#804, L41)"
+}

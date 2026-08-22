@@ -1,0 +1,8 @@
+{
+  "name": "an-unstamped-asset-older-than-its-design-change-is-badged",
+  "file": "postroll/media/design_stamp.py",
+  "find": "        elif predates_its_design_change(name, path):",
+  "replace": "        elif False:",
+  "test": "tests/test_media_design_version.py::test_an_unstamped_asset_older_than_its_design_change_is_stale",
+  "breaks": "the badge goes back to firing only on a recorded version, and there are no stamps under the preview library at all, so every cached asset made before a design change reads as current. That is how the 7 August before/after render was published with its wordmark clipped (#804)"
+}

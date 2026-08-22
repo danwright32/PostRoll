@@ -18,10 +18,11 @@ preview, which is the copy that survives to be rendered again.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 from typing import Iterable
 
-from .design_tokens import MEDIA_DESIGN_VERSIONS
+from .design_tokens import MEDIA_DESIGN_CHANGED, MEDIA_DESIGN_VERSIONS
 
 
 #: The record's name inside a day folder.
@@ -126,6 +127,61 @@ def cached_templates(day_dir: Path | str) -> list[str]:
     })
 
 
+def cached_assets(day_dir: Path | str) -> dict[str, Path]:
+    """The same assets, with the path each one was found at (#804).
+
+    The path is what carries the modification date the unstamped rule reads.
+    Kept beside `cached_templates` rather than replacing it, because the app
+    and the tests both ask the plain question far more often than they ask
+    where the file is.
+
+    One entry per template: a folder holding two files with the same stem keeps
+    whichever the scan reached last, which is the only arrangement a render
+    never produces.
+    """
+    day_dir = Path(day_dir)
+    try:
+        entries = list(day_dir.iterdir())
+    except OSError:
+        return {}
+    return {
+        entry.stem: entry for entry in sorted(entries)
+        if entry.is_file() and entry.stem in MEDIA_DESIGN_VERSIONS
+    }
+
+
+def predates_its_design_change(name: str, path: Path) -> bool:
+    """Whether an asset was written before the day its template's design changed.
+
+    The half of the badge that needs no stamp (#804). It answers False in every
+    case where there is no evidence, and each of those is a different situation
+    that must not be read as the others:
+
+    * a template with no recorded design CHANGE has nothing to be older than.
+      Its date in the table would only say when a number was first written
+      down, and an asset older than that was made by the same design (L98).
+    * a file whose date cannot be read says nothing about when it was made, so
+      reporting it would be a claim this never measured (L11).
+
+    Compared as local calendar dates, because the recorded change is a calendar
+    date. An asset written ON the day of the change, before the change itself,
+    reads as current: that under-reports by less than a day, which is the safe
+    direction for a badge that sends somebody to re-render.
+
+    A copied or synced file carries a modification date at or after its real
+    render, never before it, so the same direction holds for a library that has
+    been moved: it can hide a stale asset, it cannot invent one.
+    """
+    changed = MEDIA_DESIGN_CHANGED.get(name)
+    if changed is None:
+        return False
+    try:
+        written = date.fromtimestamp(path.stat().st_mtime)
+    except (OSError, OverflowError, ValueError):
+        return False
+    return written < date.fromisoformat(changed)
+
+
 def stale_templates(day_dir: Path | str) -> list[str]:
     """Which cached assets in a day folder predate the design this build renders.
 
@@ -165,10 +221,17 @@ def stale_templates(day_dir: Path | str) -> list[str]:
     """
     recorded = read_design_stamp(day_dir)
     recorded = _with_collage_from_its_sidecar(day_dir, recorded)
-    return [
-        name for name in cached_templates(day_dir)
-        if name in recorded and recorded[name] < MEDIA_DESIGN_VERSIONS[name]
-    ]
+    stale = []
+    for name, path in sorted(cached_assets(day_dir).items()):
+        if name in recorded:
+            # A record beats an inference, in both directions: an asset stamped
+            # current is not badged for being old, and one stamped behind is
+            # badged however new the file is.
+            if recorded[name] < MEDIA_DESIGN_VERSIONS[name]:
+                stale.append(name)
+        elif predates_its_design_change(name, path):
+            stale.append(name)
+    return stale
 
 
 def _with_collage_from_its_sidecar(

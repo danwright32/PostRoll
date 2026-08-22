@@ -33,6 +33,7 @@ from tools.record_design_change import (
     Refused,
     prepare,
     unbumped_templates,
+    undated_bumps,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -62,6 +63,64 @@ def test_a_template_whose_version_moved_with_it_is_not_named():
     )
 
     assert unbumped == []
+
+
+def test_a_bump_whose_date_did_not_move_with_it_is_named():
+    """The pair the unstamped badge rests on (#804).
+
+    A version bumped without `MEDIA_DESIGN_CHANGED` moving leaves every asset
+    made between the old date and now reading as current, on the whole library
+    that carries no stamp, which is the silence #804 was filed about.
+    """
+    undated = undated_bumps(
+        record={"story": {"fingerprint": "a", "version": 1}},
+        versions={"story": 2},
+        changed={"story": "2026-01-01"},
+        today="2026-08-21")
+
+    assert undated == ["story"]
+
+
+def test_a_bump_dated_today_is_not_named():
+    undated = undated_bumps(
+        record={"story": {"fingerprint": "a", "version": 1}},
+        versions={"story": 2},
+        changed={"story": "2026-08-21"},
+        today="2026-08-21")
+
+    assert undated == []
+
+
+def test_a_first_bump_with_no_date_at_all_is_named():
+    """Going from version 1 to 2 is the case with no previous date to be stale.
+
+    An absent entry has to be caught by the same check, or the very first bump
+    of a template, which is the one that starts the badge working for it, is the
+    one that slips through (L98).
+    """
+    undated = undated_bumps(
+        record={"reel_clip": {"fingerprint": "a", "version": 1}},
+        versions={"reel_clip": 2},
+        changed={},
+        today="2026-08-21")
+
+    assert undated == ["reel_clip"]
+
+
+def test_a_template_whose_version_did_not_move_is_not_asked_for_a_date():
+    """Only a bump needs a date.
+
+    Every other template keeps whatever date it already had, so an unrelated
+    change does not turn into a demand to restamp the whole table.
+    """
+    undated = undated_bumps(
+        record={"story": {"fingerprint": "a", "version": 2},
+                "cover": {"fingerprint": "b", "version": 2}},
+        versions={"story": 2, "cover": 2},
+        changed={"story": "2026-01-01", "cover": "2026-01-01"},
+        today="2026-08-21")
+
+    assert undated == []
 
 
 def test_a_template_nothing_moved_in_is_not_named():
@@ -174,6 +233,30 @@ def test_an_unbumped_template_is_refused_before_anything_is_rendered(tmp_path):
     assert "record-fingerprints" in str(refusal.value), (
         "the refusal does not name the other door, so somebody whose change "
         "renders identically is told to bump a version they should not bump")
+
+
+def test_a_bump_with_no_change_date_is_refused_before_anything_is_rendered(tmp_path):
+    """Built is not wired (L3).
+
+    `undated_bumps` can be exactly right while nothing calls it, and the version
+    would ship with a stale date. This asks that the refusal actually happens,
+    and that it happens BEFORE the render, which is the whole point of checking
+    the preconditions in this tool rather than in the one that comes after it.
+    """
+    repo = _tree(tmp_path)
+    done, stamp, runner = _steps_recorder(repo)
+
+    with pytest.raises(Refused) as refusal:
+        prepare(repo, undated=["before_after"], stamp=stamp, runner=runner)
+
+    assert done == [], "it rendered before refusing, which is the cost it exists to avoid"
+    assert "before_after" in str(refusal.value)
+    assert "MEDIA_DESIGN_CHANGED" in str(refusal.value), (
+        "the refusal does not name what to edit, so it leaves the person to go "
+        "and find it (L80)")
+    assert "DesignTokens.swift" in str(refusal.value), (
+        "the refusal does not mention the Swift mirror, which is the half the "
+        "app actually reads")
 
 
 def test_a_run_that_moved_no_frame_at_all_says_so_rather_than_reporting_success(tmp_path):
