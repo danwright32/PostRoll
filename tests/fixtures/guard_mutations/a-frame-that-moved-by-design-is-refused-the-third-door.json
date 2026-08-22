@@ -1,0 +1,8 @@
+{
+  "name": "a-frame-that-moved-by-design-is-refused-the-third-door",
+  "file": "tools/record_codec_change.py",
+  "find": "        design = golden_drift.why_it_is_not_codec_fidelity(reading)",
+  "replace": "        design = None",
+  "test": "tests/test_record_codec_change.py::test_a_frame_that_moved_by_design_is_refused_with_its_reading",
+  "breaks": "the third door re-records any reference frame handed to it, so a template that was genuinely redesigned has its frame replaced with the staleness badge left off, and every cached asset goes on rendering the old look with nothing reporting it (#818)"
+}

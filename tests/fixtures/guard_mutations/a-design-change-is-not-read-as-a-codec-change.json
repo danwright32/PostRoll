@@ -1,0 +1,8 @@
+{
+  "name": "a-design-change-is-not-read-as-a-codec-change",
+  "file": "tests/golden_drift.py",
+  "find": "CODEC_MEDIAN_DELTA = 24",
+  "replace": "CODEC_MEDIAN_DELTA = 240",
+  "test": "tests/test_codec_fidelity.py::test_every_measured_reading_is_read_the_way_it_was_taken",
+  "breaks": "the amplitude a codec difference is allowed passes every measured design change, so the story's wordmark moved a pixel reads as an encoder rounding and its reference frame can be re-recorded with no version bump (#818)"
+}

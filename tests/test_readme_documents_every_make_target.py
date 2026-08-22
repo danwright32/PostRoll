@@ -67,17 +67,19 @@ def test_the_readme_names_every_target():
         "each one is for, or delete the target.")
 
 
-#: The two commands that answer the design fingerprint guard's question.
+#: The three commands that answer the design fingerprint guard's question.
 #:
-#: They are only useful as a pair. The guard asks which of two things happened,
-#: the template renders differently and the version has to be bumped, or it
-#: renders identically and only the record moves, and there is one command for
-#: each answer. Either one read alone looks like THE answer.
-DESIGN_CHANGE_DOORS = ("record-fingerprints", "record-design-change")
+#: They are only useful together. The guard asks which of three things happened:
+#: the template renders differently and the version has to be bumped, it renders
+#: identically and only the record moves, or the encoder moved the pixels while
+#: the design stood still (#818). There is one command for each answer, and any
+#: one read alone looks like THE answer.
+DESIGN_CHANGE_DOORS = ("record-fingerprints", "record-design-change",
+                       "record-codec-change")
 
 
 def test_both_doors_for_a_design_change_are_in_one_section():
-    """Not merely both present in the file: both in the SAME section.
+    """Not merely all present in the file: all in the SAME section.
 
     A reader arrives here holding a red fingerprint guard and reads the section
     it sent them to. A command documented three screens away is a command they
@@ -98,14 +100,14 @@ def test_both_doors_for_a_design_change_are_in_one_section():
     holding = [s for s in sections if any(documented(c, s) for c in DESIGN_CHANGE_DOORS)]
     assert len(holding) == 1, (
         f"{len(holding)} sections of the README name one of {list(DESIGN_CHANGE_DOORS)}. "
-        "The two commands answer the two halves of one question and belong in "
-        "one place: split across sections, whichever the reader lands in reads "
-        "as the whole answer.")
+        "These commands answer the parts of one question and belong in one "
+        "place: split across sections, whichever the reader lands in reads as "
+        "the whole answer.")
     for command in DESIGN_CHANGE_DOORS:
         assert documented(command, holding[0]), (
             f"the design change section does not name `make {command}`. It has "
-            "to document which of the two cases each command answers, because a "
-            "section naming one of them sends the reader down the path that was "
+            "to document which case each command answers, because a section "
+            "naming only some of them sends the reader down the path that was "
             "going wrong (#786).")
 
 

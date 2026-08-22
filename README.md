@@ -159,10 +159,11 @@ indistinguishable from no test, so it was removed rather than left to rot
 ## Recording a design change
 
 `tests/test_media_design_fingerprint.py` fails whenever a media template's
-source moves, and asks which of two things happened: the template renders
-differently now, so `MEDIA_DESIGN_VERSIONS` has to be bumped, or it renders
-identically and only the record needs updating. There is a command for each
-answer, and picking the wrong one is the mistake this section exists to stop.
+source moves, and asks which of three things happened: the template renders
+differently now, so `MEDIA_DESIGN_VERSIONS` has to be bumped, it renders
+identically and only the record needs updating, or the encoder moved the pixels
+while the design stood still. There is a command for each answer, and picking
+the wrong one is the mistake this section exists to stop.
 
 **The rendering changed, on purpose.** This is the door for a deliberate
 redesign:
@@ -195,8 +196,33 @@ reference frame with uncommitted changes, or a check that skipped, failed or
 reported nothing. A hand written re-record cannot tell the two cases apart, and
 telling them apart is the entire job of the guard (#660).
 
-Both render real reels, so they take minutes rather than seconds, and both need
-ffmpeg and the macOS system fonts.
+**The pixels moved and the design did not.** An encode setting, a codec flag:
+
+```
+make record-codec-change
+```
+
+The third door (#818). #811 changed one encode argument on the clip reel and
+moved 0.27% of its pixels, low amplitude spread over the frame, so the reference
+frame failed and `make record-fingerprints` correctly refused, while the two
+frames were indistinguishable side by side. The version bump was the only door
+left, and a bump badges every cached asset of that template as out of date for a
+change nobody can see.
+
+This reads the shape of what moved, from the readings the comparisons already
+take: how far the pixels moved on their worst channel, and how much of their own
+box they fill. An encoder rounds, so its differences are shallow and scattered;
+a moved or recoloured element leaves ink through its box. The thresholds and the
+measured readings they sit between are in `tests/golden_drift.py`, and
+`tests/test_codec_fidelity.py` holds them to those readings. Anything that reads
+as a design change is refused with its numbers, and so is a check that skipped,
+reported nothing, wrote no reading, or failed with its frame unchanged. What it
+allows, it re-records and stops, because a low amplitude change local to one
+element reads the same as an encoder and only a person looking at the two frames
+can tell.
+
+All three render real reels, so they take minutes rather than seconds, and all
+three need ffmpeg and the macOS system fonts.
 
 ## The other commands
 

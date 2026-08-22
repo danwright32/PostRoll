@@ -722,3 +722,115 @@ def test_a_failed_frame_carries_the_note(tmp_path, monkeypatch):
 
     assert ffmpeg_note(ffmpeg_versions().get("ffmpeg")) in str(failure.value), (
         str(failure.value))
+
+
+# ── the reading says how far the pixels moved, and reads back ────────────────
+#
+# #818. A count and a box cannot tell a render that moved by codec fidelity from
+# one that moved by design, and the tool that decides between them reads the
+# readings this module writes rather than measuring them again, so the format
+# has to survive the round trip.
+
+from golden_drift import (  # noqa: E402
+    Reading,
+    median_over_tolerance,
+    parse,
+    readings,
+)
+
+
+def test_a_reading_says_how_far_the_pixels_moved():
+    written = line("clip_reel", 7189, 2073600, (0, 127, 1080, 1903), 7)
+
+    assert "median delta 7" in written, written
+
+
+def test_a_reading_reads_back_as_the_numbers_it_was_written_from():
+    # One module writes the line and parses it, so the two cannot drift apart
+    # (L41). Everything the verdict is computed from has to survive: the count,
+    # the canvas it is out of, the box, and the amplitude.
+    written = line("clip_reel", 7189, 2073600, (0, 127, 1080, 1903), 7)
+
+    read = parse(written)
+
+    assert read == Reading(name="clip_reel", changed=7189, total=2073600,
+                           box=(0, 127, 1080, 1903), median_delta=7)
+    assert read.fill == pytest.approx(7189 / (1080 * 1776))
+    assert read.box_share == pytest.approx((1080 * 1776) / 2073600)
+
+
+def test_a_reading_taken_before_amplitude_was_written_reads_as_unmeasured():
+    # The old format, which is what a log from a run before #818 carries. None
+    # rather than zero: nobody measured it, which is not the same as nothing
+    # having moved (L11).
+    read = parse(line("story", 26, 2073600, (308, 320, 671, 337)))
+
+    assert read is not None and read.median_delta is None, read
+
+
+def test_a_frame_that_did_not_move_reads_back_with_no_box():
+    read = parse(line("story", 0, 2073600, None, None))
+
+    assert read is not None and read.box is None and read.fill == 0.0, read
+
+
+def test_a_line_that_is_not_a_reading_is_skipped_rather_than_counted(tmp_path):
+    # A collected log carries whatever else was appended to it, and a heading or
+    # a stray line read as a reading would be a template nobody measured (L11).
+    log = tmp_path / "log.txt"
+    log.write_text("### ffmpeg on macOS (ARM64), shard goldens\n"
+                   + line("story", 0, 2073600, None, 0) + "\n"
+                   + "some other output\n", encoding="utf-8")
+
+    assert [r.name for r in readings(log)] == ["story"]
+
+
+def test_a_log_that_was_never_written_is_no_readings(tmp_path):
+    assert readings(tmp_path / "never-written.txt") == []
+
+
+def test_the_median_is_taken_over_the_changed_pixels_only():
+    """The whole canvas is unchanged, so a median over it is zero either way.
+
+    Histogram of a frame where two million pixels match exactly and four moved
+    by 40, 60, 80 and 100. The median that describes the change is 60 or 80;
+    the median over the frame is 0 whatever happened.
+    """
+    histogram = [0] * 256
+    histogram[0] = 2073596
+    for value in (40, 60, 80, 100):
+        histogram[value] = 1
+
+    assert median_over_tolerance(histogram, 6) in (60, 80)
+
+
+def test_nothing_past_the_tolerance_is_not_a_median_of_zero():
+    histogram = [0] * 256
+    histogram[0] = 2073600
+
+    assert median_over_tolerance(histogram, 6) is None
+
+
+def test_a_real_comparison_writes_the_amplitude(tmp_path, monkeypatch):
+    """Built is not wired (L3).
+
+    The verdict is computed from readings the comparison takes, so a comparison
+    that wrote a count and a box and no amplitude would leave the tool with
+    nothing to judge on every template.
+    """
+    log = tmp_path / "log.txt"
+    monkeypatch.setenv(LOG_VARIABLE, str(log))
+    goldens = tmp_path / "goldens"
+    goldens.mkdir()
+    monkeypatch.setattr("test_golden_frames.GOLDEN_DIR", goldens)
+
+    reference = Image.new("RGB", (1080, 1920), (250, 248, 245))
+    reference.save(goldens / "nudged.png")
+    rendered = reference.copy()
+    for x in range(26):
+        rendered.putpixel((x, 0), (200, 198, 195))
+
+    assert_matches_golden(rendered, "nudged", tmp_path)
+
+    read = parse(log.read_text(encoding="utf-8").strip())
+    assert read is not None and read.median_delta == 50, read

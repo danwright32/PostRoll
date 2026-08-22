@@ -21,7 +21,7 @@ PROJECT   := PostRollApp/PostRoll.xcodeproj
 
 .PHONY: install install-force build test test-python test-python-fast \
 	check-guards check-toolchain record-fingerprints record-test-durations \
-	record-design-change review-sheet clean
+	record-design-change record-codec-change review-sheet clean
 
 # One build-and-install implementation, not two. This used to run its own
 # xcodebuild and cp, skipping the xattr clear, the stable-identity signing and
@@ -268,3 +268,19 @@ clean:
 # that is the case it is looking at.
 record-design-change:
 	@venv/bin/python tools/record_design_change.py
+
+# The third door (#818): the pixels moved and the design did not.
+#
+# #811 dropped one encode argument and moved 0.27% of the clip reel's pixels,
+# which fails the reference frame while the two frames are indistinguishable
+# side by side. `record-fingerprints` refuses, correctly, and the only door left
+# was a version bump, which badges every cached asset of that template as out of
+# date for a change nobody can see (L36).
+#
+# This judges the SHAPE of what moved, off the readings the comparisons already
+# take, and re-records only what reads as an encoder rounding rather than as an
+# element moved or redrawn. It writes no version and no fingerprint: it hands
+# the frames back to be looked at, and `record-fingerprints` records them once
+# they are committed and passing.
+record-codec-change:
+	@venv/bin/python tools/record_codec_change.py
