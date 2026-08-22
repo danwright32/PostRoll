@@ -42,6 +42,20 @@ It refuses, by name, in every case where re-recording would be wrong:
     something other than the comparison;
   * a reading whose shape says an element was moved or redrawn.
 
+It runs the reference checks ONCE (#827). It used to read what the frames did
+with one run and then record them with a second, with `POSTROLL_UPDATE_GOLDENS`
+set, which rendered every reel again. Measured on this Mac on 2026-08-22, on
+`reel_clip` with the intermediates moved from `-crf 20` to 18: 23.0s the old
+way against 12.2s this way, for the same two frames and the same verdict.
+
+Speed is the smaller half of it. The second run rendered AFRESH, so the frame it
+committed was a different encode from the one the readings were taken on: what
+was judged and what was recorded were not the same picture. The comparison now
+keeps the frame it rendered (`POSTROLL_GOLDEN_CANDIDATES`, see
+`tests/golden_drift.py`) and this records that file, so the frame committed is
+the frame these readings describe. Every refusal below still runs against the
+measuring pass, which is now the only pass there is.
+
 What it does NOT claim: that a codec-shaped difference is invisible. A change
 that is low amplitude AND sparse in its own box AND local to one element reads
 exactly like an encoder rounding, and this cannot tell them apart. That is why
@@ -74,6 +88,7 @@ import golden_drift  # noqa: E402
 from postroll.media import design_fingerprint as fp  # noqa: E402
 from postroll.media import design_tokens as tokens  # noqa: E402
 from tools.record_design_fingerprints import (  # noqa: E402
+    GOLDEN_DIR,
     RECORD_PATH,
     REFERENCE_TESTS,
     UNPHOTOGRAPHED,
@@ -122,6 +137,10 @@ def run_reference_tests(node_ids: tuple[str, ...], report_path: Path,
     A non-zero exit is expected here rather than refused: the frames this exists
     for are frames that FAIL. What the exit code cannot say is why, so the
     caller judges the readings and the junit outcomes instead.
+
+    The environment it is handed already names where the rendered frames are to
+    be kept, which is what makes this the ONLY run (#827): what the comparison
+    rendered is what gets recorded, so nothing has to render it again.
     """
     completed = subprocess.run(
         [sys.executable, "-m", "pytest", *node_ids, "-q", "--no-header",
@@ -201,12 +220,35 @@ def describe(reading: golden_drift.Reading) -> str:
             f"median delta {reading.median_delta}")
 
 
-def rerecord(node_ids: tuple[str, ...], report_path: Path, drift_path: Path,
-             env: dict[str, str], repo_root: Path,
-             runner) -> tuple[int, str]:
-    """The same checks again with the re-record flag set."""
-    return runner(node_ids, report_path, drift_path,
-                  {**env, "POSTROLL_UPDATE_GOLDENS": "1"}, repo_root)
+def missing_frames(run: Run, kept: Path) -> tuple[str, ...]:
+    """Frames this run measured and did not keep a picture of.
+
+    The door records what the measuring run rendered, so a reading with no
+    picture beside it is a frame there is nothing to record. Named rather than
+    skipped: recording the rest would leave the template half recorded and still
+    failing for the frame that was passed over, with the run reporting success
+    (L98).
+    """
+    return tuple(reading.name for reading in run.readings
+                 if not (kept / f"{reading.name}.png").is_file())
+
+
+def record_kept_frames(run: Run, kept: Path, repo_root: Path) -> tuple[str, ...]:
+    """Put the frames this run rendered where the references live.
+
+    This is the whole of the recording step (#827). It used to be a second full
+    run of the same checks with `POSTROLL_UPDATE_GOLDENS` set, which rendered
+    every reel again: twice the time, and the frame it committed was a DIFFERENT
+    encode from the one the readings above were taken on, so what was judged and
+    what was recorded were not the same picture.
+    """
+    recorded = []
+    for reading in run.readings:
+        destination = repo_root / GOLDEN_DIR / f"{reading.name}.png"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes((kept / f"{reading.name}.png").read_bytes())
+        recorded.append(reading.name)
+    return tuple(recorded)
 
 
 def record(repo_root: Path, *, runner=run_reference_tests,
@@ -265,16 +307,23 @@ def record(repo_root: Path, *, runner=run_reference_tests,
                                  "UNPHOTOGRAPHED in tools/record_design_fingerprints.py")
 
     provable = [t for t in moved if t in REFERENCE_TESTS]
-    to_rerecord: dict[str, tuple[str, ...]] = {}
+    # The whole run happens inside one workspace, because the frames each
+    # template rendered are kept there and recorded from there afterwards. They
+    # are the answer to the second question the tool asks, so they have to
+    # outlive the judging of the first (#827).
     with tempfile.TemporaryDirectory() as workspace:
         run_env = _reference_run_env(environment)
+        allowed: dict[str, tuple[Run, Path]] = {}
         for template in provable:
             node_ids = REFERENCE_TESTS[template]
             log(f"Reading {template} against {len(node_ids)} reference "
                 f"frame(s); this renders.")
             report = Path(workspace) / f"{template}.xml"
             drift = Path(workspace) / f"{template}.drift"
-            returncode, output = runner(node_ids, report, drift, run_env, repo_root)
+            kept = Path(workspace) / f"{template}.frames"
+            returncode, output = runner(
+                node_ids, report, drift,
+                {**run_env, golden_drift.CANDIDATE_VARIABLE: str(kept)}, repo_root)
             run, unreadable = look_at(node_ids, report, drift, returncode, output)
             if unreadable:
                 refused[template] = unreadable
@@ -285,39 +334,40 @@ def record(repo_root: Path, *, runner=run_reference_tests,
             if reason:
                 refused[template] = reason
                 continue
-            to_rerecord[template] = node_ids
+            unkept = missing_frames(run, kept)
+            if unkept:
+                refused[template] = (
+                    f"the run measured {', '.join(unkept)} and kept no frame for "
+                    f"{'it' if len(unkept) == 1 else 'them'}, so there is nothing "
+                    f"here to record. The frame recorded is the one the run "
+                    f"rendered, which is what makes it the frame these readings "
+                    f"describe.")
+                continue
+            allowed[template] = (run, kept)
 
-    if refused:
-        for template, reason in sorted(refused.items()):
-            log(f"NOT re-recorded, {template}: {reason}")
-        log("Nothing was re-recorded. A frame that moved because an element "
-            "moved or was redrawn is a design change: bump "
-            "MEDIA_DESIGN_VERSIONS, mirror it in "
-            "PostRollApp/Sources/DesignTokens.swift, and use `make "
-            "record-design-change`.")
-        return 1
+        if refused:
+            for template, reason in sorted(refused.items()):
+                log(f"NOT re-recorded, {template}: {reason}")
+            log("Nothing was re-recorded. A frame that moved because an element "
+                "moved or was redrawn is a design change: bump "
+                "MEDIA_DESIGN_VERSIONS, mirror it in "
+                "PostRollApp/Sources/DesignTokens.swift, and use `make "
+                "record-design-change`.")
+            return 1
 
-    with tempfile.TemporaryDirectory() as workspace:
-        run_env = _reference_run_env(environment)
-        for template, node_ids in to_rerecord.items():
-            log(f"Re-recording {template}'s reference frame(s).")
-            returncode, output = rerecord(
-                node_ids, Path(workspace) / f"{template}.xml",
-                Path(workspace) / f"{template}.drift", run_env, repo_root, runner)
-            if returncode != 0:
-                log(f"Refusing: the re-record run for {template} exited "
-                    f"{returncode}, so the frames it left behind are of a run "
-                    f"that failed and must not be committed:\n{_tail(output)}")
-                return 1
+        for template, (run, kept) in allowed.items():
+            recorded = record_kept_frames(run, kept, repo_root)
+            log(f"Recording {template}'s reference frame(s): "
+                f"{', '.join(recorded)}.")
 
     changed, git_failed = _dirty_goldens(repo_root)
     if git_failed:
         log(f"Re-recorded, and git could not say which frames changed: {git_failed}")
         return 1
     if not changed:
-        log("Refusing: the re-record left every reference frame byte for byte "
-            "as it was, so nothing here moved and the readings above came from "
-            "something other than these frames.")
+        log("Refusing: the frames this run rendered are byte for byte the ones "
+            "already committed, so nothing here moved and the readings above "
+            "came from something other than these frames.")
         return 1
 
     log("")

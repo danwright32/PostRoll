@@ -1,0 +1,8 @@
+{
+  "name": "the-frame-kept-is-the-frame-that-was-rendered",
+  "file": "tests/test_golden_frames.py",
+  "find": "    candidate = golden_drift.candidate_for(name)\n    if candidate is not None:\n        _write_frame(actual, candidate)",
+  "replace": "    candidate = golden_drift.candidate_for(name)\n    if candidate is not None:\n        _write_frame(Image.open(GOLDEN_DIR / f\"{name}.png\").convert(\"RGB\"), candidate)",
+  "test": "tests/test_golden_drift_is_reported.py::test_the_frame_kept_is_the_one_that_was_rendered",
+  "breaks": "the codec door records the frame already committed rather than the one the run rendered, so a re-record writes the same bytes back and the tool refuses every real codec change while reporting the frames unmoved (#827)"
+}

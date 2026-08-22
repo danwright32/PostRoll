@@ -89,39 +89,39 @@ def _case(node_id: str, outcome: str) -> str:
     return f'<testcase classname="{classname}" name="{name}"{inner}'
 
 
+#: What the measuring run leaves behind for a frame it rendered, standing in for
+#: the PNG a real comparison keeps.
+KEPT_BYTES = b"the frame this run rendered and measured"
+
+
 class FakeRun:
     """A stand-in for the reference run, with a recorded verdict and readings.
 
-    Two modes, because the tool runs the checks twice: once to read what the
-    frames did, and once with `POSTROLL_UPDATE_GOLDENS` set to re-record them.
-    The second mode writes new bytes into the reference frames, which is what
-    the tool then asks git about.
+    One mode, because the tool runs the checks ONCE (#827). A real comparison
+    keeps the frame it rendered where `POSTROLL_GOLDEN_CANDIDATES` points, and
+    the tool records that file rather than rendering the template again, so this
+    writes a stand-in frame there for every name it claims to have kept.
     """
 
     def __init__(self, *, outcomes: dict[str, str] | None = None,
                  readings: tuple[str, ...] = CODEC_READINGS,
                  omit: tuple[str, ...] = (), report: bool = True,
                  returncode: int = 1, output: str = "one frame moved",
-                 rerecords: tuple[str, ...] = GOLDENS,
-                 rerecord_returncode: int = 0) -> None:
+                 keeps: tuple[str, ...] = GOLDENS,
+                 kept_bytes: bytes = KEPT_BYTES) -> None:
         self.outcomes = outcomes or {node: "failed" for node in NODES}
         self.readings = readings
         self.omit = omit
         self.report = report
         self.returncode = returncode
         self.output = output
-        self.rerecords = rerecords
-        self.rerecord_returncode = rerecord_returncode
+        self.keeps = keeps
+        self.kept_bytes = kept_bytes
         self.calls: list[tuple[tuple[str, ...], dict[str, str]]] = []
 
     def __call__(self, node_ids, report_path: Path, drift_path: Path, env,
                  repo_root: Path) -> tuple[int, str]:
         self.calls.append((tuple(node_ids), dict(env)))
-        if env.get("POSTROLL_UPDATE_GOLDENS"):
-            for name in self.rerecords:
-                (repo_root / GOLDEN_DIR / f"{name}.png").write_bytes(
-                    b"a re-recorded reference frame")
-            return self.rerecord_returncode, "re-recorded"
         if self.report:
             cases = "".join(_case(node, self.outcomes.get(node, "failed"))
                             for node in node_ids if node not in self.omit)
@@ -131,10 +131,16 @@ class FakeRun:
                 encoding="utf-8")
         if self.readings:
             drift_path.write_text("\n".join(self.readings) + "\n", encoding="utf-8")
+        kept = env.get(golden_drift.CANDIDATE_VARIABLE)
+        if kept:
+            Path(kept).mkdir(parents=True, exist_ok=True)
+            for name in self.keeps:
+                (Path(kept) / f"{name}.png").write_bytes(self.kept_bytes)
         return self.returncode, self.output
 
     @property
     def rerecorded(self) -> bool:
+        """Whether any reference frame in the repo was written."""
         return any(env.get("POSTROLL_UPDATE_GOLDENS") for _, env in self.calls)
 
 
@@ -161,6 +167,19 @@ def move_the_clip_reel(repo: Path) -> None:
     move_fingerprint(repo, "render_clip_reel.py")
 
 
+def goldens_untouched(repo: Path) -> bool:
+    """Whether every reference frame in the repo is still what it was.
+
+    What "re-recorded" means moved with #827: the frames are written by the TOOL
+    copying what the measuring run kept, not by a second pytest run setting a
+    flag. A refusal check that still asked the runner would be asking something
+    that can no longer happen, and would pass in a fixture where it could not
+    fail (L159).
+    """
+    return all((repo / GOLDEN_DIR / f"{name}.png").read_bytes() == b"reference frame"
+               for name in GOLDENS)
+
+
 def versions_in(repo: Path) -> dict:
     return {name: entry["version"] for name, entry
             in json.loads((repo / RECORD_PATH).read_text(encoding="utf-8")).items()}
@@ -176,7 +195,7 @@ def test_a_render_that_moved_by_the_encoder_gets_its_frame_re_recorded(repo):
     code, said = run(repo, runner)
 
     assert code == 0, said
-    assert runner.rerecorded, said
+    assert not goldens_untouched(repo), said
     # BOTH of this template's frames, named (#825). A codec change moves the
     # delivered reel and the titled one, since the second is an encode of the
     # first, and a door that re-recorded one of them would leave the template
@@ -255,7 +274,7 @@ def test_a_bumped_version_is_sent_to_the_other_door(repo):
 
     assert code == 1
     assert "record-design-change" in said, said
-    assert not runner.rerecorded, said
+    assert goldens_untouched(repo), said
 
 
 def test_the_re_record_flag_being_set_already_is_refused(repo):
@@ -293,7 +312,7 @@ def test_a_check_that_reported_nothing_is_refused(repo):
 
     assert code == 1
     assert "reported nothing at all" in said, said
-    assert not runner.rerecorded, said
+    assert goldens_untouched(repo), said
 
 
 def test_a_check_that_skipped_is_refused(repo):
@@ -304,7 +323,7 @@ def test_a_check_that_skipped_is_refused(repo):
 
     assert code == 1
     assert "skipped rather than ran" in said, said
-    assert not runner.rerecorded, said
+    assert goldens_untouched(repo), said
 
 
 def test_a_run_that_collected_nothing_says_so_rather_than_blaming_a_check(repo):
@@ -322,7 +341,7 @@ def test_a_run_that_collected_nothing_says_so_rather_than_blaming_a_check(repo):
     assert code == 1
     assert "no readings at all" in said, said
     assert "POSTROLL_GOLDEN_DRIFT_LOG" in said, said
-    assert not runner.rerecorded, said
+    assert goldens_untouched(repo), said
 
 
 def test_a_template_photographed_twice_needs_a_reading_from_each():
@@ -353,7 +372,7 @@ def test_a_run_whose_report_never_appeared_is_refused(repo):
 
     assert code == 1
     assert "wrote no report" in said, said
-    assert not runner.rerecorded, said
+    assert goldens_untouched(repo), said
 
 
 def test_frames_that_all_passed_are_sent_to_the_other_door(repo):
@@ -366,7 +385,7 @@ def test_frames_that_all_passed_are_sent_to_the_other_door(repo):
 
     assert code == 1
     assert "record-fingerprints" in said, said
-    assert not runner.rerecorded, said
+    assert goldens_untouched(repo), said
 
 
 def test_a_failure_with_the_frame_unchanged_is_refused(repo):
@@ -381,7 +400,7 @@ def test_a_failure_with_the_frame_unchanged_is_refused(repo):
 
     assert code == 1
     assert "not the comparison" in said, said
-    assert not runner.rerecorded, said
+    assert goldens_untouched(repo), said
 
 
 def test_a_frame_that_moved_by_design_is_refused_with_its_reading(repo):
@@ -400,7 +419,7 @@ def test_a_frame_that_moved_by_design_is_refused_with_its_reading(repo):
     assert "moved by design" in said, said
     assert "median" in said, said
     assert "MEDIA_DESIGN_VERSIONS" in said, said
-    assert not runner.rerecorded, said
+    assert goldens_untouched(repo), said
 
 
 def test_one_design_shaped_frame_refuses_the_whole_template(repo):
@@ -413,26 +432,73 @@ def test_one_design_shaped_frame_refuses_the_whole_template(repo):
 
     assert code == 1
     assert "moved by design" in said, said
-    assert not runner.rerecorded, said
+    assert goldens_untouched(repo), said
 
 
-def test_a_re_record_that_failed_is_refused(repo):
+def test_a_measured_frame_that_was_never_kept_is_refused(repo):
+    """The frame is recorded from the run that measured it (#827).
+
+    So a reading with no frame beside it is a frame nobody kept, and the tool
+    has nothing to record. Refused by name rather than skipped: skipping would
+    leave the template half recorded, still failing for the frame it passed
+    over, with the run reporting success.
+    """
     move_the_clip_reel(repo)
-    runner = FakeRun(rerecord_returncode=2)
+    runner = FakeRun(keeps=(GOLDEN,))
 
     code, said = run(repo, runner)
 
     assert code == 1
-    assert "must not be committed" in said, said
+    assert "kept no frame" in said, said
+    assert DELIVERED_GOLDEN in said, said
+    assert goldens_untouched(repo), said
 
 
-def test_a_re_record_that_changed_nothing_is_refused(repo):
-    # The readings said a frame moved and re-recording it produced the same
-    # bytes, so the two disagree and one of them is measuring something else.
+def test_a_kept_frame_identical_to_the_committed_one_is_refused(repo):
+    # The readings said a frame moved and the frame kept is byte for byte the
+    # one already committed, so the two disagree and one of them is measuring
+    # something other than these frames.
     move_the_clip_reel(repo)
-    runner = FakeRun(rerecords=())
+    runner = FakeRun(kept_bytes=b"reference frame")
 
     code, said = run(repo, runner)
 
     assert code == 1
     assert "byte for byte" in said, said
+
+
+def test_the_reference_checks_run_once(repo):
+    """What #827 is about: one render, not two.
+
+    The tool used to read the frames with one run and record them with a second,
+    so a step that renders reels took twice as long as it needed to.
+    """
+    move_the_clip_reel(repo)
+    runner = FakeRun()
+
+    code, said = run(repo, runner)
+
+    assert code == 0, said
+    assert len(runner.calls) == 1, (
+        f"the reference checks ran {len(runner.calls)} times for one template")
+    assert not runner.rerecorded, (
+        "the checks were asked to re-record, which is the second render this "
+        "change exists to remove")
+
+
+def test_the_frame_recorded_is_the_frame_that_was_measured(repo):
+    """Not merely one render: the SAME render (#827).
+
+    Two runs of the same checks produce two encodes, so the readings that
+    allowed the re-record described a file that was then thrown away, and the
+    frame committed was one nothing had judged.
+    """
+    move_the_clip_reel(repo)
+
+    code, said = run(repo, FakeRun())
+
+    assert code == 0, said
+    for name in GOLDENS:
+        assert (repo / GOLDEN_DIR / f"{name}.png").read_bytes() == KEPT_BYTES, (
+            f"{name} was recorded as something other than the frame the run "
+            f"measured")
