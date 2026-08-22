@@ -179,7 +179,7 @@ def predates_its_design_change(name: str, path: Path) -> bool:
         written = date.fromtimestamp(path.stat().st_mtime)
     except (OSError, OverflowError, ValueError):
         return False
-    return written < date.fromisoformat(changed)
+    return written < date.fromisoformat(changed.day)
 
 
 def stale_templates(day_dir: Path | str) -> list[str]:
