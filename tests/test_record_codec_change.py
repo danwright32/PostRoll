@@ -275,17 +275,42 @@ def test_a_check_that_skipped_is_refused(repo):
     assert not runner.rerecorded, said
 
 
-def test_a_run_that_wrote_no_reading_is_refused(repo):
-    # The check failed before it reached its frame, so nothing measured what
-    # moved and there is nothing to judge.
+def test_a_run_that_collected_nothing_says_so_rather_than_blaming_a_check(repo):
+    """Two causes, one symptom, and they have different repairs (L11).
+
+    No readings at all is either every check failing before its frame or the
+    collecting variable never reaching the run, and this cannot tell them apart,
+    so it says both rather than naming the one it guessed.
+    """
     move_the_clip_reel(repo)
     runner = FakeRun(readings=())
 
     code, said = run(repo, runner)
 
     assert code == 1
-    assert "wrote a reading" in said, said
+    assert "no readings at all" in said, said
+    assert "POSTROLL_GOLDEN_DRIFT_LOG" in said, said
     assert not runner.rerecorded, said
+
+
+def test_a_template_photographed_twice_needs_a_reading_from_each():
+    # Built directly rather than through a run, because the templates with two
+    # reference frames are the Tuesday reels and rendering one here would take
+    # minutes (L2). The rule is the same: a reading missing is a frame nobody
+    # measured.
+    from golden_drift import parse
+    from tools.record_codec_change import Run, why_it_cannot_be_rerecorded
+
+    run_with_one = Run(
+        node_ids=("tests/test_golden_frames.py::test_a",
+                  "tests/test_golden_frames.py::test_b"),
+        outcomes={"tests/test_golden_frames.py::test_a": "failed",
+                  "tests/test_golden_frames.py::test_b": "failed"},
+        readings=(parse(CODEC_READING),), output="one of them failed early")
+
+    reason = why_it_cannot_be_rerecorded(run_with_one)
+
+    assert reason is not None and "wrote a reading" in reason, reason
 
 
 def test_a_run_whose_report_never_appeared_is_refused(repo):

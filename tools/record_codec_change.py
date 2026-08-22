@@ -162,6 +162,13 @@ def why_it_cannot_be_rerecorded(run: Run) -> str | None:
             return (f"{node} skipped rather than ran, so nothing measured what "
                     f"its frame does.")
 
+    if not run.readings:
+        return (f"the run wrote no readings at all, so nothing measured what "
+                f"any of these frames did. Either every check failed before it "
+                f"reached its frame, or the readings were never collected, "
+                f"which is {DRIFT_VARIABLE} not reaching the run. Those are "
+                f"different repairs and this cannot tell them apart from here. "
+                f"What the run said:\n{_tail(run.output)}")
     if len(run.readings) < len(run.node_ids):
         return (f"{len(run.node_ids)} reference check(s) ran and only "
                 f"{len(run.readings)} wrote a reading, so at least one failed "
