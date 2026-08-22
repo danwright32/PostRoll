@@ -1,0 +1,8 @@
+{
+  "name": "some-template-is-still-held-to-a-side-band",
+  "file": "tests/test_phone_safe_area.py",
+  "find": "CROPPED = sorted(name for name in RENDERERS if tokens.safe_side_for(name) > 0)",
+  "replace": "CROPPED = sorted(name for name in RENDERERS if False)",
+  "test": "tests/test_phone_safe_area.py::test_the_templates_held_to_a_side_band_are_not_an_empty_set",
+  "breaks": "every template drops out of the side-crop check and the file still reads as enforcing it, which is the shape a green sweep over nothing hides (#809, L98)"
+}

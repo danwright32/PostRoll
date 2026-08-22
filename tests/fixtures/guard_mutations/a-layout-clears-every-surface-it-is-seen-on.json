@@ -1,0 +1,8 @@
+{
+  "name": "a-layout-clears-every-surface-it-is-seen-on",
+  "file": "postroll/media/design_tokens.py",
+  "find": "        if lender == template:",
+  "replace": "        if False:",
+  "test": "tests/test_side_crop_readings.py::test_a_template_inherits_the_surfaces_of_whatever_its_layout_also_draws",
+  "breaks": "a template stops inheriting the surfaces of whatever else its layout draws, so the story is held to the story's crop of nothing while the same layout is still drawing cover.png onto a reel, where 57 canvas pixels a side are cut off (#809)"
+}

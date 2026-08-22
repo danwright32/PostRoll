@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from postroll.media import design_tokens as tokens
 from postroll.media.design_tokens import SideCropReading
 
@@ -182,3 +184,138 @@ def test_the_token_still_covers_the_only_phone_measured_so_far():
     devices = [reading.device for reading in tokens.SIDE_CROP_READINGS]
 
     assert "iPhone 16 Pro Max" in devices, devices
+
+
+# ── which surface each template is actually posted to (#809) ──────────────────
+
+
+def test_every_template_records_the_surface_it_is_posted_to():
+    """A crop is a property of the SURFACE, so a template needs to name its own.
+
+    Held against the design versions table, which is the list of templates this
+    project renders. A template in neither direction would be held to whatever
+    the widest reading anywhere happens to be, which is what #809 was filed
+    about, or to nothing at all.
+    """
+    declared = set(tokens.TEMPLATE_SURFACES)
+    rendered = set(tokens.MEDIA_DESIGN_VERSIONS)
+
+    assert declared == rendered, (
+        f"these templates render an asset and record no surface: "
+        f"{sorted(rendered - declared)}; and these record a surface and render "
+        f"nothing: {sorted(declared - rendered)}. Every template has to say "
+        "where its asset is seen, because that is what decides how much of its "
+        "edges are cut off.")
+
+
+def test_every_surface_named_is_one_this_repo_knows():
+    named = {surface for surfaces in tokens.TEMPLATE_SURFACES.values()
+             for surface in surfaces}
+    unknown = sorted(named - set(tokens.SIDE_CROP_BY_SURFACE))
+
+    assert not unknown, (
+        f"these templates name a surface with no recorded crop: {unknown}. "
+        f"Known: {sorted(tokens.SIDE_CROP_BY_SURFACE)}")
+
+
+def test_every_measured_surface_has_a_reading_behind_its_crop():
+    """A crop of zero must come from a measurement, never from an empty table.
+
+    `story` is 0 because a published story was measured losing nothing. A
+    surface nobody has measured would also compute to nothing, and the two are
+    indistinguishable from the number alone (L98), so the readings are asked
+    for by name.
+    """
+    for surface in sorted(tokens.SIDE_CROP_SURFACES):
+        readings = [r for r in tokens.SIDE_CROP_READINGS if r.surface == surface]
+        assert readings, (
+            f"{surface} is a measured surface with no reading behind it, so its "
+            f"crop of {tokens.SIDE_CROP_BY_SURFACE[surface]} rests on an empty "
+            "table rather than on anything anybody saw")
+
+
+def test_the_only_unmeasured_surface_is_the_one_nothing_is_posted_to():
+    """The exemption, named rather than left as a gap (L129).
+
+    `app` has no reading and cannot have one: it is not a place Instagram shows
+    a frame, it is PostRoll's own review screen, which draws all 1080 pixels
+    because it is drawing the file. Any OTHER surface without a reading is the
+    silent case the check above exists to catch.
+    """
+    unmeasured = sorted(set(tokens.SIDE_CROP_BY_SURFACE) - tokens.SIDE_CROP_SURFACES)
+
+    assert unmeasured == ["app"], (
+        f"these surfaces carry a crop with no measurement behind them: "
+        f"{unmeasured}. Only `app` is allowed to, because it is not a surface "
+        "Instagram shows anything on.")
+
+
+def test_each_surfaces_crop_covers_the_widest_reading_taken_on_it():
+    for surface in sorted(tokens.SIDE_CROP_SURFACES):
+        widest = tokens.widest_side_crop(surface=surface)
+        assert tokens.SIDE_CROP_BY_SURFACE[surface] >= widest, (
+            f"{surface} is held to {tokens.SIDE_CROP_BY_SURFACE[surface]} canvas "
+            f"pixels a side and the widest reading taken on it is {widest:.1f}, "
+            "so a column a phone really cuts off is being declared safe")
+
+
+def test_a_wider_reading_on_one_surface_would_raise_that_surfaces_floor():
+    """The control for the check above, on one surface rather than all of them (L1).
+
+    The story reads zero today, which is exactly the case where a check can pass
+    while measuring nothing. This hands the story surface a phone that crops and
+    watches the comparison go the other way.
+    """
+    hungry = SideCropReading(device="a taller phone than any seen",
+                             surface="story", measured="2026-08-21",
+                             screen=(1320, 3200), shown=1800, window=1320)
+    widest = tokens.widest_side_crop(tokens.SIDE_CROP_READINGS + (hungry,),
+                                     surface="story")
+
+    assert widest > tokens.SIDE_CROP_BY_SURFACE["story"], (
+        f"the synthetic phone this control is built on does not crop more than "
+        f"the story's {tokens.SIDE_CROP_BY_SURFACE['story']} ({widest:.1f}), so "
+        "the check above has not been shown able to fail")
+
+
+def test_a_surface_with_no_readings_is_refused_rather_than_answered_with_zero():
+    """Asking for a surface nobody measured must not answer "nothing is cut off".
+
+    That is the one answer indistinguishable from a real letterboxed reading,
+    and it is the answer an unfiltered max over an empty sequence would be
+    given if the filter were ever loosened (L98).
+    """
+    with pytest.raises(ValueError, match="carousel"):
+        tokens.widest_side_crop(surface="carousel")
+
+
+def test_a_template_is_held_to_the_widest_crop_of_the_surfaces_it_is_seen_on():
+    assert tokens.safe_side_for("reel_scroll") == tokens.SAFE_SIDE
+    assert tokens.safe_side_for("collage") == 0
+
+
+def test_a_template_inherits_the_surfaces_of_whatever_its_layout_also_draws():
+    """The coupling that decides the story, and the reason #809 changes less
+    than it looks like it should.
+
+    `cover` is not a story. It is the Instagram grid cover for the Thursday
+    scroll reel and the Friday clip reel, and it is drawn by `generate_story`'s
+    exact layout. So the story's template puts pixels on a REEL, where the edges
+    are cut off, and relaxing it to the story's own crop would have taken the
+    clearance away from an asset that needs it.
+    """
+    assert tokens.surfaces_seen_by("story") == frozenset({"story", "reel"})
+    assert tokens.safe_side_for("story") == tokens.SAFE_SIDE
+
+
+def test_a_template_drawn_by_nothing_else_is_only_its_own_surfaces():
+    assert tokens.surfaces_seen_by("collage") == frozenset({"story"})
+
+
+def test_every_borrowed_layout_names_two_templates_that_exist():
+    for borrower, lender in sorted(tokens.DRAWN_BY.items()):
+        assert borrower in tokens.TEMPLATE_SURFACES, borrower
+        assert lender in tokens.TEMPLATE_SURFACES, lender
+        assert lender not in tokens.DRAWN_BY, (
+            f"{borrower} borrows {lender}'s layout and {lender} borrows another, "
+            "so the surfaces one inherits depend on the order they are read in")

@@ -400,16 +400,30 @@ SIDE_CROP_READINGS: tuple[SideCropReading, ...] = (
 
 def widest_side_crop(
     readings: tuple[SideCropReading, ...] | None = None,
+    *,
+    surface: str | None = None,
 ) -> float:
     """The largest crop any recorded phone showed, in canvas pixels.
 
     Takes the table rather than reading the module's own, so the guard that
     holds SAFE_SIDE to it can be shown failing on a phone that crops more
     without the committed readings being edited (L1).
+
+    `surface` narrows it to one place a frame is shown, which is what #809
+    needs: the widest crop ANYWHERE is the reel's, and holding a story to it
+    holds it to a crop that surface does not make. A surface with no readings
+    RAISES rather than answering zero, because zero is exactly what a real
+    letterboxed reading looks like and the two must not be confused (L98).
     """
-    return max(reading.canvas_pixels_per_side
-               for reading in (SIDE_CROP_READINGS if readings is None
-                               else readings))
+    table = SIDE_CROP_READINGS if readings is None else readings
+    if surface is not None:
+        table = tuple(r for r in table if r.surface == surface)
+        if not table:
+            raise ValueError(
+                f"no side-crop reading has been taken on {surface!r}, so how "
+                "much of a frame it cuts off is unknown. Answering zero would "
+                "be indistinguishable from a surface measured to crop nothing.")
+    return max(reading.canvas_pixels_per_side for reading in table)
 
 
 #: How much of EACH SIDE of a full-frame asset the phone never shows (#768).
@@ -436,6 +450,133 @@ def widest_side_crop(
 #: readings are in the table above, each naming its surface, so the difference
 #: is a row rather than a sentence somebody has to remember to write.
 SAFE_SIDE = 60
+
+
+#: How much of each side each surface cuts off, in canvas pixels (#809).
+#:
+#: `SAFE_SIDE` is the widest crop measured ANYWHERE, which is the reel's, and
+#: until now every template was held to it. Holding a story to it holds it to a
+#: crop that surface does not make: measured on the same phone the day after,
+#: Instagram letterboxes a story and shows all 1080 pixels.
+#:
+#: The reel's number is not restated here. Two spellings of one measurement
+#: drift the moment one is edited (L41), and this one is already explained
+#: above.
+SIDE_CROP_BY_SURFACE: dict[str, int] = {
+    "reel": SAFE_SIDE,
+    # Measured 2026-08-21 on the iPhone 16 Pro Max: fitted to the 1320px screen
+    # width with black bands above and below, so nothing is cut off the sides.
+    # A reading, not an assumption, and `test_every_measured_surface_has_a_
+    # reading_behind_its_crop` is what keeps it one.
+    "story": 0,
+    # Not a surface Instagram shows anything on: PostRoll's own review screen,
+    # which draws all 1080 pixels because it is drawing the file. It carries no
+    # reading and cannot have one, which is why it is outside
+    # SIDE_CROP_SURFACES and named as the single exemption by
+    # `test_the_only_unmeasured_surface_is_the_one_nothing_is_posted_to`.
+    "app": 0,
+}
+
+
+#: Where each template's rendered asset is actually seen (#809).
+#:
+#: The question `SAFE_SIDE` alone could not answer. Every template was held to
+#: the widest crop recorded anywhere, so the story and the collage gave up 60
+#: pixels down each edge for a crop that does not happen where they are posted.
+#:
+#: What checking that turned up is that it changes less than it looks like it
+#: should, and the reasons are worth having written down rather than
+#: rediscovered:
+#:
+#:   * `before_after` is Friday's story AND the closing frame both plate reels
+#:     dissolve into (`generate_media.py` passes it as `closing_frame_path`), so
+#:     its pixels really are shown on a reel and really are cropped.
+#:   * `story`'s layout also draws `cover`, through `DRAWN_BY` below, and a
+#:     cover is a reel's, so the story template puts pixels on a reel too.
+#:
+#: Which leaves `collage` as the one template this actually frees, and it was
+#: already clearing 72 pixels. The value is the record, not the pixels.
+#:
+#: Sourced from postroll-prd.md section 4 for where each asset is posted, and
+#: from the code for the two couplings above.
+TEMPLATE_SURFACES: dict[str, frozenset[str]] = {
+    # PRD 4.4, the Wednesday collage story. Posted to Instagram and Facebook as
+    # a story and nowhere else.
+    "collage": frozenset({"story"}),
+    # PRD 4.1 and 4.2, the story beside the single photo post.
+    "story": frozenset({"story"}),
+    # The Instagram grid cover for the Thursday scroll reel and the Friday clip
+    # reel (`PostingDay.coverPick` in Event.swift), so it is shown where those
+    # reels are. Drawn by the story's layout, which is what DRAWN_BY records.
+    "cover": frozenset({"reel"}),
+    # PRD 4.6, Friday's before/after story, AND the closing graphic of both
+    # plate reels.
+    "before_after": frozenset({"story", "reel"}),
+    # PRD 4.3, the Tuesday speed edit reel, and its two plate variants.
+    "reel_screen": frozenset({"reel"}),
+    "reel_morph": frozenset({"reel"}),
+    "reel_slider": frozenset({"reel"}),
+    # PRD 4.5, the Thursday photo scroll reel.
+    "reel_scroll": frozenset({"reel"}),
+    # Never posted: the still the Thursday crop editor draws over, seen only in
+    # PostRoll.
+    "reel_preview": frozenset({"app"}),
+    # Friday's auto-cut clip reel. Retired 2026-07-09, still renderable.
+    "reel_clip": frozenset({"reel"}),
+}
+
+
+#: Templates whose asset is drawn by ANOTHER template's layout (#809).
+#:
+#: Recorded rather than left in prose, because it decides how much clearance the
+#: LENDER needs: a layout is held to every surface anything it draws is shown
+#: on, and reading only the lender's own entry would have taken the story's
+#: side clearance away while `cover` was still going onto a reel.
+#:
+#: Both facts were already written in this file, one in each template's design
+#: version comment. Written down twice in prose is how a coupling goes unnoticed
+#: at the moment it matters (L41).
+DRAWN_BY: dict[str, str] = {
+    "cover": "story",
+    "reel_preview": "reel_scroll",
+}
+
+
+def surfaces_seen_by(
+    template: str,
+    surfaces: dict[str, frozenset[str]] | None = None,
+    drawn_by: dict[str, str] | None = None,
+) -> frozenset[str]:
+    """Every surface anything drawn by `template`'s LAYOUT is shown on.
+
+    One level, not a chain: `test_every_borrowed_layout_names_two_templates_
+    that_exist` refuses a lender that is itself a borrower, so the answer cannot
+    depend on the order the table is read in.
+    """
+    surfaces = TEMPLATE_SURFACES if surfaces is None else surfaces
+    drawn_by = DRAWN_BY if drawn_by is None else drawn_by
+    seen = set(surfaces[template])
+    for borrower, lender in drawn_by.items():
+        if lender == template:
+            seen |= surfaces[borrower]
+    return frozenset(seen)
+
+
+def safe_side_for(
+    template: str,
+    surfaces: dict[str, frozenset[str]] | None = None,
+    drawn_by: dict[str, str] | None = None,
+    crops: dict[str, int] | None = None,
+) -> int:
+    """How much of each side is cut off the surfaces `template` is seen on.
+
+    The widest of them, because one layout has to clear the worst case of
+    everywhere it appears. Takes its tables so a guard can be driven against a
+    template arrangement that is not this one (L1).
+    """
+    crops = SIDE_CROP_BY_SURFACE if crops is None else crops
+    return max(crops[surface]
+               for surface in surfaces_seen_by(template, surfaces, drawn_by))
 
 #: Where the action rail starts, as a fraction of the frame's height (#753).
 #:

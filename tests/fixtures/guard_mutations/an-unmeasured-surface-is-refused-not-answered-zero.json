@@ -1,0 +1,8 @@
+{
+  "name": "an-unmeasured-surface-is-refused-not-answered-zero",
+  "file": "postroll/media/design_tokens.py",
+  "find": "        if not table:",
+  "replace": "        if False and not table:",
+  "test": "tests/test_side_crop_readings.py::test_a_surface_with_no_readings_is_refused_rather_than_answered_with_zero",
+  "breaks": "a surface nobody has measured answers with the widest crop of an empty table instead of refusing, and zero is exactly what a real letterboxed reading looks like, so a surface that has never been looked at is indistinguishable from one measured to crop nothing (#809, L98)"
+}
