@@ -1,0 +1,8 @@
+{
+  "name": "the-deadline-lets-the-rest-of-the-run-finish",
+  "file": "pyproject.toml",
+  "find": "addopts = \"-ra --strict-markers --dist worksteal --timeout=600 --timeout-method=signal\"",
+  "replace": "addopts = \"-ra --strict-markers --dist worksteal --timeout=600 --timeout-method=thread\"",
+  "test": "tests/test_a_wedged_test_names_itself.py::test_the_deadline_is_the_method_that_lets_the_run_finish",
+  "breaks": "a timed out test terminates its whole xdist worker instead of failing inside the run, so everything else queued on that worker is lost and the junit report is not written normally, which is the report tools/record_test_durations.py reads to decide whether a red run may still be recorded (#837)"
+}

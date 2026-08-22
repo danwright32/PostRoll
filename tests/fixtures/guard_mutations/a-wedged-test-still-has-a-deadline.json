@@ -1,0 +1,8 @@
+{
+  "name": "a-wedged-test-still-has-a-deadline",
+  "file": "pyproject.toml",
+  "find": "addopts = \"-ra --strict-markers --dist worksteal --timeout=600 --timeout-method=signal\"",
+  "replace": "addopts = \"-ra --strict-markers --dist worksteal --timeout=0 --timeout-method=signal\"",
+  "test": "tests/test_a_wedged_test_names_itself.py::test_every_run_carries_a_per_test_deadline",
+  "breaks": "the per-test deadline is switched off while the option stays visibly present, so a wedged test runs until the job's own timeout-minutes kills the whole run, and the only thing reported is that the job ran out of time: which test was stuck is exactly what it does not say, which is the state #836 was opened about (#832)"
+}

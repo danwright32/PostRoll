@@ -10,6 +10,11 @@ pytest==8.4.2
 # 13 minutes, and they are safe to parallelise because every one of them writes
 # only into pytest's per-test tmp_path (#412).
 pytest-xdist==3.8.0
+# Gives each test its own deadline, so a wedged one is a red line naming itself
+# rather than a job killed by `timeout-minutes` saying only that the job ran out
+# of time (#836). Configured in pyproject.toml's addopts; without this pin every
+# pytest invocation would die on an unrecognised `--timeout`.
+pytest-timeout==2.4.0
 
 # Static checks, run in CI before the suite (#113).
 ruff==0.16.2
