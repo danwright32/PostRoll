@@ -251,14 +251,20 @@ MAX_CHANGED_FRACTION = 0.0001
 
 # ── comparison ────────────────────────────────────────────────────────────────
 
-def _changed_mask(actual: Image.Image, golden: Image.Image) -> Image.Image:
-    """A 1-bit mask of pixels differing by more than the tolerance on any channel."""
+def _worst_channel_delta(actual: Image.Image, golden: Image.Image) -> Image.Image:
+    """Per pixel, how far the worst of its three channels moved."""
     difference = ImageChops.difference(actual.convert("RGB"), golden.convert("RGB"))
     bands = difference.split()
     worst = bands[0]
     for band in bands[1:]:
         worst = ImageChops.lighter(worst, band)
-    return worst.point(lambda v: 255 if v > CHANNEL_TOLERANCE else 0)
+    return worst
+
+
+def _changed_mask(actual: Image.Image, golden: Image.Image) -> Image.Image:
+    """A 1-bit mask of pixels differing by more than the tolerance on any channel."""
+    return _worst_channel_delta(actual, golden).point(
+        lambda v: 255 if v > CHANNEL_TOLERANCE else 0)
 
 
 def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> None:
@@ -278,7 +284,8 @@ def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> Non
     assert actual.size == golden.size, (
         f"{name}: rendered {actual.size}, reference is {golden.size}")
 
-    mask = _changed_mask(actual, golden)
+    delta = _worst_channel_delta(actual, golden)
+    mask = delta.point(lambda v: 255 if v > CHANNEL_TOLERANCE else 0)
     changed = mask.histogram()[255]
     total = actual.width * actual.height
     fraction = changed / total
@@ -291,7 +298,14 @@ def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> Non
     # The box comes off the mask the comparison already built, so it costs
     # nothing (#793). A count alone cannot tell scattered codec noise from a
     # moved element, which is the one thing not established about `clip_reel`.
-    golden_drift.report(name, changed, total, box=mask.getbbox())
+    # With how far they moved (#818). A count and a box cannot tell a render
+    # that moved by codec fidelity from one that moved by design, and amplitude
+    # is what separates them: an encoder rounds, a moved element replaces one
+    # colour with another. It is what `make record-codec-change` reads.
+    golden_drift.report(
+        name, changed, total, box=mask.getbbox(),
+        median_delta=golden_drift.median_over_tolerance(
+            delta.histogram(), CHANNEL_TOLERANCE))
 
     if fraction > MAX_CHANGED_FRACTION:
         # Write the evidence out rather than only reporting a number, because a

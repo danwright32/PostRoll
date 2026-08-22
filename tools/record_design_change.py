@@ -217,6 +217,10 @@ def prepare(repo_root: Path, *, unbumped: list[str] | None = None,
             "  If it renders identically and only the source moved, this is the "
             "wrong door: use `make record-fingerprints`, which records the "
             "fingerprint alone.\n"
+            "  If the pixels moved and the design did not, which is an encode "
+            "setting rather than a redesign, that is the third door: `make "
+            "record-codec-change` re-records the frames and leaves every "
+            "version alone (#818).\n"
             "  Refusing here rather than after the render, which takes minutes.")
 
     if undated:

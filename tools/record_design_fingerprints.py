@@ -197,7 +197,11 @@ def refusal_for(node_ids: tuple[str, ...], report_path: Path,
             return (f"{node} skipped rather than passed. A skipped reference "
                     f"check says nothing about how the template renders.")
         if outcome != "passed":
-            return f"{node} {outcome}, so this template's rendering changed."
+            return (f"{node} {outcome}, so this template's rendering changed. If "
+                    f"the DESIGN changed, bump MEDIA_DESIGN_VERSIONS and use "
+                    f"`make record-design-change`; if an encode setting moved "
+                    f"the pixels while the design stood still, that is the third "
+                    f"door, `make record-codec-change` (#818).")
 
     if returncode != 0:
         return (f"every reference check reported a pass and the run still "

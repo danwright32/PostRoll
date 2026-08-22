@@ -1,0 +1,8 @@
+{
+  "name": "a-recoloured-element-is-not-read-as-a-codec-change",
+  "file": "tests/golden_drift.py",
+  "find": "CODEC_MAX_FILL = 0.043",
+  "replace": "CODEC_MAX_FILL = 0.43",
+  "test": "tests/test_codec_fidelity.py::test_every_measured_reading_is_read_the_way_it_was_taken",
+  "breaks": "how much of its own box a change may fill and still read as an encoder passes an element redrawn in place, so the story's caption type drawn 8 lighter reads as codec fidelity and its reference frame can be re-recorded with no version bump, which amplitude cannot catch because 8 is what an encoder moves a pixel (#818)"
+}
