@@ -376,3 +376,33 @@ def test_the_reel_this_returns_was_not_encoded_by_a_fast_preset(tmp_path, count)
         f"which is ffmpeg's medium and what every other template's last pass "
         f"uses (#811, #819). Settings in the file: "
         f"{ {k: settings.get(k) for k in ('ref', 'subme', 'mixed_ref', 'trellis')} }")
+
+
+# ── the intermediates' quality is a named setting (#826) ─────────────────────
+
+@needs_ffmpeg
+def test_the_intermediate_encode_reads_the_named_quality_setting(tmp_path, monkeypatch):
+    """The lever #826 measured is the one the encode actually uses (L107).
+
+    `tools/measure_clip_reel_encodes.py` compares what the intermediates cost at
+    different quality settings by moving these two names. If the encode kept its
+    own copy of the number, the tool would be measuring a variant nothing
+    renders, and the readings recorded beside the encode would describe a
+    pipeline that does not exist.
+
+    One selection, so the reel IS the prepared segment: with more than one, the
+    join re-encodes and the delivered file carries the join's setting instead.
+    """
+    import postroll.media.render_clip_reel as clip_mod
+
+    monkeypatch.setattr(clip_mod, "SEGMENT_CRF", "16")
+    clip = tmp_path / "clip.mp4"
+    _make_clip(clip, seconds=6.0, color="red")
+    out = tmp_path / "reel.mp4"
+
+    render_clip_reel([{"clip_path": str(clip), "trim_in": 0.0, "trim_out": 4.0,
+                       "transition_after": "cut"}], out)
+
+    assert x264_settings(out)["crf"] == "16.0", (
+        "the segment encode did not use the quality setting it is asked for, so "
+        "the name is documentation rather than the lever")
