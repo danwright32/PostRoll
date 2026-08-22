@@ -1,0 +1,8 @@
+{
+  "name": "a-warning-names-no-cause-it-cannot-know",
+  "file": "PostRollApp/Sources/Services/MediaErrorSummary.swift",
+  "find": "             + \"\\n\\n\\(subject) exported anyway, so nothing is missing from the \"\n             + \"folder.\"",
+  "replace": "             + \"\\n\\n\\(subject) exported without the missing input, so nothing is \"\n             + \"missing from the folder.\"",
+  "test": "PostRollTests/MediaErrorSummaryTests/testAWarningDoesNotNameACauseItCannotKnow",
+  "breaks": "the export screen tells Dan a day went out without a missing input on every warning, including a Friday title card that failed, where nothing was missing and an encode did not run (#824, L11)"
+}
