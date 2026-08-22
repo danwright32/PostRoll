@@ -75,7 +75,7 @@ from ..media.generate_collage import generate_collage
 from ..media.generate_before_after import generate_before_after
 from ..media.clip_scorer import score_clips, InsufficientClipsError
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
-from ..media.generate_title_card import apply_title_card, TitleCardError
+from ..media.generate_title_card import apply_title_card_in_place
 from ..media.design_stamp import rendered_templates, write_design_stamp
 from .audio_tags import resolve_reel_audio
 from .progress import ProgressWriter
@@ -851,14 +851,21 @@ def generate_media(
                     # touch, not the product itself, so a failure here must
                     # never cost the reel Stage 1/2/3 already built.
                     if not bool(day_info.get("title_card_muted", False)):
-                        titled_path = str(day_dir / "reel_clip_titled.mp4.tmp")
-                        try:
-                            apply_title_card(reel_path, event, titled_path)
-                            Path(titled_path).replace(reel_path)
-                        except TitleCardError as e:
-                            print(f"[generate_media] friday: title card skipped: {e}", flush=True)
-                        finally:
-                            Path(titled_path).unlink(missing_ok=True)
+                        untitled = apply_title_card_in_place(
+                            reel_path, event,
+                            staging_path=str(day_dir / "reel_clip_titled.mp4.tmp"),
+                        )
+                        if untitled:
+                            # A WARNING, not an error (#824). The reel is on
+                            # disk and the export folder is complete, and an
+                            # error here would suppress the export over a
+                            # finishing touch. What it must not be any more is
+                            # a printed line: that died with the process, so a
+                            # reel Dan posted with no title read as identical
+                            # to one he chose to have no title on.
+                            print(f"[generate_media] friday: WARNING: {untitled}",
+                                  flush=True, file=sys.stderr)
+                            _record_warning(warnings, "friday", untitled)
 
                     day_result["reel"] = reel_path
                     # Translated to Swift's FridayClipPlan field names

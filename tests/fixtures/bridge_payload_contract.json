@@ -671,6 +671,24 @@
       "cover_pick": "swift"
     }
   },
+  "friday_override_result": {
+    "_what": "What a manual Friday reel re-render did, including a title card that could not be applied.",
+    "python": [
+      {
+        "module": "postroll/ai/render_friday_override.py",
+        "function": "render_friday_override"
+      }
+    ],
+    "swift": {
+      "kind": "reader",
+      "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+      "function": "parseFridayOverrideOutput"
+    },
+    "keys": {
+      "reel": "swift",
+      "title_card_skipped": "swift"
+    }
+  },
   "swap_reel_audio": {
     "_what": "The result of swapping a reel's audio track without re-encoding video.",
     "python": [
@@ -952,7 +970,7 @@
           "conditional": "Sent when clip audio is muted outright."
         },
         "title_card_muted": {
-          "conditional": "Sent when the title card's audio is muted."
+          "conditional": "Sent when Dan turned the title card off for this event."
         }
       }
     },

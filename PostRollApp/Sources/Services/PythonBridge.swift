@@ -729,15 +729,46 @@ actor PythonBridge {
         return parsed
     }
 
+    /// What a manual Friday re-render did, as reported by
+    /// render_friday_override.py.
+    ///
+    /// `titleCardSkipped` is the reason the reel carries no title, and is nil
+    /// for a reel that has one and for a reel Dan muted the title on: he made
+    /// that choice here, in the app, so reporting it back would put a notice on
+    /// every deliberately untitled reel (#824). It is non-nil only when the
+    /// card was meant to be there and is not, which is a thing he cannot see by
+    /// looking at the reel unless something says so.
+    struct FridayOverrideResult: Sendable, Equatable {
+        let reelPath: String
+        let titleCardSkipped: String?
+    }
+
+    /// Parses render_friday_override.py's result. Pure, so the shapes it must
+    /// refuse are testable without a subprocess.
+    ///
+    /// Refuses a payload with no reel path rather than filling one in: that
+    /// path is what the player reloads, and a guessed one points the app at a
+    /// file this run may never have written (L75).
+    ///
+    /// An empty `title_card_skipped` becomes nil, so "the title is on the reel"
+    /// and "this reel has no title and here is why" cannot be confused by a
+    /// caller that only checks for a value.
+    nonisolated static func parseFridayOverrideOutput(_ json: [String: Any]) -> FridayOverrideResult? {
+        guard let reelPath = json["reel"] as? String, !reelPath.isEmpty else { return nil }
+        let skipped = (json["title_card_skipped"] as? String) ?? ""
+        return FridayOverrideResult(reelPath: reelPath,
+                                    titleCardSkipped: skipped.isEmpty ? nil : skipped)
+    }
+
     /// Re-renders the Friday reel from the user's manual override
     /// (reorder/include-exclude/swap), skipping Stage 1/2 entirely. Manual
     /// edits never re-invoke Claude (feedback_collage_edits_no_python_regen).
     /// Overwrites the existing reel path in place, mirroring
     /// runSwapReelAudio, so the reel player picks up the change with no new
-    /// path wiring. Returns the render output path on success, nil when
-    /// there's no override or no existing reel to overwrite.
+    /// path wiring. Returns what the render reported, nil when there's no
+    /// override or no existing reel to overwrite.
     @discardableResult
-    func runRenderFridayOverride(event: Event) async throws -> String? {
+    func runRenderFridayOverride(event: Event) async throws -> FridayOverrideResult? {
         guard let fri = event.days[DayName.friday.rawValue],
               let override = fri.fridayClipOverride, !override.isEmpty,
               let reelPath = event.previewMediaPaths[DayName.friday.rawValue]?["reel"] else {
@@ -746,7 +777,11 @@ actor PythonBridge {
 
         let tmp = FileManager.default.temporaryDirectory
         let manifestFile = tmp.appendingPathComponent("postroll_friday_override_manifest_\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: manifestFile) }
+        let resultFile = tmp.appendingPathComponent("postroll_friday_override_result_\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: manifestFile)
+            try? FileManager.default.removeItem(at: resultFile)
+        }
 
         let manifest = Self.buildFridayOverrideManifest(event: event, override: override)
         let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
@@ -756,10 +791,22 @@ actor PythonBridge {
             "-m", "postroll.ai.render_friday_override",
             "--manifest", manifestFile.path,
             "--output", reelPath,
+            "--result", resultFile.path,
         ])
 
         guard FileManager.default.fileExists(atPath: reelPath) else { return nil }
-        return reelPath
+
+        // The reel exists, so the render worked; what the result file adds is
+        // what happened to the title card. A missing or unreadable one is not a
+        // failed render, so the reel is still returned: it is the app that
+        // cannot then say whether the title landed, and claiming it did would
+        // be the wrong half to guess at.
+        guard let data = try? Data(contentsOf: resultFile),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let parsed = Self.parseFridayOverrideOutput(json) else {
+            return FridayOverrideResult(reelPath: reelPath, titleCardSkipped: nil)
+        }
+        return parsed
     }
 
     /// Builds the render_friday_override.py manifest: fridayClipOverride

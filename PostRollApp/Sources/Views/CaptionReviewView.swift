@@ -1160,18 +1160,24 @@ struct CaptionReviewView: View {
         Task {
             do {
                 let liveEvent = appState.events.first(where: { $0.id == event.id }) ?? event
-                let reelPath = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
+                let render = try await PythonBridge.shared.runRenderFridayOverride(event: liveEvent)
                 await MainActor.run {
-                    guard let reelPath else {
+                    guard let render else {
                         graphics.failDayRegen(
                             .friday, for: event.id,
                             reason: "Friday reel edit couldn't be applied: no reel to update")
                         return
                     }
                     graphics.endDayRegen(.friday, for: event.id)
+                    // A reel that came back with no title says so here (#824).
+                    // Passed even when nil, which is what clears the note from
+                    // the last render: a warning that outlives the thing it was
+                    // about is worse than none, because it is now false.
+                    recordMediaOutcome(day: .friday, error: nil,
+                                       warning: render.titleCardSkipped)
                     var current = appState.events.first(where: { $0.id == event.id }) ?? liveEvent
                     var paths = current.previewMediaPaths[DayName.friday.rawValue] ?? [:]
-                    paths["reel"] = reelPath
+                    paths["reel"] = render.reelPath
                     current.previewMediaPaths[DayName.friday.rawValue] = paths
                     appState.updateEvent(current)
                     graphicVersions[.friday] = (graphicVersions[.friday] ?? 0) + 1
