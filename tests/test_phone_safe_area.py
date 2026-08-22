@@ -57,6 +57,7 @@ import pytest
 from PIL import Image, ImageChops
 
 from conftest import needs_mac_fonts
+from postroll.media import design_tokens as tokens
 from postroll.media.design_tokens import (
     SAFE_BOTTOM,
     SAFE_RIGHT,
@@ -314,10 +315,29 @@ MEASURED_BOTTOM = sorted(set(RENDERERS) - set(EXEMPT_BOTTOM))
 #: these pixels are not drawn anywhere. That makes this the strictest of the
 #: bands, and the cheapest to satisfy, since every template centres what it
 #: draws.
-SIDE_BANDS = {
-    "left": (0, 0, SAFE_SIDE, CANVAS[1]),
-    "right": (CANVAS[0] - SAFE_SIDE, 0, CANVAS[0], CANVAS[1]),
-}
+#:
+#: How wide the column is depends on the SURFACE, so it is per template since
+#: #809 rather than one band for all of them. `design_tokens.safe_side_for`
+#: answers it, over every surface anything drawn by that template's layout is
+#: shown on. A story is letterboxed and loses nothing, so holding one to the
+#: reel's 60 held it to a crop that does not happen to it.
+def side_bands(width: int) -> dict[str, tuple[int, int, int, int]]:
+    return {
+        "left": (0, 0, width, CANVAS[1]),
+        "right": (CANVAS[0] - width, 0, CANVAS[0], CANVAS[1]),
+    }
+
+
+#: Templates with a column to clear at all, which is what the check below runs
+#: over. A template posted only where nothing is cropped has a band of zero
+#: width, and a zero-width band measures zero pixels on any render whatsoever:
+#: it would report green having looked at nothing, which is the one result
+#: indistinguishable from a template that clears its column (L98). So they are
+#: excluded by name here and accounted for by
+#: `test_every_template_with_no_side_band_is_posted_where_nothing_is_cropped`.
+CROPPED = sorted(name for name in RENDERERS if tokens.safe_side_for(name) > 0)
+
+UNCROPPED = sorted(set(RENDERERS) - set(CROPPED))
 
 
 #: How much branding may fall off a side before it counts.
@@ -339,20 +359,51 @@ SIDE_ALLOWANCE = 500
 
 
 @needs_mac_fonts
-@pytest.mark.parametrize("side", sorted(SIDE_BANDS))
-@pytest.mark.parametrize("name", sorted(RENDERERS))
+@pytest.mark.parametrize("side", ["left", "right"])
+@pytest.mark.parametrize("name", CROPPED)
 def test_no_template_draws_words_off_the_side_of_the_screen(name, side, tmp_path):
+    width = tokens.safe_side_for(name)
     render = RENDERERS[name]
     marked = _branding_pixels(render(tmp_path, True), render(tmp_path, False),
-                              SIDE_BANDS[side])
+                              side_bands(width)[side])
 
     assert marked <= SIDE_ALLOWANCE, (
         f"{name} puts {marked} pixels of its own branding in the {side} "
-        f"{SAFE_SIDE}px, over the {SIDE_ALLOWANCE} a cropped hairline accounts "
+        f"{width}px, over the {SIDE_ALLOWANCE} a cropped hairline accounts "
         "for. The phone crops that column off entirely: Instagram scales a 1080 "
         "wide frame to 1476 screen px in a 1320 px window, so those pixels are "
         "not drawn anywhere at all (#768). This is not something a viewer has "
-        "to read past; it is something no viewer ever sees.")
+        f"to read past; it is something no viewer ever sees. {name} is held to "
+        f"this because it is seen on {sorted(tokens.surfaces_seen_by(name))}.")
+
+
+def test_every_template_with_no_side_band_is_posted_where_nothing_is_cropped():
+    """The templates the check above does not run over, named and accounted for.
+
+    A template drops out of it by having a band of zero width, and a zero-width
+    band cannot fail, so the drop-out has to be visible rather than a shorter
+    parametrize list nobody counts (L129). This asserts each one is out for the
+    recorded reason: every surface it is seen on was measured to crop nothing.
+    """
+    for name in UNCROPPED:
+        seen = tokens.surfaces_seen_by(name)
+        assert seen, f"{name} is seen on no surface at all, which is not a reason"
+        for surface in sorted(seen):
+            assert tokens.SIDE_CROP_BY_SURFACE[surface] == 0, (
+                f"{name} is not held to a side band and is seen on {surface}, "
+                f"which crops {tokens.SIDE_CROP_BY_SURFACE[surface]} pixels a "
+                "side")
+
+
+def test_the_templates_held_to_a_side_band_are_not_an_empty_set():
+    """The control for the split itself.
+
+    `CROPPED` is derived, and a derivation that came back empty would take every
+    template out of the check while the file still reads as enforcing it (L98).
+    """
+    assert len(CROPPED) >= 4, (
+        f"only {CROPPED} are held to a side band, which is too few to be the "
+        "reels plus the before/after")
 
 
 @needs_mac_fonts
@@ -371,7 +422,7 @@ def test_the_side_measurement_can_still_see_something_there(tmp_path):
     ImageDraw.Draw(marked).rectangle([0, 400, SAFE_SIDE - 1, 1400],
                                      fill=(20, 20, 20))
 
-    reading = _branding_pixels(marked, plain, SIDE_BANDS["left"])
+    reading = _branding_pixels(marked, plain, side_bands(SAFE_SIDE)["left"])
 
     assert reading > SIDE_ALLOWANCE, (
         f"a solid block filling the cropped column measures {reading}, under "
