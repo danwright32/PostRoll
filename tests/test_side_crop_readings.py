@@ -44,6 +44,75 @@ def test_every_reading_names_the_phone_it_came_from():
             f"old this reading is: {reading.measured!r}")
 
 
+def test_every_reading_names_the_surface_it_was_seen_on():
+    """How much is lost depends on the SURFACE, not only on the phone (#805).
+
+    `SAFE_SIDE` was set from two published REELS on Dan's iPhone 16 Pro Max,
+    where Instagram filled the screen with the 1080 wide frame and cut about 57
+    canvas pixels off each side. Measured on the same phone on 2026-08-21, a
+    published STORY was fitted to the 1320px screen width with black bands above
+    and below: all 1080 pixels visible, no side crop at all.
+
+    Nothing beside the token recorded that, so a reader would reasonably
+    conclude every full-frame asset loses its edges on every surface.
+    """
+    for reading in tokens.SIDE_CROP_READINGS:
+        assert reading.surface.strip(), (
+            f"{reading.device} on {reading.measured} records no surface, so "
+            "nothing says whether it was seen as a reel or a story, and the two "
+            "measured differently on the same phone (#805)")
+
+
+def test_a_readings_surface_is_one_this_repo_knows():
+    """A free string quietly makes a third surface out of a typo.
+
+    The set is small and deliberate. Adding to it is a decision (a new place
+    Instagram shows a full frame), and the guard makes it one somebody takes
+    rather than one a spelling takes for them (L113).
+    """
+    unknown = sorted({reading.surface for reading in tokens.SIDE_CROP_READINGS}
+                     - tokens.SIDE_CROP_SURFACES)
+
+    assert not unknown, (
+        f"these readings name a surface nothing here knows: {unknown}. Add it "
+        "to SIDE_CROP_SURFACES if it is real, so the vocabulary stays one that "
+        f"was chosen. Known: {sorted(tokens.SIDE_CROP_SURFACES)}")
+
+
+def test_both_surfaces_measured_on_the_same_phone_are_kept():
+    """The finding is the DIFFERENCE, so both halves have to survive.
+
+    A table holding only the reel reading is the state that made this worth
+    filing, and one holding only the story reading would drop SAFE_SIDE to zero
+    the day somebody computed the token from it.
+    """
+    same_phone = {reading.surface for reading in tokens.SIDE_CROP_READINGS
+                  if reading.device == "iPhone 16 Pro Max"}
+
+    assert {"reel", "story"} <= same_phone, (
+        "the iPhone 16 Pro Max readings no longer cover both a reel and a "
+        f"story, so the difference between them is not recorded: {same_phone}")
+
+
+def test_a_letterboxed_surface_does_not_lower_the_token():
+    """The control for the reading being safe to add at all (L159).
+
+    The story reads zero, and the token is the WIDEST crop seen. If the table
+    were ever reduced by an average or a latest-wins rule, adding a surface that
+    crops nothing would narrow the safe area on a phone that really does crop,
+    which is the direction that declares a column safe while it is cut off.
+    """
+    letterboxed = SideCropReading(device="iPhone 16 Pro Max", surface="story",
+                                  measured="2026-08-21",
+                                  screen=(1320, 2868), shown=1320, window=1320)
+
+    assert letterboxed.canvas_pixels_per_side == 0
+    assert tokens.widest_side_crop((letterboxed,) + tokens.SIDE_CROP_READINGS) \
+        == tokens.widest_side_crop(tokens.SIDE_CROP_READINGS), (
+            "a surface that crops nothing changed the widest crop, so the token "
+            "no longer follows the worst case")
+
+
 def test_a_reading_derives_its_crop_from_what_was_actually_measured():
     """The arithmetic, against the reading it was first worked out from.
 
@@ -55,7 +124,8 @@ def test_a_reading_derives_its_crop_from_what_was_actually_measured():
     frame shown at 1476 in a 1320 window, which is 78 screen pixels a side and
     57 canvas pixels a side.
     """
-    reading = SideCropReading(device="iPhone 16 Pro Max", measured="2026-08-20",
+    reading = SideCropReading(device="iPhone 16 Pro Max", surface="reel",
+                              measured="2026-08-20",
                               screen=(1320, 2868), shown=1476, window=1320)
 
     assert reading.screen_pixels_per_side == 78
@@ -69,7 +139,8 @@ def test_a_phone_that_crops_nothing_reads_as_nothing():
     cropping phones could be scaled wrongly and still look plausible on every
     one of them. This is the case where the answer is known exactly.
     """
-    reading = SideCropReading(device="a 16:9 screen", measured="2026-08-20",
+    reading = SideCropReading(device="a 16:9 screen", surface="reel",
+                              measured="2026-08-20",
                               screen=(1080, 1920), shown=1080, window=1080)
 
     assert reading.canvas_pixels_per_side == 0
@@ -95,7 +166,7 @@ def test_a_wider_reading_would_actually_raise_the_floor():
     committed readings.
     """
     hungry = SideCropReading(device="a taller phone than any seen",
-                             measured="2026-08-20",
+                             surface="reel", measured="2026-08-20",
                              screen=(1320, 3200), shown=1800, window=1320)
     widest = tokens.widest_side_crop(tokens.SIDE_CROP_READINGS + (hungry,))
 

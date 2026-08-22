@@ -1,0 +1,8 @@
+{
+  "name": "a-side-crop-reading-names-its-surface",
+  "file": "postroll/media/design_tokens.py",
+  "find": "    SideCropReading(device=\"iPhone 16 Pro Max\", surface=\"story\",",
+  "replace": "    SideCropReading(device=\"iPhone 16 Pro Max\", surface=\"\",",
+  "test": "tests/test_side_crop_readings.py::test_every_reading_names_the_surface_it_was_seen_on",
+  "breaks": "a side-crop reading stops saying whether it was seen as a reel or a story, and the two measured completely differently on the same phone: the reel loses 57 canvas pixels a side and the story loses nothing, so a table keyed by phone alone reads as though the phone decided it (#805)"
+}

@@ -285,6 +285,14 @@ class SideCropReading:
 
     #: The phone, named the way Dan would name it.
     device: str
+    #: Where the asset was being shown: a reel or a story (#805).
+    #:
+    #: Load bearing rather than context. Instagram fits a full frame differently
+    #: on each, and measured on ONE phone on two days the difference is the
+    #: whole crop: a reel fills the screen and loses its edges, a story is
+    #: letterboxed and loses nothing. A table keyed by phone alone reads as
+    #: though the phone decided it.
+    surface: str
     #: The day the reading was taken, as YYYY-MM-DD.
     measured: str
     #: The phone's screen in its own pixels, recorded for context rather than
@@ -306,7 +314,15 @@ class SideCropReading:
         return self.screen_pixels_per_side * (FULL_FRAME_W / self.shown)
 
 
-#: Every side-crop reading taken, one per phone, newest last (#775).
+#: The surfaces a full-frame asset is known to be shown on (#805).
+#:
+#: A closed vocabulary rather than a free string, so a third surface is
+#: something somebody adds deliberately rather than something a typo creates
+#: (L113). `tests/test_side_crop_readings.py` holds every reading to it.
+SIDE_CROP_SURFACES = frozenset({"reel", "story"})
+
+
+#: Every side-crop reading taken, one per phone and SURFACE, newest last (#775).
 #:
 #: A table rather than prose, because this is the one safe-area token that is
 #: genuinely device dependent: how much is cropped follows from the phone's
@@ -324,8 +340,20 @@ SIDE_CROP_READINGS: tuple[SideCropReading, ...] = (
     # The reading SAFE_SIDE was set from, taken off two published reels (#768).
     # 78 screen pixels a side, which is 57 canvas pixels a side, so the visible
     # canvas is x 57 to 1023 rather than 0 to 1080.
-    SideCropReading(device="iPhone 16 Pro Max", measured="2026-08-20",
+    SideCropReading(device="iPhone 16 Pro Max", surface="reel",
+                    measured="2026-08-20",
                     screen=(1320, 2868), shown=1476, window=1320),
+    # The same phone, a published STORY, and it crops nothing at all (#805).
+    # Instagram fitted the 1080 wide frame to the 1320px screen width with black
+    # bands above and below, so all 1080 canvas pixels are visible.
+    #
+    # Recorded rather than left out for reading zero. It is the reading that
+    # says the crop follows the SURFACE and not only the phone, which is the one
+    # thing the table could not previously express, and a zero cannot lower the
+    # token because the token follows the widest reading.
+    SideCropReading(device="iPhone 16 Pro Max", surface="story",
+                    measured="2026-08-21",
+                    screen=(1320, 2868), shown=1320, window=1320),
 )
 
 
@@ -358,6 +386,14 @@ def widest_side_crop(
 #: is entirely off screen. The prints run edge to edge on the phone, which is
 #: not what the layout draws and not what any local render shows. Whether that
 #: is a problem is a design question; that it is happening is now written down.
+#:
+#: It applies to a REEL and not to every surface (#805). Measured on the same
+#: phone on 2026-08-21, a published story was fitted to the screen width with
+#: black bands above and below and lost nothing off its sides. So 60 is the
+#: worst case across the surfaces measured rather than what every full-frame
+#: asset loses, and a template held to it is being held to the reel. Both
+#: readings are in the table above, each naming its surface, so the difference
+#: is a row rather than a sentence somebody has to remember to write.
 SAFE_SIDE = 60
 
 #: Where the action rail starts, as a fraction of the frame's height (#753).
