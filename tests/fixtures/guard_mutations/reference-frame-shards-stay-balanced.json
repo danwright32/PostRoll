@@ -1,8 +1,8 @@
 {
   "name": "reference-frame-shards-stay-balanced",
   "file": ".github/workflows/swift.yml",
-  "find": "          - name: legibility\n            files: tests/test_frame_legibility.py\n          - name: thursday-reel\n            files: tests/test_thursday_reel_legibility.py\n          - name: goldens\n            files: tests/test_golden_frames.py tests/test_slider_program_plate.py",
-  "replace": "          - name: legibility\n            files: tests/test_frame_legibility.py tests/test_golden_frames.py\n          - name: thursday-reel\n            files: tests/test_thursday_reel_legibility.py\n          - name: goldens\n            files: tests/test_slider_program_plate.py",
+  "find": "          - name: legibility\n            files: tests/test_closing_crossfade_legibility.py",
+  "replace": "          - name: legibility\n            files: tests/test_closing_crossfade_legibility.py tests/test_golden_frames.py",
   "test": "tests/test_reference_frame_shards_are_balanced.py::test_the_heaviest_shard_is_close_to_the_best_a_split_could_do",
-  "breaks": "the two heaviest files move onto one runner, so that shard carries 53% of the measured suite against the 32% the best split could manage, and the job wall clock becomes that one shard while another sits nearly idle (#795)"
+  "breaks": "the two heaviest files move onto one runner, so that shard carries far more of the measured suite than the best split could manage, and the job wall clock becomes that one shard while another sits nearly idle (#795, #810)"
 }

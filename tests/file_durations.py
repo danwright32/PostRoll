@@ -54,22 +54,41 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: all. A floor in seconds would have been crossed by four files without one line
 #: of test code changing.
 #:
-#: 8% is chosen from where the distribution actually is, not picked round (L172).
-#: Sorted by share the suite has a gap of nearly 5x in it: three files at 31.7%,
-#: 21.2% and 17.3%, then nothing until 3.5%, then a long tail of 140 files under
-#: that. 8% sits in the gap with more than a factor of two of clear air either
-#: side, and both readings agree about it.
+#: The floor is chosen from where the distribution actually is, not picked round
+#: (L172), and it was re-chosen for #810. Sorted by share the suite now reads:
+#:
+#:     test_golden_frames.py                    23.9%
+#:     test_closing_crossfade_legibility.py     23.0%
+#:     test_thursday_reel_legibility.py         18.7%
+#:     test_frame_legibility.py                 10.2%
+#:     test_generate_media_friday_clips.py       2.9%    and a tail of 145 more
+#:
+#: so the gap is between 10.2% and 2.9%, a factor of 3.5, and 5.4% is its
+#: geometric middle: 1.86x of clear air below and 1.88x above.
+#:
+#: It used to be 8%, chosen the same way against a distribution whose gap was
+#: between 17.3% and 3.5%. #810 split `test_frame_legibility.py`, which was
+#: 33.7% of the run and the largest file in it, into the closing crossfade and
+#: what was left; the remainder landed at 10.2%, inside the old floor's clear
+#: air, and the guard below said so. The set of files over the floor is the same
+#: four either way, so nothing moved in or out of the fast run: what changed is
+#: that the floor is back in a gap instead of beside a file.
+#:
+#: The margins are narrower than the old ones, which had more than a factor of
+#: two each side. That is the distribution, not a loosening: there is no
+#: placement in this gap with more than 1.88x, and both bounds below are still
+#: satisfied with room.
 #:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.08
+EXPENSIVE_SHARE = 0.054
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:
-#: 0.6 to 1.6 of the floor, so no file may sit between 4.8% and 12.8% of the run.
-#: The real margins on the record as it stands are 3.0% below and 17.5% above.
+#: 0.6 to 1.6 of the floor, so no file may sit between 3.2% and 8.6% of the run.
+#: The real margins on the record as it stands are 2.9% below and 10.2% above.
 GAP_BELOW, GAP_ABOVE = 0.6, 1.6
 
 
