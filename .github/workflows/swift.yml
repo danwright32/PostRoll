@@ -231,6 +231,21 @@ jobs:
     # test_frame_legibility.py. Until that split the one file was most of the
     # job and nothing could divide it further.
     #
+    # #810 is the same move again. Even after #512 that one file was 33.7% of
+    # the measured suite and the whole of this shard, so it WAS the floor: no
+    # arrangement of three runners could beat a file that cannot be divided
+    # across them. Its closing-crossfade block, about two thirds of it, is
+    # tests/test_closing_crossfade_legibility.py now, and the floor is a
+    # perfect third of the matrix instead, 27.0%.
+    #
+    # A shard's name is its heaviest file, not a list of what it runs: `goldens`
+    # has carried the phone safe area and the story title clamp since #507. That
+    # is deliberate here, because these names are CHECK names, and adding or
+    # renaming one costs a knowingly red merge (the derived set is calibrated
+    # against a recorded green reply in tests/test_wait_for_checks.py, and no
+    # green run carrying a new name can exist yet). So the files moved and the
+    # three names did not.
+    #
     # ── how the balance is decided (#795) ────────────────────────────────────
     #
     # By MEASURED time, not by file count, and the measurement is not written
@@ -290,11 +305,11 @@ jobs:
       matrix:
         shard:
           - name: legibility
-            files: tests/test_frame_legibility.py
+            files: tests/test_closing_crossfade_legibility.py tests/test_phone_safe_area.py tests/test_story_title_clamp.py tests/test_gallery_alignment.py
           - name: thursday-reel
-            files: tests/test_thursday_reel_legibility.py
+            files: tests/test_thursday_reel_legibility.py tests/test_frame_legibility.py
           - name: goldens
-            files: tests/test_golden_frames.py tests/test_slider_program_plate.py tests/test_gallery_alignment.py tests/test_phone_safe_area.py tests/test_story_title_clamp.py tests/test_frame_names_its_show.py
+            files: tests/test_golden_frames.py tests/test_slider_program_plate.py tests/test_frame_names_its_show.py
     steps:
       - uses: actions/checkout@v5
 
