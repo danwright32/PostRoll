@@ -86,45 +86,40 @@ UPDATING = os.environ.get("POSTROLL_UPDATE_GOLDENS") == "1"
 #: about 250,249,245, a worst channel delta of 2) with headroom.
 CHANNEL_TOLERANCE = 6
 
-#: The worst reading an UNCHANGED design produces on the CI runner (#787).
+#: The worst reading an UNCHANGED design has EVER produced on the CI runner.
 #:
-#: Measured, not assumed, and it is the number the limit below is chosen from.
-#: Every reference-frame comparison writes its reading down now, so this came
-#: off two independent macos-15 jobs on 2026-08-21, `Tests / macos` and
-#: `macOS / reference-frames (goldens)`, against frames recorded on Dan's Mac.
-#: The two agree to the pixel:
+#: TWO readings, and the limit below is chosen from this one rather than from
+#: the newer one, which needs saying because they disagree.
 #:
-#:     nine of the ten frames    0 of 2073600 px    0.0000%
-#:     clip_reel                26 of 2073600 px    0.0013%
+#: 26 pixels, on 2026-08-21 (#787), off two independent macos-15 jobs, `Tests /
+#: macos` and `macOS / reference-frames (goldens)`, agreeing to the pixel and to
+#: the box: `clip_reel: 26 of 2073600 px, 0.0013%, region 363x17 at (308,320),
+#: 0.4% of it`, with the other nine templates at 0. That band is the top of the
+#: title card's script lettering, thin near-white antialiasing against the brown
+#: band behind it, and #811 found what produced it: the title pass asked x264
+#: for `-preset veryfast`, which turns off the decisions that keep two builds of
+#: it agreeing, so ffmpeg 8.1 on Dan's Mac and 8.1.2_1 on the runner rounded
+#: that lettering differently.
 #:
-#: So the runner's own ffmpeg, which is the entire reason a share is allowed at
-#: all rather than demanding an exact match, costs 26 pixels on one template and
-#: nothing on the other nine. Reproducible to the pixel across two runs, so it is
-#: a stable property of that template's encode rather than randomness.
+#: 0 pixels, on 2026-08-22, once #811 dropped that preset. All ten frames, on
+#: three independent jobs across two commits: `macOS / reference-frames
+#: (goldens)` in runs 32581000159 and 32581526773, and `Tests / macos` in run
+#: 32581526768. The frames those jobs compared were recorded on this Mac on
+#: ffmpeg 8.1 and read by the runner on 8.1.2_1, so the zero is a reading ACROSS
+#: two builds, not a reading of one machine against itself.
 #:
-#: WHERE those 26 pixels are, measured once the readings carried a region (#793,
-#: and again on two independent jobs, `Tests / macos` and `macOS /
-#: reference-frames (goldens)`, agreeing to the pixel AND to the box):
+#: So why is the anchor still 26 and not 0? Because a limit cannot be derived
+#: from zero. Multiplying it gives zero, which would demand every future encoder
+#: agree with these frames bit for bit, and the first Homebrew bottle revision
+#: that rounded one edge differently would fail all ten at once (L36). And zero
+#: is a floor with no error bar: what #811 removed was the thing that made two
+#: builds disagree LOUDLY, not the mechanism by which they can, so 26 remains
+#: the size of the only cross-build drift this repo has ever measured. It is
+#: what the limit has to clear.
 #:
-#:     clip_reel: 26 of 2073600 px, 0.0013%, region 363x17 at (308,320), 0.4% of it
-#:
-#: They are not dust over the frame and they are not a moved element, which
-#: would fill its box. They sit in a band 363 wide and 17 tall, 0.4% filled, and
-#: that band is exactly the top of the title card's script lettering: measured
-#: on the committed frame, the lettering's ink begins at y=322 and runs to
-#: y=396, so the drift is the leading edge of its tallest strokes, thin
-#: near-white antialiasing against the mid-brown band behind them.
-#:
-#: What that does NOT establish is why this template's title and not another's.
-#: The guess in #793 was the title card, and the box says the guess was right
-#: about WHICH element; the reason the same lettering is stable elsewhere is
-#: still unread. What it does settle is the shape of the risk: this is one text
-#: element's antialiasing, so it does not grow with the canvas or spread to the
-#: other nine, and the headroom below is against a localised effect.
-#:
-#: On this Mac the reading is 0 for all ten, which is why the limit could not be
-#: chosen here (L177).
-UNCHANGED_ON_CI = 26 / (1080 * 1920)
+#: On this Mac the reading is 0 for all ten, and always was, which is why the
+#: limit could not be chosen here (L177).
+WORST_UNCHANGED_ON_CI = 26 / (1080 * 1920)
 
 #: The ffmpeg that produced the reading above (#792).
 #:
@@ -141,11 +136,12 @@ UNCHANGED_ON_CI = 26 / (1080 * 1920)
 #: builds of the same major version, which is what the tolerance is for.
 #:
 #: At the old limit of 0.005 there was 385x of headroom and none of this
-#: mattered. At 0.0002 there is 16x, which is deliberate and correct against
-#: this reading, and it means an ffmpeg that renders a few hundred pixels
-#: differently fails every reference frame at once. The check below turns that
-#: into one failure naming ffmpeg rather than ten reading as a design
-#: regression on ten templates.
+#: mattered. At 0.0001 there is 8x, which is deliberate and correct against this
+#: reading, and it means an ffmpeg that renders a couple of hundred pixels
+#: differently fails every reference frame at once. The check below turns a
+#: major version apart into one failure naming ffmpeg rather than ten reading as
+#: a design regression, and `ffmpeg_note` names the version on any frame that
+#: fails, at the patch level the check cannot see (#817).
 MEASURED_AGAINST_FFMPEG = "8.1.2_1"
 
 
@@ -197,35 +193,60 @@ def ffmpeg_note(running: str | None) -> str:
         "design change.")
 
 
-#: The smallest change the reference frames actually have to CATCH (#787).
+#: The smallest change the reference frames actually have to CATCH.
 #:
-#: Also measured: lifting `program_plate.FOOTER_RULE_Y` by `SAFE_BOTTOM` moves
-#: the entire footer colophon of both plate reels, the rose-gold rule and the
-#: wordmark under it, 160 pixels up the frame. That is 7336 pixels, 0.3538% of
-#: the canvas, and it is the whole signature block of a template.
+#: Measured by moving something, twice, and the smaller reading is the one kept.
 #:
-#: It is the smallest REAL defect there is a reading for, so the limit has to sit
-#: under it. It did not: the limit was 0.005, fourteen times this, and both reels
-#: passed their reference frames unchanged while their colophon moved a tenth of
-#: the frame's height. That is #787.
-SMALLEST_REAL_MOVE = 7336 / (1080 * 1920)
+#: 7336 pixels, 0.3538% (#787): lifting `program_plate.FOOTER_RULE_Y` by
+#: `SAFE_BOTTOM` moves the entire footer colophon of both plate reels, the
+#: rose-gold rule and the wordmark under it, 160 pixels up the frame. That was
+#: the whole signature block of a template, and at the limit of 0.005 both reels
+#: passed their reference frames while it moved a tenth of the frame's height.
+#:
+#: 1871 pixels, 0.0902% (#816): the story template's second caption line moved
+#: ONE pixel, by `generate_story.ORG_VENUE_LINE_SPACING` 55 to 56, rendered
+#: against the committed frame on this Mac. Two neighbouring readings from the
+#: same measurement, for scale: the whole caption block moved one pixel reads
+#: 3561 px, and the wordmark moved one pixel reads 4624 px. The control renders
+#: unperturbed and reads 0.
+#:
+#: A single line of type moved by one pixel is about a quarter of the colophon
+#: reading, and it is a real defect: a caption that has drifted off its band is
+#: exactly the kind of thing these frames exist to catch. So the limit has to
+#: sit under 1871, not merely under 7336, which is what re-chose it in #816.
+#:
+#: `test_a_caption_line_moved_one_pixel_fails_its_reference_frame` takes this
+#: reading again on every run rather than leaving it as a number in a comment,
+#: so a template whose type stops being caught at this size is a failure here
+#: rather than a stale claim (L32).
+SMALLEST_REAL_MOVE = 1871 / (1080 * 1920)
 
 #: Share of pixels allowed past the per-channel tolerance.
 #:
 #: Chosen from the two measurements above rather than picked round, and it sits
-#: at their geometric middle: 415 pixels, sixteen times the worst unchanged
-#: reading and eighteen times under the smallest real move. Out of the dense
-#: part of the distribution in both directions, so neither a slightly noisier
-#: encode nor a slightly smaller layout change lands anywhere near it (L172).
+#: at their geometric middle: 207 pixels of a 1080 by 1920 canvas, eight times
+#: the worst unchanged reading there has ever been and nine times under the
+#: smallest real move there is a reading for. Out of the dense part of the
+#: distribution in both directions, so neither a noisier encode nor a smaller
+#: layout change lands anywhere near it (L172).
 #:
-#: The comment that stood here said a moved element covers far more of the frame
-#: than the limit. That was the claim, never a reading, and it was wrong by a
-#: factor of fourteen in the direction that matters.
+#: Re-chosen in #816, from 0.0002. Two things moved under it. The noise floor
+#: went to zero once #811 dropped the fast preset, which does not on its own
+#: justify a tighter limit (see `WORST_UNCHANGED_ON_CI` for why zero cannot be
+#: multiplied into one). What does is the other end: `SMALLEST_REAL_MOVE` is now
+#: a caption line moved one pixel rather than a whole colophon moved 160, and at
+#: 0.0002 the limit sat 4.5x under it, which is inside the clear air
+#: `test_the_limit_sits_between_the_noise_and_the_defect` demands. At 0.0001 it
+#: is 9x under, with the same 8x above the noise.
+#:
+#: The comment that stood here before #787 said a moved element covers far more
+#: of the frame than the limit. That was the claim, never a reading, and it was
+#: wrong by a factor of fourteen in the direction that matters.
 #:
 #: `test_the_limit_sits_between_the_noise_and_the_defect` holds the gap open, so
 #: a new reading that closes it from either side asks for the limit to be chosen
 #: again rather than letting it drift.
-MAX_CHANGED_FRACTION = 0.0002
+MAX_CHANGED_FRACTION = 0.0001
 
 
 # ── comparison ────────────────────────────────────────────────────────────────
@@ -336,11 +357,11 @@ def test_the_frames_are_compared_by_the_ffmpeg_the_limit_was_measured_against():
         f"these frames are being compared by ffmpeg {running} and the reading "
         f"MAX_CHANGED_FRACTION was chosen from was taken against "
         f"{MEASURED_AGAINST_FFMPEG}. A major version apart is outside anything "
-        "measured here, and at 16x of headroom the limit is tight enough that "
+        "measured here, and at 8x of headroom the limit is tight enough that "
         "a different encoder fails all ten frames at once, which reads as a "
         "design regression rather than as a new toolchain.\n"
         "  This run publishes its own drift readings; take the new numbers from "
-        "them, re-choose MAX_CHANGED_FRACTION from UNCHANGED_ON_CI and "
+        "them, re-choose MAX_CHANGED_FRACTION from WORST_UNCHANGED_ON_CI and "
         "SMALLEST_REAL_MOVE, and record the version here.")
 
 
@@ -629,6 +650,56 @@ def test_story_matches_its_reference_frame(photos, tmp_path):
     frame = Image.open(out).convert("RGB")
     assert_shows_real_content(frame, "story")
     assert_matches_golden(frame, "story", tmp_path)
+
+
+@requires_mac_fonts
+def test_a_caption_line_moved_one_pixel_fails_its_reference_frame(
+        photos, tmp_path, monkeypatch):
+    """The reading `SMALLEST_REAL_MOVE` is chosen from, taken again on every run.
+
+    #787 chose the limit from a whole colophon moving 160 pixels, which is the
+    largest small defect there was a reading for rather than the smallest. This
+    is the other end, and #816 re-chose the limit from it: one line of the
+    story's caption moved ONE pixel reads 1871 of 2073600 pixels, a quarter of
+    the colophon reading, and it is exactly the kind of drift these frames
+    exist to catch.
+
+    Taken by moving something real rather than by painting pixels into a
+    synthetic frame, because the number has to describe what a rendered
+    template does. `test_a_frame_that_moved_an_element_now_fails` covers the
+    arithmetic; this covers the claim.
+
+    The reading is diverted to a temporary log. A perturbed render writes a
+    reading under the template's own name, and on CI that would land in the
+    collected drift log as a `story` measurement nobody took, in the very
+    distribution the limit is chosen from (L191).
+    """
+    monkeypatch.setenv(golden_drift.LOG_VARIABLE, str(tmp_path / "drift.txt"))
+    monkeypatch.setattr(story_mod, "ORG_VENUE_LINE_SPACING",
+                        story_mod.ORG_VENUE_LINE_SPACING + 1)
+
+    out = tmp_path / "story.png"
+    story_mod.generate_story(
+        photo_path=photos[0], event_name="Reference Event",
+        org="Reference Org", venue="Reference Venue", output_path=str(out),
+        logo_path=LOGO)
+
+    frame = Image.open(out).convert("RGB")
+    golden = Image.open(GOLDEN_DIR / "story.png")
+    changed = _changed_mask(frame, golden).histogram()[255]
+    total = frame.width * frame.height
+
+    assert changed >= SMALLEST_REAL_MOVE * total, (
+        f"moving the story's second caption line one pixel reads {changed} of "
+        f"{total} pixels, under the {SMALLEST_REAL_MOVE * total:.0f} "
+        f"SMALLEST_REAL_MOVE records. Either the caption moved less than it "
+        f"did when that was measured, in which case re-choose the limit from "
+        f"this reading, or the perturbation above no longer reaches the render, "
+        f"in which case this check is measuring an untouched template (L100).")
+
+    with pytest.raises(BaseException) as failure:
+        assert_matches_golden(frame, "story", tmp_path)
+    assert "moved" in str(failure.value), str(failure.value)
 
 
 @requires_mac_fonts

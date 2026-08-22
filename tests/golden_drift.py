@@ -1,10 +1,10 @@
 """Every reference-frame comparison writes down what it measured (#787).
 
 `tests/test_golden_frames.py` fails a template when more than
-`MAX_CHANGED_FRACTION` of its frame differs from the committed reference, and
-that constant is 0.005, half a percent. The comment beside it said why: a moved
-element, a label that has lost its contrast, or a shadow streaking the mat all
-cover far more of the frame than this.
+`MAX_CHANGED_FRACTION` of its frame differs from the committed reference. That
+constant was 0.005, half a percent, when this was written. The comment beside it
+said why: a moved element, a label that has lost its contrast, or a shadow
+streaking the mat all cover far more of the frame than this.
 
 Measured on 2026-08-21 while doing #753, that is not true of a moved element.
 Lifting `program_plate.FOOTER_RULE_Y` by `SAFE_BOTTOM` moves the entire footer

@@ -1,6 +1,6 @@
 """#787: the reference frames write down what they measured, on every run.
 
-`MAX_CHANGED_FRACTION` is 0.005 and its stated justification is that a moved
+`MAX_CHANGED_FRACTION` was 0.005 and its stated justification was that a moved
 element covers far more of the frame than that. Measured on 2026-08-21, lifting
 the plate reels' entire footer colophon 160 pixels moved 7336 pixels, 0.35% of
 the canvas, and both reels passed their reference frames unchanged.
@@ -513,9 +513,10 @@ def test_a_shard_that_should_have_measured_and_did_not_still_says_so():
 def test_every_rendering_job_records_the_ffmpeg_it_ran_against():
     """The reading and the tool that produced it arrive together (#792).
 
-    `MAX_CHANGED_FRACTION` is 0.0002 since #787, twenty-five times tighter than
-    the 0.005 it replaced, and it was chosen from what an unchanged design reads
-    on the runner: 0 pixels on nine frames and 26 on `clip_reel`. That share
+    `MAX_CHANGED_FRACTION` is 0.0001 since #816, fifty times tighter than the
+    0.005 it replaced, and it was chosen from what an unchanged design reads on
+    the runner: 26 pixels on `clip_reel` at the worst it has ever read, 0 on
+    every frame since #811 dropped the preset that caused it. That share
     exists only because of the runner's ffmpeg, and both jobs pin the runner
     IMAGE, deliberately, since the frames were recorded against its fonts, while
     neither pins ffmpeg: `brew install ffmpeg` takes whatever Homebrew has that
@@ -523,7 +524,7 @@ def test_every_rendering_job_records_the_ffmpeg_it_ran_against():
 
     So the number the limit rests on can move with nothing in the repo saying
     so. At the old limit there was 385x of headroom and it did not matter; at
-    16x, an ffmpeg rendering a few hundred pixels differently fails every
+    8x, an ffmpeg rendering a couple of hundred pixels differently fails every
     reference frame at once, and the first symptom reads as a design regression
     on ten templates.
 
@@ -546,7 +547,7 @@ def test_every_rendering_job_records_the_ffmpeg_it_ran_against():
 from test_golden_frames import (  # noqa: E402
     MAX_CHANGED_FRACTION,
     SMALLEST_REAL_MOVE,
-    UNCHANGED_ON_CI,
+    WORST_UNCHANGED_ON_CI,
 )
 
 #: How much clear air the limit needs either side, as a multiplier.
@@ -579,6 +580,28 @@ def test_the_version_parser_reads_the_spellings_this_repo_has_actually_seen():
         "as one would accept a truncated or invented version (L108)")
 
 
+def test_the_noise_anchor_is_a_reading_and_not_a_zero():
+    """The control for the check below (#816).
+
+    `WORST_UNCHANGED_ON_CI` is multiplied to produce the floor the limit has to
+    clear, and every reading taken since #811 dropped the fast preset is 0: ten
+    frames, three jobs, two commits. A zero anchor multiplies to zero, which
+    makes the first half of the check below true of ANY limit at all, including
+    one under what the runner already produces, while still reading as an
+    assertion about the noise (L182).
+
+    So the anchor stays the worst reading there has ever been rather than the
+    latest one, and this says out loud that it has to be a reading.
+    """
+    assert WORST_UNCHANGED_ON_CI > 0, (
+        "WORST_UNCHANGED_ON_CI is zero, so the gap below it is zero and the "
+        "limit is held to nothing on the noise side. A floor of zero cannot be "
+        "multiplied into a limit: it would demand every future encoder agree "
+        "with these frames bit for bit, and the first Homebrew bottle revision "
+        "that rounded one edge differently would fail all ten at once (L36). "
+        "Keep the worst reading an unchanged design has produced on the runner.")
+
+
 def test_the_limit_sits_between_the_noise_and_the_defect():
     """The whole of #787 in one assertion.
 
@@ -587,11 +610,11 @@ def test_the_limit_sits_between_the_noise_and_the_defect():
     the smallest change the frames exist to catch, or it passes on exactly that.
     It was not: at 0.005 it sat ABOVE a whole colophon moving 160 pixels.
     """
-    assert UNCHANGED_ON_CI * GAP <= MAX_CHANGED_FRACTION, (
-        f"the limit {MAX_CHANGED_FRACTION:.4%} is close to what an unchanged "
-        f"design already reads on the runner, {UNCHANGED_ON_CI:.4%}, so correct "
-        "runs will start failing. Re-measure from a CI run's published readings "
-        "and choose the limit again.")
+    assert WORST_UNCHANGED_ON_CI * GAP <= MAX_CHANGED_FRACTION, (
+        f"the limit {MAX_CHANGED_FRACTION:.4%} is close to the worst an "
+        f"unchanged design has read on the runner, {WORST_UNCHANGED_ON_CI:.4%}, "
+        "so correct runs will start failing. Re-measure from a CI run's "
+        "published readings and choose the limit again.")
     assert MAX_CHANGED_FRACTION * GAP <= SMALLEST_REAL_MOVE, (
         f"the limit {MAX_CHANGED_FRACTION:.4%} is close to the smallest real "
         f"change there is a reading for, {SMALLEST_REAL_MOVE:.4%}, so the "
@@ -606,9 +629,10 @@ def test_the_two_readings_are_far_enough_apart_to_put_a_limit_between():
     the whole canvas would work and the check would need a different shape
     entirely, which is a decision rather than a number.
     """
-    assert UNCHANGED_ON_CI * GAP * GAP <= SMALLEST_REAL_MOVE, (
-        f"an unchanged design reads {UNCHANGED_ON_CI:.4%} and the smallest real "
-        f"change reads {SMALLEST_REAL_MOVE:.4%}. There is no longer room for a "
+    assert WORST_UNCHANGED_ON_CI * GAP * GAP <= SMALLEST_REAL_MOVE, (
+        f"an unchanged design has read {WORST_UNCHANGED_ON_CI:.4%} at worst and "
+        f"the smallest real change reads {SMALLEST_REAL_MOVE:.4%}. There is no "
+        "longer room for a "
         "limit between them, so a share of the canvas has stopped being able to "
         "tell noise from a moved element at all.")
 
