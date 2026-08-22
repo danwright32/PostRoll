@@ -1,0 +1,8 @@
+{
+  "name": "the-joined-reel-is-not-encoded-fast",
+  "file": "postroll/media/render_clip_reel.py",
+  "find": "                \"-c:v\", \"libx264\", \"-crf\", \"20\", \"-pix_fmt\", \"yuv420p\",",
+  "replace": "                \"-c:v\", \"libx264\", \"-preset\", \"veryfast\", \"-crf\", \"20\", \"-pix_fmt\", \"yuv420p\",",
+  "test": "tests/test_render_clip_reel.py::test_the_reel_this_returns_was_not_encoded_by_a_fast_preset",
+  "breaks": "the joined reel ships with trellis quantisation and subpixel refinement off, and it ships exactly as it is whenever the title card is muted or fails, which is the state #811 took off the title pass for the same reason (#819)"
+}
