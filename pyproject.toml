@@ -33,10 +33,37 @@ pythonpath = ["."]
 # off a busy one. Same suite, same machine, same day: 121s. It costs a little CPU
 # (886s to 929s of user time) for nearly half the wall clock.
 #
+# `--timeout` is the fourth, and it is about being TOLD what wedged (#836).
+# #832 gave every CI job a deadline, which stops a wedged run burning the
+# platform default, but a job killed that way reports only that the job ran out
+# of time. Finding out which test it was took cancelling two runs and pairing
+# each `pytest -v` start line against its verdict by hand. A per-test deadline
+# makes that one red line naming the test, with the stack it was stuck in.
+#
+# 600s, sized from a reading rather than picked round. The slowest single test
+# measured anywhere is 94.84s, on the macOS runner, and it is the same test
+# every time: three runs on 2026-08-22 put it at 94.84s, 76.65s and 75.34s, and
+# this Mac at 91.23s. The Linux leg's slowest is a different test at 31.3s. So
+# this is 6.3x the worst reading, and there is nothing in the distribution
+# between 95s and it: the next slowest test is 68s (L172).
+#
+# Sized generously on purpose. A wedge is unbounded, so any finite limit catches
+# it, and the only thing a tighter number buys is a red suite on a slow morning.
+# It still sits well inside the shortest job that runs pytest, which is 20
+# minutes, so the job deadline stays the backstop for a run that wedges OUTSIDE
+# a test where no per-test limit can see it.
+#
+# `--timeout-method=signal` is the default wherever SIGALRM exists, which is
+# both our platforms, and is pinned because the alternative is not equivalent:
+# `thread` terminates the whole worker, and pytest-timeout documents junit XML
+# as not functioning normally under it. `tools/record_test_durations.py` reads
+# that report to decide whether a red run may still be recorded (#837), so a
+# silent switch would leave it refusing every run it was changed to allow.
+#
 # Set here rather than on each command, so the local targets, the CI legs and the
 # reference-frame shards cannot disagree about it (L41). Harmless with no `-n`:
 # a run with one process ignores it.
-addopts = "-ra --strict-markers --dist worksteal"
+addopts = "-ra --strict-markers --dist worksteal --timeout=600 --timeout-method=signal"
 
 # Declared so --strict-markers accepts it. `slow` means EXPENSIVE, and nothing
 # else since #766: which files carry it is derived from a measurement in
