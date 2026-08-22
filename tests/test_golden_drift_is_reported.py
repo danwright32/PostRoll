@@ -52,7 +52,7 @@ def test_nothing_is_collecting_is_its_own_answer():
 def test_the_one_variable_asked_for_is_where_readings_go(tmp_path):
     log = tmp_path / "log.txt"
 
-    written = report("story", 10, 1000, {LOG_VARIABLE: str(log)})
+    written = report("story", 10, 1000, environment={LOG_VARIABLE: str(log)})
 
     assert written is not None
     assert log.read_text(encoding="utf-8").splitlines() == [written]
@@ -69,7 +69,7 @@ def test_a_step_summary_alone_collects_nothing(tmp_path):
     """
     summary = tmp_path / "summary.md"
 
-    assert report("story", 10, 1000, {"GITHUB_STEP_SUMMARY": str(summary)}) is None
+    assert report("story", 10, 1000, environment={"GITHUB_STEP_SUMMARY": str(summary)}) is None
     assert not summary.exists()
 
 
@@ -82,7 +82,7 @@ def test_readings_from_several_writers_all_survive(tmp_path):
     """
     log = tmp_path / "log.txt"
     for name in ("story", "collage", "morph_reel"):
-        report(name, 1, 100, {LOG_VARIABLE: str(log)})
+        report(name, 1, 100, environment={LOG_VARIABLE: str(log)})
 
     assert len(log.read_text(encoding="utf-8").splitlines()) == 3
 
@@ -91,7 +91,59 @@ def test_a_reading_that_could_not_be_written_says_so_rather_than_nothing():
     # "written" and "there was nowhere to write it" are different outcomes, and
     # a caller reading silence as success would report a run that collected
     # nothing as a run in which nothing drifted (L11, L98).
-    assert report("story", 1, 100, {}) is None
+    assert report("story", 1, 100, environment={}) is None
+
+
+def test_a_reading_says_where_the_changed_pixels_are():
+    """A count cannot tell scattered noise from a moved element (#793).
+
+    That is the one thing not established about `clip_reel`, which reads 26
+    pixels on the runner while the other nine templates read 0, reproducibly to
+    the pixel across two separate runs.
+    """
+    written = line("clip_reel", 26, 1080 * 1920, box=(100, 200, 130, 220))
+
+    assert "region 30x20 at (100,200)" in written, written
+
+
+def test_a_tight_box_and_a_spread_one_read_differently():
+    """The question the box is being added to answer.
+
+    The same 26 pixels inside a mark and the same 26 dusted over a whole canvas
+    are the same count and completely different findings, so the reading has to
+    separate them without anybody fetching the frame.
+    """
+    tight = line("clip_reel", 26, 1080 * 1920, box=(100, 200, 106, 205))
+    spread = line("clip_reel", 26, 1080 * 1920, box=(0, 0, 1080, 1920))
+
+    assert "86.7% of it" in tight, tight
+    assert "0.0% of it" in spread, spread
+    assert tight != spread
+
+
+def test_a_frame_that_did_not_move_says_so_rather_than_naming_a_corner():
+    """None is its own answer.
+
+    `getbbox()` returns None for a mask with nothing set. A box of zeros written
+    in its place would read as a real one-pixel region at the top-left corner,
+    which is a finding about a frame that did not move at all (L11).
+    """
+    written = line("story", 0, 1080 * 1920, box=None)
+
+    assert "no changed region" in written, written
+    assert "(0,0)" not in written, written
+
+
+def test_an_environment_passed_positionally_is_refused():
+    """`box` and `environment` are keyword only, and that is load bearing.
+
+    `box` was added in front of `environment`, so a caller still passing an
+    environment positionally would bind a dict to `box` and write a reading
+    about a region nobody measured, with nothing raising (L168). Every caller
+    was updated; this is what stops the next one being written that way.
+    """
+    with pytest.raises(TypeError):
+        report("story", 1, 100, {})  # type: ignore[misc]
 
 
 # ── the comparison itself reports ────────────────────────────────────────────
@@ -118,6 +170,8 @@ def test_a_passing_comparison_still_writes_its_reading(tmp_path, monkeypatch):
     written = log.read_text(encoding="utf-8").strip()
     assert written.startswith("- unmoved:"), written
     assert "0 of 1200 px" in written, written
+    # A frame that did not move says so, rather than naming the top-left corner.
+    assert "no changed region" in written, written
 
 
 def test_a_frame_that_moved_a_little_reports_the_share_it_moved(tmp_path,
@@ -152,6 +206,9 @@ def test_a_frame_that_moved_a_little_reports_the_share_it_moved(tmp_path,
 
     written = log.read_text(encoding="utf-8").strip()
     assert "26 of 2073600 px" in written, written
+    # And where they are: a row of 26 along the top edge, which the box says
+    # outright rather than leaving to be guessed from a count (#793).
+    assert "region 26x1 at (0,0)" in written, written
     assert CHANNEL_TOLERANCE < 255, "the tolerance would count nothing as changed"
 
 
