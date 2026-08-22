@@ -304,3 +304,75 @@ def test_crossfade_transition_renders_without_error(tmp_path):
     assert out.exists()
     # Two 4s segments joined by one 0.4s crossfade: total ~= 4 + 4 - 0.4 = 7.6s.
     assert abs(_probe_duration(out) - 7.6) < 0.5
+
+
+# ── the pass that decides shipped pixels is not a fast one (#819) ─────────────
+
+#: What x264 writes into the file about how it encoded it.
+#:
+#: Read off two real encodes on 2026-08-22 rather than taken from the
+#: documentation (L52): `-preset veryfast` writes `ref=1 subme=2 mixed_ref=0
+#: trellis=0`, and the default preset, which is medium, writes `ref=3 subme=7
+#: mixed_ref=1 trellis=1`. The string is in the bitstream, so it describes the
+#: file that ships rather than the arguments some source line passes.
+FAST_PRESET_GIVES_ITSELF_AWAY = {"trellis": "0", "subme": "2"}
+
+
+def x264_settings(path: Path) -> dict[str, str]:
+    """The encoder settings x264 recorded inside `path`.
+
+    Raises rather than returning an empty dict when the marker is not there: a
+    file this cannot read is not a file encoded carefully, and a caller that
+    could not tell them apart would read an unreadable answer as a pass (L98).
+    """
+    blob = path.read_bytes()
+    at = blob.find(b"x264 - core")
+    if at < 0:
+        raise AssertionError(
+            f"{path.name} carries no x264 settings string, so nothing here can "
+            f"say how it was encoded. Either it was not encoded by x264 or the "
+            f"marker moved; do not read this as a careful encode.")
+    line = blob[at:blob.find(b"\x00", at)].decode("utf-8", "replace")
+    return dict(word.split("=", 1) for word in line.split() if "=" in word)
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("count", [1, 2])
+def test_the_reel_this_returns_was_not_encoded_by_a_fast_preset(tmp_path, count):
+    """#819, on the file rather than on the source line.
+
+    The title card is optional (`title_card_muted`) and its failure is caught,
+    so on those runs the file this function returns is what Dan posts, with no
+    further encode. Which pass produced it depends on the plan: with one
+    selection the reel is a copy of the segment prep, and with more it is the
+    join. Both are checked, because the rule is about the delivered pixels and
+    not about a particular line.
+
+    #811 established the rule for the last pass: `veryfast` turns off trellis
+    quantisation, subpixel refinement and multiple reference frames, and it is
+    what made the clip reel the one template whose frame drifted between two
+    builds of ffmpeg. The passes upstream of a re-encode keep it deliberately,
+    and what that costs is recorded beside them.
+    """
+    clips = []
+    for index in range(count):
+        clip = tmp_path / f"clip{index}.mp4"
+        _make_clip(clip, seconds=6.0, color=("red", "blue")[index], freq=300 + index)
+        clips.append(clip)
+    out = tmp_path / "reel.mp4"
+
+    render_clip_reel(
+        [{"clip_path": str(clip), "trim_in": 0.0, "trim_out": 4.0,
+          "transition_after": "cut"} for clip in clips], out)
+
+    settings = x264_settings(out)
+    asked_fast = {name: settings.get(name) for name in FAST_PRESET_GIVES_ITSELF_AWAY
+                  if settings.get(name) == FAST_PRESET_GIVES_ITSELF_AWAY[name]}
+
+    assert not asked_fast, (
+        f"the reel this returns was encoded with {asked_fast}, which is what a "
+        f"fast preset writes, and this file ships whenever the title card is "
+        f"muted or fails. The pass that decides shipped pixels takes no preset, "
+        f"which is ffmpeg's medium and what every other template's last pass "
+        f"uses (#811, #819). Settings in the file: "
+        f"{ {k: settings.get(k) for k in ('ref', 'subme', 'mixed_ref', 'trellis')} }")

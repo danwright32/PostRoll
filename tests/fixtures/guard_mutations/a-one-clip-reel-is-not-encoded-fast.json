@@ -1,0 +1,8 @@
+{
+  "name": "a-one-clip-reel-is-not-encoded-fast",
+  "file": "postroll/media/render_clip_reel.py",
+  "find": "                                        reencoded_downstream=joined_afterwards)",
+  "replace": "                                        reencoded_downstream=True)",
+  "test": "tests/test_render_clip_reel.py::test_the_reel_this_returns_was_not_encoded_by_a_fast_preset",
+  "breaks": "a reel built from ONE selection is a stream copy of its prepared segment, so that segment's fast encode is what ships, and the rule holds for every other plan while the smallest one silently breaks it (#819)"
+}

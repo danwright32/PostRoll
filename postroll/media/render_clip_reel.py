@@ -115,11 +115,18 @@ def _validate_selections(selections: list[dict]) -> None:
             )
 
 
-def _prepare_segment(sel: dict, out_path: Path, *, has_audio: bool) -> float:
+def _prepare_segment(sel: dict, out_path: Path, *, has_audio: bool,
+                     reencoded_downstream: bool = True) -> float:
     """Trim + normalize one selection to a standalone segment at a
     consistent resolution/fps/audio format so the segments can be joined
     with xfade regardless of the source clips' original formats. Returns
-    the segment's duration."""
+    the segment's duration.
+
+    `reencoded_downstream` says whether anything encodes these pixels again.
+    With more than one selection the join below does, and this pass takes
+    `-preset veryfast`; with exactly ONE the join is a stream copy, so this is
+    the encode that decides what ships and it takes no preset (#819).
+    """
     trim_in = float(sel["trim_in"])
     trim_out = float(sel["trim_out"])
     duration = trim_out - trim_in
@@ -131,7 +138,18 @@ def _prepare_segment(sel: dict, out_path: Path, *, has_audio: bool) -> float:
         "-ss", str(trim_in), "-to", str(trim_out), "-i", str(sel["clip_path"]),
         "-vf", _scale_pad_filter(crop_x, crop_y),
         "-r", "30",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        # Fast when the join re-encodes these pixels, and what that costs was
+        # measured rather than assumed (#819). On 30s of panned photography
+        # with grain, the whole reel takes 16.6s with every pass fast, 21.3s
+        # with only the delivering pass at medium, and 37.8s with these at
+        # medium too. Against intermediates encoded LOSSLESSLY, which is the
+        # best material the last pass could have, dropping the preset here
+        # buys 1.0 dB of PSNR and 0.06 of SSIM on footage of pure noise, the
+        # hardest case there is. So it more than doubles a Friday render for a
+        # difference nothing has shown to be visible, and it stays.
+        "-c:v", "libx264",
+        *(("-preset", "veryfast") if reencoded_downstream else ()),
+        "-crf", "20",
         "-pix_fmt", "yuv420p",
     ]
     if has_audio:
@@ -228,9 +246,14 @@ def render_clip_reel(
 
         segment_paths: list[Path] = []
         durations: list[float] = []
+        # A single selection is copied rather than joined below, so its
+        # prepared segment IS the reel and the pass that makes it is the one
+        # deciding shipped pixels (#819).
+        joined_afterwards = len(selections) > 1
         for i, sel in enumerate(selections):
             seg_path = tmp_path / f"segment_{i:02d}.mp4"
-            duration = _prepare_segment(sel, seg_path, has_audio=has_audio[i])
+            duration = _prepare_segment(sel, seg_path, has_audio=has_audio[i],
+                                        reencoded_downstream=joined_afterwards)
             segment_paths.append(seg_path)
             durations.append(duration)
 
@@ -251,7 +274,14 @@ def render_clip_reel(
                 "ffmpeg", "-y", "-loglevel", "error", *video_input_args,
                 "-filter_complex", video_filter,
                 "-map", f"[{video_out_label}]", "-an",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+                # No preset, which is ffmpeg's medium (#819). The mux below
+                # copies this stream and the title card is optional, so these
+                # are the pixels that ship whenever it is muted or fails, and
+                # #811 settled what a fast preset does to a delivered file.
+                # Measured on 2026-08-22, on 30s of panned photography with
+                # grain: 16.6s for the whole reel with every pass fast, 21.3s
+                # with this one at medium, 37.8s with every pass at medium.
+                "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p",
                 str(video_track),
             ]
         result = subprocess.run(video_cmd, capture_output=True, text=True)
