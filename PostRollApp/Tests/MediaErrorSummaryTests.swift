@@ -100,6 +100,24 @@ final class MediaErrorSummaryTests: XCTestCase {
         XCTAssertTrue(s.lowercased().contains("exported"), s)
     }
 
+    func testAWarningDoesNotNameACauseItCannotKnow() throws {
+        // Since #824 this channel also carries a finishing touch that FAILED, in
+        // which nothing was missing and an encode did not run. The closing
+        // sentence was written for a chosen photo that had moved and asserted
+        // that cause on EVERY warning, so it said something untrue about the one
+        // case here that is not about a missing file (L11).
+        let s = try XCTUnwrap(MediaErrorSummary.warningSentence([
+            "friday": "title card skipped, so the reel carries no title: ffmpeg overlay failed",
+        ]))
+        XCTAssertFalse(s.lowercased().contains("missing input"), s)
+
+        // And it still has to say the folder is complete, which is the whole
+        // reason warnings are kept apart from failures. The reason line above it
+        // is where the cause is named, by the code that knows it.
+        XCTAssertTrue(s.contains("nothing is missing from the folder"), s)
+        XCTAssertTrue(s.contains("ffmpeg overlay failed"), s)
+    }
+
     func testWarningDaysAreAlsoListedInWeekOrder() throws {
         let s = try XCTUnwrap(MediaErrorSummary.warningSentence([
             "friday": "a", "tuesday": "b",

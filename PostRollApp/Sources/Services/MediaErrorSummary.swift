@@ -52,13 +52,22 @@ enum MediaErrorSummary {
              + "folder is missing them. Check the log for why, then regenerate."
     }
 
-    /// What a day was missing when it rendered anyway, or nil when nothing was.
+    /// What was worth saying about a day that rendered anyway, or nil when
+    /// there was nothing.
     ///
     /// Unlike a failure's reason (ffmpeg stderr, which tells Dan nothing he can
-    /// act on) a warning's reason is written by our own code and names the file
-    /// that has moved, which is the actionable part. So it is quoted, and it
-    /// says plainly that the folder is complete: a warning that reads like a
-    /// loss is the defect this split exists to fix.
+    /// act on) a warning's reason is written by our own code and names what
+    /// actually happened, which is the actionable part. So it is quoted, and the
+    /// sentence after it says plainly that the folder is complete: a warning
+    /// that reads like a loss is the defect this split exists to fix.
+    ///
+    /// That closing sentence names NO cause, and used to (#824). It said the day
+    /// was exported "without the missing input", which was true of the one thing
+    /// this carried when it was written, a chosen photo that had moved. It now
+    /// also carries a Friday title card that failed, where nothing was missing
+    /// and an encode did not run, and the sentence went on asserting a cause it
+    /// could not know. The cause belongs to the line above, written by the code
+    /// that knows it.
     static func warningSentence(_ warnings: [String: String]) -> String? {
         let keys = orderedKeys(warnings)
         guard !keys.isEmpty else { return nil }
@@ -70,7 +79,7 @@ enum MediaErrorSummary {
         let lines = keys.map { "\(displayName($0)): \(Sentence.closed(warnings[$0] ?? ""))" }
         let subject = keys.count == 1 ? "That day was" : "Those days were"
         return lines.joined(separator: "\n")
-             + "\n\n\(subject) exported without the missing input, so nothing is "
-             + "missing from the folder."
+             + "\n\n\(subject) exported anyway, so nothing is missing from the "
+             + "folder."
     }
 }
