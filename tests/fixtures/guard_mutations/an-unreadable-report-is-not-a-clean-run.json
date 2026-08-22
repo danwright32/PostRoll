@@ -1,0 +1,8 @@
+{
+  "name": "an-unreadable-report-is-not-a-clean-run",
+  "file": "tools/record_test_durations.py",
+  "find": "            if not cases:",
+  "replace": "            if False:",
+  "test": "tests/test_record_test_durations.py::test_a_non_zero_exit_naming_no_failing_test_refuses",
+  "breaks": "a non-zero exit whose report names no failing test at all is read as a run with nothing blocking it, so a usage error, an internal error, or a run that collected nothing silently writes the record instead of refusing, and an empty answer becomes indistinguishable from a clean one (L98, #837)"
+}

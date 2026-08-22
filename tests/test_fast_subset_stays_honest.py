@@ -68,7 +68,7 @@ def test_the_measurement_actually_found_some_expensive_files():
         f"only {sorted(files)} measure at or above {EXPENSIVE_SHARE:.0%} of "
         "the run, so the "
         "fast target is skipping almost nothing and the checks below prove "
-        "almost nothing. Re-record with tools/record_test_durations.py.")
+        "almost nothing. Re-record with `make record-test-durations`.")
 
 
 def test_the_measurement_did_not_swallow_the_whole_suite():
@@ -96,7 +96,7 @@ def test_the_record_names_only_files_that_still_exist():
     assert not vanished, (
         "these files are in the duration record and are not in tests/ any "
         f"more: {vanished}. Re-record with "
-        "`venv/bin/python tools/record_test_durations.py`.")
+        "`make record-test-durations`.")
 
 
 def test_the_record_still_covers_the_suite():
@@ -167,7 +167,7 @@ def test_the_floor_still_sits_in_a_gap_in_the_real_distribution():
         f"these files are now close to the {EXPENSIVE_SHARE:.0%} floor: "
         f"{crowding}. The floor was chosen to sit in a gap so that no small "
         "change in cost moves a file in or out of the fast run; it no longer "
-        "does. Re-measure with tools/record_test_durations.py and choose a new "
+        "does. Re-measure with `make record-test-durations` and choose a new "
         "EXPENSIVE_SHARE from where the distribution actually is.")
 
 
