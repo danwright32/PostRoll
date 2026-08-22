@@ -866,24 +866,38 @@ def test_the_frame_is_kept_where_the_tool_asked_for_it(tmp_path, monkeypatch):
 def test_a_comparison_keeps_the_bytes_a_re_record_would_have_written(tmp_path, monkeypatch):
     """The property the whole change rests on (#827).
 
-    The tool now RECORDS this file rather than rendering the frame a second
-    time, so it has to be what the second render would have written. Checked
-    against a committed reference frame, which was written by the re-record path
-    itself: if the two ways of saving a frame ever produce different bytes, the
-    door starts recording something subtly unlike what it says it records.
+    The tool now RECORDS the kept file rather than rendering the frame a second
+    time, so it has to be what the second render would have written. Both go
+    through `_write_frame`, and this is what holds them to each other: if the
+    two ways of saving a frame ever produce different bytes, the door starts
+    recording something subtly unlike what it says it records.
+
+    Against a reference this test writes ITSELF, never a committed one. A
+    committed frame was encoded by whichever Pillow and zlib the Mac that
+    recorded it had, and PNG encoders are not byte reproducible across builds,
+    so comparing against one asserts something that is not true off that
+    machine. The property under test is that the two WRITERS agree, which is
+    exactly what a locally written reference measures.
     """
     from golden_drift import CANDIDATE_VARIABLE
-    from test_golden_frames import GOLDEN_DIR
+    from test_golden_frames import _write_frame
 
-    committed = GOLDEN_DIR / "cover.png"
-    assert committed.is_file(), "no committed frame to compare a kept one against"
+    goldens = tmp_path / "goldens"
+    monkeypatch.setattr("test_golden_frames.GOLDEN_DIR", goldens)
+
+    frame = Image.new("RGB", (1080, 1920), (250, 248, 245))
+    for x in range(600):
+        frame.putpixel((x, 3), (20, 18, 16))
+
+    # The re-record path, writing the reference.
+    _write_frame(frame, goldens / "kept_pair.png")
 
     monkeypatch.setenv(CANDIDATE_VARIABLE, str(tmp_path / "kept"))
-    assert_matches_golden(Image.open(committed).convert("RGB"), "cover", tmp_path)
+    assert_matches_golden(frame, "kept_pair", tmp_path)
 
-    kept = tmp_path / "kept" / "cover.png"
-    assert kept.is_file(), "the comparison rendered a frame and kept nothing"
-    assert kept.read_bytes() == committed.read_bytes(), (
+    kept = tmp_path / "kept" / "kept_pair.png"
+    assert kept.is_file(), "the comparison was handed a frame and kept nothing"
+    assert kept.read_bytes() == (goldens / "kept_pair.png").read_bytes(), (
         "the frame kept for the codec door is not byte for byte what a "
         "re-record writes, so recording it would record something else")
 
@@ -893,25 +907,30 @@ def test_the_frame_kept_is_the_one_that_was_rendered(tmp_path, monkeypatch):
 
     The whole value of keeping it is that the tool records what the run
     RENDERED. A frame copied from the committed reference instead would be
-    byte-identical to it, so every check comparing the two would agree, the
-    door would re-record the same bytes back, and it would then refuse every
-    real codec change on the grounds that nothing moved.
+    byte-identical to it, so every check comparing the two would agree, the door
+    would re-record the same bytes back, and it would then refuse every real
+    codec change on the grounds that nothing moved.
     """
     from golden_drift import CANDIDATE_VARIABLE
-    from test_golden_frames import GOLDEN_DIR
+    from test_golden_frames import _write_frame
 
-    committed = GOLDEN_DIR / "cover.png"
-    rendered = Image.open(committed).convert("RGB")
-    # Few enough to stay well inside MAX_CHANGED_FRACTION, so what this test
-    # measures is what was kept rather than whether the comparison passed.
+    goldens = tmp_path / "goldens"
+    monkeypatch.setattr("test_golden_frames.GOLDEN_DIR", goldens)
+
+    reference = Image.new("RGB", (1080, 1920), (250, 248, 245))
+    _write_frame(reference, goldens / "moved.png")
+
+    rendered = reference.copy()
+    # Few enough to stay well inside MAX_CHANGED_FRACTION, so what this measures
+    # is what was kept rather than whether the comparison passed.
     for x in range(26):
         rendered.putpixel((x, 0), (200, 198, 195))
 
     monkeypatch.setenv(CANDIDATE_VARIABLE, str(tmp_path / "kept"))
-    assert_matches_golden(rendered, "cover", tmp_path)
+    assert_matches_golden(rendered, "moved", tmp_path)
 
-    kept = Image.open(tmp_path / "kept" / "cover.png").convert("RGB")
-    assert kept.getpixel((0, 0)) == (200, 198, 195), (
+    kept = tmp_path / "kept" / "moved.png"
+    assert Image.open(kept).convert("RGB").getpixel((0, 0)) == (200, 198, 195), (
         "the frame kept is not the one the comparison was handed, so the door "
         "would record something nothing measured")
-    assert (tmp_path / "kept" / "cover.png").read_bytes() != committed.read_bytes()
+    assert kept.read_bytes() != (goldens / "moved.png").read_bytes()
