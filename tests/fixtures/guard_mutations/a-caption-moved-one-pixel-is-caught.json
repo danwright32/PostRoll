@@ -1,0 +1,8 @@
+{
+  "name": "a-caption-moved-one-pixel-is-caught",
+  "file": "tests/test_golden_frames.py",
+  "find": "MAX_CHANGED_FRACTION = 0.0001",
+  "replace": "MAX_CHANGED_FRACTION = 0.005",
+  "test": "tests/test_golden_frames.py::test_a_caption_line_moved_one_pixel_fails_its_reference_frame",
+  "breaks": "a line of a template's caption drifts one pixel off its band and its reference frame reports no difference, which is 1871 of 2073600 pixels against a limit of 10368 (#816)"
+}

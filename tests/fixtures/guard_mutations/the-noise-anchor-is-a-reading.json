@@ -1,0 +1,8 @@
+{
+  "name": "the-noise-anchor-is-a-reading",
+  "file": "tests/test_golden_frames.py",
+  "find": "WORST_UNCHANGED_ON_CI = 26 / (1080 * 1920)",
+  "replace": "WORST_UNCHANGED_ON_CI = 0 / (1080 * 1920)",
+  "test": "tests/test_golden_drift_is_reported.py::test_the_noise_anchor_is_a_reading_and_not_a_zero",
+  "breaks": "the floor the limit has to clear becomes zero, so the check holding the limit above the noise is true of any limit at all while still reading as an assertion about the noise, which is what every reading since #811 would make it if the latest one were taken as the anchor (#816)"
+}
