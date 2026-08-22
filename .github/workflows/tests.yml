@@ -22,6 +22,12 @@ concurrency:
 jobs:
   python:
     runs-on: ubuntu-latest
+    # A deadline, because a job without one cannot fail, it can only hang, and a
+    # hang looks exactly like a slow queue (#832). This job wedged twice on one
+    # commit on 2026-08-22 and ran 45 minutes before it was cancelled by hand.
+    # Sized from what it really costs: 2m49s, 3m23s and 3m25s measured that day,
+    # so this is about six times the real thing and will not fail a slow runner.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 

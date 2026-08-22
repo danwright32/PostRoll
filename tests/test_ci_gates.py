@@ -664,3 +664,84 @@ def test_the_freshness_question_is_asked_once_not_once_per_shard(guards):
     assert "matrix.shard == 1" in guards, (
         "the freshness question is asked on every shard of the sweep, so it is "
         "answered once per runner")
+
+
+# ── every job has a deadline (#832) ──────────────────────────────────────────
+#
+# Here rather than in a file of its own because it is the same subject: what the
+# workflows have to guarantee before a pull request can be trusted, read the
+# same way, out of the same files.
+#
+# On 2026-08-22 the Linux test job wedged twice on one commit. It carries no
+# `timeout-minutes`, so it ran until it was cancelled by hand, 45 minutes the
+# first time. A job with no deadline cannot fail, it can only hang, and a hang
+# is worse than a failure because it is indistinguishable from a slow queue
+# (L110): that job normally takes about three minutes, and nothing on the checks
+# list said which of the two was happening.
+#
+# The deadline VALUES are a judgement that will drift as the suite grows, so
+# this asserts only that each job has one. What it is really protecting against
+# is a job added tomorrow inheriting the rule instead of somebody having to
+# remember it (L96).
+
+WORKFLOW_FILES = ("tests.yml", "swift.yml", "guards.yml")
+
+
+def jobs_without_a_deadline(text: str) -> list[str]:
+    """Every job in one workflow that declares no `timeout-minutes`.
+
+    Read as text, for the reason this whole file gives. Only what follows the
+    `jobs:` key is scanned, because `concurrency:` carries two-space keys of its
+    own above it and they are not jobs. Comment lines are dropped: a line
+    MENTIONING the deadline is not a deadline, and a guard answered by prose
+    about the thing is indistinguishable from one that works (L103).
+    """
+    lines = [line for line in text.splitlines() if not line.strip().startswith("#")]
+    try:
+        start = next(i for i, line in enumerate(lines) if line.rstrip() == "jobs:")
+    except StopIteration:
+        raise AssertionError(
+            "this workflow declares no `jobs:` at all, so nothing here read a "
+            "job. That is a failure rather than an empty answer: a guard that "
+            "cannot find its subject has measured nothing (L98).") from None
+
+    jobs: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in lines[start + 1:]:
+        if re.match(r"^[^\s#]", line):        # back out to the top level
+            break
+        named = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+        if named:
+            current = named.group(1)
+            jobs[current] = []
+        elif current is not None:
+            jobs[current].append(line)
+
+    assert jobs, ("no jobs were read out of this workflow, so this check passed "
+                  "over an empty set")
+    return sorted(name for name, body in jobs.items()
+                  if not any(re.match(r"^    timeout-minutes:\s*\d+", line)
+                             for line in body))
+
+
+def test_every_ci_job_carries_a_deadline():
+    missing: list[str] = []
+    for name in WORKFLOW_FILES:
+        text = (WORKFLOWS / name).read_text()
+        missing += [f"{name}: {job}" for job in jobs_without_a_deadline(text)]
+
+    assert not missing, (
+        "these CI jobs have no timeout-minutes, so a run that stops making "
+        "progress in one of them sits until the platform's own default rather "
+        "than failing: " + ", ".join(missing))
+
+
+def test_the_deadline_reader_can_see_a_job_that_lacks_one():
+    """The guard's own mechanism, seen working (L1).
+
+    Without this the check above passes whenever the reader stops matching,
+    which is the same green as a workflow where every job is covered.
+    """
+    text = "jobs:\n  covered:\n    timeout-minutes: 45\n    runs-on: x\n  bare:\n    runs-on: y\n"
+
+    assert jobs_without_a_deadline(text) == ["bare"]

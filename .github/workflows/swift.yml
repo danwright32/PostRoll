@@ -86,6 +86,11 @@ jobs:
   # against, not a version bump.
   swift-unit:
     runs-on: macos-26
+    # Same reason as the python job (#832). 45 rather than a tighter number
+    # because this compiles the app and runs 2250 tests, measured at 8m44s, and
+    # it matches what the macOS job in tests.yml already carries for work of the
+    # same kind.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -215,6 +220,10 @@ jobs:
   reference-frames:
     name: reference-frames (${{ matrix.shard.name }})
     runs-on: macos-15
+    # Per SHARD, which is what a job is here (#832). Each one renders reels and
+    # measured 2m29s to 3m19s on 2026-08-22, so this is roughly ten times the
+    # real thing: a shard that reaches it is stuck rather than slow.
+    timeout-minutes: 30
 
     # ── why it is fanned out over a matrix (#507) ─────────────────────────────
     #
