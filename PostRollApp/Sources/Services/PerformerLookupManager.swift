@@ -60,6 +60,16 @@ final class PerformerLookupManager {
     /// event are separate runs rather than one overwriting the other's record.
     private var trackers: [Kind: JobTracker<Event.ID, Run>] = [:]
 
+    /// Whether either lookup is still running (#862).
+    ///
+    /// Across every kind, because "is anything running" is the question being
+    /// asked and one kind answering for both would be wrong in the direction
+    /// that loses work. A kind with no tracker yet has never been started, so it
+    /// contributes nothing rather than being treated as unknown.
+    var hasWorkInFlight: Bool {
+        trackers.values.contains { $0.hasWorkInFlight }
+    }
+
     private func tracker(_ kind: Kind) -> JobTracker<Event.ID, Run> {
         if let existing = trackers[kind] { return existing }
         let made = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
@@ -284,4 +294,12 @@ final class PerformerLookupManager {
         }
         tracker(kind).markFailed(eventID)
     }
+}
+
+/// Asked whenever PostRoll is about to quit or install an update (#862).
+///
+/// The phrase is a clause rather than a name, because it is dropped into a
+/// sentence that already says what is happening to it.
+extension PerformerLookupManager: BackgroundWork {
+    var workPhrase: String { "a performer lookup is still running" }
 }

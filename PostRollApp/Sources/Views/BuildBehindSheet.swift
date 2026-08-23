@@ -32,9 +32,9 @@ struct BuildBehindSheet: View {
     private var repo: URL { behind.repo }
 
     @Environment(AppState.self) private var appState
-    @Environment(GenerationManager.self) private var generationManager
-    @Environment(OCRManager.self) private var ocrManager
-    @Environment(ExportManager.self) private var exportManager
+    /// What is running, across every owner rather than the three this sheet
+    /// used to name (#862).
+    @Environment(\.workInFlight) private var workInFlight
     @Environment(\.dismiss) private var dismiss
 
     private var command: String {
@@ -49,9 +49,7 @@ struct BuildBehindSheet: View {
     /// quits the app and anything mid flight loses whatever it has not written
     /// back yet.
     private var busyReason: String? {
-        AppUpdate.busyReason(generating: generationManager.hasWorkInFlight,
-                             readingPrograms: ocrManager.hasWorkInFlight,
-                             exporting: exportManager.hasWorkInFlight)
+        AppUpdate.busyReason(workInFlight: workInFlight)
     }
 
     var body: some View {

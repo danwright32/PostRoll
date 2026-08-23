@@ -46,6 +46,19 @@ final class ProgramNotesManager {
 
     private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
 
+
+    /// Whether anything this owner started is still running (#862).
+
+    ///
+
+    /// The tracker has always known this; nothing forwarded it, so this
+
+    /// owner was invisible to the one place that asked whether it was safe
+
+    /// to quit or to install an update.
+
+    var hasWorkInFlight: Bool { tracker.hasWorkInFlight }
+
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isRunning(_ id: Event.ID) -> Bool { tracker.isActive(id) }
     func failure(for id: Event.ID) -> String? { tracker.job(for: id)?.failure }
@@ -210,4 +223,12 @@ enum ProgramNotesMerge {
         }
         return error.localizedDescription
     }
+}
+
+/// Asked whenever PostRoll is about to quit or install an update (#862).
+///
+/// The phrase is a clause rather than a name, because it is dropped into a
+/// sentence that already says what is happening to it.
+extension ProgramNotesManager: BackgroundWork {
+    var workPhrase: String { "a programme notes search is still running" }
 }

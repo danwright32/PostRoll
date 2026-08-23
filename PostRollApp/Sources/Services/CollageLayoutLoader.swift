@@ -33,6 +33,13 @@ final class CollageLayoutLoader {
     }
 
     private let tracker = JobTracker<Key, Run>(elapsed: \.elapsedSeconds)
+
+    /// Whether anything this owner started is still running (#862).
+    ///
+    /// The tracker has always known this; nothing forwarded it, so this owner
+    /// was invisible to the one place that asked whether it was safe to quit or
+    /// to install an update.
+    var hasWorkInFlight: Bool { tracker.hasWorkInFlight }
     private var failures: [Key: String] = [:]
 
     // MARK: - Reads
@@ -154,4 +161,12 @@ final class CollageLayoutLoader {
         }
         return error.localizedDescription
     }
+}
+
+/// Asked whenever PostRoll is about to quit or install an update (#862).
+///
+/// The phrase is a clause rather than a name, because it is dropped into a
+/// sentence that already says what is happening to it.
+extension CollageLayoutLoader: BackgroundWork {
+    var workPhrase: String { "a collage layout is still being drawn" }
 }
