@@ -32,14 +32,20 @@ final class AppEntryPointUITests: XCTestCase {
     /// Every assertion below is about the running application, so a launch that
     /// did not happen has to fail here rather than leaving the assertions to
     /// report about nothing (L98).
-    private func launched(file: StaticString = #filePath, line: UInt = #line) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launch()
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30),
-                      "PostRoll did not reach the foreground, so nothing below "
-                      + "is about a running app. State: \(app.state.rawValue)",
-                      file: file, line: line)
-        return app
+    private lazy var dataRoot = LaunchedApp.scratchRoot("entry-point")
+
+    override func tearDownWithError() throws {
+        LaunchedApp.terminateEveryCopy()
+        try? FileManager.default.removeItem(at: dataRoot)
+    }
+
+    private func launched(file: StaticString = #filePath, line: UInt = #line) throws -> XCUIApplication {
+        // Through the shared route, so these are pointed away from live data and
+        // get the same proven clean slate as everything else. They used to
+        // launch bare, which was harmless on a fresh runner and would have read
+        // and written the real events.json the first time anyone ran the GUI
+        // suite on the development Mac (L2).
+        try LaunchedApp.launch(dataRoot: dataRoot, file: file, line: line)
     }
 
     // MARK: - The app under test is the one built from this checkout
@@ -51,7 +57,7 @@ final class AppEntryPointUITests: XCTestCase {
         // launched". The answer is taken from the operating system's record of
         // what is running rather than from anything this test asked for, so the
         // two sides of the check do not come from one lookup (L70).
-        _ = launched()
+        _ = try launched()
 
         // The products folder this run built into, taken from the RUNNER app
         // this code is executing inside. In a UI test `Bundle.main` is
@@ -107,7 +113,7 @@ final class AppEntryPointUITests: XCTestCase {
         //
         // No unit test could see this, and no text guard could either: the
         // defect was the scene TYPE and the window COUNT.
-        let app = launched()
+        let app = try launched()
 
         let windows = app.windows.count
         XCTAssertEqual(windows, 1,
