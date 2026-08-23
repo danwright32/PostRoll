@@ -86,19 +86,37 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: (5.05% and 5.76% in two readings against a 5.4% floor for #826, 4.5% now),
 #: and a marker that flips with the noise is worse than either answer.
 #:
-#: It was 8% before #810, 5.4% after it, and 3.7% after #826. Each time the
-#: shape of the run changed, not the rule.
+#: It was 8% before #810, 5.4% after it, 3.7% after #826, and 6.5% after #840.
+#: Each time the shape of the run changed, not the rule.
+#:
+#: 7.5% on 2026-08-23, re-chosen for the same reason as every entry above it and
+#: with the same file on the line. Two new test files for #866 made the record
+#: stop covering the suite, so it was re-taken, and a re-take measures every
+#: file again. `test_generate_media_friday_clips.py` came out at 5.4% against
+#: 4.5%, which put it inside the 5.2% to 8.1% band the old floor asked to be
+#: clear, and the guard said so.
+#:
+#: The gap it now sits in is 5.4% below (that same file) and 10.5% above
+#: (`test_frame_legibility.py`), a factor of 1.94, and 7.5% is its geometric
+#: middle. Which files the fast run skips does not change: the same four are
+#: above the floor at 6.5% and at 7.5%, so this moves the marker rather than the
+#: behaviour.
 #:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.065
+EXPENSIVE_SHARE = 0.075
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:
-#: 0.8 to 1.25 of the floor, so no file may sit between 5.2% and 8.1% of the run.
-#: The real margins on the record as it stands are 4.7% below and 9.1% above.
+#: 0.8 to 1.25 of the floor, so no file may sit between 6.0% and 9.4% of the run.
+#: The real margins on the record as it stands are 5.4% below and 10.5% above.
+#:
+#: Deliberately left alone when the floor moved to 7.5% on 2026-08-23. The band
+#: says how much noise a reading carries and the floor says where the gap is;
+#: widening the band to absorb a file that has moved would answer a measurement
+#: with a looser rule, which is the one response this guard exists to prevent.
 #:
 #: These were 0.6 and 1.6, chosen when the gap was a factor of 3.5. That band
 #: asks for 2.67x of clear air and this gap is 1.84x, so no placement in it

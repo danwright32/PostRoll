@@ -316,3 +316,35 @@ def test_the_full_target_still_runs_the_ordinary_tests_too():
         "the full local target reaches the slow files and nothing else, so the "
         f"1700 ordinary tests are skipped locally. Filters: {filters}, "
         f"prerequisites: {prerequisites}")
+
+def test_the_readme_says_how_many_files_the_fast_run_skips():
+    """The one sentence about this that a person actually reads (L210).
+
+    The README says how many files `make test-python-fast` deselects. That
+    number is derived from the record and the floor, and nothing held it to
+    either: it said three while the answer had been four for some time, and it
+    was found by reading rather than by anything failing. A count in prose beside
+    a mechanism that computes the same count is a claim, and an unchecked claim
+    next to a checked one is read as though it were checked too.
+
+    Held to the count rather than to the wording, so rephrasing the sentence is
+    free and changing the number is not.
+    """
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text()
+
+    spelled = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
+               6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+    said = re.search(r"which is (\w+) of them today", readme)
+    assert said, (
+        "the README no longer says how many files the fast run skips, so this "
+        "test is reading nothing and would pass on any README at all"
+    )
+
+    actual = len(expensive())
+    expected = spelled.get(actual, str(actual))
+    assert said.group(1) == expected, (
+        f"the README says the fast run skips {said.group(1)} test files and it "
+        f"actually skips {actual}: {sorted(expensive())}. The number moves "
+        "whenever the floor or the record does, so it is the sentence that has "
+        "to follow, not the reader who has to notice."
+    )

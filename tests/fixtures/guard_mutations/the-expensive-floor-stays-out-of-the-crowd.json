@@ -1,8 +1,8 @@
 {
   "name": "the-expensive-floor-stays-out-of-the-crowd",
   "file": "tests/file_durations.py",
-  "find": "EXPENSIVE_SHARE = 0.065",
-  "replace": "EXPENSIVE_SHARE = 0.040",
+  "find": "EXPENSIVE_SHARE = 0.075",
+  "replace": "EXPENSIVE_SHARE = 0.055",
   "test": "tests/test_fast_subset_stays_honest.py::test_the_floor_still_sits_in_a_gap_in_the_real_distribution",
   "breaks": "the floor deciding what the fast run skips moves into the dense part of the distribution, where a small change in one file's cost carries several files across it at once (#766, L172)"
 }

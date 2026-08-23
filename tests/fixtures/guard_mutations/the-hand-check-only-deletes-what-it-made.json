@@ -1,0 +1,8 @@
+{
+  "name": "the-hand-check-only-deletes-what-it-made",
+  "file": "PostRollApp/hand-check.sh",
+  "find": "  if [[ ! -f \"${MARKER}\" ]]; then",
+  "replace": "  if [[ -f \"/nonexistent-so-this-never-fires\" ]]; then",
+  "test": "tests/test_hand_check_states.py::test_it_refuses_to_delete_a_directory_it_did_not_create",
+  "breaks": "the hand check recursively deletes whatever POSTROLL_HAND_CHECK_WORLD points at, including a folder full of somebody's files, because every state clears the world before anything has checked what the world is (#866, L5)"
+}
