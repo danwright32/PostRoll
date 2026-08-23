@@ -88,6 +88,7 @@ final class JobTracker<Key: Hashable, Job> {
         activeIDs.insert(id)
         failedIDs.remove(id)
         ensureTimer()
+        reportActivity()
     }
 
     /// Mutate an existing job in place (e.g. set a phase, status, or task handle).
@@ -102,6 +103,7 @@ final class JobTracker<Key: Hashable, Job> {
     func deactivate(_ id: Key) {
         activeIDs.remove(id)
         stopTimerIfIdle()
+        reportActivity()
     }
 
     /// Mark a job failed: no longer active, flagged for the sidebar, job kept so
@@ -110,6 +112,7 @@ final class JobTracker<Key: Hashable, Job> {
         activeIDs.remove(id)
         failedIDs.insert(id)
         stopTimerIfIdle()
+        reportActivity()
     }
 
     /// Remove a job entirely (success write-back done, or user cancelled).
@@ -118,6 +121,7 @@ final class JobTracker<Key: Hashable, Job> {
         activeIDs.remove(id)
         failedIDs.remove(id)
         stopTimerIfIdle()
+        reportActivity()
     }
 
     /// Drop a terminal failed outcome once acknowledged — ignored while active.
@@ -144,6 +148,29 @@ final class JobTracker<Key: Hashable, Job> {
             }
         }
         stopTimerIfIdle()
+        reportActivity()
+    }
+
+    // MARK: - Telling the Dock (#863)
+
+    /// Say whether this tracker has anything running, and for how long.
+    ///
+    /// Here rather than in each manager, because every manager composes this and
+    /// these five transitions are already the complete set of moments when the
+    /// answer can change. Wiring it per manager would be a list beside a list,
+    /// and the one that fell behind would be the one whose work ran invisibly
+    /// (L41, L96).
+    ///
+    /// Reported on the tick as well as on the transitions, so the Dock carries a
+    /// number that keeps moving. A mark that never changes is the same picture
+    /// whether the run is progressing, wedged or dead, which is the state this
+    /// whole thing exists to end.
+    ///
+    /// The longest running job, because that is the one whose clock says the
+    /// most about whether anything is still happening.
+    private func reportActivity() {
+        let longest = activeIDs.compactMap { runs[$0]?[keyPath: elapsed] }.max()
+        NotificationService.shared.reportWork(self, runningFor: longest)
     }
 
     private func stopTimerIfIdle() {

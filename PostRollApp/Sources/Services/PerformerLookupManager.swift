@@ -37,6 +37,16 @@ final class PerformerLookupManager {
             case .fromWeb: return "Reading the event page…"
             }
         }
+
+        /// The same work, as a clause for a sentence about it stopping (#863).
+        /// Separate from `label` because that one is a progress caption and this
+        /// one has to read after an event's name.
+        var workDescription: String {
+            switch self {
+            case .handles: return "looking up handles"
+            case .fromWeb: return "reading the event page"
+            }
+        }
     }
 
     struct Run {
@@ -201,7 +211,7 @@ final class PerformerLookupManager {
             } catch is CancellationError {
                 self?.tracker(.handles).remove(eventID)
             } catch {
-                self?.fail(.handles, eventID: eventID, error: error)
+                self?.fail(.handles, eventID: eventID, error: error, named: eventName)
             }
         }
         tracker(.handles).update(eventID) { $0.task = task }
@@ -249,7 +259,7 @@ final class PerformerLookupManager {
             } catch is CancellationError {
                 self?.tracker(.fromWeb).remove(eventID)
             } catch {
-                self?.fail(.fromWeb, eventID: eventID, error: error)
+                self?.fail(.fromWeb, eventID: eventID, error: error, named: eventName)
             }
         }
         tracker(.fromWeb).update(eventID) { $0.task = task }
@@ -288,11 +298,16 @@ final class PerformerLookupManager {
             for: eventID)
     }
 
-    private func fail(_ kind: Kind, eventID: Event.ID, error: Error) {
+    private func fail(_ kind: Kind, eventID: Event.ID, error: Error, named eventName: String) {
         tracker(kind).update(eventID) {
             $0.failure = ProgramNotesMerge.failureMessage(error)
         }
         tracker(kind).markFailed(eventID)
+        // Said out loud when he is not looking (#863).
+        NotificationService.shared.notifyWorkFailed(
+            work: kind.workDescription,
+            eventName: eventName,
+            reason: ProgramNotesMerge.failureMessage(error))
     }
 }
 

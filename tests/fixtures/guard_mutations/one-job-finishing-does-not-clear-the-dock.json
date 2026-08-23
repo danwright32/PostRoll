@@ -1,0 +1,8 @@
+{
+  "name": "one-job-finishing-does-not-clear-the-dock",
+  "file": "PostRollApp/Sources/Models/WorkActivity.swift",
+  "find": "            running.removeValue(forKey: key)",
+  "replace": "            running.removeAll()",
+  "test": "PostRollTests/WorkWithNoWindowTests/testOneOwnerStoppingLeavesTheOthersRunning",
+  "breaks": "a quick lookup finishing clears the Dock while a twenty minute generation is still running, and nothing puts it back, so the longest runs are exactly the ones that go invisible (#863)"
+}

@@ -51,6 +51,25 @@ enum PaintedSurfaces {
     /// words as much as the fill does.
     static let page = Color.cream
 
+    // MARK: - The Dock (#863)
+
+    /// The band drawn across the foot of the Dock icon while background work is
+    /// running, and the elapsed clock on it.
+    ///
+    /// Named here rather than written into the drawing, because a foreground
+    /// only means anything as one half of a pair and only a pair can be held to
+    /// a level (L213). Registered in `all` below, so it is measured by the same
+    /// machinery as every other surface.
+    ///
+    /// Opaque black rather than a translucent scrim over the icon. What is
+    /// behind this band is the app icon, which this palette does not own and
+    /// which changes when the icon does: a translucent band would make both
+    /// halves of the pair depend on artwork nothing here can measure, and the
+    /// contrast would be decided by whoever last redrew the icon.
+    static let dockWorkingBand = Color.black
+    static let dockWorkingClock = Color.white
+
+
     /// What a pair has to clear.
     ///
     /// WCAG AA: 4.5:1 for body-sized text, 3:1 for text at 18pt and above and
@@ -770,6 +789,8 @@ enum PaintedSurfaces {
     /// file, so a name added without an entry fails there rather than silently
     /// exempting whatever it is put on (L96).
     static let byName: [String: Color] = [
+        "dockWorkingBand": dockWorkingBand,
+        "dockWorkingClock": dockWorkingClock,
         "page": page,
         "deepPage": deepPage,
         "runNotePanel": runNotePanel,
@@ -1176,6 +1197,11 @@ enum PaintedSurfaces {
         // like every other surface drawn on one.
         pairs.append(Pair("busy scrim", "label", photoScrimText,
                           on: photoScrim.composited(over: brightestPhoto), .bodyText))
+
+        // The Dock, which is a surface like any other: it carries words, and
+        // they are read at a glance from across a desk (#863).
+        pairs.append(Pair("dock working band", "elapsed clock",
+                          dockWorkingClock, on: dockWorkingBand, .bodyText))
 
         return pairs
     }

@@ -1,0 +1,8 @@
+{
+  "name": "the-dock-shows-work-that-is-running",
+  "file": "PostRollApp/Sources/Models/WorkActivity.swift",
+  "find": "        guard let longest = running.values.map(\\.seconds).max() else { return .idle }",
+  "replace": "        guard let longest = running.values.map(\\.seconds).min(), false else { return .idle }",
+  "test": "PostRollTests/WorkWithNoWindowTests/testAnOwnerThatStartsIsWorking",
+  "breaks": "the Dock says nothing whatever is running, so closing the window puts work back to being invisible, which is the whole of #863"
+}

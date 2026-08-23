@@ -147,6 +147,11 @@ final class ProgramNotesManager {
                     $0.failure = ProgramNotesMerge.failureMessage(error)
                 }
                 self?.tracker.markFailed(eventID)
+                // Said out loud when he is not looking (#863).
+                NotificationService.shared.notifyWorkFailed(
+                    work: "searching for programme notes",
+                    eventName: appState.events.first { $0.id == eventID }?.name ?? "An event",
+                    reason: ProgramNotesMerge.failureMessage(error))
             }
         }
         tracker.update(eventID) { $0.task = task }
