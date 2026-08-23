@@ -1,0 +1,90 @@
+name: GUI
+
+# Can the app actually be driven on a runner? (#849)
+#
+# `PostRollApp.swift` is excluded from the unit test bundle, correctly: a test
+# bundle is loaded into a host that already has an entry point. The cost is that
+# nothing in the suite can RUN it, and its only cover is guards matching its
+# TEXT. #842 hid exactly there, and was found by installing the build and
+# counting windows by hand.
+#
+# #509 deleted the previous UI target on the recorded grounds that "a headless
+# runner cannot reliably drive XCUIApplication". That was written on 2026-06-11
+# and nothing has re-checked it since. A decision recorded on an issue is only
+# true as of its date (L61), and this one decides whether the entry point can
+# ever have a reviewer, so it is measured here rather than inherited.
+#
+# ── why this never runs on a pull request ────────────────────────────────────
+#
+# Two reasons, and either alone would be enough.
+#
+# A UI test is slow and flaky by nature, and the macOS runner already carries
+# about eleven minutes of work that every pull request waits on. A flake here
+# must not be able to fail the fast suite.
+#
+# The second is mechanical. `tools/wait_for_checks.py` derives the checks it
+# waits for from the workflows that trigger on `pull_request`, and
+# `tests/test_wait_for_checks.py` calibrates that set against a reply recorded
+# from a real green pull request. A new check name on a pull request can only be
+# green once the fixture already holds it, and the fixture can only be recorded
+# from a green run, so adding one takes a knowingly red merge. That is a
+# deliberate cost to pay on purpose, not a side effect of adding a test.
+on:
+  workflow_dispatch:
+  # TEMPORARY, for the viability measurement only. Narrowed to main before this
+  # is merged: a branch listed here runs the job on every push to it.
+  push:
+    branches: [ui-test-viability]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    # The same image as swift-unit, for the same reason: CI's compiler must be
+    # at or ahead of the one on the development Mac, never behind (#528).
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select the recorded Xcode
+        run: |
+          version="$(cat PostRollApp/.ci-xcode-version)"
+          app="/Applications/Xcode_${version}.app"
+          if [ ! -d "${app}" ]; then
+            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
+            echo "on this runner image. What it has:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "${app}"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: PostRollApp
+        run: xcodegen generate
+
+      # Whether there is a window server session to draw into at all, asked
+      # before anything tries to use one. A UI test that cannot launch reports a
+      # timeout that reads like a slow app, so the answer is taken first and
+      # printed plainly.
+      - name: Say what kind of session this runner is
+        run: |
+          echo "user: $(id -un)"
+          echo "console user: $(stat -f%Su /dev/console || echo unknown)"
+          echo "launchctl session:"
+          launchctl managername || true
+
+      - name: Run the GUI tests
+        run: |
+          xcodebuild \
+            -project PostRollApp/PostRoll.xcodeproj \
+            -scheme PostRollUITests \
+            -destination 'platform=macOS' \
+            -derivedDataPath PostRollApp/.derived-data \
+            test

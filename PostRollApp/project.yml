@@ -244,6 +244,44 @@ targets:
         # convention; this makes it a build error.
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: POSTROLL_TESTS
 
+  # Something that can actually RUN the app entry point (#849).
+  #
+  # `PostRollApp.swift` is excluded from PostRollTests above, correctly: a unit
+  # test bundle is loaded into a host that already has an entry point. The cost
+  # of that correct decision was that nothing in the suite could run the file,
+  # and its only cover was guards matching its TEXT. #842 hid there: a link left
+  # an extra window behind and every unit test passed, because the defect was
+  # which scene type the app declares and how many windows exist, and a text
+  # match can see neither.
+  #
+  # A UI test launches the real application, so it can answer both. It is a
+  # separate target with a separate scheme, deliberately: `make test` and the
+  # PostRollTests scheme must not launch a GUI, and a target that is flaky by
+  # nature must not be able to fail the fast suite.
+  #
+  # It does not run on pull requests either. See .github/workflows/ui.yml.
+  PostRollUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: PostRoll
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwphotony.PostRollUITests
+        GENERATE_INFOPLIST_FILE: "YES"
+        CODE_SIGN_IDENTITY: "-"
+        # Which application the runner launches and drives. Without it
+        # `XCUIApplication()` has no target and every test reports about nothing.
+        TEST_TARGET_NAME: PostRoll
+        # Deliberately NOT POSTROLL_TESTS. That flag compiles the test-only
+        # seams, and this target drives the app through its real surfaces
+        # instead: a UI test reaching a seam the shipping app cannot reach would
+        # be testing a build nobody runs.
+
 schemes:
   PostRoll:
     build:
@@ -266,3 +304,16 @@ schemes:
     test:
       targets:
         - PostRollTests
+
+  # The GUI suite, on its own, so nothing that runs the fast suite can launch a
+  # window (#849). Builds the app because that is what it drives.
+  PostRollUITests:
+    build:
+      targets:
+        PostRoll: all
+        PostRollUITests: [test]
+    run:
+      config: Debug
+    test:
+      targets:
+        - PostRollUITests
