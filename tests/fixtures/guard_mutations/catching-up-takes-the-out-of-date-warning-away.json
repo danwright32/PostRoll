@@ -1,8 +1,8 @@
 {
   "name": "catching-up-takes-the-out-of-date-warning-away",
   "file": "PostRollApp/Sources/AppState.swift",
-  "find": "        case .current:\n            buildBehind = nil",
-  "replace": "        case .current:\n            buildBehind = buildBehind",
+  "find": "            sheets.withdraw(.buildBehind)\n            dismissedBuildBehind = nil",
+  "replace": "            dismissedBuildBehind = nil",
   "test": "PostRollTests/BuildBehindRefreshTests/testCatchingUpTakesTheWarningAway",
   "breaks": "a rebuild while the app is open leaves the out of date warning standing, which is exactly what the sheet asked for having been done and says the fix did not work (#675, L11)"
 }

@@ -1,0 +1,8 @@
+{
+  "name": "a-displaced-sheet-is-kept-rather-than-thrown-away",
+  "file": "PostRollApp/Sources/Models/WindowModals.swift",
+  "find": "        if let showing = presented {\n            waiting.insert(showing, at: 0)\n        }\n        presented = modal",
+  "replace": "        presented = modal",
+  "test": "PostRollTests/WindowSheetPresentationTests/testTheDisplacedWarningIsKeptRatherThanThrownAway",
+  "breaks": "a postroll:// link arriving while the out of date warning is up throws the warning away instead of showing it afterwards, which is the #675 notice quietly cleared by a click that had nothing to do with it (#846)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "a-background-verdict-does-not-interrupt-the-form",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "            sheets.request(.buildBehind(warning), from: .background)",
+  "replace": "            sheets.request(.buildBehind(warning), from: .person)",
+  "test": "PostRollTests/WindowSheetPresentationTests/testABuildBehindVerdictNeverInterruptsWhatDanIsDoing",
+  "breaks": "the build freshness reading, which runs on every activation, takes a half typed New Event form off the screen mid sentence (#846)"
+}

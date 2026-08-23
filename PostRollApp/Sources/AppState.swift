@@ -9,7 +9,23 @@ enum InsightsSection: String { case overview, posts, orgs }
 final class AppState {
     var events: [Event] = []
     var selectedEventID: Event.ID?
-    var showingNewEvent = false
+
+    /// Every sheet the window can put up, and the rule for what happens when two
+    /// are asked for at once (#846).
+    ///
+    /// One piece of state rather than a flag per sheet. SwiftUI presents at most
+    /// one sheet per view, so three `.sheet` modifiers on one view meant a second
+    /// request was answered by whichever modifier SwiftUI happened to honour,
+    /// with the loser silently doing nothing and nothing saying which. See
+    /// `ModalQueue` for what each collision now decides.
+    private var sheets = ModalQueue<WindowSheet>()
+
+    /// The sheet on screen, or nil when the window is showing none.
+    var presentedSheet: WindowSheet? { sheets.presented }
+
+    /// Everything asked for that is not on screen, soonest first. Nothing here
+    /// has been shown and nothing here has been thrown away.
+    var waitingSheets: [WindowSheet] { sheets.waiting }
 
     /// The values a `postroll://` link brought, for the sheet to open with
     /// (#840). Nil for a new event typed by hand.
@@ -22,8 +38,6 @@ final class AppState {
     /// Set when a link was answered by a copy of PostRoll that is not the
     /// installed one (#840). See `AnsweringCopy`.
     private(set) var answeringCopyNotice: String?
-    /// The list of days whose cached assets predate the current design (#293).
-    var showingOutdatedDesigns = false
 
     /// Set when the running app was built before the newest commit, so a fix
     /// that has already shipped may simply not be in this copy.
@@ -42,7 +56,19 @@ final class AppState {
     /// Written only through `present` and `dismissBuildBehind`, so a verdict
     /// cannot reach the window without also passing the check that stops a
     /// dismissed one coming back.
-    private(set) var buildBehind: BuildBehind?
+    ///
+    /// Derived from the sheet queue rather than held beside it, so there is one
+    /// answer to what the window is showing (#846). "Showing or waiting to
+    /// show", deliberately: a warning pushed aside by a link Dan followed has
+    /// not stopped being true, and reading it as gone here would make being
+    /// displaced indistinguishable from having caught up.
+    var buildBehind: BuildBehind? {
+        let sheets = ([self.sheets.presented] + self.sheets.waiting).compactMap { $0 }
+        for sheet in sheets {
+            if case .buildBehind(let behind) = sheet { return behind }
+        }
+        return nil
+    }
 
     /// The verdict already put in front of Dan and waved away.
     ///
@@ -96,9 +122,15 @@ final class AppState {
             let warning = BuildBehind(builtAt: builtAt, latestCommit: latestCommit,
                                       remedy: remedy, repo: repo)
             guard warning.id != dismissedBuildBehind else { return }
-            buildBehind = warning
+            // `.background`, because nothing Dan did asked for this. The reading
+            // is taken on every activation, so a verdict that interrupted would
+            // take a half typed New Event form off the screen mid sentence.
+            sheets.request(.buildBehind(warning), from: .background)
         case .current:
-            buildBehind = nil
+            // Withdrawn rather than dismissed: nobody saw it, so there is
+            // nothing to record against it, and it must go whether it was on
+            // screen or still waiting its turn.
+            sheets.withdraw(.buildBehind)
             dismissedBuildBehind = nil
         case let .cannotTell(reason):
             NSLog("[PostRoll] build freshness unknown: \(reason)")
@@ -111,7 +143,28 @@ final class AppState {
     /// could disagree with the one that actually cleared the sheet.
     func dismissBuildBehind() {
         dismissedBuildBehind = buildBehind?.id
-        buildBehind = nil
+        sheets.withdraw(.buildBehind)
+    }
+
+    // MARK: - The window's sheets (#846)
+
+    /// Take the sheet on screen away and show whatever was waiting behind it.
+    ///
+    /// The one route a dismissal takes, so the recording that stops a dismissed
+    /// build behind warning coming back cannot be skipped by dismissing it some
+    /// other way. It reads what actually came off the screen rather than the
+    /// field afterwards, because by then the next sheet is already in it.
+    func dismissPresentedSheet() {
+        guard let dismissed = sheets.dismissPresented() else { return }
+        if case .buildBehind(let behind) = dismissed {
+            dismissedBuildBehind = behind.id
+        }
+    }
+
+    /// Put the list of days whose assets predate the current design on screen
+    /// (#293). Raised from the menu, so it is something Dan asked for.
+    func presentOutdatedDesigns() {
+        sheets.request(.outdatedDesigns, from: .person)
     }
 
     // MARK: - Updating the app itself (#686)
@@ -245,10 +298,63 @@ final class AppState {
         updateRefusal = nil
     }
 
+    /// Every alert the window can put up, and the rule for what happens when two
+    /// are asked for at once (#846).
+    ///
+    /// The same one presenter treatment as `sheets` above, and for the same
+    /// reason: these were three separate `.alert` modifiers on one view, and two
+    /// of the three are raised by launch checks that both run on every launch.
+    private var alerts = ModalQueue<WindowAlert>()
+
+    /// The alert on screen, or nil when the window is showing none.
+    var presentedAlert: WindowAlert? { alerts.presented }
+
+    /// Everything asked for that is not on screen, soonest first.
+    var waitingAlerts: [WindowAlert] { alerts.waiting }
+
     /// Set at launch when PostRoll cannot reach its code folder, so the app
     /// says so before Dan has picked a day and pressed a button on something
     /// that was never going to run (#652).
-    var projectRootProblem: AppPaths.ProjectRootProblem?
+    ///
+    /// Derived from the queue rather than held beside it, so there is one answer
+    /// to what the window is showing. Read as "showing or waiting", because an
+    /// alert queued behind the refusal to open the store has not stopped being
+    /// true.
+    var projectRootProblem: AppPaths.ProjectRootProblem? {
+        for alert in alertsInHand {
+            if case .projectRoot(let problem) = alert { return problem }
+        }
+        return nil
+    }
+
+    /// Every alert the window is showing or holding, in the order they would be
+    /// seen. One reading for all three accessors below, so they cannot come to
+    /// disagree about what counts as raised.
+    private var alertsInHand: [WindowAlert] {
+        ([alerts.presented] + alerts.waiting).compactMap { $0 }
+    }
+
+    /// Say that the code folder cannot be used (#652).
+    ///
+    /// `.background`: nothing Dan did asked for this, it is a check that runs at
+    /// launch and again on every activation.
+    func reportProjectRootProblem(_ problem: AppPaths.ProjectRootProblem) {
+        alerts.request(.projectRoot(problem), from: .background)
+    }
+
+    /// Take the code folder warning away, because the folder is reachable again.
+    func clearProjectRootProblem() {
+        alerts.withdraw(.projectRoot)
+    }
+
+    /// Take the alert on screen away and show whatever was waiting behind it.
+    ///
+    /// Does nothing to the refusal to open the store, which is blocking: that
+    /// one is not dismissible, and `ModalQueue` is where that is enforced rather
+    /// than in whichever binding happens to present it.
+    func dismissPresentedAlert() {
+        alerts.dismissPresented()
+    }
 
     /// Set at launch when the code folder is not on a clean main, so anything
     /// generated runs code that is not what this app was built from (#664).
@@ -341,7 +447,21 @@ final class AppState {
     /// Set when events.json existed but its contents could not be decoded.
     /// Shown once as a dismissible alert; the bad file was moved aside, so
     /// starting from an empty list is safe.
-    var dataLoadWarning: String?
+    var dataLoadWarning: String? {
+        for alert in alertsInHand {
+            if case .dataLoad(let message) = alert { return message }
+        }
+        return nil
+    }
+
+    /// Say that the saved events were read and could not be understood (#441).
+    func reportDataLoadWarning(_ message: String) {
+        alerts.request(.dataLoad(message), from: .background)
+    }
+
+    func clearDataLoadWarning() {
+        alerts.withdraw(.dataLoad)
+    }
 
     /// The backup the corrupt-store alert can put back, when one exists.
     ///
@@ -355,7 +475,27 @@ final class AppState {
     /// I/O error). The file is intact and untouched, its contents are unknown,
     /// and saving is refused, so the app must not let the user work in what
     /// looks like an empty library. Shown as a blocking alert with a retry.
-    var storeUnavailable: String?
+    var storeUnavailable: String? {
+        for alert in alertsInHand {
+            if case .storeUnavailable(let message) = alert { return message }
+        }
+        return nil
+    }
+
+    /// Say that the events could not be read at all.
+    ///
+    /// Blocking, so it takes the screen from whatever else was on it and cannot
+    /// be waved away. `WindowAlert.isBlocking` is where that is decided, so it
+    /// holds however this alert is raised.
+    func reportStoreUnavailable(_ message: String) {
+        alerts.request(.storeUnavailable(message), from: .background)
+    }
+
+    /// The store opened, so the refusal goes and whatever was queued behind it
+    /// gets its turn.
+    func clearStoreUnavailable() {
+        alerts.withdraw(.storeUnavailable)
+    }
 
     /// Set the first time a save fails, and kept until one succeeds (#446).
     ///
@@ -435,8 +575,8 @@ final class AppState {
         events = loaded.events
         switch loaded.status {
         case .ok:
-            dataLoadWarning = nil
-            storeUnavailable = nil
+            clearDataLoadWarning()
+            clearStoreUnavailable()
             restorableBackup = nil
         case .corrupt:
             let available = StoreBackups.availableRestore(for: storeURL)
@@ -445,13 +585,28 @@ final class AppState {
                 return RestorableBackup(fileName: url.lastPathComponent,
                                         takenAt: StoreBackups.takenAt(url, of: storeURL))
             }()
-            dataLoadWarning = StoreRestoreText.corruptStore(loaded.recoveryMessage,
-                                                            offering: available,
-                                                            named: restorableBackup)
-            storeUnavailable = nil
+            // Spelled out rather than assigned from an optional, which is what
+            // this was. Both composers answer nil when they were given no
+            // reason, and an assignment hid that behind looking like a write:
+            // the alert simply did not appear. Neither nil is reachable from
+            // `EventStore` today (every result it builds for these two cases
+            // carries a sentence), and the branch is written so that stops
+            // being something a reader has to work out.
+            if let warning = StoreRestoreText.corruptStore(loaded.recoveryMessage,
+                                                           offering: available,
+                                                           named: restorableBackup) {
+                reportDataLoadWarning(warning)
+            } else {
+                clearDataLoadWarning()
+            }
+            clearStoreUnavailable()
         case .unreadable:
-            dataLoadWarning = nil
-            storeUnavailable = loaded.recoveryMessage
+            clearDataLoadWarning()
+            if let message = loaded.recoveryMessage {
+                reportStoreUnavailable(message)
+            } else {
+                clearStoreUnavailable()
+            }
             restorableBackup = nil
         }
 
@@ -537,10 +692,10 @@ final class AppState {
             // path that reads the store its own way.
             loadStore()
         case .noBackup:
-            dataLoadWarning = StoreRestoreText.noBackup
+            reportDataLoadWarning(StoreRestoreText.noBackup)
             restorableBackup = nil
         case .failed(let reason):
-            dataLoadWarning = StoreRestoreText.failed(reason)
+            reportDataLoadWarning(StoreRestoreText.failed(reason))
         }
         return outcome
     }
@@ -615,7 +770,10 @@ final class AppState {
     /// handler did not run.
     func presentNewEvent(prefill: DeepLink.EventDraft? = nil) {
         newEventPrefill = prefill
-        showingNewEvent = true
+        // `.person` whether it was Cmd+N, a button or a link: all three are Dan
+        // asking for the form, and a link that opened no sheet is a link that
+        // appears to do nothing (#846).
+        sheets.request(.newEvent, from: .person)
     }
 
     /// Act on a `postroll://` link.
