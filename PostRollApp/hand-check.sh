@@ -41,10 +41,21 @@ STORE="${DATA}/events.json"
 # Written into every world this script builds, and required before it deletes
 # one. See remove_world.
 MARKER="${WORLD}/.postroll-hand-check"
+# Where the seeded state copies photographs to, and how many it takes.
+PHOTOS="${WORLD}/photos"
+SEED_PHOTO_CAP=8
+# The seeded event's date, as seconds since Apple's 2001 reference date, which
+# is what a plain JSONDecoder reads a Date as and therefore what EventStore
+# reads. 2026-09-01 00:00:00 UTC, the same date the link step uses.
+#
+# A literal rather than computed from a date string, because this script has to
+# run on the Linux runner its tests run on and `date -j -f` is BSD only. The
+# test derives the number from the date itself, so the two are not one lookup.
+SEED_DATE_SECONDS=809913600
 
 usage() {
   cat >&2 <<'USAGE'
-usage: hand-check.sh <command> [--no-launch]
+usage: hand-check.sh <command> [photo folder] [--no-launch]
 
 States, each of which rebuilds the scratch world and launches the app in it:
   healthy             a readable, empty store and a real code folder
@@ -54,6 +65,13 @@ States, each of which rebuilds the scratch world and launches the app in it:
   unreadable-store    events.json present and unreadable (chmod 000)
   both-broken         unreadable store AND a broken code folder, which is the
                       state #855 was found in
+  seeded <folder>     a store holding ONE event, with up to 8 photographs
+                      copied out of <folder>, so a generation can actually be
+                      started. Every other state builds an empty store, and
+                      Generate All is disabled until a day has a photo on it.
+                      Add --no-code-folder to seed the same event and point the
+                      app somewhere that is not a checkout, so a run started
+                      from it fails.
 
 Actions on the world a state left behind:
   repair-store        make the unreadable store readable again, so Try Again
@@ -153,7 +171,7 @@ build_world() {
   echo "not a checkout" > "${NOT_A_CHECKOUT}/README.txt"
 
   case "${state}" in
-    healthy|no-code-folder)
+    healthy|no-code-folder|seeded)
       echo '[]' > "${STORE}"
       ;;
     corrupt-store)
@@ -164,6 +182,160 @@ build_world() {
       chmod 000 "${STORE}"
       ;;
   esac
+}
+
+# MARK: - The state a generation can be started from (#879)
+
+# Every photograph in a folder, one per line, top level only.
+#
+# Top level rather than recursive on purpose: a shoot folder usually holds
+# exports, selects and raw files in folders beside each other, and a hand check
+# that quietly reaches into all of them is one whose input nobody can predict.
+images_in() {
+  find "$1" -maxdepth 1 -type f \( \
+    -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.heic' \
+  \) | LC_ALL=C sort
+}
+
+# The photo folder is checked BEFORE anything is deleted.
+#
+# Every state begins by tearing the world down, so an argument checked after
+# that can only confirm a deletion that has already happened (L5). Here that
+# would take away the state whoever is mid checklist is standing in, in order
+# to tell them they mistyped a path.
+#
+# An empty folder is refused rather than seeded from, because an event with no
+# photographs leaves Generate All disabled: the checklist step then reads as
+# the app being broken, and a setup that silently did nothing is the one thing
+# a check must never be able to report as a pass (L98).
+require_photo_folder() {
+  local source="${1:-}"
+  if [[ -z "${source}" ]]; then
+    echo "seeded needs a photo folder to copy from, for example:" >&2
+    echo "  ./PostRollApp/hand-check.sh seeded ~/Pictures/some-shoot" >&2
+    exit 64
+  fi
+  if [[ ! -d "${source}" ]]; then
+    echo "no photo folder at ${source}, so there is nothing to seed an event with." >&2
+    exit 1
+  fi
+  if [[ -z "$(images_in "${source}")" ]]; then
+    echo "no photographs in ${source} (looked for jpg, jpeg, png and heic at the" >&2
+    echo "top level). An event with no photos leaves Generate All disabled, so" >&2
+    echo "there would be nothing to press in step 8." >&2
+    exit 1
+  fi
+}
+
+# Percent encode a path for a file URL.
+#
+# The world can be pointed anywhere, so its path is not ours to assume: a space
+# in it produces a URL the app resolves to a different file, and a day whose
+# photos cannot be opened is the same dead end as a day with no photos. The
+# loop runs in the C locale so a multibyte character is encoded as its bytes,
+# which is what a URL wants.
+url_encode_path() {
+  local input="$1" out="" index char
+  local LC_ALL=C
+  for (( index = 0; index < ${#input}; index++ )); do
+    char="${input:index:1}"
+    case "${char}" in
+      [a-zA-Z0-9._~/-]) out="${out}${char}" ;;
+      *) out="${out}$(printf '%%%02X' "'${char}")" ;;
+    esac
+  done
+  printf '%s' "${out}"
+}
+
+# Copy up to the cap into the world, under names of our own.
+#
+# Renamed rather than kept for two reasons. A real shoot folder's filenames
+# carry the client and the show, and this writes them into a JSON file and into
+# whatever terminal the check is being run in (L155). And a name is free to
+# hold anything at all, while the ones written here are known to survive being
+# turned into a URL.
+#
+# Sets SEEDED_PHOTO_URLS, the JSON array body the store is written with.
+SEEDED_PHOTO_URLS=""
+copy_photos_from() {
+  local source="$1"
+  # Not named `url`: HandCheckLinkTests reads the one `url="` assignment in this
+  # file as the link step 4 fires, and refuses when there are two.
+  local found taken=0 image extension photo_url
+  found="$(images_in "${source}" | wc -l | tr -d ' ')"
+  mkdir -p "${PHOTOS}"
+
+  while IFS= read -r image; do
+    [[ -z "${image}" ]] && continue
+    [[ ${taken} -ge ${SEED_PHOTO_CAP} ]] && break
+    taken=$((taken + 1))
+    extension="$(printf '%s' "${image##*.}" | tr '[:upper:]' '[:lower:]')"
+    cp "${image}" "${PHOTOS}/photo-${taken}.${extension}"
+    photo_url="file://$(url_encode_path "${PHOTOS}/photo-${taken}.${extension}")"
+    if [[ -z "${SEEDED_PHOTO_URLS}" ]]; then
+      SEEDED_PHOTO_URLS="\"${photo_url}\""
+    else
+      SEEDED_PHOTO_URLS="${SEEDED_PHOTO_URLS}, \"${photo_url}\""
+    fi
+  done < <(images_in "${source}")
+
+  # Said out loud whenever the cap fired. A cap nobody is told about reads as
+  # "it took the whole shoot", and the captions that come back would then be
+  # read as the pipeline's opinion of photographs it never saw.
+  if [[ ${taken} -lt ${found} ]]; then
+    echo "took ${taken} of the ${found} photographs in ${source} (the cap is ${SEED_PHOTO_CAP})"
+  else
+    echo "took all ${taken} photographs in ${source}"
+  fi
+}
+
+# One event, at the stage whose screen is the generation screen.
+#
+# Three fields decide whether the run can be started at all, and each is here
+# for a reason rather than for completeness. `stage` because EventDetailView
+# shows AssetGenerationView for Photos Assigned and something else for every
+# other stage. The day's photos because GenerationScreenBodies disables
+# Generate All until there is one. And `ocrResult`, empty but present, because
+# PythonBridge.buildManifest throws "No OCR result" before the pipeline is
+# started without it: seeding one without it would make the successful half of
+# step 8 unreachable while looking exactly like a run that was set up properly.
+#
+# The program is deliberately thin and obviously invented. It is enough for the
+# manifest to be built, and nothing here is a real person.
+write_seeded_store() {
+  cat > "${STORE}" <<STOREEOF
+[
+  {
+    "id": "6C2F1A44-0000-4000-8000-000000000003",
+    "name": "Hand check run",
+    "org": "Test Company",
+    "venue": "Test Hall",
+    "venueContext": "Main Stage",
+    "date": ${SEED_DATE_SECONDS},
+    "shootType": "Performance",
+    "stage": "Photos Assigned",
+    "ocrResult": {
+      "performers": [
+        {"name": "Test Performer One", "role": "soloist", "voice_or_instrument": "piano"},
+        {"name": "Test Performer Two", "role": "conductor", "voice_or_instrument": ""}
+      ],
+      "pieces": [
+        {"composer": "Test Composer", "title": "Test Piece", "movements": [], "notes": ""}
+      ],
+      "program_notes": "A programme invented for the hand check.",
+      "organization_notes": "",
+      "venue_notes": "",
+      "production_details": ""
+    },
+    "days": {
+      "monday": {
+        "day": "monday",
+        "photoPaths": [${SEEDED_PHOTO_URLS}]
+      }
+    }
+  }
+]
+STOREEOF
 }
 
 launch_in() {
@@ -180,7 +352,7 @@ launch_in() {
 
   local project="${PWD}"
   case "${state}" in
-    no-code-folder|both-broken) project="${NOT_A_CHECKOUT}" ;;
+    no-code-folder|both-broken|seeded-no-code-folder) project="${NOT_A_CHECKOUT}" ;;
   esac
 
   POSTROLL_DATA_DIR="${DATA}" POSTROLL_PROJECT_DIR="${project}" "${BINARY}" &
@@ -203,8 +375,30 @@ launch_in() {
 
 command="${1:-}"
 [[ -z "${command}" ]] && usage
+shift
+
+# One pass over what is left, because `seeded` takes a path as well as the flag
+# and the flag is written after it. An argument that is neither is refused by
+# name rather than ignored: a mistyped flag that is silently dropped launches
+# the app in the face of somebody who asked for it not to be.
 no_launch=0
-[[ "${2:-}" == "--no-launch" ]] && no_launch=1
+broken_code_folder=0
+photo_source=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-launch) no_launch=1 ;;
+    --no-code-folder) broken_code_folder=1 ;;
+    *)
+      if [[ -z "${photo_source}" ]]; then
+        photo_source="$1"
+      else
+        echo "unexpected argument: $1" >&2
+        usage
+      fi
+      ;;
+  esac
+  shift
+done
 
 case "${command}" in
   healthy|no-code-folder|corrupt-store|unreadable-store|both-broken)
@@ -213,6 +407,29 @@ case "${command}" in
     if [[ "${no_launch}" == "0" ]]; then
       require_installed
       launch_in "${command}"
+    fi
+    ;;
+
+  seeded)
+    # Checked before the world is touched, so a mistyped path costs nothing.
+    require_photo_folder "${photo_source}"
+    build_world seeded
+    copy_photos_from "${photo_source}"
+    write_seeded_store
+    state="seeded"
+    if [[ "${broken_code_folder}" == "1" ]]; then
+      # The failure half of step 8: a run that CAN be started, pointed at a
+      # code folder that is not a checkout, so it fails where the pipeline
+      # would have run rather than never starting. An event with no photos
+      # produces no failure to be told about, which is why this is a flag on
+      # the seeded state rather than a state of its own.
+      state="seeded-no-code-folder"
+      echo "the app will be pointed at ${NOT_A_CHECKOUT}, so a run started here fails"
+    fi
+    echo "built the ${state} world at ${WORLD}"
+    if [[ "${no_launch}" == "0" ]]; then
+      require_installed
+      launch_in "${state}"
     fi
     ;;
 
