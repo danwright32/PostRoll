@@ -87,6 +87,46 @@ targets:
             echo "error: wanted ${ROOT}, read back \"${WROTE}\"." >&2
             exit 1
           fi
+          # The URL scheme an OmniFocus task note links to (#840). Downbeat
+          # writes a postroll:// link into the note; macOS only knows which
+          # bundle answers it from CFBundleURLTypes in the BUILT plist.
+          #
+          # Written here rather than as an `INFOPLIST_KEY_` setting for exactly
+          # the reason the key above is: Xcode maps that prefix onto a known set
+          # of Info.plist keys, and CFBundleURLTypes is not one of them, so the
+          # setting would sit in this file looking correct and reach no build.
+          #
+          # In THIS phase rather than one of its own so there is a single point
+          # that edits the finished plist, a single ordering edge against
+          # `ProcessInfoPlistFile`, and a single re-seal below covering both
+          # edits. A second phase would need its own copy of all three.
+          # One spelling of the scheme in this script, which is also the one the
+          # guard in tests/test_url_scheme_registered.py reads and holds Swift's
+          # `DeepLink.scheme` to.
+          POSTROLL_SCHEME="postroll"
+          # The abstract name for the URL type, taken from the plist rather than
+          # from `PRODUCT_BUNDLE_IDENTIFIER`. That variable is exported by
+          # Xcode and by nothing else, so under `set -u` it takes the whole
+          # phase down anywhere the phase is run outside a build, which is where
+          # its own tests run it.
+          URL_TYPE_NAME="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "${PLIST}")"
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "${PLIST}" >/dev/null 2>&1 || true
+          /usr/libexec/PlistBuddy \
+            -c "Add :CFBundleURLTypes array" \
+            -c "Add :CFBundleURLTypes:0:CFBundleURLName string ${URL_TYPE_NAME}" \
+            -c "Add :CFBundleURLTypes:0:CFBundleTypeRole string Editor" \
+            -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" \
+            -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string ${POSTROLL_SCHEME}" \
+            "${PLIST}"
+          # Read back, like the key above and for the same reason: a PlistBuddy
+          # write that did nothing says nothing, and the symptom here would be a
+          # green build whose link opens no application at all.
+          WROTE_SCHEME="$(/usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes:0:CFBundleURLSchemes:0" "${PLIST}")"
+          if [ "${WROTE_SCHEME}" != "${POSTROLL_SCHEME}" ]; then
+            echo "error: the ${POSTROLL_SCHEME}:// scheme was not registered in ${PLIST}." >&2
+            echo "error: wanted ${POSTROLL_SCHEME}, read back \"${WROTE_SCHEME}\"." >&2
+            exit 1
+          fi
           # Changing the Info.plist can break the bundle's seal, so it is
           # signed again here and the signature verified. An unsigned or broken
           # bundle has no stable identity for macOS to remember folder

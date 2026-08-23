@@ -13,6 +13,16 @@ struct PostRollApp: App {
     /// that renders whole screens (#718). See `AppOwners`.
     @State private var owners = AppOwners()
 
+    /// Where a `postroll://` link lands (#840).
+    ///
+    /// An AppKit delegate rather than `onOpenURL`, and only one of the two,
+    /// because they disagree about the case that matters: on a cold launch the
+    /// URL is delivered to the application before the first scene exists. This
+    /// is the method that event actually reaches, and it puts the URL in the
+    /// inbox rather than handling it, so there is something waiting whichever
+    /// order the two happen in.
+    @NSApplicationDelegateAdaptor(DeepLinkDelegate.self) private var deepLinks
+
     init() {
         NotificationService.shared.requestPermission()
     }
@@ -52,7 +62,7 @@ struct PostRollApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Event…") {
-                    appState.showingNewEvent = true
+                    appState.presentNewEvent()
                 }
                 .keyboardShortcut("n")
 

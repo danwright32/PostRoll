@@ -22,13 +22,15 @@ import postroll.media.generate_title_card as card_mod
 # a loud failure, which is what CI needs.
 from conftest import HAVE_FFMPEG, needs_ffmpeg  # noqa: F401
 
-# Every check here runs the whole Friday gate, which renders a real reel and,
-# since #824, really does composite a title card onto it: that pass used to fail
-# on ffmpeg's first argument and cost nothing. Measured after that at 5.0% and
-# 5.8% of the suite in two readings, which is the fifth most expensive file in
-# it, so `make test-python-fast` deselects it. CI and `make test-python` still
-# run everything (#826).
-pytestmark = pytest.mark.slow
+# Deliberately NOT marked slow, and it was until #840. Every check here runs the
+# whole Friday gate, which renders a real reel and, since #824, really composites
+# a title card onto it, so it is one of the more expensive files in the suite.
+# It is not expensive ENOUGH: re-measured on 2026-08-22 it is 4.5% of the run
+# against a floor of 6.5%, and the floor sits where it does because that is the
+# only gap in the distribution wide enough to put it in. Two readings had it at
+# 5.0% and 5.8% when the floor was 3.7%, which is how close this file has always
+# been to the line. `make test-python-fast` therefore pays for it; CI and
+# `make test-python` were running it either way (#826, #840).
 
 
 def _make_gradient(path, seconds=3.0):

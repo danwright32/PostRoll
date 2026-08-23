@@ -55,40 +55,50 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: of test code changing.
 #:
 #: The floor is chosen from where the distribution actually is, not picked round
-#: (L172), and it has been re-chosen twice: for #810, and for #826. Sorted by
-#: share the suite now reads:
+#: (L172), and it has now been re-chosen three times: for #810, for #826, and
+#: for #840. Sorted by share the suite reads, measured on 2026-08-22:
 #:
-#:     test_golden_frames.py                    22.3%
-#:     test_closing_crossfade_legibility.py     17.6%
-#:     test_thursday_reel_legibility.py         16.5%
-#:     test_frame_legibility.py                 11.1%
-#:     test_generate_media_friday_clips.py       5.1%
-#:     test_slider_program_plate.py              2.7%    and a tail of 150 more
+#:     test_golden_frames.py                    18.3%
+#:     test_closing_crossfade_legibility.py     14.9%
+#:     test_thursday_reel_legibility.py         12.8%
+#:     test_frame_legibility.py                  9.1%
+#:     test_slider_program_plate.py              4.7%
+#:     test_generate_media_friday_clips.py       4.5%
+#:     test_record_design_fingerprints.py        4.0%
+#:     test_render_clip_reel.py                  3.7%
+#:     test_phone_safe_area.py                   3.4%
+#:     test_record_codec_change.py               2.6%    and a tail of 148 more
 #:
-#: so the gap is between 5.1% and 2.7%, and 3.7% is its geometric middle: 1.36x
-#: of clear air below and 1.35x above.
+#: so the only gap left is between 9.1% and 4.7%, and 6.5% is near its geometric
+#: middle: 1.38x of clear air below and 1.40x above. Every candidate lower down
+#: is inside the run of files from 4.7% to 2.6%, where each step is under 1.2x
+#: and no floor could be placed without something sitting on it.
 #:
-#: What moved, and why the gap is narrower than it was. The Friday clip gate was
-#: 2.9% of the run and is 5.1%, because #824 fixed a title card that had been
-#: failing on ffmpeg's first argument: that pass now really composites, and every
-#: check in that file pays for a real encode it used to get for nothing. So a
-#: file that was the top of the tail became an island of its own, and the old
-#: 5.4% floor was sitting on it: two readings of the same tree put that file at
-#: 5.05% and 5.76%, on either side of the floor.
+#: What moved. Nothing about these files changed for #840; the record was
+#: re-taken because two new test files made it stop covering the suite, and a
+#: re-take measures every file again. Four files that were within 1.2x of the
+#: old 3.7% floor came out on the other side of it, which is precisely the drift
+#: the gap rule exists to notice rather than absorb.
 #:
-#: It was 8% before #810, and 5.4% after it. Each time the shape of the run
-#: changed, not the rule.
+#: The cost of moving the floor up, said plainly: the fast local run now pays
+#: for `test_generate_media_friday_clips.py`, about 4.5% of the run, which it
+#: used to skip. That file has been on the line every time this was re-chosen
+#: (5.05% and 5.76% in two readings against a 5.4% floor for #826, 4.5% now),
+#: and a marker that flips with the noise is worse than either answer.
+#:
+#: It was 8% before #810, 5.4% after it, and 3.7% after #826. Each time the
+#: shape of the run changed, not the rule.
 #:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.037
+EXPENSIVE_SHARE = 0.065
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:
-#: 0.8 to 1.25 of the floor, so no file may sit between 3.0% and 4.6% of the run.
-#: The real margins on the record as it stands are 2.7% below and 5.1% above.
+#: 0.8 to 1.25 of the floor, so no file may sit between 5.2% and 8.1% of the run.
+#: The real margins on the record as it stands are 4.7% below and 9.1% above.
 #:
 #: These were 0.6 and 1.6, chosen when the gap was a factor of 3.5. That band
 #: asks for 2.67x of clear air and this gap is 1.84x, so no placement in it

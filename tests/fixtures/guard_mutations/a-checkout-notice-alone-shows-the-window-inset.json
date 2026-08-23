@@ -1,8 +1,8 @@
 {
   "name": "a-checkout-notice-alone-shows-the-window-inset",
   "file": "PostRollApp/Sources/Views/MainWindowView.swift",
-  "find": "            if appState.checkoutNotice != nil || appState.saveFailure != nil {",
-  "replace": "            if appState.saveFailure != nil {",
+  "find": "            if appState.checkoutNotice != nil || appState.saveFailure != nil\n                || appState.deepLinkNotice != nil || appState.answeringCopyNotice != nil {",
+  "replace": "            if appState.saveFailure != nil\n                || appState.deepLinkNotice != nil || appState.answeringCopyNotice != nil {",
   "test": "PostRollTests/CheckoutBannerTests/testACheckoutNoticeAloneIsEnoughToShowTheInset",
   "breaks": "the strip holding both banners appears only when a save is failing, so a checkout off a clean main with nothing else wrong, which is the ordinary state during a working session, shows nothing at all. The notice is computed, stored and never seen, and its silence reads as an assurance (#670)"
 }

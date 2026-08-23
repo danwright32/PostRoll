@@ -4,12 +4,33 @@ struct NewEventSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
-    @State private var name = ""
-    @State private var org = ""
-    @State private var venue = ""
-    @State private var venueContext = ""
-    @State private var date = Date()
+    /// What a `postroll://` link brought, or nil for a new event typed by hand
+    /// (#840).
+    ///
+    /// The form is filled from it and then nothing else happens: the sheet is
+    /// the review step, and Create is still what writes. A link that is stale
+    /// or wrong is visible here before it becomes an event.
+    let prefill: DeepLink.EventDraft?
+
+    @State private var name: String
+    @State private var org: String
+    @State private var venue: String
+    @State private var venueContext: String
+    @State private var date: Date
+    /// Deliberately NOT prefilled. The link has no shoot type to give: Downbeat
+    /// knows the genre, which is a different axis, and nothing over there
+    /// answers whether this is a performance, a photo call or a rehearsal. So
+    /// the picker goes on doing the job it already does.
     @State private var shootType = ShootType.fullShow
+
+    init(prefill: DeepLink.EventDraft? = nil) {
+        self.prefill = prefill
+        _name = State(initialValue: prefill?.name ?? "")
+        _org = State(initialValue: prefill?.org ?? "")
+        _venue = State(initialValue: prefill?.venue ?? "")
+        _venueContext = State(initialValue: prefill?.venueContext ?? "")
+        _date = State(initialValue: prefill?.date ?? Date())
+    }
 
     /// Why this cannot be created yet, from the same predicate that disables the
     /// button, so a greyed control can never sit beside nothing (#402).
@@ -101,17 +122,21 @@ struct NewEventSheet: View {
     }
 
     private func createEvent() {
-        // Every one of these is a single line field, so a paste carrying a
-        // line break in the MIDDLE is folded rather than only trimmed (#688).
-        // The form renders one as a gap that looks like a space, so nothing on
-        // screen would say the value was broken.
-        let event = Event(
-            name: FieldText.singleLine(name),
-            org: FieldText.singleLine(org),
-            venue: FieldText.singleLine(venue),
-            venueContext: FieldText.singleLine(venueContext),
+        // Built through the one place that builds one, rather than here, since
+        // #840 gave the form a second filler: the folding rule (#688) and the
+        // booking id would otherwise have two spellings.
+        //
+        // The booking id comes from the link and from nowhere else, so an event
+        // typed by hand carries none and a second click on a link matches only
+        // the event that link made.
+        let event = NewEventForm.event(
+            name: name,
+            org: org,
+            venue: venue,
+            venueContext: venueContext,
             date: date,
-            shootType: shootType
+            shootType: shootType,
+            bookingID: prefill?.bookingID
         )
         appState.addEvent(event)
         dismiss()
