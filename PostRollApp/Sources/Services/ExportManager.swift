@@ -77,10 +77,16 @@ final class ExportManager {
         // deactivated-run shape as the folder-access refusal below, so the
         // button says what it is waiting for instead of doing nothing (#182).
         if let waiting = ExportReadiness.blockedReason(regeneratingDays: regeneratingDays) {
-            tracker.begin(Run(phase: .failed(
-                "\(waiting) before exporting, so the folder gets the new files rather than the previous ones."),
+            let blocked = "\(waiting) before exporting, so the folder gets the new files rather than the previous ones."
+            tracker.begin(Run(phase: .failed(blocked),
                               isFullExport: onlyDay == nil), for: eventID)
             tracker.deactivate(eventID)
+            // Reached only from a button press, so `notifyWorkFailed` sees an
+            // active app and stays quiet. It is here anyway rather than being
+            // exempted: an exemption is a hand-kept list, and the entries
+            // anybody remembers to add are the ones already safe (L96).
+            NotificationService.shared.notifyWorkFailed(
+                work: "exporting", eventName: "An event", reason: blocked)
             return
         }
 
@@ -92,6 +98,10 @@ final class ExportManager {
             tracker.begin(Run(phase: .failed("Could not access the selected folder."),
                               isFullExport: onlyDay == nil), for: eventID)
             tracker.deactivate(eventID)
+            // As above: a click reaches this, so it stays quiet in practice.
+            NotificationService.shared.notifyWorkFailed(
+                work: "exporting", eventName: ev.name,
+                reason: "Could not access the selected folder.")
             return
         }
 
@@ -410,11 +420,21 @@ final class ExportManager {
         } catch {
             staging?.abandon()
             destinationRoot.stopAccessingSecurityScopedResource()
+            let reason = ((error as? PythonBridgeError)?.message(whileDoing: .export) ?? error.localizedDescription)
             tracker.update(eventID) {
                 $0.task = nil
-                $0.phase = .failed(((error as? PythonBridgeError)?.message(whileDoing: .export) ?? error.localizedDescription))
+                $0.phase = .failed(reason)
             }
             tracker.deactivate(eventID)
+            // Said out loud when he is not looking (#872). An export is the
+            // longest thing this app does, and it was the one kind of work that
+            // still died in silence: it records a failure by setting a phase
+            // rather than through `markFailed`, so the sweep that holds every
+            // other failure path to announcing could not see it at all.
+            NotificationService.shared.notifyWorkFailed(
+                work: "exporting",
+                eventName: capturedEvent.name,
+                reason: reason)
         }
     }
 
