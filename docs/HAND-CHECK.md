@@ -44,6 +44,10 @@ When you are finished:
 
 ## 1. Closing the window leaves the app running (#847)
 
+Covers: `PostRollApp/Sources/PostRollApp.swift`,
+`PostRollApp/Sources/Services/DeepLinkInbox.swift`,
+`PostRollApp/Sources/Views/MainWindowView.swift`
+
 ```
 ./PostRollApp/hand-check.sh healthy
 ```
@@ -62,6 +66,9 @@ Now click the PostRoll icon in the Dock.
 
 ## 2. The New Event command still works with no window (#847)
 
+Covers: `PostRollApp/Sources/PostRollApp.swift`,
+`PostRollApp/Sources/Services/DeepLinkInbox.swift`
+
 Still in the same state. Press **Cmd+W** again, then **Cmd+N**.
 
 **Expect:** a window opens with the New Event form on it.
@@ -71,6 +78,10 @@ dead while the window is closed is the half of #847 nothing guards.
 Press **Escape** to close the form.
 
 ## 3. Return commits a form you opened yourself (#848)
+
+Covers: `PostRollApp/Sources/Views/NewEventSheet.swift`,
+`PostRollApp/Sources/Views/MainWindowView.swift`,
+`PostRollApp/Sources/Models/WindowModals.swift`
 
 ```
 ./PostRollApp/hand-check.sh healthy
@@ -83,6 +94,11 @@ Press **Cmd+N**, type `Return test` into the name field, press **Return**.
 opened form, and this is Dan's everyday flow.
 
 ## 4. Return does NOT commit a form a link opened (#848, #844)
+
+Covers: `PostRollApp/Sources/Views/NewEventSheet.swift`,
+`PostRollApp/Sources/Services/DeepLink.swift`,
+`PostRollApp/Sources/Services/DeepLinkInbox.swift`,
+`PostRollApp/Sources/Models/WindowModals.swift`
 
 With that same window still open:
 
@@ -110,6 +126,13 @@ Click **Create**.
 does one of them passes on a change that does nothing at all.
 
 ## 5. Each alert says its own words, with its own buttons (#855)
+
+Covers: `PostRollApp/Sources/Models/WindowModals.swift`,
+`PostRollApp/Sources/Views/MainWindowView.swift`,
+`PostRollApp/Sources/AppState.swift`,
+`PostRollApp/Sources/Services/LaunchProjectCheck.swift`,
+`PostRollApp/Sources/Services/EventStore.swift`,
+`PostRollApp/Sources/Services/StoreRestoreText.swift`
 
 Three separate launches, because each is a different launch condition.
 
@@ -151,6 +174,11 @@ library that quietly discards his edits.
 
 ## 6. Recovering from the refusal shows what was waiting behind it (#855)
 
+Covers: `PostRollApp/Sources/Models/WindowModals.swift`,
+`PostRollApp/Sources/Views/MainWindowView.swift`,
+`PostRollApp/Sources/AppState.swift`,
+`PostRollApp/Sources/Services/LaunchProjectCheck.swift`
+
 This is the step the whole of #855 turned out to be about, and the one most
 worth running after any change to the alerts.
 
@@ -185,6 +213,10 @@ away, and re-raising it on every activation is how a warning becomes something
 to dismiss on reflex.
 
 ## 7. Quitting while something is running asks first (#862)
+
+Covers: `PostRollApp/Sources/Services/DeepLinkInbox.swift`,
+`PostRollApp/Sources/Models/BackgroundWork.swift`,
+`PostRollApp/Sources/Services/JobTracker.swift`
 
 The dialog is an alert macOS puts up during termination, so nothing automated
 can read it either.
@@ -231,6 +263,11 @@ generation. Step 8 needs a whole one, and the two cannot share: that one has to
 be allowed to finish.
 
 ## 8. Work with no window says so (#863, #879)
+
+Covers: `PostRollApp/Sources/Views/WorkingDockTile.swift`,
+`PostRollApp/Sources/Services/NotificationService.swift`,
+`PostRollApp/Sources/Models/WorkActivity.swift`,
+`PostRollApp/Sources/Services/JobTracker.swift`
 
 Neither half of this is reachable to anything automated: one is drawn on the
 Dock icon and the other is a banner from Notification Center.
