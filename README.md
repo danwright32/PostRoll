@@ -167,7 +167,7 @@ make test-python-fast
 ```
 
 That deselects the handful of test files measured above the floor in
-`tests/file_durations.py`, which is three of them today. It is a loop, not a
+`tests/file_durations.py`, which is four of them today. It is a loop, not a
 gate: `make test-python` and CI still run everything. Which files it skips comes
 from a measurement rather than a guess (#766), so a new file heavy enough to
 belong to the full run only is added to it by re-measuring:
@@ -186,10 +186,41 @@ deliberately (#431): the two attempts at narrowing it, first skipping the Swift
 job on pull requests and then filtering it by path, each hid a real failure.
 
 The Swift unit tests compile `Sources` directly into the test bundle, with no
-app host, so they cannot reach the live data store. There is no UI test target:
-a headless runner cannot reliably drive a window, and a test nothing runs is
-indistinguishable from no test, so it was removed rather than left to rot
-(#524).
+app host, so they cannot reach the live data store.
+
+There is also a small GUI target, `PostRollUITests`, which launches the real
+app. It exists because `PostRollApp.swift` is excluded from the unit bundle, so
+the entry point's only other cover is guards matching its text, and #842 hid
+exactly there. It runs on every merge in `.github/workflows/ui.yml`, never on a
+pull request, and holds two things: the app opens exactly one window, and the
+binary under test is the one that run built.
+
+Two shallow checks is all it holds because most of what it was built for turned
+out to be unreachable. XCUITest cannot read into a PostRoll window, so five of
+the seven tests written for it were deleted (#860). This corrects what this
+section used to say, which was that a headless runner cannot drive a window at
+all: that was #509's recorded reason from June, and it was measured and found
+false on the macos-26 image (#849).
+
+## The hand check
+
+What the GUI target cannot reach is written down instead, in
+[docs/HAND-CHECK.md](docs/HAND-CHECK.md): six questions about the window, the
+New Event form's keyboard handling and the alerts, each with a result specific
+enough to be wrong. Run it after `make install` when any of those change.
+
+```
+./PostRollApp/hand-check.sh healthy
+```
+
+That builds a scratch library and a scratch code folder and launches the app
+pointed at them, so the steps that deliberately break the store cannot reach the
+real events.json. `./PostRollApp/hand-check.sh` on its own lists the states.
+Finish with:
+
+```
+./PostRollApp/hand-check.sh end
+```
 
 ## Recording a design change
 
