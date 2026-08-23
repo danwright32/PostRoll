@@ -268,6 +268,37 @@ final class TestTargetHygieneTests: XCTestCase {
         )
     }
 
+    /// How many times the manifest DEFINES the test-only flag.
+    ///
+    /// Comment lines are dropped before counting, because a comment cannot
+    /// define a build setting: counting one is a false accusation, and the
+    /// message it produces names a cause that did not happen (#853, L11). This
+    /// is what `tests/test_swift_test_target_covers_sources.py` already does to
+    /// the same file, for the same reason spelled out there: a guard that can be
+    /// answered by prose is not measuring what it claims to (L103).
+    ///
+    /// Dropping them is not a loosening. A commented out definition sets
+    /// nothing, so not counting it is the correct answer, and a real definition
+    /// on the app target is still caught wherever in the file it appears.
+    ///
+    /// Takes the manifest as text rather than reading the file, so the two cases
+    /// below can be driven with a manifest this test wrote. A guard that can
+    /// only ever be run against the one file that currently satisfies it has no
+    /// way to be shown failing (L1).
+    static func testOnlyFlagDefinitions(in manifest: String) -> Int {
+        let code = manifest
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
+            .joined(separator: "\n")
+        return code.components(separatedBy: Self.testOnlyFlag).count - 1
+    }
+
+    /// Spelled in pieces so this file does not itself contain the token. The
+    /// guard counts occurrences in project.yml rather than here, so this is
+    /// only tidiness; naming it once and building it once keeps the two cases
+    /// below honest about what they are constructing.
+    static let testOnlyFlag = "POSTROLL" + "_TESTS"
+
     /// The flag the guard above depends on is set in exactly one place. If the
     /// test target stops defining it, every test using the seam fails to
     /// compile, which is loud; if the APP target ever starts defining it, the
@@ -279,13 +310,66 @@ final class TestTargetHygieneTests: XCTestCase {
         let manifest = try String(
             contentsOf: appDir.appendingPathComponent("project.yml"), encoding: .utf8)
 
-        let definitions = manifest.components(separatedBy: "POSTROLL_TESTS").count - 1
+        let definitions = Self.testOnlyFlagDefinitions(in: manifest)
         XCTAssertEqual(
             definitions, 1,
-            "POSTROLL_TESTS must be defined once, on the PostRollTests target only. "
-            + "Found \(definitions) mentions in project.yml. Defining it on the app target "
+            "\(Self.testOnlyFlag) must be defined once, on the PostRollTests target only. "
+            + "Found \(definitions) definitions in project.yml. Defining it on the app target "
             + "would make every test-only seam reachable from the shipping app."
         )
+    }
+
+    /// A second definition is still caught, wherever it is (#853).
+    ///
+    /// The half that must not be lost. Without this, dropping comments could be
+    /// dropping everything and the guard above would pass on any manifest at
+    /// all, which is the failure it exists to prevent.
+    func testASecondDefinitionIsStillCaught() {
+        let manifest = """
+            targets:
+              PostRoll:
+                settings:
+                  base:
+                    SWIFT_ACTIVE_COMPILATION_CONDITIONS: \(Self.testOnlyFlag)
+              PostRollTests:
+                settings:
+                  base:
+                    SWIFT_ACTIVE_COMPILATION_CONDITIONS: \(Self.testOnlyFlag)
+            """
+
+        XCTAssertEqual(
+            Self.testOnlyFlagDefinitions(in: manifest), 2,
+            "the app target defines the test-only flag and this counted it as "
+            + "one definition, so every test-only seam is reachable from the "
+            + "shipping app and nothing says so")
+    }
+
+    /// A comment that merely NAMES the flag is not a definition (#853).
+    ///
+    /// This is the case that cost a CI round trip: the GUI target added in #849
+    /// carried a comment saying it deliberately does not set the flag, and the
+    /// guard reported two definitions and blamed the app target, which had done
+    /// nothing.
+    func testACommentNamingTheFlagIsNotADefinition() {
+        let manifest = """
+            targets:
+              PostRoll:
+                settings:
+                  base:
+                    # Deliberately does not set \(Self.testOnlyFlag), because the
+                    # seams behind it must not be reachable from the shipping app.
+                    SWIFT_VERSION: "6.0"
+              PostRollTests:
+                settings:
+                  base:
+                    SWIFT_ACTIVE_COMPILATION_CONDITIONS: \(Self.testOnlyFlag)
+            """
+
+        XCTAssertEqual(
+            Self.testOnlyFlagDefinitions(in: manifest), 1,
+            "a comment explaining the flag was counted as a definition, so the "
+            + "manifest cannot be commented without failing a guard about "
+            + "something the comment did not do")
     }
 
     /// No test builds an AppState through the shipping initialiser (#681).
