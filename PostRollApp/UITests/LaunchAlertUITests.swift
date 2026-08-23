@@ -124,6 +124,36 @@ enum AlertOnScreen {
         buttons.allElementsBoundByIndex.map { $0.label }.filter { !$0.isEmpty }
     }
 
+    /// Press a button on the alert, saying so when it was not there to press.
+    ///
+    /// Through the sheet rather than the application, so a button of the same
+    /// name elsewhere on the window cannot answer for it.
+    static func press(_ label: String, in app: XCUIApplication) -> Bool {
+        let sheet = app.sheets.firstMatch
+        guard sheet.exists else { return false }
+        let button = sheet.buttons[label]
+        guard button.exists else { return false }
+        button.click()
+        return true
+    }
+
+    /// Whether an alert carrying `title` has GONE, within `seconds`.
+    ///
+    /// Its own function rather than a negation of `showing`, because the two
+    /// wait for opposite things: asking `showing` to be false returns the
+    /// instant it is polled, before anything had a chance to tear down, and a
+    /// dismissal that has not happened yet is indistinguishable from one that
+    /// worked (L106).
+    static func gone(_ title: String, in app: XCUIApplication,
+                     within seconds: TimeInterval = 10) -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        repeat {
+            if !app.staticTexts[title].exists { return true }
+            usleep(200_000)
+        } while Date() < deadline
+        return false
+    }
+
     /// Everything the harness can see, for a failure message that is worth
     /// reading. A failure saying only that a title was absent cannot tell an
     /// alert with the wrong words from a harness that saw nothing at all.
@@ -241,6 +271,20 @@ final class CorruptStoreAlertUITests: XCTestCase {
         XCTAssertTrue(labels.contains("OK"),
                       "the way out of this alert is not there. Buttons "
                       + "(fromAlert=\(fromAlert)): \(labels)")
+
+        // And it works. A button that is present and does nothing is the same
+        // dead end as no button at all, and it is what step 5 of the hand check
+        // presses by hand today.
+        XCTAssertTrue(AlertOnScreen.press("OK", in: app), "there was no OK to press")
+        XCTAssertTrue(AlertOnScreen.gone(AlertTitle.dataLoad, in: app),
+                      "OK did not take the alert away. " + AlertOnScreen.describe(app))
+
+        // Gone and staying gone. An alert that comes back on the next tick is
+        // one Dan dismisses on reflex, which is how a warning stops being read.
+        usleep(2_000_000)
+        XCTAssertFalse(app.staticTexts[AlertTitle.dataLoad].exists,
+                       "the alert came back after being dismissed. "
+                       + AlertOnScreen.describe(app))
     }
 }
 
@@ -286,6 +330,15 @@ final class UnreadableStoreAlertUITests: XCTestCase {
                            + "alert's button on the one alert that must not be "
                            + "dismissible: \(labels)")
         }
+
+        // It refuses to be dismissed, which is the whole of it. The events are
+        // still on disk and letting Dan past would show him an empty library
+        // that quietly discards everything he types into it.
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        usleep(2_000_000)
+        XCTAssertTrue(app.staticTexts[AlertTitle.storeUnavailable].exists,
+                      "Escape dismissed the one alert that must not be "
+                      + "dismissible. " + AlertOnScreen.describe(app))
     }
 }
 
@@ -363,5 +416,29 @@ final class BothBrokenAlertUITests: XCTestCase {
                        "the code folder warning is on screen alongside the "
                        + "refusal, which is the collision #846 removed. "
                        + AlertOnScreen.describe(app))
+
+        // ── the whole of #855, which step 6 of the hand check presses by hand ──
+        //
+        // Repair the store underneath the refusal and press Try Again. One
+        // button press then makes two changes: the refusal is torn down and the
+        // warning queued behind it is promoted. SwiftUI's report of the alert
+        // it tore down arrives AFTER that, and unaddressed it lands on the
+        // warning nobody has seen yet and dismisses it, recorded as dismissed
+        // so it never comes back.
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o644],
+            ofItemAtPath: root.appendingPathComponent("events.json").path)
+
+        XCTAssertTrue(AlertOnScreen.press("Try Again", in: app),
+                      "there was no Try Again to press on the refusal")
+
+        XCTAssertTrue(AlertOnScreen.gone(AlertTitle.storeUnavailable, in: app),
+                      "Try Again did not clear the refusal, so the repair was "
+                      + "not seen. " + AlertOnScreen.describe(app))
+        XCTAssertTrue(AlertOnScreen.showing(AlertTitle.projectRoot, in: app, within: 10),
+                      "the code folder warning did not take the screen the "
+                      + "refusal left. That is #855: one press made two changes "
+                      + "and swallowed the alert nobody had seen. "
+                      + AlertOnScreen.describe(app))
     }
 }
