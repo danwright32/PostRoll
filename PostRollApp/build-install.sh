@@ -186,6 +186,17 @@ echo "    Signature verified"
 
 echo "==> Installed: ${DEST}"
 
+# Which copy of PostRoll macOS hands a postroll:// link to (#840). Fourteen
+# PostRoll.app bundles were registered with LaunchServices when that issue was
+# filed, and a Debug build in a build folder is as valid a candidate as this
+# one. Not fatal: the install itself succeeded, and the app says so on its own
+# when a link reaches the wrong copy. Loud, though, rather than swallowed.
+if ! ./register-url-scheme.sh; then
+  echo "    WARNING: the postroll:// registrations could not be tidied (above)." >&2
+  echo "    A link from an OmniFocus task note may reach a different copy of" >&2
+  echo "    PostRoll than this one. PostRoll will say so when it does." >&2
+fi
+
 if [[ "${1:-}" == "--launch" ]]; then
   echo "==> Launching"
   open "${DEST}"

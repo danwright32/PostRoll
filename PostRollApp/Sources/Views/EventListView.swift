@@ -152,7 +152,7 @@ struct EventListView: View {
                     }
 
                     Button {
-                        appState.showingNewEvent = true
+                        appState.presentNewEvent()
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 13, weight: .medium))

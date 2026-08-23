@@ -10,6 +10,11 @@ struct MainWindowView: View {
     @Environment(OCRManager.self) private var ocrManager
     @Environment(ExportManager.self) private var exportManager
 
+    /// Links that arrived from an OmniFocus task note (#840). Read here rather
+    /// than handled where they land, because on a cold launch the URL is
+    /// delivered before this view exists.
+    private var deepLinks = DeepLinkInbox.shared
+
     var body: some View {
         @Bindable var appState = appState
 
@@ -51,7 +56,7 @@ struct MainWindowView: View {
                 } else {
                     WelcomeDetailView(
                         hasEvents: !appState.events.isEmpty,
-                        onNew: { appState.showingNewEvent = true }
+                        onNew: { appState.presentNewEvent() }
                     )
                 }
             } else {
@@ -76,8 +81,42 @@ struct MainWindowView: View {
             // for one slot: a failing save and a checkout that is not on a clean
             // main can be true at the same time, and whichever lost would be
             // invisible while still true.
-            if appState.checkoutNotice != nil || appState.saveFailure != nil {
+            if appState.checkoutNotice != nil || appState.saveFailure != nil
+                || appState.deepLinkNotice != nil || appState.answeringCopyNotice != nil {
                 VStack(spacing: Spacing.sm) {
+                    // Which copy of PostRoll answered the link (#840). Above
+                    // the rest of the stack because it changes what every other
+                    // sentence here is ABOUT: a Debug build has its own events
+                    // store, so an event created in it is simply not in the app
+                    // Dan normally opens.
+                    if let copy = appState.answeringCopyNotice {
+                        BrandBanner(
+                            icon: "exclamationmark.triangle.fill",
+                            message: copy,
+                            style: .warning,
+                            actions: [BrandBannerAction(label: "Dismiss") {
+                                appState.dismissAnsweringCopyNotice()
+                            }])
+                    }
+                    // A click that opened no sheet (#840): either the link had
+                    // already made its event, or it could not be read. Both
+                    // have to be said. The first changes nothing visible when
+                    // that event was already on screen, and the second is
+                    // otherwise a link that silently did nothing.
+                    //
+                    // Dismissable, because unlike the two below it neither
+                    // condition persists: it is about one click, and once it
+                    // has been read there is nothing left to be true.
+                    if let notice = appState.deepLinkNotice {
+                        BrandBanner(
+                            icon: notice.kind == .refused
+                                ? "exclamationmark.triangle.fill" : "link",
+                            message: notice.message,
+                            style: notice.kind == .refused ? .error : .info,
+                            actions: [BrandBannerAction(label: "Dismiss") {
+                                appState.dismissDeepLinkNotice()
+                            }])
+                    }
                     if let notice = appState.checkoutNotice {
                         // Dismissable, unlike the one below it (#696). The
                         // state this was shown for is remembered, so waving it
@@ -111,8 +150,16 @@ struct MainWindowView: View {
         .toolbarBackground(Color.creamDeep, for: .windowToolbar)
         .toolbarBackground(.visible, for: .windowToolbar)
         .background(WindowConfigurator())
+        // Both orders a cold launch can happen in (#840). `onAppear` catches
+        // the link that was already waiting when this view was built, which is
+        // the case a change-watcher alone cannot see because the change
+        // happened first; `onChange` catches the click that comes in while the
+        // window is already open, which `onAppear` alone cannot see because it
+        // fires once.
+        .onAppear { appState.handleWaitingDeepLinks(deepLinks) }
+        .onChange(of: deepLinks.pending) { appState.handleWaitingDeepLinks(deepLinks) }
         .sheet(isPresented: $appState.showingNewEvent) {
-            NewEventSheet()
+            NewEventSheet(prefill: appState.newEventPrefill)
                 .environment(appState)
         }
         .sheet(isPresented: $appState.showingOutdatedDesigns) {

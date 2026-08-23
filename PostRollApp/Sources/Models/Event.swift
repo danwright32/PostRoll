@@ -13,6 +13,18 @@ struct Event: Identifiable, Codable, Hashable {
     var shootType: ShootType
     var stage: EventStage = .created
 
+    /// Downbeat's id for the show this event was created from, when it came
+    /// from a `postroll://` link rather than being typed (#840).
+    ///
+    /// Per SHOW rather than per booking, so a three night run carries three
+    /// distinct ids and makes three distinct events. It is the key a second
+    /// click on the same link matches on: with it, clicking again selects this
+    /// event and says so; without it, every click would make another event.
+    ///
+    /// `nil` for every event typed into the sheet by hand, which is every event
+    /// that existed before this shipped. A nil must never match another nil.
+    var downbeatBookingID: UUID? = nil
+
     // Program OCR inputs
     var programImagePaths: [URL] = []
     /// A single searchable PDF of the whole program, built from the page scans
@@ -170,6 +182,7 @@ extension Event {
         date         = try c.decode(Date.self,      forKey: .date)
         shootType    = try c.decode(ShootType.self, forKey: .shootType)
         stage             = try c.decodeIfPresent(EventStage.self,                 forKey: .stage)             ?? .created
+        downbeatBookingID = try c.decodeIfPresent(UUID.self,                       forKey: .downbeatBookingID)
         programImagePaths = try c.decodeIfPresent([URL].self,                      forKey: .programImagePaths) ?? []
         programPDFPath    = try c.decodeIfPresent(URL.self,                        forKey: .programPDFPath)
         programPDFFingerprint = try c.decodeIfPresent(String.self,                 forKey: .programPDFFingerprint)

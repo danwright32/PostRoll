@@ -118,6 +118,41 @@ Optional overrides, none of which need setting for normal use:
 | `POSTROLL_CLAUDE_BIN` | Path to the `claude` binary, used on the CLI fallback path. |
 | `JAMENDO_TRACKS_URL` | Overrides the Jamendo endpoint. Test seam. |
 
+## Creating an event from an OmniFocus task
+
+Downbeat already holds the five things the New Event sheet asks for, and already
+prints them into the "Create new project in PostRoll" task note. That note
+carries a link instead of five lines to retype:
+
+```
+postroll://new?name=…&org=…&venue=…&room=…&date=20260822&booking=<uuid>
+```
+
+Clicking it opens the New Event sheet with the five fields filled. Nothing is
+written until Create is pressed: the sheet is the review step, and it is what
+keeps a stale or wrong link visible before it becomes an event. The shoot type
+picker is untouched, because Downbeat has no answer for it.
+
+`booking` is Downbeat's id for the SHOW, so a three night run emits three links
+and makes three events. PostRoll keeps it on the event, and a second click on a
+link it has already made the event for selects that event and says so rather
+than offering a second sheet.
+
+A link PostRoll cannot read opens nothing and says why: an unsubstituted
+`<<photoshootName>>` from a broken task template, a date that is not eight
+digits, a booking id that is not an id. Downbeat's half of this is
+`danwright32/downbeat#404`.
+
+**Which copy of PostRoll answers.** More than one `PostRoll.app` exists on this
+Mac (the installed one, plus whatever the last few builds left in build
+folders), and macOS chooses between them by its own rules. `build-install.sh`
+runs `PostRollApp/register-url-scheme.sh` after installing, which registers
+`/Applications/PostRoll.app` and unregisters every other copy LaunchServices
+knows about. That narrows the field and does not settle it, so PostRoll also
+says so in the window when a link reaches a copy that is not the installed one.
+A build product answering the link would read and write its own events store,
+and the only other symptom is an event that later cannot be found.
+
 ## Running the tests
 
 ```

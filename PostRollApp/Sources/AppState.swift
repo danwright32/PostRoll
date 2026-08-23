@@ -10,6 +10,18 @@ final class AppState {
     var events: [Event] = []
     var selectedEventID: Event.ID?
     var showingNewEvent = false
+
+    /// The values a `postroll://` link brought, for the sheet to open with
+    /// (#840). Nil for a new event typed by hand.
+    private(set) var newEventPrefill: DeepLink.EventDraft?
+
+    /// What to say about a link that opened no sheet: one that PostRoll had
+    /// already made the event for, or one it could not read (#840).
+    private(set) var deepLinkNotice: DeepLink.Notice?
+
+    /// Set when a link was answered by a copy of PostRoll that is not the
+    /// installed one (#840). See `AnsweringCopy`.
+    private(set) var answeringCopyNotice: String?
     /// The list of days whose cached assets predate the current design (#293).
     var showingOutdatedDesigns = false
 
@@ -590,6 +602,74 @@ final class AppState {
         } else {
             Task { @MainActor in self?.record(outcome) }
         }
+    }
+
+    // MARK: - postroll:// links (#840)
+
+    /// Put the New Event sheet on screen.
+    ///
+    /// Every route to that sheet goes through here, Cmd+N and both buttons
+    /// included, so the prefill from a link cannot outlive the click that
+    /// brought it. Clearing it in a dismissal handler instead would leave the
+    /// last link's values sitting in the next hand-typed event whenever that
+    /// handler did not run.
+    func presentNewEvent(prefill: DeepLink.EventDraft? = nil) {
+        newEventPrefill = prefill
+        showingNewEvent = true
+    }
+
+    /// Act on a `postroll://` link.
+    ///
+    /// The three outcomes are the three `DeepLink.Landing` cases, and every one
+    /// of them leaves something on screen: a filled sheet, a selected event
+    /// with a sentence saying why, or a refusal naming what is wrong with the
+    /// link. Nothing here writes an event; the sheet's Create button still does
+    /// that, and it is the review step that keeps a stale link visible.
+    ///
+    /// The calendar is a parameter for the same reason the parser takes one:
+    /// the link names a DAY, and the instant a day begins is decided by the
+    /// time zone (L504).
+    ///
+    /// `answeredBy` is which copy of PostRoll this is, and it is a parameter
+    /// rather than read inside because a check whose two sides come from one
+    /// lookup can only prove that lookup is self-consistent (L70). It is
+    /// answered on every link and not only on a refusal: the everyday case is a
+    /// link that works perfectly in the wrong build, and tying the warning to
+    /// failure would leave exactly that case silent (L142).
+    func handle(_ url: URL,
+                calendar: Calendar = .current,
+                answeredBy: URL = Bundle.main.bundleURL) {
+        answeringCopyNotice = AnsweringCopy.notice(answeredBy: answeredBy)
+
+        switch DeepLink.landing(for: url, existing: events, calendar: calendar) {
+        case .newEvent(let draft):
+            deepLinkNotice = nil
+            presentNewEvent(prefill: draft)
+        case .alreadyCreated(let id, let message):
+            newEventPrefill = nil
+            selectedEventID = id
+            deepLinkNotice = DeepLink.Notice(kind: .handled, message: message)
+        case .refused(let message):
+            newEventPrefill = nil
+            deepLinkNotice = DeepLink.Notice(kind: .refused, message: message)
+        }
+    }
+
+    /// Everything a link left waiting, acted on in the order it arrived.
+    ///
+    /// Called when the window appears and again whenever the inbox changes, so
+    /// a link delivered before the scene existed is handled rather than dropped
+    /// (#840).
+    func handleWaitingDeepLinks(_ inbox: DeepLinkInbox) {
+        for url in inbox.drain() { handle(url) }
+    }
+
+    func dismissDeepLinkNotice() {
+        deepLinkNotice = nil
+    }
+
+    func dismissAnsweringCopyNotice() {
+        answeringCopyNotice = nil
     }
 
     func addEvent(_ event: Event) {
