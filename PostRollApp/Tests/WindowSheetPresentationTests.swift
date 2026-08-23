@@ -105,7 +105,7 @@ final class WindowSheetPresentationTests: XCTestCase {
         state.present(behind(), forRepo: repo)
         state.presentNewEvent()
 
-        state.dismissPresentedSheet()
+        state.dismissPresentedSheet(.newEvent)
 
         XCTAssertEqual(state.presentedSheet?.kind, .buildBehind,
                        "the warning waited and then never came back, which is "
@@ -123,8 +123,8 @@ final class WindowSheetPresentationTests: XCTestCase {
         let state = state()
         state.present(behind(), forRepo: repo)
         state.presentNewEvent()
-        state.dismissPresentedSheet()
-        state.dismissPresentedSheet()
+        state.dismissPresentedSheet(.newEvent)
+        state.dismissPresentedSheet(.buildBehind)
 
         // Same verdict, offered again the way an activation offers it.
         state.present(behind(), forRepo: repo)
@@ -142,7 +142,7 @@ final class WindowSheetPresentationTests: XCTestCase {
         let state = state()
         state.present(behind(), forRepo: repo)
 
-        state.dismissPresentedSheet()
+        state.dismissPresentedSheet(.buildBehind)
         state.present(behind(), forRepo: repo)
 
         XCTAssertNil(state.presentedSheet,
