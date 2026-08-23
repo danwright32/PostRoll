@@ -1,0 +1,8 @@
+{
+  "name": "the-app-declares-one-window-not-a-group",
+  "file": "PostRollApp/Sources/PostRollApp.swift",
+  "find": "        Window(\"PostRoll\", id: \"main\") {",
+  "replace": "        WindowGroup {",
+  "test": "PostRollTests/DeepLinkWiringTests/testTheAppDeclaresASingleWindowRatherThanAGroup",
+  "breaks": "SwiftUI answers every incoming postroll:// URL by opening a NEW window, so the count grows by one per link and survives a quit through window restoration. Worse, showingNewEvent is one flag on the shared AppState and every window binds a sheet to it, so one link puts up a New Event sheet on each window with the same prefill and cancelling one leaves the others standing. Measured on the real machine at 1, then 2, then 3 (#842)"
+}
