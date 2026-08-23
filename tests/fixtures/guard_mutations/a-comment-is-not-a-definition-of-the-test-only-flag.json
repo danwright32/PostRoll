@@ -1,0 +1,8 @@
+{
+  "name": "a-comment-is-not-a-definition-of-the-test-only-flag",
+  "file": "PostRollApp/Tests/TestTargetHygieneTests.swift",
+  "find": "            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix(\"#\") }\n",
+  "replace": "",
+  "test": "PostRollTests/TestTargetHygieneTests/testACommentNamingTheFlagIsNotADefinition",
+  "breaks": "the guard counts mentions rather than definitions again, so any comment naming the test-only flag fails a check about something the comment did not do, and the message blames the app target for a second definition nobody wrote (#853, L11, L103)"
+}
