@@ -46,8 +46,10 @@ name: GUI
 # What made this worth keeping rather than merely defensible is that the cost
 # came down. Measured on the runner on 2026-08-23: 84.7 seconds of test time in
 # a job of about 150 when each test started and ended its own app, against 4.0
-# seconds in a job of about 101 now that the class shares one. #864 has the
-# numbers and is careful about what they do and do not attribute.
+# seconds in a job of 101 now that the class shares one. A control on main,
+# still launching per test, dispatched onto the same image 25 minutes later,
+# came back at 87.2 seconds in a job of 171, so the saving is the change rather
+# than the runner. #864 has the numbers.
 #
 # ── why this never runs on a pull request ────────────────────────────────────
 #

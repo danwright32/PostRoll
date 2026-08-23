@@ -36,7 +36,14 @@ final class AppEntryPointUITests: XCTestCase {
     /// test: 43.6 seconds and 41.1 seconds, of the SAME binary built by the same
     /// job, 84.7 seconds of test time in a job of about 150. With one launch and
     /// one termination for the whole class: 3.9 seconds and 0.1 seconds, 4.0
-    /// seconds of test time, and the job about 101.
+    /// seconds of test time, and the job 101.
+    ///
+    /// A control was run rather than assuming the difference was the change:
+    /// main, still launching per test, dispatched onto the same image 25 minutes
+    /// after the branch run, came back at 45.4 and 41.9 seconds, 87.2 seconds of
+    /// test time in a job of 171. So the saving is this change and not the
+    /// runner having a better afternoon, which is the alternative explanation
+    /// two numbers moving together can never rule out on their own (L203).
     ///
     /// What that settles and what it does not. It settles that the price is paid
     /// once per test rather than once per build, so #864's first suggestion, a
