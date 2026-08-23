@@ -137,8 +137,20 @@ struct ModalQueue<Modal: WindowModal> {
     /// A blocking modal refuses: it returns nil and nothing moves. Dismissal is
     /// the one thing it exists to say no to, and letting a caller take it away
     /// by asking twice would put the whole point of it behind a convention.
+    ///
+    /// `expected` is required, and it is not ceremony. A dismissal is a decision
+    /// about the modal that was on the screen when it was taken, and by the time
+    /// it arrives that may not be what is presented any more. One button press
+    /// makes two changes whenever the button's own action raises or withdraws
+    /// something: the action runs first and the queue promotes what was waiting,
+    /// and only then does SwiftUI report the modal it tore down. Unaddressed,
+    /// that report lands on the modal nobody has seen yet and takes it away,
+    /// which is #855: pressing Try Again on the refusal to open the events also
+    /// silently swallowed the code folder warning queued behind it. An action
+    /// must be addressed by what the decision was made over (L166).
     @discardableResult
-    mutating func dismissPresented() -> Modal? {
+    mutating func dismissPresented(_ expected: Modal.Kind) -> Modal? {
+        guard presented?.kind == expected else { return nil }
         guard presented?.isBlocking != true else { return nil }
         let dismissed = presented
         presented = waiting.isEmpty ? nil : waiting.removeFirst()

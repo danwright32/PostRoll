@@ -91,7 +91,7 @@ final class WindowAlertPresentationTests: XCTestCase {
         let state = state()
         state.reportStoreUnavailable(unreadableStore)
 
-        state.dismissPresentedAlert()
+        state.dismissPresentedAlert(.storeUnavailable)
 
         XCTAssertEqual(state.presentedAlert?.kind, .storeUnavailable,
                        "the refusal was waved away, so the app is now showing "
@@ -176,7 +176,7 @@ final class WindowAlertPresentationTests: XCTestCase {
         state.reportProjectRootProblem(.notRecorded)
         state.reportDataLoadWarning("The saved events were unreadable.")
 
-        state.dismissPresentedAlert()
+        state.dismissPresentedAlert(.projectRoot)
 
         XCTAssertNotNil(state.presentedAlert,
                         "dismissing the first alert took the second one with it")
@@ -197,5 +197,81 @@ final class WindowAlertPresentationTests: XCTestCase {
         XCTAssertTrue(state.waitingAlerts.isEmpty,
                       "\(state.waitingAlerts.count) copies of the same launch "
                       + "warning are queued behind the one on screen")
+    }
+
+    // MARK: - A dismissal belongs to the alert it was about
+
+    /// #855, measured on the real app.
+    ///
+    /// Reproduction: make `events.json` unreadable and point the code folder
+    /// somewhere that is not a checkout. Both launch checks fire, the refusal to
+    /// open the events wins the screen and the code folder warning waits behind
+    /// it. Fix the permissions, press Try Again, and the refusal clears with no
+    /// alert appearing at all. Dan fixes one fault and never learns about the
+    /// other.
+    ///
+    /// The cause is not that SwiftUI failed to redraw, which is what the issue
+    /// first assumed. It is that ONE button press makes TWO changes: the
+    /// button's own action opens the store, which promotes the code folder
+    /// warning onto the screen, and then SwiftUI reports the alert it just tore
+    /// down by writing `isPresented` false. That write was a decision about the
+    /// refusal. It arrives addressed to nothing, so it lands on whatever is
+    /// presented NOW, which is the alert nobody has seen yet (L166).
+    ///
+    /// So a dismissal names the alert it is about, and one for an alert that has
+    /// already left the screen does nothing.
+    @MainActor
+    func testRecoveringFromTheRefusalDoesNotWaveAwayWhatWasBehindIt() {
+        let state = state()
+        state.reportProjectRootProblem(.notRecorded)
+        state.reportStoreUnavailable(unreadableStore)
+
+        // The button's action. The store opened, so the refusal is withdrawn and
+        // the code folder warning behind it takes the screen.
+        state.clearStoreUnavailable()
+        // SwiftUI, reporting the alert it tore down when the button was pressed.
+        state.dismissPresentedAlert(.storeUnavailable)
+
+        XCTAssertEqual(state.presentedAlert?.kind, .projectRoot,
+                       "pressing Try Again cleared the refusal AND took the "
+                       + "code folder warning queued behind it, so Dan fixed "
+                       + "one fault and was never told about the other")
+    }
+
+    /// The second half of the same defect, and the worse half.
+    ///
+    /// `dismissPresentedAlert` records what it took away, so that a warning Dan
+    /// waved away is not put back on the next activation. A dismissal landing on
+    /// the wrong alert therefore does not merely hide it once: it writes down
+    /// that he waved away a warning he was never shown, and the check that runs
+    /// on every activation then refuses to raise it for the rest of the session.
+    @MainActor
+    func testTheWarningNobodySawIsNotRecordedAsWavedAway() {
+        let state = state()
+        state.reportProjectRootProblem(.notRecorded)
+        state.reportStoreUnavailable(unreadableStore)
+
+        state.clearStoreUnavailable()
+        state.dismissPresentedAlert(.storeUnavailable)
+        // Every activation reads the code folder again and reports what it finds.
+        state.applyProjectRoot(.unreachable(.notRecorded))
+
+        XCTAssertEqual(state.presentedAlert?.kind, .projectRoot,
+                       "the code folder warning was recorded as waved away by a "
+                       + "dismissal meant for the refusal, so it stayed silent "
+                       + "for the rest of the session")
+    }
+
+    /// The guard must not swallow the ordinary case it sits in front of.
+    @MainActor
+    func testADismissalForTheAlertOnScreenStillTakesItAway() {
+        let state = state()
+        state.reportDataLoadWarning("The saved events were unreadable.")
+
+        state.dismissPresentedAlert(.dataLoad)
+
+        XCTAssertNil(state.presentedAlert,
+                     "the alert on screen was named in its own dismissal and "
+                     + "stayed up anyway")
     }
 }

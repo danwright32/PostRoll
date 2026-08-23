@@ -178,9 +178,17 @@ struct MainWindowView: View {
         // straight back by the next reading and would reappear on every
         // activation, which is how a warning becomes something to click away on
         // reflex (L36).
+        //
+        // The dismissal names the sheet it is about (#855). SwiftUI reports a
+        // dismissal AFTER the button that caused it has already run, and a
+        // button whose action raises or withdraws something has by then put a
+        // different sheet on screen. See `ModalQueue.dismissPresented`.
         .sheet(item: Binding(
             get: { appState.presentedSheet },
-            set: { if $0 == nil { appState.dismissPresentedSheet() } }
+            set: { [showing = appState.presentedSheet?.kind] item in
+                guard item == nil, let showing else { return }
+                appState.dismissPresentedSheet(showing)
+            }
         )) { sheet in
             switch sheet {
             case .newEvent:
@@ -255,7 +263,10 @@ struct MainWindowView: View {
             appState.presentedAlert.map(WindowAlertText.title) ?? "",
             isPresented: Binding(
                 get: { appState.presentedAlert != nil },
-                set: { if !$0 { appState.dismissPresentedAlert() } }
+                set: { [showing = appState.presentedAlert?.kind] isShowing in
+                    guard !isShowing, let showing else { return }
+                    appState.dismissPresentedAlert(showing)
+                }
             ),
             presenting: appState.presentedAlert
         ) { alert in

@@ -80,7 +80,7 @@ final class ProjectRootRefreshTests: XCTestCase {
         // puts the same alert back in front of him.
         let state = state()
         state.applyProjectRoot(.unreachable(.missing(checkout)))
-        state.dismissPresentedAlert()
+        state.dismissPresentedAlert(.projectRoot)
 
         state.applyProjectRoot(.unreachable(.missing(checkout)))
 
@@ -96,7 +96,7 @@ final class ProjectRootRefreshTests: XCTestCase {
         // environment is a different thing to say, and a different fix.
         let state = state()
         state.applyProjectRoot(.unreachable(.missing(checkout)))
-        state.dismissPresentedAlert()
+        state.dismissPresentedAlert(.projectRoot)
 
         state.applyProjectRoot(.unreachable(.notACheckout(checkout)))
 
@@ -111,7 +111,7 @@ final class ProjectRootRefreshTests: XCTestCase {
         // it is news again even though it is the same words.
         let state = state()
         state.applyProjectRoot(.unreachable(.missing(checkout)))
-        state.dismissPresentedAlert()
+        state.dismissPresentedAlert(.projectRoot)
 
         state.applyProjectRoot(.ready(checkout))
         state.applyProjectRoot(.unreachable(.missing(checkout)))

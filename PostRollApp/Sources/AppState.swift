@@ -145,8 +145,13 @@ final class AppState {
     /// build behind warning coming back cannot be skipped by dismissing it some
     /// other way. It reads what actually came off the screen rather than the
     /// field afterwards, because by then the next sheet is already in it.
-    func dismissPresentedSheet() {
-        guard let dismissed = sheets.dismissPresented() else { return }
+    ///
+    /// Addressed to the sheet it is about, for the reason `ModalQueue` states in
+    /// full: a sheet whose own button raises or withdraws something is replaced
+    /// on screen before SwiftUI gets round to reporting the dismissal, and an
+    /// unaddressed report then takes away its replacement (#855).
+    func dismissPresentedSheet(_ expected: WindowSheet.Kind) {
+        guard let dismissed = sheets.dismissPresented(expected) else { return }
         if case .buildBehind(let behind) = dismissed {
             dismissedBuildBehind = behind.id
         }
@@ -382,8 +387,16 @@ final class AppState {
     /// Does nothing to the refusal to open the store, which is blocking: that
     /// one is not dismissible, and `ModalQueue` is where that is enforced rather
     /// than in whichever binding happens to present it.
-    func dismissPresentedAlert() {
-        guard let dismissed = alerts.dismissPresented() else { return }
+    ///
+    /// `expected` names the alert the dismissal was about. Pressing Try Again on
+    /// the refusal makes two changes in one press: the button opens the store,
+    /// which promotes the code folder warning waiting behind it, and only then
+    /// does SwiftUI report the alert it tore down. Unaddressed, that report took
+    /// away the warning nobody had seen AND recorded it as waved away, so the
+    /// check that runs on every activation stayed silent for the rest of the
+    /// session (#855).
+    func dismissPresentedAlert(_ expected: WindowAlert.Kind) {
+        guard let dismissed = alerts.dismissPresented(expected) else { return }
         // Recorded here rather than by the caller, because this is the one route
         // a dismissal takes and a recording made anywhere else could disagree
         // with the one that actually cleared the alert.
