@@ -1,0 +1,8 @@
+{
+  "name": "a-dismissed-sheet-records-which-verdict-it-was",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "        if case .buildBehind(let behind) = dismissed {\n            dismissedBuildBehind = behind.id\n        }",
+  "replace": "        _ = dismissed",
+  "test": "PostRollTests/WindowSheetPresentationTests/testDismissingTheWarningThroughTheWindowRecordsIt",
+  "breaks": "a verdict Dan waved away is put back by the next reading of the code folder, so the out of date sheet reappears every time he clicks into the app and becomes something to dismiss on reflex (#675, L36)"
+}

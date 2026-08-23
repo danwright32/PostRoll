@@ -196,8 +196,14 @@ final class BuildBehindRefreshTests: XCTestCase {
         // Asserted as ONE match carrying both halves rather than as a sheet
         // somewhere and a dismissal somewhere, because two separate matches in a
         // file this size prove neither of them (L172).
+        //
+        // The dismissal is `dismissPresentedSheet` since #846, which is the one
+        // route every sheet's dismissal takes and the only place that records
+        // the verdict. What this guard is about has not changed: the window must
+        // not clear the sheet by writing to a value of its own, because then the
+        // next reading of the code folder puts it straight back.
         XCTAssertNotNil(
-            code.range(of: #"\.sheet\(item: Binding\([^)]*dismissBuildBehind"#,
+            code.range(of: #"\.sheet\(item: Binding\([^)]*dismissPresentedSheet"#,
                        options: .regularExpression),
             "the out of date sheet is dismissed without recording it, so the "
             + "next reading of the code folder puts it straight back and it "

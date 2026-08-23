@@ -158,35 +158,47 @@ struct MainWindowView: View {
         // fires once.
         .onAppear { appState.handleWaitingDeepLinks(deepLinks) }
         .onChange(of: deepLinks.pending) { appState.handleWaitingDeepLinks(deepLinks) }
-        .sheet(isPresented: $appState.showingNewEvent) {
-            NewEventSheet(prefill: appState.newEventPrefill)
-                .environment(appState)
-        }
-        .sheet(isPresented: $appState.showingOutdatedDesigns) {
-            OutdatedDesignsSheet()
-                .environment(appState)
-        }
-        // The app being older than the code it was built from is the one thing
-        // that makes a shipped fix look like it never worked, so it is said in
-        // the middle of the window rather than left to be noticed.
+        // ONE sheet modifier for the whole window (#846).
         //
-        // Dismissing goes through the state rather than clearing the value here,
-        // because the verdict is taken again every time the code folder is read
-        // (#675): a sheet that only cleared itself would be put straight back by
-        // the next reading and would reappear on every activation, which is how a
-        // warning becomes something to click away on reflex (L36).
+        // This was three, each bound to its own flag, and SwiftUI presents at
+        // most one sheet per view: when two were asked for at once, one of them
+        // silently did nothing and nothing said which. That was survivable
+        // while all three were things Dan opened himself, because he could only
+        // ask for one at a time. #840 ended it, by letting a `postroll://` link
+        // raise the New Event form at any moment, including while the build
+        // behind warning is up.
+        //
+        // Which one wins is now decided in `ModalQueue` and testable without a
+        // window, rather than being whichever modifier SwiftUI happened to
+        // honour. Nothing is dropped: the rest wait and come back.
+        //
+        // Dismissing goes through the state rather than clearing a value here,
+        // because the build behind verdict is taken again every time the code
+        // folder is read (#675): a sheet that only cleared itself would be put
+        // straight back by the next reading and would reappear on every
+        // activation, which is how a warning becomes something to click away on
+        // reflex (L36).
         .sheet(item: Binding(
-            get: { appState.buildBehind },
-            set: { if $0 == nil { appState.dismissBuildBehind() } }
-        )) { behind in
-            BuildBehindSheet(behind: behind)
-                .environment(appState)
-                // The three managers that own background work. The sheet asks
-                // them whether anything is mid flight before it lets an update
-                // start, because installing quits the app (#686).
-                .environment(generationManager)
-                .environment(ocrManager)
-                .environment(exportManager)
+            get: { appState.presentedSheet },
+            set: { if $0 == nil { appState.dismissPresentedSheet() } }
+        )) { sheet in
+            switch sheet {
+            case .newEvent:
+                NewEventSheet(prefill: appState.newEventPrefill)
+                    .environment(appState)
+            case .outdatedDesigns:
+                OutdatedDesignsSheet()
+                    .environment(appState)
+            case .buildBehind(let behind):
+                BuildBehindSheet(behind: behind)
+                    .environment(appState)
+                    // The three managers that own background work. The sheet
+                    // asks them whether anything is mid flight before it lets an
+                    // update start, because installing quits the app (#686).
+                    .environment(generationManager)
+                    .environment(ocrManager)
+                    .environment(exportManager)
+            }
         }
         .task { await checkTheCodeFolder() }
         // A checkout moves while the app is open, which is the case the notice
@@ -201,56 +213,54 @@ struct MainWindowView: View {
             for: NSApplication.didBecomeActiveNotification)) { _ in
                 Task { await refreshCheckoutNotice() }
             }
-        // Said at launch rather than left for the first generation to discover,
-        // because an app that cannot generate anything otherwise looks entirely
-        // normal until Dan has picked a day and pressed a button (#652).
+        // ONE alert modifier for the whole window, for the same reason there is
+        // one sheet modifier above (#846).
         //
-        // Dismissible: everything that is not generation still works, so
-        // trapping him behind it would take away more than the fault does.
+        // This was three, and two of the three are raised by launch checks that
+        // both run on every launch: the code folder is read on this view's first
+        // task, and the store is read as the state is built. Which alert is
+        // shown when both want the screen is now decided in `ModalQueue`, where
+        // it can be read and tested, rather than being whichever `.alert`
+        // modifier SwiftUI happened to honour.
+        //
+        // The refusal to open the store is blocking, so it takes the screen and
+        // cannot be dismissed. That was true before, as a binding whose setter
+        // ignored its input; it is now a property of the alert itself, so it
+        // holds wherever the alert is raised from.
         .alert(
-            LaunchProjectCheck.title,
+            appState.presentedAlert.map(WindowAlertText.title) ?? "",
             isPresented: Binding(
-                get: { appState.projectRootProblem != nil },
-                set: { if !$0 { appState.projectRootProblem = nil } }
+                get: { appState.presentedAlert != nil },
+                set: { if !$0 { appState.dismissPresentedAlert() } }
             )
         ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(appState.projectRootProblem.map(LaunchProjectCheck.message) ?? "")
-        }
-        .alert(
-            "Saved events could not be read",
-            isPresented: Binding(
-                get: { appState.dataLoadWarning != nil },
-                set: { if !$0 { appState.dataLoadWarning = nil } }
-            )
-        ) {
-            // The way back, on the screen that reports the loss (#441). Five
-            // verified-good generations sat beside the bad file with nothing in
-            // the app able to offer them, and Dan does not use the terminal, so
-            // the only restore path was one he could not take.
-            if appState.restorableBackup != nil {
-                Button(StoreRestoreText.restoreLabel) { appState.restoreLatestBackup() }
+            switch appState.presentedAlert {
+            case .projectRoot:
+                // Dismissible: everything that is not generation still works, so
+                // trapping Dan behind it would take away more than the fault
+                // does (#652).
+                Button("OK", role: .cancel) {}
+            case .dataLoad:
+                // The way back, on the screen that reports the loss (#441). Five
+                // verified-good generations sat beside the bad file with nothing
+                // in the app able to offer them, and Dan does not use the
+                // terminal, so the only restore path was one he could not take.
+                if appState.restorableBackup != nil {
+                    Button(StoreRestoreText.restoreLabel) { appState.restoreLatestBackup() }
+                }
+                Button("OK", role: .cancel) {}
+            case .storeUnavailable:
+                // A store that could not be read is a different situation from a
+                // store that was read and turned out to be bad: the events are
+                // still there, we just cannot see them, and saving is refused.
+                // Neither button dismisses; one fixes it and one leaves.
+                Button("Try Again") { appState.loadStore() }
+                Button("Quit PostRoll") { NSApplication.shared.terminate(nil) }
+            case .none:
+                EmptyView()
             }
-            Button("OK", role: .cancel) {}
         } message: {
-            Text(appState.dataLoadWarning ?? "")
-        }
-        // A store that could not be read is a different situation from a store
-        // that was read and turned out to be bad: the events are still there,
-        // we just cannot see them, and saving is refused. Blocking here keeps
-        // the user out of an app that looks empty and quietly discards edits.
-        .alert(
-            "PostRoll cannot open your events",
-            isPresented: Binding(
-                get: { appState.storeUnavailable != nil },
-                set: { _ in }
-            )
-        ) {
-            Button("Try Again") { appState.loadStore() }
-            Button("Quit PostRoll") { NSApplication.shared.terminate(nil) }
-        } message: {
-            Text(appState.storeUnavailable ?? "")
+            Text(appState.presentedAlert.map(WindowAlertText.message) ?? "")
         }
     }
 
@@ -306,7 +316,7 @@ struct MainWindowView: View {
         let repo: URL
         switch LaunchProjectCheck.outcome() {
         case .unreachable(let problem):
-            appState.projectRootProblem = problem
+            appState.reportProjectRootProblem(problem)
             return
         case .ready(let root):
             repo = root

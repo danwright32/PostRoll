@@ -1,0 +1,8 @@
+{
+  "name": "the-refusal-to-open-the-store-takes-the-screen",
+  "file": "PostRollApp/Sources/Models/WindowModals.swift",
+  "find": "        if modal.isBlocking {\n            promote(modal)\n            return\n        }",
+  "replace": "",
+  "test": "PostRollTests/WindowAlertPresentationTests/testTheRefusalToOpenTheStoreIsTheOneOnScreen",
+  "breaks": "which alert Dan sees at launch is decided by whichever launch check finished first, so the notice about the code folder can sit on top of the one saying his events cannot be opened at all (#846)"
+}

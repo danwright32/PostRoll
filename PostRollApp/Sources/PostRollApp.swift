@@ -36,8 +36,8 @@ struct PostRollApp: App {
         // window, two after a link, three after a quit and another link, since
         // window restoration brings the extras back.
         //
-        // The cost was not the clutter. `showingNewEvent` is one flag on the
-        // shared AppState and every window binds a sheet to it, so a single
+        // The cost was not the clutter. Which sheet is showing is one piece of
+        // state on the shared AppState and every window binds to it, so a single
         // link put a New Event sheet on all three, showing the same prefill,
         // and cancelling one left the others standing.
         //
@@ -89,7 +89,7 @@ struct PostRollApp: App {
                 // after a design change" (#293). It walks the preview folder,
                 // so it is behind a menu item rather than running on its own.
                 Button("Outdated Designs…") {
-                    appState.showingOutdatedDesigns = true
+                    appState.presentOutdatedDesigns()
                 }
             }
             CommandGroup(replacing: .help) {

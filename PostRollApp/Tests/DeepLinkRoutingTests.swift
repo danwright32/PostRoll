@@ -58,7 +58,8 @@ final class DeepLinkRoutingTests: XCTestCase {
 
         app.handle(link(), calendar: calendar)
 
-        XCTAssertTrue(app.showingNewEvent, "the link filled a form nothing put on screen")
+        XCTAssertEqual(app.presentedSheet?.kind, .newEvent,
+                       "the link filled a form nothing put on screen")
         let prefill = app.newEventPrefill
         XCTAssertEqual(prefill?.name, "Brahms Requiem")
         XCTAssertEqual(prefill?.org, "Oratorio Society")
@@ -87,7 +88,8 @@ final class DeepLinkRoutingTests: XCTestCase {
         app.handle(link(), calendar: calendar)
 
         XCTAssertEqual(app.selectedEventID, already.id)
-        XCTAssertFalse(app.showingNewEvent, "a second click offered a second sheet")
+        XCTAssertNotEqual(app.presentedSheet?.kind, .newEvent,
+                          "a second click offered a second sheet")
         XCTAssertEqual(app.deepLinkNotice?.kind, .handled)
         XCTAssertEqual(app.deepLinkNotice?.message, DeepLink.alreadyCreatedMessage(for: already))
     }
@@ -113,7 +115,8 @@ final class DeepLinkRoutingTests: XCTestCase {
         XCTAssertEqual(app.deepLinkNotice?.kind, .refused)
         XCTAssertEqual(app.deepLinkNotice?.message,
                        DeepLink.Refusal.unreadableDate("nonsense").message)
-        XCTAssertFalse(app.showingNewEvent, "a link that reads as nothing still opened a form")
+        XCTAssertNotEqual(app.presentedSheet?.kind, .newEvent,
+                          "a link that reads as nothing still opened a form")
         XCTAssertNil(app.newEventPrefill)
     }
 
@@ -175,7 +178,7 @@ final class DeepLinkRoutingTests: XCTestCase {
 
         app.handle(link(), calendar: calendar, answeredBy: debug)
 
-        XCTAssertTrue(app.showingNewEvent)
+        XCTAssertEqual(app.presentedSheet?.kind, .newEvent)
         XCTAssertNotNil(app.answeringCopyNotice)
     }
 
@@ -198,7 +201,7 @@ final class DeepLinkRoutingTests: XCTestCase {
 
         app.presentNewEvent()
 
-        XCTAssertTrue(app.showingNewEvent)
+        XCTAssertEqual(app.presentedSheet?.kind, .newEvent)
         XCTAssertNil(app.newEventPrefill,
                      "typing a new event by hand reopened the last link's values")
     }

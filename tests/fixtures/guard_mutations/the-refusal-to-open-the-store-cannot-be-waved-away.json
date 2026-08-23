@@ -1,0 +1,8 @@
+{
+  "name": "the-refusal-to-open-the-store-cannot-be-waved-away",
+  "file": "PostRollApp/Sources/Models/WindowModals.swift",
+  "find": "        guard presented?.isBlocking != true else { return nil }\n",
+  "replace": "",
+  "test": "PostRollTests/WindowAlertPresentationTests/testTheRefusalToOpenTheStoreCannotBeDismissed",
+  "breaks": "the alert saying the events cannot be read is dismissible, so Dan is left working in what looks like an empty library over events that are still on disk, and every edit he makes is refused (#846)"
+}
