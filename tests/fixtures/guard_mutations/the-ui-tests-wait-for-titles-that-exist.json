@@ -1,0 +1,8 @@
+{
+  "name": "the-ui-tests-wait-for-titles-that-exist",
+  "file": "PostRollApp/UITests/LaunchAlertUITests.swift",
+  "find": "    static let storeUnavailable = \"PostRoll cannot open your events\"",
+  "replace": "    static let storeUnavailable = \"PostRoll cannot open your event\"",
+  "test": "tests/test_ui_tests_quote_the_real_alerts.py::test_every_title_the_ui_tests_wait_for_is_one_the_window_can_draw",
+  "breaks": "a UI test waits thirty seconds for words nothing draws and then reports that the alert is not on screen, which reads as the harness being unable to see the window and is the wrong conclusion to reach again (#877, #860)"
+}
