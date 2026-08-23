@@ -329,9 +329,53 @@ final class AppState {
     ///
     /// `.background`: nothing Dan did asked for this, it is a check that runs at
     /// launch and again on every activation.
+    ///
+    /// A verdict he has already seen and waved away is not put back. Asking on
+    /// every activation without that would raise the same alert every time he
+    /// clicks into PostRoll, which is how a warning becomes something to
+    /// dismiss on reflex and takes the real one with it (L36). Identity is the
+    /// problem itself, so a DIFFERENT fault with the same folder is a different
+    /// thing to say and says it.
     func reportProjectRootProblem(_ problem: AppPaths.ProjectRootProblem) {
+        guard problem != dismissedProjectRootProblem else { return }
         alerts.request(.projectRoot(problem), from: .background)
     }
+
+    /// Take the code folder warning away, because the folder is reachable again.
+    ///
+    /// Withdrawn rather than dismissed: nobody waved it away, it stopped being
+    /// true, so nothing is recorded against it. Clearing the dismissal memory is
+    /// the other half, and it is what makes the folder going missing AGAIN later
+    /// in the same session news rather than silence.
+    func clearProjectRootProblem() {
+        alerts.withdraw(.projectRoot)
+        dismissedProjectRootProblem = nil
+    }
+
+    /// Keep the code folder warning true of the folder as it IS (#856).
+    ///
+    /// This used to be set once at launch and cleared nowhere, so a checkout put
+    /// back while PostRoll sat there left the warning standing for the rest of
+    /// the session. That is the case the notice exists for: the folder moving
+    /// while the app is open is what happens when a session moves it in the
+    /// terminal.
+    ///
+    /// Both directions in one call, so a reading cannot raise a warning without
+    /// also being able to take one away. Two methods called from two places is
+    /// where the launch answer and the refreshed one become two paths that can
+    /// disagree about what is on screen (L16).
+    func applyProjectRoot(_ outcome: LaunchProjectCheck.Outcome) {
+        switch outcome {
+        case .unreachable(let problem):
+            reportProjectRootProblem(problem)
+        case .ready:
+            clearProjectRootProblem()
+        }
+    }
+
+    /// The code folder fault Dan has seen and waved away, or nil when none has
+    /// been. Not persisted: a launch is a fresh chance to notice.
+    private var dismissedProjectRootProblem: AppPaths.ProjectRootProblem?
 
     /// Take the alert on screen away and show whatever was waiting behind it.
     ///
@@ -339,7 +383,13 @@ final class AppState {
     /// one is not dismissible, and `ModalQueue` is where that is enforced rather
     /// than in whichever binding happens to present it.
     func dismissPresentedAlert() {
-        alerts.dismissPresented()
+        guard let dismissed = alerts.dismissPresented() else { return }
+        // Recorded here rather than by the caller, because this is the one route
+        // a dismissal takes and a recording made anywhere else could disagree
+        // with the one that actually cleared the alert.
+        if case .projectRoot(let problem) = dismissed {
+            dismissedProjectRootProblem = problem
+        }
     }
 
     /// Set at launch when the code folder is not on a clean main, so anything

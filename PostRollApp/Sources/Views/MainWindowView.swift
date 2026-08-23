@@ -211,6 +211,18 @@ struct MainWindowView: View {
         // would pay for it while answering the same thing.
         .onReceive(NotificationCenter.default.publisher(
             for: NSApplication.didBecomeActiveNotification)) { _ in
+                // Whether the code folder is reachable, asked again rather than
+                // answered once at launch (#856). It was set on the way in and
+                // cleared nowhere, so a checkout put back while PostRoll sat
+                // there left the warning standing for the rest of the session,
+                // which is the case the notice exists for: the folder moves
+                // precisely while the app is open, because that is when a
+                // session moves it in the terminal.
+                //
+                // Cheap, unlike the reading below it: `LaunchProjectCheck` is
+                // pure and looks at the filesystem, where that one runs git
+                // three times, which is why only this half is taken inline.
+                appState.applyProjectRoot(LaunchProjectCheck.outcome())
                 Task { await refreshCheckoutNotice() }
             }
         // ONE alert modifier for the whole window, for the same reason there is
@@ -324,10 +336,14 @@ struct MainWindowView: View {
         // build freshness runs git inside that folder, so with no folder there
         // is no verdict to reach, and the answer Dan needs is the one already
         // in hand (#652).
+        // One resolution of the checkout, applied through the same call the
+        // activation above uses, so the launch answer and every refreshed one
+        // cannot become two paths that disagree about what is on screen (L16).
+        let outcome = LaunchProjectCheck.outcome()
+        appState.applyProjectRoot(outcome)
         let repo: URL
-        switch LaunchProjectCheck.outcome() {
-        case .unreachable(let problem):
-            appState.reportProjectRootProblem(problem)
+        switch outcome {
+        case .unreachable:
             return
         case .ready(let root):
             repo = root

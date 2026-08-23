@@ -1,0 +1,8 @@
+{
+  "name": "a-code-folder-that-came-back-takes-the-warning-away",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "        case .ready:\n            clearProjectRootProblem()",
+  "replace": "        case .ready:\n            break",
+  "test": "PostRollTests/ProjectRootRefreshTests/testAFolderThatCameBackTakesTheWarningAway",
+  "breaks": "a checkout put back while PostRoll is open leaves the warning that it cannot generate anything standing for the rest of the session, which is exactly what the notice asked for having been done and says the fix did not work (#856, #668, #675, L11)"
+}

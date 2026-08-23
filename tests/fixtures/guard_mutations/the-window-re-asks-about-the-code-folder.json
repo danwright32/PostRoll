@@ -1,0 +1,8 @@
+{
+  "name": "the-window-re-asks-about-the-code-folder",
+  "file": "PostRollApp/Sources/Views/MainWindowView.swift",
+  "find": "                appState.applyProjectRoot(LaunchProjectCheck.outcome())\n",
+  "replace": "",
+  "test": "PostRollTests/ProjectRootRefreshTests/testTheWindowAsksAgainWhenTheAppComesForward",
+  "breaks": "the window answers whether the code folder is reachable once at launch and never again, so the rule that keeps the warning true of the folder as it is has no caller and is worth nothing (#856, L3)"
+}

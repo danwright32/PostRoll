@@ -1,0 +1,8 @@
+{
+  "name": "a-waved-away-code-folder-warning-stays-away",
+  "file": "PostRollApp/Sources/AppState.swift",
+  "find": "        guard problem != dismissedProjectRootProblem else { return }\n",
+  "replace": "",
+  "test": "PostRollTests/ProjectRootRefreshTests/testAWavedAwayWarningDoesNotComeBackOnTheNextReading",
+  "breaks": "the code folder warning is raised again on every activation, so a warning Dan waved away is put back in front of him every time he clicks into PostRoll and becomes something to dismiss on reflex, taking the real one with it (#856, L36)"
+}
