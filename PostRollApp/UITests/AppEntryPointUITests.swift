@@ -47,9 +47,19 @@ final class AppEntryPointUITests: XCTestCase {
     /// A test that DOES need a cold start must say so and launch its own, and
     /// `TestTargetHygieneTests` holds this file to launching once so that adding
     /// one is a decision somebody takes rather than a cost that creeps back.
-    private static var sharedLaunch: Result<XCUIApplication, Error>?
+    /// `nonisolated(unsafe)` because XCTest runs the methods of one class one
+    /// at a time on one thread, so there is no concurrent access to protect
+    /// against, and the alternatives do not work here: `@MainActor` on the
+    /// property forces `class func tearDown()` to be isolated too, and that
+    /// overrides a nonisolated method on XCTestCase.
+    ///
+    /// This is the compile error that failed the first dispatch of this change
+    /// (run 32663551076). `make test` builds the PostRollTests scheme and never
+    /// compiles this target at all, so the GUI target needs its own local build
+    /// before anything is pushed; `make build-gui-tests` is that.
+    nonisolated(unsafe) private static var sharedLaunch: Result<XCUIApplication, Error>?
 
-    private static let dataRoot = LaunchedApp.scratchRoot("entry-point")
+    nonisolated(unsafe) private static let dataRoot = LaunchedApp.scratchRoot("entry-point")
 
     /// The app, launched once and given long enough to draw.
     ///

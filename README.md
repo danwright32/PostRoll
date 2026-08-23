@@ -195,6 +195,18 @@ exactly there. It runs on every merge in `.github/workflows/ui.yml`, never on a
 pull request, and holds two things: the app opens exactly one window, and the
 binary under test is the one that run built.
 
+Nothing local runs those two, because running them launches the app over
+whatever is on screen. What is worth running before pushing is the compile:
+
+```
+make build-gui-tests
+```
+
+`make test` builds a scheme that does not contain the GUI target at all, so
+without that the first thing to compile these tests is a runner, which is how a
+concurrency-safety error failed a dispatched run at the build step on
+2026-08-23.
+
 Two shallow checks is all it holds because most of what it was built for turned
 out to be unreachable. XCUITest cannot read into a PostRoll window, so five of
 the seven tests written for it were deleted (#860). This corrects what this
