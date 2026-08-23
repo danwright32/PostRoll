@@ -1,8 +1,8 @@
 {
   "name": "manager-says-what-work-it-started",
   "file": "PostRollApp/Sources/Services/OCRManager.swift",
-  "find": "finishFailure(eventID: eventID, message: ((error as? PythonBridgeError)?.message(whileDoing: .programRead)",
-  "replace": "finishFailure(eventID: eventID, message: ((error as? PythonBridgeError)?.message(whileDoing: .other)",
+  "find": "message: ((error as? PythonBridgeError)?.message(whileDoing: .programRead)",
+  "replace": "message: ((error as? PythonBridgeError)?.message(whileDoing: .other)",
   "test": "PostRollTests/PythonBridgeErrorTests/testEachManagerNamesTheWorkItStarted",
   "breaks": "the read screens fall back to the neutral wording, which is not wrong and so is not reported by anything, and the screen quietly stops naming what stopped (#626, L3)"
 }

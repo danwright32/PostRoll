@@ -1,0 +1,8 @@
+{
+  "name": "a-failed-run-is-not-silent",
+  "file": "PostRollApp/Sources/Services/ProgramNotesManager.swift",
+  "find": "                NotificationService.shared.notifyWorkFailed(",
+  "replace": "                _ = (\n                {",
+  "test": "PostRollTests/WorkWithNoWindowTests/testEveryFailurePathAnnouncesItself",
+  "breaks": "a manager's failure path goes back to saying nothing, so with the window closed a dead run is indistinguishable from one still going and from one that finished (#863, L11)"
+}
