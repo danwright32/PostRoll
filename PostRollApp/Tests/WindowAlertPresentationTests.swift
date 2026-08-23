@@ -124,6 +124,50 @@ final class WindowAlertPresentationTests: XCTestCase {
                        + "never shown, so it is silently gone")
     }
 
+    // MARK: - The window is told WHICH alert, not just that there is one
+
+    func testTheAlertIsPresentedWithTheValueItIsAbout() throws {
+        // #855. The sheets above are keyed on identity: `.sheet(item:)` takes a
+        // value, `WindowSheet.id` differs per case, so replacing one sheet with
+        // another tells SwiftUI the content changed and it rebuilds.
+        //
+        // `.alert(_:isPresented:)` takes a Bool and carries no identity at all.
+        // When the refusal to open the events displaces the code folder warning,
+        // which is the case `ModalQueue` exists for and which happens at launch,
+        // `isPresented` never leaves true, so nothing tells SwiftUI the content
+        // changed and the previous alert's buttons can stay on screen under the
+        // new one's title. Two halves of one screen disagreeing is worse than
+        // either condition alone, because each half reads as correct.
+        //
+        // `presenting:` is the form built for this: the value reaches the
+        // actions and the message, so they are rebuilt with it.
+        //
+        // Read from the ONE `.alert(` in the file rather than by searching the
+        // whole of it, because a whole-file search for `presenting:` would be
+        // answered by any occurrence anywhere (L135). That the file holds
+        // exactly one is asserted first, so there is no second candidate for
+        // the window below to be about, and a window that found nothing to read
+        // fails rather than passing quietly (L98).
+        let code = MainWindowSource.flattened(try MainWindowSource.stripped())
+
+        let presenters = code.components(separatedBy: ".alert(").count - 1
+        XCTAssertEqual(presenters, 1,
+                       "MainWindowView presents \(presenters) alerts. One is the "
+                       + "whole point of #846, and zero means this guard is "
+                       + "reading nothing at all")
+
+        let opening = String(code.components(separatedBy: ".alert(")[1].prefix(300))
+        XCTAssertTrue(opening.contains("isPresented:"),
+                      "the alert is not presented from the window's alert state "
+                      + "at all: \(opening)")
+        XCTAssertTrue(
+            opening.contains("presenting:"),
+            "the window's alert is presented from a flag alone, so swapping one "
+            + "alert for another while one is on screen leaves the previous "
+            + "one's buttons and message under the new one's title (#855). "
+            + "What it says instead: \(opening)")
+    }
+
     // MARK: - Waving one away shows the next
 
     @MainActor
