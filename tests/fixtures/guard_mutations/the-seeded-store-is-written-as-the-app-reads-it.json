@@ -1,0 +1,8 @@
+{
+  "name": "the-seeded-store-is-written-as-the-app-reads-it",
+  "file": "PostRollApp/hand-check.sh",
+  "find": "    \"date\": ${SEED_DATE_SECONDS},",
+  "replace": "    \"date\": \"2026-09-01T00:00:00Z\",",
+  "test": "PostRollTests/HandCheckSeededStoreTests/testTheSeededStoreDecodesAsExactlyOneEvent",
+  "breaks": "the world step 8 seeds holds a store the app cannot decode at all, so the step meant to watch the Dock while a generation runs opens on the corrupt store alert from step 5, and every Python assertion about the file it wrote stays green (#879)"
+}
