@@ -227,14 +227,27 @@ struct MainWindowView: View {
         // cannot be dismissed. That was true before, as a binding whose setter
         // ignored its input; it is now a property of the alert itself, so it
         // holds wherever the alert is raised from.
+        //
+        // `presenting:` carries WHICH alert into the builders, and that is not
+        // decoration (#855). The sheet above is keyed on identity, because
+        // `.sheet(item:)` takes a value and `WindowSheet.id` differs per case,
+        // so replacing one sheet with another tells SwiftUI the content changed.
+        // `.alert(_:isPresented:)` takes only a Bool and carries no identity at
+        // all, so when the refusal to open the events displaces the code folder
+        // warning, which is the case the queue exists for and which happens at
+        // launch, `isPresented` never leaves true and nothing says the content
+        // changed. The previous alert's buttons can then sit under the new
+        // one's title, which is worse than either condition alone because each
+        // half of the screen reads as correct.
         .alert(
             appState.presentedAlert.map(WindowAlertText.title) ?? "",
             isPresented: Binding(
                 get: { appState.presentedAlert != nil },
                 set: { if !$0 { appState.dismissPresentedAlert() } }
-            )
-        ) {
-            switch appState.presentedAlert {
+            ),
+            presenting: appState.presentedAlert
+        ) { alert in
+            switch alert {
             case .projectRoot:
                 // Dismissible: everything that is not generation still works, so
                 // trapping Dan behind it would take away more than the fault
@@ -256,11 +269,9 @@ struct MainWindowView: View {
                 // Neither button dismisses; one fixes it and one leaves.
                 Button("Try Again") { appState.loadStore() }
                 Button("Quit PostRoll") { NSApplication.shared.terminate(nil) }
-            case .none:
-                EmptyView()
             }
-        } message: {
-            Text(appState.presentedAlert.map(WindowAlertText.message) ?? "")
+        } message: { alert in
+            Text(WindowAlertText.message(alert))
         }
     }
 

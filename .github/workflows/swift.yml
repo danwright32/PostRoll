@@ -63,9 +63,21 @@ concurrency:
 jobs:
   # Builds the PostRoll app, then runs the PostRollTests scheme. The app is
   # BUILT and not TESTED on purpose: building is what catches a view file that
-  # does not compile, which nothing in CI did until #521, and a headless runner
-  # cannot reliably drive a window (which is why the UI smoke test was deleted
-  # in #509 rather than moved here).
+  # does not compile, which nothing in CI did until #521.
+  #
+  # This used to say a headless runner cannot reliably drive a window, which is
+  # why #509 deleted the UI smoke test rather than moving it here. That was
+  # measured on macos-26 on 2026-08-23 and is false: `launchctl managername`
+  # answers Aqua, the app launches, and the GUI suite passes in about nine
+  # seconds. It runs from .github/workflows/ui.yml (#849).
+  #
+  # The GUI suite still does not belong in THIS job, for the two reasons that
+  # were always the stronger ones. It is slow and flaky by nature and must not
+  # fail the suite every pull request waits on, and a new required check name
+  # cannot be made green without a knowingly red merge, since
+  # tools/wait_for_checks.py derives its bar from the workflows that trigger on
+  # pull requests and the fixture it is calibrated against can only be recorded
+  # from a green run already carrying the name.
   #
   # ── why this half runs on macos-26 and the other on macos-15 ────────────────
   #
