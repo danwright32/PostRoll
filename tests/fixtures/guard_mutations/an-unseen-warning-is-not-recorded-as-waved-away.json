@@ -1,0 +1,8 @@
+{
+  "name": "an-unseen-warning-is-not-recorded-as-waved-away",
+  "file": "PostRollApp/Sources/Models/WindowModals.swift",
+  "find": "        guard presented?.kind == expected else { return nil }",
+  "replace": "        guard presented?.kind != nil else { return nil }",
+  "test": "PostRollTests/WindowAlertPresentationTests/testTheWarningNobodySawIsNotRecordedAsWavedAway",
+  "breaks": "a dismissal meant for the refusal is recorded against the code folder warning behind it, so the launch check that runs on every activation treats a warning nobody saw as one Dan waved away and stays silent for the rest of the session (#855)"
+}

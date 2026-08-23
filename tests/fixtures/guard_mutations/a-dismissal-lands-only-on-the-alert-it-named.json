@@ -1,0 +1,8 @@
+{
+  "name": "a-dismissal-lands-only-on-the-alert-it-named",
+  "file": "PostRollApp/Sources/Models/WindowModals.swift",
+  "find": "        guard presented?.kind == expected else { return nil }",
+  "replace": "        guard presented?.kind != nil else { return nil }",
+  "test": "PostRollTests/WindowAlertPresentationTests/testRecoveringFromTheRefusalDoesNotWaveAwayWhatWasBehindIt",
+  "breaks": "pressing Try Again on the refusal to open the events clears it and takes the code folder warning queued behind it, so Dan fixes one fault and is never shown the other (#855)"
+}
