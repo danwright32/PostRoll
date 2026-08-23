@@ -477,4 +477,45 @@ final class TestTargetHygieneTests: XCTestCase {
             + "they hold. Take the default off and make each call site say where it points."
         )
     }
+
+    // MARK: - The GUI target launches once (#864)
+
+    /// Launching the app costs about 42 seconds and the testing costs almost
+    /// none of it.
+    ///
+    /// Measured on the runner on 2026-08-23: 43.6 seconds for the first GUI
+    /// test and 41.1 seconds for the second, of the SAME binary built by the
+    /// same job. The cost is per LAUNCH, not per build, so it is paid again for
+    /// every test that starts its own app, and the job grows in 42 second steps
+    /// while the amount of real testing does not.
+    ///
+    /// This holds `AppEntryPointUITests` to one launch. Not because a second
+    /// would be wrong, but because it must be a decision somebody takes with the
+    /// price in front of them: a test that genuinely needs a cold start should
+    /// say so, and the ones that only READ the running app should not pay for
+    /// one. Without this the saving quietly disappears the next time a test is
+    /// added, and nothing would report it.
+    ///
+    /// Read from the UI target's source, which is not compiled into this bundle:
+    /// a UI test bundle and a unit test bundle cannot be loaded together, so
+    /// text is all this can have.
+    func testTheGUITargetLaunchesTheAppOnce() throws {
+        let file = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("UITests/AppEntryPointUITests.swift")
+        let code = try String(contentsOf: file, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("//") && !$0.hasPrefix("///") }
+            .joined(separator: "\n")
+
+        let launches = code.components(separatedBy: "LaunchedApp.launch(").count - 1
+        XCTAssertEqual(launches, 1, """
+            AppEntryPointUITests starts the app \(launches) times. Each one costs \
+            about 42 seconds on the runner and the testing in it costs almost \
+            nothing, so this is the whole price of the GUI job. Zero means this \
+            guard is reading nothing at all and would pass on any file (#864).
+            """)
+    }
 }
