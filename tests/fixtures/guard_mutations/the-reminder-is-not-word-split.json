@@ -1,0 +1,8 @@
+{
+  "name": "the-reminder-is-not-word-split",
+  "file": ".github/workflows/ui.yml",
+  "find": "            | xargs -0 python3 tools/hand_check_reminder.py \\",
+  "replace": "            | xargs -0 true; python3 tools/hand_check_reminder.py ${changed} \\",
+  "test": "tests/test_hand_check_reminder.py::test_the_diff_reaches_the_tool_one_path_per_line",
+  "breaks": "the changed files are word split on the way to the reminder, so a covered path containing a space is handed over as two paths, matches no step, and the merge that touched it is reported as needing no hand check (#878, L98)"
+}

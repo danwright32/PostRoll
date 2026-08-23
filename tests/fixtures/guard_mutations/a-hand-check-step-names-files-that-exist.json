@@ -1,0 +1,8 @@
+{
+  "name": "a-hand-check-step-names-files-that-exist",
+  "file": "docs/HAND-CHECK.md",
+  "find": "Covers: `PostRollApp/Sources/Views/WorkingDockTile.swift`,",
+  "replace": "Covers: `PostRollApp/Sources/Views/WorkingDockTileThatMoved.swift`,",
+  "test": "tests/test_hand_check_reminder.py::test_every_file_a_step_names_is_really_there",
+  "breaks": "a step points at a file that has moved, so the reminder is silent on exactly the change that should raise it while reporting itself healthy (#878, L100)"
+}

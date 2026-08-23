@@ -1,0 +1,8 @@
+{
+  "name": "the-merge-prompts-the-hand-check",
+  "file": ".github/workflows/ui.yml",
+  "find": "            | tr '\\n' '\\0' \\\n            | xargs -0 python3 tools/hand_check_reminder.py \\",
+  "replace": "            | tr '\\n' '\\0' \\\n            | xargs -0 true \\",
+  "test": "tests/test_hand_check_reminder.py::test_the_merge_workflow_runs_the_reminder",
+  "breaks": "a merge touching the window, the alerts, the quit confirmation or the Dock lands with nothing telling anybody to run the hand check, which is the state #878 was filed about: the tool exists and nothing invokes it (L27)"
+}

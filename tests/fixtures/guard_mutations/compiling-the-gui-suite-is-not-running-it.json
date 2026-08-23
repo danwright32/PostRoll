@@ -1,0 +1,8 @@
+{
+  "name": "compiling-the-gui-suite-is-not-running-it",
+  "file": ".github/workflows/ui.yml",
+  "find": "          xcodebuild \\\n            -project PostRollApp/PostRoll.xcodeproj \\",
+  "replace": "          xcodebuild build-for-testing \\\n            -project PostRollApp/PostRoll.xcodeproj \\",
+  "test": "tests/test_swift_test_target_covers_sources.py::test_something_actually_runs_the_reviewer",
+  "breaks": "the only workflow that EXECUTES the GUI suite is reduced to compiling it, which is what #509 deleted the last UI target for, and until this the guard could not tell the two apart because swift.yml names the same scheme in a build-for-testing step (#874, L220)"
+}

@@ -86,6 +86,65 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── the other half of what nothing automated can see (#878) ─────────────────
+  #
+  # `docs/HAND-CHECK.md` holds the questions this repo cannot answer any other
+  # way, and until this job existed nothing told anybody to run it. The only
+  # references anywhere were the README and the script itself, so a change to
+  # the window, the alerts, the quit confirmation or the Dock landed with no
+  # reminder at all, on files that have no other reviewer.
+  #
+  # A job rather than a step inside `ui`, so neither can hide the other: a step
+  # placed first stops the GUI tests when it fails, and one placed last never
+  # runs when they do, which is the merge somebody most wants a reminder on.
+  #
+  # It reports and does not gate. Failing a merge on a twenty minute manual
+  # routine is how a checklist becomes something to route around. It CAN fail,
+  # but only on its own defects: no changed files, no steps read, or a step
+  # naming a file that has moved, each of which would otherwise leave it quietly
+  # saying nothing needs checking.
+  hand-check-reminder:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      # Both ends of the push, through the compare API rather than a local
+      # `git diff HEAD^ HEAD`. A push to main can carry more than one commit,
+      # and HEAD^ reads only the last of them; the API takes the range and
+      # needs no history on the runner, which a depth 1 checkout does not have.
+      - name: Say whether this merge touched what only the hand check can see
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          changed="$(gh api \
+            "repos/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.sha }}" \
+            --paginate --jq '.files[].filename')"
+          if [ -z "${changed}" ]; then
+            echo "the compare returned no files at all, so nothing was read." >&2
+            exit 1
+          fi
+          # One path per line into the argument list, rather than letting the
+          # shell split on whitespace. `App Icon/PostRoll App Icon.png` is a
+          # tracked path in this repo, and a split filename matches no step at
+          # all: the reminder would stay green and say nothing needs checking,
+          # which is the silent miss it exists to prevent.
+          printf '%s\n' "${changed}" \
+            | tr '\n' '\0' \
+            | xargs -0 python3 tools/hand_check_reminder.py \
+            | tee reminder.txt
+          {
+            echo "## The hand check"
+            echo
+            echo '```'
+            cat reminder.txt
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   ui:
     # The same image as swift-unit, for the same reason: CI's compiler must be
     # at or ahead of the one on the development Mac, never behind (#528).
