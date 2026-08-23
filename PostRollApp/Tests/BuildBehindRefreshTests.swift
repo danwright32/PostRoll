@@ -112,7 +112,7 @@ final class BuildBehindRefreshTests: XCTestCase {
         await state.refreshBuildFreshness(inRepo: repo)
         XCTAssertNotNil(state.buildBehind, "the warning must appear first")
 
-        state.dismissBuildBehind()
+        state.dismissPresentedSheet()
         await state.refreshBuildFreshness(inRepo: repo)
 
         XCTAssertNil(state.buildBehind,
@@ -128,7 +128,7 @@ final class BuildBehindRefreshTests: XCTestCase {
         let state = state(judging: [behind(latestCommit: 2_000),
                                     behind(latestCommit: 9_000)])
         await state.refreshBuildFreshness(inRepo: repo)
-        state.dismissBuildBehind()
+        state.dismissPresentedSheet()
 
         await state.refreshBuildFreshness(inRepo: repo)
 
@@ -174,7 +174,7 @@ final class BuildBehindRefreshTests: XCTestCase {
         // time the build falls behind it is new news again.
         let state = state(judging: [behind(), .current, behind()])
         await state.refreshBuildFreshness(inRepo: repo)
-        state.dismissBuildBehind()
+        state.dismissPresentedSheet()
 
         await state.refreshBuildFreshness(inRepo: repo)   // caught up
         await state.refreshBuildFreshness(inRepo: repo)   // behind again
