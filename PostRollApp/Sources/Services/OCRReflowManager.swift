@@ -245,3 +245,11 @@ enum OCRReflowText {
         "Another correction on this program is still being applied. "
         + "You can send this one as soon as that finishes."
 }
+
+/// Asked whenever PostRoll is about to quit or install an update (#862).
+///
+/// The phrase is a clause rather than a name, because it is dropped into a
+/// sentence that already says what is happening to it.
+extension OCRReflowManager: BackgroundWork {
+    var workPhrase: String { "a correction is still being applied" }
+}

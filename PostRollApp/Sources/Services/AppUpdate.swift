@@ -172,24 +172,17 @@ enum AppUpdate {
     /// Installing quits the app, so anything part way through loses whatever it
     /// has not written back yet. Refusing is the point; naming what to wait for
     /// is what makes the refusal something other than a dead button.
-    static func busyReason(generating: Bool, readingPrograms: Bool,
-                           exporting: Bool) -> String? {
-        var work: [String] = []
-        if generating { work.append("a week is still generating") }
-        if readingPrograms { work.append("a program is still being read") }
-        if exporting { work.append("an export is still running") }
+    /// Takes the list rather than three flags (#862). It used to name
+    /// generation, the program read and the export by hand, which is three of
+    /// the nine owners `AppOwners` holds: an update could quit the app on top of
+    /// a performer lookup, an Insights import, a caption rerun, an OCR reflow, a
+    /// notes search or a collage render, and this sentence would have said
+    /// nothing was running. The list now comes from the owners themselves.
+    static func busyReason(workInFlight work: [String]) -> String? {
         guard !work.isEmpty else { return nil }
 
         return "PostRoll closes and reopens to install the new version, so it "
-             + "cannot update while \(list(work)). Wait for that to finish, then "
-             + "press Update again."
-    }
-
-    /// "a and b", "a, b and c". Written out because the sentence above reads
-    /// badly with a bare comma.
-    private static func list(_ items: [String]) -> String {
-        guard let last = items.last else { return "" }
-        guard items.count > 1 else { return last }
-        return items.dropLast().joined(separator: ", ") + " and " + last
+             + "cannot update while \(WorkPhrases.list(work)). Wait for that to "
+             + "finish, then press Update again."
     }
 }

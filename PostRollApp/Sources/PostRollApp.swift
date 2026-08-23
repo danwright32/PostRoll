@@ -27,6 +27,17 @@ struct PostRollApp: App {
         NotificationService.shared.requestPermission()
     }
 
+    /// Tell the delegate what is running, so it can ask before quitting (#862).
+    ///
+    /// Here rather than in the delegate itself because the owners live in this
+    /// struct's `@State` and an AppKit delegate has no view around it to read
+    /// them from. A closure rather than a copied list: the answer has to be the
+    /// one true at the instant of the quit, and a value handed over at launch
+    /// would be the answer from launch forever (L175).
+    private func wireQuitGuard() {
+        deepLinks.workInFlight = { owners.workInFlight }
+    }
+
     var body: some Scene {
         // ONE window, declared rather than hoped for (#842).
         //
@@ -47,6 +58,7 @@ struct PostRollApp: App {
         // surface to be presented on.
         Window("PostRoll", id: "main") {
             MainWindowView()
+                .task { wireQuitGuard() }
                 .environment(appState)
                 .environment(hashtagStore)
                 .environment(analyticsStore)

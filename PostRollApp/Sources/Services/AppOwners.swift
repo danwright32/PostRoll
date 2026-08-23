@@ -38,6 +38,35 @@ struct AppOwners {
     var collageLayouts = CollageLayoutLoader()
 }
 
+extension AppOwners {
+    /// Everything running right now, phrased for a sentence (#862).
+    ///
+    /// Derived from this struct rather than written out again, for the same
+    /// reason the injection below is: a second list of the owners is a list the
+    /// two can disagree about. Before this, the one place that asked whether it
+    /// was safe to quit named three of the nine by hand, and the other six were
+    /// invisible to it.
+    var workInFlight: [String] { BackgroundWorkScan.inFlight(of: self) }
+}
+
+/// What is running, for the screens that have to say so.
+///
+/// A value rather than the container, because `AppOwners` is a struct of
+/// references and putting it in the environment would hand every reader a copy
+/// of the references with no observation of its own. Read inside a view body,
+/// the properties behind it are `@Observable`, so the body that injects this
+/// re-runs when work starts or stops and nowhere else has to remember to.
+private struct WorkInFlightKey: EnvironmentKey {
+    static let defaultValue: [String] = []
+}
+
+extension EnvironmentValues {
+    var workInFlight: [String] {
+        get { self[WorkInFlightKey.self] }
+        set { self[WorkInFlightKey.self] = newValue }
+    }
+}
+
 extension View {
     /// Put every work owner into the environment.
     ///
@@ -55,5 +84,8 @@ extension View {
             .environment(owners.reflow)
             .environment(owners.captionWork)
             .environment(owners.collageLayouts)
+            // What is running, derived from the nine above rather than named
+            // again by whoever needs it (#862).
+            .environment(\.workInFlight, owners.workInFlight)
     }
 }

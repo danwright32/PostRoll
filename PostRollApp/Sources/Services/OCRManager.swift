@@ -326,3 +326,11 @@ final class OCRManager {
         tracker.markFailed(eventID)
     }
 }
+
+/// Asked whenever PostRoll is about to quit or install an update (#862).
+///
+/// The phrase is a clause rather than a name, because it is dropped into a
+/// sentence that already says what is happening to it.
+extension OCRManager: BackgroundWork {
+    var workPhrase: String { "a program is still being read" }
+}

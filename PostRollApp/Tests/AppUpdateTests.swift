@@ -171,25 +171,35 @@ final class AppUpdateTests: XCTestCase {
     func testWorkInFlightNamesWhatIsRunning() {
         // Installing quits the running app, so a generation part way through
         // loses its write-back. Refusing is the whole point, and a refusal that
-        // does not say what is running leaves Dan to guess which of three
-        // things to wait for (L11).
-        let reason = try? XCTUnwrap(
-            AppUpdate.busyReason(generating: true, readingPrograms: false, exporting: false))
-        XCTAssertEqual(reason?.contains("generat"), true, reason ?? "no reason given")
+        // does not say what is running leaves Dan to guess what to wait for
+        // (L11).
+        let reason = AppUpdate.busyReason(workInFlight: ["a week is still generating"])
+        XCTAssertEqual(reason?.contains("a week is still generating"), true,
+                       reason ?? "no reason given")
     }
 
     func testEachKindOfWorkInFlightIsNamedSeparately() {
-        let generating = AppUpdate.busyReason(generating: true, readingPrograms: false, exporting: false)
-        let reading = AppUpdate.busyReason(generating: false, readingPrograms: true, exporting: false)
-        let exporting = AppUpdate.busyReason(generating: false, readingPrograms: false, exporting: true)
+        let generating = AppUpdate.busyReason(workInFlight: ["a week is still generating"])
+        let reading = AppUpdate.busyReason(workInFlight: ["a program is still being read"])
+        let exporting = AppUpdate.busyReason(workInFlight: ["an export is still running"])
         XCTAssertEqual(Set([generating, reading, exporting].compactMap { $0 }).count, 3,
                        "two different kinds of work in flight produce the same "
                        + "sentence, so the refusal cannot be acted on")
     }
 
+    func testEverythingRunningIsNamedNotJustTheFirst() {
+        // Waiting for the generation to finish and then updating into a live
+        // export is the same defect one step later.
+        let reason = AppUpdate.busyReason(
+            workInFlight: ["a week is still generating", "an export is still running"])
+
+        XCTAssertEqual(reason?.contains("a week is still generating"), true, reason ?? "none")
+        XCTAssertEqual(reason?.contains("an export is still running"), true, reason ?? "none")
+    }
+
     func testNothingRunningIsNoReasonToRefuse() {
         // The control for the three above: a guard that refused whatever the
         // state would satisfy them all while blocking every update (L159).
-        XCTAssertNil(AppUpdate.busyReason(generating: false, readingPrograms: false, exporting: false))
+        XCTAssertNil(AppUpdate.busyReason(workInFlight: []))
     }
 }
