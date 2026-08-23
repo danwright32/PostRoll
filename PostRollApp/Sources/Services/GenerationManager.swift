@@ -161,10 +161,11 @@ final class GenerationManager {
                                        renderedDays: doGraphics ? onlyDays : [],
                                        appState: appState)
                 self?.finishFailure(eventID: eventID,
-                                    message: ((partial as? PythonBridgeError)?.message(whileDoing: .generation) ?? partial.localizedDescription))
+                                    message: ((partial as? PythonBridgeError)?.message(whileDoing: .generation) ?? partial.localizedDescription),
+                                    named: ev.name)
             } catch {
                 graphicsTask?.cancel()
-                self?.finishFailure(eventID: eventID, message: ((error as? PythonBridgeError)?.message(whileDoing: .generation) ?? error.localizedDescription))
+                self?.finishFailure(eventID: eventID, message: ((error as? PythonBridgeError)?.message(whileDoing: .generation) ?? error.localizedDescription), named: ev.name)
             }
         }
         tracker.update(eventID) { $0.task = task }
@@ -282,7 +283,7 @@ final class GenerationManager {
         // its two ways forward. Telling Dan a capped week "finished" would be
         // the app claiming more than it measured (L12).
         if let haltedReason {
-            finishFailure(eventID: eventID, message: haltedReason)
+            finishFailure(eventID: eventID, message: haltedReason, named: ev.name)
             return
         }
         NotificationService.shared.notifyGenerationComplete(eventName: ev.name)
@@ -329,13 +330,20 @@ final class GenerationManager {
                                    renderedDays: spokenFor, for: eventID)
     }
 
-    private func finishFailure(eventID: Event.ID, message: String) {
+    private func finishFailure(eventID: Event.ID, message: String, named eventName: String) {
         guard tracker.job(for: eventID) != nil else { return }
         tracker.update(eventID) {
             $0.status = .failed(message)
             $0.task = nil
         }
         tracker.markFailed(eventID)
+        // Said out loud (#863). Every notification this app sent was a
+        // completion, so with the window closed a run that died was
+        // indistinguishable from one still going and from one that finished.
+        NotificationService.shared.notifyWorkFailed(
+            work: "generating",
+            eventName: eventName,
+            reason: message)
     }
 }
 

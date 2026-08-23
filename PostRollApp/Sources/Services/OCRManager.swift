@@ -244,7 +244,9 @@ final class OCRManager {
                     + "scan stopped. Check the cast list and notes against the "
                     + "printed programme, or scan again. (\(reason))")
         } catch {
-            finishFailure(eventID: eventID, message: ((error as? PythonBridgeError)?.message(whileDoing: .programRead) ?? error.localizedDescription))
+            finishFailure(eventID: eventID,
+                          message: ((error as? PythonBridgeError)?.message(whileDoing: .programRead) ?? error.localizedDescription),
+                          named: ev.name)
         }
     }
 
@@ -317,13 +319,20 @@ final class OCRManager {
         NotificationService.shared.notifyOCRComplete(eventName: ev.name)
     }
 
-    private func finishFailure(eventID: Event.ID, message: String) {
+    private func finishFailure(eventID: Event.ID, message: String, named eventName: String) {
         guard tracker.job(for: eventID) != nil else { return }
         tracker.update(eventID) {
             $0.status = .failed(message)
             $0.task = nil
         }
         tracker.markFailed(eventID)
+        // Said out loud (#863). Every notification this app sent was a
+        // completion, so with the window closed a run that died was
+        // indistinguishable from one still going and from one that finished.
+        NotificationService.shared.notifyWorkFailed(
+            work: "reading the programme",
+            eventName: eventName,
+            reason: message)
     }
 }
 

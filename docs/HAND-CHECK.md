@@ -1,14 +1,15 @@
 # The hand check
 
-Seven questions this repo cannot answer any other way. Everything else about
+Eight questions this repo cannot answer any other way. Everything else about
 PostRoll is covered by the suites; these are here because XCUITest cannot read
 into a PostRoll window at all, which #860 records in full, so nothing that runs
 on its own can see what the window is showing.
 
 Run it after `make install`, and only when something in this list has been
 touched: the window's lifecycle, the New Event sheet's keyboard handling, the
-alerts, the queue behind them, or what happens when the app is asked to quit.
-It takes about fifteen minutes.
+alerts, the queue behind them, what happens when the app is asked to quit, or
+what the Dock says while work is running.
+It takes about twenty minutes.
 
 Each step says what should happen precisely enough to be wrong. If a step's
 result is "it looked fine", the step is not written well enough and is worth
@@ -215,6 +216,51 @@ Finally, with nothing running, press **Cmd+Q**.
 **Expect:** it quits immediately with no dialog. A confirmation that appears
 every time is one that gets clicked through on reflex, taking the real one with
 it.
+
+## 8. Work with no window says so (#863)
+
+Neither half of this is reachable to anything automated: one is drawn on the
+Dock icon and the other is a banner from Notification Center.
+
+```
+./PostRollApp/hand-check.sh healthy
+```
+
+Start a generation, then press **Cmd+W** to close the window.
+
+**Expect:** a black band across the foot of the PostRoll Dock icon with an
+elapsed clock on it, and the clock goes up every second.
+**Wrong if:** there is no band. Then work with no window is invisible again,
+which is the whole of this issue.
+**Also wrong if:** the clock is frozen. A mark that does not move cannot tell a
+run that is progressing from one that is wedged or dead, and telling those apart
+is the only reason the number is there.
+
+Wait for the run to finish.
+
+**Expect:** the band goes, and a banner says the captions are ready. The Dock
+badge then shows a count of finished work waiting to be looked at, which is a
+different mark in a different place from the band.
+
+Now make one fail. The quickest way is to point the code folder somewhere
+useless while a run is going:
+
+```
+./PostRollApp/hand-check.sh no-code-folder
+```
+
+Start a generation from that launch, close the window, and wait.
+
+**Expect:** a banner naming the event and saying the run stopped, with the
+reason in it.
+**Wrong if:** nothing arrives. Every notification this app sent used to be a
+completion, so a run that died with the window closed produced exactly the same
+evidence as one still going, which is none.
+
+Finally, repeat that with the PostRoll window open and in front.
+
+**Expect:** no banner. The screen is already showing the failure, and a banner
+on top of it is the noise that teaches you to wave banners away.
 
 ---
 

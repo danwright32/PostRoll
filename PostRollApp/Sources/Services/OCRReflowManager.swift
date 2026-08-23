@@ -181,6 +181,11 @@ final class OCRReflowManager {
                     $0.failure = Self.failureMessage(error)
                 }
                 self?.tracker.markFailed(eventID)
+                // Said out loud when he is not looking (#863).
+                NotificationService.shared.notifyWorkFailed(
+                    work: "applying the correction",
+                    eventName: appState.events.first { $0.id == eventID }?.name ?? "An event",
+                    reason: Self.failureMessage(error))
             }
         }
     }

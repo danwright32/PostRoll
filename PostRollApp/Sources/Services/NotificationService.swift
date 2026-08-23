@@ -102,6 +102,27 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )
     }
 
+    // MARK: - When work does not finish
+
+    /// A run that stopped because something went wrong (#863).
+    ///
+    /// Every notification above this is a completion. The failure paths said
+    /// nothing at all, on purpose: a failed run is not a completion and there
+    /// was no other sentence to send. With the window closed that made a dead
+    /// run, a running one and a finished one produce exactly the same evidence,
+    /// which is none, and the one that needs doing something about was the one
+    /// that said least (L11).
+    ///
+    /// Silent while PostRoll is frontmost, the same rule the badge already
+    /// follows: the screen is showing the failure and a banner over it is the
+    /// noise that teaches him to wave banners away (L36). The case this exists
+    /// for is the one where he is not looking.
+    func notifyWorkFailed(work: String, eventName: String, reason: String?) {
+        guard !NSApplication.shared.isActive else { return }
+        let announcement = WorkOutcome.failed(work: work, eventName: eventName, reason: reason)
+        send(title: announcement.title, body: announcement.body)
+    }
+
     // MARK: - Dock badge
 
     /// Increment the unacknowledged-process count and refresh the dock badge.
@@ -119,6 +140,56 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         pendingCount = 0
         NSApplication.shared.dockTile.badgeLabel = nil
     }
+
+    // MARK: - Work in flight (#863)
+
+    /// Which trackers have something running, and for how long.
+    private var activity = WorkActivity()
+
+    /// What the Dock is currently being told, so a tick that changes nothing
+    /// does not redraw the tile once a second for the whole of a long run.
+    private var shownWork: DockWork = .idle
+
+    /// One tracker's answer to "is anything of yours running".
+    ///
+    /// Called from `JobTracker` on every transition and on every tick, because
+    /// that is the one place every manager's work passes through. Before this,
+    /// closing the window left a generation running with no window, no progress
+    /// and nothing in the Dock saying so, and the only way to tell it was
+    /// happening was to open the window again (#863).
+    func reportWork(_ owner: AnyObject, runningFor seconds: Int?) {
+        activity.report(owner, runningFor: seconds)
+        activity.forgetOwnersThatWentAway()
+
+        let now = activity.state
+        guard now != shownWork else { return }
+        shownWork = now
+        showWork(now)
+    }
+
+    /// What the Dock says while work is running.
+    ///
+    /// Deliberately NOT the badge. The badge counts work that has FINISHED and
+    /// not been looked at, and one number meaning two things is a number that
+    /// says neither (L118). This is a separate mark, and it carries the elapsed
+    /// time so it is a still alive signal rather than a working one.
+    ///
+    /// Compiled out of the test bundle for the same reason `send` is: a test
+    /// bundle has no real app to own a Dock tile.
+    #if POSTROLL_TESTS
+    private func showWork(_ work: DockWork) {}
+    #else
+    private func showWork(_ work: DockWork) {
+        switch work {
+        case .idle:
+            NSApplication.shared.dockTile.contentView = nil
+        case .working(let seconds):
+            let tile = NSApplication.shared.dockTile
+            tile.contentView = WorkingDockTile(seconds: seconds)
+        }
+        NSApplication.shared.dockTile.display()
+    }
+    #endif
 
     // MARK: - Clear on activate
 
