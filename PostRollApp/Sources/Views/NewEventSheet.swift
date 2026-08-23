@@ -106,7 +106,23 @@ struct NewEventSheet: View {
                                 Spacer()
                                 Button("Create Event") { createEvent() }
                                     .buttonStyle(BrandButtonStyle())
-                                    .keyboardShortcut(.defaultAction)
+                                    // Return commits this only when Dan opened
+                                    // the sheet himself (#844).
+                                    //
+                                    // A link raises it and brings PostRoll to
+                                    // the front at a moment he did not choose,
+                                    // which on a cold launch is seconds after
+                                    // he clicked and moved on to something
+                                    // else. As the default action, Create then
+                                    // sits under whatever he types next, and
+                                    // what it commits is an event whose whole
+                                    // point is that it was reviewed first.
+                                    //
+                                    // Measured: an event reached the real store
+                                    // from a link with nobody deliberately
+                                    // pressing anything, and a hands off probe
+                                    // ruled out the code committing on its own.
+                                    .keyboardShortcut(prefill == nil ? .defaultAction : nil)
                                     .disabled(!isValid)
                                     .opacity(isValid ? 1 : 0.4)
                             }

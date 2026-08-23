@@ -168,6 +168,35 @@ final class DeepLinkWiringTests: XCTestCase {
                        + "another copy of the same sheet (#842)")
     }
 
+    // MARK: - A sheet nobody asked for does not commit on the next keystroke
+
+    func testCreateIsNotTheDefaultActionOnASheetALinkRaised() throws {
+        // #844: an event reached the real store from a link with nobody
+        // deliberately pressing Create. A hands off probe then showed the code
+        // does not commit on its own (twenty seconds, sheet up, store
+        // unchanged), which leaves a keystroke as what did it.
+        //
+        // The hazard is the combination, not either half. A link raises this
+        // sheet and brings PostRoll to the front at a moment the person did not
+        // choose, which on a cold launch is seconds after they clicked and
+        // moved on to something else. `defaultAction` then puts a committing
+        // button under the next Return they type, and what it commits is an
+        // event whose whole point is that it was reviewed first.
+        //
+        // Kept for a sheet opened BY HAND, where Return is the affordance
+        // somebody just asked for.
+        let code = try source("Views/NewEventSheet.swift")
+        let flattened = code.split(whereSeparator: { $0 == "\n" || $0 == " " }).joined(separator: " ")
+
+        XCTAssertFalse(flattened.contains("keyboardShortcut(.defaultAction)"),
+                       "Create is the unconditional default action again, so a link that "
+                       + "raises this sheet puts it under whatever the person types next (#844)")
+        XCTAssertNotNil(flattened.range(of: #"keyboardShortcut\([^)]*prefill[^)]*\)"#,
+                                        options: .regularExpression),
+                        "Create's shortcut no longer depends on whether a link filled the "
+                        + "form in, so the two cases cannot differ: \(flattened)")
+    }
+
     func testTheWindowSaysWhenTheWrongCopyAnsweredTheLink() throws {
         // Four PostRoll.app bundles exist on this Mac and macOS picks which one
         // answers. `AnsweringCopy` can be perfect and still say nothing to
