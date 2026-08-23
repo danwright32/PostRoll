@@ -28,7 +28,24 @@ struct PostRollApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // ONE window, declared rather than hoped for (#842).
+        //
+        // This was a `WindowGroup`, and SwiftUI treats an incoming URL open
+        // event as an external event that a group answers by opening a NEW
+        // window. Measured on the real machine the day #840 shipped: one
+        // window, two after a link, three after a quit and another link, since
+        // window restoration brings the extras back.
+        //
+        // The cost was not the clutter. `showingNewEvent` is one flag on the
+        // shared AppState and every window binds a sheet to it, so a single
+        // link put a New Event sheet on all three, showing the same prefill,
+        // and cancelling one left the others standing.
+        //
+        // PostRoll has always been a one window app: the New Window command is
+        // replaced below. Saying so here removes the class rather than the one
+        // route into it, and it means a flag on shared state has exactly one
+        // surface to be presented on.
+        Window("PostRoll", id: "main") {
             MainWindowView()
                 .environment(appState)
                 .environment(hashtagStore)
