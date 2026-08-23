@@ -228,6 +228,50 @@ def test_the_unit_bundle_exclusions_have_a_reviewer_that_runs_them(
     )
 
 
+
+# MARK: - Telling a run from a compile
+
+
+def _xcodebuild_commands(text: str) -> list[str]:
+    """Every xcodebuild invocation in a workflow, one string each.
+
+    The lines are joined because the interesting words sit at opposite ends of a
+    backslash continued command: the scheme is in the middle and whether it is
+    `test` or `build-for-testing` is at one end. A check over the whole FILE is
+    answered by any occurrence anywhere in it (L135), which is exactly how this
+    guard stopped working.
+    """
+    commands: list[str] = []
+    current: list[str] | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if current is None:
+            if not stripped.startswith("xcodebuild"):
+                continue
+            current = [stripped]
+        else:
+            current.append(stripped)
+        if not stripped.endswith("\\"):
+            commands.append(" ".join(current))
+            current = None
+    if current is not None:
+        commands.append(" ".join(current))
+    return commands
+
+
+def _runs_the_gui_scheme(command: str) -> bool:
+    """Whether this invocation EXECUTES the GUI suite rather than compiling it.
+
+    #874 added a `build-for-testing` step on the same scheme to swift.yml, for
+    a good reason: nothing local or on a pull request compiled the GUI tests, so
+    a dispatched run failed at its build step on an error any compile would have
+    caught. It also silently satisfied this guard, which until then only looked
+    for the scheme's NAME anywhere in a workflow file. A compile is not a run,
+    and #509 deleted the last UI target precisely for being the first without
+    the second, so the two have to stay distinguishable here (L220).
+    """
+    return "-scheme PostRollUITests" in command and "build-for-testing" not in command
+
 def test_something_actually_runs_the_reviewer(tests_target: str) -> None:
     """A target that compiles and never executes is coverage on paper.
 
@@ -241,7 +285,8 @@ def test_something_actually_runs_the_reviewer(tests_target: str) -> None:
     workflows = REPO_ROOT / ".github" / "workflows"
     runners = [
         path for path in sorted(workflows.glob("*.yml"))
-        if "-scheme PostRollUITests" in path.read_text()
+        if any(_runs_the_gui_scheme(command)
+               for command in _xcodebuild_commands(path.read_text()))
     ]
     assert runners, (
         "no workflow runs the PostRollUITests scheme, so the reviewer named for "
