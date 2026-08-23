@@ -116,7 +116,7 @@ final class WindowSheetPresentationTests: XCTestCase {
 
     @MainActor
     func testADisplacedWarningIsNotRecordedAsDismissed() {
-        // `dismissBuildBehind` remembers the verdict so it is not put back on
+        // Dismissing remembers the verdict so it is not put back on
         // every activation. Being pushed aside by a link is not Dan waving it
         // away, and recording it as such would silence the real warning for the
         // rest of its life.

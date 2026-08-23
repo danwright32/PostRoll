@@ -53,7 +53,7 @@ final class AppState {
     /// Refreshed off the reading the notice already takes rather than by adding
     /// a second reader of the same folder, the same way #668 did the notice.
     ///
-    /// Written only through `present` and `dismissBuildBehind`, so a verdict
+    /// Written only through `present` and `dismissPresentedSheet`, so a verdict
     /// cannot reach the window without also passing the check that stops a
     /// dismissed one coming back.
     ///
@@ -135,15 +135,6 @@ final class AppState {
         case let .cannotTell(reason):
             NSLog("[PostRoll] build freshness unknown: \(reason)")
         }
-    }
-
-    /// Take the sheet away, and remember which verdict it was showing.
-    ///
-    /// Both halves in one place, because a dismissal recorded anywhere else
-    /// could disagree with the one that actually cleared the sheet.
-    func dismissBuildBehind() {
-        dismissedBuildBehind = buildBehind?.id
-        sheets.withdraw(.buildBehind)
     }
 
     // MARK: - The window's sheets (#846)
@@ -340,11 +331,6 @@ final class AppState {
     /// launch and again on every activation.
     func reportProjectRootProblem(_ problem: AppPaths.ProjectRootProblem) {
         alerts.request(.projectRoot(problem), from: .background)
-    }
-
-    /// Take the code folder warning away, because the folder is reachable again.
-    func clearProjectRootProblem() {
-        alerts.withdraw(.projectRoot)
     }
 
     /// Take the alert on screen away and show whatever was waiting behind it.
