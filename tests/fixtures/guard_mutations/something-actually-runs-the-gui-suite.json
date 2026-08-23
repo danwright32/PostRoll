@@ -1,0 +1,8 @@
+{
+  "name": "something-actually-runs-the-gui-suite",
+  "file": ".github/workflows/ui.yml",
+  "find": "            -scheme PostRollUITests \\\n",
+  "replace": "            -scheme PostRollTests \\\n",
+  "test": "tests/test_swift_test_target_covers_sources.py::test_something_actually_runs_the_reviewer",
+  "breaks": "the GUI target compiles and nothing ever executes it, which is coverage on paper and exactly what #509 deleted the previous UI target for (#849, L3)"
+}

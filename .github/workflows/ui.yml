@@ -1,0 +1,104 @@
+name: GUI
+
+# Can the app actually be driven on a runner? (#849)
+#
+# `PostRollApp.swift` is excluded from the unit test bundle, correctly: a test
+# bundle is loaded into a host that already has an entry point. The cost is that
+# nothing in the suite can RUN it, and its only cover is guards matching its
+# TEXT. #842 hid exactly there, and was found by installing the build and
+# counting windows by hand.
+#
+# #509 deleted the previous UI target on the recorded grounds that "a headless
+# runner cannot reliably drive XCUIApplication". That was written on 2026-06-11,
+# nothing had re-checked it since, and it is the premise that decides whether
+# the entry point can ever have a reviewer at all, so it was measured rather
+# than inherited (L61).
+#
+# It is false on this image. Measured on macos-26 on 2026-08-23: `launchctl
+# managername` answers Aqua, the console user is the runner itself, the app
+# launches, and both tests pass in about nine seconds inside a job that finishes
+# in a little over two minutes. The premise was true of some runner at some
+# point; it is not true of this one.
+#
+# ── why this never runs on a pull request ────────────────────────────────────
+#
+# Two reasons, and either alone would be enough.
+#
+# A UI test is slow and flaky by nature, and the macOS runner already carries
+# about eleven minutes of work that every pull request waits on. A flake here
+# must not be able to fail the fast suite.
+#
+# The second is mechanical. `tools/wait_for_checks.py` derives the checks it
+# waits for from the workflows that trigger on `pull_request`, and
+# `tests/test_wait_for_checks.py` calibrates that set against a reply recorded
+# from a real green pull request. A new check name on a pull request can only be
+# green once the fixture already holds it, and the fixture can only be recorded
+# from a green run, so adding one takes a knowingly red merge. That is a
+# deliberate cost to pay on purpose, not a side effect of adding a test.
+on:
+  workflow_dispatch:
+  # Every merge, so the entry point has a reviewer that actually runs rather
+  # than one somebody has to remember to invoke (L27). It reports after the
+  # merge rather than gating it, which is the trade being made: a defect here is
+  # caught within minutes of landing instead of before, and in exchange no
+  # pull request waits on a GUI test and no new required check has to be
+  # bootstrapped.
+  #
+  # Nightly was considered and rejected as the cheaper option: work here lands
+  # in bursts, so a nightly run reports a morning defect at three the next
+  # morning while costing a run on every quiet day too.
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    # The same image as swift-unit, for the same reason: CI's compiler must be
+    # at or ahead of the one on the development Mac, never behind (#528).
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select the recorded Xcode
+        run: |
+          version="$(cat PostRollApp/.ci-xcode-version)"
+          app="/Applications/Xcode_${version}.app"
+          if [ ! -d "${app}" ]; then
+            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
+            echo "on this runner image. What it has:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "${app}"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: PostRollApp
+        run: xcodegen generate
+
+      # Whether there is a window server session to draw into at all, asked
+      # before anything tries to use one. A UI test that cannot launch reports a
+      # timeout that reads like a slow app, so the answer is taken first and
+      # printed plainly.
+      - name: Say what kind of session this runner is
+        run: |
+          echo "user: $(id -un)"
+          echo "console user: $(stat -f%Su /dev/console || echo unknown)"
+          echo "launchctl session:"
+          launchctl managername || true
+
+      - name: Run the GUI tests
+        run: |
+          xcodebuild \
+            -project PostRollApp/PostRoll.xcodeproj \
+            -scheme PostRollUITests \
+            -destination 'platform=macOS' \
+            -derivedDataPath PostRollApp/.derived-data \
+            test
