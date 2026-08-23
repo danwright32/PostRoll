@@ -1,0 +1,8 @@
+{
+  "name": "an-export-that-fails-is-not-silent",
+  "file": "PostRollApp/Sources/Services/ExportManager.swift",
+  "find": "            NotificationService.shared.notifyWorkFailed(\n                work: \"exporting\",\n                eventName: capturedEvent.name,\n                reason: reason)",
+  "replace": "            _ = reason",
+  "test": "PostRollTests/WorkWithNoWindowTests/testEveryFailurePathAnnouncesItself",
+  "breaks": "an export that dies part way through goes back to saying nothing, which is the longest running work in the app and the one kind that was still failing in silence before #872. It also proves the sweep reaches a failure recorded by setting a phase rather than by calling markFailed, which is the whole reason it could not see this site (L247)"
+}

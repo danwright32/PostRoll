@@ -143,6 +143,25 @@ final class WorkWithNoWindowTests: XCTestCase {
 
     // MARK: - No manager gets to fail quietly
 
+    /// Whether this line is a place a run BECOMES failed.
+    ///
+    /// The state, not one spelling of it. The first version of this sweep looked
+    /// for `markFailed`, which is how five of the managers record a failure, and
+    /// `ExportManager` is not one of them: it sets a failed phase and
+    /// deactivates instead. So the longest running work in the app was the one
+    /// kind that still failed in silence, and this sweep reported all clear
+    /// while checking five real sites (#872).
+    ///
+    /// A sweep that enumerates its subjects by one spelling of the thing it
+    /// cares about exempts everything reaching the same state another way, and
+    /// it reads as real coverage because the subjects it did find are real
+    /// (L247).
+    private static func putsARunIntoAFailedState(_ line: String) -> Bool {
+        line.contains(".markFailed(") || line.contains("phase: .failed(")
+            || line.contains("phase = .failed(")
+    }
+
+
     /// Every place a run is marked failed says so out loud.
     ///
     /// The reason this is a sweep rather than five tests. Announcing a failure
@@ -173,7 +192,7 @@ final class WorkWithNoWindowTests: XCTestCase {
             let lines = try String(contentsOf: url, encoding: .utf8)
                 .components(separatedBy: "\n")
 
-            for (index, line) in lines.enumerated() where line.contains(".markFailed(") {
+            for (index, line) in lines.enumerated() where Self.putsARunIntoAFailedState(line) {
                 checked += 1
                 let window = lines[index..<min(index + 9, lines.count)].joined(separator: "\n")
                 if !window.contains("notifyWorkFailed(") {
