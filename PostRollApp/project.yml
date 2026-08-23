@@ -286,10 +286,16 @@ targets:
         # Which application the runner launches and drives. Without it
         # `XCUIApplication()` has no target and every test reports about nothing.
         TEST_TARGET_NAME: PostRoll
-        # Deliberately NOT POSTROLL_TESTS. That flag compiles the test-only
-        # seams, and this target drives the app through its real surfaces
-        # instead: a UI test reaching a seam the shipping app cannot reach would
-        # be testing a build nobody runs.
+        # Deliberately no test-only compilation flag here. The one the unit
+        # bundle sets compiles the seams that let a test point AppState at a
+        # temp store, and this target drives the real application through its
+        # real surfaces instead: a UI test reaching a seam the shipping app
+        # cannot reach would be testing a build nobody runs.
+        #
+        # Not named here on purpose. TestTargetHygieneTests counts every
+        # occurrence of that flag's name in this file, comments included, and
+        # requires exactly one, so writing it in a comment fails the guard that
+        # keeps the seams out of the shipping app.
 
 schemes:
   PostRoll:
