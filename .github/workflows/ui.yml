@@ -9,10 +9,16 @@ name: GUI
 # counting windows by hand.
 #
 # #509 deleted the previous UI target on the recorded grounds that "a headless
-# runner cannot reliably drive XCUIApplication". That was written on 2026-06-11
-# and nothing has re-checked it since. A decision recorded on an issue is only
-# true as of its date (L61), and this one decides whether the entry point can
-# ever have a reviewer, so it is measured here rather than inherited.
+# runner cannot reliably drive XCUIApplication". That was written on 2026-06-11,
+# nothing had re-checked it since, and it is the premise that decides whether
+# the entry point can ever have a reviewer at all, so it was measured rather
+# than inherited (L61).
+#
+# It is false on this image. Measured on macos-26 on 2026-08-23: `launchctl
+# managername` answers Aqua, the console user is the runner itself, the app
+# launches, and both tests pass in about nine seconds inside a job that finishes
+# in a little over two minutes. The premise was true of some runner at some
+# point; it is not true of this one.
 #
 # ── why this never runs on a pull request ────────────────────────────────────
 #
@@ -31,10 +37,18 @@ name: GUI
 # deliberate cost to pay on purpose, not a side effect of adding a test.
 on:
   workflow_dispatch:
-  # TEMPORARY, for the viability measurement only. Narrowed to main before this
-  # is merged: a branch listed here runs the job on every push to it.
+  # Every merge, so the entry point has a reviewer that actually runs rather
+  # than one somebody has to remember to invoke (L27). It reports after the
+  # merge rather than gating it, which is the trade being made: a defect here is
+  # caught within minutes of landing instead of before, and in exchange no
+  # pull request waits on a GUI test and no new required check has to be
+  # bootstrapped.
+  #
+  # Nightly was considered and rejected as the cheaper option: work here lands
+  # in bursts, so a nightly run reports a morning defect at three the next
+  # morning while costing a run on every quiet day too.
   push:
-    branches: [ui-test-viability]
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

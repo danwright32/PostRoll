@@ -157,3 +157,105 @@ def test_every_exclude_still_names_a_file_that_exists(tests_target: str) -> None
         "These entries under PostRollTests `excludes:` no longer name a file "
         "under Sources/, so delete them:\n  " + "\n  ".join(stale)
     )
+
+
+# ── the exemption's reviewer (#849) ───────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def manifest() -> str:
+    return _strip_comments(MANIFEST.read_text())
+
+
+def test_every_exclusion_is_still_compiled_into_the_app_itself(
+    manifest: str, tests_target: str
+) -> None:
+    """A file no target compiles cannot be run by anything at all.
+
+    The exclusions exist because a unit test bundle must not carry a second
+    entry point, not because the file is dead. If it ever stops being compiled
+    into the application too, it is not exempt from one suite, it is gone.
+    """
+    app = _target_block(manifest, "PostRoll")
+    globbed = [p for p in _sources_paths(app) if p == "Sources"]
+    assert globbed, (
+        "the PostRoll app target no longer globs Sources, so which files it "
+        "compiles is a hand list again and this check cannot answer for them"
+    )
+    assert not _excludes(app), (
+        "the PostRoll app target now excludes files, so a file can be exempt "
+        "from the unit bundle AND absent from the app, which is not an "
+        "exemption but a deletion: " + ", ".join(_excludes(app))
+    )
+    for name in _excludes(tests_target):
+        assert (SOURCES / name).exists(), f"{name} is excluded but not on disk"
+
+
+def test_the_unit_bundle_exclusions_have_a_reviewer_that_runs_them(
+    manifest: str, tests_target: str
+) -> None:
+    """#849: the exemption is right, which is exactly why nothing reviewed it.
+
+    `PostRollApp.swift` is excluded from `PostRollTests` for a good reason, so
+    nothing in the unit suite can run it and its only cover was guards matching
+    its TEXT. #842 lived there: a link left an extra window behind and every
+    unit test passed, because the defect was which scene type the app declares
+    and how many windows exist, and a text match can see neither.
+
+    A deliberate exemption with no reviewer named in the same change has no
+    reviewer at all (L129). This holds the pair together: as long as anything is
+    excluded from the unit bundle, a target that launches the real application
+    has to exist. Removing the reviewer then fails here rather than quietly
+    restoring the blind spot.
+    """
+    if not _excludes(tests_target):
+        pytest.skip("nothing is excluded from the unit bundle, so nothing needs "
+                    "a second reviewer")
+
+    ui = _target_block(manifest, "PostRollUITests")
+    assert "type: bundle.ui-testing" in ui, (
+        "PostRollUITests is not a UI testing bundle, so it cannot launch the "
+        "app and the files excluded from the unit bundle have no reviewer: "
+        + ", ".join(_excludes(tests_target))
+    )
+    assert "- target: PostRoll" in ui, (
+        "PostRollUITests does not depend on the PostRoll app target, so there "
+        "is nothing for it to launch"
+    )
+    assert "TEST_TARGET_NAME: PostRoll" in ui, (
+        "PostRollUITests names no target application, so `XCUIApplication()` "
+        "has nothing to drive and every test in it reports about nothing (L98)"
+    )
+
+
+def test_something_actually_runs_the_reviewer(tests_target: str) -> None:
+    """A target that compiles and never executes is coverage on paper.
+
+    That is what #509 found the last UI target to be, and why it was deleted:
+    it had been added and nothing had ever run it. Naming a reviewer that
+    nothing invokes would repeat exactly that, one issue later (L3).
+    """
+    if not _excludes(tests_target):
+        pytest.skip("nothing is excluded from the unit bundle")
+
+    workflows = REPO_ROOT / ".github" / "workflows"
+    runners = [
+        path for path in sorted(workflows.glob("*.yml"))
+        if "-scheme PostRollUITests" in path.read_text()
+    ]
+    assert runners, (
+        "no workflow runs the PostRollUITests scheme, so the reviewer named for "
+        "the unit bundle's exclusions compiles and never executes, which is "
+        "what #509 deleted the last UI target for"
+    )
+    for path in runners:
+        text = path.read_text()
+        assert "workflow_dispatch:" in text, (
+            f"{path.name} runs the GUI suite but cannot be run by hand, so "
+            "there is no way to ask the question the day it matters"
+        )
+        assert "branches: [main]" in text, (
+            f"{path.name} runs the GUI suite on no branch, so it only ever runs "
+            "when somebody remembers to ask, which is a rule living in a "
+            "person's head (L27)"
+        )

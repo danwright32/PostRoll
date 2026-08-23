@@ -4,5 +4,5 @@
   "find": "-scheme PostRollTests",
   "replace": "-scheme PostRoll",
   "test": "tests/test_ci_gates.py::test_it_runs_the_unit_test_scheme_not_the_gui_one",
-  "breaks": "CI runs the GUI-driving scheme a headless runner cannot drive"
+  "breaks": "the job every pull request waits on runs the GUI-driving scheme, which is slow, flaky by nature, and adds a required check name that cannot be made green without a knowingly red merge (#849)"
 }

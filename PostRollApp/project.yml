@@ -230,6 +230,15 @@ targets:
         excludes:
           # The @main entry point. A test bundle is loaded into a host process
           # that already has one, so it must not carry a second.
+          #
+          # Its reviewer is the PostRollUITests target below, which launches the
+          # real application (#849). That is named here on purpose: a deliberate
+          # exemption with no reviewer named in the same place has no reviewer at
+          # all, and the gap stays invisible precisely because the exemption is
+          # correct (L129). #842 hid in this file while every unit test passed.
+          # tests/test_swift_test_target_covers_sources.py holds the pair
+          # together, so removing the reviewer fails rather than quietly
+          # restoring the blind spot.
           - PostRollApp.swift
     settings:
       base:

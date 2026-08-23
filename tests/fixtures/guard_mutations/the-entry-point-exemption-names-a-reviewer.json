@@ -1,0 +1,8 @@
+{
+  "name": "the-entry-point-exemption-names-a-reviewer",
+  "file": "PostRollApp/project.yml",
+  "find": "        TEST_TARGET_NAME: PostRoll\n",
+  "replace": "",
+  "test": "tests/test_swift_test_target_covers_sources.py::test_the_unit_bundle_exclusions_have_a_reviewer_that_runs_them",
+  "breaks": "PostRollApp.swift is excluded from the unit bundle with nothing able to run it, which is the state #842 hid in: the defect was which scene type the app declares and how many windows exist, and every unit test passed because a text match can see neither (#849, L129)"
+}

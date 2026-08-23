@@ -186,8 +186,19 @@ def test_it_can_still_be_run_by_hand(swift):
 # ── what it actually runs ─────────────────────────────────────────────────────
 
 def test_it_runs_the_unit_test_scheme_not_the_gui_one(swift):
-    """A headless runner cannot reliably drive XCUIApplication, and a job that
-    fails for that reason teaches everyone to ignore it.
+    """The job every pull request waits on must not carry the GUI suite.
+
+    The reason used to be that a headless runner cannot drive XCUIApplication.
+    That was measured on macos-26 on 2026-08-23 and is false: the runner has an
+    Aqua session, the app launches, and the GUI suite passes there. It runs from
+    .github/workflows/ui.yml instead, on merges and on demand.
+
+    The rule survives on two reasons that were always the stronger ones. A UI
+    test is slow and flaky by nature and must not be able to fail the fast suite
+    every pull request blocks on. And a new check name on a pull request cannot
+    be made green without a fixture recorded from a green run carrying it, so
+    adding one takes a knowingly red merge, which is a cost to choose
+    deliberately rather than to acquire by adding a test.
 
     What is forbidden is TESTING a scheme that pulls in PostRollUITests, not
     naming the app scheme at all. Asserting the absence of the name was a proxy
@@ -207,8 +218,9 @@ def test_it_runs_the_unit_test_scheme_not_the_gui_one(swift):
         and re.search(r"^\s+test\s*$", rest, re.M)
     ]
     assert not gui_tested, (
-        f"{gui_tested} is TESTED on a headless runner, which drags in "
-        "PostRollUITests and cannot pass reliably")
+        f"{gui_tested} is TESTED in the job every pull request waits on, which "
+        "drags in PostRollUITests: slow, flaky by nature, and a new required "
+        "check name nothing can make green. It belongs in ui.yml")
 
 
 def test_it_regenerates_the_project_rather_than_trusting_the_checked_in_copy(swift):
