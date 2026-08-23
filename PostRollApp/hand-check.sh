@@ -34,10 +34,13 @@ set -euo pipefail
 
 APP="/Applications/PostRoll.app"
 BINARY="${APP}/Contents/MacOS/PostRoll"
-WORLD="${HOME}/Library/Caches/PostRollHandCheck"
+WORLD="${POSTROLL_HAND_CHECK_WORLD:-${HOME}/Library/Caches/PostRollHandCheck}"
 DATA="${WORLD}/data"
 NOT_A_CHECKOUT="${WORLD}/not-a-checkout"
 STORE="${DATA}/events.json"
+# Written into every world this script builds, and required before it deletes
+# one. See remove_world.
+MARKER="${WORLD}/.postroll-hand-check"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -61,6 +64,10 @@ Actions on the world a state left behind:
   end                 quit every copy and delete the scratch world
 
 --no-launch builds the state and stops, without starting the app.
+
+POSTROLL_HAND_CHECK_WORLD moves the scratch world somewhere other than
+~/Library/Caches/PostRollHandCheck. Nothing is deleted from a folder this
+script did not make, whichever location it is pointed at.
 USAGE
   exit 64
 }
@@ -108,10 +115,38 @@ quit_every_copy() {
   sleep 0.5
 }
 
+# Delete the scratch world, and ONLY if this script is the thing that made it.
+#
+# Every state starts by clearing the world, and the location is overridable, so
+# this is a recursive delete of a path that came from outside. The check on that
+# path used to live in `launch_in`, which runs after the delete: a check that
+# happens after the destruction can only ever confirm what has already been done
+# (L5).
+#
+# A marker file rather than a rule about what the path looks like. Any path rule
+# has to be loose enough to allow an override and strict enough to refuse a home
+# directory, and there is no such rule. The marker answers the question actually
+# being asked: did this script make this folder.
+remove_world() {
+  [[ -e "${WORLD}" ]] || return 0
+  if [[ ! -f "${MARKER}" ]]; then
+    echo "refusing to delete ${WORLD}: it exists and this script did not make" >&2
+    echo "it (no ${MARKER}). Point POSTROLL_HAND_CHECK_WORLD somewhere else, or" >&2
+    echo "remove that folder yourself if it really is scratch." >&2
+    exit 1
+  fi
+  # Readable first. A store left at mode 000 cannot be removed from a folder
+  # that can otherwise be read, and a cleanup that half worked leaves the next
+  # run starting from a state nobody chose.
+  [[ -e "${STORE}" ]] && chmod 644 "${STORE}"
+  rm -rf "${WORLD}"
+}
+
 build_world() {
   local state="$1"
-  rm -rf "${WORLD}"
+  remove_world
   mkdir -p "${DATA}" "${NOT_A_CHECKOUT}"
+  date > "${MARKER}"
   # Something in it, so the folder is not merely empty: the app treats a missing
   # code folder and one that is not a checkout as different problems, and only
   # the second is what this state means.
@@ -233,12 +268,8 @@ case "${command}" in
 
   end)
     quit_every_copy
-    # chmod first: rm cannot remove a 000 file inside a folder it can read, and
-    # a cleanup that half worked leaves the next run starting from a state
-    # nobody chose.
-    [[ -e "${STORE}" ]] && chmod 644 "${STORE}"
-    rm -rf "${WORLD}"
-    echo "every copy quit and ${WORLD} deleted"
+    remove_world
+    echo "every copy quit and ${WORLD} is gone"
     ;;
 
   *)

@@ -175,3 +175,78 @@ def test_status_reports_without_building_anything():
 
     assert result.returncode == 0, result.stderr
     assert not WORLD.exists(), "status built a scratch world just by being asked a question"
+
+# MARK: - It only ever deletes what it made
+
+
+def test_it_refuses_to_delete_a_directory_it_did_not_create(tmp_path):
+    """The script deletes its whole world at the start of every state, and the
+    world's location can be overridden. So the delete has to be able to say no.
+
+    Written after a lessons scan pointed at the `rm -rf` and the ordering turned
+    out to be genuinely wrong: the delete ran before the check on the path, so
+    the check could only ever have confirmed a deletion that had already
+    happened (L5).
+
+    A marker file, rather than a rule about what the path looks like. A path
+    rule has to be loose enough to allow the override and strict enough to
+    refuse a home directory, and there is no such rule; a marker answers the
+    question actually being asked, which is whether this script made this
+    folder.
+    """
+    somebody_elses = tmp_path / "not-ours"
+    somebody_elses.mkdir()
+    (somebody_elses / "a-real-file.txt").write_text("do not delete me")
+
+    env = {**os.environ, "POSTROLL_HAND_CHECK_WORLD": str(somebody_elses)}
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "healthy", "--no-launch"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False, env=env,
+    )
+
+    assert result.returncode != 0, "the script emptied a folder it had not made"
+    assert (somebody_elses / "a-real-file.txt").exists(), "the file was deleted"
+    assert str(somebody_elses) in result.stderr, (
+        f"the refusal does not name what it refused to delete: {result.stderr}"
+    )
+
+
+def test_it_does_delete_a_world_it_made_itself(tmp_path):
+    """The other half, in the same fixture. A refusal that fires on everything
+    is not a guard, it is a broken script, and the two look identical from a
+    test that only ever checks the refusal (L159)."""
+    ours = tmp_path / "ours"
+    env = {**os.environ, "POSTROLL_HAND_CHECK_WORLD": str(ours)}
+
+    built = subprocess.run(
+        ["bash", str(SCRIPT), "unreadable-store", "--no-launch"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False, env=env,
+    )
+    assert built.returncode == 0, built.stderr
+    assert (ours / "data" / "events.json").exists()
+
+    ended = subprocess.run(
+        ["bash", str(SCRIPT), "end"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False, env=env,
+    )
+
+    assert ended.returncode == 0, ended.stderr
+    assert not ours.exists(), (
+        "the world it made itself was left behind, including a store at mode "
+        "000 that the next run inherits"
+    )
+
+
+def test_ending_a_world_that_was_never_started_is_not_an_error(tmp_path):
+    """`end` is the last line of the checklist and gets run whether or not
+    anything was started. Failing there would send whoever ran the check looking
+    for a problem that is not one."""
+    env = {**os.environ, "POSTROLL_HAND_CHECK_WORLD": str(tmp_path / "never-made")}
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "end"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False, env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+
