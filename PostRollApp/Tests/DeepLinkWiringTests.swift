@@ -140,6 +140,34 @@ final class DeepLinkWiringTests: XCTestCase {
                       "the notice has no way to be waved away, so it stays until relaunch: \(code)")
     }
 
+    // MARK: - There is one window, so there is one sheet
+
+    func testTheAppDeclaresASingleWindowRatherThanAGroup() throws {
+        // Measured on the real machine after #840 shipped: the window count
+        // went 1, then 2 after one link, then 3 after a quit and another link
+        // (#842). SwiftUI's `WindowGroup` treats an incoming URL open event as
+        // an external event and opens a NEW window for it, and window
+        // restoration brings the extras back after a quit.
+        //
+        // That is not merely untidy. `showingNewEvent` is one flag on the
+        // shared AppState and every window binds a sheet to it, so one link put
+        // up a New Event sheet on each of them, all with the same prefill, and
+        // cancelling one left the others standing.
+        //
+        // `Window` is a scene with exactly one window, which is what PostRoll
+        // has always been: the New Window command is already replaced in
+        // `.commands`. Declaring it removes the whole class rather than the one
+        // route into it.
+        let code = try source("PostRollApp.swift")
+
+        XCTAssertTrue(code.contains("Window("),
+                      "the app declares no single Window scene: \(code)")
+        XCTAssertFalse(code.contains("WindowGroup"),
+                       "the app is back to a WindowGroup, which SwiftUI multiplies on every "
+                       + "incoming URL, so each link leaves a window behind and puts up "
+                       + "another copy of the same sheet (#842)")
+    }
+
     func testTheWindowSaysWhenTheWrongCopyAnsweredTheLink() throws {
         // Four PostRoll.app bundles exist on this Mac and macOS picks which one
         // answers. `AnsweringCopy` can be perfect and still say nothing to
