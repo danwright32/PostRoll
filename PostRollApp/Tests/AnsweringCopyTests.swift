@@ -48,14 +48,40 @@ final class AnsweringCopyTests: XCTestCase {
                       "the notice does not name the copy that was meant to: \(notice ?? "nil")")
     }
 
-    func testAPathWrittenADifferentWayIsStillTheInstalledCopy() {
-        // `Bundle.main.bundleURL` is not guaranteed to be spelled the way this
+    func testAPathWrittenADifferentWayIsStillTheInstalledCopyWhenItIsThere() throws {
+        // `Bundle.main.bundleURL` is not guaranteed to be spelled the way the
         // constant is. A comparison that took two spellings of one path for two
         // different copies would warn on every single link, and a warning that
         // is always on is one nobody reads (L36).
-        let awkward = URL(fileURLWithPath: "/Applications/./PostRoll.app/")
+        //
+        // The bundle is CREATED here rather than assumed. This test used to use
+        // /Applications/PostRoll.app, and it passed on this Mac and failed on
+        // CI: `resolvingSymlinksInPath` canonicalises a path that exists and
+        // leaves one that does not alone, so what the test really asked was
+        // whether PostRoll happened to be installed on the machine running it
+        // (L504).
+        let real = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AnsweringCopy-\(UUID().uuidString)")
+            .appendingPathComponent("PostRoll.app")
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: real.deletingLastPathComponent()) }
 
-        XCTAssertNil(AnsweringCopy.notice(answeredBy: awkward, installedAt: installed))
+        let awkward = URL(fileURLWithPath: real.deletingLastPathComponent()
+            .path(percentEncoded: false) + "/./PostRoll.app/")
+
+        XCTAssertNil(AnsweringCopy.notice(answeredBy: awkward,
+                                          installedAt: real.path(percentEncoded: false)))
+    }
+
+    func testAPathWrittenADifferentWayIsStillTheInstalledCopyWhenItIsNot() {
+        // The other half, and the one CI actually runs: on a machine with no
+        // PostRoll installed, neither side gets canonicalised, so the trailing
+        // slash and the `.` survive to be compared. A copy that has been moved
+        // or not yet installed must not read as a different copy answering.
+        let missing = "/nowhere-postroll-was-installed/PostRoll.app"
+        let awkward = URL(fileURLWithPath: "/nowhere-postroll-was-installed/./PostRoll.app/")
+
+        XCTAssertNil(AnsweringCopy.notice(answeredBy: awkward, installedAt: missing))
     }
 
     func testTheDefaultIsTheCopyBuildInstallWrites() {

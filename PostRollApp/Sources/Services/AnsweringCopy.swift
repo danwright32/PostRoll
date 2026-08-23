@@ -44,7 +44,15 @@ enum AnsweringCopy {
     }
 
     private static func settled(_ url: URL) -> String {
-        url.standardizedFileURL.resolvingSymlinksInPath()
+        var path = url.standardizedFileURL.resolvingSymlinksInPath()
             .path(percentEncoded: false)
+        // The trailing slash is dropped HERE rather than left to
+        // `resolvingSymlinksInPath`, which only tidies a path that is really on
+        // disk. That difference is invisible on a Mac with PostRoll installed
+        // and decisive on one without: a machine where the app has been moved,
+        // or not installed yet, is exactly where every link would otherwise be
+        // reported as answered by the wrong copy (L504).
+        while path.count > 1 && path.hasSuffix("/") { path.removeLast() }
+        return path
     }
 }
