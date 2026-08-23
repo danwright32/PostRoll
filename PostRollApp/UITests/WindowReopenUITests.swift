@@ -33,15 +33,15 @@ final class WindowReopenUITests: XCTestCase {
     /// Wait for the window count to reach `expected`, or fail saying what it was.
     ///
     /// Polled rather than read once: closing and reopening a window is not
-    /// synchronous with the keystroke that asked for it, and a single read taken
-    /// too early reports the previous state as the answer.
-    /// 30s by default, not 10.
+    /// synchronous with the click that asked for it, and a single read taken too
+    /// early reports the previous state as the answer.
     ///
-    /// Every launch here is cold, because teardown ends the app so the next test
-    /// cannot inherit a windowless one, and a cold launch on this machine was
-    /// measured at over 40 seconds against about two for a warm one. Reopening a
-    /// closed window sits on the same curve. A limit set from the warm case
-    /// fails on the cold one and reads as the window never coming back (L224).
+    /// 30 seconds rather than a few, because every launch here is cold: teardown
+    /// ends the app so the next test cannot inherit a windowless one. A cold
+    /// launch was measured at over 40 seconds on both the development Mac and
+    /// the CI runner, against about two warm, and reopening sits on the same
+    /// curve. A limit set from the warm case fails on the cold one and reads as
+    /// the window never coming back (L224).
     private func waitForWindows(_ expected: Int,
                                 in app: XCUIApplication,
                                 within seconds: TimeInterval = 30,
@@ -59,6 +59,31 @@ final class WindowReopenUITests: XCTestCase {
                        file: file, line: line)
     }
 
+    /// Close the window the way a person does, by clicking its close button.
+    ///
+    /// Not the Cmd+W key equivalent, which was tried first and does nothing on
+    /// the CI runner: all three tests there waited 30 seconds for the window to
+    /// go and it was still up, while the same keystroke works on the development
+    /// Mac. A menu key equivalent has to reach the app through the key window
+    /// and the menu bar, and that path is not dependable in an automation
+    /// session.
+    ///
+    /// Clicking the button is also what #847 describes, and it does not depend
+    /// on the Close menu item keeping its shortcut.
+    private func closeTheWindow(of app: XCUIApplication,
+                                file: StaticString = #filePath,
+                                line: UInt = #line) throws {
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 30),
+                      "there is no window to close", file: file, line: line)
+        let close = window.buttons[XCUIIdentifierCloseWindow]
+        XCTAssertTrue(close.waitForExistence(timeout: 15),
+                      "the window has no close button, so there is no way to ask "
+                      + "it to close and this test would prove nothing",
+                      file: file, line: line)
+        close.click()
+    }
+
     // MARK: - Closing it
 
     func testClosingTheWindowLeavesTheAppRunning() throws {
@@ -69,7 +94,7 @@ final class WindowReopenUITests: XCTestCase {
         let app = try LaunchedApp.launch(dataRoot: dataRoot)
         waitForWindows(1, in: app)
 
-        app.typeKey("w", modifierFlags: .command)
+        try closeTheWindow(of: app)
 
         waitForWindows(0, in: app)
         XCTAssertFalse(try LaunchedApp.theRunningCopy().isTerminated,
@@ -84,7 +109,7 @@ final class WindowReopenUITests: XCTestCase {
         // this is the same question rather than a near neighbour of it.
         let app = try LaunchedApp.launch(dataRoot: dataRoot)
         waitForWindows(1, in: app)
-        app.typeKey("w", modifierFlags: .command)
+        try closeTheWindow(of: app)
         waitForWindows(0, in: app)
 
         let running = try LaunchedApp.theRunningCopy()
@@ -114,7 +139,7 @@ final class WindowReopenUITests: XCTestCase {
         // and one of them is the installed app holding real events (L2, #840).
         let app = try LaunchedApp.launch(dataRoot: dataRoot)
         waitForWindows(1, in: app)
-        app.typeKey("w", modifierFlags: .command)
+        try closeTheWindow(of: app)
         waitForWindows(0, in: app)
 
         let running = try LaunchedApp.theRunningCopy()
