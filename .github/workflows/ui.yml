@@ -44,10 +44,10 @@ name: GUI
 # question something can.
 #
 # What made this worth keeping rather than merely defensible is that the cost
-# came down. It was about 85 seconds of test time, almost all of it macOS
-# rescanning a freshly built ad hoc signed bundle: measured on the runner on
-# 2026-08-23 at 43.6s and 41.1s for two tests of the SAME binary, so the price
-# is per launch rather than per build. The suite now launches once (#864).
+# came down. Measured on the runner on 2026-08-23: 84.7 seconds of test time in
+# a job of about 150 when each test started and ended its own app, against 4.0
+# seconds in a job of about 101 now that the class shares one. #864 has the
+# numbers and is careful about what they do and do not attribute.
 #
 # ── why this never runs on a pull request ────────────────────────────────────
 #

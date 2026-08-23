@@ -29,20 +29,32 @@ final class AppEntryPointUITests: XCTestCase {
 
     // MARK: - One launch for the whole class (#864)
 
-    /// Launching costs about 42 seconds and testing costs almost none of it.
+    /// Starting and ending an app costs about 42 seconds, and the testing in
+    /// between costs almost none of it.
     ///
-    /// Measured on the runner on 2026-08-23, from a run of this file as it
-    /// stood: 43.6 seconds for the first test and 41.1 seconds for the second,
-    /// of the SAME binary built by the same job. So the cost is per LAUNCH, not
-    /// per build, and #864's first suggestion, a single warm-up launch before
-    /// the suite, would have paid it once and then paid it again for every test
-    /// anyway. That direction is dead, and it was the plausible one.
+    /// Measured on the runner on 2026-08-23. With a launch and a termination per
+    /// test: 43.6 seconds and 41.1 seconds, of the SAME binary built by the same
+    /// job, 84.7 seconds of test time in a job of about 150. With one launch and
+    /// one termination for the whole class: 3.9 seconds and 0.1 seconds, 4.0
+    /// seconds of test time, and the job about 101.
     ///
-    /// What is left is the other direction in the same issue: share one app
-    /// where the tests do not need a fresh one. Neither of these does. Both only
-    /// READ, one the accessibility tree's window count and one the operating
-    /// system's list of running processes, and neither clicks, types or closes
-    /// anything, so the second inherits exactly the state the first found.
+    /// What that settles and what it does not. It settles that the price is paid
+    /// once per test rather than once per build, so #864's first suggestion, a
+    /// warm-up launch before the suite, would have paid it once and then paid it
+    /// again for every test anyway. It does NOT settle which half of a test's
+    /// own start and end the 42 seconds went into: the shared run's wall clock
+    /// is 24.4 seconds against 4.0 of test time, so roughly 20 seconds sits in
+    /// setup and teardown outside the methods, and `terminateEveryCopy` polls
+    /// for up to 20 seconds waiting for the app to die. Attributing it all to
+    /// macOS rescanning the bundle, which is what #864 assumed, is not something
+    /// these numbers support (L203).
+    ///
+    /// Either way the remedy is the same, and it is the other direction in the
+    /// same issue: share one app where the tests do not need a fresh one.
+    /// Neither of these does. Both only READ, one the accessibility tree's
+    /// window count and one the operating system's list of running processes,
+    /// and neither clicks, types or closes anything, so the second inherits
+    /// exactly the state the first found.
     ///
     /// A test that DOES need a cold start must say so and launch its own, and
     /// `TestTargetHygieneTests` holds this file to launching once so that adding
