@@ -1,0 +1,8 @@
+{
+  "name": "a-link-raised-sheet-is-not-the-default-action",
+  "file": "PostRollApp/Sources/Views/NewEventSheet.swift",
+  "find": ".keyboardShortcut(prefill == nil ? .defaultAction : nil)",
+  "replace": ".keyboardShortcut(.defaultAction)",
+  "test": "PostRollTests/DeepLinkWiringTests/testCreateIsNotTheDefaultActionOnASheetALinkRaised",
+  "breaks": "a postroll:// link raises the New Event sheet and brings PostRoll to the front at a moment Dan did not choose, and Create goes back to sitting under whatever he types next, so one Return meant for another app commits an event whose whole point is that it was reviewed first. Measured once for real: an event reached the store from a link with nobody deliberately pressing anything (#844)"
+}
