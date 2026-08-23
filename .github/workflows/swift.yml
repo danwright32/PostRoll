@@ -191,6 +191,33 @@ jobs:
             -derivedDataPath PostRollApp/.derived-data \
             test
 
+      # Compile the GUI test target, without running it (#874).
+      #
+      # `make test` and the step above both build the PostRollTests scheme,
+      # which does not contain PostRollUITests at all, so nothing local or on a
+      # pull request ever compiled the GUI tests. The first thing that did was a
+      # runner, and on 2026-08-23 a dispatched GUI run failed at its BUILD step
+      # on a concurrency-safety error that any compile would have caught.
+      #
+      # build-for-testing rather than test, deliberately. Running the GUI tests
+      # is what is slow and flaky and what keeps them off pull requests, and
+      # none of that applies to compiling them.
+      #
+      # In this existing job rather than a new one, which is not laziness. A new
+      # check name on a pull request can only go green once
+      # tests/test_wait_for_checks.py's recorded reply already holds it, and
+      # that reply can only be recorded from a green run, so adding one costs a
+      # knowingly red merge. Adding a step to a job that already reports buys
+      # the same coverage for none of that.
+      - name: Compile the GUI tests
+        run: |
+          xcodebuild build-for-testing \
+            -project PostRollApp/PostRoll.xcodeproj \
+            -scheme PostRollUITests \
+            -destination 'platform=macOS' \
+            -derivedDataPath PostRollApp/.derived-data \
+            -quiet
+
       # Only the compiled products earn their upload. Index.noindex is the
       # editor's symbol index, which nothing on a runner reads, and Logs is a
       # transcript of the run that just finished.
