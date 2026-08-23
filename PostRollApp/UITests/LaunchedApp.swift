@@ -58,6 +58,17 @@ enum LaunchedApp {
         // run first. A 30 second limit failed that test and nothing else, which
         // reads as "the app is broken" rather than "the clock was too tight"
         // (L224: a fixed number measures what else the machine is doing).
+        // Brought to the front deliberately. A launch alone leaves PostRoll
+        // behind whatever else is on screen, and its window CONTENTS are then
+        // not exposed: the accessibility tree comes back with a menu bar, the
+        // application marked Disabled, and no window at all, so every query for
+        // a control inside it finds nothing and reads as the control missing.
+        //
+        // Measured while building #848: the test that fired a postroll:// link
+        // could read the form, and the one that only launched could not. Opening
+        // a URL activates the app, which was the whole of the difference.
+        app.activate()
+
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 120),
                       "PostRoll did not reach the foreground, so nothing after "
                       + "this is about a running app. State: \(app.state.rawValue)",
