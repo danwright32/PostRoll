@@ -1,0 +1,8 @@
+{
+  "name": "seeding-refuses-a-folder-with-no-photographs",
+  "file": "PostRollApp/hand-check.sh",
+  "find": "  if [[ -z \"$(images_in \"${source}\")\" ]]; then",
+  "replace": "  if [[ -n \"/nonexistent-so-this-never-fires\" ]] && false; then",
+  "test": "tests/test_hand_check_states.py::test_seeding_from_a_folder_with_no_images_refuses_and_names_it",
+  "breaks": "a mistyped photo folder seeds an event with no photos, which leaves Generate All disabled: the setup silently did nothing and the step reads as the app being broken (#879, L98)"
+}

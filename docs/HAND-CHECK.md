@@ -9,7 +9,8 @@ Run it after `make install`, and only when something in this list has been
 touched: the window's lifecycle, the New Event sheet's keyboard handling, the
 alerts, the queue behind them, what happens when the app is asked to quit, or
 what the Dock says while work is running.
-It takes about twenty minutes.
+It takes about twenty minutes of attention, and steps 7 and 8 spend part of
+that waiting on a real generation.
 
 Each step says what should happen precisely enough to be wrong. If a step's
 result is "it looked fine", the step is not written well enough and is worth
@@ -24,6 +25,11 @@ make install
 Every step below points the app at a scratch library and a scratch code folder,
 so nothing here can touch the real events.json. That is done by the setup
 script rather than by hand, because several steps deliberately break the store.
+
+Steps 7 and 8 need work in flight, which means a real generation, which means an
+event with photographs on it. Those two ask for a folder to copy a handful out
+of; the copies live in the scratch world and the folder itself is only ever
+read. Between them they cost about one and a half runs against the API.
 
 Run each `hand-check.sh` command from the repo root. Each one quits any running
 PostRoll first, so you never have two copies answering.
@@ -183,12 +189,15 @@ to dismiss on reflex.
 The dialog is an alert macOS puts up during termination, so nothing automated
 can read it either.
 
+Something has to be running, so this uses the seeded event step 8 explains,
+for the same reason: a generation cannot be started from an empty store.
+
 ```
-./PostRollApp/hand-check.sh healthy
+./PostRollApp/hand-check.sh seeded ~/Pictures/some-shoot
 ```
 
-Start something that takes a while: open an event and run a generation, or an
-export. While it is running, press **Cmd+Q**.
+Open **Hand check run** and press **Generate All**. While it is running, press
+**Cmd+Q**.
 
 **Expect:** a dialog titled **PostRoll is still working**, whose message names
 what is running (for example "a week is still generating"), with **Keep
@@ -217,50 +226,77 @@ Finally, with nothing running, press **Cmd+Q**.
 every time is one that gets clicked through on reflex, taking the real one with
 it.
 
-## 8. Work with no window says so (#863)
+Quit Anyway takes the run with it, so this step costs part of a real
+generation. Step 8 needs a whole one, and the two cannot share: that one has to
+be allowed to finish.
+
+## 8. Work with no window says so (#863, #879)
 
 Neither half of this is reachable to anything automated: one is drawn on the
 Dock icon and the other is a banner from Notification Center.
 
+This step needs an event a generation can actually be started from, which none
+of the states above provide: they all build an empty store, and Generate All
+stays disabled until a day has a photo on it. So this one seeds an event of its
+own out of a folder of photographs you point it at. Up to eight are copied into
+the scratch world, and it says how many it took of how many it found.
+
 ```
-./PostRollApp/hand-check.sh healthy
+./PostRollApp/hand-check.sh seeded ~/Pictures/some-shoot
 ```
 
-Start a generation, then press **Cmd+W** to close the window.
+Open **Hand check run**, press **Generate All**, then press **Cmd+W** to close
+the window. This is a real run against the API on photographs nobody wants
+captions for, which is what it costs to see the mark that only appears while
+work is happening.
 
-**Expect:** a black band across the foot of the PostRoll Dock icon with an
-elapsed clock on it, and the clock goes up every second.
+**Expect:** a black band across the foot of the PostRoll Dock icon, with an
+elapsed clock on it, over the ordinary PostRoll icon.
 **Wrong if:** there is no band. Then work with no window is invisible again,
-which is the whole of this issue.
+which is the whole of #863.
+**Also wrong if:** the band is sitting on an empty tile with no icon behind it.
+`WorkingDockTile` draws the app icon optionally, so an icon that came back nil
+would fail exactly this way and say nothing (#879).
 **Also wrong if:** the clock is frozen. A mark that does not move cannot tell a
 run that is progressing from one that is wedged or dead, and telling those apart
-is the only reason the number is there.
+is the only reason the number is there. Watch it for five seconds rather than
+glancing: it moves once a second.
 
-Wait for the run to finish.
+Wait for the run to finish. It takes about six minutes.
 
-**Expect:** the band goes, and a banner says the captions are ready. The Dock
-badge then shows a count of finished work waiting to be looked at, which is a
-different mark in a different place from the band.
+**Expect:** the band goes, and a banner titled **Hand check run: Captions
+Ready**. The Dock badge then shows a count of finished work waiting to be looked
+at, which is a different mark in a different place from the band.
+**Wrong if:** the badge and the band are ever drawn on top of each other, or one
+hides the other. They are set independently, by
+`NotificationService.incrementBadge` and by the custom view installed beside it,
+and whether both are legible at once has never been looked at (#879).
 
-Now make one fail. The quickest way is to point the code folder somewhere
-useless while a run is going:
+Now make one fail. Same event, with the app pointed at a folder that is not a
+checkout, so the run starts and then dies where the pipeline would have been:
 
 ```
-./PostRollApp/hand-check.sh no-code-folder
+./PostRollApp/hand-check.sh seeded ~/Pictures/some-shoot --no-code-folder
 ```
 
-Start a generation from that launch, close the window, and wait.
+Press **OK** on the code folder alert, open the event, press **Generate All**,
+then **Cmd+W**. It fails within a few seconds and costs nothing: the pipeline is
+never reached.
 
-**Expect:** a banner naming the event and saying the run stopped, with the
-reason in it.
+**Expect:** a banner titled **Hand check run: generating stopped**, whose body
+gives the reason.
 **Wrong if:** nothing arrives. Every notification this app sent used to be a
 completion, so a run that died with the window closed produced exactly the same
 evidence as one still going, which is none.
+**Also wrong if:** the banner names an event you have never heard of, or says
+"an event" without naming one. The name is looked up from the event the run
+belongs to, and a placeholder in its place means the lookup failed (#879).
 
-Finally, repeat that with the PostRoll window open and in front.
+Finally, repeat that last part with the PostRoll window open and in front.
 
 **Expect:** no banner. The screen is already showing the failure, and a banner
-on top of it is the noise that teaches you to wave banners away.
+on top of it is the noise that teaches you to wave banners away. A banner
+appearing here is as much a defect as one failing to appear above.
 
 ---
 

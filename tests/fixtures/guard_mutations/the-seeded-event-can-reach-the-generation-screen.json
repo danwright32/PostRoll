@@ -1,0 +1,8 @@
+{
+  "name": "the-seeded-event-can-reach-the-generation-screen",
+  "file": "PostRollApp/hand-check.sh",
+  "find": "    \"stage\": \"Photos Assigned\",",
+  "replace": "    \"stage\": \"Event Created\",",
+  "test": "PostRollTests/HandCheckSeededStoreTests/testTheSeededEventIsAtTheStageWhoseScreenIsTheGenerationScreen",
+  "breaks": "the seeded event opens on a screen that is not the generation screen, so steps 7 and 8 have no Generate All to press and read as the app being broken (#879)"
+}

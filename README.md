@@ -217,9 +217,12 @@ false on the macos-26 image (#849).
 ## The hand check
 
 What the GUI target cannot reach is written down instead, in
-[docs/HAND-CHECK.md](docs/HAND-CHECK.md): six questions about the window, the
-New Event form's keyboard handling and the alerts, each with a result specific
-enough to be wrong. Run it after `make install` when any of those change.
+[docs/HAND-CHECK.md](docs/HAND-CHECK.md): the questions about the window, the
+New Event form's keyboard handling, the alerts, the quit confirmation and what
+the Dock says while work is running, each with a result specific enough to be
+wrong. Run it after `make install` when any of those change. It says how many
+there are; this does not, because a count kept in two places is one that drifts,
+and it had (this said six while there were eight).
 
 ```
 ./PostRollApp/hand-check.sh healthy

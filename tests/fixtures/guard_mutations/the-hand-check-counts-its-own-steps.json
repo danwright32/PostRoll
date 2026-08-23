@@ -1,0 +1,8 @@
+{
+  "name": "the-hand-check-counts-its-own-steps",
+  "file": "docs/HAND-CHECK.md",
+  "find": "Eight questions this repo cannot answer any other way.",
+  "replace": "Six questions this repo cannot answer any other way.",
+  "test": "tests/test_hand_check_covers_every_alert.py::test_the_checklist_counts_its_own_steps_correctly",
+  "breaks": "the checklist opens by claiming a number of questions that is not the number of steps below it, which is the drift the README had already made (#879, L41)"
+}

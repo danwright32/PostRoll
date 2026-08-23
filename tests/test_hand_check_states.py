@@ -22,7 +22,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import pytest
 
@@ -240,3 +242,229 @@ def test_ending_a_world_that_was_never_started_is_not_an_error(world: Path):
     result = run(world, "end")
 
     assert result.returncode == 0, result.stderr
+
+
+# MARK: - The state a generation can actually be started from (#879)
+#
+# Step 8 of the checklist watches what the Dock and Notification Center say
+# while work runs, and both halves of it begin by starting a generation. Every
+# state above builds an EMPTY store, and `Generate All` is disabled until an
+# event has at least one photo, so the step was not runnable as written: the
+# button it tells you to press is grey, on a screen you cannot reach.
+
+# What the script copies at most, so a folder holding a whole shoot does not
+# turn a hand check into a full week's API spend. Stated here as well as in the
+# script because the point of the cap is that whoever runs the check is TOLD
+# when it fired.
+SEED_PHOTO_CAP = 8
+
+# The seeded event's date, as the app reads it. `EventStore` decodes with a
+# plain JSONDecoder, whose default strategy for a Date is seconds since the 2001
+# reference date. Derived here from the date itself rather than copied from the
+# script, so the two sides of the check do not come from one lookup (L70).
+SEED_DATE = datetime(2026, 9, 1, tzinfo=timezone.utc)
+APPLE_REFERENCE_DATE = datetime(2001, 1, 1, tzinfo=timezone.utc)
+
+
+@pytest.fixture
+def shoot(tmp_path: Path) -> Path:
+    """A folder of images standing in for one of Dan's shoot folders."""
+    folder = tmp_path / "shoot"
+    folder.mkdir()
+    for index in range(3):
+        (folder / f"DSC0{index}.JPG").write_bytes(b"stand-in for a photograph")
+    return folder
+
+
+def seeded_event(world: Path) -> dict:
+    events = json.loads(store_in(world).read_text())
+    assert len(events) == 1, f"the seeded store holds {len(events)} events rather than one"
+    return events[0]
+
+
+def photo_files(event: dict) -> list[Path]:
+    """The files the seeded event's photo paths actually name.
+
+    Through the URL, because that is what the app does with them. A path that
+    survives as a string and does not survive being turned back into a file is
+    a day with no photos, which is the state this whole command exists to avoid.
+    """
+    paths = event["days"]["monday"]["photoPaths"]
+    for url in paths:
+        assert url.startswith("file://"), f"{url} is not a file URL, so the app cannot open it"
+    return [Path(unquote(urlparse(url).path)) for url in paths]
+
+
+def test_seeding_with_no_folder_refuses_before_it_deletes_anything(world: Path):
+    """A refusal has to come before the world is rebuilt, not after.
+
+    Every state starts by deleting the world, so an argument checked afterwards
+    can only confirm a deletion that has already happened (L5). Here that would
+    take away the state whoever ran the previous step is standing in.
+    """
+    world.mkdir(parents=True)
+    (world / ".postroll-hand-check").write_text("made by an earlier step")
+    (world / "data").mkdir()
+    (world / "data" / "events.json").write_text("[]")
+
+    result = run(world, "seeded", "--no-launch")
+
+    assert result.returncode != 0, "seeded accepted no photo folder at all"
+    # The words, not merely a non-zero exit. Every unknown command already
+    # fails and prints a usage message mentioning the code folder, so a check
+    # for a refusal, or for the word folder, is answered by the command not
+    # existing at all (L140).
+    assert "photo folder" in result.stderr.lower(), (
+        f"the refusal does not say a photo folder is what is missing: {result.stderr}"
+    )
+    assert (world / "data" / "events.json").exists(), (
+        "the world was torn down by a command that then refused to build one"
+    )
+
+
+def test_seeding_from_a_folder_with_no_images_refuses_and_names_it(world: Path, tmp_path: Path):
+    """The setup that silently does nothing is the one to be afraid of.
+
+    A seeded event with no photos leaves `Generate All` disabled, which looks
+    exactly like the app being broken to somebody following the checklist, and
+    reads as a passed step to somebody skimming it (L98).
+    """
+    empty = tmp_path / "not-a-shoot"
+    empty.mkdir()
+    (empty / "notes.txt").write_text("no photographs in here")
+
+    result = run(world, "seeded", str(empty), "--no-launch")
+
+    assert result.returncode != 0, "seeded built an event out of a folder with no photos"
+    assert str(empty) in result.stderr, (
+        f"the refusal does not name the folder it was pointed at: {result.stderr}"
+    )
+
+
+def test_a_seeded_event_is_one_a_generation_can_be_started_from(world: Path, shoot: Path):
+    """The three things that decide whether the button is even reachable.
+
+    The stage, because `EventDetailView` shows the generation screen for
+    `.photosAssigned` and something else for every other stage. The photos,
+    because `canGenerate` is `totalPhotos > 0`. And the OCR result, because
+    `PythonBridge.buildManifest` throws "No OCR result" before the pipeline is
+    started at all, so an event without one can only ever produce a failure.
+    """
+    result = run(world, "seeded", str(shoot), "--no-launch")
+    assert result.returncode == 0, result.stderr
+
+    event = seeded_event(world)
+    assert event["stage"] == "Photos Assigned", (
+        f"the seeded event is at stage {event['stage']!r}, so the generation "
+        "screen is not the one the app shows for it"
+    )
+    assert "ocrResult" in event, (
+        "the seeded event has no OCR result, so buildManifest refuses the run "
+        "before the pipeline starts and only the failure half of step 8 is reachable"
+    )
+    assert event["days"]["monday"]["day"] == "monday"
+    assert len(photo_files(event)) == 3, "the seeded day does not carry the photos it was given"
+
+
+def test_the_seeded_photos_are_real_files_inside_the_scratch_world(world: Path, shoot: Path):
+    """Copied in, not pointed at where they came from.
+
+    The run writes its output beside the data root, and the checklist deletes
+    the whole world when it is finished. A world holding paths into a real shoot
+    folder would make `end` a command whose blast radius depends on what it was
+    seeded from.
+    """
+    run(world, "seeded", str(shoot), "--no-launch")
+
+    for photo in photo_files(seeded_event(world)):
+        assert photo.exists(), f"{photo} is named by the event and is not there"
+        assert world in photo.parents, f"{photo} is outside the scratch world"
+
+
+def test_seeding_leaves_the_folder_it_was_pointed_at_alone(world: Path, shoot: Path):
+    """It is given a real shoot folder, so it must only ever read from it."""
+    before = sorted(path.name for path in shoot.iterdir())
+
+    result = run(world, "seeded", str(shoot), "--no-launch")
+
+    assert result.returncode == 0, result.stderr
+    assert sorted(path.name for path in shoot.iterdir()) == before
+    assert photo_files(seeded_event(world)), (
+        "nothing was seeded, so leaving the source alone proves nothing (L159)"
+    )
+
+
+def test_seeding_says_so_when_it_takes_fewer_photos_than_it_found(world: Path, tmp_path: Path):
+    """A cap that is not reported reads as "it took everything" (L107 territory).
+
+    Somebody who pointed this at a 600 photo shoot and was told nothing would
+    reasonably read the captions afterwards as the pipeline's opinion of the
+    whole shoot.
+    """
+    folder = tmp_path / "whole-shoot"
+    folder.mkdir()
+    found = SEED_PHOTO_CAP + 3
+    for index in range(found):
+        (folder / f"DSC{index:04d}.jpg").write_bytes(b"stand-in for a photograph")
+
+    result = run(world, "seeded", str(folder), "--no-launch")
+
+    assert result.returncode == 0, result.stderr
+    assert len(photo_files(seeded_event(world))) == SEED_PHOTO_CAP
+    assert str(SEED_PHOTO_CAP) in result.stdout and str(found) in result.stdout, (
+        f"the cap fired and the output does not say how many were left: {result.stdout}"
+    )
+
+
+def test_the_seeded_date_is_written_the_way_the_app_reads_it(world: Path, shoot: Path):
+    """A date in the wrong encoding is not a wrong date, it is an unreadable store.
+
+    `EventStore` uses a plain JSONDecoder, so a Date is a number of seconds
+    since 2001 and an ISO string fails to decode. The whole store then fails
+    with it, and the state built to be healthy raises the corrupt store alert
+    instead, which is a different step of this same checklist.
+    """
+    run(world, "seeded", str(shoot), "--no-launch")
+
+    date = seeded_event(world)["date"]
+    assert isinstance(date, (int, float)) and not isinstance(date, bool), (
+        f"the seeded date is {date!r}, which JSONDecoder cannot read as a Date"
+    )
+    assert date == (SEED_DATE - APPLE_REFERENCE_DATE).total_seconds()
+
+
+def test_a_seeded_world_is_still_a_scratch_world(world: Path, shoot: Path):
+    """The safety claim every other state is held to, on this one too."""
+    result = run(world, "seeded", str(shoot), "--no-launch")
+
+    assert result.returncode == 0, result.stderr
+    store = store_in(world)
+    assert store.exists(), "there is no store, so where it is not is not a measurement"
+    assert world in store.parents
+    assert "Documents" not in str(store) and "Application Support" not in str(store)
+
+
+def test_a_seeded_world_can_also_have_the_broken_code_folder(world: Path, shoot: Path):
+    """The failure half of step 8 needs both at once, in one world.
+
+    A run fails there because the pipeline is not where the app was told it is,
+    and it has to be a run that could otherwise have started: an event with no
+    photos never reaches the bridge, so it produces no failure to be told about
+    either. Before this the two states were separate commands, each of which
+    began by deleting what the other had built.
+    """
+    result = run(world, "seeded", str(shoot), "--no-code-folder", "--no-launch")
+
+    assert result.returncode == 0, result.stderr
+    assert len(photo_files(seeded_event(world))) == 3, (
+        "the broken code folder cost the world its seeded event"
+    )
+    folder = world / "not-a-checkout"
+    assert folder.is_dir() and not (folder / ".git").exists()
+    assert any(folder.iterdir()), (
+        "the folder is empty, so the app reports it as missing rather than as "
+        "not a checkout, which is a different alert with different words"
+    )
+    assert "not-a-checkout" in result.stdout, (
+        f"nothing says the app is being pointed away from the checkout: {result.stdout}"
+    )
