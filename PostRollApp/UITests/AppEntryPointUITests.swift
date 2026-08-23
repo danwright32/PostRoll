@@ -53,10 +53,22 @@ final class AppEntryPointUITests: XCTestCase {
         // two sides of the check do not come from one lookup (L70).
         _ = launched()
 
-        // The products folder this test bundle was itself built into. Derived
-        // from where THIS code is running rather than named, so it cannot go
-        // stale and cannot be spelled two ways.
-        let products = Bundle(for: type(of: self)).bundleURL.deletingLastPathComponent()
+        // The products folder this run built into, taken from the RUNNER app
+        // this code is executing inside. In a UI test `Bundle.main` is
+        // PostRollUITests-Runner.app, which xcodebuild puts beside PostRoll.app,
+        // so its parent is the folder both were built into.
+        //
+        // Not `Bundle(for: type(of: self))`, which was tried first and is
+        // wrong: the test bundle is nested at
+        // PostRollUITests-Runner.app/Contents/PlugIns, three levels down, and
+        // comparing against that folder failed while the app was in exactly the
+        // right place. Measured on the runner on 2026-08-23.
+        let runner = Bundle.main.bundleURL
+        XCTAssertEqual(runner.pathExtension, "app",
+                       "the test runner is not an app bundle at \(runner.path), "
+                       + "so the folder derived from it is not the products "
+                       + "folder and the comparison below means nothing")
+        let products = runner.deletingLastPathComponent()
 
         let copies = NSWorkspace.shared.runningApplications.filter {
             $0.bundleIdentifier == "com.dwphotony.PostRoll"
