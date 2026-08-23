@@ -21,6 +21,7 @@ PROJECT   := PostRollApp/PostRoll.xcodeproj
 
 .PHONY: install install-force build test test-python test-python-fast \
 	check-guards check-toolchain record-fingerprints record-test-durations \
+	build-gui-tests \
 	record-design-change record-codec-change review-sheet clean
 
 # One build-and-install implementation, not two. This used to run its own
@@ -72,6 +73,21 @@ REVIEW_TESTS := \
 # drift into disagreeing about which tests are renderings (L41). CI runs
 # xcodebuild directly rather than through here, so the dumps are still proven
 # there on every push; what is skipped is only the local rendering.
+# Compile the GUI test target without running it.
+#
+# `make test` builds the PostRollTests scheme, which does not contain
+# PostRollUITests at all, so nothing local ever compiles the GUI tests and the
+# first thing that does is a runner. That is how a concurrency-safety error
+# reached CI on 2026-08-23 and failed a dispatched run at the build step (#864).
+#
+# build-for-testing rather than test: compiling is the part no local check had,
+# and RUNNING it would launch the app over whatever is on screen.
+build-gui-tests:
+	@$(LOCKED) xcodebuild build-for-testing -project "$(PROJECT)" \
+		-scheme PostRollUITests \
+		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
+		-quiet
+
 test:
 	@$(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
 		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \

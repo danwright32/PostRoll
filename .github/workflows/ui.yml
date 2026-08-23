@@ -20,6 +20,37 @@ name: GUI
 # in a little over two minutes. The premise was true of some runner at some
 # point; it is not true of this one.
 #
+# ── re-judged on 2026-08-23, and kept (#867) ─────────────────────────────────
+#
+# #849 built this target on the basis that a UI test launching the real app
+# could answer three things: window counts, sheet contents, and whether a key
+# press commits. Two of the three turned out to be unreachable, and five of the
+# seven tests written for it were deleted as a result (#860). A decision resting
+# on a premise now known to be two thirds wrong should be re-examined rather
+# than inherited (L61), so it was.
+#
+# It stays, for one reason. `PostRollApp.swift` is excluded from the unit bundle,
+# correctly, so the two checks left here are the only things in the repo that
+# RUN the entry point. #842 is what that costs when nothing does: the app
+# declared the wrong scene type, every unit test passed, and it was found by
+# installing the build and counting windows by hand.
+#
+# The two cheaper alternatives were considered and neither replaces it. A source
+# guard asserting the scene type would have caught #842 specifically, and would
+# catch nothing about a scene declared correctly that behaves wrongly, which is
+# the same text-matching cover that let #842 through in the first place. The
+# hand check (#866) does cover the window count, and only when somebody runs it;
+# it is the right home for the questions nothing can reach, not for the one
+# question something can.
+#
+# What made this worth keeping rather than merely defensible is that the cost
+# came down. Measured on the runner on 2026-08-23: 84.7 seconds of test time in
+# a job of about 150 when each test started and ended its own app, against 4.0
+# seconds in a job of 101 now that the class shares one. A control on main,
+# still launching per test, dispatched onto the same image 25 minutes later,
+# came back at 87.2 seconds in a job of 171, so the saving is the change rather
+# than the runner. #864 has the numbers.
+#
 # ── why this never runs on a pull request ────────────────────────────────────
 #
 # Two reasons, and either alone would be enough.

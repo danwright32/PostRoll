@@ -27,25 +27,85 @@ final class AppEntryPointUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// The app, launched and given long enough to draw.
+    // MARK: - One launch for the whole class (#864)
+
+    /// Starting and ending an app costs about 42 seconds, and the testing in
+    /// between costs almost none of it.
+    ///
+    /// Measured on the runner on 2026-08-23. With a launch and a termination per
+    /// test: 43.6 seconds and 41.1 seconds, of the SAME binary built by the same
+    /// job, 84.7 seconds of test time in a job of about 150. With one launch and
+    /// one termination for the whole class: 3.9 seconds and 0.1 seconds, 4.0
+    /// seconds of test time, and the job 101.
+    ///
+    /// A control was run rather than assuming the difference was the change:
+    /// main, still launching per test, dispatched onto the same image 25 minutes
+    /// after the branch run, came back at 45.4 and 41.9 seconds, 87.2 seconds of
+    /// test time in a job of 171. So the saving is this change and not the
+    /// runner having a better afternoon, which is the alternative explanation
+    /// two numbers moving together can never rule out on their own (L203).
+    ///
+    /// What that settles and what it does not. It settles that the price is paid
+    /// once per test rather than once per build, so #864's first suggestion, a
+    /// warm-up launch before the suite, would have paid it once and then paid it
+    /// again for every test anyway. It does NOT settle which half of a test's
+    /// own start and end the 42 seconds went into: the shared run's wall clock
+    /// is 24.4 seconds against 4.0 of test time, so roughly 20 seconds sits in
+    /// setup and teardown outside the methods, and `terminateEveryCopy` polls
+    /// for up to 20 seconds waiting for the app to die. Attributing it all to
+    /// macOS rescanning the bundle, which is what #864 assumed, is not something
+    /// these numbers support (L203).
+    ///
+    /// Either way the remedy is the same, and it is the other direction in the
+    /// same issue: share one app where the tests do not need a fresh one.
+    /// Neither of these does. Both only READ, one the accessibility tree's
+    /// window count and one the operating system's list of running processes,
+    /// and neither clicks, types or closes anything, so the second inherits
+    /// exactly the state the first found.
+    ///
+    /// A test that DOES need a cold start must say so and launch its own, and
+    /// `TestTargetHygieneTests` holds this file to launching once so that adding
+    /// one is a decision somebody takes rather than a cost that creeps back.
+    /// `nonisolated(unsafe)` because XCTest runs the methods of one class one
+    /// at a time on one thread, so there is no concurrent access to protect
+    /// against, and the alternatives do not work here: `@MainActor` on the
+    /// property forces `class func tearDown()` to be isolated too, and that
+    /// overrides a nonisolated method on XCTestCase.
+    ///
+    /// This is the compile error that failed the first dispatch of this change
+    /// (run 32663551076). `make test` builds the PostRollTests scheme and never
+    /// compiles this target at all, so the GUI target needs its own local build
+    /// before anything is pushed; `make build-gui-tests` is that.
+    nonisolated(unsafe) private static var sharedLaunch: Result<XCUIApplication, Error>?
+
+    nonisolated(unsafe) private static let dataRoot = LaunchedApp.scratchRoot("entry-point")
+
+    /// The app, launched once and given long enough to draw.
     ///
     /// Every assertion below is about the running application, so a launch that
     /// did not happen has to fail here rather than leaving the assertions to
-    /// report about nothing (L98).
-    private lazy var dataRoot = LaunchedApp.scratchRoot("entry-point")
-
-    override func tearDownWithError() throws {
-        LaunchedApp.terminateEveryCopy()
-        try? FileManager.default.removeItem(at: dataRoot)
+    /// report about nothing (L98). The failure is REMEMBERED rather than
+    /// retried, so a launch that cannot work fails both tests with the same
+    /// reason instead of costing another 42 seconds to fail again.
+    private func launched() throws -> XCUIApplication {
+        if Self.sharedLaunch == nil {
+            Self.sharedLaunch = Result { try LaunchedApp.launch(dataRoot: Self.dataRoot) }
+        }
+        return try XCTUnwrap(Self.sharedLaunch,
+                             "the shared launch was never attempted").get()
     }
 
-    private func launched(file: StaticString = #filePath, line: UInt = #line) throws -> XCUIApplication {
-        // Through the shared route, so these are pointed away from live data and
-        // get the same proven clean slate as everything else. They used to
-        // launch bare, which was harmless on a fresh runner and would have read
-        // and written the real events.json the first time anyone ran the GUI
-        // suite on the development Mac (L2).
-        try LaunchedApp.launch(dataRoot: dataRoot, file: file, line: line)
+    /// Ends the app once the whole class is done, not once per test.
+    ///
+    /// Per test was what made the second launch necessary. It is still ended:
+    /// since #847 PostRoll does not quit when its window closes, so a copy left
+    /// behind outlives the run that made it and the next launch lands on top of
+    /// it.
+    override class func tearDown() {
+        LaunchedApp.terminateEveryCopy()
+        try? FileManager.default.removeItem(at: dataRoot)
+        sharedLaunch = nil
+        super.tearDown()
     }
 
     // MARK: - The app under test is the one built from this checkout
