@@ -26,6 +26,29 @@ import XCTest
 /// The tree is printed on every run, pass or fail. The first dispatch of this
 /// file is a measurement as much as a test, and a green run that prints nothing
 /// says only that the assertions written by somebody guessing happened to hold.
+///
+/// ── what the first dispatch measured, run 32672296758 on 2026-08-23 ─────────
+///
+/// Five of six assertions held on the runner, and the sixth was this file's own
+/// defect rather than the app's. The alert is entirely readable:
+///
+/// ```
+/// Sheet, {{382.0, 211.0}, {260.0, 314.0}}, label: 'alert', Keyboard Focused
+///   StaticText, identifier: '_NS:74', value: PostRoll cannot ge...
+///   StaticText, identifier: '_NS:58', value: PostRoll found /Us...
+///   Button, identifier: 'action-button-1', label: 'OK'
+/// ```
+///
+/// Two things worth keeping. The words arrive as a static text's VALUE and its
+/// label is empty, which is why `words(in:)` reads both. And the application
+/// and window are marked `Disabled` while the sheet is up: that is the exact
+/// symptom #860 recorded as the harness going blind, and it is nothing of the
+/// sort. It is a window behind a modal, correctly reported, with its whole
+/// subtree present at about 17,700 characters.
+///
+/// The four launches cost 171.8 seconds of the job, at roughly 42 seconds each.
+/// That is what these questions cost to ask automatically, against a manual
+/// routine that costs twenty minutes and only runs when somebody remembers.
 
 // MARK: - The titles, in one place
 
@@ -47,6 +70,21 @@ enum AlertTitle {
 
 /// What is on screen, asked of the running app.
 enum AlertOnScreen {
+
+    /// The words every static text on screen is carrying.
+    ///
+    /// From `value` as well as `label`, because an alert's title and message
+    /// arrive as static texts whose text is the VALUE and whose label is empty.
+    /// A check reading only the label finds nothing while the words are plainly
+    /// on the screen, which is the failure this file shipped with on its first
+    /// dispatch: run 32672296758 on 2026-08-23, where the tree held
+    /// `StaticText, value: PostRoll found /Us...` and the assertion reported
+    /// that nothing named the folder.
+    static func words(in app: XCUIApplication) -> [String] {
+        app.staticTexts.allElementsBoundByIndex.flatMap { element -> [String] in
+            [element.label, element.value as? String ?? ""].filter { !$0.isEmpty }
+        }
+    }
 
     /// Whether an alert carrying `title` is up, within `seconds`.
     ///
@@ -280,8 +318,7 @@ final class BrokenCodeFolderAlertUITests: XCTestCase {
         // The message names the folder, which is what makes it actionable: an
         // alert saying the code folder is wrong without saying which folder it
         // looked in leaves nothing to do about it (L80).
-        let named = app.staticTexts.allElementsBoundByIndex
-            .contains { $0.label.contains("not-a-checkout") }
+        let named = AlertOnScreen.words(in: app).contains { $0.contains("not-a-checkout") }
         XCTAssertTrue(named,
                       "nothing on screen names the folder the app looked in. "
                       + AlertOnScreen.describe(app))
