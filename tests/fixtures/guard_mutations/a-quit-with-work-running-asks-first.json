@@ -1,0 +1,8 @@
+{
+  "name": "a-quit-with-work-running-asks-first",
+  "file": "PostRollApp/Sources/Models/BackgroundWork.swift",
+  "find": "        guard !workInFlight.isEmpty else { return .quitNow }",
+  "replace": "        guard workInFlight.isEmpty else { return .quitNow }",
+  "test": "PostRollTests/QuitWithWorkInFlightTests/testQuittingWithWorkRunningAsks",
+  "breaks": "Cmd+Q, the Quit menu item, the Dock and a logout all terminate PostRoll on top of a running generation, export or page read, killing it with nothing anywhere saying what happened to it (#862)"
+}

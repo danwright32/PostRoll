@@ -1,13 +1,14 @@
 # The hand check
 
-Six questions this repo cannot answer any other way. Everything else about
+Seven questions this repo cannot answer any other way. Everything else about
 PostRoll is covered by the suites; these are here because XCUITest cannot read
 into a PostRoll window at all, which #860 records in full, so nothing that runs
 on its own can see what the window is showing.
 
 Run it after `make install`, and only when something in this list has been
 touched: the window's lifecycle, the New Event sheet's keyboard handling, the
-alerts, or the queue behind them. It takes about ten minutes.
+alerts, the queue behind them, or what happens when the app is asked to quit.
+It takes about fifteen minutes.
 
 Each step says what should happen precisely enough to be wrong. If a step's
 result is "it looked fine", the step is not written well enough and is worth
@@ -175,6 +176,45 @@ PostRoll.
 **Expect:** the warning does not come back. It has now genuinely been waved
 away, and re-raising it on every activation is how a warning becomes something
 to dismiss on reflex.
+
+## 7. Quitting while something is running asks first (#862)
+
+The dialog is an alert macOS puts up during termination, so nothing automated
+can read it either.
+
+```
+./PostRollApp/hand-check.sh healthy
+```
+
+Start something that takes a while: open an event and run a generation, or an
+export. While it is running, press **Cmd+Q**.
+
+**Expect:** a dialog titled **PostRoll is still working**, whose message names
+what is running (for example "a week is still generating"), with **Keep
+Working** and **Quit Anyway**.
+**Wrong if:** the app just quits. That is the defect: every route out except the
+update sheet used to terminate with no check at all.
+**Also wrong if:** the message says something is running that is not, or fails
+to name something that is. The list is derived from the nine owners of
+background work, so a wrong name means the derivation is reading the wrong
+thing.
+
+Press **Keep Working**.
+
+**Expect:** the app stays, and the run carries on from where it was rather than
+restarting.
+
+Now press **Cmd+Q** again and press **Quit Anyway**.
+
+**Expect:** PostRoll quits.
+**Wrong if:** it stays. Quit Anyway has to be a real way out, or a logout turns
+into a machine that will not log out.
+
+Finally, with nothing running, press **Cmd+Q**.
+
+**Expect:** it quits immediately with no dialog. A confirmation that appears
+every time is one that gets clicked through on reflex, taking the real one with
+it.
 
 ---
 

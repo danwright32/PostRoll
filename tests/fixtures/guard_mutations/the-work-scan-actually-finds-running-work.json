@@ -1,0 +1,8 @@
+{
+  "name": "the-work-scan-actually-finds-running-work",
+  "file": "PostRollApp/Sources/Models/BackgroundWork.swift",
+  "find": "            guard let owner = child.value as? BackgroundWork, owner.hasWorkInFlight else {",
+  "replace": "            guard let owner = child.value as? BackgroundWork, false, owner.hasWorkInFlight else {",
+  "test": "PostRollTests/QuitWithWorkInFlightTests/testTheScanFindsWorkThatIsActuallyRunning",
+  "breaks": "the scan reports nothing running whatever is running, so the quit dialog never appears and the update refusal never refuses, while every test that only looks at an idle app goes on passing (#862, L98)"
+}

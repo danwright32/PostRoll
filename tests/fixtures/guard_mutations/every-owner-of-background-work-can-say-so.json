@@ -1,0 +1,8 @@
+{
+  "name": "every-owner-of-background-work-can-say-so",
+  "file": "PostRollApp/Sources/Services/CollageLayoutLoader.swift",
+  "find": "extension CollageLayoutLoader: BackgroundWork {",
+  "replace": "extension CollageLayoutLoader {",
+  "test": "PostRollTests/QuitWithWorkInFlightTests/testEveryOwnerInAppOwnersReportsWhetherItIsBusy",
+  "breaks": "an owner of background work drops out of the derived list, so PostRoll says nothing is running while it is and quits on top of it, which is exactly the state the three named managers left the other six in before #862"
+}
