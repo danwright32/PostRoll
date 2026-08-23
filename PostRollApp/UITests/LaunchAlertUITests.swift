@@ -115,6 +115,30 @@ enum BrokenWorld {
         }
     }
 
+    /// A folder the launch check reads as a working checkout.
+    ///
+    /// Passed by every test that is NOT about the code folder, and that is not
+    /// tidiness. The runner's own checkout has no `venv/bin/python3`: nothing
+    /// in `ui.yml` builds one, so an app launched without this raises the code
+    /// folder alert as well as the one the test is about, and the two are
+    /// queued with only one on screen. The test would then fail for a reason
+    /// that has nothing to do with what it asks, on an environment nobody
+    /// declared (L2).
+    ///
+    /// It mirrors what `AppPaths.projectRootProblem` actually looks for, which
+    /// is two paths existing, rather than being a real checkout.
+    static func aCheckout(in root: URL) throws -> URL {
+        let folder = root.appendingPathComponent("checkout")
+        let fm = FileManager.default
+        try fm.createDirectory(at: folder.appendingPathComponent("postroll"),
+                               withIntermediateDirectories: true)
+        try fm.createDirectory(at: folder.appendingPathComponent("venv/bin"),
+                               withIntermediateDirectories: true)
+        try Data("#!/bin/sh\n".utf8)
+            .write(to: folder.appendingPathComponent("venv/bin/python3"))
+        return folder
+    }
+
     /// A folder that exists and is not a checkout, which is a different problem
     /// from a folder that is missing and raises a different message.
     static func notACheckout(in root: URL) throws -> URL {
@@ -159,12 +183,21 @@ final class CorruptStoreAlertUITests: XCTestCase {
     }
 
     func testTheAlertSaysTheEventsCouldNotBeRead() throws {
-        let app = try LaunchedApp.launch(dataRoot: root)
+        let app = try LaunchedApp.launch(dataRoot: root,
+                                         projectRoot: try BrokenWorld.aCheckout(in: root))
         print("CorruptStoreAlertUITests:\n\(AlertOnScreen.describe(app))")
 
         XCTAssertTrue(AlertOnScreen.showing(AlertTitle.dataLoad, in: app),
                       "the alert titled \(AlertTitle.dataLoad) is not on screen. "
                       + AlertOnScreen.describe(app))
+
+        // Named separately, because "the alert I asked about is not showing" and
+        // "a different alert is showing instead" send whoever reads the failure
+        // to different places, and the second is the one this file has already
+        // had to be fixed for once.
+        XCTAssertFalse(app.staticTexts[AlertTitle.projectRoot].exists,
+                       "the code folder alert is on screen instead, so this "
+                       + "launch had two problems and the queue chose the other one")
 
         let (labels, fromAlert) = AlertOnScreen.buttons(in: app)
         XCTAssertTrue(labels.contains("OK"),
@@ -191,7 +224,8 @@ final class UnreadableStoreAlertUITests: XCTestCase {
     }
 
     func testTheRefusalNamesItselfAndOffersOnlyItsTwoWaysOut() throws {
-        let app = try LaunchedApp.launch(dataRoot: root)
+        let app = try LaunchedApp.launch(dataRoot: root,
+                                         projectRoot: try BrokenWorld.aCheckout(in: root))
         print("UnreadableStoreAlertUITests:\n\(AlertOnScreen.describe(app))")
 
         XCTAssertTrue(AlertOnScreen.showing(AlertTitle.storeUnavailable, in: app),
