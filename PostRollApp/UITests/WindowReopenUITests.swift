@@ -76,12 +76,49 @@ final class WindowReopenUITests: XCTestCase {
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 30),
                       "there is no window to close", file: file, line: line)
-        let close = window.buttons[XCUIIdentifierCloseWindow]
-        XCTAssertTrue(close.waitForExistence(timeout: 15),
-                      "the window has no close button, so there is no way to ask "
-                      + "it to close and this test would prove nothing",
-                      file: file, line: line)
-        close.click()
+
+        // The menu command first. Clicking the close button was tried and is a
+        // silent no-op on the runner: the button is found, the click reports
+        // success, and the window is still there 30 seconds later. Cmd+W is the
+        // same. A menu item click drives the app's own Close command rather than
+        // the window chrome, and does not depend on anything being hittable at a
+        // screen position.
+        let closeItem = app.menuBars.menuItems["Close"]
+        if closeItem.waitForExistence(timeout: 15) {
+            closeItem.click()
+            if windowsSettle(to: 0, in: app, within: 10) { return }
+        }
+
+        // Still there. Fall back to the button, and if that does nothing either,
+        // say what the tree actually holds rather than leaving the next reader
+        // with "it did not close" and no way to find out why.
+        let button = window.buttons[XCUIIdentifierCloseWindow]
+        if button.waitForExistence(timeout: 5) {
+            button.click()
+            if windowsSettle(to: 0, in: app, within: 10) { return }
+            XCTFail("neither the Close menu item nor the close button closed the "
+                    + "window. The button exists, isHittable=\(button.isHittable), "
+                    + "frame=\(button.frame). Window frame=\(window.frame). "
+                    + "Tree:\n\(app.debugDescription)",
+                    file: file, line: line)
+        } else {
+            XCTFail("the Close menu item did not close the window and the window "
+                    + "has no close button either. Tree:\n\(app.debugDescription)",
+                    file: file, line: line)
+        }
+    }
+
+    /// Whether the window count reaches `expected` within the time, without
+    /// failing when it does not. The caller decides what a no is worth.
+    private func windowsSettle(to expected: Int,
+                               in app: XCUIApplication,
+                               within seconds: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            if app.windows.count == expected { return true }
+            usleep(200_000)
+        }
+        return app.windows.count == expected
     }
 
     // MARK: - Closing it
