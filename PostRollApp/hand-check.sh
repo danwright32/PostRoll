@@ -2,21 +2,27 @@
 # The states the hand check needs, built without going near real data (#866).
 #
 # Questions about this app that can only be answered by driving it: whether
-# closing the window leaves it running and reachable (#847), whether Return
-# commits a hand opened form but not a link raised one (#848), what happens when
-# it is asked to quit with work in flight (#862), and what the Dock and
-# Notification Center say (#863). Each was answered by hand and each answer
+# closing the window leaves it running and reachable (#847), which copy of
+# PostRoll macOS hands a real link to (#844), what happens when it is asked to
+# quit with work in flight (#862), and what the Dock and Notification Center
+# say (#863). Each was answered by hand and each answer
 # lived only in an issue comment. docs/HAND-CHECK.md is the routine that
 # replaces those comments; this is what puts the app into each state it asks
 # about.
 #
-# The alerts used to be here too, on the recorded grounds that XCUITest cannot
-# read into a PostRoll window. That was measured again on 2026-08-23 and is
-# false, so they are asserted now rather than looked at
-# (PostRollApp/UITests/LaunchAlertUITests.swift, #877). The broken store states
-# below are kept: they are what the alert tests set up too, and the corrupt and
-# unreadable worlds are still the quickest way to put a running app in front of
-# somebody who needs to see one.
+# The alerts and the New Event form used to be here too, on the recorded grounds
+# that XCUITest cannot read into a PostRoll window. That was measured again on
+# 2026-08-23 and 24 and is false, so both are asserted now rather than looked at
+# (LaunchAlertUITests.swift and NewEventFormUITests.swift, #877 and #883). The
+# broken store states below are kept: they are what the alert tests set up too,
+# and the corrupt and unreadable worlds are still the quickest way to put a
+# running app in front of somebody who needs to see one.
+#
+# The `link` command is kept for the half a test deliberately cannot ask. The UI
+# test names the bundle it delivers to, because a test must not let
+# LaunchServices choose a copy pointed at the real library; which copy it WOULD
+# have chosen is exactly what is left over, and it is a real question on a
+# machine with fourteen PostRoll bundles registered.
 #
 # ## Why a script rather than a paragraph of instructions
 #
