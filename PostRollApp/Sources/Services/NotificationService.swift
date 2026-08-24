@@ -33,9 +33,32 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Permission
 
+    /// What the last request for permission produced.
+    ///
+    /// Kept rather than discarded, which is the whole of #879's second half.
+    /// Every banner this app sends, every completion and every failed run, is
+    /// delivered only if this is `.granted`, and until now the answer was
+    /// thrown away at the callback: `{ _, _ in }`. A refusal and a working app
+    /// produced exactly the same evidence, which is none, and the symptom is a
+    /// person watching for a banner that can never arrive.
+    private(set) var permission: NotificationPermission = .notAsked
+
     func requestPermission() {
         UNUserNotificationCenter.current().delegate = self
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: [.alert, .sound, .badge]
+        ) { granted, error in
+            let outcome = NotificationPermission.outcome(granted: granted, error: error)
+            if let complaint = outcome.complaint {
+                // Loud, and in the log rather than only in a variable, because
+                // the log is the only surface that outlives the launch this
+                // happened on (L148).
+                NSLog("NotificationService: %@", complaint)
+            }
+            Task { @MainActor in
+                NotificationService.shared.permission = outcome
+            }
+        }
     }
 
     // MARK: - Foreground delivery
