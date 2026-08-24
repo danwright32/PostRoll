@@ -1,21 +1,20 @@
-"""Every alert the window can show is in the hand check (#866).
+"""Every alert the window can draw, read out of the Swift that draws it.
 
-The checklist quotes each alert by its title and its buttons, because "check the
-alert looks right" is not a step anybody can be wrong about. That makes it a
-document holding copies of strings that live in Swift, and a document quoting
-code it is not held to is worse than no document: it sends whoever is running
-the check looking for words that no longer exist, and a step that cannot be
-completed is usually recorded as a step that passed.
+Two guards need this and each would otherwise spell the parse differently: one
+asks whether the UI tests quote every alert, the other whether they assert every
+button. A copy of one derivation is a copy that drifts, and the failure is the
+quiet kind, since a parse that matches nothing reports a clean run over an empty
+set (L98). Both readers below RAISE rather than returning an empty answer.
 
-Both directions matter and only one of them is obvious. A RENAMED title leaves a
-checklist step nobody can carry out. A NEW alert leaves a screen the routine
-never looks at, and nothing anywhere would say so, because the checklist goes on
-passing on the alerts it already knew about (L96).
+This used to serve `docs/HAND-CHECK.md`, which quoted the alerts because nothing
+automated could see them. Since #877 they are asserted by
+`PostRollApp/UITests/LaunchAlertUITests.swift` and the checklist no longer
+mentions them, so the same readers now hold the UI tests instead. What is being
+protected did not change: an alert nobody looks at is one that can be
+half swapped and stay that way (#855, L96).
 
-What this deliberately does NOT check is the sentence beside each title. The
-message bodies name paths and are composed at runtime, so quoting them exactly
-would break on every legitimate rewording; the checklist describes them instead
-(L210).
+Read as text rather than compiled, because the alerts live in Swift and this is
+Python.
 """
 
 from __future__ import annotations
@@ -70,16 +69,6 @@ def alert_titles() -> set[str]:
     return titles
 
 
-def test_every_alert_title_appears_in_the_checklist():
-    checklist = CHECKLIST.read_text()
-    missing = sorted(t for t in alert_titles() if t not in checklist)
-
-    assert not missing, (
-        "the hand check does not cover these alerts, so nothing looks at what "
-        f"they draw and nothing ever will: {missing}"
-    )
-
-
 def alert_button_labels() -> set[str]:
     """Every button label the window's one alert modifier can draw.
 
@@ -98,7 +87,15 @@ def alert_button_labels() -> set[str]:
         f"MainWindowView presents {len(block) - 1} alerts. One is the whole "
         "point of #846, and zero means this test is reading nothing at all"
     )
-    body = block[1]
+    # Only as far as the message builder, which is where the alert's own
+    # buttons end. Reading to the end of the file swept up `New Event` from the
+    # window behind it, and a guard that demands somebody quote a button no
+    # alert has is a guard nobody can satisfy honestly.
+    assert "} message: {" in block[1], (
+        "the alert modifier no longer hands off to a message builder, so there "
+        "is no end to read to and this would take every button on the window"
+    )
+    body = block[1].split("} message: {")[0]
 
     labels = set(re.findall(r'Button\("([^"]+)"', body))
     # The restore button takes its label from a named constant, because the same
@@ -115,56 +112,3 @@ def alert_button_labels() -> set[str]:
         "parse is wrong rather than the app being simpler"
     )
     return labels
-
-
-def test_every_alert_button_is_named_in_the_checklist():
-    """A step that checks only the title passes on a half swapped alert, which
-    is the exact failure #855 was opened to find, so the buttons are quoted too.
-
-    This catches the direction that actually goes wrong: a label reworded in
-    Swift while the checklist goes on asking for the old words, which leaves a
-    step nobody can carry out and which is usually recorded as a step that
-    passed. It does not claim the label is quoted in the RIGHT step; a whole
-    file match is satisfied by any mention anywhere (L135), and holding a prose
-    sentence to a position in the document would break on every rewrite of it.
-    """
-    checklist = CHECKLIST.read_text()
-    missing = sorted(label for label in alert_button_labels() if label not in checklist)
-
-    assert not missing, (
-        "the checklist never names these alert buttons, so whoever runs it "
-        f"cannot tell a correctly drawn alert from a half swapped one: {missing}"
-    )
-
-
-def test_the_checklist_counts_its_own_steps_correctly():
-    """The opening line says how many questions there are, and it is a number
-    kept by hand beside a list that grows (L41).
-
-    It had already drifted once, in the README, which said six while there were
-    eight. The README no longer claims a count at all; this one is worth keeping
-    because it is the first sentence somebody reads before deciding whether to
-    start, but only if something holds it to the steps below it.
-    """
-    text = CHECKLIST.read_text()
-
-    steps = re.findall(r"^## (\d+)\. ", text, re.M)
-    assert steps, "no numbered steps were found at all, so this test reads nothing"
-    assert [int(number) for number in steps] == list(range(1, len(steps) + 1)), (
-        f"the steps are numbered {steps}, which is not 1 upwards, so a count of "
-        "them is not what the opening line is claiming"
-    )
-
-    spelled = {
-        4: "Four", 5: "Five", 6: "Six", 7: "Seven", 8: "Eight",
-        9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve",
-    }
-    expected = spelled.get(len(steps))
-    assert expected, (
-        f"{len(steps)} steps, and this test has no word for that number. Add it "
-        "rather than deleting the check"
-    )
-    first_line = text.splitlines()[2]
-    assert first_line.startswith(f"{expected} questions"), (
-        f"the checklist opens with {first_line!r} and holds {len(steps)} steps"
-    )

@@ -1,16 +1,27 @@
 # The hand check
 
-Eight questions this repo cannot answer any other way. Everything else about
-PostRoll is covered by the suites; these are here because XCUITest cannot read
-into a PostRoll window at all, which #860 records in full, so nothing that runs
-on its own can see what the window is showing.
+Six questions this repo cannot answer any other way. Everything else about
+PostRoll is covered by the suites, and that now includes the alerts, which used
+to be steps 5 and 6 here.
+
+This document used to say that XCUITest cannot read into a PostRoll window at
+all, which #860 recorded in full. That was measured again on 2026-08-23 and is
+false: the harness reads an alert's title, its message and its buttons, presses
+them, and sees what happens next. `PostRollApp/UITests/LaunchAlertUITests.swift`
+holds what that retired, including the #855 recovery, and carries the evidence.
+What is left here is what nothing automated can reach: a window that will not
+close under a synthetic Cmd+W, a form whose Return has to come from a real key
+press, an alert macOS puts up during termination, the Dock icon, and Notification
+Center.
 
 Run it after `make install`, and only when something in this list has been
-touched: the window's lifecycle, the New Event sheet's keyboard handling, the
-alerts, the queue behind them, what happens when the app is asked to quit, or
-what the Dock says while work is running.
-It takes about twenty minutes of attention, and steps 7 and 8 spend part of
-that waiting on a real generation.
+touched: the window's lifecycle, the New Event sheet's keyboard handling, what
+happens when the app is asked to quit, or what the Dock says while work is
+running. Nothing prompts you: a step on the merge to main does, naming the steps
+whose files the merge touched (#878).
+
+It takes about ten minutes of attention, and steps 5 and 6 spend part of that
+waiting on a real generation.
 
 Each step says what should happen precisely enough to be wrong. If a step's
 result is "it looked fine", the step is not written well enough and is worth
@@ -26,7 +37,7 @@ Every step below points the app at a scratch library and a scratch code folder,
 so nothing here can touch the real events.json. That is done by the setup
 script rather than by hand, because several steps deliberately break the store.
 
-Steps 7 and 8 need work in flight, which means a real generation, which means an
+Steps 5 and 6 need work in flight, which means a real generation, which means an
 event with photographs on it. Those two ask for a folder to copy a handful out
 of; the copies live in the scratch world and the folder itself is only ever
 read. Between them they cost about one and a half runs against the API.
@@ -125,94 +136,7 @@ Click **Create**.
 **Wrong if:** the button does nothing. Both halves matter: a check that only
 does one of them passes on a change that does nothing at all.
 
-## 5. Each alert says its own words, with its own buttons (#855)
-
-Covers: `PostRollApp/Sources/Models/WindowModals.swift`,
-`PostRollApp/Sources/Views/MainWindowView.swift`,
-`PostRollApp/Sources/AppState.swift`,
-`PostRollApp/Sources/Services/LaunchProjectCheck.swift`,
-`PostRollApp/Sources/Services/EventStore.swift`,
-`PostRollApp/Sources/Services/StoreRestoreText.swift`
-
-Three separate launches, because each is a different launch condition.
-
-```
-./PostRollApp/hand-check.sh no-code-folder
-```
-
-**Expect:** one alert titled **PostRoll cannot generate anything**, whose
-message names the folder `not-a-checkout` under `~/Library/Caches/
-PostRollHandCheck`, with a single **OK** button.
-**Wrong if:** the title and the buttons disagree, for example this title over
-Try Again and Quit PostRoll. Two halves of one screen can each read as correct
-while contradicting each other, which is the whole of #855.
-
-Press **OK**. Expect it to go away and stay away.
-
-```
-./PostRollApp/hand-check.sh corrupt-store
-```
-
-**Expect:** one alert titled **Saved events could not be read**, saying the
-unreadable file was set aside, with an **OK** button. If a backup exists in the
-scratch world there will also be a **Restore Latest Backup** button; on a fresh
-scratch world there will not be, and that is correct.
-
-```
-./PostRollApp/hand-check.sh unreadable-store
-```
-
-**Expect:** one alert titled **PostRoll cannot open your events**, with exactly
-two buttons, **Try Again** and **Quit PostRoll**.
-
-Press **Escape**, and click outside the alert.
-
-**Expect:** it stays. It is the one alert that refuses to be dismissed, because
-the events are still on disk and letting Dan past would show him an empty
-library that quietly discards his edits.
-**Wrong if:** it closes. Everything he types after that is lost.
-
-## 6. Recovering from the refusal shows what was waiting behind it (#855)
-
-Covers: `PostRollApp/Sources/Models/WindowModals.swift`,
-`PostRollApp/Sources/Views/MainWindowView.swift`,
-`PostRollApp/Sources/AppState.swift`,
-`PostRollApp/Sources/Services/LaunchProjectCheck.swift`
-
-This is the step the whole of #855 turned out to be about, and the one most
-worth running after any change to the alerts.
-
-```
-./PostRollApp/hand-check.sh both-broken
-```
-
-**Expect:** the alert on screen is **PostRoll cannot open your events**, not the
-code folder one. Both launch checks fired, and the refusal wins the screen
-whichever finished first.
-
-Now repair the store, leaving the alert up:
-
-```
-./PostRollApp/hand-check.sh repair-store
-```
-
-Press **Try Again**.
-
-**Expect:** the refusal clears AND the alert titled **PostRoll cannot generate
-anything** appears in its place, because the code folder is still broken.
-**Wrong if:** no alert appears at all. That was the defect: one button press
-made two changes, and SwiftUI's report of the alert it tore down landed on the
-warning that had just been promoted, dismissing an alert nobody had seen. Worse,
-it was recorded as dismissed, so it never came back.
-
-Press **OK** on the code folder alert, then switch to another app and back to
-PostRoll.
-
-**Expect:** the warning does not come back. It has now genuinely been waved
-away, and re-raising it on every activation is how a warning becomes something
-to dismiss on reflex.
-
-## 7. Quitting while something is running asks first (#862)
+## 5. Quitting while something is running asks first (#862)
 
 Covers: `PostRollApp/Sources/Services/DeepLinkInbox.swift`,
 `PostRollApp/Sources/Models/BackgroundWork.swift`,
@@ -221,7 +145,7 @@ Covers: `PostRollApp/Sources/Services/DeepLinkInbox.swift`,
 The dialog is an alert macOS puts up during termination, so nothing automated
 can read it either.
 
-Something has to be running, so this uses the seeded event step 8 explains,
+Something has to be running, so this uses the seeded event step 6 explains,
 for the same reason: a generation cannot be started from an empty store.
 
 ```
@@ -259,10 +183,10 @@ every time is one that gets clicked through on reflex, taking the real one with
 it.
 
 Quit Anyway takes the run with it, so this step costs part of a real
-generation. Step 8 needs a whole one, and the two cannot share: that one has to
+generation. Step 6 needs a whole one, and the two cannot share: that one has to
 be allowed to finish.
 
-## 8. Work with no window says so (#863, #879)
+## 6. Work with no window says so (#863, #879)
 
 Covers: `PostRollApp/Sources/Views/WorkingDockTile.swift`,
 `PostRollApp/Sources/Services/NotificationService.swift`,

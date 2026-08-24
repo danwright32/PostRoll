@@ -12,9 +12,9 @@ import XCTest
 /// as a number of seconds since 2001, because `EventStore` decodes with a plain
 /// decoder; an ISO string there is valid JSON, passes every assertion on the
 /// Python side, and makes the whole store undecodable. The state built to be
-/// healthy would then raise the corrupt store alert, which is a different step
-/// of the same checklist, and whoever was running step 8 would be looking at a
-/// screen from step 5.
+/// healthy would then raise the corrupt store alert instead, and whoever was
+/// following the Dock step would be looking at a screen belonging to a
+/// different one.
 ///
 /// So this decodes what the script wrote, the way the app does, and asks the
 /// three questions that decide whether a generation can be started from it.

@@ -1,0 +1,8 @@
+{
+  "name": "a-hanging-gui-test-is-given-a-deadline",
+  "file": ".github/workflows/ui.yml",
+  "find": "            -test-timeouts-enabled YES \\\n",
+  "replace": "",
+  "test": "tests/test_gui_tests_cannot_hang_silently.py::test_a_hanging_gui_test_is_given_a_deadline",
+  "breaks": "a UI test that stops responding holds the runner until the workflow's own 45 minute timeout and reports nothing, because a run's log cannot be read until it finishes: measured on 2026-08-23, run 32673163649, where the log came back only after cancelling the job by hand (#877, L110)"
+}

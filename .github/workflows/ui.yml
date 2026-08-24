@@ -184,6 +184,19 @@ jobs:
           echo "launchctl session:"
           launchctl managername || true
 
+      # The timeout flags are not tuning, they are the difference between a
+      # failure and a wedged job. Measured on 2026-08-23, run 32673163649: a UI
+      # test stopped responding inside an accessibility query two seconds in,
+      # and the step sat there for 35 minutes reporting nothing, because a
+      # run's log cannot be read until it finishes. Cancelling it by hand is
+      # what unlocked the log. XCUITest's own timeouts are off unless asked
+      # for, so a wait here had no deadline at all and could only hang (L110).
+      #
+      # 180 seconds per test, against a cold launch measured at about 42.
+      # tests/test_gui_tests_cannot_hang_silently.py holds this to being asked
+      # for at all, and to staying well under the job's own 45 minutes: an
+      # allowance near that is not a deadline, it is the same wedge with a flag
+      # in front of it.
       - name: Run the GUI tests
         run: |
           xcodebuild \
@@ -191,4 +204,7 @@ jobs:
             -scheme PostRollUITests \
             -destination 'platform=macOS' \
             -derivedDataPath PostRollApp/.derived-data \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 180 \
+            -maximum-test-execution-time-allowance 300 \
             test

@@ -218,11 +218,17 @@ false on the macos-26 image (#849).
 
 What the GUI target cannot reach is written down instead, in
 [docs/HAND-CHECK.md](docs/HAND-CHECK.md): the questions about the window, the
-New Event form's keyboard handling, the alerts, the quit confirmation and what
-the Dock says while work is running, each with a result specific enough to be
-wrong. Run it after `make install` when any of those change. It says how many
-there are; this does not, because a count kept in two places is one that drifts,
-and it had (this said six while there were eight).
+New Event form's keyboard handling, the quit confirmation and what the Dock says
+while work is running, each with a result specific enough to be wrong. Run it
+after `make install` when any of those change; a step on the merge to main says
+when a merge touched something only it can see. It says how many questions there
+are; this does not, because a count kept in two places is one that drifts, and
+it had.
+
+The alerts used to be in there too, on the recorded grounds that XCUITest cannot
+read into a PostRoll window. That was measured again and is false, so they are
+asserted against the running app now
+([LaunchAlertUITests](PostRollApp/UITests/LaunchAlertUITests.swift), #877).
 
 ```
 ./PostRollApp/hand-check.sh healthy

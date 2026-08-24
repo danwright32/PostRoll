@@ -1,0 +1,8 @@
+{
+  "name": "every-alert-button-is-named-by-the-ui-tests",
+  "file": "PostRollApp/UITests/LaunchAlertUITests.swift",
+  "find": "        XCTAssertTrue(labels.contains(\"Quit PostRoll\"),",
+  "replace": "        XCTAssertTrue(labels.contains(\"Quit\"),",
+  "test": "tests/test_ui_tests_quote_the_real_alerts.py::test_every_button_the_alerts_can_draw_is_named_by_the_ui_tests",
+  "breaks": "a button the alerts can draw is named nowhere in the UI tests, so a label reworded in Swift leaves every test passing, which is the half swapped alert #855 was opened to find (#877, L96)"
+}

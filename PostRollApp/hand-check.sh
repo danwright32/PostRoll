@@ -1,14 +1,22 @@
 #!/bin/bash
 # The states the hand check needs, built without going near real data (#866).
 #
-# Three questions about this app can only be answered by driving it: whether
+# Questions about this app that can only be answered by driving it: whether
 # closing the window leaves it running and reachable (#847), whether Return
-# commits a hand opened form but not a link raised one (#848), and what the
-# alerts actually put on screen (#855). XCUITest cannot read into a PostRoll
-# window, which #860 records in full, so each was answered by hand and each
-# answer lived only in an issue comment. docs/HAND-CHECK.md is the routine that
+# commits a hand opened form but not a link raised one (#848), what happens when
+# it is asked to quit with work in flight (#862), and what the Dock and
+# Notification Center say (#863). Each was answered by hand and each answer
+# lived only in an issue comment. docs/HAND-CHECK.md is the routine that
 # replaces those comments; this is what puts the app into each state it asks
 # about.
+#
+# The alerts used to be here too, on the recorded grounds that XCUITest cannot
+# read into a PostRoll window. That was measured again on 2026-08-23 and is
+# false, so they are asserted now rather than looked at
+# (PostRollApp/UITests/LaunchAlertUITests.swift, #877). The broken store states
+# below are kept: they are what the alert tests set up too, and the corrupt and
+# unreadable worlds are still the quickest way to put a running app in front of
+# somebody who needs to see one.
 #
 # ## Why a script rather than a paragraph of instructions
 #
@@ -222,7 +230,7 @@ require_photo_folder() {
   if [[ -z "$(images_in "${source}")" ]]; then
     echo "no photographs in ${source} (looked for jpg, jpeg, png and heic at the" >&2
     echo "top level). An event with no photos leaves Generate All disabled, so" >&2
-    echo "there would be nothing to press in step 8." >&2
+    echo "there would be nothing to press in step 6." >&2
     exit 1
   fi
 }
@@ -298,7 +306,7 @@ copy_photos_from() {
 # Generate All until there is one. And `ocrResult`, empty but present, because
 # PythonBridge.buildManifest throws "No OCR result" before the pipeline is
 # started without it: seeding one without it would make the successful half of
-# step 8 unreachable while looking exactly like a run that was set up properly.
+# step 6 unreachable while looking exactly like a run that was set up properly.
 #
 # The program is deliberately thin and obviously invented. It is enough for the
 # manifest to be built, and nothing here is a real person.
@@ -418,7 +426,7 @@ case "${command}" in
     write_seeded_store
     state="seeded"
     if [[ "${broken_code_folder}" == "1" ]]; then
-      # The failure half of step 8: a run that CAN be started, pointed at a
+      # The failure half of step 6: a run that CAN be started, pointed at a
       # code folder that is not a checkout, so it fails where the pipeline
       # would have run rather than never starting. An event with no photos
       # produces no failure to be told about, which is why this is a flag on

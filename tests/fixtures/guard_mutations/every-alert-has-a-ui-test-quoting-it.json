@@ -1,0 +1,8 @@
+{
+  "name": "every-alert-has-a-ui-test-quoting-it",
+  "file": "PostRollApp/UITests/LaunchAlertUITests.swift",
+  "find": "    static let dataLoad = \"Saved events could not be read\"\n",
+  "replace": "",
+  "test": "tests/test_ui_tests_quote_the_real_alerts.py::test_every_alert_the_window_can_draw_is_quoted_by_the_ui_tests",
+  "breaks": "an alert the window can raise has no UI test at all, and nothing says so because the tests go on passing on the alerts they already knew about (#877, L96)"
+}
