@@ -1,0 +1,8 @@
+{
+  "name": "a-failed-permission-request-is-not-a-refusal",
+  "file": "PostRollApp/Sources/Models/NotificationPermission.swift",
+  "find": "        if let error { return .failed(error.localizedDescription) }\n",
+  "replace": "",
+  "test": "PostRollTests/NotificationPermissionTests/testAFailedRequestIsNotARefusal",
+  "breaks": "a request for notification permission that FAILED is reported as the person having refused, so the remedy offered is a System Settings switch that is not the problem, and the real reason the banners never arrive is thrown away (#879, L11)"
+}
