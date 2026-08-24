@@ -73,17 +73,29 @@ enum AlertTitle {
 /// What is on screen, asked of the running app.
 enum AlertOnScreen {
 
-    /// The words every static text on screen is carrying.
+    /// The words on screen, wherever they are being carried.
     ///
-    /// From `value` as well as `label`, because an alert's title and message
-    /// arrive as static texts whose text is the VALUE and whose label is empty.
-    /// A check reading only the label finds nothing while the words are plainly
-    /// on the screen, which is the failure this file shipped with on its first
-    /// dispatch: run 32672296758 on 2026-08-23, where the tree held
-    /// `StaticText, value: PostRoll found /Us...` and the assertion reported
-    /// that nothing named the folder.
+    /// Two element types and two attributes, and every one of the four is here
+    /// because leaving it out produced a test that reported words absent while
+    /// they were plainly on the screen. That failure is indistinguishable from
+    /// a harness that cannot see into the window, which is the conclusion this
+    /// whole target exists to correct, so it is worth the breadth.
+    ///
+    /// `value` as well as `label`: an alert's title and message arrive as
+    /// static texts whose text is the VALUE and whose label is empty. Measured
+    /// on the runner, run 32672296758 on 2026-08-23, where the tree held
+    /// `StaticText, value: PostRoll found /Us...` while the assertion said
+    /// nothing named the folder.
+    ///
+    /// Text fields as well as static texts: a form filled in from a
+    /// `postroll://` link carries its values on the FIELDS, not beside them.
+    /// Measured the same way, run 32680680685, where the tree held
+    /// `TextField, placeholderValue: 'Event name', value: Hand check` while the
+    /// assertion said the form was not filled in.
     static func words(in app: XCUIApplication) -> [String] {
-        app.staticTexts.allElementsBoundByIndex.flatMap { element -> [String] in
+        let carriers = app.staticTexts.allElementsBoundByIndex
+            + app.textFields.allElementsBoundByIndex
+        return carriers.flatMap { element -> [String] in
             [element.label, element.value as? String ?? ""].filter { !$0.isEmpty }
         }
     }

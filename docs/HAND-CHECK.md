@@ -1,26 +1,30 @@
 # The hand check
 
-Six questions this repo cannot answer any other way. Everything else about
-PostRoll is covered by the suites, and that now includes the alerts, which used
-to be steps 5 and 6 here.
+Five questions this repo cannot answer any other way. Everything else about
+PostRoll is covered by the suites, and that now includes the alerts and the New
+Event form, which used to be four of the steps here.
 
 This document used to say that XCUITest cannot read into a PostRoll window at
-all, which #860 recorded in full. That was measured again on 2026-08-23 and is
-false: the harness reads an alert's title, its message and its buttons, presses
-them, and sees what happens next. `PostRollApp/UITests/LaunchAlertUITests.swift`
-holds what that retired, including the #855 recovery, and carries the evidence.
+all, which #860 recorded in full. That was measured again on 2026-08-23 and 24
+and is false in both directions it was believed in: the harness reads an alert's
+title, message and buttons, reads a form's fields and the values a link filled
+them with, types into them, presses them, and sees what happens next.
+`LaunchAlertUITests.swift` and `NewEventFormUITests.swift` hold what that
+retired, including the #855 recovery and the #844 refusal, and carry the
+evidence.
+
 What is left here is what nothing automated can reach: a window that will not
-close under a synthetic Cmd+W, a form whose Return has to come from a real key
-press, an alert macOS puts up during termination, the Dock icon, and Notification
+close under a synthetic Cmd+W, which copy of PostRoll macOS hands a real link
+to, an alert macOS puts up during termination, the Dock icon, and Notification
 Center.
 
 Run it after `make install`, and only when something in this list has been
-touched: the window's lifecycle, the New Event sheet's keyboard handling, what
-happens when the app is asked to quit, or what the Dock says while work is
-running. Nothing prompts you: a step on the merge to main does, naming the steps
-whose files the merge touched (#878).
+touched: the window's lifecycle, deep links, what happens when the app is asked
+to quit, or what the Dock says while work is running. Nothing prompts you: a
+step on the merge to main does, naming the steps whose files the merge touched
+(#878).
 
-It takes about ten minutes of attention, and steps 5 and 6 spend part of that
+It takes about ten minutes of attention, and steps 4 and 5 spend part of that
 waiting on a real generation.
 
 Each step says what should happen precisely enough to be wrong. If a step's
@@ -37,7 +41,7 @@ Every step below points the app at a scratch library and a scratch code folder,
 so nothing here can touch the real events.json. That is done by the setup
 script rather than by hand, because several steps deliberately break the store.
 
-Steps 5 and 6 need work in flight, which means a real generation, which means an
+Steps 4 and 5 need work in flight, which means a real generation, which means an
 event with photographs on it. Those two ask for a folder to copy a handful out
 of; the copies live in the scratch world and the folder itself is only ever
 read. Between them they cost about one and a half runs against the API.
@@ -88,55 +92,40 @@ dead while the window is closed is the half of #847 nothing guards.
 
 Press **Escape** to close the form.
 
-## 3. Return commits a form you opened yourself (#848)
+## 3. A real link reaches the copy you think it does (#844, #840)
 
-Covers: `PostRollApp/Sources/Views/NewEventSheet.swift`,
-`PostRollApp/Sources/Views/MainWindowView.swift`,
-`PostRollApp/Sources/Models/WindowModals.swift`
+Covers: `PostRollApp/Sources/Services/DeepLink.swift`,
+`PostRollApp/Sources/Services/DeepLinkInbox.swift`
 
-```
-./PostRollApp/hand-check.sh healthy
-```
+What the form DOES with a link is asserted now, in `NewEventFormUITests`:
+that Return commits a form opened by hand and does not commit one a link
+raised, and that Create Event still works. What no test can ask is which copy
+of PostRoll macOS hands a real link to, because that depends on what this
+machine has registered over time, and fourteen PostRoll bundles have been
+registered on it. The UI test deliberately names the bundle to take that choice
+away, which is right for a test and is the exact question left over here.
 
-Press **Cmd+N**, type `Return test` into the name field, press **Return**.
-
-**Expect:** the sheet closes and an event called `Return test` is in the list.
-**Wrong if:** nothing happens. Then Create is not the default action for a hand
-opened form, and this is Dan's everyday flow.
-
-## 4. Return does NOT commit a form a link opened (#848, #844)
-
-Covers: `PostRollApp/Sources/Views/NewEventSheet.swift`,
-`PostRollApp/Sources/Services/DeepLink.swift`,
-`PostRollApp/Sources/Services/DeepLinkInbox.swift`,
-`PostRollApp/Sources/Models/WindowModals.swift`
-
-With that same window still open:
+Still in the state step 2 left, with a window open. This one acts on the world
+that is already there rather than building its own, because what it is asking
+about is which running copy answers.
 
 ```
 ./PostRollApp/hand-check.sh link
 ```
 
-**Expect:** the New Event form opens, already filled in with `Hand check`,
-`Test Company`, `Test Hall`, `Main Stage` and 1 September 2026.
+**Expect:** the form opens on the copy the script just launched, already filled
+in with `Hand check`, `Test Company`, `Test Hall`, `Main Stage` and 1 September
+2026, and the script reports the same set of running copies before and after.
 **Wrong if:** the script prints a warning that the set of running copies
-changed. That means LaunchServices handed the link to a different PostRoll,
-which is pointed at the real library. Quit that copy before going on, and treat
-this step as having measured nothing.
+changed, or the window that came forward is not the one pointed at the scratch
+world. That means macOS handed the link to a different PostRoll, which is
+pointed at the real library, and everything it writes goes there. PostRoll says
+so itself when a link reaches a copy that is not the installed one; that notice
+is the other half of this step.
 
-Now press **Return**.
+Press **Escape** to close the form.
 
-**Expect:** nothing happens. The sheet stays open and no event is created.
-**Wrong if:** an event called `Hand check` appears. A Return meant for another
-app then commits an event Dan has not read, which is what #844 exists to stop.
-
-Click **Create**.
-
-**Expect:** now the event is created.
-**Wrong if:** the button does nothing. Both halves matter: a check that only
-does one of them passes on a change that does nothing at all.
-
-## 5. Quitting while something is running asks first (#862)
+## 4. Quitting while something is running asks first (#862)
 
 Covers: `PostRollApp/Sources/Services/DeepLinkInbox.swift`,
 `PostRollApp/Sources/Models/BackgroundWork.swift`,
@@ -145,7 +134,7 @@ Covers: `PostRollApp/Sources/Services/DeepLinkInbox.swift`,
 The dialog is an alert macOS puts up during termination, so nothing automated
 can read it either.
 
-Something has to be running, so this uses the seeded event step 6 explains,
+Something has to be running, so this uses the seeded event step 5 explains,
 for the same reason: a generation cannot be started from an empty store.
 
 ```
@@ -183,10 +172,10 @@ every time is one that gets clicked through on reflex, taking the real one with
 it.
 
 Quit Anyway takes the run with it, so this step costs part of a real
-generation. Step 6 needs a whole one, and the two cannot share: that one has to
+generation. Step 5 needs a whole one, and the two cannot share: that one has to
 be allowed to finish.
 
-## 6. Work with no window says so (#863, #879)
+## 5. Work with no window says so (#863, #879)
 
 Covers: `PostRollApp/Sources/Views/WorkingDockTile.swift`,
 `PostRollApp/Sources/Services/NotificationService.swift`,
