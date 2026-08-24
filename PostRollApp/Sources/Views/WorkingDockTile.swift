@@ -20,9 +20,14 @@ import SwiftUI
 final class WorkingDockTile: NSView {
 
     private let seconds: Int
+    private let icon: NSImage?
 
-    init(seconds: Int) {
+    /// - Parameter icon: the app icon to draw the mark on. Injected, with the
+    ///   running app's icon as the default, so the case where there ISN'T one
+    ///   can be rendered by a test. The shipping app always passes the default.
+    init(seconds: Int, icon: NSImage? = NSApplication.shared.applicationIconImage) {
         self.seconds = seconds
+        self.icon = icon
         super.init(frame: NSRect(x: 0, y: 0, width: 128, height: 128))
     }
 
@@ -30,7 +35,28 @@ final class WorkingDockTile: NSView {
     required init?(coder: NSCoder) { fatalError("not from a nib") }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSApplication.shared.applicationIconImage?.draw(in: bounds)
+        // A tile with nothing on it is not an option (#885).
+        //
+        // This used to be `applicationIconImage?.draw(in: bounds)`, one
+        // optional chain, and a nil icon drew a black band on nothing at all:
+        // the mark that says work is happening would have arrived as a strip
+        // floating on an empty square, and nothing anywhere would have said so.
+        // The Dock is the one surface that reports a run with no window, so its
+        // failure has to be visible rather than silent (L67).
+        //
+        // The fallback is deliberately not a second attempt at the icon. It is
+        // a filled field in the band's own colour, so the mark still reads as a
+        // mark on something, and it is obviously not the app icon, which is the
+        // point: it says the icon went missing rather than pretending it did
+        // not.
+        if let icon {
+            icon.draw(in: bounds)
+        } else {
+            NSColor(PaintedSurfaces.dockMissingIcon).setFill()
+            bounds.fill()
+            NSLog("WorkingDockTile: the application has no icon, so the working "
+                  + "mark is being drawn on a plain field (#885)")
+        }
 
         let text = WorkingDockTile.clock(seconds)
         let height: CGFloat = 30

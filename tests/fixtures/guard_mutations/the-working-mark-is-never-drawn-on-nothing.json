@@ -1,0 +1,8 @@
+{
+  "name": "the-working-mark-is-never-drawn-on-nothing",
+  "file": "PostRollApp/Sources/Views/WorkingDockTile.swift",
+  "find": "            NSColor(PaintedSurfaces.dockMissingIcon).setFill()\n            bounds.fill()",
+  "replace": "            if false { bounds.fill() }",
+  "test": "PostRollTests/WorkingDockTileTests/testATileWithNoIconIsStillAFullTile",
+  "breaks": "an application with no icon draws the working mark as a black strip floating on an empty square, on the one surface that reports a run with no window, and nothing anywhere says so (#885, L67)"
+}

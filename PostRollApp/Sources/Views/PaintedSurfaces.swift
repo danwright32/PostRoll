@@ -69,6 +69,15 @@ enum PaintedSurfaces {
     static let dockWorkingBand = Color.black
     static let dockWorkingClock = Color.white
 
+    /// The field the working mark is drawn on when the app has no icon (#885).
+    ///
+    /// Its own token rather than reusing the band's black, because the two are
+    /// beside each other and a band on a field of the same colour is one solid
+    /// square: the clock would be the only thing on the tile and the mark would
+    /// have no shape at all. Grey keeps the band readable as a band, and is
+    /// obviously not the app icon, which is what it is there to say.
+    static let dockMissingIcon = Color(red: 0.35, green: 0.35, blue: 0.35)
+
 
     /// What a pair has to clear.
     ///
@@ -791,6 +800,7 @@ enum PaintedSurfaces {
     static let byName: [String: Color] = [
         "dockWorkingBand": dockWorkingBand,
         "dockWorkingClock": dockWorkingClock,
+        "dockMissingIcon": dockMissingIcon,
         "page": page,
         "deepPage": deepPage,
         "runNotePanel": runNotePanel,
