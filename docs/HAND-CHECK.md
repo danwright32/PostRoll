@@ -216,10 +216,12 @@ completion, so a run that died with the window closed produced exactly the same
 evidence as one still going, which is none.
 
 **Before deciding nothing arrived is the app's fault**, ask whether a banner
-could have arrived at all. On 2026-08-24 PostRoll had no entry in macOS
-Notification settings on the development machine, which is what a permission
-request that never completed looks like from outside, and every banner it sent
-would have gone nowhere. The app says which of those it is now, once per launch:
+could have arrived at all. Two things were measured on the development machine
+on 2026-08-24 and neither is proof on its own: PostRoll has no entry in macOS
+Notification settings, read through the preferences daemon, and it has no
+delivered notification on record. The second is weaker than it sounds, because
+that database only keeps about four days. Together they are enough to check
+before blaming the app, and the app answers it directly now, once per launch:
 
 ```
 log show --predicate 'process == "PostRoll"' --last 30m --info | grep NotificationService

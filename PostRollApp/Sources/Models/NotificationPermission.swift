@@ -10,9 +10,15 @@ import Foundation
 /// The reason this exists is that the answer used to be discarded. Every
 /// notification PostRoll sends, every completion and every failed run, arrives
 /// only if permission was granted, and a refusal produced the same evidence as
-/// a working app: none. On the development machine on 2026-08-24, PostRoll had
-/// no entry in macOS Notification settings at all, which is what a request that
-/// never completed looks like from outside, and nothing in the app knew.
+/// a working app: none.
+///
+/// What prompted it, on the development machine on 2026-08-24: PostRoll has no
+/// entry in macOS Notification settings, and no delivered notification on
+/// record. Neither is proof. An app can notify without the person having
+/// touched its settings row, and the delivery database keeps only about four
+/// days, so an app that simply has not run is indistinguishable from one that
+/// cannot notify. That is the point. Two readings from outside could not settle
+/// it, and the app itself knew the answer all along and threw it away.
 enum NotificationPermission: Equatable {
 
     /// Nothing has been asked yet. The state at launch, and never a verdict.
