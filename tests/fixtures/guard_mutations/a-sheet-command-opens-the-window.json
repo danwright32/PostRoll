@@ -1,0 +1,8 @@
+{
+  "name": "a-sheet-command-opens-the-window",
+  "file": "PostRollApp/Sources/PostRollApp.swift",
+  "find": "            Button(\"New Event…\") {\n                openWindow(id: PostRollApp.mainWindowID)",
+  "replace": "            Button(\"New Event…\") {",
+  "test": "PostRollTests/SheetCommandsOpenTheWindowTests/testEveryCommandButtonAsksForAWindowBeforeRaisingItsSheet",
+  "breaks": "the New Event command records a request and opens nothing while the window is closed, so Cmd+N appears to do nothing and the form turns up later on whatever window opens next, with nobody having asked for it then (#884, #847)"
+}
