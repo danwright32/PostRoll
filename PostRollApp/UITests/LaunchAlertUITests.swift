@@ -259,6 +259,22 @@ final class CorruptStoreAlertUITests: XCTestCase {
                       "the alert titled \(AlertTitle.dataLoad) is not on screen. "
                       + AlertOnScreen.describe(app))
 
+        // The sentence, not only the title. What makes this alert survivable is
+        // that it says nothing was deleted and names where the unreadable file
+        // went, and a title over a message about something else is two halves
+        // of one screen each reading as correct (#855).
+        let said = AlertOnScreen.words(in: app)
+        XCTAssertTrue(said.contains { $0.contains("set aside") },
+                      "the alert does not say the unreadable file was kept. "
+                      + AlertOnScreen.describe(app))
+
+        // No backup in a scratch world, so no way to offer one. The button
+        // appearing here would offer Dan a restore from a file that is not
+        // there.
+        let (allButtons, _) = AlertOnScreen.buttons(in: app)
+        XCTAssertFalse(allButtons.contains("Restore Latest Backup"),
+                       "a restore is offered with no backup to restore from: \(allButtons)")
+
         // Named separately, because "the alert I asked about is not showing" and
         // "a different alert is showing instead" send whoever reads the failure
         // to different places, and the second is the one this file has already
