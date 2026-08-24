@@ -1,7 +1,7 @@
 {
   "name": "every-hand-check-step-names-its-files",
   "file": "docs/HAND-CHECK.md",
-  "find": "Covers: `PostRollApp/Sources/PostRollApp.swift`,\n`PostRollApp/Sources/Services/DeepLinkInbox.swift`\n",
+  "find": "Covers: `PostRollApp/Sources/Services/DeepLink.swift`,\n`PostRollApp/Sources/Services/DeepLinkInbox.swift`\n",
   "replace": "",
   "test": "tests/test_hand_check_reminder.py::test_every_step_says_which_files_it_covers",
   "breaks": "a step declares no files at all, so no merge can ever prompt it, and that is indistinguishable from a step whose files were not touched (#878)"

@@ -78,8 +78,8 @@ final class NewEventFormUITests: XCTestCase {
         // Clicked rather than Cmd+N. A synthetic Cmd+W has been measured not to
         // take effect on this runner (#860), and clicking an on screen button
         // has been measured to work (#877), so the route that is known to
-        // arrive is the one used. The command itself is step 2's question, not
-        // this one's.
+        // arrive is the one used. Whether the menu COMMAND works, with a
+        // window and without one, is WindowLifecycleUITests' question.
         let newEvent = app.buttons["New Event"].firstMatch
         XCTAssertTrue(newEvent.waitForExistence(timeout: 30),
                       "there is no New Event button to open the form with. "

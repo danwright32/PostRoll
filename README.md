@@ -225,10 +225,13 @@ when a merge touched something only it can see. It says how many questions there
 are; this does not, because a count kept in two places is one that drifts, and
 it had.
 
-The alerts used to be in there too, on the recorded grounds that XCUITest cannot
-read into a PostRoll window. That was measured again and is false, so they are
-asserted against the running app now
-([LaunchAlertUITests](PostRollApp/UITests/LaunchAlertUITests.swift), #877).
+The alerts, the New Event form and the window's lifecycle used to be in there
+too, on the recorded grounds that XCUITest cannot read into a PostRoll window.
+That was measured again and is false in every direction it was believed in, so
+all three are asserted against the running app now (`PostRollApp/UITests/`,
+#877, #883 and #884). Re-testing it was worth more than the automation: one of
+those steps had never been run by anybody, and the thing it asks about did not
+work (#884).
 
 ```
 ./PostRollApp/hand-check.sh healthy
