@@ -8,8 +8,10 @@ import XCTest
 /// screen, and it was abandoned because #860 concluded XCUITest goes blind on a
 /// PostRoll window: the application reported as `Disabled` with an empty
 /// element subtree. Every later decision inherited that, including the note
-/// saying the harness cannot read a form or an alert, and steps 5 and 6 of
-/// `docs/HAND-CHECK.md` exist because of it.
+/// saying the harness cannot read a form or an alert, and two steps of
+/// `docs/HAND-CHECK.md` existed because of it. They are retired now, and their
+/// numbers are deliberately not quoted below: a comment naming a step number is
+/// wrong the first time a step is added or removed above it.
 ///
 /// That conclusion was measured again on 2026-08-23 and is wrong. The app
 /// reports `runningForeground` and the element tree is about 17,800 characters,
@@ -289,8 +291,8 @@ final class CorruptStoreAlertUITests: XCTestCase {
                       + "(fromAlert=\(fromAlert)): \(labels)")
 
         // And it works. A button that is present and does nothing is the same
-        // dead end as no button at all, and it is what step 5 of the hand check
-        // presses by hand today.
+        // dead end as no button at all, and pressing it is what the hand check
+        // used to ask somebody to do.
         XCTAssertTrue(AlertOnScreen.press("OK", in: app), "there was no OK to press")
         XCTAssertTrue(AlertOnScreen.gone(AlertTitle.dataLoad, in: app),
                       "OK did not take the alert away. " + AlertOnScreen.describe(app))
@@ -433,7 +435,7 @@ final class BothBrokenAlertUITests: XCTestCase {
                        + "refusal, which is the collision #846 removed. "
                        + AlertOnScreen.describe(app))
 
-        // ── the whole of #855, which step 6 of the hand check presses by hand ──
+        // ── the whole of #855, which the hand check used to press by hand ─────
         //
         // Repair the store underneath the refusal and press Try Again. One
         // button press then makes two changes: the refusal is torn down and the
