@@ -1,0 +1,8 @@
+{
+  "name": "the-gui-suite-declares-its-launches",
+  "file": "PostRollApp/UITests/WindowLifecycleUITests.swift",
+  "find": "        let app = try LaunchedApp.launch(dataRoot: root,",
+  "replace": "        _ = try LaunchedApp.launch(dataRoot: root, projectRoot: nil)\n        let app = try LaunchedApp.launch(dataRoot: root,",
+  "test": "tests/test_gui_launch_budget.py::test_every_launch_in_the_gui_suite_is_declared",
+  "breaks": "a launch is added to the GUI suite without anybody saying what it buys, and it costs 42 to 55 seconds of every merge to main while looking free in the file that adds it, which is how the previous UI target became too slow to keep (#896, #509)"
+}
