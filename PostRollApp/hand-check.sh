@@ -263,8 +263,20 @@ url_encode_path() {
 # hold anything at all, while the ones written here are known to survive being
 # turned into a URL.
 #
-# Sets SEEDED_PHOTO_URLS, the JSON array body the store is written with.
-SEEDED_PHOTO_URLS=""
+# Sets SEEDED_MONDAY_URLS and SEEDED_WEDNESDAY_URLS, the JSON array bodies the
+# store is written with.
+#
+# Two days rather than one, dealt alternately. Not for coverage: the run is what
+# the Dock mark is being watched DURING, and a one day run can be over before
+# anybody has watched the clock advance for long enough to tell a moving number
+# from a frozen one, which is the whole question. Two caption calls roughly
+# double the run for the same photographs.
+#
+# Monday and Wednesday specifically. Friday is excluded from the days a run can
+# use, and Tuesday carries the reel slots (a screen recording, a raw and an
+# edited photo, audio) that this fixture has nothing to put in.
+SEEDED_MONDAY_URLS=""
+SEEDED_WEDNESDAY_URLS=""
 copy_photos_from() {
   local source="$1"
   # Not named `url`: HandCheckLinkTests reads the one `url="` assignment in this
@@ -280,10 +292,18 @@ copy_photos_from() {
     extension="$(printf '%s' "${image##*.}" | tr '[:upper:]' '[:lower:]')"
     cp "${image}" "${PHOTOS}/photo-${taken}.${extension}"
     photo_url="file://$(url_encode_path "${PHOTOS}/photo-${taken}.${extension}")"
-    if [[ -z "${SEEDED_PHOTO_URLS}" ]]; then
-      SEEDED_PHOTO_URLS="\"${photo_url}\""
+    if (( taken % 2 == 1 )); then
+      if [[ -z "${SEEDED_MONDAY_URLS}" ]]; then
+        SEEDED_MONDAY_URLS="\"${photo_url}\""
+      else
+        SEEDED_MONDAY_URLS="${SEEDED_MONDAY_URLS}, \"${photo_url}\""
+      fi
     else
-      SEEDED_PHOTO_URLS="${SEEDED_PHOTO_URLS}, \"${photo_url}\""
+      if [[ -z "${SEEDED_WEDNESDAY_URLS}" ]]; then
+        SEEDED_WEDNESDAY_URLS="\"${photo_url}\""
+      else
+        SEEDED_WEDNESDAY_URLS="${SEEDED_WEDNESDAY_URLS}, \"${photo_url}\""
+      fi
     fi
   done < <(images_in "${source}")
 
@@ -325,20 +345,31 @@ write_seeded_store() {
     "ocrResult": {
       "performers": [
         {"name": "Test Performer One", "role": "soloist", "voice_or_instrument": "piano"},
-        {"name": "Test Performer Two", "role": "conductor", "voice_or_instrument": ""}
+        {"name": "Test Performer Two", "role": "conductor", "voice_or_instrument": ""},
+        {"name": "Test Performer Three", "role": "ensemble member", "voice_or_instrument": "violin"},
+        {"name": "Test Performer Four", "role": "ensemble member", "voice_or_instrument": "cello"}
       ],
       "pieces": [
-        {"composer": "Test Composer", "title": "Test Piece", "movements": [], "notes": ""}
+        {"composer": "Test Composer", "title": "Test Piece in C",
+         "movements": ["I. Allegro", "II. Adagio"],
+         "notes": "Written for the hand check and performed by nobody."},
+        {"composer": "Another Test Composer", "title": "Second Test Piece",
+         "movements": [], "notes": ""}
       ],
-      "program_notes": "A programme invented for the hand check.",
-      "organization_notes": "",
-      "venue_notes": "",
-      "production_details": ""
+      "program_notes": "A programme invented for the hand check. Two pieces, four performers, no real people and no real evening.",
+      "organization_notes": "Test Company is an invented ensemble that exists only in this scratch world.",
+      "venue_notes": "Test Hall is an invented room.",
+      "production_details": "Invented for the hand check.",
+      "other": ""
     },
     "days": {
       "monday": {
         "day": "monday",
-        "photoPaths": [${SEEDED_PHOTO_URLS}]
+        "photoPaths": [${SEEDED_MONDAY_URLS}]
+      },
+      "wednesday": {
+        "day": "wednesday",
+        "photoPaths": [${SEEDED_WEDNESDAY_URLS}]
       }
     }
   }

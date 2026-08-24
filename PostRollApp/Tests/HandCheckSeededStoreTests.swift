@@ -107,20 +107,34 @@ final class HandCheckSeededStoreTests: XCTestCase {
                        + "nothing to be about")
     }
 
-    func testTheSeededDayCarriesPhotosThatAreActuallyThere() throws {
+    /// The days the seeding deals photographs onto.
+    ///
+    /// Friday cannot be generated and Tuesday carries the reel slots this
+    /// fixture has nothing to fill, so neither is used.
+    private static let seededDays: [DayName] = [.monday, .wednesday]
+
+    func testTheSeededDaysCarryPhotosThatAreActuallyThere() throws {
         let event = try XCTUnwrap(try seed().first)
 
-        let monday = try XCTUnwrap(event.days[DayName.monday.rawValue],
-                                   "the seeded event has no Monday, so there is no "
-                                   + "day with photos on it")
-        XCTAssertEqual(monday.photoPaths.count, 3,
-                       "the seeded day carries \(monday.photoPaths.count) photos "
-                       + "rather than the three it was given")
+        var photos: [URL] = []
+        for day in Self.seededDays {
+            let posting = try XCTUnwrap(event.days[day.rawValue],
+                                        "the seeded event has no \(day.rawValue), so "
+                                        + "there is one fewer day with photos on it")
+            XCTAssertFalse(posting.photoPaths.isEmpty,
+                           "\(day.rawValue) carries no photos, so the run is shorter "
+                           + "than the Dock clock needs to be watched for")
+            photos += posting.photoPaths
+        }
+
+        XCTAssertEqual(photos.count, 3,
+                       "the seeded days carry \(photos.count) photos rather than the "
+                       + "three they were given")
 
         // Through the file system, not the string. `Generate All` is enabled by
         // the COUNT of paths, so a day full of URLs naming nothing gets the
         // button pressed and the run fails on the first read.
-        for photo in monday.photoPaths {
+        for photo in photos {
             XCTAssertTrue(FileManager.default.fileExists(atPath: photo.path),
                           "\(photo.path) is named by the seeded event and is not there")
         }

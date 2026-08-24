@@ -200,7 +200,8 @@ This step needs an event a generation can actually be started from, which none
 of the states above provide: they all build an empty store, and Generate All
 stays disabled until a day has a photo on it. So this one seeds an event of its
 own out of a folder of photographs you point it at. Up to eight are copied into
-the scratch world, and it says how many it took of how many it found.
+the scratch world, dealt across Monday and Wednesday so the run is long enough
+to watch, and it says how many it took of how many it found.
 
 ```
 ./PostRollApp/hand-check.sh seeded ~/Pictures/some-shoot
