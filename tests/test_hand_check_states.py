@@ -282,17 +282,27 @@ def seeded_event(world: Path) -> dict:
     return events[0]
 
 
+#: The days the seeding deals photographs onto. Friday cannot be generated and
+#: Tuesday carries reel slots this fixture has nothing to fill, so those two are
+#: deliberately not used.
+SEEDED_DAYS = ("monday", "wednesday")
+
+
 def photo_files(event: dict) -> list[Path]:
-    """The files the seeded event's photo paths actually name.
+    """The files the seeded event's photo paths actually name, across every day.
 
     Through the URL, because that is what the app does with them. A path that
     survives as a string and does not survive being turned back into a file is
     a day with no photos, which is the state this whole command exists to avoid.
     """
-    paths = event["days"]["monday"]["photoPaths"]
-    for url in paths:
-        assert url.startswith("file://"), f"{url} is not a file URL, so the app cannot open it"
-    return [Path(unquote(urlparse(url).path)) for url in paths]
+    files = []
+    for day in SEEDED_DAYS:
+        for url in event["days"][day]["photoPaths"]:
+            assert url.startswith("file://"), (
+                f"{url} is not a file URL, so the app cannot open it"
+            )
+            files.append(Path(unquote(urlparse(url).path)))
+    return files
 
 
 def test_seeding_with_no_folder_refuses_before_it_deletes_anything(world: Path):
@@ -362,8 +372,17 @@ def test_a_seeded_event_is_one_a_generation_can_be_started_from(world: Path, sho
         "the seeded event has no OCR result, so buildManifest refuses the run "
         "before the pipeline starts and only the failure half of step 8 is reachable"
     )
-    assert event["days"]["monday"]["day"] == "monday"
-    assert len(photo_files(event)) == 3, "the seeded day does not carry the photos it was given"
+    for day in SEEDED_DAYS:
+        assert event["days"][day]["day"] == day
+    assert len(photo_files(event)) == 3, "the seeded days do not carry the photos they were given"
+
+    # Spread, not piled onto one day. A single day's run can be over before
+    # anybody has watched the Dock clock long enough to tell a moving number
+    # from a frozen one, which is the question the step exists to ask.
+    counts = [len(event["days"][day]["photoPaths"]) for day in SEEDED_DAYS]
+    assert all(count > 0 for count in counts), (
+        f"the photographs landed on one day only: {counts}"
+    )
 
 
 def test_the_seeded_photos_are_real_files_inside_the_scratch_world(world: Path, shoot: Path):
