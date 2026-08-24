@@ -107,25 +107,54 @@ final class WindowLifecycleUITests: XCTestCase {
         // ── the other half of #847, which nothing guards ──────────────────────
         //
         // A command that is dead while the window is closed is the half of #847
-        // that no unit test can see: the menu item exists either way, and
-        // whether it DOES anything depends on the scene the app declares. Close
-        // the window again and ask the menu for a new event.
+        // no unit test can see: the menu item exists either way, and whether it
+        // DOES anything depends on the scene the app declares, which is what
+        // #842 got wrong.
+        //
+        // The control comes first, deliberately. On the first dispatch of this
+        // (run 32683556647) the menu item was present and enabled, the click was
+        // made, and no window appeared, which reads as the app being broken and
+        // reads exactly the same as a menu click that never landed. #860
+        // recorded menu clicks among the things that do not take effect here, so
+        // that reading was not available without a positive case in the SAME
+        // fixture (L159). This is it: the command, with a window open, where it
+        // is known to work.
+        let newEvent = app.menuBars.menuItems["New Event…"]
+        XCTAssertTrue(newEvent.waitForExistence(timeout: 20),
+                      "there is no New Event command in the menu bar at all. "
+                      + AlertOnScreen.describe(app))
+        newEvent.click()
+        let controlWorked = app.sheets.firstMatch.waitForExistence(timeout: 20)
+        XCTAssertTrue(controlWorked,
+                      "the New Event command did nothing WITH a window open, so "
+                      + "this harness cannot drive the menu at all and the "
+                      + "question below cannot be asked through it. "
+                      + AlertOnScreen.describe(app))
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        usleep(1_000_000)
+
+        // Now the real question, with no window.
         close.click()
         XCTAssertTrue(windowCount(app, reaches: 0),
                       "the window did not close a second time. "
                       + AlertOnScreen.describe(app))
 
-        let newEvent = app.menuBars.menuItems["New Event…"]
-        XCTAssertTrue(newEvent.waitForExistence(timeout: 20),
-                      "there is no New Event command in the menu bar at all. "
-                      + AlertOnScreen.describe(app))
+        // Brought to the front first, because that is the state the question is
+        // about: a person reaches this menu by clicking the Dock icon or
+        // switching to PostRoll, and a menu bar belonging to another app is not
+        // the one being asked.
+        copy.activate()
+        usleep(1_000_000)
+
         XCTAssertTrue(newEvent.isEnabled,
                       "the New Event command is greyed out with no window open, "
                       + "which is the half of #847 nothing else guards")
         newEvent.click()
 
         XCTAssertTrue(windowCount(app, reaches: 1),
-                      "the New Event command opened no window. "
+                      "the New Event command opened no window, and it DID open "
+                      + "one moments ago with a window already up, so the click "
+                      + "lands and the command is what does nothing. "
                       + AlertOnScreen.describe(app))
         XCTAssertTrue(app.sheets.firstMatch.waitForExistence(timeout: 20),
                       "a window came back with no form on it, so the command "
