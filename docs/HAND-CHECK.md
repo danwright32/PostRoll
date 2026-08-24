@@ -214,6 +214,20 @@ gives the reason.
 **Wrong if:** nothing arrives. Every notification this app sent used to be a
 completion, so a run that died with the window closed produced exactly the same
 evidence as one still going, which is none.
+
+**Before deciding nothing arrived is the app's fault**, ask whether a banner
+could have arrived at all. On 2026-08-24 PostRoll had no entry in macOS
+Notification settings on the development machine, which is what a permission
+request that never completed looks like from outside, and every banner it sent
+would have gone nowhere. The app says which of those it is now, once per launch:
+
+```
+log show --predicate 'process == "PostRoll"' --last 30m --info | grep NotificationService
+```
+
+Nothing from that line means permission was granted and the silence is the
+app's. A complaint there names the cause and the remedy, and the remedy for a
+refusal is System Settings > Notifications (#879, #890).
 **Also wrong if:** the banner names an event you have never heard of, or says
 "an event" without naming one. The name is looked up from the event the run
 belongs to, and a placeholder in its place means the lookup failed (#879).
