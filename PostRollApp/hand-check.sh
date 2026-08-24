@@ -1,19 +1,21 @@
 #!/bin/bash
 # The states the hand check needs, built without going near real data (#866).
 #
-# Questions about this app that can only be answered by driving it: whether
-# closing the window leaves it running and reachable (#847), which copy of
-# PostRoll macOS hands a real link to (#844), what happens when it is asked to
-# quit with work in flight (#862), and what the Dock and Notification Center
+# Questions about this app that can only be answered by driving it: which copy
+# of PostRoll macOS hands a real link to (#844), what happens when it is asked
+# to quit with work in flight (#862), and what the Dock and Notification Center
 # say (#863). Each was answered by hand and each answer
 # lived only in an issue comment. docs/HAND-CHECK.md is the routine that
 # replaces those comments; this is what puts the app into each state it asks
 # about.
 #
-# The alerts and the New Event form used to be here too, on the recorded grounds
-# that XCUITest cannot read into a PostRoll window. That was measured again on
-# 2026-08-23 and 24 and is false, so both are asserted now rather than looked at
-# (LaunchAlertUITests.swift and NewEventFormUITests.swift, #877 and #883). The
+# The alerts, the New Event form and the window's lifecycle used to be here too,
+# on the recorded grounds that XCUITest cannot read into a PostRoll window. That
+# was measured again on 2026-08-23 and 24 and is false, so all three are
+# asserted now rather than looked at (LaunchAlertUITests, NewEventFormUITests
+# and WindowLifecycleUITests, #877, #883 and #884). Re-testing it was worth more
+# than the automation: the New Event command with no window had never been run
+# by anybody, and it did not work. The
 # broken store states below are kept: they are what the alert tests set up too,
 # and the corrupt and unreadable worlds are still the quickest way to put a
 # running app in front of somebody who needs to see one.

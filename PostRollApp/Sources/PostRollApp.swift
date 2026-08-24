@@ -1,7 +1,60 @@
 import SwiftUI
 
+/// The commands that put something on the window, which have to make sure there
+/// IS one (#884, #847).
+///
+/// Both actions here only set state on `AppState`, and a sheet with no window
+/// has nowhere to be presented. Nothing in this app opened a window from code:
+/// the scene comes back when macOS reopens the app, which is what clicking the
+/// Dock icon does, and that is the only route there was. So with the window
+/// closed, Cmd+N set the flag and NOTHING appeared.
+///
+/// That is worse than an inert command. The request is recorded, so the form
+/// turns up later, on whatever window opens next, with nobody having asked for
+/// it then.
+///
+/// Measured on the runner on 2026-08-24, run 32684066381, and it had never been
+/// measured before: it is step 2 of a manual checklist nobody had run. The same
+/// run pressed this command WITH a window open moments earlier and the form
+/// appeared, which is what separates a dead command from a click that never
+/// landed (L248, L159).
+///
+/// `openWindow` on a `Window` scene brings the one window forward rather than
+/// making a second, so this cannot reintroduce #842.
+private struct SheetCommands: Commands {
+
+    let appState: AppState
+
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("New Event…") {
+                openWindow(id: PostRollApp.mainWindowID)
+                appState.presentNewEvent()
+            }
+            .keyboardShortcut("n")
+
+            Divider()
+
+            // The one place that answers "which days need re-rendering
+            // after a design change" (#293). It walks the preview folder,
+            // so it is behind a menu item rather than running on its own.
+            Button("Outdated Designs…") {
+                openWindow(id: PostRollApp.mainWindowID)
+                appState.presentOutdatedDesigns()
+            }
+        }
+    }
+}
+
 @main
 struct PostRollApp: App {
+
+    /// The one window's id, named once so the scene and the commands that reopen
+    /// it cannot drift apart.
+    static let mainWindowID = "main"
+
     @State private var appState = AppState()
     @State private var hashtagStore = HashtagStore()
     @State private var analyticsStore = AnalyticsStore()
@@ -56,7 +109,7 @@ struct PostRollApp: App {
         // replaced below. Saying so here removes the class rather than the one
         // route into it, and it means a flag on shared state has exactly one
         // surface to be presented on.
-        Window("PostRoll", id: "main") {
+        Window("PostRoll", id: PostRollApp.mainWindowID) {
             MainWindowView()
                 .task { wireQuitGuard() }
                 .environment(appState)
@@ -89,21 +142,7 @@ struct PostRollApp: App {
         .windowToolbarStyle(.unified)
         .defaultSize(width: 1200, height: 760)
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("New Event…") {
-                    appState.presentNewEvent()
-                }
-                .keyboardShortcut("n")
-
-                Divider()
-
-                // The one place that answers "which days need re-rendering
-                // after a design change" (#293). It walks the preview folder,
-                // so it is behind a menu item rather than running on its own.
-                Button("Outdated Designs…") {
-                    appState.presentOutdatedDesigns()
-                }
-            }
+            SheetCommands(appState: appState)
             CommandGroup(replacing: .help) {
                 Button("Copy Install Command") {
                     NSPasteboard.general.clearContents()
