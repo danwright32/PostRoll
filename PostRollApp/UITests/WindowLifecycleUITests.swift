@@ -103,5 +103,33 @@ final class WindowLifecycleUITests: XCTestCase {
         XCTAssertEqual(LaunchedApp.runningCopies.count, 1,
                        "the reopen started a SECOND copy rather than waking this "
                        + "one, and the second is pointed at the real library")
+
+        // ── the other half of #847, which nothing guards ──────────────────────
+        //
+        // A command that is dead while the window is closed is the half of #847
+        // that no unit test can see: the menu item exists either way, and
+        // whether it DOES anything depends on the scene the app declares. Close
+        // the window again and ask the menu for a new event.
+        close.click()
+        XCTAssertTrue(windowCount(app, reaches: 0),
+                      "the window did not close a second time. "
+                      + AlertOnScreen.describe(app))
+
+        let newEvent = app.menuBars.menuItems["New Event…"]
+        XCTAssertTrue(newEvent.waitForExistence(timeout: 20),
+                      "there is no New Event command in the menu bar at all. "
+                      + AlertOnScreen.describe(app))
+        XCTAssertTrue(newEvent.isEnabled,
+                      "the New Event command is greyed out with no window open, "
+                      + "which is the half of #847 nothing else guards")
+        newEvent.click()
+
+        XCTAssertTrue(windowCount(app, reaches: 1),
+                      "the New Event command opened no window. "
+                      + AlertOnScreen.describe(app))
+        XCTAssertTrue(app.sheets.firstMatch.waitForExistence(timeout: 20),
+                      "a window came back with no form on it, so the command "
+                      + "opened a window and then did nothing. "
+                      + AlertOnScreen.describe(app))
     }
 }
