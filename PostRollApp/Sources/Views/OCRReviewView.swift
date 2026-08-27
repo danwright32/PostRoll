@@ -641,11 +641,19 @@ private struct PerformersEditor: View {
         )
     }
 
+    /// Recomputed from the list on every edit rather than held, so a warning
+    /// clears the moment the row it names is corrected (L14).
+    private var duplicates: [UUID: DuplicateHandleMark.Mark] {
+        DuplicateHandleMark.marks(in: performers)
+    }
+
     var body: some View {
         VStack(spacing: Spacing.sm) {
+            let duplicates = duplicates
             ForEach(performers) { performer in
                 PerformerRow(performer: performerBinding(id: performer.id, fallback: performer),
-                             suppliedByBook: suppliedByBook[performer.id]) {
+                             suppliedByBook: suppliedByBook[performer.id],
+                             duplicate: duplicates[performer.id]) {
                     if let idx = performers.firstIndex(where: { $0.id == performer.id }) {
                         let snapshot = performers[idx]
                         performers.remove(at: idx)
@@ -842,6 +850,8 @@ private struct PerformerRow: View {
     @Binding var performer: Performer
     /// The handle the handle book guessed for this performer, if it did (#459).
     var suppliedByBook: String? = nil
+    /// Who else on this programme carries this row's handle or name, if anyone.
+    var duplicate: DuplicateHandleMark.Mark? = nil
     let onDelete: () -> Void
 
     /// Only while the field still holds what the book put there. Once Dan has
@@ -858,11 +868,15 @@ private struct PerformerRow: View {
                     .frame(maxWidth: 200)
                 VStack(alignment: .leading, spacing: 2) {
                     BrandField("@handle", text: $performer.handle)
-                    if isGuessed {
-                        Label(HandleBookMark.note, systemImage: "questionmark.circle")
+                    ForEach(PerformerRowNotes.lines(duplicate: duplicate,
+                                                    isGuessed: isGuessed), id: \.text) { note in
+                        Label(note.text,
+                              systemImage: note.isProblem ? "exclamationmark.triangle"
+                                                          : "questionmark.circle")
                             .font(.system(size: 9))
-                            .foregroundStyle(PaintedSurfaces.secondaryText)
-                            .help(HandleBookMark.explanation)
+                            .foregroundStyle(note.isProblem ? PaintedSurfaces.stateWarningText
+                                                            : PaintedSurfaces.secondaryText)
+                            .help(note.tooltip)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

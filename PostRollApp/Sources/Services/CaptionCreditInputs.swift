@@ -43,13 +43,31 @@ enum CaptionCreditInputs {
         // Selected performers: by handle when they have a real one, by name
         // otherwise. A sentinel like "unknown" is not a handle.
         let selectedIDs = Set(day.selectedPerformerIDs)
+        let selected = (event.ocrResult?.performers ?? [])
+            .filter { selectedIDs.contains($0.id) }
+
+        // Judged across the performers posted THIS day, not the whole
+        // programme: whether two credits collapse into one depends on who is
+        // in these photos, and naming a company left out of them would credit
+        // a performance nobody is looking at (L166).
+        let sharing = DuplicateHandleMark.marks(in: selected)
+
         var performerHandles: [String] = []
         var performerNames: [String] = []
-        for performer in (event.ocrResult?.performers ?? [])
-        where selectedIDs.contains(performer.id) {
+        for performer in selected {
             let handle = performer.handle.trimmingCharacters(in: .whitespaces)
             if !handle.isEmpty && PythonBridge.isRealHandle(handle) {
                 performerHandles.append(handle.hasPrefix("@") ? handle : "@\(handle)")
+                // Two performers on one account are one tag but two credits.
+                // The dedupe below keeps the account once, which is right, and
+                // that alone would leave the second company named nowhere in
+                // the caption while the credit check reports every credit
+                // present (#475 cannot see this: it looks for the handle, and
+                // the handle is there). So each of them is named as well.
+                if !(sharing[performer.id]?.sameHandleAs.isEmpty ?? true),
+                   !performer.name.isEmpty {
+                    performerNames.append(performer.name)
+                }
             } else if !performer.name.isEmpty {
                 performerNames.append(performer.name)
             }
