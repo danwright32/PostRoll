@@ -113,9 +113,24 @@ final class HandleBook: @unchecked Sendable {
     }
 
     /// Save all performers that have handles. Call when advancing past OCR review.
+    ///
+    /// A row `DuplicateHandleMark` flags is skipped, and the entry the book
+    /// already holds for that name is left exactly as it was. On Battery Dance
+    /// Festival, 2026-08-27, a paste had put one handle on two different
+    /// companies while the book held the correct one for the first of them,
+    /// and this write would have replaced a good value with a wrong one for
+    /// every future event carrying that name.
+    ///
+    /// Neither half is recorded, not even the one that is probably right:
+    /// which row holds the bad value is exactly what cannot be known here, so
+    /// picking one would be a guess stored as a fact (L75). Not learning costs
+    /// only this pass, and correcting the row and advancing again records both
+    /// (L5: never destroy good state for an unverified replacement).
     func recordAll(performers: [Performer]) {
+        let duplicated = DuplicateHandleMark.marks(in: performers)
         var b = performerBook
         for p in performers where !p.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            guard duplicated[p.id] == nil else { continue }
             let key = normalize(p.name)
             let handle = p.handle.trimmingCharacters(in: .whitespaces)
             if !handle.isEmpty {
