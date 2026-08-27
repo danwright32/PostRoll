@@ -27,10 +27,25 @@ actor PythonBridge {
         return out
     }
 
+    /// Whether this value may be offered to a caption as an account to mention.
+    ///
+    /// Two questions, both of which have to be no (L118). A SENTINEL is a
+    /// recorded answer: somebody looked and there is no Instagram, and it is
+    /// stored so nobody searches again. A value that is not SHAPED like a
+    /// handle is a different thing entirely, and until #899 nothing asked it:
+    /// a company's row carried its own display name, "DPR Dance", this
+    /// returned true, and the caption prompt was handed `@DPR Dance` as an
+    /// account to mention. The model wrote it, and `@DPR` belongs to somebody.
+    ///
+    /// Every list built from performers reads this, so all of them agree: the
+    /// tag suggestions, the caption credits, the duplicate marks and the
+    /// handle book. A row failing it is credited by NAME instead, which is
+    /// what should have happened for that company from the start.
     nonisolated static func isRealHandle(_ handle: String) -> Bool {
         var h = handle.trimmingCharacters(in: .whitespaces).lowercased()
         if h.hasPrefix("@") { h = String(h.dropFirst()) }
-        return !h.isEmpty && !handleSentinels.contains(h)
+        guard !h.isEmpty, !handleSentinels.contains(h) else { return false }
+        return CaptionBlocks.isHandleShaped(handle)
     }
 
     // nonisolated lets these be read from Task.detached without hopping back to the actor
@@ -1373,12 +1388,6 @@ actor PythonBridge {
         guard let programDict = try JSONSerialization.jsonObject(with: ocrData) as? [String: Any] else {
             throw PythonBridgeError.invalidOutput("Could not serialise OCR result.")
         }
-
-        // Parse event-wide handles (org, venue) — prepended to every day
-        let eventHandleList: [String] = event.eventHandles
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
 
         // Build per-day entries, optionally filtered to a subset
         let performers = ocr.performers

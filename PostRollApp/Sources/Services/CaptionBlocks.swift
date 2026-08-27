@@ -30,6 +30,34 @@ enum CaptionBlocks {
     /// together.
     static let maxTagsPerPost = 20
 
+    /// The characters an Instagram username is made of.
+    private static let handleCharacters = Set(
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._")
+
+    /// Whether this value could be an Instagram username at all (#899).
+    ///
+    /// A performer row carried its company's display name in the handle field,
+    /// "DPR Dance", and nothing checked. It reached `tag_handles` as a handle
+    /// to mention, the model wrote `@DPR Dance` into a caption bound for
+    /// Instagram, and `HANDLE_RE` on the Python side then read that as `@dpr`,
+    /// which was never offered and belongs to somebody else. Any `tag_handles`
+    /// entry containing a space produces that pair; it is not probabilistic.
+    ///
+    /// SHAPE only. Whether a value is a SENTINEL recorded because a lookup
+    /// found nothing ("unknown", "n/a") is a different question, answered
+    /// separately by `PythonBridge.isRealHandle`, so that one word names one
+    /// unit (L118). "unknown" is well shaped.
+    ///
+    /// Mirrors `caption_blocks.is_handle_shaped` in Python, and
+    /// `tests/fixtures/handle_shape.json` states the cases once for both,
+    /// because a rule applied on one side of the bridge only is how this
+    /// happened.
+    static func isHandleShaped(_ raw: String) -> Bool {
+        let name = bareUsername(raw)
+        guard !name.isEmpty, !name.hasSuffix(".") else { return false }
+        return name.allSatisfy { handleCharacters.contains($0) }
+    }
+
     /// Instagram's "Tag people" field takes a bare username, so the export
     /// must not carry the @ (#221). Also tolerates a pasted profile URL.
     static func bareUsername(_ raw: String) -> String {

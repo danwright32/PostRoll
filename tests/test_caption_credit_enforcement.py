@@ -126,6 +126,89 @@ def test_a_clean_caption_produces_no_findings():
                            tag_handles=["@dciny", "@lincolncenter"]) == []
 
 
+# ── a tag list entry that cannot be a handle (#899) ───────────────────────────
+#
+# Reproduced exactly against the stored data, read only: a performer row
+# carrying its company's display name in the handle field put "@DPR Dance" into
+# the caption, and this file read that as two separate defects, neither of them
+# the real one.
+#
+#     Finding(caption_foreign_handle, '@dpr')
+#     Finding(caption_missing_credit, '@dpr dance')
+#
+# The first accuses the model of tagging a stranger it never chose, because
+# HANDLE_RE cannot match a value containing a space and takes the fragment
+# before it. The second can never clear, because "@dpr dance" cannot appear in
+# a caption in a form this file recognises, so it is reported forever.
+#
+# The value is fixed at the writers now, but this is the backstop for one that
+# is already stored: it is a finding ABOUT the tag list, said once, and it must
+# not become an accusation about the caption.
+
+
+def test_a_tag_list_entry_that_cannot_be_a_handle_is_a_finding_about_the_list():
+    findings = credit_findings("A night with @dpr dance.",
+                               tag_handles=["@DPR Dance"])
+
+    assert [f.code for f in findings] == ["caption_tag_list_not_a_handle"]
+    assert "DPR Dance" in findings[0].detail
+
+
+def test_it_is_not_reported_as_a_credit_that_went_missing():
+    """It can never be found, so it would be reported on every future run."""
+    codes = [f.code for f in credit_findings("A quiet night.",
+                                             tag_handles=["@DPR Dance"])]
+
+    assert "caption_missing_credit" not in codes, (
+        "a tag list entry that cannot appear in a caption at all is reported "
+        "as absent from every caption ever written")
+
+
+def test_the_fragment_before_the_space_is_not_called_a_stranger():
+    """The accusation the pipeline earned itself.
+
+    `@DPR Dance` in the caption reads to HANDLE_RE as `@dpr`, which was never
+    offered, so the caption is accused of tagging an account the model did not
+    choose and the pipeline supplied.
+    """
+    codes = [f.code for f in credit_findings("A night with @DPR Dance.",
+                                             tag_handles=["@DPR Dance"])]
+
+    assert "caption_foreign_handle" not in codes, (
+        "the caption is accused of inventing a handle that the tag list "
+        "handed it")
+
+
+def test_a_real_stranger_is_still_reported_beside_a_malformed_entry():
+    """The positive control. Suppressing the fragment must not suppress the
+    check: a file that stopped reporting strangers altogether would satisfy
+    the three above (L159)."""
+    codes = [f.code for f in credit_findings(
+        "A night with @DPR Dance and @strangerhandle.",
+        tag_handles=["@DPR Dance"])]
+
+    assert "caption_foreign_handle" in codes
+    assert "caption_tag_list_not_a_handle" in codes
+
+
+def test_a_well_formed_entry_beside_a_malformed_one_is_still_required():
+    codes = [f.code for f in credit_findings("A quiet night.",
+                                             tag_handles=["@DPR Dance", "@dciny"])]
+
+    assert "caption_missing_credit" in codes
+    assert "caption_tag_list_not_a_handle" in codes
+
+
+def test_a_sentinel_is_not_mistaken_for_a_malformed_entry():
+    """`unknown` is shaped like a handle. That it is a sentinel is a separate
+    question, answered before a tag list is built, and this file must not
+    start answering it too (L118)."""
+    codes = [f.code for f in credit_findings("@unknown was there.",
+                                             tag_handles=["@unknown"])]
+
+    assert "caption_tag_list_not_a_handle" not in codes
+
+
 # ── the generate path reports what it found ───────────────────────────────────
 
 @pytest.fixture

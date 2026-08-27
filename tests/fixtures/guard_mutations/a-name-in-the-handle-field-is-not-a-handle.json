@@ -1,0 +1,8 @@
+{
+  "name": "a-name-in-the-handle-field-is-not-a-handle",
+  "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+  "find": "        return CaptionBlocks.isHandleShaped(handle)",
+  "replace": "        return true",
+  "test": "PostRollTests/HandleFieldShapeTests/testACompanyWithANameInItsHandleFieldIsCreditedByName",
+  "breaks": "a performer row carrying its company's display name is handed to the caption prompt as an account to mention, the model writes @DPR Dance into a caption bound for Instagram, and the mention resolves to whoever owns @DPR (#899)"
+}

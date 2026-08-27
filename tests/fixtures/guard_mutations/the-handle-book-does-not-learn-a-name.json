@@ -1,0 +1,8 @@
+{
+  "name": "the-handle-book-does-not-learn-a-name",
+  "file": "PostRollApp/Sources/Services/HandleBook.swift",
+  "find": "            if !handle.isEmpty, CaptionBlocks.isHandleShaped(handle) {",
+  "replace": "            if !handle.isEmpty {",
+  "test": "PostRollTests/HandleFieldShapeTests/testTheBookRefusesToLearnANameAsAHandle",
+  "breaks": "the book learns a company's display name against its own name and auto fills it into every future event carrying that name, so the caption mention that goes to a stranger recurs forever (#899)"
+}

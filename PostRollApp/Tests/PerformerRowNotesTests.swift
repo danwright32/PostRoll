@@ -13,17 +13,17 @@ final class PerformerRowNotesTests: XCTestCase {
     private let duplicate = DuplicateHandleMark.Mark(sameHandleAs: ["NANM"])
 
     func testACleanRowSaysNothing() {
-        XCTAssertEqual(PerformerRowNotes.lines(duplicate: nil, isGuessed: false), [])
+        XCTAssertEqual(PerformerRowNotes.lines(duplicate: nil, isGuessed: false, handle: "@nanmdancecompany"), [])
     }
 
     func testAGuessedHandleKeepsItsExistingNote() {
-        XCTAssertEqual(PerformerRowNotes.lines(duplicate: nil, isGuessed: true),
+        XCTAssertEqual(PerformerRowNotes.lines(duplicate: nil, isGuessed: true, handle: "@nanmdancecompany"),
                        [.init(text: HandleBookMark.note, isProblem: false,
                               tooltip: HandleBookMark.explanation)])
     }
 
     func testADuplicateSaysWhichOtherRowItClashesWith() {
-        XCTAssertEqual(PerformerRowNotes.lines(duplicate: duplicate, isGuessed: false),
+        XCTAssertEqual(PerformerRowNotes.lines(duplicate: duplicate, isGuessed: false, handle: "@nanmdancecompany"),
                        [.init(text: "Same handle as NANM", isProblem: true,
                               tooltip: DuplicateHandleMark.explanation)])
     }
@@ -32,7 +32,7 @@ final class PerformerRowNotesTests: XCTestCase {
         // Both are true and both are shown. The duplicate goes first because it
         // is the one that has to be acted on: the guess note explains where a
         // value came from, and knowing that does not make it correct.
-        XCTAssertEqual(PerformerRowNotes.lines(duplicate: duplicate, isGuessed: true).map(\.text),
+        XCTAssertEqual(PerformerRowNotes.lines(duplicate: duplicate, isGuessed: true, handle: "@nanmdancecompany").map(\.text),
                        ["Same handle as NANM", HandleBookMark.note])
     }
 
@@ -40,7 +40,7 @@ final class PerformerRowNotesTests: XCTestCase {
         // The guess note has been a quiet aside since #459 and stays one. If
         // both drew the same, the row would carry two warnings where only one
         // says anything is wrong.
-        XCTAssertEqual(PerformerRowNotes.lines(duplicate: duplicate, isGuessed: true)
+        XCTAssertEqual(PerformerRowNotes.lines(duplicate: duplicate, isGuessed: true, handle: "@nanmdancecompany")
                         .map(\.isProblem),
                        [true, false])
     }

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import re
 
+from ..caption_blocks import is_handle_shaped
 from .blog_quality import Finding
 
 #: An @ handle as it appears in caption text. A dot is legal inside a handle
@@ -52,8 +53,65 @@ def norm_handle(token: str) -> str:
     return str(token).strip().casefold().lstrip("@").rstrip(_TRAILING)
 
 
+def malformed_tag_handles(tag_handles) -> list[str]:
+    """Tag list entries that cannot be an Instagram handle at all (#899).
+
+    A performer row carrying its company's display name in the handle field put
+    "@DPR Dance" into a caption bound for Instagram, and this module read it as
+    two separate defects, neither of them the real one: a stranger tag on the
+    fragment `@dpr`, because `HANDLE_RE` cannot match a value containing a
+    space, and a credit missing forever, because `@dpr dance` can never appear
+    in a caption in a form anything here recognises.
+
+    Both are findings about the TAG LIST, and the second is the worse kind: it
+    can never be cleared by anything Dan does to the caption, so it would be
+    reported on every future run of an event carrying that row (L111).
+
+    First spelling kept, later case-insensitive repeats dropped: the problem is
+    the entry, not how many lists it reached.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in (tag_handles or []):
+        text = str(raw).strip()
+        if not text or is_handle_shaped(text):
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+    return out
+
+
+def _usable(tag_handles) -> list[str]:
+    """The entries that can be compared against a caption at all."""
+    return [h for h in (tag_handles or [])
+            if str(h).strip() and is_handle_shaped(h)]
+
+
+def _supplied_fragments(tag_handles) -> set[str]:
+    """Every handle a malformed entry PUT IN FRONT OF THE MODEL.
+
+    An entry that is not handle shaped still carries handle shaped pieces, and
+    those are what a caption written from it contains: "@DPR Dance" is written
+    into the caption whole and read back as `@dpr`, and an org field holding
+    "@bludlineodyssey presented by @matchbookfestival" carries two real
+    accounts. Accusing the caption of inventing any of them is accusing the
+    model of a choice the pipeline made for it, and the finding that names the
+    entry itself already says what is wrong.
+    """
+    fragments: set[str] = set()
+    for entry in malformed_tag_handles(tag_handles):
+        for token in HANDLE_RE.findall("@" + str(entry).lstrip("@")):
+            key = norm_handle(token)
+            if key:
+                fragments.add(key)
+    return fragments
+
+
 def _offered(tag_handles) -> set[str]:
-    return {norm_handle(h) for h in (tag_handles or []) if str(h).strip()}
+    return {norm_handle(h) for h in _usable(tag_handles) if str(h).strip()}
 
 
 def foreign_handles(caption: str, *, tag_handles=None) -> list[str]:
@@ -62,7 +120,7 @@ def foreign_handles(caption: str, *, tag_handles=None) -> list[str]:
     Reported once each however often they appear: the problem is the account,
     not the number of times it was named.
     """
-    offered = _offered(tag_handles)
+    offered = _offered(tag_handles) | _supplied_fragments(tag_handles)
     found: list[str] = []
     seen: set[str] = set()
     for token in HANDLE_RE.findall(caption or ""):
@@ -86,7 +144,11 @@ def missing_credits(caption: str, *, tag_handles=None, name_mentions=None) -> li
     low = text.casefold()
 
     absent: list[str] = []
-    for handle in tag_handles or []:
+    # `_usable` rather than the raw list: an entry that is not handle shaped
+    # cannot appear in a caption in a form this reads, so requiring it reports
+    # it absent from every caption ever written, and no edit clears it (#899).
+    # `malformed_tag_handles` names it once instead.
+    for handle in _usable(tag_handles):
         key = norm_handle(handle)
         if key and key not in present:
             absent.append("@" + key)
@@ -100,11 +162,21 @@ def missing_credits(caption: str, *, tag_handles=None, name_mentions=None) -> li
 def credit_findings(caption: str, *, tag_handles=None, name_mentions=None) -> list[Finding]:
     """Everything either rule caught, in the shape the app already decodes.
 
-    Ordered with the invented handles first: a missing credit is a caption Dan
-    has to add a name to, while an invented one is already pointing at somebody
-    else's account.
+    Ordered with the tag list first, then the invented handles: an entry that
+    is not a handle is upstream of both other rules and explains what they
+    would otherwise report as the caption's fault. After that, a missing credit
+    is a caption Dan has to add a name to, while an invented one is already
+    pointing at somebody else's account.
     """
     findings: list[Finding] = []
+    for entry in malformed_tag_handles(tag_handles):
+        findings.append(Finding(
+            "caption_tag_list_not_a_handle",
+            "Something that is not an Instagram handle was offered to this "
+            "caption as one, so whoever it names has been credited by a "
+            "mention that goes nowhere. Correct the handle on the performer "
+            "or clear it, and they will be credited by name instead.",
+            entry))
     for handle in foreign_handles(caption, tag_handles=tag_handles):
         findings.append(Finding(
             "caption_foreign_handle",

@@ -29,11 +29,19 @@ enum CaptionCreditInputs {
     /// `day` is optional because a day may not exist on the event at all, which
     /// is not an error: it credits the event-wide handles and nothing else.
     static func forDay(_ day: PostingDay?, event: Event) -> ForDay {
-        // Event-wide handles (org, venue) go on every day.
-        let eventHandles: [String] = event.eventHandles
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+        // Event-wide handles (org, venue) go on every day, read through the
+        // same helper the tagging sheet reads them with (#899).
+        //
+        // This used to split the field on commas and pass the pieces straight
+        // through, with no gate of any kind. The field is free text and holds
+        // two shapes: the comma separated bare names the OCR review writes,
+        // and a sentence somebody typed. Two entries in the org book are prose
+        // today, "@bludlineodyssey presented by @matchbookfestival" among
+        // them, and each reached the caption prompt as ONE multi word account
+        // to mention. `accounts(in:)` takes the accounts out of either shape
+        // and takes a comma separated piece only when it could be a handle, so
+        // prose can no longer become one.
+        let eventHandles = EventHandleSuggestions.accounts(in: event.eventHandles)
 
         guard let day else {
             return ForDay(handles: PythonBridge.dedupedPreservingOrder(eventHandles),

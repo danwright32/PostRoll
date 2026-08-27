@@ -34,6 +34,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from ..caption_blocks import is_handle_shaped
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -459,6 +460,16 @@ def _normalise_handle_suggestions(data: list) -> list[dict]:
         if not handle_matches_profile(handle, profile_url):
             print(f"warning: dropped a handle suggestion for {name}: {handle} does not "
                   f"match the profile it was given, {profile_url}.",
+                  file=sys.stderr, flush=True)
+            continue
+        # A handle that is not shaped like one (#899). `handle_matches_profile`
+        # above returns true whenever no `profile_url` came back, so an
+        # unlinked suggestion of ANY shape was accepted, and the app writes an
+        # accepted suggestion straight into the performer's handle field. That
+        # is how a company's display name became a caption mention.
+        if handle and not is_handle_shaped(handle):
+            print(f"warning: dropped a handle suggestion for {name}: "
+                  f"{handle} is not shaped like an Instagram handle.",
                   file=sys.stderr, flush=True)
             continue
         out.append({

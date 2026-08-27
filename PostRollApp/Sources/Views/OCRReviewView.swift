@@ -869,7 +869,9 @@ private struct PerformerRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     BrandField("@handle", text: $performer.handle)
                     ForEach(PerformerRowNotes.lines(duplicate: duplicate,
-                                                    isGuessed: isGuessed), id: \.text) { note in
+                                                    isGuessed: isGuessed,
+                                                    handle: performer.handle),
+                            id: \.text) { note in
                         Label(note.text,
                               systemImage: note.isProblem ? "exclamationmark.triangle"
                                                           : "questionmark.circle")

@@ -223,7 +223,14 @@ final class PerformerLookupManager {
     /// or not the screen that offered it still exists.
     func apply(_ suggestion: PythonBridge.HandleSuggestion, to eventID: Event.ID,
                in appState: AppState) {
+        // Shaped like a handle, or there is nothing here to accept (#899).
+        // The Python side already drops a suggestion of the wrong shape, and
+        // this is the write that would put one into the field: the enrichment
+        // check `handle_matches_profile` passes anything at all when the model
+        // returned no profile_url, so an unlinked suggestion was accepted
+        // whatever it looked like.
         guard let handle = suggestion.handle,
+              CaptionBlocks.isHandleShaped(handle),
               var live = appState.events.first(where: { $0.id == eventID }),
               var stored = live.ocrResult,
               let index = stored.performers.firstIndex(where: {
