@@ -1,0 +1,8 @@
+{
+  "name": "a-perturbed-render-cannot-become-the-reference-frame",
+  "file": "tests/test_golden_frames.py",
+  "find": "    if UPDATING and may_record:",
+  "replace": "    if UPDATING:",
+  "test": "tests/test_golden_frames.py::test_the_re_record_door_refuses_a_frame_that_is_deliberately_wrong",
+  "breaks": "make record-design-change saves the deliberately perturbed story render over goldens/story.png on every run, whatever template is being changed, and the only thing between that and a committed golden is the door refusing for the failure it causes on the next line (#898)"
+}

@@ -85,13 +85,12 @@ CLOSING_FRAME_DURATION = 5.0
 #
 # The title used to be drawn at y=35 in a cream header that started at the very
 # top of the frame, which put the show's name under the phone's status bar and
-# Dynamic Island on every reel published.
+# Dynamic Island on every reel published. The band clears that band now.
 #
-# The band is laid ON the photography rather than covering the top of the
-# frame. Pushing the cream down instead would have left 170px of empty cream
-# above the title, which is dead space in the one place a viewer looks first;
-# the prints run to the top edge instead, and the part the phone covers is
-# photograph, which is what it covers on every other story in the feed.
+# It is real chrome, not a plate: the gallery scrolls in the viewport BELOW it
+# (#898). It was laid on the photography until then, and the price of that was
+# not a trimmed top row, it was two landscape prints that were never visible at
+# any point in the file. What the phone covers above the band is mat.
 
 #: Where the cream band starts: immediately below the band the phone covers.
 TITLE_BAND_TOP = SAFE_TOP
@@ -110,10 +109,30 @@ CHROME_BOTTOM_Y = TITLE_BAND_BOTTOM
 
 #: Where the title sits inside the band.
 TITLE_TOP_Y = TITLE_BAND_TOP + 26
-# The footer is only a cream mask now: it softens photos scrolling in at the bottom
-# edge. The colophon no longer lives here (it is baked into the strip right under
-# the last photo), so this is back to a thin band.
+# The bottom chrome. The colophon does not live here (it is baked into the strip
+# right under the last photo), so this is a thin band closing the gallery.
 FOOTER_H = 100
+
+# ── The viewport (#898) ──────────────────────────────────────────────────────
+#
+# The window the strip scrolls through. Everything between the two pieces of
+# chrome, and nothing outside it: a print placed here cannot be painted over by
+# the band or the footer, whatever the shape of the photograph or wherever the
+# scroll has reached.
+#
+# The sibling template is the reference. `generate_reel_screen` has reserved
+# `CANVAS_H - HEADER_H - FOOTER_H` and placed its content at `HEADER_H` since it
+# was written, so its chrome has never overlapped its photography.
+
+#: The first row of pixels the photography may occupy.
+VIEWPORT_TOP = TITLE_BAND_BOTTOM
+
+#: The first row it may not: where the footer starts.
+VIEWPORT_BOTTOM = CANVAS_H - FOOTER_H
+
+#: How much of the frame the gallery gets. What the strip is cropped to, and
+#: what the scroll range is measured against.
+VIEWPORT_H = VIEWPORT_BOTTOM - VIEWPORT_TOP
 # Wide enough to read as the signature under the gallery without spanning the full
 # mat, which felt like a banner. The asset carries transparent side margins, so its
 # visible ink is a bit under this.
@@ -241,19 +260,20 @@ def build_collage_strip(
     # bottom padding has to reserve room for it: a gap under the photos, the mark,
     # then even breathing room and the frame's bottom mask below it.
     logo = load_logo(logo_path)
-    # The prints run all the way to the top of the frame and the title band is
-    # laid over them (#752). Starting them below the band instead leaves the
-    # covered strip showing the collage's cream mat until the strip has
-    # scrolled past it, which is most of the first stretch of the reel and
-    # reads as the dead space this redesign exists to remove. What the band
-    # hides of the top row is the price, and it is what makes the band read as
-    # a plate on photography rather than a lid on it.
-    top_pad = ROW_GAP * 4
+    # One gutter above the first row, the same gutter that sits between every
+    # other pair of rows. The strip's top edge is what the viewport opens on, so
+    # this is the whole distance between the band and the first print: the dead
+    # cream #752 was worried about is what a viewport with a deep top pad would
+    # produce, and the answer is not to pad it. It is a gutter rather than zero
+    # because the hairline framing each print is drawn one pixel outside it.
+    top_pad = ROW_GAP
+    # No FOOTER_H reserved here since #898: the viewport ends where the footer
+    # starts, so the strip never reaches under it and padding for it would only
+    # add mat the scroll has to travel through.
     if logo:
-        bottom_pad = (COLOPHON_GAP_ABOVE + logo.height
-                      + COLOPHON_GAP_BELOW + FOOTER_H)
+        bottom_pad = COLOPHON_GAP_ABOVE + logo.height + COLOPHON_GAP_BELOW
     else:
-        bottom_pad = FOOTER_H + 30
+        bottom_pad = 30
     total_h = top_pad + sum(h for _, h, _ in row_data) + ROW_GAP * (len(row_data) - 1) + bottom_pad
 
     # Create strip on the brand cream mat
@@ -354,6 +374,44 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
     frame_rgba.paste(footer, (0, footer_y), footer)
 
     return frame_rgba.convert("RGB")
+
+
+def max_scroll_for(strip_height: int) -> int:
+    """How far the strip travels: the part of it that cannot be shown at once.
+
+    Shared with the checks for the same reason `compose_frame` is: a scroll
+    range restated beside a check samples a different journey from the one the
+    encoder renders.
+    """
+    return max(0, strip_height - VIEWPORT_H)
+
+
+def place_strip(strip: Image.Image, scroll_y: int) -> Image.Image:
+    """Where the photography lands in the frame, before any chrome is drawn.
+
+    Split out from `compose_frame` so a check can ask where the prints ARE
+    rather than where they can still be SEEN. The band and the footer mask are
+    opaque cream, so a frame read after they are drawn reports nothing under
+    them whether they are covering a photograph or the mat, and a check written
+    that way cannot fail (L1, L159).
+    """
+    frame = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
+    frame.paste(strip.crop((0, scroll_y, CANVAS_W, scroll_y + VIEWPORT_H)),
+                (0, VIEWPORT_TOP))
+    return frame
+
+
+def compose_frame(strip: Image.Image, scroll_y: int, event_name: str,
+                  org: str, venue: str) -> Image.Image:
+    """One frame of the reel: the strip at `scroll_y`, with the chrome over it.
+
+    The encoder and the checks that measure a frame both come through here, so
+    what is measured is what ships. Reading the composition off the encoder's
+    loop meant a check re-stating the crop beside it, which is a second
+    definition of the frame that drifts silently (L107).
+    """
+    return draw_branded_chrome(place_strip(strip, scroll_y),
+                               event_name, org, venue)
 
 
 from postroll.ai.audio_tags import THURSDAY_FALLBACK_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
@@ -500,25 +558,29 @@ def generate_reel_scroll(
     strip_h = strip.height
     print(f"Strip size: {CANVAS_W}x{strip_h}")
 
-    # A strip shorter than the canvas (possible with a handful of photos)
+    # A strip shorter than the viewport (possible with a handful of photos)
     # has nothing to scroll: cropping past its bottom would render a black
     # band, and a 40 second motionless "scroll" is dead air. Pad the strip
-    # to canvas height with the cream background and collapse the scroll
+    # to viewport height with the cream background and collapse the scroll
     # phase to a short hold instead.
-    if strip_h <= CANVAS_H:
-        padded = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
+    #
+    # Against VIEWPORT_H rather than CANVAS_H since #898: the strip is cropped
+    # to the viewport now, so a strip between the two heights scrolls perfectly
+    # well and padding it would have stopped a real scroll dead.
+    if strip_h <= VIEWPORT_H:
+        padded = Image.new("RGB", (CANVAS_W, VIEWPORT_H), CREAM)
         padded.paste(strip, (0, 0))
         strip = padded
-        strip_h = CANVAS_H
+        strip_h = VIEWPORT_H
         scroll_duration = min(scroll_duration, 4.0)
-        print(f"Strip shorter than canvas: padded to {CANVAS_W}x{CANVAS_H}, "
+        print(f"Strip shorter than viewport: padded to {CANVAS_W}x{VIEWPORT_H}, "
               f"scroll collapsed to {scroll_duration}s hold")
 
     total_duration = scroll_duration + HOLD_END + CLOSING_FRAME_DURATION
 
     # Scroll exactly to bottom of strip — bottom_pad handles footer clearance.
     # When the strip exactly fills the canvas this is 0 (a static frame).
-    max_scroll = max(0, strip_h - CANVAS_H)
+    max_scroll = max_scroll_for(strip_h)
 
     # The colophon is baked into the strip (above), so the footer chrome is just a
     # cream mask now: pass no logo to it.
@@ -543,26 +605,24 @@ def generate_reel_scroll(
                 t = i / scroll_frames
                 eased = ease_in_out(t)
                 scroll_y = int(eased * max_scroll)
-                frame = strip.crop((0, scroll_y, CANVAS_W, scroll_y + CANVAS_H))
-                frame = draw_branded_chrome(frame, event_name, org, venue)
+                frame = compose_frame(strip, scroll_y, event_name, org, venue)
 
             elif i < scroll_frames + hold_frames:
-                frame = strip.crop((0, max_scroll, CANVAS_W, max_scroll + CANVAS_H))
-                frame = draw_branded_chrome(frame, event_name, org, venue)
+                frame = compose_frame(strip, max_scroll, event_name, org, venue)
 
             else:
                 if closing_frame:
                     closing_i = i - scroll_frames - hold_frames
                     if closing_i < FPS:
                         blend = closing_i / FPS
-                        last = strip.crop((0, max_scroll, CANVAS_W, max_scroll + CANVAS_H))
-                        last = draw_branded_chrome(last, event_name, org, venue)
+                        last = compose_frame(strip, max_scroll, event_name,
+                                             org, venue)
                         frame = Image.blend(last, closing_frame, blend)
                     else:
                         frame = closing_frame
                 else:
-                    frame = strip.crop((0, max_scroll, CANVAS_W, max_scroll + CANVAS_H))
-                    frame = draw_branded_chrome(frame, event_name, org, venue)
+                    frame = compose_frame(strip, max_scroll, event_name,
+                                          org, venue)
 
             frame.save(str(tmpdir / f"frame_{i:05d}.png"), "PNG")
 

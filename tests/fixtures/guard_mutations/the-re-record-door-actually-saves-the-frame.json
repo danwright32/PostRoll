@@ -1,0 +1,8 @@
+{
+  "name": "the-re-record-door-actually-saves-the-frame",
+  "file": "tests/test_golden_frames.py",
+  "find": "    actual.convert(\"RGB\").save(path)",
+  "replace": "    pass",
+  "test": "tests/test_golden_frames.py::test_the_re_record_door_saves_a_frame_it_is_allowed_to_save",
+  "breaks": "the re-record door records nothing at all, so POSTROLL_UPDATE_GOLDENS leaves every reference frame at whatever it already held while the run reports it re-recorded them, and the refusal guard beside this one becomes a refusal by a door that never writes (L159, #898)"
+}

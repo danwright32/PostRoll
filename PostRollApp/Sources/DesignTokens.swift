@@ -73,8 +73,8 @@ enum MediaDesign {
         "reel_screen": 2,
         "reel_morph": 3,
         "reel_slider": 3,
-        "reel_scroll": 2,
-        "reel_preview": 2,
+        "reel_scroll": 3,
+        "reel_preview": 3,
         "reel_clip": 2,
     ]
 
@@ -100,8 +100,8 @@ enum MediaDesign {
         "reel_screen": "2026-08-21",
         "reel_morph": "2026-08-21",
         "reel_slider": "2026-08-21",
-        "reel_scroll": "2026-08-20",
-        "reel_preview": "2026-08-20",
+        "reel_scroll": "2026-08-27",
+        "reel_preview": "2026-08-27",
         "reel_clip": "2026-08-22",
     ]
 
