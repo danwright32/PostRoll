@@ -53,10 +53,16 @@ final class HandleBookDuplicateGuardTests: XCTestCase {
         XCTAssertEqual(book.handle(forPerformer: "NANM"), "")
     }
 
-    func testTwoRowsSharingOneNameAreNotLearnedEither() {
-        // The book is keyed on the name, so these two write to one entry and
-        // the later one silently wins. Whichever handle that is, it is being
-        // recorded against a name that means two different people.
+    func testTwoRowsSharingOnlyANameAreStillLearned() {
+        // A repeated NAME is warned about on the row but does not stop the
+        // write. Dan's call, 2026-08-27: two performers genuinely sharing a
+        // name is a thing that happens, and refusing to learn either would
+        // mean retyping both handles at every future event, forever, for a
+        // programme that is not wrong.
+        //
+        // The book holds one entry per name, so the later row wins, and the
+        // value it auto-fills is already marked as a guess by HandleBookMark
+        // (#459) rather than presented as read off the programme.
         let book = book()
 
         book.recordAll(performers: [
@@ -64,7 +70,17 @@ final class HandleBookDuplicateGuardTests: XCTestCase {
             performer("Ana Vidović", handle: "@vidovic"),
         ])
 
-        XCTAssertEqual(book.handle(forPerformer: "Ana Vidović"), "")
+        XCTAssertEqual(book.handle(forPerformer: "Ana Vidović"), "@vidovic")
+    }
+
+    func testARepeatedNameIsStillReportedOnTheRow() {
+        // The write is allowed, the warning is not withdrawn. Those are two
+        // different decisions and only the first one changed.
+        let a = performer("Ana Vidović", handle: "@ana")
+        let b = performer("Ana Vidović", handle: "@vidovic")
+
+        XCTAssertEqual(DuplicateHandleMark.marks(in: [a, b])[a.id]?.sameNameAs,
+                       ["Ana Vidović"])
     }
 
     func testEveryOtherPerformerOnTheSameProgrammeIsStillLearned() {
