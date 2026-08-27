@@ -117,12 +117,21 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # all. program_plate.MAX_PRINT_H carries that reading.
     "reel_morph": 3,
     "reel_slider": 3,
-    # 2 is the taller header that keeps the title out of the band the phone
-    # covers (#752): it drew at y=35, under the status bar, on every reel.
-    "reel_scroll": 2,
+    # 3 is the gallery moving BELOW the chrome rather than under it (#898).
+    #
+    # 2 was the taller header that keeps the title out of the band the phone
+    # covers (#752): it drew at y=35, under the status bar, on every reel. That
+    # header stays exactly where it is. What moved is the photography: the band
+    # was laid ON the prints, and measured on a real strip that left the opening
+    # row spanning y=64 to 386 against a band covering 170 to 390, so a landscape
+    # pair opened every reel sliced in half and was never seen whole at any point
+    # in the file. The strip scrolls in a viewport between the two pieces of
+    # chrome now, so no print can be painted over by either.
+    "reel_scroll": 3,
     # The still the Thursday crop editor draws over. Same layout maths as the
-    # reel it previews, so a redesign of one dates the other.
-    "reel_preview": 2,
+    # reel it previews, so a redesign of one dates the other: 3 is #898's
+    # viewport, which moved this strip's own padding at both ends.
+    "reel_preview": 3,
     # Friday's auto-cut clip reel. The feature is retired (2026-07-09) but the
     # renderer is still reachable, and an asset that can still be produced
     # still needs to say which design produced it.
@@ -207,8 +216,8 @@ MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
     "reel_screen": DesignChange(version=2, day="2026-08-21"),
     "reel_morph": DesignChange(version=3, day="2026-08-21"),
     "reel_slider": DesignChange(version=3, day="2026-08-21"),
-    "reel_scroll": DesignChange(version=2, day="2026-08-20"),
-    "reel_preview": DesignChange(version=2, day="2026-08-20"),
+    "reel_scroll": DesignChange(version=3, day="2026-08-27"),
+    "reel_preview": DesignChange(version=3, day="2026-08-27"),
     "reel_clip": DesignChange(version=2, day="2026-08-22"),
 }
 

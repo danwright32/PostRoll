@@ -34,6 +34,7 @@ that flag is the one way a broken frame becomes the expectation.
 from __future__ import annotations
 
 import os
+import sys
 import re
 import subprocess
 from pathlib import Path
@@ -280,11 +281,19 @@ def _write_frame(actual: Image.Image, path: Path) -> None:
     actual.convert("RGB").save(path)
 
 
-def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path) -> None:
-    """Diff `actual` against the committed reference frame for `name`."""
+def assert_matches_golden(actual: Image.Image, name: str, tmp_path: Path,
+                          *, may_record: bool = True) -> None:
+    """Diff `actual` against the committed reference frame for `name`.
+
+    `may_record=False` for a caller whose frame is DELIBERATELY wrong: the
+    re-record door would otherwise save it as the expectation. It is a parameter
+    rather than something read from the environment because the caller is the
+    only one that knows its render is a perturbation, and a check written
+    without deciding gets the safe default that matches every honest call.
+    """
     golden_path = GOLDEN_DIR / f"{name}.png"
 
-    if UPDATING:
+    if UPDATING and may_record:
         _write_frame(actual, golden_path)
         pytest.skip(f"re-recorded {golden_path.name}; unset POSTROLL_UPDATE_GOLDENS to check it")
 
@@ -706,6 +715,18 @@ def test_a_caption_line_moved_one_pixel_fails_its_reference_frame(
     reading under the template's own name, and on CI that would land in the
     collected drift log as a `story` measurement nobody took, in the very
     distribution the limit is chosen from (L191).
+
+    The comparison below passes `may_record=False` for the same reason, one
+    level worse. Under `POSTROLL_UPDATE_GOLDENS` every comparison re-records
+    instead of raising, so this check both stopped asserting the refusal it
+    exists to prove and SAVED its deliberately broken render over
+    `goldens/story.png` (measured on 2026-08-27: `make record-design-change` did
+    it on a run for a different template entirely, and left the corrupt frame in
+    the tree). The only thing between that and a committed golden was the door
+    refusing for the failure on the line below, which is a refusal about this
+    check rather than about the frame it had already overwritten. A negative
+    check may not depend on the mode it runs in, and it may never write the
+    expectation it is measuring against (L1, L84).
     """
     monkeypatch.setenv(golden_drift.LOG_VARIABLE, str(tmp_path / "drift.txt"))
     monkeypatch.setattr(story_mod, "ORG_VENUE_LINE_SPACING",
@@ -731,8 +752,83 @@ def test_a_caption_line_moved_one_pixel_fails_its_reference_frame(
         f"in which case this check is measuring an untouched template (L100).")
 
     with pytest.raises(BaseException) as failure:
-        assert_matches_golden(frame, "story", tmp_path)
+        assert_matches_golden(frame, "story", tmp_path, may_record=False)
     assert "moved" in str(failure.value), str(failure.value)
+
+
+def _recording_into(monkeypatch, tmp_path, name: str) -> Path:
+    """The re-record door, pointed at a scratch folder holding one frame.
+
+    Pointed away from `fixtures/goldens` rather than run against it: this is a
+    check ABOUT the writer, so a version of it that ran against the real folder
+    would corrupt a reference frame on exactly the run where the guard is
+    broken, which is the run it exists for (L2).
+    """
+    scratch = tmp_path / "goldens"
+    scratch.mkdir()
+    Image.new("RGB", (8, 8), (10, 10, 10)).save(scratch / f"{name}.png")
+    monkeypatch.setattr(sys.modules[__name__], "GOLDEN_DIR", scratch)
+    monkeypatch.setattr(sys.modules[__name__], "UPDATING", True)
+    monkeypatch.setenv(golden_drift.LOG_VARIABLE, str(tmp_path / "drift.txt"))
+    return scratch / f"{name}.png"
+
+
+def test_the_re_record_door_saves_a_frame_it_is_allowed_to_save(monkeypatch, tmp_path):
+    """The positive control for the check below.
+
+    Without it, a door that had stopped recording ALTOGETHER would satisfy the
+    refusal test and read as the guard working (L159).
+    """
+    golden = _recording_into(monkeypatch, tmp_path, "scratch")
+    before = golden.read_bytes()
+
+    # The skip it raises after recording, by name: any throw at all would
+    # satisfy a blind `raises`, including one from the fixture above (L140).
+    with pytest.raises(pytest.skip.Exception) as skipped:
+        assert_matches_golden(Image.new("RGB", (8, 8), (200, 30, 30)),
+                              "scratch", tmp_path)
+    assert "re-recorded" in str(skipped.value), str(skipped.value)
+
+    assert golden.read_bytes() != before, (
+        "the re-record door did not save the frame it was handed, so the "
+        "refusal measured below is a refusal by a door that records nothing")
+
+
+def test_the_re_record_door_refuses_a_frame_that_is_deliberately_wrong(
+        monkeypatch, tmp_path):
+    """A perturbed render may never become the expectation (#898).
+
+    `test_a_caption_line_moved_one_pixel_fails_its_reference_frame` renders a
+    story with one caption line moved and asserts the comparison rejects it.
+    Under `POSTROLL_UPDATE_GOLDENS` that comparison used to record instead, so
+    the door saved the broken story over `goldens/story.png` on every run of
+    `make record-design-change`, whatever template was being changed. It was
+    caught only because the same check then failed and the door refused for
+    that, having already written the file (2026-08-27).
+    """
+    golden = _recording_into(monkeypatch, tmp_path, "scratch")
+    before = golden.read_bytes()
+
+    # Written out rather than as `pytest.raises`, because the failure this
+    # guards against raises a SKIP: `raises` lets that through, the guard's own
+    # test is then reported as skipped rather than failed, and a skip is not a
+    # verdict (`tools/check_guards.py` calls it ERROR, and L98 is why). Each
+    # outcome is named where it happens.
+    try:
+        assert_matches_golden(Image.new("RGB", (8, 8), (200, 30, 30)),
+                              "scratch", tmp_path, may_record=False)
+    except pytest.skip.Exception as recorded:
+        pytest.fail("a comparison that declared its frame deliberately wrong "
+                    f"re-recorded it instead of refusing: {recorded}")
+    except pytest.fail.Exception as refused:
+        assert "of pixels moved" in str(refused), str(refused)
+    else:
+        pytest.fail("a frame nothing like the reference was accepted, so the "
+                    "comparison below proves nothing about what it saved")
+
+    assert golden.read_bytes() == before, (
+        "a comparison that declared its frame deliberately wrong still "
+        "re-recorded it, so the reference frame is now the broken render")
 
 
 @requires_mac_fonts
