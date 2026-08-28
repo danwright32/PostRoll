@@ -51,6 +51,34 @@ final class DeepLinkInbox {
 /// `kAEGetURL` event actually reaches, and `onOpenURL` is a layer over it that
 /// needs a scene to exist first.
 final class DeepLinkDelegate: NSObject, NSApplicationDelegate {
+
+    /// Asking macOS whether PostRoll may notify (#893).
+    ///
+    /// It used to happen in `PostRollApp.init()`, which runs before the app has
+    /// finished launching. On the development machine on 2026-08-24 PostRoll
+    /// had no entry in macOS Notification settings and no delivered
+    /// notification on record, which is what a request that never completed
+    /// looks like from outside, and asking that early was the leading suspect.
+    /// If it was the cause then no banner this app has ever sent could arrive,
+    /// including every completion Dan relies on with the window closed.
+    ///
+    /// A closure rather than the call itself, for the reason #707 gives:
+    /// `UNUserNotificationCenter` raises rather than failing when there is no
+    /// real app around it, so a test that reached it would report the harness
+    /// instead of the app. The default is the real request, because a seam left
+    /// unwired is a permission nobody ever asks for, which is the same silence
+    /// one level down (L98).
+    var askForNotificationPermission: () -> Void = {
+        MainActor.assumeIsolated {
+            NotificationService.shared.requestPermission()
+        }
+    }
+
+    /// The app is up. This is the point the request was moved to.
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        askForNotificationPermission()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         MainActor.assumeIsolated {
             for url in urls { DeepLinkInbox.shared.receive(url) }

@@ -76,9 +76,6 @@ struct PostRollApp: App {
     /// order the two happen in.
     @NSApplicationDelegateAdaptor(DeepLinkDelegate.self) private var deepLinks
 
-    init() {
-        NotificationService.shared.requestPermission()
-    }
 
     /// Tell the delegate what is running, so it can ask before quitting (#862).
     ///

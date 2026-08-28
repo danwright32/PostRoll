@@ -15,6 +15,9 @@ struct MainWindowView: View {
     /// delivered before this view exists.
     private var deepLinks = DeepLinkInbox.shared
 
+    /// Whether a banner this app sends could reach anybody at all (#894).
+    private var notifications = NotificationService.shared
+
     var body: some View {
         @Bindable var appState = appState
 
@@ -130,6 +133,22 @@ struct MainWindowView: View {
                                         label: CheckoutNotice.dismissLabel) {
                                             appState.dismissCheckoutNotice()
                                         }])
+                    }
+                    // Nothing this app announces can arrive (#894). Not
+                    // dismissable, and above the save failure rather than below
+                    // it, because unlike the two notices above it this one is
+                    // about a condition that persists for the whole session and
+                    // silences every OTHER thing the app would have said.
+                    //
+                    // The whole point of the notifications is the case where
+                    // the window is closed, so this is the one sentence that
+                    // has to be read while it is open.
+                    if let complaint = NotificationNotice.message(
+                        permission: notifications.permission,
+                        hasAsked: notifications.hasAsked) {
+                        BrandBanner(icon: "bell.slash.fill",
+                                    message: complaint,
+                                    style: .warning)
                     }
                     if let failure = appState.saveFailure {
                         BrandBanner(
