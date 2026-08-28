@@ -5,12 +5,13 @@ feed photo + a story image) or a ``collage_carousel`` post (a multi-photo
 carousel feed plus a collage that doubles as the story), and how many photos it
 uses.
 
-Two presets ship today:
+Three presets ship today:
 
 * ``balanced`` (the default) — Sunday, Monday, and Wednesday each carry a
   4 photo carousel plus a 4 photo collage story.
 * ``classic`` — the original layout: Sunday and Monday are single feed photos,
   Wednesday is a 10 photo carousel + collage.
+* ``opening``: Sunday carries 7, Monday and Wednesday stay at 4 (#900).
 
 Tuesday, Thursday, and Friday are not governed by the preset; their format is
 fixed (speed-edit reel, scroll reel, before/after) regardless of preset.
@@ -39,6 +40,20 @@ _PRESETS: dict[str, dict[str, tuple[str, int]]] = {
         "sunday":    (SINGLE, 1),
         "monday":    (SINGLE, 1),
         "wednesday": (COLLAGE_CAROUSEL, 10),
+    },
+    # #900. Sunday's post for Battery Dance Festival had 7 photos worth using
+    # and the app used 4. The Photo Assignment screen said so, so nothing was
+    # hidden; there was simply no way to ask for all 7, because the count is
+    # fixed by the preset and 7 was not a count any preset could name.
+    #
+    # A preset governs all three collage days at once, so this cannot express
+    # "Sunday only" without also declaring what Monday and Wednesday do. They
+    # are pinned at 4, which is what they already were. Decided by Dan on
+    # 2026-08-27, choosing a preset over a per day override.
+    "opening": {
+        "sunday":    (COLLAGE_CAROUSEL, 7),
+        "monday":    (COLLAGE_CAROUSEL, 4),
+        "wednesday": (COLLAGE_CAROUSEL, 4),
     },
 }
 

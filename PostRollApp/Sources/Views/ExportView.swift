@@ -312,7 +312,12 @@ struct ExportView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(maxWidth: 360)
+                // 480 rather than 360 since #900: three segments carry their
+                // counts in the label ("Opening (7·4·4)"), and a segmented
+                // control truncates rather than wrapping, so the numbers that
+                // make the labels worth reading are the first thing to go. It
+                // is a maximum, so a narrower window still takes less.
+                .frame(maxWidth: 480)
                 .disabled(isRegenerating)
             }
             if isRegenerating {

@@ -117,7 +117,14 @@ struct SettingsView: View {
             } header: {
                 Text("Default Posting Layout")
             } footer: {
-                Text("The layout new events start with. Balanced posts a 4 photo carousel with a collage story on Sunday, Monday, and Wednesday; Classic posts a single photo Sunday and Monday plus a 10 photo Wednesday. You can override this for any single event on its Export page.")
+                // Built from the presets rather than typed out (#900). The
+                // sentence here named two of them and the picker above has
+                // always drawn every one, so adding a third would have left
+                // this describing a shorter list than the control it explains.
+                Text("The layout new events start with. "
+                     + PostingPreset.explanations
+                     + " You can override this for any single event on its "
+                     + "Export page.")
                     .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)
                     .font(.system(size: 11))
             }

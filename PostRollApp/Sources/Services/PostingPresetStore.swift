@@ -12,6 +12,12 @@ enum DayFormat: Equatable {
 enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
     case balanced   // Sun/Mon/Wed: 4 photo carousel + 4 photo collage story
     case classic    // Sun/Mon: single feed photo + story; Wed: 10 photo carousel + collage
+    // Sunday 7, Monday and Wednesday 4 (#900). Sunday's post for Battery Dance
+    // Festival had 7 photos worth using and the app used 4, and there was no
+    // way to ask for all 7 because 7 was not a count any preset could name.
+    // A preset governs all three collage days at once, so this cannot say
+    // "Sunday only" without declaring what the other two do; they stay at 4.
+    case opening
 
     var id: String { rawValue }
 
@@ -19,7 +25,34 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
         switch self {
         case .balanced: return "Balanced (4·4·4)"
         case .classic:  return "Classic (1·1·10)"
+        case .opening:  return "Opening (7·4·4)"
         }
+    }
+
+    /// One clause describing what this preset posts, for the sentence under the
+    /// picker (#900).
+    ///
+    /// Here rather than typed into the Settings copy, which hand listed two of
+    /// them and would have gone on describing two presets while the picker
+    /// offered three. A list that has to mirror another source is derived from
+    /// it, never maintained beside it (L41).
+    var explanation: String {
+        switch self {
+        case .balanced:
+            return "Balanced posts a 4 photo carousel with a collage story on "
+                + "Sunday, Monday and Wednesday"
+        case .classic:
+            return "Classic posts a single photo Sunday and Monday plus a 10 "
+                + "photo Wednesday"
+        case .opening:
+            return "Opening posts 7 photos on Sunday and 4 on Monday and "
+                + "Wednesday"
+        }
+    }
+
+    /// What every preset does, in one sentence, in picker order.
+    static var explanations: String {
+        allCases.map(\.explanation).joined(separator: "; ") + "."
     }
 
     /// `(format, photoCount)` for a preset governed day, else nil for days the
@@ -32,6 +65,10 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
             return (.single, 1)
         case (.classic, .wednesday):
             return (.collageCarousel, 10)
+        case (.opening, .sunday):
+            return (.collageCarousel, 7)
+        case (.opening, .monday), (.opening, .wednesday):
+            return (.collageCarousel, 4)
         default:
             return nil
         }

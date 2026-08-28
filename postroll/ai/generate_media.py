@@ -70,8 +70,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
+
 from ..media.generate_story import generate_story
-from ..media.generate_collage import generate_collage
+from ..media.generate_collage import crop_budget_admits, generate_collage
 from ..media.generate_before_after import generate_before_after
 from ..media.clip_scorer import score_clips, InsufficientClipsError
 from ..media.render_clip_reel import render_clip_reel, DEFAULT_DUCK_GAIN_DB
@@ -528,6 +530,42 @@ def generate_media(
                     seed = day_info.get("collage_seed")
                     # cell_layout: user-dragged frame positions — skips masonry if present
                     cell_layout = day_info.get("cell_layout")
+
+                    # Whether any arrangement holds THESE photos inside the crop
+                    # budget (#900). When none does the renderer forces a
+                    # fallback and crops harder than allowed; it says so on
+                    # stderr, which is not a surface anybody reads, so the run
+                    # carries it to the screen instead. Asked before the render
+                    # rather than reported after, because the answer does not
+                    # depend on the render and a warning attached to a finished
+                    # asset reads as a complaint about the asset.
+                    #
+                    # Measured at 7, which the `opening` preset makes reachable:
+                    # all landscape admits 14 arrangements, five landscape with
+                    # two portrait admits 5, and all portrait admits none.
+                    if not cell_layout:
+                        try:
+                            ratios = []
+                            for photo in selected:
+                                with Image.open(photo) as im:
+                                    ratios.append(im.width / im.height)
+                            if ratios and not crop_budget_admits(len(selected), ratios):
+                                _record_warning(
+                                    warnings, day_name,
+                                    f"No collage layout fits these {len(selected)} "
+                                    "photos without cropping them harder than "
+                                    "intended, because too many of them are "
+                                    "upright. The collage is still made. Use "
+                                    "fewer photos, or swap some for landscape "
+                                    "frames, to get one that fits.")
+                        except Exception as e:
+                            # A shape this could not read is not a reason to
+                            # skip the collage, and it is not a crop problem
+                            # either, so it is not reported as one (L11).
+                            print(f"[generate_media] {day_name}: could not read "
+                                  f"photo shapes for the crop budget check: {e}",
+                                  flush=True, file=sys.stderr)
+
                     working_on(day_name, "collage")
                     generate_collage(
                         photo_paths=selected,
