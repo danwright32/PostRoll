@@ -1,0 +1,8 @@
+{
+  "name": "permission-is-not-asked-before-launch",
+  "file": "PostRollApp/Sources/PostRollApp.swift",
+  "find": "    @NSApplicationDelegateAdaptor(DeepLinkDelegate.self) private var deepLinks",
+  "replace": "    @NSApplicationDelegateAdaptor(DeepLinkDelegate.self) private var deepLinks\n    init() { NotificationService.shared.requestPermission() }",
+  "test": "tests/test_permission_is_asked_after_launch.py::test_permission_is_not_asked_from_the_app_initialiser",
+  "breaks": "permission is asked for again before the app has finished launching, which is the leading suspect for a request that never completed, and every banner PostRoll sends then reaches nobody with nothing saying so (#893, #879)"
+}

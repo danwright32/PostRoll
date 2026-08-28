@@ -22,7 +22,14 @@ enum ProgramImageCleanup {
 
 /// Handles macOS notifications and Dock badge for PostRoll background steps.
 /// Badge count = events where a background process just finished and needs review.
+///
+/// `@Observable` since #894, so the window can SAY when nothing this app
+/// announces can arrive. The answer lands asynchronously, from the permission
+/// callback, and a view reading a plain class would have been built before it
+/// arrived and never rebuilt: the banner would be correct only for somebody who
+/// happened to open a different screen afterwards.
 @MainActor
+@Observable
 final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationService()
     private override init() { super.init() }
@@ -43,7 +50,18 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// person watching for a banner that can never arrive.
     private(set) var permission: NotificationPermission = .notAsked
 
+    /// Whether the request has been MADE, which is a different question from
+    /// what it produced (#894).
+    ///
+    /// `.notAsked` covers two situations that need different answers: the
+    /// ordinary moment at launch before the callback returns, where saying
+    /// anything is a false alarm on every launch, and a request that was made
+    /// and never came back, which is the reported symptom itself and used to
+    /// read as an ordinary launch. One field cannot hold two checks (L53).
+    private(set) var hasAsked = false
+
     func requestPermission() {
+        hasAsked = true
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound, .badge]
@@ -63,13 +81,34 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Foreground delivery
 
-    // Without this, macOS silently drops banners when PostRoll is frontmost.
+    /// What macOS is asked to do with a notification that arrives while
+    /// PostRoll is the frontmost app (#895).
+    ///
+    /// Without this, macOS silently drops the banner. That it is a BANNER, and
+    /// not silence, is a decision rather than an oversight, and it is the
+    /// opposite of the rule the two other surfaces follow: `notifyWorkFailed`
+    /// returns early while PostRoll is frontmost, and `incrementBadge` guards
+    /// on the same thing. Three surfaces answering one question two ways is
+    /// what #895 was filed about.
+    ///
+    /// Dan, 2026-08-27, choosing to keep it and write down why: a FAILURE is
+    /// already on the screen he is looking at, so a banner over it is the noise
+    /// that teaches somebody to wave banners away. A COMPLETION is news he may
+    /// want while looking at a different part of the app: the Export page
+    /// cannot tell him Thursday has finished while he is on Sunday.
+    ///
+    /// A named constant rather than a literal inside the callback, so the
+    /// decision can be asserted. A rule that lives only in a comment is a hope
+    /// (L27).
+    nonisolated static let presentationWhileActive: UNNotificationPresentationOptions =
+        [.banner, .sound]
+
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        completionHandler(NotificationService.presentationWhileActive)
     }
 
     // MARK: - Step notifications

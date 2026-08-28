@@ -1,0 +1,8 @@
+{
+  "name": "the-permission-seam-still-asks",
+  "file": "PostRollApp/Sources/Services/DeepLinkInbox.swift",
+  "find": "            NotificationService.shared.requestPermission()",
+  "replace": "            _ = NotificationService.shared",
+  "test": "tests/test_permission_is_asked_after_launch.py::test_the_seam_defaults_to_the_real_request",
+  "breaks": "the seam the tests substitute is left wired to nothing, so the app asks nobody for permission and every banner it sends is delivered to nobody, which is the same silence one level down (L98, #893)"
+}
