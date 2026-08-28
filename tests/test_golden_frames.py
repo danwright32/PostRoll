@@ -786,7 +786,7 @@ def test_the_re_record_door_saves_a_frame_it_is_allowed_to_save(monkeypatch, tmp
     # satisfy a blind `raises`, including one from the fixture above (L140).
     with pytest.raises(pytest.skip.Exception) as skipped:
         assert_matches_golden(Image.new("RGB", (8, 8), (200, 30, 30)),
-                              "scratch", tmp_path)
+                              "scratch", tmp_path, may_record=True)
     assert "re-recorded" in str(skipped.value), str(skipped.value)
 
     assert golden.read_bytes() != before, (

@@ -1,0 +1,8 @@
+{
+  "name": "a-raises-block-must-decide-about-recording",
+  "file": "tests/test_golden_frames.py",
+  "find": "                              \"scratch\", tmp_path, may_record=True)",
+  "replace": "                              \"scratch\", tmp_path)",
+  "test": "tests/test_golden_recording_door.py::test_every_call_inside_a_raises_has_decided",
+  "breaks": "a check that hands a frame to assert_matches_golden inside a pytest.raises goes back to deciding by default, and under POSTROLL_UPDATE_GOLDENS the default SAVES that frame as the reference frame, which is how make record-design-change came to overwrite goldens/story.png with a deliberately broken render on every run (#915, #898)"
+}
