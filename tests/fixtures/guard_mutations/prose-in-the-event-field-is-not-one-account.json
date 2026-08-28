@@ -1,0 +1,8 @@
+{
+  "name": "prose-in-the-event-field-is-not-one-account",
+  "file": "PostRollApp/Sources/Services/CaptionCreditInputs.swift",
+  "find": "        let eventHandles = EventHandleSuggestions.accounts(in: event.eventHandles)",
+  "replace": "        let eventHandles = event.eventHandles.split(separator: \",\").map { String($0) }",
+  "test": "PostRollTests/HandleFieldShapeTests/testProseInTheEventHandlesFieldBecomesTheAccountsInsideIt",
+  "breaks": "an org field holding a sentence, which two events carry today, reaches the caption prompt as one multi word account to mention (#899)"
+}

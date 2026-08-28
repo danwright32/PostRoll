@@ -121,3 +121,28 @@ def test_a_suggestion_with_no_url_still_reaches_dan():
     ])
 
     assert [s["name"] for s in kept] == ["No Link"]
+
+
+def test_a_suggestion_whose_handle_is_not_a_handle_is_dropped(capsys):
+    """#899. `handle_matches_profile` returns true whenever no `profile_url`
+    came back, so an unlinked suggestion of ANY shape was accepted and written
+    straight into the performer's handle field by `PerformerLookupManager`."""
+    kept = enrich_program._normalise_handle_suggestions([
+        {"name": "DPR Dance", "handle": "DPR Dance"},
+        {"name": "Safa", "handle": "@safa.wav"},
+    ])
+
+    assert [k["handle"] for k in kept] == ["@safa.wav"]
+    assert "DPR Dance" in capsys.readouterr().err
+
+
+def test_a_dropped_suggestion_says_which_one_and_why(capsys):
+    """A discard nobody can see is a suggestion that silently never arrives,
+    and the row is then left blank with no reason (L11)."""
+    enrich_program._normalise_handle_suggestions([
+        {"name": "DPR Dance", "handle": "DPR Dance"},
+    ])
+
+    complaint = capsys.readouterr().err
+    assert "DPR Dance" in complaint
+    assert "handle" in complaint

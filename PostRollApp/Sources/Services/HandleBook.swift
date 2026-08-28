@@ -97,18 +97,33 @@ final class HandleBook: @unchecked Sendable {
         set { defaults.set(newValue, forKey: performerKey) }
     }
 
-    /// Look up a saved handle for a performer name. Returns empty string if unknown.
+    /// Look up a saved handle for a performer name. Returns empty string if
+    /// unknown, and for an entry that is not shaped like a handle (#899).
+    ///
+    /// Filtered at the read rather than deleted from the store. The book holds
+    /// one such entry today, a company's display name learned before anything
+    /// checked, and a value cannot be brought back once it is gone (L116). It
+    /// reaches no caption from here, and it stays visible to whatever surface
+    /// ends up listing what the book holds.
     func handle(forPerformer name: String) -> String {
-        performerBook[normalize(name)] ?? ""
+        let stored = performerBook[normalize(name)] ?? ""
+        guard CaptionBlocks.isHandleShaped(stored) else { return "" }
+        return stored
     }
 
     /// Save a performer name → handle mapping. Empty handle removes the entry.
+    ///
+    /// A value that is not shaped like a handle is neither written nor allowed
+    /// to remove what is there (#899). Writing it caches the defect against
+    /// the name for every future event; removing on it would let a typo throw
+    /// away a good handle on the way past (L5).
     func record(performer name: String, handle: String) {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         var b = performerBook
         let trimmed = handle.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { b.removeValue(forKey: normalize(name)) }
-        else               { b[normalize(name)] = trimmed }
+        else if CaptionBlocks.isHandleShaped(trimmed) { b[normalize(name)] = trimmed }
+        else { return }
         performerBook = b
     }
 
@@ -140,7 +155,11 @@ final class HandleBook: @unchecked Sendable {
             guard duplicated[p.id]?.sameHandleAs.isEmpty ?? true else { continue }
             let key = normalize(p.name)
             let handle = p.handle.trimmingCharacters(in: .whitespaces)
-            if !handle.isEmpty {
+            // Shaped like a handle, or it is not one to learn (#899). A row
+            // carrying a company's display name in this field is how the book
+            // came to hold one, and it auto filled into every future event
+            // with that name from then on.
+            if !handle.isEmpty, CaptionBlocks.isHandleShaped(handle) {
                 b[key] = handle
             }
         }

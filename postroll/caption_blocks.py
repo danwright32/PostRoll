@@ -52,6 +52,35 @@ def bare_username(raw: str) -> str:
     return name.strip()
 
 
+#: The characters an Instagram username is made of.
+_HANDLE_CHARACTERS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._")
+
+
+def is_handle_shaped(raw: str) -> bool:
+    """Whether this value could be an Instagram username at all (#899).
+
+    A performer row carried its company's display name in the handle field,
+    'DPR Dance', and nothing checked. It reached `tag_handles` as a handle to
+    mention, the model wrote `@DPR Dance` into a caption bound for Instagram,
+    and `HANDLE_RE` in `caption_credits` then read that as `@dpr`, which was
+    never offered and belongs to somebody else. Any `tag_handles` entry
+    containing a space produces that pair; it is not probabilistic.
+
+    SHAPE only. Whether a value is a SENTINEL recorded because a lookup found
+    nothing ('unknown', 'n/a') is a different question, answered separately, so
+    that one word names one unit (L118). 'unknown' is well shaped.
+
+    Mirrors `CaptionBlocks.isHandleShaped` in Swift, and
+    `tests/fixtures/handle_shape.json` states the cases once for both, because
+    a rule applied on one side of the bridge only is how this happened.
+    """
+    name = bare_username(raw)
+    if not name or name.endswith("."):
+        return False
+    return all(character in _HANDLE_CHARACTERS for character in name)
+
+
 def week_tag_list(days: Iterable[tuple[dict[str, Any] | None,
                                        dict[str, list[str]] | None,
                                        list[Any] | None]]) -> list[str]:
