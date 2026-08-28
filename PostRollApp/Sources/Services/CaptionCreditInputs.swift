@@ -13,6 +13,46 @@ import Foundation
 /// the drift is silent in the worst direction: a handle offered at generation
 /// and withheld at revision reads to the credit checks as a handle nobody
 /// offered, which is the finding that says the caption tags a stranger.
+/// How one credit somebody TYPED is carried into a caption (#912).
+///
+/// Three answers rather than two, because the third is not the absence of the
+/// other two. A mention goes in `tag_handles` and the model writes `@name`. A
+/// name goes in `name_mentions` and the model writes the words. NOTHING is the
+/// answer for a sentinel, which is a recorded "somebody looked and there is no
+/// Instagram" and is not a credit at all: routing one to names would put the
+/// word "unknown" in a caption (L118).
+///
+/// One rule for every field somebody types a credit into, because they were
+/// three rules and each had a different hole. #899 fixed the performer rows and
+/// the event handles field. The day's own handle list still split on commas and
+/// passed every piece through, so `DPR Dance` typed there became `@DPR Dance`
+/// in the prompt, which is exactly what #899 was filed for. The per photo tags
+/// dropped `@DPR Dance` on the floor instead, silently, so somebody tagged a
+/// company and nothing credited them (L100).
+enum TypedCredit: Equatable {
+    /// A usable handle. Carried with the @ the caption needs.
+    case mention(String)
+    /// Anything else meant as a credit. The name underneath a sigil counts:
+    /// somebody typing `@DPR Dance` meant that company, and the words are the
+    /// credit even though the account is not.
+    case name(String)
+    /// A sentinel, or nothing at all.
+    case nothing
+
+    static func read(_ raw: String) -> TypedCredit {
+        let typed = raw.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return .nothing }
+        if PythonBridge.isRealHandle(typed) {
+            return .mention(typed.hasPrefix("@") ? typed : "@\(typed)")
+        }
+        // Shaped like a handle but refused above: that is the sentinel case,
+        // and it is the one thing here that is not a credit.
+        if CaptionBlocks.isHandleShaped(typed) { return .nothing }
+        let words = CaptionBlocks.bareUsername(typed)
+        return words.isEmpty ? .nothing : .name(words)
+    }
+}
+
 enum CaptionCreditInputs {
 
     struct ForDay {
@@ -85,17 +125,37 @@ enum CaptionCreditInputs {
         // (#171). Without this, tagging a carousel photo only produced the
         // PHOTO TAGS list in CAPTIONS.txt and Dan had to tick the same person
         // again at day level to get them into the caption.
+        //
+        // Read through `TypedCredit` since #912. This used to send anything
+        // starting with @ to the handles list or nowhere, so `@DPR Dance` was
+        // dropped on the floor: somebody tagged a company on a photograph and
+        // nothing credited them, with nothing said (L100).
         var photoTagHandles: [String] = []
         var photoTagNames: [String] = []
         for tags in day.photoTags.values {
             for raw in tags {
-                let tag = raw.trimmingCharacters(in: .whitespaces)
-                guard !tag.isEmpty else { continue }
-                if tag.hasPrefix("@") {
-                    if PythonBridge.isRealHandle(tag) { photoTagHandles.append(tag) }
-                } else {
-                    photoTagNames.append(tag)
+                switch TypedCredit.read(raw) {
+                case .mention(let handle): photoTagHandles.append(handle)
+                case .name(let words):     photoTagNames.append(words)
+                case .nothing:             continue
                 }
+            }
+        }
+
+        // The day's own handle list, read the same way (#912).
+        //
+        // It was added to the handles list verbatim, which is the ungated comma
+        // split #899 removed from `event.eventHandles`, still standing one
+        // field along. A name typed here reached the caption prompt as an
+        // account to mention, and the mention went to whoever owns the first
+        // word of it.
+        var dayHandles: [String] = []
+        var dayNames: [String] = []
+        for raw in day.tagHandles {
+            switch TypedCredit.read(raw) {
+            case .mention(let handle): dayHandles.append(handle)
+            case .name(let words):     dayNames.append(words)
+            case .nothing:             continue
             }
         }
         // photoTags iterates a dictionary, so sort for a stable manifest.
@@ -112,9 +172,9 @@ enum CaptionCreditInputs {
 
         return ForDay(
             handles: PythonBridge.dedupedPreservingOrder(
-                eventHandles + performerHandles + day.tagHandles + photoTagHandles),
+                eventHandles + performerHandles + dayHandles + photoTagHandles),
             names: PythonBridge.dedupedPreservingOrder(
-                performerNames + day.nameMentions + photoTagNames),
+                performerNames + day.nameMentions + dayNames + photoTagNames),
             photoTags: tagsByPath)
     }
 }

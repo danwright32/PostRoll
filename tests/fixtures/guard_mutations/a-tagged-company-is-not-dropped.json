@@ -1,0 +1,8 @@
+{
+  "name": "a-tagged-company-is-not-dropped",
+  "file": "PostRollApp/Sources/Services/CaptionCreditInputs.swift",
+  "find": "                case .name(let words):     photoTagNames.append(words)",
+  "replace": "                case .name:                continue",
+  "test": "PostRollTests/HandleFieldShapeTests/testACompanyTaggedOnAPhotoIsNotDroppedOnTheFloor",
+  "breaks": "somebody tags a company on a photograph and nothing credits them anywhere, with nothing said, which is how the per photo tags treated any @ value that was not a usable handle before #912 (L100)"
+}
