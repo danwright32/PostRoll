@@ -129,6 +129,8 @@ struct SettingsView: View {
                     .font(.system(size: 11))
             }
 
+            SavedHandlesSection(book: HandleBook.shared)
+
             if let bytes = reclaimableBytes, bytes > 0 {
                 Section {
                     HStack {
