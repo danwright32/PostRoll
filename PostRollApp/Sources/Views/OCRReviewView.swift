@@ -670,6 +670,7 @@ private struct PerformersEditor: View {
                 Divider().padding(.vertical, 4)
                 HandleSuggestionsView(
                     suggestions: handleSuggestions,
+                    performers: performers,
                     onAccept: onAcceptSuggestion,
                     onDismiss: onDismissSuggestion,
                     onDismissAll: onDismissAllSuggestions
@@ -745,6 +746,10 @@ private struct PerformersEditor: View {
 
 private struct HandleSuggestionsView: View {
     let suggestions: [PythonBridge.HandleSuggestion]
+    /// The rows as they stand, so a suggestion whose handle another one already
+    /// carries can be refused before it is accepted rather than reported after
+    /// (#904).
+    let performers: [Performer]
     let onAccept: (PythonBridge.HandleSuggestion) -> Void
     let onDismiss: (PythonBridge.HandleSuggestion) -> Void
     let onDismissAll: () -> Void
@@ -766,6 +771,11 @@ private struct HandleSuggestionsView: View {
             ForEach(suggestions, id: \.name) { suggestion in
                 HandleSuggestionRow(
                     suggestion: suggestion,
+                    // Read from the rows as they stand now, not from a value
+                    // captured when the lookup returned: a row corrected in the
+                    // meantime clears this the moment it is (L14).
+                    alreadyHeldBy: SuggestionCollision.heldBy(suggestion,
+                                                              among: performers),
                     onAccept: { onAccept(suggestion) },
                     onDismiss: { onDismiss(suggestion) }
                 )
@@ -776,6 +786,11 @@ private struct HandleSuggestionsView: View {
 
 private struct HandleSuggestionRow: View {
     let suggestion: PythonBridge.HandleSuggestion
+    /// The other row on this programme that already carries this handle (#904).
+    /// Accepting it would create the exact collision `DuplicateHandleMark`
+    /// exists to report, one step before the warning appears, so the button is
+    /// not offered and the row says who has it.
+    var alreadyHeldBy: String? = nil
     let onAccept: () -> Void
     let onDismiss: () -> Void
 
@@ -804,6 +819,13 @@ private struct HandleSuggestionRow: View {
                         .font(.system(size: 11))
                         .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
+                if let alreadyHeldBy {
+                    Label(SuggestionCollision.refusal(heldBy: alreadyHeldBy),
+                          systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(PaintedSurfaces.stateWarningText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer()
@@ -821,14 +843,21 @@ private struct HandleSuggestionRow: View {
                 .help("Open Instagram profile to verify")
             }
 
-            Button { onAccept() } label: {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(PaintedSurfaces.stateSuccessText)
+            // Not offered at all when the handle is taken, rather than offered
+            // and refused: a control that does nothing when pressed leaves the
+            // person with no way to learn why, and pressing it again is the
+            // only diagnosis available (L148, L109). The sentence above says
+            // what to do instead.
+            if alreadyHeldBy == nil {
+                Button { onAccept() } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(PaintedSurfaces.stateSuccessText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Apply this handle")
+                .help("Apply this handle")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Apply this handle")
-            .help("Apply this handle")
 
             Button { onDismiss() } label: {
                 Image(systemName: "xmark.circle")

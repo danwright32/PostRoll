@@ -223,6 +223,17 @@ final class PerformerLookupManager {
     /// or not the screen that offered it still exists.
     func apply(_ suggestion: PythonBridge.HandleSuggestion, to eventID: Event.ID,
                in appState: AppState) {
+        // Refused if another row on this programme already carries it (#904).
+        // The screen does not offer the button in that case, so reaching here
+        // means the list moved between the draw and the press. The suggestion
+        // is deliberately NOT dropped: nothing happened, and the row it is on
+        // keeps saying why (L11).
+        if let live = appState.events.first(where: { $0.id == eventID }),
+           let stored = live.ocrResult,
+           SuggestionCollision.heldBy(suggestion, among: stored.performers) != nil {
+            return
+        }
+
         // Shaped like a handle, or there is nothing here to accept (#899).
         // The Python side already drops a suggestion of the wrong shape, and
         // this is the write that would put one into the field: the enrichment

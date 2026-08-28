@@ -1,0 +1,8 @@
+{
+  "name": "a-taken-handle-is-not-suggested-again",
+  "file": "PostRollApp/Sources/Services/SuggestionCollision.swift",
+  "find": "                  CaptionBlocks.bareUsername(held).lowercased() == wanted else { continue }",
+  "replace": "                  false else { continue }",
+  "test": "PostRollTests/SuggestionCollisionTests/testAHandleAnotherRowHoldsIsNamedWithThatRow",
+  "breaks": "a suggested handle another row already carries is accepted with nothing said, which creates the exact collision DuplicateHandleMark exists to report one step before the warning appears (#904)"
+}
