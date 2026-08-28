@@ -29,6 +29,125 @@ final class HandleBook: @unchecked Sendable {
     init(defaults: UserDefaults) { self.defaults = defaults }
     #endif
 
+    // MARK: - Reading and correcting what the books hold (#903)
+
+    /// Which book, for a screen that shows all three.
+    ///
+    /// The three are separate stores keyed the same way, so an operation has to
+    /// name one: keyed alike, a delete that took the key rather than the book
+    /// would remove a handle nobody asked about.
+    enum Kind: String, CaseIterable, Identifiable, Sendable {
+        case performer, org, venue
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .performer: return "Performers"
+            case .org:       return "Organisations"
+            case .venue:     return "Venues"
+            }
+        }
+
+        var explanation: String {
+            switch self {
+            case .performer:
+                return "Filled into a performer's handle field on every future "
+                    + "event with the same name. It is a guess, matched on the "
+                    + "name alone, so the next Sarah Chen gets the last one's."
+            case .org:
+                return "Filled into the event handles field for every future "
+                    + "event at the same organisation. This one is free text, "
+                    + "so a sentence with accounts inside it is fine."
+            case .venue:
+                return "Filled into the event handles field for every future "
+                    + "event at the same venue. Free text, like organisations."
+            }
+        }
+
+        /// Whether this book's values have to be shaped like a handle (#899).
+        ///
+        /// Only the performer book. The other two hold the event handles field,
+        /// which legitimately carries a sentence: two entries are prose today
+        /// and `EventHandleSuggestions` takes the accounts out of them.
+        var valuesMustBeHandles: Bool { self == .performer }
+
+        var storageKey: String {
+            switch self {
+            // The one place this string is written. `orgKey` and `venueKey`
+            // are already static on HandleBook because a test plants values
+            // through them; the performer key had no such reader until now.
+            case .performer: return "postroll.handlebook.performer.v1"
+            case .org:       return HandleBook.orgKey
+            case .venue:     return HandleBook.venueKey
+            }
+        }
+    }
+
+    /// One saved entry, as the screen shows it.
+    struct Entry: Identifiable, Equatable, Sendable {
+        /// The normalised name the book is keyed on.
+        var name: String
+        var value: String
+        /// Whether this value is actually served, or filtered on the way out.
+        ///
+        /// #899 stopped a value that is not shaped like a handle reaching a
+        /// caption, which left it invisible: this is the one screen that has to
+        /// show it anyway, and say that it is doing nothing.
+        var isUsable: Bool
+
+        var id: String { name }
+    }
+
+    /// Everything a book holds, by name.
+    ///
+    /// Read raw, NOT through `handle(forPerformer:)`. That filters a value the
+    /// caption path must not see, which is right there and wrong here: the only
+    /// reason this screen exists is to show the entry somebody has to correct,
+    /// and a filtered read would hide exactly the row worth looking at.
+    ///
+    /// Sorted, because a dictionary has no order and a list drawn straight from
+    /// one rearranges itself between two readings of the same book.
+    func entries(in kind: Kind) -> [Entry] {
+        let stored = defaults.dictionary(forKey: kind.storageKey) as? [String: String] ?? [:]
+        return stored
+            .sorted { $0.key < $1.key }
+            .map { name, value in
+                Entry(name: name, value: value,
+                      isUsable: !kind.valuesMustBeHandles
+                          || CaptionBlocks.isHandleShaped(value))
+            }
+    }
+
+    /// Correct one entry, or clear it to remove it.
+    ///
+    /// A blank value removes, because clearing the field is how a row is
+    /// removed on screen and a refusal there would leave a dead control (L109).
+    ///
+    /// A performer value that is not shaped like a handle is refused and
+    /// changes nothing: the screen that exists to correct a bad value must not
+    /// be a second way to write one, and it may not throw away a good handle on
+    /// the way past (L5, #899).
+    func setEntry(name: String, value: String, in kind: Kind) {
+        let key = normalize(name)
+        guard !key.isEmpty else { return }
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+
+        var book = defaults.dictionary(forKey: kind.storageKey) as? [String: String] ?? [:]
+        if trimmed.isEmpty {
+            book.removeValue(forKey: key)
+        } else if kind.valuesMustBeHandles, !CaptionBlocks.isHandleShaped(trimmed) {
+            return
+        } else {
+            book[key] = trimmed
+        }
+        defaults.set(book, forKey: kind.storageKey)
+    }
+
+    func removeEntry(name: String, in kind: Kind) {
+        setEntry(name: name, value: "", in: kind)
+    }
+
     private func normalize(_ name: String) -> String {
         FieldText.normalized(name).lowercased()
     }
@@ -90,7 +209,10 @@ final class HandleBook: @unchecked Sendable {
 
     // MARK: - Performer handles
 
-    private let performerKey = "postroll.handlebook.performer.v1"
+    /// Named off `Kind` rather than spelled again, so the screen that lists the
+    /// books and the code that writes them cannot end up reading two different
+    /// stores (L41).
+    private var performerKey: String { Kind.performer.storageKey }
 
     private var performerBook: [String: String] {
         get { defaults.dictionary(forKey: performerKey) as? [String: String] ?? [:] }

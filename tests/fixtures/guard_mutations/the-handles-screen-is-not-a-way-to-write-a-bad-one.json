@@ -1,0 +1,8 @@
+{
+  "name": "the-handles-screen-is-not-a-way-to-write-a-bad-one",
+  "file": "PostRollApp/Sources/Services/HandleBook.swift",
+  "find": "        } else if kind.valuesMustBeHandles, !CaptionBlocks.isHandleShaped(trimmed) {\n            return",
+  "replace": "        } else if false {\n            return",
+  "test": "PostRollTests/HandleBookEntriesTests/testCorrectingAPerformerEntryToSomethingThatIsNotAHandleIsRefused",
+  "breaks": "the screen added to correct a value that is not an Instagram handle becomes a second way to write one, and it overwrites a good handle on the way past (#903, #899, L5)"
+}

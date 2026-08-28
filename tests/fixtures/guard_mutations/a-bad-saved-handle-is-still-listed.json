@@ -1,0 +1,8 @@
+{
+  "name": "a-bad-saved-handle-is-still-listed",
+  "file": "PostRollApp/Sources/Services/HandleBook.swift",
+  "find": "        let stored = defaults.dictionary(forKey: kind.storageKey) as? [String: String] ?? [:]\n        return stored",
+  "replace": "        let stored = (defaults.dictionary(forKey: kind.storageKey) as? [String: String] ?? [:])\n            .filter { CaptionBlocks.isHandleShaped($0.value) }\n        return stored",
+  "test": "PostRollTests/HandleBookEntriesTests/testAStoredValueThatIsNotAHandleIsStillLISTED",
+  "breaks": "the one screen that exists to show a saved handle worth correcting filters out exactly the entries worth correcting, because #899 already hides them everywhere else, so the only copy of the bad value is in a preferences file again (#903)"
+}
