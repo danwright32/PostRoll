@@ -35,6 +35,50 @@ final class PostingPresetTests: XCTestCase {
         // These strings travel in the manifest to Python — they must not drift.
         XCTAssertEqual(PostingPreset.balanced.rawValue, "balanced")
         XCTAssertEqual(PostingPreset.classic.rawValue, "classic")
+        XCTAssertEqual(PostingPreset.opening.rawValue, "opening")
+    }
+
+    // MARK: - #900, seven on Sunday
+
+    func testOpeningGivesSundaySevenAndLeavesTheOthersAlone() {
+        XCTAssertEqual(PostingPreset.opening.format(for: .sunday)?.count, 7)
+        XCTAssertEqual(PostingPreset.opening.format(for: .monday)?.count, 4)
+        XCTAssertEqual(PostingPreset.opening.format(for: .wednesday)?.count, 4)
+        for day in [DayName.sunday, .monday, .wednesday] {
+            XCTAssertTrue(PostingPreset.opening.isCollageCarousel(day))
+        }
+    }
+
+    /// The default is untouched. This preset is additive: every existing event
+    /// renders exactly what it rendered before.
+    func testTheDefaultIsStillBalancedAndStillFour() {
+        XCTAssertEqual(PostingPreset.current(in: UserDefaults(
+            suiteName: "posting-preset-\(UUID().uuidString)")!), .balanced)
+        XCTAssertEqual(PostingPreset.balanced.format(for: .sunday)?.count, 4)
+    }
+
+    /// Confirmed rather than assumed (#900). Both of these already read the
+    /// preset's target rather than a literal, which is what #195 and #119
+    /// fixed, so raising Sunday to 7 should carry them with it for free. That
+    /// is a claim about code nobody touched, and a claim nobody checks is the
+    /// kind that turns out to be wrong.
+    func testTheExtraPhotosNoticeFollowsTheNewTargetRatherThanFour() {
+        XCTAssertNil(CollagePhotoSelection.extraPhotosNote(
+            photoCount: 7, preset: .opening, day: .sunday),
+                     "the notice fired at exactly the count the preset asks for")
+
+        let note = CollagePhotoSelection.extraPhotosNote(
+            photoCount: 8, preset: .opening, day: .sunday)
+        XCTAssertEqual(note?.contains("first 7 photos"), true, note ?? "nil")
+    }
+
+    func testSevenIsInsideTheRangeThatOffersOtherLayouts() {
+        XCTAssertTrue(CollagePhotoSelection.offersAlternativeLayouts(photoCount: 7))
+    }
+
+    func testTheTargetForAnOpeningSundayIsSeven() {
+        XCTAssertEqual(CollagePhotoSelection.target(preset: .opening, day: .sunday), 7)
+        XCTAssertEqual(CollagePhotoSelection.target(preset: .opening, day: .monday), 4)
     }
 
     // MARK: - Collage photo selection floor (#63)

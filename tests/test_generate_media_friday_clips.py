@@ -15,6 +15,12 @@ from pathlib import Path
 
 import pytest
 
+# Above the fast run's floor since 2026-08-27 (6.1% of the whole suite, against
+# a 4.5% floor). It was 3.3% when the expensive set was last derived, so the
+# fast loop had come to pay for it on every edit. See tests/file_durations.py.
+pytestmark = pytest.mark.slow
+
+
 import postroll.ai.generate_media as gm_mod
 import postroll.media.generate_title_card as card_mod
 

@@ -97,16 +97,32 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: clear, and the guard said so.
 #:
 #: The gap it now sits in is 5.4% below (that same file) and 10.5% above
-#: (`test_frame_legibility.py`), a factor of 1.94, and 7.5% is its geometric
-#: middle. Which files the fast run skips does not change: the same four are
-#: above the floor at 6.5% and at 7.5%, so this moves the marker rather than the
-#: behaviour.
+#: (`test_frame_legibility.py`), a factor of 1.94, and 7.5% was its geometric
+#: middle.
+#:
+#: 4.5% since 2026-08-27, re-chosen against a fresh recording rather than
+#: nudged. `test_fast_subset_stays_honest` went red exactly as it is meant to:
+#: `test_frame_legibility` had grown to 9.3% and `test_generate_media_friday_clips`
+#: to 6.1%, which put both inside the band around 7.5%, and no floor between
+#: them could clear it: that gap is a factor of 1.54 and the band asks for 1.56.
+#:
+#: So the floor moved to the widest gap the distribution actually has, which is
+#: now 6.05% (`test_generate_media_friday_clips`) to 3.25%
+#: (`test_render_clip_reel`), a factor of 1.86. 4.5% is its geometric middle,
+#: and its neighbours sit at 0.72x and 1.34x of it against a band of 0.8 to
+#: 1.25.
+#:
+#: This one DOES change behaviour, unlike the move to 7.5%:
+#: `test_generate_media_friday_clips` is above the floor now and the fast run
+#: skips it. That is the honest reading rather than a side effect. It was 3.3%
+#: of the run when the set was last derived and it is 6.1% now, so the fast loop
+#: had come to pay for it every time.
 #:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.075
+EXPENSIVE_SHARE = 0.045
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:

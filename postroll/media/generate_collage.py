@@ -280,6 +280,38 @@ def _all_splits(n: int) -> list[tuple[list[int], list[int]]]:
     return [(list(t), list(b)) for t in valid_top for b in valid_bottom]
 
 
+def fitting_collage_splits(
+    n: int,
+    photo_ratios: list[float] | None = None,
+) -> list[tuple[list[int], list[int]]]:
+    """The arrangements that actually fit these photos, which may be none.
+
+    Split out from `distinct_collage_splits` so a caller can ask whether the
+    crop budget admits ANYTHING before rendering (#900). That function answers
+    the question the renderer needs, "what do I draw from", and its answer is
+    never empty: when nothing fits it falls back to one arrangement and crops
+    harder than the budget allows. Both answers are needed and they are
+    different questions, so they are different functions (L53).
+    """
+    if photo_ratios is None:
+        return _all_splits(n)
+    return [s for s in _all_splits(n) if split_fits_photos(s, photo_ratios)]
+
+
+def crop_budget_admits(n: int, photo_ratios: list[float] | None = None) -> bool:
+    """Whether any arrangement holds these photos inside the crop budget.
+
+    False means the render will force a fallback that crops harder than
+    intended. It says so on stderr, which reaches nobody: the caller asks this
+    first so the run can put it where it is read.
+
+    Measured at 7 photos, which is what the `opening` preset makes reachable:
+    all landscape admits 14 arrangements, five landscape with two portrait
+    admits 5, and all portrait admits none.
+    """
+    return bool(fitting_collage_splits(n, photo_ratios))
+
+
 def distinct_collage_splits(
     n: int,
     photo_ratios: list[float] | None = None,
@@ -298,7 +330,7 @@ def distinct_collage_splits(
     if photo_ratios is None:
         return splits
 
-    fitting = [s for s in splits if split_fits_photos(s, photo_ratios)]
+    fitting = fitting_collage_splits(n, photo_ratios)
     if fitting:
         return fitting
 
