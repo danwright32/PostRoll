@@ -99,6 +99,98 @@ final class HandleFieldShapeTests: XCTestCase {
                        ["dciny", "carnegiehall"])
     }
 
+    // MARK: - the day's own handle list (#912)
+
+    private func day(withTagHandles handles: [String]) -> (PostingDay, Event) {
+        let event = Event(name: "E", org: "", venue: "",
+                          date: Date(), shootType: .fullShow)
+        var day = PostingDay(day: .sunday)
+        day.tagHandles = handles
+        return (day, event)
+    }
+
+    /// #899 removed the ungated comma split of `event.eventHandles`. The day
+    /// level list still had one: `parseHandles` splits the field and
+    /// `CaptionCreditInputs` added every piece to the handles list verbatim, so
+    /// a company name typed there produced `@DPR Dance` in the caption prompt,
+    /// which is the exact pair of findings #899 was filed for.
+    func testANameTypedIntoTheDayHandleListIsCreditedByName() {
+        let (day, event) = day(withTagHandles: ["DPR Dance"])
+
+        let credits = CaptionCreditInputs.forDay(day, event: event)
+
+        XCTAssertFalse(credits.handles.contains { $0.contains("DPR Dance") },
+                       "it was handed to the caption prompt as an account to "
+                       + "mention, and @DPR belongs to somebody")
+        XCTAssertTrue(credits.names.contains("DPR Dance"),
+                      "and it is a credit somebody typed on purpose, so it is "
+                      + "not dropped either")
+    }
+
+    /// The @ is what somebody types when they mean an account, so a value that
+    /// carries one and still is not a handle is the same mistake wearing a
+    /// sigil. The name underneath it is the credit.
+    func testTheSameValueWithASigilIsAlsoCreditedByName() {
+        let (day, event) = day(withTagHandles: ["@DPR Dance"])
+
+        let credits = CaptionCreditInputs.forDay(day, event: event)
+
+        XCTAssertTrue(credits.names.contains("DPR Dance"), "\(credits.names)")
+        XCTAssertTrue(credits.handles.isEmpty, "\(credits.handles)")
+    }
+
+    func testARealHandleTypedThereIsStillAMention() {
+        let (day, event) = day(withTagHandles: ["@dpr.dance"])
+
+        let credits = CaptionCreditInputs.forDay(day, event: event)
+
+        XCTAssertEqual(credits.handles, ["@dpr.dance"])
+        XCTAssertTrue(credits.names.isEmpty)
+    }
+
+    /// A sentinel is a recorded "there is no Instagram", not a credit. Routing
+    /// it to names would put the word "unknown" in a caption (L118).
+    func testASentinelTypedThereIsCreditedNeitherWay() {
+        let (day, event) = day(withTagHandles: ["unknown"])
+
+        let credits = CaptionCreditInputs.forDay(day, event: event)
+
+        XCTAssertTrue(credits.handles.isEmpty, "\(credits.handles)")
+        XCTAssertTrue(credits.names.isEmpty, "\(credits.names)")
+    }
+
+    /// The second hole the shared rule closes (#912). The per photo tags sent
+    /// anything starting with @ to the handles list or NOWHERE, so this value
+    /// was dropped on the floor: somebody tagged a company on a photograph and
+    /// nothing credited them, with nothing said (L100).
+    func testACompanyTaggedOnAPhotoIsNotDroppedOnTheFloor() {
+        let event = Event(name: "E", org: "", venue: "",
+                          date: Date(), shootType: .fullShow)
+        var day = PostingDay(day: .sunday)
+        let photo = URL(fileURLWithPath: "/photos/s1.jpg")
+        day.photoPaths = [photo]
+        day.photoTags = [photo.absoluteString: ["@DPR Dance"]]
+
+        let credits = CaptionCreditInputs.forDay(day, event: event)
+
+        XCTAssertTrue(credits.names.contains("DPR Dance"), "\(credits.names)")
+        XCTAssertTrue(credits.handles.isEmpty, "\(credits.handles)")
+    }
+
+    func testARealHandleTaggedOnAPhotoIsStillAMention() {
+        let event = Event(name: "E", org: "", venue: "",
+                          date: Date(), shootType: .fullShow)
+        var day = PostingDay(day: .sunday)
+        let photo = URL(fileURLWithPath: "/photos/s1.jpg")
+        day.photoPaths = [photo]
+        day.photoTags = [photo.absoluteString: ["@dpr.dance", "Jane Doe"]]
+
+        let credits = CaptionCreditInputs.forDay(day, event: event)
+
+        XCTAssertEqual(credits.handles, ["@dpr.dance"])
+        XCTAssertEqual(credits.names, ["Jane Doe"])
+    }
+
     // MARK: - the book neither learns nor replays one
 
     /// Read out of the STORE, never through `handle(forPerformer:)`.

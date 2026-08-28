@@ -1,0 +1,8 @@
+{
+  "name": "a-typed-name-is-credited-not-mentioned",
+  "file": "PostRollApp/Sources/Services/CaptionCreditInputs.swift",
+  "find": "        let words = CaptionBlocks.bareUsername(typed)\n        return words.isEmpty ? .nothing : .name(words)",
+  "replace": "        return .mention(typed)",
+  "test": "PostRollTests/HandleFieldShapeTests/testANameTypedIntoTheDayHandleListIsCreditedByName",
+  "breaks": "a company name typed into the day's handle list or onto a photo is handed to the caption prompt as an account to mention, so the model writes @DPR Dance into a caption bound for Instagram and the mention goes to whoever owns @DPR (#912, the same defect #899 fixed one field along)"
+}
