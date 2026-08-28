@@ -38,7 +38,18 @@ from PIL import ImageFont
 #: 1 is the gallery redesign (c65a0d6: gallery mat, caption plate, shape-aware
 #: layout). Anything rendered before that is unstamped, which reads as older
 #: rather than as version 0.
-COLLAGE_DESIGN_VERSION = 1
+#:
+#: 2 is the layout chooser learning about the phone chrome (#921). No token and
+#: no geometry moved: what changed is WHICH arrangements the pool offers, and
+#: that is enough, because narrowing the pool re-maps every stored seed. A
+#: cached collage genuinely does not match what its own seed renders now.
+#:
+#: The collage was the only static template whose layout varies from render to
+#: render, so it was the only one nobody had ever positioned against Instagram's
+#: caption band. Measured on 2026-08-28 from real photographs: the worst
+#: arrangement the old pool offered hid 88.9% of its bottom row, three of seven
+#: photographs effectively absent, and the file on disk was perfectly correct.
+COLLAGE_DESIGN_VERSION = 2
 
 
 #: Which generation of each template's design this build renders (#286).
@@ -210,6 +221,7 @@ class DesignChange:
 #: drifted by the next day, because a squash merge rewrites the hash the work
 #: was done under (measured 2026-08-21, three of the six named were wrong).
 MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
+    "collage": DesignChange(version=2, day="2026-08-28"),
     "story": DesignChange(version=2, day="2026-08-21"),
     "cover": DesignChange(version=2, day="2026-08-21"),
     "before_after": DesignChange(version=2, day="2026-08-21"),

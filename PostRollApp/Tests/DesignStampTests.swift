@@ -154,15 +154,21 @@ final class DesignStampTests: XCTestCase {
         // No bump, no claim. A template still at its first version has no
         // recorded design CHANGE, only a date somebody first wrote a number
         // down, and an asset older than that was made by the same design.
-        let never = MediaDesign.allTemplates.filter { MediaDesign.changed(of: $0) == nil }
-        XCTAssertFalse(never.isEmpty,
-                       "every template records a change, so this case cannot be reached")
-        for name in never {
-            try cache(name)
-            try age(name, to: "2020-01-01")
-        }
+        //
+        // Driven against an INJECTED table since #921. It used to read the
+        // shipping one and take whatever had no change recorded, which worked
+        // until the collage got one and the set went empty, at which point this
+        // correctly refused to pass over nothing. A rule is tested by feeding
+        // it the case (L1).
+        var withoutOne = MediaDesign.mediaDesignChanged
+        let never = "collage"
+        XCTAssertNotNil(withoutOne.removeValue(forKey: never))
 
-        XCTAssertEqual(DesignStamp.staleTemplates(in: dir), [])
+        try cache(never)
+        try age(never, to: "2020-01-01")
+
+        XCTAssertEqual(
+            DesignStamp.staleTemplates(in: dir, changedDays: withoutOne), [])
     }
 
     func testAStampStillDecidesOverTheFileDate() throws {

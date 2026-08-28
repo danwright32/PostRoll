@@ -363,7 +363,24 @@ def test_an_unstamped_asset_newer_than_its_design_change_is_not_stale(tmp_path):
     assert design_stamp.stale_templates(tmp_path) == []
 
 
-def test_an_unstamped_template_whose_design_never_changed_is_not_reported(tmp_path):
+def _without_a_recorded_change(monkeypatch) -> list[str]:
+    """Take one template's change record away, and say which.
+
+    Both rules below are about a template that has never been bumped, and the
+    shipping tables no longer contain one: every template has a recorded change
+    since the collage got one in #921. So the case is made rather than found,
+    which is what a guard needs anyway (L1). `collage` is the one removed
+    because it is the template those tests were originally written against.
+    """
+    changed = dict(tokens.MEDIA_DESIGN_CHANGED)
+    removed = changed.pop("collage")
+    assert removed is not None
+    monkeypatch.setattr(tokens, "MEDIA_DESIGN_CHANGED", changed)
+    monkeypatch.setattr(design_stamp, "MEDIA_DESIGN_CHANGED", changed, raising=False)
+    return ["collage"]
+
+
+def test_an_unstamped_template_whose_design_never_changed_is_not_reported(tmp_path, monkeypatch):
     """No bump, no claim.
 
     A template still at its first version has no recorded design CHANGE, only a
@@ -371,11 +388,14 @@ def test_an_unstamped_template_whose_design_never_changed_is_not_reported(tmp_pa
     that was made by the same design. Badging it would be an accusation from the
     absence of evidence, which is the thing the version rule exists not to do
     (L98, and the 66 folders badged at once on 2026-08-10).
+
+    Driven against an INJECTED table since #921. It used to read the real one
+    and pick whatever template happened to have no change recorded, and that
+    worked until the collage got one and the set went empty, at which point the
+    guard correctly refused to pass over nothing. A rule is tested by feeding it
+    the case, not by hoping the shipping data still contains one (L1).
     """
-    unbumped = sorted(set(tokens.MEDIA_DESIGN_VERSIONS) - set(tokens.MEDIA_DESIGN_CHANGED))
-    assert unbumped, (
-        "every template has a recorded design change, so this case cannot be "
-        "reached and the rule it covers is untested rather than unnecessary")
+    unbumped = _without_a_recorded_change(monkeypatch)
 
     for name in unbumped:
         _cache(tmp_path, name)
@@ -422,7 +442,7 @@ def test_an_asset_whose_date_cannot_be_read_is_not_reported(tmp_path):
     assert design_stamp.predates_its_design_change(name, real) is True
 
 
-def test_an_asset_with_no_record_and_no_change_to_be_older_than_is_not_reported(tmp_path):
+def test_an_asset_with_no_record_and_no_change_to_be_older_than_is_not_reported(tmp_path, monkeypatch):
     # The badge fires on evidence, never on the absence of it. Measured on real
     # data (2026-08-10): every one of the 66 day folders on Dan's machine holds
     # assets and no stamp, so treating "no record" as stale badged all 66 at
@@ -438,11 +458,9 @@ def test_an_asset_with_no_record_and_no_change_to_be_older_than_is_not_reported(
     # and `reel_clip` by hand, and #811 bumped reel_clip, so the test began
     # asserting that a template WITH a recorded change says nothing, which is
     # the opposite of what it is for (L41).
-    unrecorded = sorted(set(tokens.MEDIA_DESIGN_VERSIONS)
-                        - set(tokens.MEDIA_DESIGN_CHANGED))
-    assert unrecorded, (
-        "every template records a design change, so there is no template left "
-        "for this to be about and it would pass over nothing")
+    # Injected since #921, for the reason the sibling test above gives: reading
+    # the real table left this with no subject once the collage was recorded.
+    unrecorded = _without_a_recorded_change(monkeypatch)
 
     for name in unrecorded:
         _cache(tmp_path, name)
