@@ -1,0 +1,8 @@
+{
+  "name": "the-tag-sheet-says-who-is-left-out",
+  "file": "PostRollApp/Sources/Models/PhotoTagSheetNote.swift",
+  "find": "        guard !dropped.isEmpty else { return nil }",
+  "replace": "        guard false else { return nil }",
+  "test": "PostRollTests/PhotoTagSheetNoteTests/testTwoPerformersOnOneAccountAreCountedAndNamed",
+  "breaks": "the tagging sheet goes back to offering fewer people than the programme has and saying nothing, so a person counting chips cannot tell somebody left out from somebody who was never there (#902)"
+}

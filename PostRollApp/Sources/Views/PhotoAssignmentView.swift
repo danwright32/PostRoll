@@ -65,8 +65,8 @@ struct PhotoAssignmentView: View {
     /// Suggestions for a day's per-photo tag popover: this event's performers,
     /// then its own accounts. Built by `PhotoTagSuggestionList` so the list can
     /// be asserted against the field shapes real events carry (#292).
-    private func tagSuggestions(for day: DayName) -> [PhotoTagSuggestion] {
-        PhotoTagSuggestionList.build(eventHandles: event.eventHandles,
+    private func tagSheet(for day: DayName) -> PhotoTagSuggestionList.Sheet {
+        PhotoTagSuggestionList.sheet(eventHandles: event.eventHandles,
                                      performers: event.ocrResult?.performers ?? [],
                                      appearingIn: dayPerformers[day] ?? [])
     }
@@ -216,7 +216,8 @@ struct PhotoAssignmentView: View {
                             photos: dayBinding(day),
                             cropOffsets: enableCrop ? cropOffsetsBinding(day) : nil,
                             photoTags: isCollageDay(day) ? photoTagsBinding(day) : nil,
-                            tagSuggestions: isCollageDay(day) ? tagSuggestions(for: day) : [],
+                            tagSuggestions: isCollageDay(day) ? tagSheet(for: day).suggestions : [],
+                            missingPeopleNote: isCollageDay(day) ? tagSheet(for: day).note : nil,
                             notes: noteBinding(day),
                             onPreview: { previewURL = $0 },
                             onAddPhotos: { presentPicker(.day(day)) }
@@ -858,6 +859,10 @@ struct PhotoDaySection: View {
     var cropOffsets: Binding<[String: CropOffset]>? = nil
     var photoTags: Binding<[String: [String]]>? = nil
     var tagSuggestions: [PhotoTagSuggestion] = []
+    /// Travels beside the list it is about, so a view holding one holds both
+    /// (#902). Split apart they drift, and the drift is a count that no longer
+    /// describes the chips underneath it.
+    var missingPeopleNote: String? = nil
     var notes: Binding<String>? = nil
     var onPreview: ((URL) -> Void)? = nil
     let onAddPhotos: () -> Void
@@ -951,6 +956,7 @@ struct PhotoDaySection: View {
                     photos: photos,
                     photoTags: tagsBinding,
                     suggestions: tagSuggestions,
+                    missingPeopleNote: missingPeopleNote,
                     index: Binding(get: { taggingIndex ?? 0 },
                                    set: { taggingIndex = $0 }),
                     onClose: { taggingIndex = nil }
@@ -987,7 +993,6 @@ struct PhotoDaySection: View {
             }
             CroppablePhotoThumb(url: url, cropOffset: cropBinding,
                                 photoTags: tagBinding,
-                                tagSuggestions: tagSuggestions,
                                 isReorderTarget: reorderTargetIndex == i,
                                 onTag: photoTags == nil ? nil : { taggingIndex = i },
                                 onPreview: onPreview,
@@ -1055,7 +1060,11 @@ private struct CroppablePhotoThumb: View {
     /// touching any of the other controls.
     var cropOffset: Binding<CropOffset>? = nil
     var photoTags: Binding<[String]>? = nil
-    var tagSuggestions: [PhotoTagSuggestion] = []
+    // No `tagSuggestions` and no note here (#902). The thumb has never drawn
+    // either: it opens the sheet through `onTag`, and the GRID owns the sheet
+    // because the sheet needs the whole day's photos to step through. The
+    // parameter was passed in and read by nothing, and adding the note beside
+    // it would have been a second one (L29).
     var isReorderTarget: Bool = false
     /// Batch tagging (#172). Non-nil only where per-photo tagging exists; the
     /// Bool passed back says whether shift was held, so the grid can extend a
@@ -1196,6 +1205,11 @@ private struct PhotoTagEditor: View {
 
     @Binding var tags: [String]
     var suggestions: [PhotoTagSuggestion] = []
+    /// When the sheet is offering fewer people than the programme has (#902).
+    /// Said here rather than only on the Review screen, because this is where
+    /// the absence is noticed: somebody counting chips against the programme
+    /// had no way to tell a person left out from a person who was never there.
+    var missingPeopleNote: String? = nil
     var tagsHeading: String = "TAGGED IN THIS PHOTO"
     var autoFocus: Bool = true
     @State private var newTag: String = ""
@@ -1285,6 +1299,14 @@ private struct PhotoTagEditor: View {
                             addToken(picked.token)
                         }
                     }
+                    // Under the offers rather than above them, because it is
+                    // about the list that is right there to be counted.
+                    if let missingPeopleNote {
+                        Label(missingPeopleNote, systemImage: "person.fill.questionmark")
+                            .font(.system(size: 10))
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -1320,6 +1342,10 @@ private struct PhotoTaggingSheet: View {
     let photos: [URL]
     @Binding var photoTags: [String: [String]]
     var suggestions: [PhotoTagSuggestion] = []
+    /// Travels beside the list it is about, so a view holding one holds both
+    /// (#902). Split apart they drift, and the drift is a count that no longer
+    /// describes the chips underneath it.
+    var missingPeopleNote: String? = nil
     @Binding var index: Int
     let onClose: () -> Void
 
@@ -1368,7 +1394,8 @@ private struct PhotoTaggingSheet: View {
 
                     // Re-created per photo so the text field clears and the
                     // chips reflect the photo now on screen, not the last one.
-                    PhotoTagEditor(tags: tagsBinding, suggestions: suggestions)
+                    PhotoTagEditor(tags: tagsBinding, suggestions: suggestions,
+                                   missingPeopleNote: missingPeopleNote)
                         .id(currentURL?.absoluteString ?? "none")
 
                     // Deliberately quiet: stepping to the next photo is the
