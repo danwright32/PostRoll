@@ -60,6 +60,28 @@ unregistered for this reason: it reads the generated project by design, and its
 sibling `the-manifest-keeps-the-plist-ordering-edge` proves the same rule from
 the manifest, which is where a person edits.
 
+## An entry the prover would silence is refused when the registry loads
+
+Since #920 the prover holds `tools/perturbation_lock.py` across each
+perturbation, and any check that consults that lock stands down while it is
+held. An entry whose `test` names one of those checks can therefore never be
+proved: the prover breaks the code, the named test skips, and no failure is
+ever seen.
+
+The sweep did not go quiet about it, but what it said was wrong. A skip-only
+run has been reported as ERROR since #665, and the message that ERROR carries
+blames a missing external ("whatever it needs, ffmpeg, the macOS fonts, is
+missing here"), which sends the reader off to install something over a problem
+that has nothing to do with one. So `load_registry` refuses such an entry
+outright (#931), naming the alternative: point the entry at the policy helper
+and inject a checkout of your own, which is what
+`tests/test_perturbation_lock.py` does.
+
+Catching the stand-down is explicitly allowed, and has to be, because it is that
+alternative. `_reaction` in that file calls the real helper with an injected
+root and turns the skip into a value, and `a-lock-nobody-holds-is-loud` is a
+registered entry pointing through it.
+
 ## Guards deliberately not registered
 
 Guards deliberately NOT registered, because no compile-safe one line perturbation expresses the defect they catch: UploadPageCropRemovalTests (adding a real crop control is not one line; prose would trip it but proves nothing), the absence guards test_blog_draft_text.py::test_no_module_builds_the_heading_by_hand / test_layout_sidecar.py::test_no_generator_builds_the_name_by_hand / test_blog_meta.py::test_neither_string_can_reach_the_ai_round_trip (their only one line trip is planting the banned text artificially), test_suite_hygiene.py and test_guard_mutation_registry.py (they protect the test suite and this registry themselves), test_bridge_payload_contract.py / test_manifest_contract.py (the one line rename anchor is ambiguous in PythonBridge.swift), test_brand_text.py (removing the route in one line breaks the module's own names), test_event_slug_parity.py (slug internals are not safely one line perturbable), and the measured pixel thresholds in test_golden_frames.py / test_frame_legibility.py / test_screen_reel_logo_contrast.py's contrast checks (failing them takes a rendering change, not a text edit).

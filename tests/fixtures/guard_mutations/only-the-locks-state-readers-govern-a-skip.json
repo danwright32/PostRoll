@@ -1,0 +1,8 @@
+{
+  "name": "only-the-locks-state-readers-govern-a-skip",
+  "file": "tools/check_guards.py",
+  "find": "LOCK_STATE_READERS = (\"verdict\", \"current\")",
+  "replace": "LOCK_STATE_READERS = (\"verdict\", \"current\", \"lock_path\")",
+  "test": "tests/test_check_guards.py::test_the_lock_policy_tests_are_not_mistaken_for_stand_down_helpers",
+  "breaks": "any call into the lock module counts as producing a stand-down decision, so `path = lock_path(tmp_path)` followed by an unrelated skip reads as a check silencing itself. tests/test_perturbation_lock.py is then refused, and that file is the alternative the refusal tells people to use (#931, L104)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "a-silenced-guard-is-refused-at-load",
+  "file": "tools/check_guards.py",
+  "find": "        silenced = silenced_by_the_prover(entry, root)\n        if silenced:\n            raise RegistryError(silenced)",
+  "replace": "        pass",
+  "test": "tests/test_check_guards.py::test_load_registry_refuses_an_entry_whose_test_the_prover_silences",
+  "breaks": "an entry naming a check that stands down for the perturbation lock can be registered again. The prover then breaks the code, the named test skips, no failure is ever seen, and the sweep reports ERROR blaming a missing external that has nothing to do with it, on every run for ever (#920, #931, L11)"
+}

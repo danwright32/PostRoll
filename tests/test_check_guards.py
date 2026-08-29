@@ -39,6 +39,8 @@ from tools.check_guards import (
     command_for,
     derived_data_path,
     load_registry,
+    silenced_functions,
+    stand_down_helpers,
     run_entry,
 )
 
@@ -1204,3 +1206,276 @@ def test_a_sweep_inside_its_deadline_is_unaffected(repo: Path, tmp_path: Path):
                         deadline_seconds=3600, log=lines.append)
     assert code == 0, "\n".join(lines)
     assert "deadline" not in "\n".join(lines).lower()
+
+
+# ── #931: an entry whose test the prover itself silences ──────────────────────
+#
+# Since #920 the prover holds `perturbation_lock` across each perturbation, and
+# the suite's registry check stands down while that lock is held. An entry whose
+# `test` names one of the standing-down checks can therefore never be proved:
+# the prover breaks the code, the named test skips, and no failure is ever seen.
+#
+# Correction to the reason this was filed with. It says the entry is reported
+# SURVIVED for ever. It is not: `classify_pytest` has refused a skip-only run
+# since #665, so the sweep reports ERROR. That is worse in one way and better in
+# another. Better, because SURVIVED is an accusation and ERROR is not. Worse,
+# because the message ERROR carries blames a missing external ("whatever it
+# needs, ffmpeg, the macOS fonts, is missing here"), which is nothing to do with
+# what happened, so the reader is sent to install something (L11). Either way
+# the guard is never proved and the sweep never says why.
+
+
+#: A stand-down helper shaped like the real one, and a test that calls it.
+#:
+#: Written out rather than imported so the fixture states the shape being
+#: detected. `test_the_real_stand_down_helper_is_recognised` below is what holds
+#: the detection to the actual code, because a rule proved only against a shape
+#: I chose is a rule about my own fixture (L48, L96).
+SILENCED_TEST_MODULE = '''
+import pytest
+
+from tools import perturbation_lock
+
+
+def refuse_if_a_prover_is_working():
+    outcome, why = perturbation_lock.verdict(REPO_ROOT)
+    if outcome is perturbation_lock.Verdict.CANNOT_JUDGE:
+        pytest.skip(why)
+
+
+def test_every_anchor_still_matches(entry):
+    refuse_if_a_prover_is_working()
+    assert entry.find in entry.file
+'''
+
+#: The same module reached one step further away, which is how a real test file
+#: grows: the guard is called by a shared setup rather than by the test itself.
+INDIRECTLY_SILENCED_MODULE = SILENCED_TEST_MODULE + '''
+
+def a_shared_precondition():
+    refuse_if_a_prover_is_working()
+
+
+def test_through_a_helper(entry):
+    a_shared_precondition()
+    assert entry.find in entry.file
+'''
+
+#: Reads the very same lock and does NOT stand down: it injects a checkout and
+#: asserts on the answer. This is `tests/test_perturbation_lock.py`, and it is
+#: the named alternative, so refusing it would refuse the remedy along with the
+#: defect (L104).
+LOCK_POLICY_MODULE = '''
+from tools.perturbation_lock import Verdict, verdict
+
+
+def test_a_stale_lock_is_reported_as_stale(tmp_path):
+    assert verdict(tmp_path)[0] is Verdict.STALE
+'''
+
+
+def _repo_with_test_module(tmp_path: Path, source: str,
+                           name: str = "test_thing.py") -> Path:
+    repo = tmp_path / "checkout"
+    (repo / "tests").mkdir(parents=True)
+    (repo / "tests" / name).write_text(source)
+    return repo
+
+
+def _registry_dir(repo: Path) -> Path:
+    return repo / "tests" / "fixtures" / "guard_mutations"
+
+
+def _register(repo: Path, **overrides) -> None:
+    write_registry(_registry_dir(repo), [registry_dict(**overrides)])
+
+
+def test_load_registry_refuses_an_entry_whose_test_the_prover_silences(tmp_path):
+    """The whole issue. The prover holds the lock, the named test skips, and no
+    failure can ever be seen, so the entry reports the same thing on every
+    sweep for ever while looking like a registered guard."""
+    repo = _repo_with_test_module(tmp_path, SILENCED_TEST_MODULE)
+    _register(repo, file="tests/test_thing.py", find="a", replace="b",
+              test="tests/test_thing.py::test_every_anchor_still_matches")
+
+    with pytest.raises(RegistryError, match="stands down"):
+        load_registry(_registry_dir(repo), repo_root=repo)
+
+
+def test_the_refusal_names_the_alternative(tmp_path):
+    """A refusal that does not say what to do instead sends somebody back to
+    the same choice with no more information than they had (L111)."""
+    repo = _repo_with_test_module(tmp_path, SILENCED_TEST_MODULE)
+    _register(repo, file="tests/test_thing.py", find="a", replace="b",
+              test="tests/test_thing.py::test_every_anchor_still_matches")
+
+    with pytest.raises(RegistryError) as raised:
+        load_registry(_registry_dir(repo), repo_root=repo)
+
+    message = str(raised.value)
+    assert "test_perturbation_lock" in message, message
+    assert "inject" in message, message
+
+
+def test_a_test_silenced_through_a_helper_is_refused_too(tmp_path):
+    """A rule that reads only the test's own body is answered by moving the
+    call one line away, which is where a shared precondition normally lives."""
+    repo = _repo_with_test_module(tmp_path, INDIRECTLY_SILENCED_MODULE)
+    _register(repo, file="tests/test_thing.py", find="a", replace="b",
+              test="tests/test_thing.py::test_through_a_helper")
+
+    with pytest.raises(RegistryError, match="stands down"):
+        load_registry(_registry_dir(repo), repo_root=repo)
+
+
+#: The recommended pattern itself: drive the helper with an injected checkout
+#: and CATCH the skip, turning it into a value the test can assert on. Nothing
+#: here can be silenced by a real prover, because the skip never escapes and the
+#: root is not the real one.
+CATCHES_THE_STAND_DOWN_MODULE = SILENCED_TEST_MODULE + '''
+
+def _reaction(repo_root):
+    try:
+        refuse_if_a_prover_is_working(repo_root)
+    except pytest.skip.Exception as skipped:
+        return "stood down", str(skipped)
+    return "proceeded", ""
+
+
+def test_the_check_stands_down_for_a_working_prover(tmp_path):
+    assert _reaction(tmp_path)[0] == "stood down"
+'''
+
+
+def test_a_test_that_catches_the_stand_down_is_allowed(tmp_path):
+    """The pattern the refusal recommends, which is also a real registered
+    entry: `a-lock-nobody-holds-is-loud` points at exactly this shape in
+    tests/test_perturbation_lock.py.
+
+    A rule that followed the call graph without noticing the catch would refuse
+    it, and the message would then be recommending something it forbids.
+    """
+    repo = _repo_with_test_module(tmp_path, CATCHES_THE_STAND_DOWN_MODULE)
+    _register(repo, file="tests/test_thing.py", find="a", replace="b",
+              test=("tests/test_thing.py"
+                    "::test_the_check_stands_down_for_a_working_prover"))
+
+    assert len(load_registry(_registry_dir(repo), repo_root=repo)) == 1
+
+
+def test_a_test_that_reads_the_lock_without_standing_down_is_allowed(tmp_path):
+    """The named alternative must survive the rule. Refusing every test that
+    mentions the lock would refuse the remedy along with the defect, and the
+    remedy is the whole content of the message (L104)."""
+    repo = _repo_with_test_module(tmp_path, LOCK_POLICY_MODULE)
+    _register(repo, file="tests/test_thing.py", find="a", replace="b",
+              test="tests/test_thing.py::test_a_stale_lock_is_reported_as_stale")
+
+    assert len(load_registry(_registry_dir(repo), repo_root=repo)) == 1
+
+
+def test_an_ordinary_python_entry_is_untouched(tmp_path):
+    repo = _repo_with_test_module(
+        tmp_path, "def test_plain():\n    assert True\n")
+    _register(repo, file="tests/test_thing.py", find="a", replace="b",
+              test="tests/test_thing.py::test_plain")
+
+    assert len(load_registry(_registry_dir(repo), repo_root=repo)) == 1
+
+
+def test_a_swift_entry_is_not_examined_for_this(tmp_path):
+    """The lock stands down a Python check. A Swift spec cannot be silenced by
+    it, and looking for a Python module named by a Swift spec would refuse
+    every Swift entry there is."""
+    repo = _repo_with_test_module(tmp_path, SILENCED_TEST_MODULE)
+    _register(repo)  # the default entry is a PostRollTests spec
+
+    assert len(load_registry(_registry_dir(repo), repo_root=repo)) == 1
+
+
+def test_the_real_stand_down_helper_is_recognised():
+    """What holds the rule to this repository rather than to the fixture above.
+
+    A detector whose vocabulary comes only from examples I wrote covers the
+    shapes I had in mind and is silently blind to the one in the code (L48,
+    L96). This asserts the real helper, in the real file, is what the scan
+    finds, so renaming it or changing how it stands down fails here rather than
+    quietly disarming the refusal.
+    """
+    found = stand_down_helpers(REPO_ROOT / "tests")
+
+    assert "refuse_if_a_prover_is_working" in found, sorted(found)
+
+
+def test_the_lock_policy_tests_are_not_mistaken_for_stand_down_helpers():
+    """The same scan, on the file it must NOT catch. `test_perturbation_lock.py`
+    reads the lock harder than anything else here and is the alternative the
+    refusal recommends."""
+    found = stand_down_helpers(REPO_ROOT / "tests")
+    policy = (REPO_ROOT / "tests" / "test_perturbation_lock.py").read_text()
+
+    named_there = [name for name in found if f"def {name}(" in policy]
+    assert not named_there, (
+        f"{named_there} in test_perturbation_lock.py are being read as helpers "
+        "that stand down, which would refuse the very alternative the message "
+        "tells people to use")
+
+
+def test_the_real_registry_check_cannot_be_registered(tmp_path):
+    """The case #931 was filed about, end to end against this repository.
+
+    Everything above either drives a fixture module I wrote or scans the real
+    tests directory. Neither on its own proves the refusal fires on the entry
+    somebody would actually write, because two checks over one subject can each
+    pass while the path between them is broken (L178). This is that path: a real
+    registry entry, naming a real standing-down check in a real file, refused.
+
+    Registered in a temporary directory rather than in `tests/fixtures/`, so
+    the entry that must be refused never sits in the tree where a sweep could
+    pick it up (L2).
+    """
+    registry = write_registry(tmp_path / "guard_mutations", [registry_dict(
+        name="cannot-be-proved",
+        file="tests/fixtures/guard_mutations/README.md",
+        find="registry", replace="registries",
+        test=("tests/test_guard_mutation_registry.py"
+              "::test_every_anchor_still_matches_its_file_exactly_once"),
+    )])
+
+    with pytest.raises(RegistryError, match="stands down") as raised:
+        load_registry(registry, repo_root=REPO_ROOT)
+
+    assert "test_perturbation_lock" in str(raised.value)
+
+
+def test_the_registry_this_repository_ships_is_accepted():
+    """The other direction, and the one that makes the check above mean
+    something: 400-odd real entries, none of them refused.
+
+    A refusal nothing passes is not a check, it is an outage, and this rule
+    reads every registered entry's test module (L104).
+    """
+    assert len(load_registry(REPO_ROOT / "tests" / "fixtures" / "guard_mutations",
+                             repo_root=REPO_ROOT)) >= 100
+
+
+def test_a_module_that_could_not_be_read_is_not_remembered_as_silencing_nobody(tmp_path):
+    """An unreadable module is a NON-ANSWER, and it must not be cached as one.
+
+    The answers here are cached per module, because 413 entries name barely a
+    hundred files between them. Caching the empty answer given for a module
+    that could not be parsed would turn "could not read this" into "this
+    silences nobody" for the rest of the process, and once the two share a
+    representation nothing can tell them apart (L215).
+    """
+    repo = _repo_with_test_module(tmp_path, "def broken(:\n")
+    module = repo / "tests" / "test_thing.py"
+
+    assert silenced_functions(module, repo) == frozenset(), (
+        "a module that cannot be parsed is not this check's question")
+
+    module.write_text(SILENCED_TEST_MODULE)
+
+    assert "test_every_anchor_still_matches" in silenced_functions(module, repo), (
+        "the unreadable answer was cached, so a module that can now be read is "
+        "still remembered as silencing nobody")
