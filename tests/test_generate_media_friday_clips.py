@@ -37,7 +37,6 @@ from conftest import HAVE_FFMPEG, needs_ffmpeg  # noqa: F401
 # The marker is not a judgement kept here. It is derived from the recorded
 # distribution in tests/file_durations.py, and tests/test_fast_subset_stays_honest.py
 # fails if this line and that record disagree.
-pytestmark = pytest.mark.slow
 
 
 def _make_gradient(path, seconds=3.0):

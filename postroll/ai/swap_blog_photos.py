@@ -31,7 +31,7 @@ import tempfile
 from pathlib import Path
 
 from .ai_tells import strip_em_dashes
-from .blog_quality import check_blog, finding_entry
+from .blog_quality import check_blog, finding_entry, repair_marker_filenames
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -147,10 +147,20 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
     # swapped could ship an em dash into published copy (#203).
     final_body = strip_em_dashes(data.get("body", body).strip())
 
+    # A near-miss filename is repaired rather than reported (#962). This path
+    # rewrites EVERY marker in the post, so it is the one most able to break
+    # the filename rule, and it was the one that could not see it: the real
+    # names were resolved a few lines above and none of them reached the check.
+    final_body, repairs = repair_marker_filenames(final_body, photo_filenames)
+    for was, now in repairs:
+        print(f"[swap_blog_photos] REPAIRED marker filename: {was!r} -> {now!r}",
+              flush=True, file=sys.stderr)
+
     # The same deterministic checks the generate and revise paths run (#201).
-    # Reported, never rewritten: alt text cannot be corrected without seeing
-    # the photograph.
-    findings = check_blog(final_body, program=program, venue=venue)
+    # The rest are reported, never rewritten: alt text cannot be corrected
+    # without seeing the photograph.
+    findings = check_blog(final_body, program=program, venue=venue,
+                          photo_filenames=photo_filenames)
     for f in findings:
         print(f"[swap_blog_photos] CHECK {f.code}: {f.message} ({f.detail})",
               flush=True, file=sys.stderr)
