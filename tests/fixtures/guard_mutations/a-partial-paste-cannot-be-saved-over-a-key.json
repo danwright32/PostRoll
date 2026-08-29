@@ -1,0 +1,8 @@
+{
+  "name": "a-partial-paste-cannot-be-saved-over-a-key",
+  "file": "PostRollApp/Sources/Services/KeychainStore.swift",
+  "find": "        sanitize(typed) != stored && isSavable(typed)",
+  "replace": "        sanitize(typed) != stored",
+  "test": "PostRollTests/SaveButtonStateTests/testAPartialPasteCannotBeSavedEvenOverADifferentKey",
+  "breaks": "most of a key, prefix intact, can be saved over a working one. That is the commonest paste accident and the one that looks exactly like success: the value that sat stored on this Mac for two days was thirteen characters (#348, #935)"
+}

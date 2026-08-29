@@ -416,6 +416,7 @@
 		B1216850E34C6D8772958FFF /* TagFieldNoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFD926F86071C377745042FF /* TagFieldNoteTests.swift */; };
 		B1216850E34C6D8772958FFD /* SettingsKeySourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFD926F86071C377745042FD /* SettingsKeySourceTests.swift */; };
 		B1216850E34C6D8772958FFE /* SentenceListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFD926F86071C377745042FE /* SentenceListTests.swift */; };
+		B1216850E34C6D8772958FFA /* SaveButtonStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFD926F86071C377745042FA /* SaveButtonStateTests.swift */; };
 		1E0BD1797467B207E116E3A4 /* HandleFieldShapeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED7FC0AAD38B23A21A16423 /* HandleFieldShapeTests.swift */; };
 		53BB8A457F69778CBC928109 /* HandleShapeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E9544577D48566C2FE9D2E /* HandleShapeTests.swift */; };
 		E6A8FA2871B0F731FE75F356 /* NotificationReachabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A676EDB3CE5B3BCBF34C5126 /* NotificationReachabilityTests.swift */; };
@@ -999,6 +1000,7 @@
 		EFD926F86071C377745042FF /* TagFieldNoteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagFieldNoteTests.swift; sourceTree = "<group>"; };
 		EFD926F86071C377745042FD /* SettingsKeySourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsKeySourceTests.swift; sourceTree = "<group>"; };
 		EFD926F86071C377745042FE /* SentenceListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceListTests.swift; sourceTree = "<group>"; };
+		EFD926F86071C377745042FA /* SaveButtonStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveButtonStateTests.swift; sourceTree = "<group>"; };
 		AED7FC0AAD38B23A21A16423 /* HandleFieldShapeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleFieldShapeTests.swift; sourceTree = "<group>"; };
 		81E9544577D48566C2FE9D2E /* HandleShapeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleShapeTests.swift; sourceTree = "<group>"; };
 		A676EDB3CE5B3BCBF34C5126 /* NotificationReachabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationReachabilityTests.swift; sourceTree = "<group>"; };
@@ -1589,6 +1591,7 @@
 				EFD926F86071C377745042FF /* TagFieldNoteTests.swift */,
 				EFD926F86071C377745042FD /* SettingsKeySourceTests.swift */,
 				EFD926F86071C377745042FE /* SentenceListTests.swift */,
+				EFD926F86071C377745042FA /* SaveButtonStateTests.swift */,
 				AED7FC0AAD38B23A21A16423 /* HandleFieldShapeTests.swift */,
 				81E9544577D48566C2FE9D2E /* HandleShapeTests.swift */,
 				A676EDB3CE5B3BCBF34C5126 /* NotificationReachabilityTests.swift */,
@@ -2287,6 +2290,7 @@
 				B1216850E34C6D8772958FFF /* TagFieldNoteTests.swift in Sources */,
 				B1216850E34C6D8772958FFD /* SettingsKeySourceTests.swift in Sources */,
 				B1216850E34C6D8772958FFE /* SentenceListTests.swift in Sources */,
+				B1216850E34C6D8772958FFA /* SaveButtonStateTests.swift in Sources */,
 				1E0BD1797467B207E116E3A4 /* HandleFieldShapeTests.swift in Sources */,
 				53BB8A457F69778CBC928109 /* HandleShapeTests.swift in Sources */,
 				E6A8FA2871B0F731FE75F356 /* NotificationReachabilityTests.swift in Sources */,

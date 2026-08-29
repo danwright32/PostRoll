@@ -32,4 +32,18 @@ enum SettingsCopy {
     static let keyNotRemoved =
         "The key could not be removed from your keychain. It is still stored, "
         + "so generation will keep using it. Check Keychain Access, then try again."
+
+    /// The keychain refused to store the key (#112).
+    ///
+    /// Says what is still in force, because that is what decides what happens
+    /// next: the previous key, if there is one, is what the next run uses. A
+    /// refused write used to report exactly like a successful one, so the next
+    /// run failed with an authentication error pointing nowhere near the cause.
+    ///
+    /// Beside its sibling above rather than written inline at the call site,
+    /// which is where it used to live: two sentences about one pair of outcomes,
+    /// kept apart, are two that can drift into saying the same thing.
+    static let keyNotSaved =
+        "The key could not be saved to your keychain. Nothing was stored, so "
+        + "generation will keep using the previous key if there is one."
 }

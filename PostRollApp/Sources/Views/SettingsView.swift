@@ -43,10 +43,33 @@ struct SettingsView: View {
 
     @State private var apiKey: String
 
+    /// What the store held when it was last read (#935).
+    ///
+    /// Held beside the typed value rather than fetched to answer the Save
+    /// button's disabled state, which is what that modifier used to do: a
+    /// keychain read on every render pass, so typing one character re-read it.
+    /// A keychain read is a privileged call, not a cheap one.
+    ///
+    /// Read once here and moved only when a write actually LANDS, which is the
+    /// part that has to stay correct. A refused save or delete leaves it alone,
+    /// so the typed value still differs from it and the button stays live to be
+    /// retried; a button that went quiet there would leave somebody facing a
+    /// screen saying the write failed and no way to try again (#112, #448,
+    /// L109).
+    ///
+    /// What this deliberately gives up, said out loud rather than left as a gap
+    /// (L129): the screen no longer notices a key changed by something OTHER
+    /// than this app while Settings is open. The app is the only writer of this
+    /// entry, and the previous behaviour bought that at the price of a
+    /// privileged call per redraw.
+    @State private var storedKey: String
+
     init(keySource: KeySource = .keychain, book: HandleBook = .shared) {
         self.keySource = keySource
         self.book = book
-        _apiKey = State(initialValue: keySource.read() ?? "")
+        let stored = keySource.read() ?? ""
+        _apiKey = State(initialValue: stored)
+        _storedKey = State(initialValue: stored)
     }
 
     @State private var saved = false
@@ -93,45 +116,29 @@ struct SettingsView: View {
 
                 HStack {
                     Button("Save") {
-                        let trimmed = KeychainStore.sanitize(apiKey)
-                        if trimmed.isEmpty {
-                            // Clearing the field means removing the key, and a
-                            // keychain that refuses that used to report exactly
-                            // like one that did it: the green Saved state while
-                            // the key sat there and the next run kept billing
-                            // against it (#448).
-                            if KeychainStore.deleteAPIKey() {
-                                saved = true
-                                saveError = nil
-                            } else {
-                                saved = false
-                                saveError = SettingsCopy.keyNotRemoved
-                            }
-                        } else if KeychainStore.saveAPIKey(trimmed) {
-                            saved = true
-                            saveError = nil
-                        } else {
-                            // A refused write used to report exactly like a
-                            // successful one, so the next run failed with an
-                            // authentication error pointing nowhere near the
-                            // real cause (#112).
-                            saved = false
-                            saveError = "The key could not be saved to your keychain. "
-                                      + "Nothing was stored, so generation will keep using "
-                                      + "the previous key if there is one."
-                        }
+                        // One implementation of what a press does, held in
+                        // KeychainStore so every branch of it can be exercised
+                        // with no keychain (#935). It decides what is stored,
+                        // whether to show the mark, and what to say when the
+                        // write was refused, together: three fields set
+                        // separately here is how a refused write came to
+                        // present as a successful one (#112, L53).
+                        let outcome = KeychainStore.save(typed: apiKey,
+                                                         stored: storedKey)
+                        storedKey = outcome.stored
+                        saved = outcome.saved
+                        saveError = outcome.error
                     }
                     .buttonStyle(.borderedProminent)
                     // Unchanged, or not long enough to be a whole key (#348).
                     // The warning above says which, so a disabled button is
                     // never unexplained.
-                    // Through the same source, or a render would compare the
-                    // typed value against the real keychain and the seam would
-                    // cover only half the screen (#918). That this runs on
-                    // every redraw is a separate defect, tracked by #935.
-                    .disabled(KeychainStore.sanitize(apiKey) ==
-                              (keySource.read() ?? "")
-                              || !KeychainStore.isSavable(apiKey))
+                    //
+                    // Against the value held in state rather than one fetched
+                    // here (#935). This ran on every render pass and each run
+                    // was a keychain read.
+                    .disabled(!KeychainStore.canSave(typed: apiKey,
+                                                     stored: storedKey))
 
                     if saved {
                         Label("Saved", systemImage: "checkmark.circle.fill")
