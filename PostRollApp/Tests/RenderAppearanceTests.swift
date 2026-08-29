@@ -40,17 +40,35 @@ final class RenderAppearanceTests: XCTestCase {
 
     /// A patch of a colour AppKit owns rather than one this app names, so it
     /// follows the appearance rather than a constant.
+    ///
+    /// Rendered inside an explicit DRAWING appearance, not merely with the
+    /// application's set. The two are different mechanisms and only one of them
+    /// reaches `ImageRenderer`: setting `NSApplication.shared.appearance` alone
+    /// left the unpinned ImageRenderer drawing in whatever the MACHINE was in,
+    /// so the guard for that half was real on a Mac in dark mode and vacuous on
+    /// a light one. CI is a light one, and it reported the mutation SURVIVED
+    /// while the same mutation was KILLED here (#918, L504).
+    ///
+    /// With this, the ambient is dark on every machine, and a renderer that
+    /// pins comes out aqua because its own pin is applied inside.
     private func drawnWindowBackground(through renderer: Renderer) throws -> NSColor {
         let size = CGSize(width: 40, height: 40)
         let patch = Color(nsColor: .windowBackgroundColor)
             .frame(width: size.width, height: size.height)
-        let rep: NSBitmapImageRep
-        switch renderer {
-        case .hosted:
-            rep = try WordFootprint.hosted(patch, size: size, wordless: false)
-        case .imageRendered:
-            rep = try WordFootprint.imageRendered(patch, wordless: false)
+        var drawn: NSBitmapImageRep?
+        var failure: Error?
+        try XCTUnwrap(NSAppearance(named: .darkAqua)).performAsCurrentDrawingAppearance {
+            do {
+                switch renderer {
+                case .hosted:
+                    drawn = try WordFootprint.hosted(patch, size: size, wordless: false)
+                case .imageRendered:
+                    drawn = try WordFootprint.imageRendered(patch, wordless: false)
+                }
+            } catch { failure = error }
         }
+        if let failure { throw failure }
+        let rep = try XCTUnwrap(drawn, "the render produced nothing at all")
         // Read at the middle, and in the rep's own pixel space: ImageRenderer
         // draws at scale 2, so the bitmap is twice the size asked for.
         return try XCTUnwrap(
