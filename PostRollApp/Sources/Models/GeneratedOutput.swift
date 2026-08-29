@@ -6,6 +6,20 @@ struct DayCaption: Codable, Hashable {
     var caption: String = ""
     var hashtags: [String] = []
     var altTexts: [String] = []
+    /// Which photo each entry in `altTexts` describes, in the same order (#1008).
+    ///
+    /// `altTexts` is positional against the day's photos and nothing maintains
+    /// that alignment once they move: `PostingDay.removingPhotos` re-keys the
+    /// crops, the tags and the collage cells and cannot reach these, because
+    /// they live here rather than on the day, and a drag to reorder moves the
+    /// photos alone. Position then measures whatever later occupies it (L237),
+    /// and the export describes each photo with its neighbour's words.
+    ///
+    /// Empty on every event saved before this existed, which is why readers
+    /// fall back to position rather than requiring it: an anchor that is not
+    /// there is not evidence the alt texts are wrong, and refusing them would
+    /// empty the block for every event already on disk.
+    var altTextPhotoPaths: [String] = []
     var sceneLabels: [String?] = []
     /// The caption exactly as it came out of generation — never overwritten by edits.
     /// Empty until `WeekGenerationResult.stampOriginals()` is called after first decode.
@@ -30,6 +44,7 @@ struct DayCaption: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case caption, hashtags, findings
         case altTexts         = "alt_texts"
+        case altTextPhotoPaths = "alt_text_photo_paths"
         case sceneLabels      = "scene_labels"
         case generatedCaption = "generated_caption"
         case findingsCaption  = "findings_caption"
@@ -57,6 +72,25 @@ struct DayCaption: Codable, Hashable {
 
     var wasEdited: Bool {
         !generatedCaption.isEmpty && caption != generatedCaption
+    }
+
+    /// The alt text written for `photo`, or nil when this day has none for it.
+    ///
+    /// Resolved by path when the anchors are there, so reordering or removing a
+    /// photo cannot hand its description to a different photograph. `position`
+    /// is the fallback for every event saved before the anchors existed, where
+    /// index is all there is: exactly as correct as the old behaviour for those,
+    /// and no worse. An anchor list that is present but does not name this photo
+    /// answers nil rather than falling through to position, because a photo
+    /// ADDED after generation genuinely has no alt text, and describing it with
+    /// whatever sits at its index is the failure this exists to stop (L214).
+    func altText(for photo: URL, at position: Int) -> String? {
+        guard !altTextPhotoPaths.isEmpty else {
+            return position < altTexts.count ? altTexts[position] : nil
+        }
+        guard let anchored = altTextPhotoPaths.firstIndex(of: photo.path),
+              anchored < altTexts.count else { return nil }
+        return altTexts[anchored]
     }
 }
 
@@ -270,6 +304,7 @@ extension DayCaption {
         caption          = try c.decodeIfPresent(String.self,    forKey: .caption)          ?? ""
         hashtags         = try c.decodeIfPresent([String].self,  forKey: .hashtags)         ?? []
         altTexts         = try c.decodeIfPresent([String].self,  forKey: .altTexts)         ?? []
+        altTextPhotoPaths = try c.decodeIfPresent([String].self, forKey: .altTextPhotoPaths) ?? []
         sceneLabels      = try c.decodeIfPresent([String?].self, forKey: .sceneLabels)      ?? []
         generatedCaption = try c.decodeIfPresent(String.self,    forKey: .generatedCaption) ?? ""
         findings         = try c.decodeIfPresent([QualityFinding].self, forKey: .findings)  ?? []

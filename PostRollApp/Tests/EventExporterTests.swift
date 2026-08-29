@@ -58,6 +58,74 @@ final class EventExporterTests: XCTestCase {
         return event
     }
 
+    // MARK: - Alt text stays with its own photo (#1008)
+
+    /// Reordering a day's photos must not move the alt texts onto each other.
+    ///
+    /// `altTexts` is positional against `photoPaths`, and nothing permutes it
+    /// when the photos move. `PhotoAssignmentView` offers a drag to reorder and
+    /// `removingPhotos` re-keys every OTHER per-photo map (crops, tags, collage
+    /// cells) while being unable to reach the alt texts at all, because they
+    /// live on `Event.weekResult`. So position measures whatever later occupies
+    /// it (L237), and the export labels each alt text with a filename that is
+    /// not its subject.
+    ///
+    /// The failure is quiet in the worst way: alt texts from one shoot resemble
+    /// each other, so a swapped pair reads as plausible.
+    func testAltTextFollowsItsPhotoWhenTheDayIsReordered() throws {
+        let first  = makeFile("shot-100.jpg")
+        let second = makeFile("shot-277.jpg")
+        var event = makeEvent(wednesdayPhotos: [first, second])
+
+        // Written against the photos in their original order, and anchored to
+        // them, which is what the caption run now reports.
+        var wed = DayCaption()
+        wed.caption = "Carousel day"
+        wed.altTexts = ["a cellist alone on the apron", "the full ensemble in silhouette"]
+        wed.altTextPhotoPaths = [first.path, second.path]
+        event.weekResult?.wednesday = wed
+
+        // Dan drags the second photo in front of the first.
+        event.days[DayName.wednesday.rawValue]?.photoPaths = [second, first]
+
+        let folder = try EventExporter.export(event: event, to: root).folder
+        let captions = try String(
+            contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+
+        XCTAssertTrue(captions.contains("277: the full ensemble in silhouette"),
+                      "shot-277 is now first and its own alt text has to come with it:\n\(captions)")
+        XCTAssertTrue(captions.contains("100: a cellist alone on the apron"),
+                      "shot-100 is now second and keeps its own alt text:\n\(captions)")
+        XCTAssertFalse(captions.contains("277: a cellist alone on the apron"),
+                       "the alt texts were paired by position, so each photo is "
+                       + "described by the other one:\n\(captions)")
+    }
+
+    /// Data written before the anchors existed has none, and must keep working.
+    ///
+    /// Every event already on disk is in this state, so a reader that requires
+    /// the anchor silently empties the alt text block for all of them. Falling
+    /// back to position is exactly as correct as today for those, which is the
+    /// most that can be recovered from a list that never recorded its subjects.
+    func testAnAltTextListWithNoAnchorsStillExportsInOrder() throws {
+        let first  = makeFile("shot-100.jpg")
+        let second = makeFile("shot-277.jpg")
+        var event = makeEvent(wednesdayPhotos: [first, second])
+
+        var wed = DayCaption()
+        wed.caption = "Carousel day"
+        wed.altTexts = ["first frame", "second frame"]
+        wed.altTextPhotoPaths = []   // an older save
+        event.weekResult?.wednesday = wed
+
+        let folder = try EventExporter.export(event: event, to: root).folder
+        let captions = try String(
+            contentsOf: folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+
+        XCTAssertTrue(captions.contains("100: first frame"), captions)
+        XCTAssertTrue(captions.contains("277: second frame"), captions)
+    }
+
     // MARK: - Tests
 
     func testFullExportWritesExpectedLayout() throws {
