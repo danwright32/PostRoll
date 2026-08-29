@@ -97,4 +97,67 @@ enum RepoFixture {
                      file: StaticString = #filePath, line: UInt = #line) throws -> String {
         String(decoding: try data(relativePath, file: file, line: line), as: UTF8.self)
     }
+
+    // MARK: - Walking a source tree (#941)
+
+    /// `url`'s path relative to `root`, or nil when it is not inside it.
+    ///
+    /// This exists because the obvious way to write it is wrong. Trimming
+    /// `root.path + "/"` off the front of an absolute path is a SUBSTITUTION,
+    /// and a substitution rewrites wherever it matches, not only the front. The
+    /// two sides disagree the moment symlinks are involved: `#filePath` records
+    /// the path a file was COMPILED from, an enumerator hands back a resolved
+    /// one, and on macOS `/tmp` is a symlink to `/private/tmp`. Running the
+    /// suite from a worktree under `/tmp` therefore trimmed nothing off the
+    /// front, removed a match from the middle instead, and fused `/private`
+    /// onto `AppState.swift` to make `privateAppState.swift`, a file nobody
+    /// wrote (L251).
+    ///
+    /// So both sides are resolved first, and the comparison is over path
+    /// COMPONENTS rather than over the text: a prefix that is not a whole
+    /// component boundary cannot be mistaken for one, so a sibling directory
+    /// named `Sources-old` is not read as being inside `Sources`.
+    ///
+    /// Nil rather than a best effort, because the caller can say what a file
+    /// outside the root means for it, and a plausible looking name derived from
+    /// whatever was left over is precisely the failure this replaces.
+    static func relativePath(of url: URL, under root: URL) -> String? {
+        let base = root.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        let parts = url.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        guard parts.count > base.count, Array(parts.prefix(base.count)) == base else { return nil }
+        return parts.dropFirst(base.count).joined(separator: "/")
+    }
+
+    /// Every file under `root` with `ext`, each with its path relative to it.
+    ///
+    /// The one way a source-scanning suite should walk the tree, so the
+    /// resolving above happens once rather than at each sweep that needs it.
+    ///
+    /// A file the enumerator returns that does not come out as being under the
+    /// root FAILS rather than being dropped: a walk that quietly discards what
+    /// it cannot name reports a clean sweep over files it never read, which is
+    /// indistinguishable from a sweep that found nothing wrong (L98, L215).
+    static func files(under root: URL, withExtension ext: String,
+                      file: StaticString = #filePath,
+                      line: UInt = #line) -> [(relativePath: String, url: URL)] {
+        let base = root.resolvingSymlinksInPath().standardizedFileURL
+        guard let walk = FileManager.default.enumerator(
+            at: base, includingPropertiesForKeys: nil) else {
+            XCTFail("could not read \(base.path), so nothing was swept",
+                    file: file, line: line)
+            return []
+        }
+        var found: [(relativePath: String, url: URL)] = []
+        for case let url as URL in walk where url.pathExtension == ext {
+            guard let relative = relativePath(of: url, under: base) else {
+                XCTFail("\(url.path) came back from a walk of \(base.path) and is not "
+                        + "inside it, so it cannot be named relatively and dropping it "
+                        + "would leave this sweep silently short",
+                        file: file, line: line)
+                continue
+            }
+            found.append((relative, url))
+        }
+        return found
+    }
 }
