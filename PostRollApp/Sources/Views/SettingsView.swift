@@ -1,7 +1,44 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var apiKey: String = KeychainStore.readAPIKey() ?? ""
+
+    /// Where the stored key is read from (#918).
+    ///
+    /// This screen could not be rendered for review because building it read
+    /// the real key out of the macOS keychain, which would have put a live
+    /// secret read inside the test suite on every run and every machine. No
+    /// other test here does that: `APIKeyDeliveryTests` hands its own key in,
+    /// and `KeychainStoreTests` only exercises the pure helpers (L2).
+    ///
+    /// A named value rather than a closure, because the DEFAULT is the half
+    /// worth pinning. A seam whose default silently became the fixture would
+    /// leave the real screen reading nothing and showing an empty field, and
+    /// two closures cannot be compared to catch that. This can, and
+    /// `SettingsKeySourceTests` does.
+    ///
+    /// Nothing about how the key is stored, saved or delivered changes. Only
+    /// where the screen looks when something other than the app builds it.
+    enum KeySource: Equatable {
+        case keychain
+        case fixed(String?)
+
+        func read() -> String? {
+            switch self {
+            case .keychain:          return KeychainStore.readAPIKey()
+            case .fixed(let value):  return value
+            }
+        }
+    }
+
+    let keySource: KeySource
+
+    @State private var apiKey: String
+
+    init(keySource: KeySource = .keychain) {
+        self.keySource = keySource
+        _apiKey = State(initialValue: keySource.read() ?? "")
+    }
+
     @State private var saved = false
     /// Set when a save was refused by the keychain, so a write that did not
     /// land cannot present as a successful one (#112).
@@ -78,8 +115,12 @@ struct SettingsView: View {
                     // Unchanged, or not long enough to be a whole key (#348).
                     // The warning above says which, so a disabled button is
                     // never unexplained.
+                    // Through the same source, or a render would compare the
+                    // typed value against the real keychain and the seam would
+                    // cover only half the screen (#918). That this runs on
+                    // every redraw is a separate defect, tracked by #935.
                     .disabled(KeychainStore.sanitize(apiKey) ==
-                              (KeychainStore.readAPIKey() ?? "")
+                              (keySource.read() ?? "")
                               || !KeychainStore.isSavable(apiKey))
 
                     if saved {
