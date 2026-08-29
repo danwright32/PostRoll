@@ -1,0 +1,8 @@
+{
+  "name": "catching-the-stand-down-is-not-being-silenced",
+  "file": "tools/check_guards.py",
+  "find": "                if node.name not in catchers and _calls_in(node) & targets}",
+  "replace": "                if _calls_in(node) & targets}",
+  "test": "tests/test_check_guards.py::test_a_test_that_catches_the_stand_down_is_allowed",
+  "breaks": "a test that drives the stand-down helper with an injected checkout and CATCHES the skip is refused as if it were silenced. That is the pattern the refusal's own message recommends, and it is a registered entry today (a-lock-nobody-holds-is-loud), so the rule would forbid the remedy it names (#931, L104)"
+}

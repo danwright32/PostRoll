@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import ast
 import enum
 import json
 import os
@@ -139,13 +140,318 @@ def entry_files(registry_dir: Path) -> list[Path]:
     return files
 
 
-def load_registry(path: Path) -> list[Entry]:
+#: The module a prover holds while it has a source file deliberately broken
+#: (#920). A check that consults it and stands down is a check that cannot
+#: report anything while a sweep is running, which is exactly when an entry
+#: naming it would be proved.
+PERTURBATION_LOCK = "perturbation_lock"
+
+
+def _lock_names(tree: ast.Module) -> set[str]:
+    """Every name in this module that refers to the perturbation lock.
+
+    Both spellings, because the two files that read it use one each:
+    `from tools import perturbation_lock` binds the module, and
+    `from tools.perturbation_lock import verdict` binds the function. A rule
+    that knew only the first would pass every file written the second way.
+    """
+    bound: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                leaf = alias.name.split(".")[-1]
+                if leaf == PERTURBATION_LOCK:
+                    bound.add(alias.asname or leaf)
+        elif isinstance(node, ast.ImportFrom):
+            from_lock = (node.module or "").split(".")[-1] == PERTURBATION_LOCK
+            for alias in node.names:
+                if from_lock or alias.name == PERTURBATION_LOCK:
+                    bound.add(alias.asname or alias.name)
+    return bound
+
+
+def _identifiers_in(node: ast.AST) -> set[str]:
+    return {child.id for child in ast.walk(node) if isinstance(child, ast.Name)} | {
+        child.attr for child in ast.walk(node) if isinstance(child, ast.Attribute)}
+
+
+def _calls_in(node: ast.AST) -> set[str]:
+    called: set[str] = set()
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        if isinstance(child.func, ast.Name):
+            called.add(child.func.id)
+        elif isinstance(child.func, ast.Attribute):
+            called.add(child.func.attr)
+    return called
+
+
+def _functions(tree: ast.Module) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    return [node for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+
+
+#: The two calls in the lock module that report its STATE, as opposed to the
+#: ones that merely name a path or take it.
+#:
+#: Narrowed to these deliberately. Deriving from any lock function at all read
+#: `path = lock_path(tmp_path)` as a stand-down decision, which made the
+#: read-only case in `tests/test_perturbation_lock.py` look like a helper that
+#: silences itself, and that file is the alternative this whole refusal
+#: recommends. A rename here would weaken the detection silently, so
+#: `test_the_real_stand_down_helper_is_recognised` holds these names to the
+#: helper that actually exists (L96).
+LOCK_STATE_READERS = ("verdict", "current")
+
+
+def _lock_derived(node: ast.AST, lock: set[str]) -> set[str]:
+    """Names assigned out of a call that reports the lock's state.
+
+    `outcome, why = perturbation_lock.verdict(root)` binds two of them, and the
+    skip that follows is usually written against those rather than against the
+    module, so a rule reading only the module name would miss the shape it
+    exists to catch.
+    """
+    derived: set[str] = set()
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Assign) or not isinstance(child.value, ast.Call):
+            continue
+        called = _calls_in(child.value)
+        if not (_identifiers_in(child.value.func) & lock
+                and called & set(LOCK_STATE_READERS)):
+            continue
+        for target in child.targets:
+            derived |= {name.id for name in ast.walk(target)
+                        if isinstance(name, ast.Name)}
+    return derived
+
+
+def _stands_down_on_the_lock(node: ast.AST, lock: set[str]) -> bool:
+    """Whether this function skips BECAUSE of what the lock said.
+
+    Reading the lock and skipping somewhere in the same function is not enough,
+    and getting that wrong would refuse the remedy along with the defect (L104).
+    `tests/test_perturbation_lock.py` reads the lock harder than anything else
+    here, and one of its cases skips when the process can write through a
+    read-only file, which has nothing to do with a prover: that test is the
+    alternative this refusal recommends, so it has to survive the rule.
+
+    What separates them is what GOVERNS the skip. A stand-down is a skip whose
+    condition, or whose reason, comes from the lock.
+    """
+    governed = lock | _lock_derived(node, lock)
+    for child in ast.walk(node):
+        if isinstance(child, ast.If) and _identifiers_in(child.test) & governed:
+            if any("skip" in _calls_in(branch)
+                   for branch in (*child.body, *child.orelse)):
+                return True
+        if isinstance(child, ast.Call) and "skip" in _calls_in(child):
+            if any(_identifiers_in(arg) & governed for arg in child.args):
+                return True
+    return False
+
+
+def _own_nodes(node: ast.AST):
+    """Everything inside this function except the bodies of functions nested in
+    it, so a catch belonging to an inner helper is not read as the outer one's.
+    """
+    stack = list(ast.iter_child_nodes(node))
+    while stack:
+        child = stack.pop()
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        yield child
+        stack.extend(ast.iter_child_nodes(child))
+
+
+def _skip_catchers_in(tree: ast.Module) -> set[str]:
+    """Functions that CATCH the stand-down rather than being stopped by it.
+
+    This is the pattern the refusal recommends, so it has to survive the rule
+    that the refusal implements. `tests/test_perturbation_lock.py::_reaction`
+    calls the real helper with an injected checkout and converts the skip into a
+    value, and the registered entry `a-lock-nobody-holds-is-loud` points at a
+    test that goes through it. Following the call graph without noticing the
+    catch refuses that entry, and the message would then forbid the thing it
+    tells people to do (L104).
+
+    A catch breaks the chain in both directions: such a function can never be
+    silenced itself, and a caller reaching the helper only through it cannot be
+    silenced either, because no skip escapes.
+    """
+    caught: set[str] = set()
+    for node in _functions(tree):
+        for child in _own_nodes(node):
+            if isinstance(child, ast.ExceptHandler) and child.type is not None:
+                if "skip" in _identifiers_in(child.type):
+                    caught.add(node.name)
+                    break
+            # `with pytest.raises(pytest.skip.Exception)` catches it too. The
+            # helper in this repository deliberately does NOT use that form,
+            # because a skip escaping a `raises` marks the whole test SKIPPED,
+            # but a rule that only knew try/except would refuse a file written
+            # the other way (L173).
+            if (isinstance(child, ast.Call) and "raises" in _calls_in(child)
+                    and any("skip" in _identifiers_in(arg) for arg in child.args)):
+                caught.add(node.name)
+                break
+    return caught
+
+
+def _silencers_in(tree: ast.Module) -> set[str]:
+    """Functions in this module that stand a check down for the lock."""
+    lock = _lock_names(tree)
+    if not lock:
+        return set()
+    return {node.name for node in _functions(tree)
+            if _stands_down_on_the_lock(node, lock)} - _skip_catchers_in(tree)
+
+
+#: Parsed modules are kept, because `load_registry` runs several times in one
+#: collection and the tests directory does not change underneath a run.
+_HELPER_CACHE: dict[str, frozenset[str]] = {}
+
+
+def stand_down_helpers(tests_dir: Path) -> frozenset[str]:
+    """Every function under `tests_dir` that stands a check down for the lock.
+
+    Scanned across the whole directory rather than per module, because the
+    helper is declared in one file and any other file may call it by importing
+    it. A file that cannot be parsed is passed over rather than raising: this
+    answers a question about the registry, and a syntax error somewhere else in
+    the suite is not that question and will be reported by the run itself.
+    """
+    key = str(tests_dir)
+    if key in _HELPER_CACHE:
+        return _HELPER_CACHE[key]
+
+    found: set[str] = set()
+    for path in sorted(tests_dir.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        found |= _silencers_in(tree)
+    result = frozenset(found)
+    _HELPER_CACHE[key] = result
+    return result
+
+
+#: Which functions in a given module the prover can silence, by module path.
+#:
+#: Per module rather than per entry: 413 entries name barely a hundred distinct
+#: files between them, and without this every entry re-parsed its module, which
+#: measured at 1.5 seconds per registry load. `load_registry` runs several times
+#: in one collection, in every xdist worker.
+_SILENCED_CACHE: dict[str, frozenset[str]] = {}
+
+
+def silenced_functions(module_path: Path, repo_root: Path) -> frozenset[str]:
+    """Every test in this module that a running prover would stand down.
+
+    A function is silenced when it reaches a stand-down helper and the skip can
+    still escape. A function that CATCHES the skip is neither silenced nor a
+    route to it, which is what keeps the recommended pattern legal.
+    """
+    key = str(module_path)
+    if key in _SILENCED_CACHE:
+        return _SILENCED_CACHE[key]
+
+    try:
+        tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        # Not this check's question. A module that cannot be parsed will be
+        # reported by the run itself, loudly, and answering here as well would
+        # give one fault two names (L11).
+        _SILENCED_CACHE[key] = frozenset()
+        return _SILENCED_CACHE[key]
+
+    # A name defined in THIS module wins over the same name found elsewhere, so
+    # a local function that happens to share a helper's name is judged on what
+    # it actually does rather than on where its name has been seen before.
+    local = _silencers_in(tree)
+    declared_here = {node.name for node in _functions(tree)}
+    catchers = _skip_catchers_in(tree)
+    targets = ((stand_down_helpers(repo_root / "tests")
+                - (declared_here - local)) | local) - catchers
+    if not targets:
+        _SILENCED_CACHE[key] = frozenset()
+        return _SILENCED_CACHE[key]
+
+    reaching = {node.name for node in _functions(tree)
+                if node.name not in catchers and _calls_in(node) & targets}
+    changed = True
+    while changed:
+        changed = False
+        for node in _functions(tree):
+            if node.name in reaching or node.name in catchers:
+                continue
+            if _calls_in(node) & reaching:
+                reaching.add(node.name)
+                changed = True
+
+    _SILENCED_CACHE[key] = frozenset(reaching | targets)
+    return _SILENCED_CACHE[key]
+
+
+def silenced_by_the_prover(entry: Entry, repo_root: Path) -> str | None:
+    """Why this entry can never be proved, or None when it can (#931).
+
+    The prover holds the perturbation lock across each entry, and any check
+    that consults that lock stands down while it is held. An entry naming one
+    of those checks therefore has its code broken, its test skipped, and no
+    failure seen, on every sweep for ever.
+
+    The sweep does not go quiet about it, but what it says is wrong: a
+    skip-only run has been reported as ERROR since #665, and the message that
+    ERROR carries blames a missing external, which sends the reader off to
+    install ffmpeg over a problem that has nothing to do with one (L11). So the
+    refusal belongs at load time, where the cause is known.
+
+    Silent on an entry whose test file is not there. That is a real fault and a
+    real fix, but it is `test_every_named_test_still_exists`'s to report, and a
+    second check answering for it would give the same fault two names (L11).
+    """
+    if not entry.test.startswith("tests/"):
+        return None
+    path_part, *rest = entry.test.split("::")
+    if not rest:
+        return None
+    # A parametrised node id carries its case in brackets; the function the
+    # file declares is the part before them.
+    method = rest[-1].split("[")[0]
+
+    module_path = repo_root / path_part
+    if not module_path.is_file():
+        return None
+    if method not in silenced_functions(module_path, repo_root):
+        return None
+
+    return (
+        f"{entry.name} names {entry.test}, which stands down while a guard "
+        f"prover holds the perturbation lock (#920). The prover holds that "
+        f"lock across every entry, so this one would have its code broken, "
+        f"its test skipped and no failure seen, on every sweep for ever. "
+        f"Point the entry at the policy helper instead and inject a checkout "
+        f"of your own, which is what tests/test_perturbation_lock.py does: "
+        f"that runs the same rule with nothing standing it down.")
+
+
+def load_registry(path: Path, repo_root: Path | None = None) -> list[Entry]:
     """Every entry in the registry directory, one per file.
 
     Each file holds a single entry object whose `name` is the file's own stem,
     so a name can never be claimed twice and any message naming a guard names
     the file to open.
+
+    `repo_root` is where a `tests/...` node id is resolved from, so an entry
+    naming a check the prover itself silences can be refused here rather than
+    reported wrongly on every sweep (#931). Derived from the registry's own
+    location when it is not given, which is the real layout: the registry lives
+    at tests/fixtures/guard_mutations.
     """
+    root = repo_root if repo_root is not None else path.resolve().parents[2]
     entries: list[Entry] = []
     for source in entry_files(path):
         try:
@@ -182,6 +488,9 @@ def load_registry(path: Path) -> list[Entry]:
             raise RegistryError(
                 f"{entry.name} names a test this tool does not know how to run: "
                 f"{entry.test}")
+        silenced = silenced_by_the_prover(entry, root)
+        if silenced:
+            raise RegistryError(silenced)
         entries.append(entry)
     return entries
 
