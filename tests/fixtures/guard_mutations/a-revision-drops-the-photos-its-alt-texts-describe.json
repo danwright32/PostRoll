@@ -1,0 +1,8 @@
+{
+  "name": "a-revision-drops-the-photos-its-alt-texts-describe",
+  "file": "postroll/ai/revise_caption.py",
+  "find": "        \"alt_text_photo_paths\": existing.get(\"alt_text_photo_paths\", []),",
+  "replace": "        \"alt_text_photo_paths\": [],",
+  "test": "tests/test_alt_text_photo_anchor.py::test_a_revision_keeps_the_anchors_it_was_given",
+  "breaks": "revising a caption returns no anchors, the app decodes the absence as none, and the alt texts silently go back to matching photos by position (#1008)"
+}

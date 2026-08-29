@@ -1,0 +1,8 @@
+{
+  "name": "an-alt-text-is-paired-with-its-neighbour",
+  "file": "PostRollApp/Sources/Services/EventExporter.swift",
+  "find": "                            guard let alt = cap.altText(for: url, at: idx),",
+  "replace": "                            guard let alt = (idx < cap.altTexts.count ? cap.altTexts[idx] : nil),",
+  "test": "PostRollTests/EventExporterTests/testAltTextFollowsItsPhotoWhenTheDayIsReordered",
+  "breaks": "the export goes back to pairing alt texts with photos by position, so reordering a day describes every photo with its neighbour's words, which reads as plausible because alt text from one shoot resembles itself (#1008)"
+}

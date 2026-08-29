@@ -154,3 +154,50 @@ def test_a_single_alt_post_anchors_only_the_photo_it_describes(tmp_path):
         "a single alt post describes its first photo and only that one, got "
         f"{result['alt_text_photo_paths']}"
     )
+
+
+def test_a_revision_keeps_the_anchors_it_was_given():
+    """Revising a caption must not drop which photo each alt text describes.
+
+    `revise_caption` rewrites the body and passes the alt texts through
+    untouched. If it does not pass the anchors through with them, every
+    revision returns a payload with none, `DayCaption` decodes the absence as
+    an empty list, and the alt texts silently fall back to matching photos by
+    position. That is the exact defect the anchors exist to remove, restored by
+    the one action most likely to be taken on a caption Dan is unhappy with.
+
+    A field carried by one path and dropped by its sibling is invisible at both
+    ends: neither reader can tell a revision that lost them from a caption that
+    never had them.
+    """
+    from postroll.ai import revise_caption
+
+    existing = {
+        "caption": "Before.",
+        "hashtags": ["#dwphotony"],
+        "alt_texts": ["alt for one", "alt for two"],
+        "alt_text_photo_paths": ["/photos/one.jpg", "/photos/two.jpg"],
+        "scene_labels": [None, None],
+    }
+    with patch(
+        "postroll.ai.revise_caption.run_json_prompt",
+        return_value={"caption": "After.", "hashtags": ["#dwphotony"]},
+    ):
+        result = revise_caption.revise_caption(
+            existing=existing,
+            feedback="make it warmer",
+            event="Show",
+            org="Org",
+            venue="Hall",
+            date="2026-04-05",
+            day="sunday",
+            program={"performers": [], "pieces": []},
+        )
+
+    assert result["alt_text_photo_paths"] == existing["alt_text_photo_paths"], (
+        "a revision passed the alt texts through but not the photos they "
+        f"describe, got {result.get('alt_text_photo_paths')}"
+    )
+    assert len(result["alt_text_photo_paths"]) == len(result["alt_texts"]), (
+        "the anchors and the alt texts have to survive a revision together"
+    )

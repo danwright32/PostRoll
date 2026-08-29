@@ -199,6 +199,15 @@ def revise_caption(
             famous=data.get("famous_people") or [],
         ),
         "alt_texts":    existing.get("alt_texts", []),
+        # Carried with the alt texts, never separately (#1008). A revision that
+        # passed the alt texts through and dropped the photos they describe
+        # would return a payload with no anchors, the app would decode that
+        # absence as an empty list, and the alt texts would go back to matching
+        # photos by position. That is the defect the anchors remove, restored by
+        # the one action most likely to be taken on a caption Dan dislikes, and
+        # invisible at both ends: a revision that lost them looks exactly like a
+        # caption that never had them.
+        "alt_text_photo_paths": existing.get("alt_text_photo_paths", []),
         "scene_labels": existing.get("scene_labels", []),
         # The handle and name rules, checked here too (#475). A revision is
         # where a handle is most likely to be invented, because "add @someone"
