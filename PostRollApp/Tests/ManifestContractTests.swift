@@ -263,6 +263,29 @@ final class ManifestContractTests: XCTestCase {
                        ["DSC4821.jpg", "DSC4822.jpg"])
     }
 
+    func testTheBlogPhotoFilenamesSurviveTheNamesThatCausedThisBug() throws {
+        // #962 is a filename bug, and every name in it carries a space and a
+        // typographic quote. The app stores these paths escaped, so the whole
+        // feature turns on the name arriving DECODED: handed the escaped form,
+        // Python matches nothing and the repair silently does nothing on
+        // exactly the posts it exists for. A test built from an ASCII name
+        // cannot fail on that, so it is built from the real one, decoded the
+        // way the stored event file is decoded (L48).
+        let stored = #"["file:///p/DiGangi%20With%20A%20%E2%80%9CG%E2%80%9D%20(The%20Green%20Room%2042)%20@dwphotony-141.jpg"]"#
+        var event = fullEvent()
+        event.blogPhotoPaths = try JSONDecoder().decode(
+            [URL].self, from: XCTUnwrap(stored.data(using: .utf8)))
+
+        let manifest = PythonBridge.buildBlogRevisionManifest(
+            event: event, program: ["performers": []],
+            existing: ["body": "before"], feedback: "make it shorter")
+
+        XCTAssertEqual(
+            manifest["photo_filenames"] as? [String],
+            ["DiGangi With A \u{201C}G\u{201D} (The Green Room 42) @dwphotony-141.jpg"],
+            "the name must arrive as it reads on disk, not percent escaped")
+    }
+
     func testABlogRevisionForAnEventWithNoPhotosStillSendsTheKey() throws {
         // An empty list and an absent key mean the same thing to Python here
         // (the rules stay off), but only the key being present proves the app
