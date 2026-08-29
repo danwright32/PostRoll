@@ -28,40 +28,61 @@ import AppKit
 @MainActor
 final class RenderAppearanceTests: XCTestCase {
 
+    /// Both renderers, because the suite draws through both and a fix scoped to
+    /// the one whose symptom was noticed is absent in the other (L173).
+    ///
+    /// `hosted` is a real AppKit host and takes an appearance directly.
+    /// `imageRendered` is `ImageRenderer`, which has no such property, so its
+    /// render happens inside that appearance's drawing block instead.
+    enum Renderer: String, CaseIterable {
+        case hosted, imageRendered
+    }
+
     /// A patch of a colour AppKit owns rather than one this app names, so it
     /// follows the appearance rather than a constant.
-    private func drawnWindowBackground() throws -> NSColor {
+    private func drawnWindowBackground(through renderer: Renderer) throws -> NSColor {
         let size = CGSize(width: 40, height: 40)
-        let rep = try WordFootprint.hosted(
-            Color(nsColor: .windowBackgroundColor).frame(width: size.width,
-                                                         height: size.height),
-            size: size, wordless: false)
-        return try XCTUnwrap(rep.colorAt(x: 20, y: 20)?.usingColorSpace(.sRGB),
-                             "nothing was drawn to read a colour from")
+        let patch = Color(nsColor: .windowBackgroundColor)
+            .frame(width: size.width, height: size.height)
+        let rep: NSBitmapImageRep
+        switch renderer {
+        case .hosted:
+            rep = try WordFootprint.hosted(patch, size: size, wordless: false)
+        case .imageRendered:
+            rep = try WordFootprint.imageRendered(patch, wordless: false)
+        }
+        // Read at the middle, and in the rep's own pixel space: ImageRenderer
+        // draws at scale 2, so the bitmap is twice the size asked for.
+        return try XCTUnwrap(
+            rep.colorAt(x: rep.pixelsWide / 2, y: rep.pixelsHigh / 2)?
+                .usingColorSpace(.sRGB),
+            "nothing was drawn to read a colour from")
     }
 
     private func brightness(_ colour: NSColor) -> CGFloat { colour.brightnessComponent }
 
-    func testAHostedRenderIgnoresTheMachinesOwnAppearance() throws {
-        let previous = NSApplication.shared.appearance
-        defer { NSApplication.shared.appearance = previous }
+    func testNoRendererFollowsTheMachinesOwnAppearance() throws {
+        for renderer in Renderer.allCases {
+            let previous = NSApplication.shared.appearance
+            defer { NSApplication.shared.appearance = previous }
 
-        NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
-        let underDark = try drawnWindowBackground()
+            NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+            let underDark = try drawnWindowBackground(through: renderer)
 
-        NSApplication.shared.appearance = NSAppearance(named: .aqua)
-        let underLight = try drawnWindowBackground()
+            NSApplication.shared.appearance = NSAppearance(named: .aqua)
+            let underLight = try drawnWindowBackground(through: renderer)
 
-        XCTAssertEqual(brightness(underDark), brightness(underLight), accuracy: 0.01, """
-            the same view renders differently depending on what appearance the \
-            machine happens to be in: \(brightness(underDark)) against \
-            \(brightness(underLight)). The app pins itself to aqua, so a render \
-            that follows the machine is a picture of a screen the app never draws, \
-            and on a Mac in dark mode the whole review sheet is one.
-            """)
+            XCTAssertEqual(brightness(underDark), brightness(underLight), accuracy: 0.01, """
+                \(renderer.rawValue) renders the same view differently depending on \
+                what appearance the machine happens to be in: \(brightness(underDark)) \
+                against \(brightness(underLight)). The app pins itself to aqua, so a \
+                render that follows the machine is a picture of a screen the app never \
+                draws, and on a Mac in dark mode the whole review sheet is one.
+                """)
+        }
     }
 
-    func testTheRenderIsPinnedToTheAppearanceTheAppUsesRatherThanEitherOne() throws {
+    func testEveryRendererIsPinnedToTheAppearanceTheAppUsesRatherThanEitherOne() throws {
         // The check above is satisfied by pinning to EITHER appearance, as long
         // as it is consistent, and dark would satisfy it just as well. This
         // says which one, against the same appearance PaintedSurfaces resolves
@@ -71,17 +92,20 @@ final class RenderAppearanceTests: XCTestCase {
         defer { NSApplication.shared.appearance = previous }
         NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
 
-        let drawn = try drawnWindowBackground()
         let expected = try XCTUnwrap(
             NSColor(PaintedSurfaces.systemFormBackground).usingColorSpace(.sRGB))
 
-        XCTAssertEqual(brightness(drawn), brightness(expected), accuracy: 0.01, """
-            the render draws AppKit's window background at \(brightness(drawn)) \
-            while PaintedSurfaces resolves the same colour at \(brightness(expected)). \
-            The type and the surface under it are pinned to different appearances, \
-            which is how a screen ends up correct in every named colour and \
-            unreadable on screen.
-            """)
+        for renderer in Renderer.allCases {
+            let drawn = try drawnWindowBackground(through: renderer)
+
+            XCTAssertEqual(brightness(drawn), brightness(expected), accuracy: 0.01, """
+                \(renderer.rawValue) draws AppKit's window background at \
+                \(brightness(drawn)) while PaintedSurfaces resolves the same colour \
+                at \(brightness(expected)). The type and the surface under it are \
+                pinned to different appearances, which is how a screen ends up correct \
+                in every named colour and unreadable on screen.
+                """)
+        }
     }
 
     func testTheMeasurementCanTellTheTwoAppearancesApart() throws {

@@ -137,7 +137,19 @@ enum WordFootprint {
             ? ImageRenderer(content: AnyView(content.textRenderer(WordSwitch())))
             : ImageRenderer(content: AnyView(content))
         renderer.scale = 2
-        let image = try XCTUnwrap(renderer.nsImage, "the view produced no image at all")
+        // The appearance the app pins itself to, the same as the hosted path
+        // above (#918). `ImageRenderer` has no `appearance` property, so the
+        // render happens inside that appearance's drawing block instead.
+        //
+        // A missing appearance leaves `drawn` nil and the unwrap below refuses,
+        // rather than falling through to an unpinned render. An unpinned render
+        // is the defect, and one that silently substituted itself for the
+        // pinned one would be indistinguishable from the fix working (L11).
+        var drawn: NSImage?
+        PaintedSurfaces.pinnedAppearance?.performAsCurrentDrawingAppearance {
+            drawn = renderer.nsImage
+        }
+        let image = try XCTUnwrap(drawn, "the view produced no image at all")
         let tiff = try XCTUnwrap(image.tiffRepresentation)
         return try XCTUnwrap(NSBitmapImageRep(data: tiff))
     }

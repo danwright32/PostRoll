@@ -3,6 +3,6 @@
   "file": "PostRollApp/Tests/WordFootprint.swift",
   "find": "        host.appearance = PaintedSurfaces.pinnedAppearance",
   "replace": "        host.appearance = nil",
-  "test": "PostRollTests/RenderAppearanceTests/testAHostedRenderIgnoresTheMachinesOwnAppearance",
-  "breaks": "every hosted render follows the machine's appearance again while the app pins itself to light, so on a Mac in dark mode the platform chrome (a Form's background, a TextField's bezel, a Picker) is drawn near black under the app's light type. Measured at brightness 0.119 against the app's 1.0, and no check catches it because the checks read the colours this app NAMES (#918, L504)"
+  "test": "PostRollTests/RenderAppearanceTests/testNoRendererFollowsTheMachinesOwnAppearance",
+  "breaks": "the hosted render follows the machine's appearance again while the app pins itself to light, so on a Mac in dark mode the platform chrome (a Form's background, a TextField's bezel, a Picker) is drawn near black under the app's light type. Measured at brightness 0.119 against the app's 1.0, and no check catches it because the checks read the colours this app NAMES (#918, L504)"
 }
