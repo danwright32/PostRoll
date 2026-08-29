@@ -1,7 +1,7 @@
 {
   "name": "the-swift-half-reads-the-file-date-too",
   "file": "PostRollApp/Sources/Services/DesignStamp.swift",
-  "find": "            return predatesItsDesignChange(name, at: path)",
+  "find": "            return predatesItsDesignChange(name, at: path, changedDays: changedDays)",
   "replace": "            return false",
   "test": "tests/test_media_design_version.py::test_swift_reads_the_file_date_rather_than_only_the_stamp",
   "breaks": "the app, which is the half a person actually looks at, stops badging an unstamped asset older than its design change, while the Python suite stays green (#804, L3)"

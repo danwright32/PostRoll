@@ -134,7 +134,19 @@ enum DesignStamp {
         withCollageFromItsSidecar(in: dayDir, read(in: dayDir))
     }
 
-    static func staleTemplates(in dayDir: URL) -> [String] {
+    /// `changedDays` is injectable so a rule can be driven against a table that
+    /// actually contains its case (#921).
+    ///
+    /// Both rules about a template with NO recorded change used to be tested by
+    /// reading the shipping table and taking whatever had none. That worked
+    /// until the collage got one and the set went empty, at which point the
+    /// tests correctly refused to pass over nothing. A rule is tested by
+    /// feeding it the case, not by hoping the shipping data still holds one
+    /// (L1). Defaulted, so every caller in the app is unchanged.
+    static func staleTemplates(
+        in dayDir: URL,
+        changedDays: [String: String] = MediaDesign.mediaDesignChanged
+    ) -> [String] {
         let recorded = recorded(in: dayDir)
         // Scanned once. Asking inside the filter would re-read the folder for
         // every template it holds.
@@ -146,7 +158,7 @@ enum DesignStamp {
             // current is not badged for being old, and one stamped behind is
             // badged however new the file is.
             if let stamped = recorded[name] { return stamped < current }
-            return predatesItsDesignChange(name, at: path)
+            return predatesItsDesignChange(name, at: path, changedDays: changedDays)
         }
     }
 
@@ -165,8 +177,12 @@ enum DesignStamp {
     /// that sends somebody to re-render, and a copied or synced file carries a
     /// date at or after its real render rather than before it, so the same
     /// direction holds for a library that has been moved.
-    static func predatesItsDesignChange(_ template: String, at path: URL) -> Bool {
-        guard let changed = MediaDesign.changed(of: template) else { return false }
+    static func predatesItsDesignChange(
+        _ template: String,
+        at path: URL,
+        changedDays: [String: String] = MediaDesign.mediaDesignChanged
+    ) -> Bool {
+        guard let changed = MediaDesign.changedDay(changedDays[template]) else { return false }
         guard let written = try? path.resourceValues(forKeys: [.contentModificationDateKey])
                 .contentModificationDate else { return false }
         let calendar = Calendar(identifier: .gregorian)

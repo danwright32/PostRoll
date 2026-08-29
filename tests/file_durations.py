@@ -100,29 +100,27 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: (`test_frame_legibility.py`), a factor of 1.94, and 7.5% was its geometric
 #: middle.
 #:
-#: 4.5% since 2026-08-27, re-chosen against a fresh recording rather than
-#: nudged. `test_fast_subset_stays_honest` went red exactly as it is meant to:
-#: `test_frame_legibility` had grown to 9.3% and `test_generate_media_friday_clips`
-#: to 6.1%, which put both inside the band around 7.5%, and no floor between
-#: them could clear it: that gap is a factor of 1.54 and the band asks for 1.56.
+#: 7% since 2026-08-28, re-chosen against a third recording. This floor moves
+#: whenever the suite grows enough to change what share a file is, which is the
+#: guard working rather than churn: it goes red the moment a file lands near the
+#: line, and the answer is always to re-measure and re-choose rather than to
+#: widen the band.
 #:
-#: So the floor moved to the widest gap the distribution actually has, which is
-#: now 6.05% (`test_generate_media_friday_clips`) to 3.25%
-#: (`test_render_clip_reel`), a factor of 1.86. 4.5% is its geometric middle,
-#: and its neighbours sit at 0.72x and 1.34x of it against a band of 0.8 to
-#: 1.25.
+#: `test_generate_media_friday_clips` was 6.1% and is 4.99% now, not because it
+#: got faster but because the suite around it grew. It falls back OUT of the
+#: expensive set, so the fast run pays for it again, and the set is four files
+#: as it was before 2026-08-27.
 #:
-#: This one DOES change behaviour, unlike the move to 7.5%:
-#: `test_generate_media_friday_clips` is above the floor now and the fast run
-#: skips it. That is the honest reading rather than a side effect. It was 3.3%
-#: of the run when the set was last derived and it is 6.1% now, so the fast loop
-#: had come to pay for it every time.
+#: The widest gap in the distribution is now 4.99%
+#: (`test_generate_media_friday_clips`) to 9.67% (`test_frame_legibility`), a
+#: factor of 1.94, and 7% is its geometric middle. Its neighbours sit at 0.71x
+#: and 1.38x of it against a band of 0.8 to 1.25.
 #:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.045
+EXPENSIVE_SHARE = 0.07
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:

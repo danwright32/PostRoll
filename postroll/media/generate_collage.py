@@ -35,6 +35,7 @@ from .design_tokens import (
     GUTTER as GAP,
     HAIRLINE,
     MAT_GALLERY as MAT,
+    SAFE_BOTTOM,
     TEXT_DARK,
 )
 from .brand_text import detail_lines
@@ -280,6 +281,103 @@ def _all_splits(n: int) -> list[tuple[list[int], list[int]]]:
     return [(list(t), list(b)) for t in valid_top for b in valid_bottom]
 
 
+# === The phone chrome (#921) ===
+#
+# The crop budget above asks whether a photograph is squeezed. It has never
+# asked WHERE the photographs land, and the collage is the only static template
+# where that varies: every other one has a fixed design somebody positioned
+# against the chrome once (#753, #778, #898), while this one draws an
+# arrangement at random. So the pool contained arrangements that put a whole row
+# inside the band Instagram lays its account row and caption over, and the file
+# on disk was perfectly correct either way.
+
+#: How much of one photograph may sit behind Instagram's caption.
+#:
+#: More than HALF is the line, which is a sentence rather than a fitted number:
+#: an arrangement moving from 51% to 49% has genuinely become acceptable, so it
+#: needs no clear air either side the way a threshold chosen from a gap does.
+#:
+#: It does land in clear air at both counts that ship, which is the check that
+#: it is not quietly excluding everything (L172). Measured on 2026-08-28 over
+#: every arrangement the crop budget admits, landscape:
+#:
+#:     7 photos:  kept 18.5% to 33.0%,  rejected 53.6% to 88.9%
+#:    10 photos:  kept 26.5% to 42.1%,  rejected 53.6% to 64.0%
+#:
+#: Some overlap is unavoidable and is not what this is about: the last row ends
+#: at the mat, and MAT is thinner than SAFE_BOTTOM, so EVERY arrangement loses
+#: the bottom sliver of its final row. That is a crop. Losing half a photograph
+#: is not.
+MOSTLY_HIDDEN = 0.5
+
+
+def caption_band_top() -> int:
+    """The first row of canvas Instagram lays its own words over.
+
+    Derived from the token rather than restated, so a re-measurement of what
+    Instagram covers carries this with it (L41).
+    """
+    return CANVAS_H - SAFE_BOTTOM
+
+
+def _row_extents(split: tuple[list[int], list[int]],
+                 photo_ratios: list[float]) -> list[tuple[int, int]]:
+    """Each row's top and bottom in canvas pixels.
+
+    The same walk `plan_collage_cells` does, without the widths: a row's
+    vertical position is fixed by the split and the shapes alone, so this needs
+    no rng and cannot disagree with what renders.
+    """
+    top_pattern, bottom_pattern = split
+    rows = list(top_pattern) + list(bottom_pattern)
+    heights = _row_heights(rows, photo_ratios)
+
+    extents: list[tuple[int, int]] = []
+    y = MAT
+    for row_idx, _ in enumerate(rows):
+        extents.append((y, y + heights[row_idx]))
+        y += heights[row_idx]
+        if row_idx == len(top_pattern) - 1:
+            y += STRIP_H
+        elif row_idx < len(rows) - 1:
+            y += GAP
+    return extents
+
+
+def hidden_by_the_caption(split: tuple[list[int], list[int]],
+                          photo_ratios: list[float]) -> float:
+    """The worst row's fraction sitting behind Instagram's caption.
+
+    Reported for the WORST row rather than averaged over the frame, because the
+    harm is one photograph being gone and an average lets a tall hero above pay
+    for a buried row below (L63).
+    """
+    band = caption_band_top()
+    worst = 0.0
+    for top, bottom in _row_extents(split, photo_ratios):
+        height = bottom - top
+        if height <= 0:
+            continue
+        worst = max(worst, max(0, bottom - max(top, band)) / height)
+    return worst
+
+
+def chrome_safe_collage_splits(
+    n: int,
+    photo_ratios: list[float] | None = None,
+) -> list[tuple[list[int], list[int]]]:
+    """The arrangements that fit the crop budget AND keep every photograph at
+    least half visible.
+
+    May be empty, like `fitting_collage_splits`: what to do about that is the
+    caller's decision, and `distinct_collage_splits` makes it.
+    """
+    fitting = fitting_collage_splits(n, photo_ratios)
+    if photo_ratios is None:
+        return fitting
+    return [s for s in fitting if hidden_by_the_caption(s, photo_ratios) <= MOSTLY_HIDDEN]
+
+
 def fitting_collage_splits(
     n: int,
     photo_ratios: list[float] | None = None,
@@ -325,14 +423,35 @@ def distinct_collage_splits(
     specific photos are dropped. This is what makes the layout shape-aware: a
     3-across row survives where the row is naturally short, and disappears where
     it would have to be stretched into slivers.
+
+    Since #921 an arrangement that buries a photograph behind Instagram's
+    caption is dropped too, and that filter runs FIRST so both the gallery and
+    the random pick are drawn from the same safe set. Two reasons to reject with
+    two fallbacks, in that order, because they are different failures with
+    different costs: rendering something half hidden is worse than rendering
+    something over-cropped, and both are better than rendering nothing.
     """
     splits = _all_splits(n)
     if photo_ratios is None:
         return splits
 
+    safe = chrome_safe_collage_splits(n, photo_ratios)
+    if safe:
+        return safe
+
     fitting = fitting_collage_splits(n, photo_ratios)
     if fitting:
-        return fitting
+        # Every arrangement that fits the crop budget also buries a photograph.
+        # Said out loud rather than chosen silently: the person can drop a photo
+        # or use a different day, and neither is something this can do for them.
+        print(
+            f"WARNING: every collage layout for {n} photos of aspect "
+            f"{[round(r, 2) for r in photo_ratios]} puts more than "
+            f"{MOSTLY_HIDDEN:.0%} of a photograph behind Instagram's caption. "
+            "Rendering the least bad one; use fewer photos to avoid it.",
+            file=sys.stderr,
+        )
+        return sorted(fitting, key=lambda s: hidden_by_the_caption(s, photo_ratios))
 
     # No arrangement in the pool can hold these photos without breaching the crop
     # budget. Say so rather than quietly rendering the sliver anyway.

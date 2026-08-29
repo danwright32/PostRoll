@@ -50,7 +50,7 @@ enum PhoneSafeArea {
 /// older design, and is badged rather than left to render the old look
 /// indefinitely until somebody happens to regenerate that day.
 enum CollageDesign {
-    static let collageDesignVersion = 1
+    static let collageDesignVersion = 2
 }
 
 /// Which generation of each template's design this build renders (#286).
@@ -66,7 +66,7 @@ enum CollageDesign {
 /// what the stamp records and what a day folder is scanned for.
 enum MediaDesign {
     static let mediaDesignVersions: [String: Int] = [
-        "collage": 1,
+        "collage": 2,
         "story": 2,
         "cover": 2,
         "before_after": 2,
@@ -94,6 +94,7 @@ enum MediaDesign {
     /// still at its first version has no change to be older than, only a date
     /// on which a number was first written down.
     static let mediaDesignChanged: [String: String] = [
+        "collage": "2026-08-28",
         "story": "2026-08-21",
         "cover": "2026-08-21",
         "before_after": "2026-08-21",
@@ -111,7 +112,13 @@ enum MediaDesign {
     /// The day `template`'s design last changed, or nil for one that has never
     /// been bumped and therefore has no change to be older than.
     static func changed(of template: String) -> Date? {
-        guard let text = mediaDesignChanged[template] else { return nil }
+        changedDay(mediaDesignChanged[template])
+    }
+
+    /// The same parse, over a day somebody hands in rather than one looked up.
+    /// Split out so a rule can be driven against an injected table (#921).
+    static func changedDay(_ text: String?) -> Date? {
+        guard let text else { return nil }
         return isoDay.date(from: text)
     }
 
