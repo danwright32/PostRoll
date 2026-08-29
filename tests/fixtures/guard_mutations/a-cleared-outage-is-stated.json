@@ -1,0 +1,8 @@
+{
+  "name": "a-cleared-outage-is-stated",
+  "file": "tools/wait_for_checks.py",
+  "find": "            if attempt > 1:",
+  "replace": "            if False:",
+  "test": "tests/test_wait_for_checks.py::test_an_outage_that_cleared_is_stated_rather_than_left_in_the_scrollback",
+  "breaks": "a wait that spent minutes unable to reach GitHub ends on the same lines as one that never met an outage, so the only trace is a few retry lines that scrolled past and nothing downstream can tell the two apart (#936, L77)"
+}

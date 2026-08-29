@@ -785,9 +785,23 @@ def ask(
     while True:
         attempt += 1
         try:
-            return poll(number)
+            reading = poll(number)
         except GhUnusable as error:
             last = error
+        else:
+            if attempt > 1:
+                # Said once, on the way out, because a run that survived an
+                # outage otherwise ends on "green" and "merged" with the only
+                # trace a few lines that scrolled past. With the budget now
+                # stretching to minutes that is the difference between a healthy
+                # run and one that spent two of them unable to reach GitHub, and
+                # nothing downstream could tell them apart (L77).
+                #
+                # Only when there was something to recover from: a line printed
+                # on every run carries no information.
+                out(f"  gh recovered after {now() - started:.0f}s and "
+                    f"{attempt} attempts")
+            return reading
         patience_left = budget - (now() - started)
         this = min(pause, patience_left, deadline - now())
         if this <= 0:

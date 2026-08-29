@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -1229,3 +1230,53 @@ def test_the_pauses_grow_rather_than_repeating_one_length():
     assert len(pauses) >= 3, pauses
     assert pauses == sorted(pauses), f"the pauses do not grow: {pauses}"
     assert pauses[-1] > pauses[0], f"every pause is the same length: {pauses}"
+
+
+def test_an_outage_that_cleared_is_stated_rather_than_left_in_the_scrollback():
+    """A wait that survived an outage must not read like one that never met it.
+
+    The retries are each said out loud, but the run then carries on and ends on
+    "green" and "merged", so the only trace is a few lines that scrolled past.
+    With the budget now stretching to minutes, that is the difference between a
+    healthy run and one that spent two minutes unable to reach GitHub, and
+    nothing downstream could tell them apart (L77, L106).
+    """
+    lines: list[str] = []
+    clock = FakeClock()
+
+    def poll(_number: str) -> Poll:
+        if clock.t < 20.0:
+            raise GhUnusable("HTTP 503: No server is currently available")
+        return Poll(head_sha=HEAD_SHA, rows=real_reply())
+
+    code = main(["7", "--timeout", "2400", "--interval", "30"],
+                poll=poll, now=clock.now, sleep=clock.sleep,
+                workflows=WORKFLOWS, out=lines.append)
+
+    assert code == EXIT_GREEN
+    recovered = [line for line in lines if "recovered" in line]
+    assert recovered, f"nothing said the outage had cleared: {lines}"
+
+    # Held to what actually happened rather than to a number written here: the
+    # attempts it reports are the failures said out loud, plus the one that
+    # worked. A count asserted against a constant would be a second recording
+    # of the backoff schedule, and would go red on any change to it (L63).
+    failures = len([line for line in lines if "gh failed" in line])
+    said = int(re.search(r"(\d+) attempts", recovered[0]).group(1))
+    assert said == failures + 1, (
+        f"{recovered[0]!r} claims {said} attempts, and {failures} failures were "
+        "reported before it succeeded")
+
+
+def test_a_clean_run_says_nothing_about_recovering():
+    """The other half. A line that appears on every run carries no information,
+    and one saying an outage cleared when there was none is worse than that."""
+    lines: list[str] = []
+    clock = FakeClock()
+
+    main(["7", "--timeout", "600", "--interval", "30"],
+         poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
+         now=clock.now, sleep=clock.sleep, workflows=WORKFLOWS,
+         out=lines.append)
+
+    assert not [line for line in lines if "recovered" in line], lines
