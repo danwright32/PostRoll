@@ -42,9 +42,14 @@ struct OCRReviewView: View {
     /// The book this screen fills its handle fields from (#937).
     ///
     /// Injected, and it is `init` that reads it: building this screen at all
-    /// reached into the book Dan has built up across every event he has shot,
-    /// which is the same thing the Settings screen was doing and the reason
-    /// neither could be rendered for review (#918, L2). The app passes the
+    /// fills its handle fields from the book, so a render pictures whatever the
+    /// book held rather than a state somebody chose.
+    ///
+    /// NOT because the shared book is Dan's real one under test. It is not:
+    /// `HandleBook` reads `AppPreferences.store`, which is a scratch suite in
+    /// the test bundle. It is because that scratch suite is SHARED, so it holds
+    /// whatever else the run wrote and the guessed handle this screen marks
+    /// (#459) would come and go with test order (L205). The app passes the
     /// shared one and behaves exactly as before.
     ///
     /// Every use, reads and WRITES both. This screen records what was typed

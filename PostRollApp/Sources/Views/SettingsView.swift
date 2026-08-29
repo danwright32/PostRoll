@@ -34,11 +34,21 @@ struct SettingsView: View {
 
     /// The handle book the saved handles panes list (#918).
     ///
-    /// Injected for the same reason as the key above, and it is the same class
-    /// of problem: `SavedHandlesSection` already took its book as a parameter,
-    /// and this screen was the call site handing it `.shared`, so rendering
-    /// Settings anywhere read the book Dan has built up across every event he
-    /// has shot (L2). The app still passes the shared one.
+    /// Injected because a rendered pane has to picture a book somebody CHOSE.
+    ///
+    /// A correction to what this comment first said. It claimed a render read
+    /// the book Dan has built up across every event he has shot. It does not:
+    /// `HandleBook` reads `AppPreferences.store`, and under `POSTROLL_TESTS`
+    /// that is a scratch suite, so the shared book in a test is already off his
+    /// data. The keychain above is the one with no such redirection, which is
+    /// why that seam is an L2 matter and this one is not.
+    ///
+    /// The reason that survives is still a reason. A shared scratch suite holds
+    /// whatever every other test in the run happened to write, so a picture of
+    /// the saved handles pane would be a picture of leakage, changing with test
+    /// order rather than saying anything (L205). `SavedHandlesSection` already
+    /// took its book as a parameter and this screen was the call site handing
+    /// it `.shared`. The app still passes the shared one.
     let book: HandleBook
 
     @State private var apiKey: String
