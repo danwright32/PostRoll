@@ -137,19 +137,26 @@ enum WordFootprint {
             ? ImageRenderer(content: AnyView(content.textRenderer(WordSwitch())))
             : ImageRenderer(content: AnyView(content))
         renderer.scale = 2
-        // The appearance the app pins itself to, the same as the hosted path
-        // above (#918). `ImageRenderer` has no `appearance` property, so the
-        // render happens inside that appearance's drawing block instead.
+        // Deliberately NOT pinned to an appearance, unlike `hosted` below.
         //
-        // A missing appearance leaves `drawn` nil and the unwrap below refuses,
-        // rather than falling through to an unpinned render. An unpinned render
-        // is the defect, and one that silently substituted itself for the
-        // pinned one would be indistinguishable from the fix working (L11).
-        var drawn: NSImage?
-        PaintedSurfaces.pinnedAppearance?.performAsCurrentDrawingAppearance {
-            drawn = renderer.nsImage
-        }
-        let image = try XCTUnwrap(drawn, "the view produced no image at all")
+        // A pin was added here first, on the assumption that this renderer
+        // followed the machine the way the hosted one does. Measured on
+        // 2026-08-29 with the pin removed, `ImageRenderer` draws AppKit's
+        // window background at brightness 1.0 under every combination of
+        // application appearance and drawing appearance: aqua/aqua,
+        // aqua/darkAqua, darkAqua/aqua and darkAqua/darkAqua. It follows
+        // neither, and always draws light.
+        //
+        // So the pin changed nothing, and its registry entry could never fail,
+        // which is worse than having no guard: a check that cannot go red reads
+        // as one that passes (L182). Both are gone, and this comment is what
+        // stops the next person adding it back from the same assumption.
+        //
+        // `RenderAppearanceTests` still covers this renderer. It asserts the
+        // PROPERTY, that both renderers come out in the appearance the app
+        // pins, rather than the mechanism, so if ImageRenderer ever starts
+        // following the machine it fails here instead of going unnoticed.
+        let image = try XCTUnwrap(renderer.nsImage, "the view produced no image at all")
         let tiff = try XCTUnwrap(image.tiffRepresentation)
         return try XCTUnwrap(NSBitmapImageRep(data: tiff))
     }

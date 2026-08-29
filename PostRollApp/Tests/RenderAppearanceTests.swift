@@ -31,9 +31,14 @@ final class RenderAppearanceTests: XCTestCase {
     /// Both renderers, because the suite draws through both and a fix scoped to
     /// the one whose symptom was noticed is absent in the other (L173).
     ///
-    /// `hosted` is a real AppKit host and takes an appearance directly.
-    /// `imageRendered` is `ImageRenderer`, which has no such property, so its
-    /// render happens inside that appearance's drawing block instead.
+    /// They get there by different routes, and only one of them is ours.
+    /// `hosted` is a real AppKit host and is GIVEN the appearance, because
+    /// without one it inherits the machine's. `imageRendered` was measured on
+    /// 2026-08-29 to follow neither the application appearance nor the drawing
+    /// appearance: it draws light whatever either of them says. So nothing
+    /// pins it, and what is asserted here is the PROPERTY both must have
+    /// rather than the mechanism either uses, which is what makes this fail if
+    /// ImageRenderer ever starts following the machine.
     enum Renderer: String, CaseIterable {
         case hosted, imageRendered
     }

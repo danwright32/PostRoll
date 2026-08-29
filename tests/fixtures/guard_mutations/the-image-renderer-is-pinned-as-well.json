@@ -1,8 +1,0 @@
-{
-  "name": "the-image-renderer-is-pinned-as-well",
-  "file": "PostRollApp/Tests/WordFootprint.swift",
-  "find": "        PaintedSurfaces.pinnedAppearance?.performAsCurrentDrawingAppearance {\n            drawn = renderer.nsImage\n        }",
-  "replace": "        drawn = renderer.nsImage",
-  "test": "PostRollTests/RenderAppearanceTests/testNoRendererFollowsTheMachinesOwnAppearance",
-  "breaks": "the OTHER renderer goes back to following the machine's appearance. The suite draws through both, so a pin applied only to the one whose symptom was noticed leaves every ImageRenderer surface, which is most of the notices, drawn in a mode the app never runs in (#918, L173)"
-}
