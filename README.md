@@ -187,7 +187,7 @@ make test-python-fast
 ```
 
 That deselects the handful of test files measured above the floor in
-`tests/file_durations.py`, which is four of them today. It is a loop, not a
+`tests/file_durations.py`, which is five of them today. It is a loop, not a
 gate: `make test-python` and CI still run everything. Which files it skips comes
 from a measurement rather than a guess (#766), so a new file heavy enough to
 belong to the full run only is added to it by re-measuring:
