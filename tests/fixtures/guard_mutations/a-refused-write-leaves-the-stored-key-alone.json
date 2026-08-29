@@ -1,0 +1,8 @@
+{
+  "name": "a-refused-write-leaves-the-stored-key-alone",
+  "file": "PostRollApp/Sources/Services/KeychainStore.swift",
+  "find": "        guard write(trimmed) else {\n            return SaveOutcome(stored: stored, saved: false,\n                               error: SettingsCopy.keyNotSaved)\n        }",
+  "replace": "        guard write(trimmed) else {\n            return SaveOutcome(stored: trimmed, saved: false,\n                               error: SettingsCopy.keyNotSaved)\n        }",
+  "test": "PostRollTests/SaveButtonStateTests/testASaveTheKeychainRefusedLeavesTheStoredValueAlone",
+  "breaks": "a write the keychain refused still moves what the screen believes is stored, so the screen reports a key the keychain does not hold and the Save button goes quiet: the person is left facing a message saying the write failed with no way to try again (#112, #935, L95, L109)"
+}

@@ -58,6 +58,82 @@ enum KeychainStore {
         return cleaned.isEmpty || cleaned.count >= minimumKeyLength
     }
 
+    /// Whether pressing Save would do anything (#348, #935).
+    ///
+    /// `stored` is what the keychain held when it was last read, passed in
+    /// rather than fetched. This rule used to live inline in the view's
+    /// `.disabled(...)` modifier with a `readAPIKey()` inside it, so a
+    /// privileged keychain call ran on every render pass of the Settings
+    /// screen: typing one character into the field re-read the stored key.
+    ///
+    /// Both halves matter and they refuse for different reasons. Unchanged
+    /// means there is nothing to write, and a live button there reports Saved
+    /// for a write that changed nothing. Not savable means the value is too
+    /// short to be a whole key, which is #348: code that has already worked out
+    /// the value is wrong must block the action rather than label it and leave
+    /// the button live. The warning beside the field says which, so a disabled
+    /// button is never unexplained.
+    ///
+    /// Compared on the SANITISED value, because the field is a paste target and
+    /// a pasted key routinely carries a trailing newline: a stray space would
+    /// otherwise make an unchanged key look like a new one.
+    static func canSave(typed: String, stored: String) -> Bool {
+        sanitize(typed) != stored && isSavable(typed)
+    }
+
+    /// What a press of Save did, and what the screen holds afterwards (#935).
+    struct SaveOutcome: Equatable {
+        /// What the store holds now, as far as anything can tell.
+        var stored: String
+        /// Whether to show the Saved mark. Only ever true for a write that
+        /// landed: a refused write reporting as a successful one is #112.
+        var saved: Bool
+        /// Why not, when not. Distinct per refusal, because a refused save and
+        /// a refused delete leave the machine in different states and need
+        /// different remedies (L11).
+        var error: String?
+    }
+
+    /// Carry out the write the typed value asks for, and say what is left.
+    ///
+    /// Pulled out of the button's action so every branch can be exercised with
+    /// no keychain at all (#935). The screen now HOLDS the stored key rather
+    /// than re-reading it on each render, and that is only safe while the value
+    /// moves at exactly the right moments: a refused write must leave it alone,
+    /// or the screen reports a key the keychain does not hold and the button
+    /// offering the retry is the one reading it (L95).
+    ///
+    /// An empty value means remove the key, which is a real action and the only
+    /// way to perform it, rather than a malformed one.
+    ///
+    /// The writers are parameters so a test can refuse without a keychain, and
+    /// they default to the real ones so no call site can accidentally get a
+    /// fake: a seam whose default became the test double would leave the app
+    /// writing nowhere (L196).
+    static func save(typed: String,
+                     stored: String,
+                     write: (String) -> Bool = { saveAPIKey($0) },
+                     remove: () -> Bool = { deleteAPIKey() }) -> SaveOutcome {
+        let trimmed = sanitize(typed)
+
+        if trimmed.isEmpty {
+            guard remove() else {
+                return SaveOutcome(stored: stored, saved: false,
+                                   error: SettingsCopy.keyNotRemoved)
+            }
+            return SaveOutcome(stored: "", saved: true, error: nil)
+        }
+
+        guard write(trimmed) else {
+            return SaveOutcome(stored: stored, saved: false,
+                               error: SettingsCopy.keyNotSaved)
+        }
+        // The SANITISED value, which is what was written. Storing what was typed
+        // would leave the screen holding a value with a newline on it that the
+        // keychain does not have, so the button would stay live for ever (#128).
+        return SaveOutcome(stored: trimmed, saved: true, error: nil)
+    }
+
     /// What is wrong with the shape of what was typed, or nil.
     ///
     /// Pasting a key WITHOUT its `sk-ant-` prefix produced the same generic
