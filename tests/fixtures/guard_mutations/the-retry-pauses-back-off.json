@@ -1,0 +1,8 @@
+{
+  "name": "the-retry-pauses-back-off",
+  "file": "tools/wait_for_checks.py",
+  "find": "        pause = min(pause * 2, cap)",
+  "replace": "        pause = min(pause, cap)",
+  "test": "tests/test_wait_for_checks.py::test_the_pauses_grow_rather_than_repeating_one_length",
+  "breaks": "the widened budget is spent as many short pauses instead of a backoff, so a longer outage is answered by a busy loop against a service that is already struggling (#936)"
+}

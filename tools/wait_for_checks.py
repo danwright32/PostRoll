@@ -691,22 +691,52 @@ def parse_arguments(argv: Sequence[str]) -> Arguments:
                      merge)
 
 
-# How many times one poll is attempted before gh is called unusable, and how
-# long to pause between attempts (#657).
+# How long one poll may be retried before gh is called unusable (#657, #936).
 #
 # One momentary API error is not evidence that gh cannot be asked: an HTTP 503
 # four minutes into a 2400 second wait ended a whole run, so a GitHub wobble
 # cost a full restart, and during a real incident, which is exactly when a
 # status is hardest to read by hand, the wait could never finish.
 #
-# Deliberately small and fixed. This retries the ASKING, never the verdict: a
-# reply that arrives and says nothing usable is still answered by the same rules
-# as before, and a failure that does not clear is still unusable, just seconds
-# later instead of instantly. Retrying every failure rather than only the ones
-# that look transient keeps this free of a second, message-matching classifier
-# that would eventually disagree with itself (L35).
-ASK_ATTEMPTS = 3
-ASK_BACKOFF_SECONDS = (2.0, 4.0)
+# This retries the ASKING, never the verdict: a reply that arrives and says
+# nothing usable is still answered by the same rules as before, and a failure
+# that does not clear is still unusable, just later instead of instantly.
+# Retrying every failure rather than only the ones that look transient keeps
+# this free of a second, message-matching classifier that would eventually
+# disagree with itself (L35). None of that changes here.
+#
+# What changed is the patience, and only the patience. It was three attempts
+# with two fixed pauses, so six seconds, whatever the caller had asked to wait.
+# On 2026-08-28 this machine ran out of network sockets under load from several
+# concurrent builds and `dial tcp ... can't assign requested address` outlived
+# those six seconds. The tool refused correctly rather than inventing an answer,
+# and PR #934 was then left open and unmerged with nothing watching it, which in
+# an unattended run means work silently does not land.
+#
+# So the budget is a share of the timeout the caller already passes: somebody
+# willing to wait forty minutes is willing to spend two of them finding out
+# whether GitHub is reachable, and somebody who asked for sixty seconds is not.
+#
+# A share and not the whole remaining wait, because the other half matters just
+# as much: gh being genuinely unusable, not installed or not authenticated, has
+# to be reported while somebody could still act on it rather than at the end of
+# a wait they would otherwise have spent watching. The floor keeps a very short
+# wait at least the two pauses it had before.
+ASK_BUDGET_SHARE = 0.05
+ASK_BUDGET_FLOOR_SECONDS = 6.0
+
+# Doubling from here, capped at the caller's own polling interval, so a long
+# outage is not answered by a busy loop against a service already struggling and
+# the retries never go quieter than the ordinary ticks around them. Capped at
+# the interval rather than at a number of its own, because that is a cadence the
+# caller has already chosen and a second one here is a second thing to disagree
+# with (L41).
+ASK_BACKOFF_START_SECONDS = 2.0
+
+
+def ask_budget(timeout: float) -> float:
+    """How long one poll may be retried for, given the caller's whole timeout."""
+    return max(ASK_BUDGET_FLOOR_SECONDS, timeout * ASK_BUDGET_SHARE)
 
 
 def _commits(count: int) -> str:
@@ -733,25 +763,39 @@ def ask(
     poll: Callable[[str], Poll],
     sleep: Callable[[float], None],
     out: Callable[[str], None],
+    now: Callable[[], float],
+    deadline: float,
+    budget: float,
+    cap: float,
 ) -> Poll:
-    """One poll, retried a few times before gh is declared unusable.
+    """One poll, retried within a budget before gh is declared unusable.
 
-    Each retry is said out loud, because a retry nobody can see is
-    indistinguishable from a wait that has stalled (L106).
+    Bounded twice over, by the budget and by the overall deadline, and whichever
+    runs out first ends it. The deadline matters on its own: a caller asking for
+    a sixty second wait must not have it turn into a longer one because the
+    retry budget had a floor under it.
+
+    Each retry is said out loud, with what is left, because a retry nobody can
+    see is indistinguishable from a wait that has stalled (L106).
     """
+    started = now()
+    pause = ASK_BACKOFF_START_SECONDS
     last: GhUnusable | None = None
-    for attempt in range(1, ASK_ATTEMPTS + 1):
+    attempt = 0
+    while True:
+        attempt += 1
         try:
             return poll(number)
         except GhUnusable as error:
             last = error
-            if attempt == ASK_ATTEMPTS:
-                break
-            pause = ASK_BACKOFF_SECONDS[min(attempt - 1,
-                                            len(ASK_BACKOFF_SECONDS) - 1)]
-            out(f"  gh failed ({error}), retrying in {pause:.0f}s "
-                f"[attempt {attempt} of {ASK_ATTEMPTS}]")
-            sleep(pause)
+        patience_left = budget - (now() - started)
+        this = min(pause, patience_left, deadline - now())
+        if this <= 0:
+            break
+        out(f"  gh failed ({last}), retrying in {this:.0f}s "
+            f"[attempt {attempt}, {patience_left:.0f}s of patience left]")
+        sleep(this)
+        pause = min(pause * 2, cap)
     assert last is not None
     raise last
 
@@ -790,7 +834,9 @@ def main(
 
     while True:
         try:
-            reading = ask(number, poll=poll, sleep=sleep, out=out)
+            reading = ask(number, poll=poll, sleep=sleep, out=out, now=now,
+                          deadline=deadline, budget=ask_budget(timeout),
+                          cap=interval)
         except GhUnusable as error:
             out(f"cannot ask gh: {error}")
             return EXIT_UNUSABLE

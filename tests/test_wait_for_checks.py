@@ -1111,3 +1111,121 @@ def test_a_base_branch_with_no_commit_is_refused() -> None:
         base_standing("7", HEAD_SHA, api=api)
 
     assert "main" in str(refusal.value), refusal.value
+
+
+# ── #936: the retry budget scales with the caller's patience ──────────────────
+#
+# On 2026-08-28 the local machine ran out of network sockets under load from
+# several concurrent builds, and `dial tcp ... can't assign requested address`
+# persisted past the six seconds the two fixed pauses bought. The tool refused
+# correctly rather than inventing an answer, but PR #934 was left open and
+# unmerged with nothing watching it, which in an unattended run means work
+# silently does not land.
+#
+# What must not change: it still retries the ASKING and never the verdict, it
+# still refuses rather than guessing when the failure does not clear, and it
+# still classifies no error as transient. Only the patience widens.
+
+
+def _always_failing(text: str = "dial tcp 140.82.121.6:443: can't assign requested address"):
+    def poll(_number: str) -> Poll:
+        raise GhUnusable(text)
+    return poll
+
+
+def _retry_seconds(timeout: str, interval: str = "30") -> float:
+    """How long a permanently failing gh is retried for, on the fake clock."""
+    clock = FakeClock()
+    code = main(["7", "--timeout", timeout, "--interval", interval],
+                poll=_always_failing(), now=clock.now, sleep=clock.sleep,
+                workflows=WORKFLOWS, out=lambda _line: None)
+    assert code == EXIT_UNUSABLE, code
+    return clock.t
+
+
+def test_the_retry_budget_scales_with_how_long_the_caller_would_wait():
+    """The whole issue. The budget was two fixed pauses, so a caller willing to
+    wait forty minutes got the same six seconds of patience as one willing to
+    wait one, and an outage lasting seven seconds ended both."""
+    patient = _retry_seconds("2400")
+    hurried = _retry_seconds("600")
+
+    assert patient > hurried, (
+        f"a 2400s wait retried for {patient}s and a 600s wait for {hurried}s, "
+        "so the patience does not scale with what the caller asked for")
+
+
+def test_an_outage_lasting_longer_than_the_old_six_seconds_no_longer_ends_it():
+    """The measured incident, as a case. Six seconds of retrying was the whole
+    budget before this, so an error that outlived it ended a 2400 second wait
+    and left the pull request with nothing watching it."""
+    clock = FakeClock()
+    down_until = 45.0
+
+    def poll(_number: str) -> Poll:
+        if clock.t < down_until:
+            raise GhUnusable(
+                "dial tcp 140.82.121.6:443: can't assign requested address")
+        return Poll(head_sha=HEAD_SHA, rows=real_reply())
+
+    code = main(["7", "--timeout", "2400", "--interval", "30"],
+                poll=poll, now=clock.now, sleep=clock.sleep,
+                workflows=WORKFLOWS, out=lambda _line: None)
+
+    assert code == EXIT_GREEN, (
+        f"a {down_until:.0f}s outage inside a 2400s wait still ended it")
+
+
+def test_a_failure_that_does_not_clear_still_ends_well_before_the_deadline():
+    """The other half, and the one the widening could quietly destroy.
+
+    gh being genuinely unusable (not installed, not authenticated) must be
+    reported while somebody could still act on it, not at the end of a wait
+    they would otherwise have spent watching. Asserted as a share of the
+    timeout rather than against the budget constant, because a check whose
+    expected value comes from the code it checks can only confirm the code
+    agrees with itself (L70).
+    """
+    spent = _retry_seconds("2400")
+
+    assert 0 < spent < 2400 * 0.25, (
+        f"a permanent failure cost {spent}s of a 2400s wait, which is no longer "
+        "a bounded retry: it is the wait")
+
+
+def test_no_kind_of_failure_is_retried_differently_from_any_other():
+    """The rule the issue says to keep exactly as it is.
+
+    Retrying every failure rather than the ones that look transient is what
+    keeps this free of a second, message-matching classifier that would
+    eventually disagree with the first one (L35). Two failures that read very
+    differently must cost the same patience.
+    """
+    def spent(text: str) -> float:
+        clock = FakeClock()
+        main(["7", "--timeout", "600", "--interval", "30"],
+             poll=_always_failing(text), now=clock.now, sleep=clock.sleep,
+             workflows=WORKFLOWS, out=lambda _line: None)
+        return clock.t
+
+    assert spent("HTTP 503: No server is currently available") == spent(
+        "gh: authentication required")
+
+
+def test_the_pauses_grow_rather_than_repeating_one_length():
+    """A budget spent as many short pauses is a busy loop against a service
+    that is already struggling. It has to back off."""
+    pauses: list[float] = []
+    clock = FakeClock()
+
+    def sleep(seconds: float) -> None:
+        pauses.append(seconds)
+        clock.sleep(seconds)
+
+    main(["7", "--timeout", "2400", "--interval", "30"],
+         poll=_always_failing(), now=clock.now, sleep=sleep,
+         workflows=WORKFLOWS, out=lambda _line: None)
+
+    assert len(pauses) >= 3, pauses
+    assert pauses == sorted(pauses), f"the pauses do not grow: {pauses}"
+    assert pauses[-1] > pauses[0], f"every pause is the same length: {pauses}"
