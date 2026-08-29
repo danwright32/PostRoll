@@ -74,6 +74,26 @@ LIVE_ARGUMENT = re.compile(r"(?:fileURL|storeURL|dataRoot|root)\s*:\s*AppPaths\.
 # only thing the app compiles and the test bundle does not.
 LIVE_PREFERENCES = re.compile(r"UserDefaults\.standard|(?<![\w.])\.standard\b")
 
+# A shared instance built from one of the live locations (#945).
+#
+# `LIVE_DEFAULT` reads initializer PARAMETERS, so it never saw
+# `AccountBook.shared = AccountBook(fileURL: AppPaths.accountsFile)`: nothing is
+# defaulted there, the live path is passed outright, and `AccountBook.init`
+# calls `load()`, so the first touch of that property in the test bundle read
+# Dan's real follower counts. Nothing was wrong on the day only because no
+# accounts.json existed yet; the file appears the first time an export records
+# a count, and from then on the suite would read real numbers about real people
+# on a path nobody would think to check (L222).
+#
+# A rule about the SHAPE rather than a list of singletons, on the reasoning that
+# put `AppPreferences` in place: a list only ever checks what somebody
+# remembered to list (L96).
+#
+# Lowercase after the dot on purpose. `AppPaths.Layout` and
+# `AppPaths.ProjectRootProblem` are TYPES, and `DataInventory` builds a layout
+# on a root of its own, which reaches nothing.
+LIVE_SINGLETON = re.compile(r"static\s+(?:let|var)\s+\w+[^\n=]*=[^\n]*\bAppPaths\.[a-z]")
+
 BARE_STORES = {
     "AnalyticsStore": "hand it a fileURL in a temporary directory, the way "
                       "InsightsWorkManagerTests does",
@@ -150,6 +170,24 @@ def test_no_store_the_test_bundle_compiles_defaults_to_a_live_location():
         "pass a temporary path is not structural (L2). Put the live default "
         "behind #if !POSTROLL_TESTS, the way AnalyticsStore does, so omitting "
         "it is a build error."
+    )
+
+
+def test_no_singleton_the_test_bundle_compiles_is_built_from_a_live_location():
+    offenders = []
+    for path in _swift_files(SOURCES):
+        text = swift_as_the_test_bundle_sees_it(
+            swift_code_only(path.read_text(encoding="utf-8")))
+        offenders += [f"{path.relative_to(REPO)}:{line}"
+                      for line in _hits(LIVE_SINGLETON, text)]
+
+    assert not offenders, (
+        "a shared instance the TEST BUNDLE compiles is built from one of the "
+        f"app's live locations: {', '.join(offenders)}. Nothing has to pass an "
+        "argument to reach it, so the first test that touches the property "
+        "reads Dan's real data, and no parameter rule can see it because "
+        "nothing is defaulted. Give the test bundle a scratch instance behind "
+        "#if POSTROLL_TESTS, the way AppPreferences.store does (L2)."
     )
 
 
@@ -366,3 +404,48 @@ def test_reading_a_live_location_without_opening_it_is_not_an_offence():
         "        XCTAssertEqual(AppPaths.analyticsFile,\n"
         "                       AppPaths.root.appendingPathComponent(\"analytics.json\"))\n")
     assert _hits(LIVE_ARGUMENT, innocent) == []
+
+
+def test_the_scan_can_still_see_a_live_singleton():
+    # The shape that shipped, written out as it stood before #945 (L98).
+    offender = swift_as_the_test_bundle_sees_it(swift_code_only(
+        "final class Book {\n"
+        "    static let shared = Book(fileURL: AppPaths.accountsFile)\n}\n"))
+    assert _hits(LIVE_SINGLETON, offender) == [2]
+
+
+def test_a_live_singleton_the_app_alone_compiles_is_not_an_offence():
+    # The other direction, and the arrangement the fix relies on: the app keeps
+    # its own live instance, compiled out of the test bundle. A control that
+    # only ever proves a guard FIRES will accept one that fires on everything
+    # (L104).
+    allowed = swift_as_the_test_bundle_sees_it(swift_code_only(
+        "final class Book {\n#if POSTROLL_TESTS\n"
+        "    static let shared = Book(fileURL: scratchAccountsFile())\n"
+        "#else\n"
+        "    static let shared = Book(fileURL: AppPaths.accountsFile)\n"
+        "#endif\n}\n"))
+    assert _hits(LIVE_SINGLETON, allowed) == []
+
+
+def test_the_scan_does_not_fire_on_a_type_named_under_AppPaths():
+    # `DataInventory` builds an `AppPaths.Layout` on a root of its own, which
+    # reaches no file at all. A guard that fires on the code it exists to
+    # permit is one that gets turned off (L104).
+    innocent = swift_as_the_test_bundle_sees_it(swift_code_only(
+        "    private static let layout = AppPaths.Layout("
+        "root: URL(fileURLWithPath: \"/\"))\n"))
+    assert _hits(LIVE_SINGLETON, innocent) == []
+
+
+def test_the_app_still_has_an_account_book_of_its_own():
+    # The other half, on the same reasoning as the analytics one: a rule that
+    # only ever checks an ABSENCE is satisfied by deleting both branches, and
+    # then the shipping app has no account book at all (L159).
+    book = swift_code_only(
+        (SOURCES / "Services" / "AccountBook.swift").read_text(encoding="utf-8"))
+    assert "AppPaths.accountsFile" in book, (
+        "AccountBook no longer names the live accounts file anywhere, so the "
+        "shipping app has no follower counts to read")
+    assert "AppPaths.accountsFile" not in swift_as_the_test_bundle_sees_it(book), (
+        "the live accounts file is named in code the test bundle compiles")

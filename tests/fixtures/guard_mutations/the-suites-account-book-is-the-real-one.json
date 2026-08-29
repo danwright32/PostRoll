@@ -1,0 +1,8 @@
+{
+  "name": "the-suites-account-book-is-the-real-one",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "    static let shared = AccountBook(fileURL: scratchAccountsFile())",
+  "replace": "    static let shared = AccountBook(fileURL: AppPaths.accountsFile)",
+  "test": "tests/test_swift_tests_never_reach_live_data.py::test_no_singleton_the_test_bundle_compiles_is_built_from_a_live_location",
+  "breaks": "the whole Swift suite reads Dan's real follower counts. AccountBook.init loads on construction, so the first screen render that touches the shared book opens the live accounts.json, and no parameter rule can see it because nothing is defaulted (#945, L2, L222)"
+}
