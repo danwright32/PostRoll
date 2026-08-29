@@ -1,8 +1,8 @@
 {
   "name": "one-transient-gh-failure-does-not-end-the-wait",
   "file": "tools/wait_for_checks.py",
-  "find": "            if attempt == ASK_ATTEMPTS:",
-  "replace": "            if True:",
+  "find": "        if this <= 0:\n            break",
+  "replace": "        if True:\n            break",
   "test": "tests/test_wait_for_checks.py::test_one_transient_gh_failure_does_not_end_the_wait",
   "breaks": "one momentary GitHub API error ends the whole wait again, so a wobble costs a full restart and during a real incident, which is when a status is hardest to read by hand, the wait can never finish (#657)"
 }

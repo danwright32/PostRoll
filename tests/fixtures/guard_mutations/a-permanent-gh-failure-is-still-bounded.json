@@ -1,0 +1,8 @@
+{
+  "name": "a-permanent-gh-failure-is-still-bounded",
+  "file": "tools/wait_for_checks.py",
+  "find": "    return max(ASK_BUDGET_FLOOR_SECONDS, timeout * ASK_BUDGET_SHARE)",
+  "replace": "    return timeout",
+  "test": "tests/test_wait_for_checks.py::test_a_failure_that_does_not_clear_still_ends_well_before_the_deadline",
+  "breaks": "gh being genuinely unusable, not installed or not authenticated, is retried for the whole wait instead of being reported while somebody could still act on it, so the run says nothing until the moment it would have finished anyway (#936)"
+}

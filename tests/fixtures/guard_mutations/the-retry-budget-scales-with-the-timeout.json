@@ -1,0 +1,8 @@
+{
+  "name": "the-retry-budget-scales-with-the-timeout",
+  "file": "tools/wait_for_checks.py",
+  "find": "ASK_BUDGET_SHARE = 0.05",
+  "replace": "ASK_BUDGET_SHARE = 0.0",
+  "test": "tests/test_wait_for_checks.py::test_the_retry_budget_scales_with_how_long_the_caller_would_wait",
+  "breaks": "the patience goes back to a fixed few seconds whatever the caller asked to wait, so an outage lasting longer than that ends a forty minute unattended wait and leaves the pull request with nothing watching it, which is how #934 was left open and unmerged (#936)"
+}
