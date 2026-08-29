@@ -1102,6 +1102,9 @@ extension HostedControlLegibilityTests {
         surfaces.append(("caption card", { try self.renderCaptionCard() }))
         surfaces.append(("photo day grid, thumbnails still loading",
                          { try self.renderPhotoDay() }))
+        surfaces.append(("tag fields, clean", { try self.renderTagFields(handles: "@guestartist") }))
+        surfaces.append(("tag fields, a name typed as a handle",
+                         { try self.renderTagFields(handles: "@guestartist, DPR Dance") }))
 
         return surfaces
     }
@@ -1149,6 +1152,12 @@ extension HostedControlLegibilityTests {
         expect("insights report", "the Insights report")
         expect("caption card", "a day's caption card")
         expect("photo day grid", "a posting day's photo grid")
+        // Both states, because a warning is only reviewable beside the surface
+        // WITHOUT it: a note that looks like part of the furniture reads as
+        // fine until the two are seen together (#919).
+        expect("tag fields, clean", "the tag fields with nothing to report")
+        expect("tag fields, a name typed as a handle",
+               "the tag fields warning that a value will be credited by name")
     }
 
     /// The Insights report, at the size the pane gives it (#645).
@@ -1356,6 +1365,34 @@ extension HostedControlLegibilityTests {
                             subtitle: "Carousel, up to 10 photos",
                             photos: .constant(urls),
                             onAddPhotos: {})
+                .padding(Spacing.lg)
+        }
+        .frame(width: width, height: 700)
+        .background(PaintedSurfaces.page)
+
+        return try WordFootprint.hosted(view,
+                                        size: CGSize(width: width, height: 700),
+                                        wordless: false)
+    }
+
+    /// The two tag fields, with and without something to report (#919).
+    ///
+    /// `handles` is what has been typed into the @handles field. The panel
+    /// starts expanded when it holds content, so passing a value is also what
+    /// makes the fields visible at all.
+    private func renderTagFields(handles: String,
+                                 width: CGFloat = 700) throws -> NSBitmapImageRep {
+        let view = ScrollView {
+            PerformerAssignmentSection(
+                day: .wednesday,
+                performers: [],
+                eventHandles: "@dciny, @thejoyce",
+                selectedPerformerIDs: .constant([]),
+                handles: .constant(handles),
+                names: .constant("Jordan Langworthy"),
+                isCarouselDay: true,
+                creditedFromPhotos: [],
+                onChanged: {})
                 .padding(Spacing.lg)
         }
         .frame(width: width, height: 700)

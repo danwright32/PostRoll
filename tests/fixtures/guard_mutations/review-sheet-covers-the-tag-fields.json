@@ -1,0 +1,8 @@
+{
+  "name": "review-sheet-covers-the-tag-fields",
+  "file": "PostRollApp/Tests/HostedControlLegibilityTests.swift",
+  "find": "        surfaces.append((\"tag fields, a name typed as a handle\",\n                         { try self.renderTagFields(handles: \"@guestartist, DPR Dance\") }))",
+  "replace": "",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheSheetShowsEveryStateTheseChecksMeasure",
+  "breaks": "the warning saying a value will be credited by name rather than tagged drops out of the review sheet, so the one state worth looking at is gone while the clean field remains and the sheet still reports a full run. This is the surface whose absence hid a field drawing its own dark bezel until #919 added it (#919, L70, L231)"
+}

@@ -2493,7 +2493,13 @@ private struct DayNotesField: View {
 
 // MARK: - Performer Assignment Section
 
-private struct PerformerAssignmentSection: View {
+/// Internal rather than private so the review sheet can draw it (#919).
+///
+/// The same reason `PhotoDaySection` is: the warning under the handles field
+/// says what will happen to a value that is not an account, and a sentence
+/// nobody can see rendered is a sentence nobody has reviewed. It reads nothing
+/// from the environment, which is what makes it drawable (L2).
+struct PerformerAssignmentSection: View {
     let day: DayName
     let performers: [Performer]
     let eventHandles: String     // Org + venue handles applied to every post
@@ -2600,6 +2606,22 @@ private struct PerformerAssignmentSection: View {
                             text: $handles
                         )
                         .onChange(of: handles) { _, _ in onChanged() }
+
+                        // What will happen to a value that is not a usable
+                        // handle (#919). #912 turned it into a name credit and
+                        // #917 kept it out of the exported tag list, both
+                        // silently, so this field is where somebody finds out.
+                        // The sentence reads `TypedCredit`, the same routing
+                        // the value takes, so the two cannot disagree (L144).
+                        // Drawn the way the performer rows draw theirs, so one
+                        // rule reads as one rule wherever it is met (L118).
+                        if let note = TagFieldNote.line(for: handles) {
+                            Label(note, systemImage: "exclamationmark.triangle")
+                                .font(.system(size: 10))
+                                .foregroundStyle(PaintedSurfaces.stateWarningText)
+                                .help(PerformerRowNotes.notAHandleExplanation)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
 
                         if !eventHandles.trimmingCharacters(in: .whitespaces).isEmpty {
                             Text("Already tagged on every post: \(eventHandles)")
@@ -2739,6 +2761,13 @@ private struct HandleField: View {
                         .allowsHitTesting(false)
                 }
                 TextField("", text: $text)
+                    // Every other field in the app sets this and this one did
+                    // not, so AppKit drew its own bezel INSIDE the cream fill
+                    // below: a dark inset pill carrying `bodyText`, which is a
+                    // dark colour chosen for cream. The declared colours were
+                    // right the whole time and the screen disagreed, which is
+                    // only visible once the panel is rendered (L231).
+                    .textFieldStyle(.plain)
                     .focused($focused)
                     .font(.system(size: 12))
                     .foregroundStyle(PaintedSurfaces.bodyText)
