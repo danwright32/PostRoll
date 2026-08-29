@@ -361,11 +361,16 @@ def silenced_functions(module_path: Path, repo_root: Path) -> frozenset[str]:
     try:
         tree = ast.parse(module_path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
-        # Not this check's question. A module that cannot be parsed will be
-        # reported by the run itself, loudly, and answering here as well would
-        # give one fault two names (L11).
-        _SILENCED_CACHE[key] = frozenset()
-        return _SILENCED_CACHE[key]
+        # A NON-ANSWER, not a measurement of nothing. Deliberately not cached,
+        # because caching it would turn "could not read this module" into "this
+        # module silences nobody" for the rest of the process, and those two are
+        # indistinguishable once they share a representation (L215).
+        #
+        # Passed over rather than raised because it is not this check's
+        # question: a test module that cannot be parsed fails collection in the
+        # run itself, loudly and by name, and refusing here as well would give
+        # one fault two names and the wrong one first (L11).
+        return frozenset()
 
     # A name defined in THIS module wins over the same name found elsewhere, so
     # a local function that happens to share a helper's name is judged on what

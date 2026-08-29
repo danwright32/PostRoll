@@ -39,6 +39,7 @@ from tools.check_guards import (
     command_for,
     derived_data_path,
     load_registry,
+    silenced_functions,
     stand_down_helpers,
     run_entry,
 )
@@ -1456,3 +1457,25 @@ def test_the_registry_this_repository_ships_is_accepted():
     """
     assert len(load_registry(REPO_ROOT / "tests" / "fixtures" / "guard_mutations",
                              repo_root=REPO_ROOT)) >= 100
+
+
+def test_a_module_that_could_not_be_read_is_not_remembered_as_silencing_nobody(tmp_path):
+    """An unreadable module is a NON-ANSWER, and it must not be cached as one.
+
+    The answers here are cached per module, because 413 entries name barely a
+    hundred files between them. Caching the empty answer given for a module
+    that could not be parsed would turn "could not read this" into "this
+    silences nobody" for the rest of the process, and once the two share a
+    representation nothing can tell them apart (L215).
+    """
+    repo = _repo_with_test_module(tmp_path, "def broken(:\n")
+    module = repo / "tests" / "test_thing.py"
+
+    assert silenced_functions(module, repo) == frozenset(), (
+        "a module that cannot be parsed is not this check's question")
+
+    module.write_text(SILENCED_TEST_MODULE)
+
+    assert "test_every_anchor_still_matches" in silenced_functions(module, repo), (
+        "the unreadable answer was cached, so a module that can now be read is "
+        "still remembered as silencing nobody")
