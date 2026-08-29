@@ -115,7 +115,7 @@ def lock_path(repo_root: Path) -> Path:
     return git_dir / "guard-perturbation.lock"
 
 
-def _somebody_holds(path: Path) -> bool:
+def _somebody_holds(path: Path) -> bool | None:
     """Whether a process currently holds the OS lock on this file.
 
     Asked by trying to take it and giving it straight back. The kernel releases
@@ -130,11 +130,21 @@ def _somebody_holds(path: Path) -> bool:
     detect it. `check_guards.build_lock` has used `flock` all along.
     """
     try:
-        handle = open(path, "r+")
+        # "r", not "r+": `flock` works on a read-only handle, and asking for
+        # write access would fail on a read-only lock file and turn a question
+        # this CAN answer into one it cannot.
+        handle = open(path, "r")
     except OSError:
-        # Unreadable. Whether anybody holds it cannot be established, and
-        # claiming "held" would stand the check down on a file nobody can read.
-        return False
+        # Genuinely cannot be opened. None, never False: answering False here
+        # says "nobody holds it", which the caller reports as a run that died
+        # without cleaning up, and none of that was established (L11, L215).
+        #
+        # Reachable only by a race, since `current` has just read this file as
+        # text, so it is deliberately NOT claimed as tested: it exists so the
+        # race has an honest answer rather than a confident wrong one. The
+        # ordinary read-only case is answered properly by opening "r" above,
+        # and that one IS tested.
+        return None
     try:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
@@ -160,7 +170,7 @@ def current(repo_root: Path) -> Lock | None:
         return None
     except OSError:
         return Lock(guard=Lock.UNREADABLE, pid=-1, started_at=time.time(),
-                    is_live=_somebody_holds(path))
+                    is_live=_somebody_holds(path) is True)
 
     try:
         record = json.loads(raw)
@@ -173,10 +183,15 @@ def current(repo_root: Path) -> Lock | None:
         # rather than a damaged file, and the lock is what says which.
         return Lock(guard=Lock.STARTING if not raw.strip() else Lock.UNREADABLE,
                     pid=-1, started_at=time.time(),
-                    is_live=_somebody_holds(path))
+                    is_live=_somebody_holds(path) is True)
 
-    return Lock(guard=guard, pid=pid, started_at=started_at,
-                is_live=_somebody_holds(path))
+    holds = _somebody_holds(path)
+    if holds is None:
+        # Parsed fine, but whether anybody holds it cannot be established, so
+        # it is reported as unreadable rather than as abandoned.
+        return Lock(guard=Lock.UNREADABLE, pid=pid, started_at=started_at,
+                    is_live=False)
+    return Lock(guard=guard, pid=pid, started_at=started_at, is_live=holds)
 
 
 @contextlib.contextmanager

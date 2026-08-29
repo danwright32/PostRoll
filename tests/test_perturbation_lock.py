@@ -34,8 +34,8 @@ from pathlib import Path
 
 import pytest
 
-from tools.perturbation_lock import (Lock, Verdict, current, held_for,
-                                     lock_path, verdict)
+from tools.perturbation_lock import (Lock, Verdict, _somebody_holds, current,
+                                     held_for, lock_path, verdict)
 
 
 def test_nothing_is_held_in_a_clean_checkout(tmp_path):
@@ -393,3 +393,45 @@ def test_a_prover_that_has_not_said_what_it_is_proving_yet_says_that(tmp_path):
     finally:
         holder.kill()
         holder.wait()
+
+
+def test_a_READ_ONLY_lock_file_is_still_judged_rather_than_guessed_at(tmp_path):
+    """The probe must not need write access it does not use.
+
+    `current` reads the file, then asks the kernel whether anybody holds it.
+    Those are two separate opens and the second used to ask for WRITE access,
+    which a read-only lock file refuses, so the question became unanswerable
+    and the code answered "nobody holds it" anyway. That is reported to the
+    reader as a run that died without cleaning up, which nothing established
+    (L11).
+
+    `flock` works perfectly well on a read-only handle, so the fix is to stop
+    asking for more than is used, and the case then has a real answer instead
+    of a guess: this file is locked by nobody, so it IS abandoned, and saying
+    so is now a measurement rather than a fallback.
+    """
+    import os
+    import stat
+
+    path = lock_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"guard": "real-name", "pid": 4, "started_at": 1}')
+    os.chmod(path, stat.S_IRUSR)
+    if os.access(path, os.W_OK):
+        pytest.skip("running as a user that ignores file permissions")
+
+    try:
+        outcome, why = verdict(tmp_path)
+        # And the positive half in the same fixture, so the answer above is not
+        # simply the only one this code path can now produce (L159).
+        assert _somebody_holds(path) is False, (
+            "a read-only file must be probeable, not merely default to unheld")
+    finally:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
+    assert outcome is Verdict.STALE
+    assert "real-name" in why, (
+        f"it can read the file, so it must name what the run was proving: {why}")
+    assert "could not be read" not in why, (
+        f"the file read fine and the lock was probed, so nothing here is "
+        f"unknown: {why}")
