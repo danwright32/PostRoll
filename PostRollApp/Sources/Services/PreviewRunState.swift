@@ -31,6 +31,14 @@ struct PreviewRunState: Equatable {
     /// Registers a full preview run. Returns false when one is already in
     /// flight for this event, in which case the caller must not start another.
     mutating func beginFullRun(_ eventID: UUID, at now: Date = Date()) -> Bool {
+        // A day already regenerating is writing media this run would write too
+        // (#1009). The two claims used to consult only their own store, so both
+        // said yes for one event and two `generate_media` subprocesses ran
+        // against the same files. They also share one progress file, which is
+        // per event and deleted by whichever starts second, the exact hazard
+        // AppPaths.mediaProgressFile records. Refusing here removes the
+        // collision rather than needing a second fix on the file.
+        guard regeneratingDays(for: eventID).isEmpty else { return false }
         guard fullRuns.insert(eventID).inserted else { return false }
         fullRunStarts[eventID] = now
         return true
@@ -49,6 +57,14 @@ struct PreviewRunState: Equatable {
     /// Registers a single-day regeneration. Returns false when that day is
     /// already regenerating for this event.
     mutating func beginDay(_ day: DayName, for eventID: UUID, at now: Date = Date()) -> Bool {
+        // The other half of the exclusion above (#1009). A full run already
+        // writes every day's media, so a day run beside it is a second writer
+        // on the same files and the same progress file.
+        //
+        // Refused BEFORE anything is recorded: a claim that returns false while
+        // having inserted the day leaves a spinner running for work nobody
+        // started, and the caller has no way to tell that from a real run.
+        guard !isRunningFull(eventID) else { return false }
         var days = dayRuns[eventID] ?? []
         let inserted = days.insert(day).inserted
         dayRuns[eventID] = days

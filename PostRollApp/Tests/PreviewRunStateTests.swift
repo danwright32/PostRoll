@@ -13,6 +13,80 @@ final class PreviewRunStateTests: XCTestCase {
     private let eventA = UUID()
     private let eventB = UUID()
 
+    // MARK: - A full run and a day run are the same writer (#1009)
+
+    /// The two claims never consulted each other, so both said yes for one
+    /// event and two `generate_media` subprocesses ran against the same files.
+    ///
+    /// They also collide on one file: `PythonBridge.runPreviewGeneration`
+    /// deletes `AppPaths.mediaProgressFile(forEventID:)`, which is per EVENT,
+    /// and `AppPaths` carries a comment recording why sharing that file is
+    /// wrong (one overwrites the other's label, so the screen flips and neither
+    /// surface can trust what it reads). Making the claims exclusive is what
+    /// removes the collision, rather than a second fix on the file.
+    func testADayRegenIsRefusedWhileAFullRunIsInFlight() {
+        var state = PreviewRunState()
+        XCTAssertTrue(state.beginFullRun(eventA))
+
+        XCTAssertFalse(state.beginDay(.wednesday, for: eventA),
+                       "a full run already writes every day's media, so a day run "
+                       + "beside it is a second writer on the same files")
+        XCTAssertTrue(state.regeneratingDays(for: eventA).isEmpty,
+                      "a refused claim must not record the day as running, or the "
+                      + "spinner outlives a run nobody started")
+    }
+
+    func testAFullRunIsRefusedWhileAnyDayIsRegenerating() {
+        var state = PreviewRunState()
+        XCTAssertTrue(state.beginDay(.wednesday, for: eventA))
+
+        XCTAssertFalse(state.beginFullRun(eventA),
+                       "a full run writes the day already being written")
+        XCTAssertFalse(state.isRunningFull(eventA),
+                       "a refused full run must not record itself as running")
+    }
+
+    /// The exclusion is per event, like every other rule here.
+    func testAFullRunOnOneEventDoesNotBlockADayOnAnother() {
+        var state = PreviewRunState()
+        XCTAssertTrue(state.beginFullRun(eventA))
+
+        XCTAssertTrue(state.beginDay(.wednesday, for: eventB),
+                      "two events write different folders and different progress files")
+    }
+
+    /// Cover runs stay OUTSIDE this rule, deliberately (#141).
+    ///
+    /// A cover regeneration must never look like, or trigger, a full reel or
+    /// story regen, which is why `isBusy` has never counted them. Folding them
+    /// into the exclusion here would make a cover refresh block a rebuild and
+    /// vice versa, which is a behaviour change nobody asked for and the opposite
+    /// of what #141 established.
+    func testACoverRegenIsNotBlockedByAFullRunAndDoesNotBlockOne() {
+        var state = PreviewRunState()
+        XCTAssertTrue(state.beginFullRun(eventA))
+        XCTAssertTrue(state.beginCover(.thursday, for: eventA),
+                      "a cover refresh is not a media run and never was")
+
+        var other = PreviewRunState()
+        XCTAssertTrue(other.beginCover(.thursday, for: eventA))
+        XCTAssertTrue(other.beginFullRun(eventA),
+                      "an in flight cover refresh must not block a rebuild")
+    }
+
+    /// Ending the blocker releases the block, in both directions.
+    func testEachClaimBecomesAvailableAgainWhenTheOtherEnds() {
+        var state = PreviewRunState()
+        _ = state.beginFullRun(eventA)
+        state.endFullRun(eventA)
+        XCTAssertTrue(state.beginDay(.wednesday, for: eventA),
+                      "the full run is over, so a day run is free to start")
+
+        state.endDay(.wednesday, for: eventA)
+        XCTAssertTrue(state.beginFullRun(eventA),
+                      "the last day run ended, so a full run is free to start")
+    }
+
     func testASecondFullRunForTheSameEventIsRefused() {
         var state = PreviewRunState()
 
