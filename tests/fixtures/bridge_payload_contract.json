@@ -1041,7 +1041,7 @@
       "python": [
         {
           "module": "postroll/ai/revise_blog.py",
-          "function": null,
+          "function": "main",
           "variable": "m"
         }
       ],
@@ -1054,7 +1054,8 @@
         "existing": "always",
         "feedback": "always",
         "shoot_type": "always",
-        "venue_context": "always"
+        "venue_context": "always",
+        "photo_filenames": "always"
       }
     },
     "blog_photo_swap": {

@@ -5,11 +5,20 @@ text alone will not hold these rules (this repo's standing
 deterministic-enforcement rule), so the objectively checkable ones are asserted
 here, after generation, in the same spirit as `_fix_second_person`.
 
-These REPORT rather than rewrite, which is the deliberate difference from the
-`_fix_*` helpers. Most cannot be auto-fixed without inventing something: nobody
-can supply the true number that replaces an invented one, and alt text cannot be
-rewritten without seeing the photograph. Quoting the offending text lets Dan fix
-it in seconds; silently rewriting would stack a second guess on the first.
+Most of these REPORT rather than rewrite, which is the deliberate difference
+from the `_fix_*` helpers. Most cannot be auto-fixed without inventing
+something: nobody can supply the true number that replaces an invented one, and
+alt text cannot be rewritten without seeing the photograph. Quoting the
+offending text lets Dan fix it in seconds; silently rewriting would stack a
+second guess on the first.
+
+The exception is `repair_marker_filenames` (#962), and it is an exception for a
+reason that does not generalise: the true spelling is already in hand. A marker
+differing from a real filename only in which quote or dash was typed names that
+file, so correcting it invents nothing, and the alternative was handing Dan
+fourteen findings, from one substituted character, that he could only fix by
+retyping the app's own data. Where it would have to guess, it refuses and lets
+the check report instead.
 
 Only the objectively checkable rules live here. The judgement ones (thesis
 discipline, no performance review, no criticism of the venue, no interpretation
@@ -20,6 +29,7 @@ cannot tell an observation from an assessment.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -163,6 +173,116 @@ def _marker_filename_findings(markers: list[tuple[str, str]],
                 "A photo chosen for this post was never placed in it.",
                 name))
     return findings
+
+
+#: Characters a model routinely substitutes when it copies a filename out of a
+#: `Photo N:` label: typographic quotes become ASCII ones, the several unicode
+#: dashes become a hyphen, the several unicode spaces become a space. Written as
+#: escapes rather than literals so this file holds no dash the style gate has to
+#: tell apart from a dash used as punctuation.
+_PUNCTUATION_FOLD = str.maketrans({
+    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"', "\u2033": '"',
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'", "\u2032": "'",
+    "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-",
+    "\u2014": "-", "\u2015": "-", "\u2212": "-",
+    "\u00a0": " ", "\u2007": " ", "\u2009": " ", "\u202f": " ",
+})
+
+
+def _fold_filename(name: str) -> str:
+    """A filename reduced to what two spellings of the SAME file share.
+
+    Composed and decomposed accents are one file on this filesystem, and so is
+    a name whose only difference is which quote or dash character was typed.
+    `check_blog` already folds case for the same reason, and this is the rest
+    of that same fold.
+
+    NFC rather than NFKC deliberately: NFKC would also collapse ligatures and
+    fullwidth forms, which are genuinely different names, and a fold that is
+    too generous attaches the wrong photograph.
+    """
+    text = unicodedata.normalize("NFC", str(name).strip())
+    return " ".join(text.translate(_PUNCTUATION_FOLD).split()).casefold()
+
+
+def filenames_used_by(body: str,
+                      photo_filenames: list[str] | None) -> list[str]:
+    """Which of the available photos this body actually places (#962).
+
+    An event's photo list is the photos AVAILABLE to a post, not the photos IN
+    it: `generate_blog` subsamples to seven when more are assigned, and the
+    DiGangi event holds twelve. A later pass checked against all twelve reports
+    the five nobody chose as never placed, every time, which is the check
+    crying wolf (L36) and the exact trained-to-skim failure #962 is about.
+
+    Folded the same way `repair_marker_filenames` folds, so a marker that is a
+    near miss still counts as placing its photo rather than dropping it out of
+    the set and reintroducing the false alarm one file at a time.
+    """
+    if not body or not photo_filenames:
+        return []
+    written = {_fold_filename(name) for name, _alt in _markers(body)}
+    return [str(name).strip() for name in photo_filenames
+            if str(name).strip() and _fold_filename(name) in written]
+
+
+def repair_marker_filenames(
+        body: str,
+        photo_filenames: list[str] | None) -> tuple[str, list[tuple[str, str]]]:
+    """Correct marker filenames that are near misses of a real one (#962).
+
+    Measured on Dan's DiGangi post: the photographs carry typographic quotes in
+    their names and every one of the seven markers was written with ASCII ones,
+    so `check_blog` reported all seven markers as naming a file that was never
+    sent AND all seven photos as never placed. Fourteen of his twenty three
+    checks, from one punctuation difference, and the two lists rendered in the
+    panel as the same seven filenames printed twice.
+
+    This is the `_fix_wrong_names` shape, not the report-only shape: the true
+    spelling is in hand, so nothing is being invented and no model is called.
+
+    Refuses in the two cases where it would be inventing:
+
+    - a name that folds to nothing sent was genuinely made up, and snapping it
+      to the nearest file would put the wrong photograph under prose written
+      about a different one
+    - a fold matching two sent files names a family, not a member (L521), so
+      neither is chosen
+
+    Returns the repaired body and every (was, now) pair. An empty list means
+    there was nothing to repair, which is a different outcome from a repair
+    that was refused, and the refused ones are still reported by `check_blog`
+    running afterwards (L98).
+    """
+    if not body or not photo_filenames:
+        return body, []
+
+    exact: set[str] = set()
+    by_fold: dict[str, set[str]] = {}
+    for raw in photo_filenames:
+        name = str(raw).strip()
+        if not name:
+            continue
+        exact.add(name.casefold())
+        by_fold.setdefault(_fold_filename(name), set()).add(name)
+
+    corrections: list[tuple[str, str]] = []
+
+    def _repair(match: "re.Match[str]") -> str:
+        written = match.group(1).strip()
+        if written.casefold() in exact:
+            return match.group(0)
+        candidates = by_fold.get(_fold_filename(written)) or set()
+        if len(candidates) != 1:
+            return match.group(0)
+        correct = next(iter(candidates))
+        corrections.append((written, correct))
+        # Replaced inside THIS marker only, and only its first occurrence,
+        # which is the filename: a whole-body replace would rewrite the prose
+        # and any alt text quoting the same string (#109).
+        return match.group(0).replace(written, correct, 1)
+
+    return _PHOTO_MARKER.sub(_repair, body), corrections
 
 
 def _prose_paragraphs(body: str) -> list[str]:

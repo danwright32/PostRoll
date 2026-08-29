@@ -915,6 +915,19 @@ actor PythonBridge {
             "program":       program,
             "existing":      existing,
             "feedback":      feedback,
+            // #962: the names the blog's photos carry on disk. Without them
+            // Python skips both filename rules by its own documented refusal,
+            // so the one thing a revision can break that the prompt explicitly
+            // forbids, renaming a [PHOTO:] marker, was the one thing this path
+            // could not see. The bare NAME, not the path: a marker is compared
+            // against the `Photo N:` label the model was shown.
+            //
+            // This is the photos AVAILABLE to the post, not the photos in it,
+            // because generation subsamples to seven when more are assigned.
+            // Python narrows it against the body being revised; sending the
+            // narrowed set from here would mean parsing markers in two
+            // languages, and the two would drift.
+            "photo_filenames": event.blogPhotoPaths.map { $0.lastPathComponent },
         ]
     }
 

@@ -17,7 +17,9 @@ Input manifest:
     "title": "...",
     "body":  "..."
   },
-  "feedback": "tighten the middle, cut the closing CTA"
+  "feedback": "tighten the middle, cut the closing CTA",
+  "photo_filenames": ["DSC4821.jpg", ...]   // optional; the names the post's
+                                            // photos actually carry on disk
 }
 
 Output JSON (written to --output file):
@@ -52,7 +54,8 @@ from .ai_tells import (
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
-from .blog_quality import check_blog, finding_entry
+from .blog_quality import (check_blog, filenames_used_by, finding_entry,
+                           repair_marker_filenames)
 from .generate_blog import (
     _fix_missing_contractions,
     _fix_second_person,
@@ -130,6 +133,7 @@ def revise_blog(
     existing: dict[str, Any],
     feedback: str,
     venue_context: str = "",
+    photo_filenames: list[str] | None = None,
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
@@ -138,6 +142,12 @@ def revise_blog(
 
     Photo markers in the body are preserved; only the prose is revised.
     Pipeline mirrors generate_blog: draft → voice pass → humanizer pass.
+
+    `photo_filenames` are the names the post's photos carry on disk. With them
+    the filename rules run, which is what makes a marker the revision renamed
+    visible at all; without them those two rules stay off, exactly as
+    `check_blog` documents, so an event whose photo paths are gone does not
+    have every marker reported as unknown (#962).
     """
     brand_voice_text = load_brand_voice()
 
@@ -210,7 +220,32 @@ def revise_blog(
     # exactly the request most likely to reintroduce an invented number or a
     # performance review, so it runs the same deterministic checks the first
     # pass does (#201).
-    findings = check_blog(final_body, program=program, venue=venue)
+    # The list carries the photos AVAILABLE to this event, not the photos in
+    # this post: generation subsamples to seven when more are assigned, and
+    # Dan's DiGangi event holds twelve. Checked against all twelve, the five
+    # nobody chose are reported as never placed on every single revision, which
+    # is the check crying wolf (L36). The post's own set is stated by the body
+    # being revised, which this pass is under orders to preserve verbatim.
+    in_the_post = filenames_used_by(body, photo_filenames)
+    if photo_filenames and not in_the_post:
+        # Deliberate, and said out loud rather than fallen through to: no
+        # marker in the existing body names any photo on this event, so which
+        # photos the post holds is genuinely unknown. That is a different
+        # situation from having been sent no list at all (L214), and the answer
+        # is the same only because reporting every marker as unknown would be
+        # worse than reporting none.
+        print(f"[revise_blog] no marker in the existing body names any of the "
+              f"{len(photo_filenames)} photos on this event, so the filename "
+              f"rules are skipped rather than reporting every marker unknown",
+              flush=True, file=sys.stderr)
+
+    # A near-miss filename is repaired rather than reported (#962).
+    final_body, repairs = repair_marker_filenames(final_body, in_the_post)
+    for was, now in repairs:
+        print(f"[revise_blog] REPAIRED marker filename: {was!r} -> {now!r}",
+              flush=True, file=sys.stderr)
+    findings = check_blog(final_body, program=program, venue=venue,
+                          photo_filenames=in_the_post or None)
     for f in findings:
         print(f"[revise_blog] CHECK {f.code}: {f.message} ({f.detail})",
               flush=True, file=sys.stderr)
@@ -223,7 +258,7 @@ def revise_blog(
     }
 
 
-if __name__ == "__main__":
+def main() -> int:
     parser = argparse.ArgumentParser(description="Revise a PostRoll blog draft based on feedback")
     parser.add_argument("--manifest", required=True, help="Path to revision manifest JSON")
     parser.add_argument("--output",   required=True, help="Path to write revised output JSON")
@@ -232,7 +267,7 @@ if __name__ == "__main__":
     manifest_path = Path(args.manifest)
     if not manifest_path.exists():
         print(f"Manifest not found: {manifest_path}", file=sys.stderr)
-        sys.exit(1)
+        return 1
 
     m = json.loads(manifest_path.read_text(encoding="utf-8"))
     result = revise_blog(
@@ -245,8 +280,17 @@ if __name__ == "__main__":
         program=m["program"],
         existing=m["existing"],
         feedback=m["feedback"],
+        # Optional: an app build that predates #962 sends no such key, and a
+        # revision must not fail on one. Absent means the filename rules stay
+        # off, which is what shipped before.
+        photo_filenames=m.get("photo_filenames"),
     )
     Path(args.output).write_text(
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"Revised blog written to {args.output}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

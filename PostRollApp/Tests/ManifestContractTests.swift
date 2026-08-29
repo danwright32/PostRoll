@@ -245,6 +245,38 @@ final class ManifestContractTests: XCTestCase {
             "blog_revision")
     }
 
+    func testTheBlogRevisionManifestSendsTheBlogPhotoFilenames() throws {
+        // #962: without these Python skips both filename rules by its own
+        // documented refusal, so a revision that renamed a marker, which the
+        // prompt forbids, was the one thing the revision path could not see.
+        // The NAME is what is sent, not the path: the check compares a marker
+        // against the `Photo N:` label the model was shown, which is the bare
+        // filename.
+        var event = fullEvent()
+        event.blogPhotoPaths = [URL(fileURLWithPath: "/photos/DSC4821.jpg"),
+                                URL(fileURLWithPath: "/photos/DSC4822.jpg")]
+        let manifest = PythonBridge.buildBlogRevisionManifest(
+            event: event, program: ["performers": []],
+            existing: ["body": "before"], feedback: "make it shorter")
+
+        XCTAssertEqual(manifest["photo_filenames"] as? [String],
+                       ["DSC4821.jpg", "DSC4822.jpg"])
+    }
+
+    func testABlogRevisionForAnEventWithNoPhotosStillSendsTheKey() throws {
+        // An empty list and an absent key mean the same thing to Python here
+        // (the rules stay off), but only the key being present proves the app
+        // still sends it at all. A dropped key would look identical to an
+        // event with no photos, and nothing would ever fail (L98).
+        var event = fullEvent()
+        event.blogPhotoPaths = []
+        let manifest = PythonBridge.buildBlogRevisionManifest(
+            event: event, program: ["performers": []],
+            existing: ["body": "before"], feedback: "make it shorter")
+
+        XCTAssertEqual(manifest["photo_filenames"] as? [String], [])
+    }
+
     func testTheBlogPhotoSwapManifestSendsEveryRequiredKey() throws {
         try assertSends(
             PythonBridge.buildBlogPhotoSwapManifest(

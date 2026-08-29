@@ -116,35 +116,40 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: factor of 1.94, and 7% is its geometric middle. Its neighbours sit at 0.71x
 #: and 1.38x of it against a band of 0.8 to 1.25.
 #:
-#: 4.6% since 2026-08-29, re-chosen against a fourth recording. That recording
-#: was forced by #932 adding a test file, and it moved the distribution enough
-#: that the 7% floor no longer sat in clear air: `test_generate_media_friday_clips`
-#: came out at 6.18%, inside the 5.6% to 8.8% band the old floor asked to be
-#: clear, and the guard said so. This is the fourth time that same file has
-#: decided where the floor goes, which is what a file sitting near the knee of a
-#: distribution does.
+#: 4.6% earlier on 2026-08-29, re-chosen against a fourth recording, which had
+#: `test_generate_media_friday_clips` at 6.18% and put it back IN the expensive
+#: set as a fifth file.
 #:
-#: The widest gap in the distribution is now 3.45%
-#: (`test_render_clip_reel`) to 6.18% (`test_generate_media_friday_clips`), a
-#: factor of 1.79, and 4.62% is its geometric middle. The band a floor there
-#: asks to be clear is 3.70% to 5.77%, and its neighbours sit at 0.75x and 1.34x
-#: of it against a band of 0.8 to 1.25.
+#: 7.1% since 2026-08-29, re-chosen against a fifth recording forced by #962
+#: adding two test files. Adding any file makes the
+#: record incomplete, and re-recording re-reads the WHOLE suite, so the floor is
+#: re-chosen against the distribution as it then is rather than against the one
+#: it was chosen from. This reading came in at 1737s against the previous 1071s,
+#: the same suite on the same Mac under a different load, which is why the
+#: shares moved without any test changing.
 #:
-#: The gap above it, 6.18% to 9.74%, is 1.58x. A band needing 1.5625x of clear
-#: air fits inside that by four hundredths of a percentage point on each side,
-#: which is not clear air, it is a coincidence of rounding: a floor placed there
-#: would go red on the next reading's noise. So the wider gap is the one taken,
-#: as it has been every time.
+#: `test_generate_media_friday_clips` came out at 4.37%, down from 6.18%, and
+#: it is the fifth time that same file has decided where the floor goes, which
+#: is what a file sitting near the knee of a distribution does.
 #:
-#: `test_generate_media_friday_clips` therefore moves back INTO the expensive
-#: set and the fast run stops paying for it, as it did before 2026-08-28. The
-#: set is five files. Nothing about that file changed; the suite around it did.
+#: The widest gap in the distribution is now 4.37%
+#: (`test_generate_media_friday_clips`) to 11.54% (`test_frame_legibility`), a
+#: factor of 2.64, and 7.10% is its geometric middle. The band a floor there
+#: asks to be clear is 5.68% to 8.88%, and its neighbours sit at 0.62x and
+#: 1.63x of it against a band of 0.8 to 1.25, so it has more clear air either
+#: side than any floor placed here has had.
+#:
+#: `test_generate_media_friday_clips` therefore moves back OUT of the expensive
+#: set and the fast run pays for it again, as it did before 2026-08-29. The set
+#: is four files. Nothing about that file changed; the suite around it did, and
+#: this is the second reading in two days to say so, so the next person to move
+#: this number should suspect the READING rather than the file.
 #:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.046
+EXPENSIVE_SHARE = 0.071
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:

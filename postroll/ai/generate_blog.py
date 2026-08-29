@@ -53,7 +53,7 @@ from .ai_tells import (
 )
 from .claude_client import run_json_prompt, run_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .progress import ProgressWriter
-from .blog_quality import check_blog, finding_entry
+from .blog_quality import check_blog, finding_entry, repair_marker_filenames
 from ..blog_draft import blog_draft_text
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -1819,11 +1819,23 @@ def generate_blog(
     final_body = _fix_second_person(final_body)
     final_body = _fix_missing_contractions(final_body)
 
+    # One check IS repairable in code, so it is repaired rather than reported
+    # (#962). A marker whose filename differs from a sent one only in which
+    # quote, dash or space character was typed, or in how an accent is encoded,
+    # names that file: the true spelling is in hand, so correcting it invents
+    # nothing. Measured on the DiGangi post, where this alone was fourteen of
+    # the twenty three checks Dan was handed. Runs after the last rewriter and
+    # before the checks, so what is reported is what the body actually says.
+    final_body, repairs = repair_marker_filenames(final_body, photo_filenames)
+    for was, now in repairs:
+        print(f"[generate_blog] REPAIRED marker filename: {was!r} -> {now!r}",
+              flush=True, file=sys.stderr)
+
     # Deterministic backstops for the rules a prompt cannot hold (#201).
-    # These REPORT rather than rewrite: nobody can supply the true number that
-    # replaces an invented one, and alt text cannot be rewritten without seeing
-    # the photograph. Reported loudly so a draft is never quietly shipped with
-    # them, and returned so the review screen can show exactly what to fix.
+    # The rest still REPORT rather than rewrite: nobody can supply the true
+    # number that replaces an invented one, and alt text cannot be rewritten
+    # without seeing the photograph. Reported loudly so a draft is never quietly
+    # shipped with them, and returned so the review screen can show what to fix.
     findings = check_blog(final_body, program=program, venue=venue,
                           photo_filenames=photo_filenames)
     for f in findings:
