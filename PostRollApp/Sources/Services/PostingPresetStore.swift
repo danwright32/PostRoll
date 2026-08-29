@@ -78,6 +78,42 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
         format(for: day)?.format == .collageCarousel
     }
 
+    /// How many of `day`'s assigned photos this preset actually posts (#1010).
+    ///
+    /// `min(assigned, target)`, because `generate_media.py` renders
+    /// `photos[:count]`. A target above the assigned count changes nothing: a
+    /// Sunday with three photos posts three under every preset that governs it,
+    /// so switching between them is not a change to that day at all.
+    ///
+    /// nil for a day no preset governs, the same as `format(for:)`, so the
+    /// absence keeps meaning "this day's own handling decides" rather than
+    /// "zero". Mirrored by `posting_preset.effective_count` through
+    /// `tests/fixtures/posting_presets.json`.
+    func effectiveCount(for day: DayName, assigned: Int) -> Int? {
+        guard let count = format(for: day)?.count else { return nil }
+        return min(assigned, count)
+    }
+
+    /// What kind of post `day` is, given how many photos are assigned to it.
+    ///
+    /// The question that decides whether a layout switch needs a PAID caption
+    /// rebuild, and deliberately not the same question as the format. Python's
+    /// rule includes `photo_count > 1`, so a collage day with ONE photo is a
+    /// `feed_photo`, exactly like a single day with one: a Balanced to Classic
+    /// switch on such a day changes the format and does not change the post.
+    /// Keying the rebuild on format alone pays for that day for nothing.
+    ///
+    /// Strings rather than an enum because they are Python's wire values and
+    /// this exists to agree with them; an enum would need a rawValue that
+    /// exists only for the mirror and could be wrong without anything noticing.
+    /// Mirrored by `posting_preset.post_type`, which `generate_week` delegates
+    /// to, so the app and the pipeline cannot answer this differently (L263).
+    func postType(for day: DayName, assigned: Int) -> String {
+        if isCollageCarousel(day) && assigned > 1 { return "carousel" }
+        if day == .thursday && assigned > 1 { return "scroll_reel" }
+        return "feed_photo"
+    }
+
     /// The days a switch to this layout would rebuild for `event`: the
     /// preset-governed days (Sunday/Monday/Wednesday) that actually have photos.
     /// Used to warn before a switch regenerates posts (#71).

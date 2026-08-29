@@ -82,3 +82,41 @@ def collage_count(preset: str | None, day: str) -> int | None:
 def is_collage_carousel(preset: str | None, day: str) -> bool:
     fmt = day_format(preset, day)
     return bool(fmt and fmt[0] == COLLAGE_CAROUSEL)
+
+
+def effective_count(preset: str | None, day: str, assigned: int) -> int | None:
+    """How many of `day`'s assigned photos this preset actually posts (#1010).
+
+    ``min(assigned, target)``, because ``generate_media`` renders
+    ``photos[:count]``. A preset target above the assigned count changes
+    nothing: a Sunday with three photos posts three under every preset that
+    governs it.
+
+    ``None`` for a day no preset governs, the same as ``day_format``, so the
+    absence keeps meaning "this day's own handling decides" rather than "zero".
+    """
+    fmt = day_format(preset, day)
+    if fmt is None:
+        return None
+    return min(assigned, fmt[1])
+
+
+def post_type(preset: str | None, day: str, assigned: int) -> str:
+    """What kind of post `day` is, given how many photos are assigned to it.
+
+    The single home for the rule ``generate_week._auto_post_type`` applies, so
+    the app and the pipeline cannot answer this differently. Two same-named
+    functions on either side of a boundary are never compared and can implement
+    different rules indefinitely (L263).
+
+    The ``assigned > 1`` clause is why this is not the same question as the
+    format: a collage day with ONE photo is a ``feed_photo``, exactly like a
+    single day with one. So a Balanced to Classic switch on such a day changes
+    the format and does NOT change the post, which is the difference between a
+    caption rebuild that is needed and one that is money spent for nothing.
+    """
+    if is_collage_carousel(preset, day) and assigned > 1:
+        return "carousel"
+    if day == "thursday" and assigned > 1:
+        return "scroll_reel"
+    return "feed_photo"
