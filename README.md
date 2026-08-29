@@ -156,7 +156,27 @@ and the only other symptom is an event that later cannot be found.
 ## Running the tests
 
 ```
-make test          # Swift model and service suites
+make test          # both suites, each reporting how many tests it ran
+```
+
+That runs the two legs in turn and prints a count for each:
+
+```
+Swift: 927 tests
+Python: 4012 tests
+```
+
+The counts are not decoration. Both runners exit 0 on a run that executed
+nothing at all, so a leg that ran no tests is otherwise indistinguishable from
+one that ran them all, which is what `make test` itself used to be: it ran the
+Swift suite alone and said nothing about it, and a green run read twice as the
+whole suite passing (#932). Each leg reads its own transcript back through
+`tools/suite_counts.py` and refuses when the total is missing or zero.
+
+Either half on its own, when you only changed one of them:
+
+```
+make test-swift    # Swift model and service suites
 make test-python   # the Python pipeline suites, all of them
 ```
 
@@ -167,7 +187,7 @@ make test-python-fast
 ```
 
 That deselects the handful of test files measured above the floor in
-`tests/file_durations.py`, which is four of them today. It is a loop, not a
+`tests/file_durations.py`, which is five of them today. It is a loop, not a
 gate: `make test-python` and CI still run everything. Which files it skips comes
 from a measurement rather than a guess (#766), so a new file heavy enough to
 belong to the full run only is added to it by re-measuring:

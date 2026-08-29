@@ -116,11 +116,35 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: factor of 1.94, and 7% is its geometric middle. Its neighbours sit at 0.71x
 #: and 1.38x of it against a band of 0.8 to 1.25.
 #:
+#: 4.6% since 2026-08-29, re-chosen against a fourth recording. That recording
+#: was forced by #932 adding a test file, and it moved the distribution enough
+#: that the 7% floor no longer sat in clear air: `test_generate_media_friday_clips`
+#: came out at 6.18%, inside the 5.6% to 8.8% band the old floor asked to be
+#: clear, and the guard said so. This is the fourth time that same file has
+#: decided where the floor goes, which is what a file sitting near the knee of a
+#: distribution does.
+#:
+#: The widest gap in the distribution is now 3.45%
+#: (`test_render_clip_reel`) to 6.18% (`test_generate_media_friday_clips`), a
+#: factor of 1.79, and 4.62% is its geometric middle. The band a floor there
+#: asks to be clear is 3.70% to 5.77%, and its neighbours sit at 0.75x and 1.34x
+#: of it against a band of 0.8 to 1.25.
+#:
+#: The gap above it, 6.18% to 9.74%, is 1.58x. A band needing 1.5625x of clear
+#: air fits inside that by four hundredths of a percentage point on each side,
+#: which is not clear air, it is a coincidence of rounding: a floor placed there
+#: would go red on the next reading's noise. So the wider gap is the one taken,
+#: as it has been every time.
+#:
+#: `test_generate_media_friday_clips` therefore moves back INTO the expensive
+#: set and the fast run stops paying for it, as it did before 2026-08-28. The
+#: set is five files. Nothing about that file changed; the suite around it did.
+#:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.07
+EXPENSIVE_SHARE = 0.046
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:

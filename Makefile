@@ -19,7 +19,8 @@ LOCKED = /usr/bin/env python3 tools/with_build_lock.py
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
-.PHONY: install install-force build test test-python test-python-fast \
+.PHONY: install install-force build test test-swift test-python \
+	test-python-fast \
 	check-guards check-toolchain record-fingerprints record-test-durations \
 	build-gui-tests \
 	record-design-change record-codec-change review-sheet clean
@@ -57,6 +58,41 @@ REVIEW_TESTS := \
 	PostRollTests/HostedControlLegibilityTests/testDumpEveryMeasuredScreenForReview \
 	PostRollTests/PhotoLightboxTests/testDumpTheLightboxForReview
 
+# Compile the GUI test target without running it.
+#
+# `make test` builds the PostRollTests scheme, which does not contain
+# PostRollUITests at all, so nothing local ever compiles the GUI tests and the
+# first thing that does is a runner. That is how a concurrency-safety error
+# reached CI on 2026-08-23 and failed a dispatched run at the build step (#864).
+#
+# build-for-testing rather than test: compiling is the part no local check had,
+# and RUNNING it would launch the app over whatever is on screen.
+build-gui-tests:
+	@$(LOCKED) xcodebuild build-for-testing -project "$(PROJECT)" \
+		-scheme PostRollUITests \
+		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
+		-quiet
+
+# Every test this project has, both halves, each saying how many it ran (#932).
+#
+# This target used to be the Swift suite alone. Nothing in the name said so and
+# it printed no summary separating the two, so a green `make test` read as the
+# whole suite passing while roughly 4000 Python tests had never been started. It
+# misled twice, once badly enough to be written into this project's notes.
+#
+# Sequential through $(MAKE) rather than as prerequisites, because prerequisites
+# can be dealt out to workers under `make -j` and these two legs both want the
+# whole machine, and the Swift one takes the shared build lock while it has it.
+#
+# The counts are the point. Both runners exit 0 on a run that executed NOTHING:
+# `pytest -k <no match>` prints "no tests ran", and xcodebuild reports TEST
+# SUCCEEDED for a spec that matched nothing (#644). So each leg reads its own
+# transcript back and refuses when the total is missing or zero, which is the
+# only thing that tells a full run from a half one (L98).
+test:
+	@$(MAKE) --no-print-directory test-swift
+	@$(MAKE) --no-print-directory test-python
+
 # The Swift model/service suite. Excludes the UI tests, which drive the real GUI,
 # and the three screenshot dumps.
 #
@@ -73,23 +109,15 @@ REVIEW_TESTS := \
 # drift into disagreeing about which tests are renderings (L41). CI runs
 # xcodebuild directly rather than through here, so the dumps are still proven
 # there on every push; what is skipped is only the local rendering.
-# Compile the GUI test target without running it.
 #
-# `make test` builds the PostRollTests scheme, which does not contain
-# PostRollUITests at all, so nothing local ever compiles the GUI tests and the
-# first thing that does is a runner. That is how a concurrency-safety error
-# reached CI on 2026-08-23 and failed a dispatched run at the build step (#864).
-#
-# build-for-testing rather than test: compiling is the part no local check had,
-# and RUNNING it would launch the app over whatever is on screen.
-build-gui-tests:
-	@$(LOCKED) xcodebuild build-for-testing -project "$(PROJECT)" \
-		-scheme PostRollUITests \
-		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
-		-quiet
-
-test:
-	@$(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
+# Wrapped in tools/suite_counts.py, which streams the output straight through
+# and reads the executed-tests total off the end of it. The wrapper decides only
+# whether the suite was REACHED; xcodebuild's own exit code still decides
+# whether it was green, because one field answering both questions is how a run
+# of nothing came to read as a full suite (L53).
+test-swift:
+	@venv/bin/python tools/suite_counts.py run swift -- \
+		$(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
 		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
 		$(foreach t,$(REVIEW_TESTS),-skip-testing:$(t)) \
 		test
@@ -108,7 +136,8 @@ test:
 # generates or asserts is stale the moment the suite grows, while reading as a
 # current fact (L32). `pytest -q` prints the real one at the end of every run.
 test-python:
-	@venv/bin/python -m pytest tests/ -q -n auto
+	@venv/bin/python tools/suite_counts.py run python -- \
+		venv/bin/python -m pytest tests/ -q -n auto
 
 # The loop between edits: the fast subset alone, for when even two minutes is too
 # long to wait on a one line change. Deselects the files measured above the floor

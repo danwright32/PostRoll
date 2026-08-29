@@ -1,0 +1,8 @@
+{
+  "name": "a-leg-that-ran-nothing-is-refused",
+  "file": "tools/suite_counts.py",
+  "find": "    if executed == 0:",
+  "replace": "    if executed < 0:",
+  "test": "tests/test_make_test_runs_both_suites.py::test_a_swift_run_that_executed_nothing_is_refused",
+  "breaks": "a Swift leg that executed 0 tests is reported as a full run, which is what a -only-testing or -skip-testing spec matching nothing produces: xcodebuild says TEST SUCCEEDED either way (#644, #932)"
+}

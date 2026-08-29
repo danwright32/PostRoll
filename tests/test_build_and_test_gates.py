@@ -368,20 +368,51 @@ def test_the_makefile_names_the_renderings_once():
     assert len(_review_tests()) >= 3, _review_tests()
 
 
+def _recipe(name: str) -> str:
+    """One make target's recipe, and only that one.
+
+    Read per target rather than as the span between two headers, because #932
+    split the Swift run out of `test:` into `test-swift:` and a span from `test`
+    to `test-python` then covered BOTH. Either check below would have gone on
+    passing while measuring a target neither of them is about, which is what a
+    split does to every guard calibrated against the whole (L220).
+    """
+    text = _makefile()
+    header = re.search(rf"^{re.escape(name)}:(?!=)", text, re.M)
+    assert header, f"there is no {name} target in the Makefile"
+
+    lines = []
+    for line in text[header.end():].splitlines()[1:]:
+        if line.startswith("\t"):
+            lines.append(line)
+        elif not line.strip() or line.lstrip().startswith("#"):
+            continue
+        else:
+            break
+    return "\n".join(lines)
+
+
+def test_the_rendering_run_is_a_target_of_its_own():
+    """The precondition of both checks below. If the Swift leg stopped being a
+    target with a recipe, `_recipe` would return nothing and an empty string
+    contains no forbidden spec, so both would pass while reading nothing
+    (L98, L100)."""
+    assert "xcodebuild" in _recipe("test-swift")
+
+
 def test_an_ordinary_suite_run_skips_the_renderings():
     """The dumps clear the sheet folder and keep what was there as the
-    baseline, so rendering them during `make test` rotated the POST-change
+    baseline, so rendering them during the Swift leg rotated the POST-change
     pictures into the baseline and the comparison then reported that nothing
     had moved (#644).
 
     A comparison reporting no difference because its reference point was
     overwritten is worse than no comparison, because it is believed."""
-    target = _makefile()
-    body = target[target.index("\ntest:"):target.index("\ntest-python:")]
+    body = _recipe("test-swift")
 
     for name in _review_tests():
         assert f"-skip-testing:{name}" in body or "$(REVIEW_TESTS)" in body, (
-            f"`make test` runs {name}, which re-renders the review sheet and "
+            f"the Swift leg runs {name}, which re-renders the review sheet and "
             "consumes the baseline the comparison needs")
 
 
@@ -389,8 +420,7 @@ def test_the_sheet_selects_exactly_what_the_suite_skips():
     """One list, so the two cannot drift into disagreeing about which tests are
     renderings rather than checks (L41)."""
     target = _makefile()
-    skipping = target[target.index("\ntest:"):target.index("\ntest-python:")]
     selecting = target[target.index("\nreview-sheet:"):]
 
-    assert "$(foreach t,$(REVIEW_TESTS),-skip-testing:$(t))" in skipping
+    assert "$(foreach t,$(REVIEW_TESTS),-skip-testing:$(t))" in _recipe("test-swift")
     assert "$(foreach t,$(REVIEW_TESTS),-only-testing:$(t))" in selecting
