@@ -317,3 +317,31 @@ def test_the_lock_works_in_a_git_worktree(tmp_path):
             "judging rather than standing down for somebody else's break")
 
     assert current(tree) is None
+
+
+def test_an_unreadable_lock_says_so_rather_than_inventing_a_dead_run(tmp_path):
+    """Caught by the push scan, and it was right.
+
+    A lock file that cannot be parsed took the abandoned-run branch, which told
+    the reader a prover "died without cleaning up" while proving 'an unreadable
+    lock', started by "pid -1". Not one of those claims was measured: the file
+    could not be read, so what happened to the run is unknown, and -1 is a
+    placeholder being read as a fact.
+
+    Still a FAILURE, because a file nobody can read must not quietly stand the
+    registry check down. Only the sentence changes, to one that says what was
+    actually established (L11).
+    """
+    path = lock_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("not json at all")
+
+    outcome, why = verdict(tmp_path)
+
+    assert outcome is Verdict.STALE, "an unreadable lock is still loud"
+    assert "could not be read" in why, f"got: {why}"
+    assert "pid -1" not in why, (
+        f"a placeholder must not be quoted as a process number: {why}")
+    assert "died without cleaning up" not in why, (
+        f"nothing established that a run died: {why}")
+    assert "delete" in why.lower(), "the remedy still has to be there (L111)"

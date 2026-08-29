@@ -62,6 +62,20 @@ class Lock:
         """One sentence a person can act on, naming what is happening and what
         to do about it. The two cases need different remedies, so they get
         different sentences (L11)."""
+        if self.guard == self.UNREADABLE:
+            # Says only what was established. The file exists and could not be
+            # read, so what the run was doing, and whether it is still going,
+            # are both unknown, and quoting the placeholder pid as a fact was
+            # the defect a push scan caught (L11).
+            return ("a guard prover's lock file is there and could not be "
+                    "read, so this check cannot tell whether one is running. "
+                    "The tree may hold a deliberate break. Check `git status`, "
+                    "restore anything a prover did not, then delete the lock "
+                    "file to re-enable this check.")
+        if self.guard == self.STARTING and self.is_live:
+            return ("a guard prover has just taken the lock and has not said "
+                    "what it is proving yet, so this check cannot judge the "
+                    "tree. Re-run in a moment, or run the two one at a time.")
         if self.is_live:
             return (f"a guard prover (pid {self.pid}) is part way through "
                     f"proving {self.guard!r} and has a source file broken on "
