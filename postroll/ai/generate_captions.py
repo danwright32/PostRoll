@@ -940,6 +940,27 @@ def generate_caption(
         # caption stops showing findings about the text before the edit. Same
         # reason BlogOutput carries findings_body (#201).
         "findings_caption": final_caption,
+        # Which photo each alt text describes (#1008).
+        #
+        # `alt_texts` is positional against this list, and everything that edits
+        # a day afterwards moves the photos without it. `removingPhotos` re-keys
+        # the crops, the tags and the collage cells and cannot reach the alt
+        # texts, which live on a different object, and a drag to reorder moves
+        # nothing but the photos. So position measures whatever later occupies
+        # it (L237), and the export labels an alt text with a filename that is
+        # not its subject.
+        #
+        # `original_paths` rather than `photo_paths`, which is the SURVIVING
+        # subset when a photo could not be read: the alt texts have already had
+        # their holes put back against the full list just above, so anchoring to
+        # the subset would reintroduce the off-by-one that `_reinsert_skipped`
+        # exists to prevent, at the one moment it is hardest to notice.
+        #
+        # Truncated to the alt texts that survived normalization, so the two
+        # lists are the same length in every branch. A single alt post keeps one
+        # alt text, and an anchor list still naming every photo would claim all
+        # of them for it (L16).
+        "alt_text_photo_paths": [str(p) for p in original_paths][:len(alt_texts)],
     }
 
 

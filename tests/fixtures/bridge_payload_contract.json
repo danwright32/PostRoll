@@ -128,6 +128,7 @@
       "caption": "swift",
       "hashtags": "swift",
       "alt_texts": "swift",
+      "alt_text_photo_paths": "swift",
       "scene_labels": "swift",
       "skipped_photos": {
         "python_only": "generate_week hoists this onto the week payload's `warnings`, which is where the app reads it and where it can be shown per day. DayCaption deliberately does not carry a second copy: two homes for one fact is how it goes missing in exactly one direction (L83)."
@@ -171,6 +172,7 @@
       "caption": "swift",
       "hashtags": "swift",
       "alt_texts": "swift",
+      "alt_text_photo_paths": "swift",
       "scene_labels": "swift",
       "findings": "swift",
       "findings_caption": "swift"

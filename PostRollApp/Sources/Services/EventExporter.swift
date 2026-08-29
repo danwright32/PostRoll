@@ -197,9 +197,18 @@ struct EventExporter {
             if !cap.altTexts.isEmpty {
                 let altBody: String
                 if preset.isCollageCarousel(day) {
-                    altBody = cap.altTexts.enumerated()
-                        .map { idx, altText in
-                            "\(photoLabel(idx: idx, photoPaths: photoPaths)): \(altText)"
+                    // Walked in PHOTO order, resolving each photo's own alt
+                    // text, rather than walking the alt texts and labelling
+                    // them by position (#1008). The two agree only until the
+                    // photos move, and a drag to reorder moves them with
+                    // nothing permuting the alt texts, so the old form
+                    // described each photo with its neighbour's words.
+                    altBody = photoPaths
+                        .enumerated()
+                        .compactMap { idx, url -> String? in
+                            guard let alt = cap.altText(for: url, at: idx),
+                                  !alt.isEmpty else { return nil }
+                            return "\(photoLabel(idx: idx, photoPaths: photoPaths)): \(alt)"
                         }
                         .joined(separator: "\n")
                 } else {
