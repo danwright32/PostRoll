@@ -441,6 +441,10 @@ def test_a_scoped_run_with_nothing_to_diff_against_refuses(tmp_path):
     repo = _scratch_repo(tmp_path)
     (repo / "tools").mkdir()
     shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    # check_guards imports this at module level since #920. Without it the run
+    # dies on the import, and this test then passes or fails for a reason it is
+    # not about.
+    shutil.copy(REPO_ROOT / "tools" / "perturbation_lock.py", repo / "tools")
     (repo / "tests" / "fixtures" / "guard_mutations").mkdir(parents=True)
     shutil.copy(
         next((REPO_ROOT / "tests" / "fixtures" / "guard_mutations").glob("*.json")),
@@ -466,6 +470,10 @@ def test_an_empty_registry_refuses_rather_than_passing(tmp_path):
     repo = _scratch_repo(tmp_path)
     (repo / "tools").mkdir()
     shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    # check_guards imports this at module level since #920. Without it the run
+    # dies on the import, and this test then passes or fails for a reason it is
+    # not about.
+    shutil.copy(REPO_ROOT / "tools" / "perturbation_lock.py", repo / "tools")
     (repo / "tests" / "fixtures" / "guard_mutations").mkdir(parents=True)
 
     result = subprocess.run(
@@ -510,6 +518,10 @@ def test_the_guard_runner_does_not_insist_on_a_venv(tmp_path):
     repo = _scratch_repo(tmp_path)
     (repo / "tools").mkdir()
     shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    # check_guards imports this at module level since #920. Without it the run
+    # dies on the import, and this test then passes or fails for a reason it is
+    # not about.
+    shutil.copy(REPO_ROOT / "tools" / "perturbation_lock.py", repo / "tools")
     registry = repo / "tests" / "fixtures" / "guard_mutations"
     registry.mkdir(parents=True)
 

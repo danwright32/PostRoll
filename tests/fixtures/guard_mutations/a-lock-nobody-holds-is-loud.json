@@ -1,0 +1,8 @@
+{
+  "name": "a-lock-nobody-holds-is-loud",
+  "file": "tests/test_guard_mutation_registry.py",
+  "find": "    if outcome is perturbation_lock.Verdict.STALE:\n        pytest.fail(why)",
+  "replace": "    if outcome is perturbation_lock.Verdict.STALE:\n        pytest.skip(why)",
+  "test": "tests/test_perturbation_lock.py::test_the_registry_check_FAILS_on_a_lock_nobody_holds",
+  "breaks": "a guard prover that died leaves a lock behind, and the registry check then stands down for as long as that file sits on disk rather than saying so. Every anchor in the registry goes unchecked while the suite reports a clean run, which is the shape a check that cannot fail always has (#920, L182)"
+}
