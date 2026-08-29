@@ -3,6 +3,6 @@
   "file": "PostRollApp/Tests/RepoFixture.swift",
   "find": "        let base = root.resolvingSymlinksInPath().standardizedFileURL.pathComponents",
   "replace": "        let base = root.standardizedFileURL.pathComponents",
-  "test": "PostRollTests/RepoFixtureTests/testAFileIsNamedRelativelyEvenWhenTheRootIsReachedThroughASymlink",
-  "breaks": "every source-scanning Swift suite stops working from a git worktree. The root a file was compiled from and the path an enumerator hands back disagree by a leading /private, so no file comes out as being inside the root at all (#941, L251)"
+  "test": "PostRollTests/RepoFixtureTests/testTheROOTIsResolvedToo",
+  "breaks": "every source-scanning Swift suite stops working from a git worktree. The root a file was compiled from and the path an enumerator hands back disagree by a leading /private, so no file comes out as being inside the root at all (#941, L251). Pointed at the DIRECT caller of relativePath: the sweep test cannot prove this line, because files(under:) resolves the root before it walks and passes the resolved root down, so the line has nothing left to do by the time it runs (L1)"
 }

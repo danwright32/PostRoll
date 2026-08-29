@@ -119,6 +119,34 @@ final class RepoFixtureTests: XCTestCase {
         return (real, link)
     }
 
+    func testTheROOTIsResolvedToo() throws {
+        // The guard for `relativePath`'s root-side resolve, and it has to call
+        // that function DIRECTLY.
+        //
+        // Reaching it through `files(under:)` cannot test it: that caller
+        // resolves the root itself before it walks, then passes the already
+        // resolved root down, so by the time this line runs its work is done
+        // and deleting it changes nothing. Measured: `check_guards.py` removed
+        // the root-side resolve and the suite stayed GREEN, which is a guard
+        // that has never been seen to fail (L1).
+        //
+        // So the root here is the UNRESOLVED symlink and the file is the
+        // RESOLVED target, which is exactly the disagreement a worktree
+        // produces, and it is the only arrangement in which the root-side
+        // resolve is what decides the answer.
+        let (real, link) = try treeReachedThroughASymlink()
+        let file = real.appendingPathComponent("AppState.swift").resolvingSymlinksInPath()
+
+        XCTAssertNotEqual(file.path, link.appendingPathComponent("AppState.swift").path,
+                          "the two sides agree on this machine, so nothing here can "
+                          + "exercise the resolve and the assertion below is vacuous")
+
+        XCTAssertEqual(RepoFixture.relativePath(of: file, under: link), "AppState.swift",
+                       "a root reached through a symlink must still name the files "
+                       + "under it, or every source-scanning suite goes blind in a "
+                       + "worktree (#941)")
+    }
+
     func testAFileIsNamedRelativelyEvenWhenTheRootIsReachedThroughASymlink() throws {
         let (_, link) = try treeReachedThroughASymlink()
 
