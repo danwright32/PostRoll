@@ -1,0 +1,8 @@
+{
+  "name": "a-day-rebuild-starts-under-a-full-run",
+  "file": "PostRollApp/Sources/Services/PreviewRunState.swift",
+  "find": "        guard !isRunningFull(eventID) else { return false }",
+  "replace": "        // mutation: the full run check is gone",
+  "test": "PostRollTests/PreviewRunStateTests/testADayRegenIsRefusedWhileAFullRunIsInFlight",
+  "breaks": "a single day rebuild starts underneath a full run that is already writing that day, which is the second writer the claim exists to prevent (#1009)"
+}
