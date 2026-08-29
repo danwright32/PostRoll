@@ -344,9 +344,12 @@ struct ExportView: View {
                         .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
             } else {
-                Text(effectivePreset == .balanced
-                     ? "This event: Sunday, Monday, and Wednesday each post a 4 photo carousel with a collage story."
-                     : "This event: Sunday and Monday post a single photo; Wednesday posts a 10 photo carousel with a collage story.")
+                // Derived from the preset rather than restated here (#1007).
+                // This was a two-way ternary over THREE presets, so selecting
+                // Opening printed Classic's sentence and said Sunday posts a
+                // single photo when it posts seven. Settings never had the bug
+                // because it reads `explanations` (L41).
+                Text(PostingLayoutCopy.thisEvent(effectivePreset))
                     .font(.system(size: 12))
                     .foregroundStyle(PaintedSurfaces.secondaryText)
             }

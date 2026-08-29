@@ -108,6 +108,24 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
+/// Copy for the per-event posting layout picker (#1007).
+///
+/// Here rather than inside the view, because the sentence was written as a
+/// two-way ternary over THREE presets and could not be tested where it lived:
+/// selecting Opening printed Classic's sentence, and nothing anywhere could
+/// notice. `SettingsView` stayed correct through the same change because it
+/// reads `explanations` rather than restating them (L41).
+enum PostingLayoutCopy {
+    /// The sentence under the picker, describing what THIS event posts.
+    ///
+    /// Says "this event" because the Settings screen shows a sentence about the
+    /// app wide default in the same words, and a reader has to be able to tell
+    /// which of the two they are looking at.
+    static func thisEvent(_ preset: PostingPreset) -> String {
+        "This event: \(preset.explanation)."
+    }
+}
+
 /// Pure decision logic for the "change collage photos" picker, extracted so it
 /// can be unit-tested without the SwiftUI view (issue #63 regression cover).
 enum CollagePhotoSelection {
