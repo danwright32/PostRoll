@@ -286,7 +286,48 @@ final class AccountBook {
         }
     }
 
+#if POSTROLL_TESTS
+    /// The book the TEST BUNDLE gets: a disposable file, emptied once per run
+    /// (#945).
+    ///
+    /// `init` calls `load()`, so the first touch of this property in a process
+    /// reads whatever is at that path. Nothing redirected it, and nothing was
+    /// wrong on the day only because no accounts.json existed yet. The file
+    /// appears the first time an export records a follower count, and from
+    /// then on every run of the suite would read real numbers about real
+    /// people on a path nobody would think to check (L222).
+    ///
+    /// Compiled out of the shipping app, the way `AppPreferences.store` is, so
+    /// the redirection is a property of the build rather than of each screen
+    /// remembering to pass a book down (L2). The per-call seam stays:
+    /// `AccountBook(fileURL:)` is how a test says which file it wants.
+    static let shared = AccountBook(fileURL: scratchAccountsFile())
+
+    /// A disposable accounts file, in a directory of its own that is emptied
+    /// before the path is handed back.
+    ///
+    /// The whole DIRECTORY rather than the file, because `AccountBook` rotates
+    /// a backup beside whatever it is given and sets a corrupt file aside
+    /// there too, so clearing only the file would leave the rest of the run's
+    /// leavings behind.
+    ///
+    /// Emptied on the same reasoning as the scratch preferences suite (#744):
+    /// a fixed name means one run's writes are the next run's inputs unless
+    /// something clears them, and that is diagnosed as a flaky test rather
+    /// than as leftover state.
+    ///
+    /// A function rather than a `let` so a test can watch the clearing happen.
+    /// Nothing inside a run can watch `shared` being built.
+    static func scratchAccountsFile() -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PostRollTests-accounts", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("accounts.json")
+    }
+#else
     static let shared = AccountBook(fileURL: AppPaths.accountsFile)
+#endif
 
     private let fileURL: URL
     private var records: [String: AccountRecord] = [:]

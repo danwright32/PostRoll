@@ -167,6 +167,44 @@ final class AccountBookTests: XCTestCase {
         XCTAssertEqual(fresh.stats(for: "janecellist")?.followers, 1)
     }
 
+    // MARK: - The book the suite itself gets (#945)
+
+    func testTheScratchAccountsFileIsEmptiedBeforeItIsHandedBack() throws {
+        // The half a fixed name cannot give on its own: whatever one run wrote
+        // is an input to the next unless something clears it (#744). Written
+        // as a failure of the CLEARING rather than of the path, because a
+        // returned path that merely exists proves nothing.
+        let file = AccountBook.scratchAccountsFile()
+        try "left behind by an earlier run".write(to: file, atomically: true, encoding: .utf8)
+        let sideways = file.deletingLastPathComponent().appendingPathComponent("accounts-backup.json")
+        try "and its backup".write(to: sideways, atomically: true, encoding: .utf8)
+
+        let again = AccountBook.scratchAccountsFile()
+
+        XCTAssertEqual(again, file, "the scratch path moved between calls")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: again.path),
+                       "the scratch accounts file survived, so one run's numbers are the next run's")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sideways.path),
+                       "the rotated backup survived, so clearing the file alone is not enough")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: again.deletingLastPathComponent().path),
+                      "the scratch directory was removed and not put back, so a save into it fails")
+    }
+
+    func testTheScratchAccountsFileIsNotTheRealOne() {
+        // The point of the redirection, stated where it can be read. The
+        // arrangement itself is held in place by the compiler and by
+        // tests/test_swift_tests_never_reach_live_data.py; this says what the
+        // arrangement is FOR.
+        let scratch = AccountBook.scratchAccountsFile()
+        // Read into a local first: `root: AppPaths.` written out at a call site
+        // is the spelling the live-data guard bans, and it is banned for a good
+        // reason, so this does not write it.
+        let liveRoot = AppPaths.root
+        XCTAssertNotEqual(scratch, AppPaths.accountsFile)
+        XCTAssertFalse(AppPaths.isInside(scratch, root: liveRoot),
+                       "the suite's accounts file is inside the real data root")
+    }
+
     func testANegativeNumberIsRefusedRatherThanStored() {
         // A negative follower count can only be a typo, and it would produce a
         // negative engagement rate that sorts above every real account.
