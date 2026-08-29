@@ -6,13 +6,32 @@ struct AssetGenerationView: View {
     @Environment(AppState.self) private var appState
     @Environment(GenerationManager.self) private var genManager
 
+    /// The two shared stores this screen reads while it DRAWS (#937).
+    ///
+    /// Injected so the screen can be rendered for review, which nothing could
+    /// do before: the phase timeline and the estimate are most of what it says,
+    /// and both come from a singleton reached inside a computed property, so
+    /// the picture would have been of whatever the run before happened to
+    /// leave (L205). The app passes the shared ones and behaves as before.
+    ///
+    /// Every use of the bakery, not only the ones a render reaches. A seam
+    /// applied to the reads while the write still went to the shared instance
+    /// would be one screen holding two bakeries, which is the shape of a fix
+    /// scoped to the symptom that was noticed (L173).
+    let timings: TimingStore
+    let bakery: ProgramPDFBakery
+
     /// When no run is active, this picks between the configuring and done
     /// screens. `nil` defers to `event.weekResult` (done if results exist).
     /// "Regenerate all" sets it to force the configuring screen.
     @State private var forceConfigure = false
 
-    init(event: Event) {
+    init(event: Event,
+         timings: TimingStore = .shared,
+         bakery: ProgramPDFBakery = .shared) {
         self.event = event
+        self.timings = timings
+        self.bakery = bakery
     }
 
     // Animation state
@@ -54,7 +73,7 @@ struct AssetGenerationView: View {
     // TimingStore, a retry builds a smaller timeline of its own. The arithmetic
     // for both lives in GenerationRunPlan, where it can be tested (#396).
     private var scaledPhases: [GenerationRunPlan.Phase] {
-        retryPlan?.phases ?? TimingStore.shared.scaledGenerationPhases()
+        retryPlan?.phases ?? timings.scaledGenerationPhases()
             .map { GenerationRunPlan.Phase(name: $0.name, startsAt: $0.startsAt) }
     }
 
@@ -62,7 +81,7 @@ struct AssetGenerationView: View {
         if let retry = retryPlan {
             return TimingStore.formatClock(retry.estimate)
         }
-        if let est = TimingStore.shared.generationEstimate {
+        if let est = timings.generationEstimate {
             return TimingStore.formatClock(est)
         }
         return "~6:00"
@@ -74,9 +93,9 @@ struct AssetGenerationView: View {
         GenerationRunPlan.retryPlan(
             retryDays: activeRetryDays,
             dayCount: daysWithPhotos.count,
-            fullEstimate: TimingStore.shared.generationEstimate,
-            captionsMean: TimingStore.shared.captionsMean,
-            blogMean: TimingStore.shared.blogMean)
+            fullEstimate: timings.generationEstimate,
+            captionsMean: timings.captionsMean,
+            blogMean: timings.blogMean)
     }
 
     private var runningSubtitle: String {
@@ -295,7 +314,7 @@ struct AssetGenerationView: View {
     /// Says which state the program PDF is in, so "Preparing…" isn't shown for
     /// a bake that has already failed and a live bake isn't invisible.
     private var programPDFButtonLabel: String {
-        if ProgramPDFBakery.shared.isBaking(event.id) { return "Building program PDF…" }
+        if bakery.isBaking(event.id) { return "Building program PDF…" }
         if isPreparingProgramPDF { return "Preparing program PDF…" }
         return "Download program PDF"
     }
@@ -374,9 +393,9 @@ struct AssetGenerationView: View {
                     programPDFLabel: (!event.programImagePaths.isEmpty || event.programPDFPath != nil)
                         ? programPDFButtonLabel : nil,
                     programPDFDisabled: isPreparingProgramPDF
-                        || ProgramPDFBakery.shared.isBaking(event.id),
+                        || bakery.isBaking(event.id),
                     programPDFStartedAt: programPDFStartedAt,
-                    programBakeError: ProgramPDFBakery.shared.failure(for: event.id),
+                    programBakeError: bakery.failure(for: event.id),
                     hasBlog: !event.blogPhotoPaths.isEmpty,
                     revealed: showCheckmark,
                     onContinue: { advance() },
@@ -400,7 +419,7 @@ struct AssetGenerationView: View {
                     },
                     onDownloadProgramPDF: { downloadProgramPDF() },
                     onRetryProgramBake: {
-                        ProgramPDFBakery.shared.bake(eventID: event.id, appState: appState,
+                        bakery.bake(eventID: event.id, appState: appState,
                                                      deletingScansOnSuccess: true)
                     },
                     onRegenerateBlog: { startGeneration(retryDays: Set(["blog"])) },

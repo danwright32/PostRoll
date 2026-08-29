@@ -1110,9 +1110,32 @@ extension HostedControlLegibilityTests {
         surfaces.append(("settings, a key and a full handle book",
                          { try self.renderSettings(key: "sk-ant-api03-not-a-real-key",
                                                    book: Self.filledBook()) }))
+        surfaces.append(("screen: ProgramUploadView",
+                         { try self.renderProgramUploadScreen() }))
+        surfaces.append(("screen: OCRProgressView",
+                         { try self.renderOCRProgressScreen(estimateSeconds: 95) }))
+        surfaces.append(("screen: OCRProgressView, no estimate yet",
+                         { try self.renderOCRProgressScreen(estimateSeconds: nil) }))
+        surfaces.append(("screen: PhotoAssignmentView",
+                         { try self.renderPhotoAssignmentScreen() }))
+        surfaces.append(("screen: AssetGenerationView",
+                         { try self.renderAssetGenerationScreen() }))
+        surfaces.append(("screen: OCRReviewView",
+                         { try self.renderOCRReviewScreen() }))
+        surfaces.append(("screen: ExportView",
+                         { try self.renderExportScreen() }))
+        surfaces.append(("screen: CaptionReviewView",
+                         { try self.renderCaptionReviewScreen() }))
 
         return surfaces
     }
+
+    /// What the sheet holds, by name, for a check in another file (#937).
+    ///
+    /// The surfaces themselves stay private: handing out the renderers would
+    /// let another file draw them, and then two files would decide what the
+    /// sheet is. Only the names leave.
+    var reviewSurfaceNames: [String] { reviewSurfaces.map(\.name) }
 
     /// The sheet names every state the checks in this file measure (#623).
     ///
@@ -1414,6 +1437,195 @@ extension HostedControlLegibilityTests {
         return try WordFootprint.hosted(view,
                                         size: CGSize(width: width, height: 700),
                                         wordless: false)
+    }
+
+    // MARK: - The whole screens the app can show (#937)
+    //
+    // Every one of these was absent from the sheet until now, and what WAS on
+    // it were their parts: the caption card, the photo day grid, the tag fields
+    // panel, the generation-done body, each drawn with plain values. Those are
+    // renderable precisely because they take values; the screens around them
+    // take an Event and reach for stores, which is why none of them had ever
+    // been drawn.
+    //
+    // Named `screen: <TypeName>` so `TopLevelScreenCoverageTests` can hold the
+    // sheet to what `EventDetailView` can actually show, with no mapping table
+    // in between for the two sides to disagree about (L41).
+
+    /// The size a whole screen is drawn at.
+    ///
+    /// Tall, and scrolled, because these are full pages: a frame that cropped
+    /// them would put whatever sits at the bottom, which is usually the action
+    /// that moves the event on, below the cut and out of every review.
+    static let screenSize = CGSize(width: 900, height: 1100)
+
+    private func renderScreen(_ view: some View) throws -> NSBitmapImageRep {
+        try WordFootprint.hosted(
+            ScrollView { view }
+                .frame(width: Self.screenSize.width, height: Self.screenSize.height)
+                .background(PaintedSurfaces.page),
+            size: Self.screenSize, wordless: false)
+    }
+
+    /// A scratch directory per render, so nothing drawn here can read or write
+    /// the events, photographs or previews the app really has (L2).
+    private static func scratchRoot() -> URL {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("postroll-screen-render-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: root,
+                                                 withIntermediateDirectories: true)
+        return root
+    }
+
+    /// An event with enough on it to draw, built the way the app builds one.
+    ///
+    /// A real shape rather than a tidy one: a name long enough to wrap, an
+    /// organisation and a venue that are the sort of thing a program carries,
+    /// and a date, because several of these screens put it in their header and
+    /// a missing one renders a header nobody would ever see (L48).
+    nonisolated static func sampleEvent(stage: EventStage = .created) -> Event {
+        var event = Event(name: "An Evening of New Choreography",
+                          org: "Battery Dance", venue: "Wagner Park",
+                          date: Date(timeIntervalSince1970: 1_788_000_000),
+                          shootType: .fullShow)
+        event.stage = stage
+        return event
+    }
+
+    /// The app's state, on a store and a data root of its own.
+    @MainActor
+    static func scratchAppState(_ event: Event) -> AppState {
+        let root = scratchRoot()
+        return AppState(events: [event],
+                        storeURL: root.appendingPathComponent("events.json"),
+                        dataRoot: root)
+    }
+
+    /// Stage 1: the screen that asks for the program (#937).
+    private func renderProgramUploadScreen() throws -> NSBitmapImageRep {
+        let event = Self.sampleEvent(stage: .created)
+        return try renderScreen(
+            ProgramUploadView(event: event)
+                .environment(Self.scratchAppState(event))
+                .environment(OCRManager()))
+    }
+
+    /// Stage 2: the screen shown while the program is being read (#937).
+    ///
+    /// With an estimate planted, because the footer's whole job is to say how
+    /// long this usually takes, and a store with nothing in it draws the
+    /// screen's other half. An empty one is what a first run shows and is worth
+    /// having too, so both are on the sheet.
+    private func renderOCRProgressScreen(estimateSeconds: Double?) throws -> NSBitmapImageRep {
+        let event = Self.sampleEvent(stage: .programUploaded)
+        let timings = TimingStore(defaults: Self.scratchDefaults())
+        if let estimateSeconds {
+            timings.recordOCR(seconds: estimateSeconds)
+        }
+        return try renderScreen(
+            OCRProgressView(event: event, timings: timings)
+                .environment(Self.scratchAppState(event))
+                .environment(OCRManager()))
+    }
+
+    /// Stage 3: the screen where photographs are dealt across the week (#937).
+    ///
+    /// The one screen of the seven that needed no seam at all: it takes the
+    /// event and the app's state and nothing else, which is why parts of it
+    /// (the photo grid, the tag fields panel) were already renderable and on
+    /// the sheet before the screen around them was.
+    private func renderPhotoAssignmentScreen() throws -> NSBitmapImageRep {
+        let event = Self.sampleEvent(stage: .photosAssigned)
+        return try renderScreen(
+            PhotoAssignmentView(event: event)
+                .environment(Self.scratchAppState(event)))
+    }
+
+    /// Stage 4: the screen that runs the week's generation (#937).
+    ///
+    /// Configuring rather than running, because a run in flight is what the
+    /// reading screen already pictures and this is the state Dan actually
+    /// makes a decision on. The timings carry a history, so the phase timeline
+    /// and the estimate are drawn from real arithmetic rather than the "~6:00"
+    /// fallback, which is a different picture and a rarer one.
+    private func renderAssetGenerationScreen() throws -> NSBitmapImageRep {
+        let event = Self.sampleEvent(stage: .assetsGenerated)
+        let timings = TimingStore(defaults: Self.scratchDefaults())
+        timings.recordGeneration(seconds: 372)
+        timings.recordGenerationPhases(captions: 210, blog: 96, packaging: 66)
+        return try renderScreen(
+            AssetGenerationView(event: event, timings: timings,
+                                bakery: ProgramPDFBakery())
+                .environment(Self.scratchAppState(event))
+                .environment(GenerationManager()))
+    }
+
+    /// Stage 5: the screen where what was read off the program is corrected (#937).
+    ///
+    /// With an OCR result on the event, because the screen with nothing to
+    /// review is a different and much emptier picture, and the one worth
+    /// looking at is the one with performers, pieces and a handle the book
+    /// guessed. The guessed handle matters: it is marked as a guess for as long
+    /// as it is untouched (#459), and that mark is a thing only a render shows.
+    private func renderOCRReviewScreen() throws -> NSBitmapImageRep {
+        var event = Self.sampleEvent(stage: .ocrDone)
+        var result = OCRResult()
+        result.performers = [
+            Performer(name: "Jordan Langworthy", role: "Choreographer"),
+            Performer(name: "Sarah Chen", role: "Dancer"),
+        ]
+        event.ocrResult = result
+
+        let book = HandleBook(defaults: Self.scratchDefaults())
+        book.setEntry(name: "Jordan Langworthy", value: "@jordanlangworthy",
+                      in: .performer)
+        book.setEntry(name: "Battery Dance", value: "@batterydance", in: .org)
+
+        return try renderScreen(
+            OCRReviewView(event: event, book: book)
+                .environment(Self.scratchAppState(event))
+                .environment(ProgramNotesManager())
+                .environment(PerformerLookupManager())
+                .environment(OCRManager())
+                .environment(OCRReflowManager()))
+    }
+
+    /// Stage 7: the screen the week is exported from (#937).
+    ///
+    /// The account book gets a file of its own in the scratch root. It holds
+    /// real follower counts for real accounts, so a render reaching the shared
+    /// one would read Dan's numbers into the suite and could write them back
+    /// (L2, L222).
+    private func renderExportScreen() throws -> NSBitmapImageRep {
+        let event = Self.sampleEvent(stage: .exported)
+        let root = Self.scratchRoot()
+        return try renderScreen(
+            ExportView(event: event,
+                       accounts: AccountBook(
+                        fileURL: root.appendingPathComponent("accounts.json")),
+                       previews: PreviewGraphicsManager())
+                .environment(Self.scratchAppState(event))
+                .environment(ExportManager())
+                .environment(GenerationManager()))
+    }
+
+    /// Stage 6: the screen the week's captions are read and edited on (#937).
+    ///
+    /// The last of the seven, and the heaviest. Only the two stores it reads
+    /// while DRAWING are handed in; what it does when a button is pressed goes
+    /// through PythonBridge and NotificationService, and no render presses a
+    /// button.
+    private func renderCaptionReviewScreen() throws -> NSBitmapImageRep {
+        let event = Self.sampleEvent(stage: .captionsReviewed)
+        let root = Self.scratchRoot()
+        return try renderScreen(
+            CaptionReviewView(event: event,
+                              accounts: AccountBook(
+                                fileURL: root.appendingPathComponent("accounts.json")),
+                              previews: PreviewGraphicsManager())
+                .environment(Self.scratchAppState(event))
+                .environment(HashtagStore(loadingSaved: false))
+                .environment(CaptionWorkManager()))
     }
 
     /// The Settings screen, which nothing rendered until now (#918).
