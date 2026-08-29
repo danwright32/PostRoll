@@ -1507,7 +1507,7 @@ extension HostedControlLegibilityTests {
         return try renderScreen(
             ProgramUploadView(event: event)
                 .environment(Self.scratchAppState(event))
-                .environment(OCRManager()))
+                .withAppOwners(AppOwners()))
     }
 
     /// Stage 2: the screen shown while the program is being read (#937).
@@ -1525,7 +1525,7 @@ extension HostedControlLegibilityTests {
         return try renderScreen(
             OCRProgressView(event: event, timings: timings)
                 .environment(Self.scratchAppState(event))
-                .environment(OCRManager()))
+                .withAppOwners(AppOwners()))
     }
 
     /// Stage 3: the screen where photographs are dealt across the week (#937).
@@ -1557,7 +1557,7 @@ extension HostedControlLegibilityTests {
             AssetGenerationView(event: event, timings: timings,
                                 bakery: ProgramPDFBakery())
                 .environment(Self.scratchAppState(event))
-                .environment(GenerationManager()))
+                .withAppOwners(AppOwners()))
     }
 
     /// Stage 5: the screen where what was read off the program is corrected (#937).
@@ -1584,10 +1584,7 @@ extension HostedControlLegibilityTests {
         return try renderScreen(
             OCRReviewView(event: event, book: book)
                 .environment(Self.scratchAppState(event))
-                .environment(ProgramNotesManager())
-                .environment(PerformerLookupManager())
-                .environment(OCRManager())
-                .environment(OCRReflowManager()))
+                .withAppOwners(AppOwners()))
     }
 
     /// Stage 7: the screen the week is exported from (#937).
@@ -1605,8 +1602,7 @@ extension HostedControlLegibilityTests {
                         fileURL: root.appendingPathComponent("accounts.json")),
                        previews: PreviewGraphicsManager())
                 .environment(Self.scratchAppState(event))
-                .environment(ExportManager())
-                .environment(GenerationManager()))
+                .withAppOwners(AppOwners()))
     }
 
     /// Stage 6: the screen the week's captions are read and edited on (#937).
@@ -1625,7 +1621,7 @@ extension HostedControlLegibilityTests {
                               previews: PreviewGraphicsManager())
                 .environment(Self.scratchAppState(event))
                 .environment(HashtagStore(loadingSaved: false))
-                .environment(CaptionWorkManager()))
+                .withAppOwners(AppOwners()))
     }
 
     /// The Settings screen, which nothing rendered until now (#918).
