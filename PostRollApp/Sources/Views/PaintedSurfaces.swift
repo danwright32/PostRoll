@@ -503,11 +503,24 @@ enum PaintedSurfaces {
         inPinnedAppearance(Color(nsColor: .windowBackgroundColor))
     }
 
+    /// The appearance this app pins itself to, named once (#918).
+    ///
+    /// It was spelled in three places: here, on the application and window in
+    /// `MainWindowView`, and nowhere at all in the render harness, which is how
+    /// the harness came to draw platform chrome in whatever appearance the
+    /// machine happened to be in while every colour above resolved to light
+    /// (L41). Anything that has to agree about the appearance now reads this.
+    /// Computed rather than stored: `NSAppearance` is not `Sendable`, and a
+    /// stored one would be shared mutable state across every actor that reads
+    /// it. Each caller gets its own, which costs nothing and is what the three
+    /// call sites were doing separately anyway.
+    static var pinnedAppearance: NSAppearance? { NSAppearance(named: .aqua) }
+
     /// A dynamic system colour as it lands under the appearance the app pins
     /// itself to, rather than under whatever is current where this is read.
     private static func inPinnedAppearance(_ colour: Color) -> Color {
         var resolved = colour
-        NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
+        pinnedAppearance?.performAsCurrentDrawingAppearance {
             if let sRGB = NSColor(colour).usingColorSpace(.sRGB) {
                 resolved = Color(nsColor: sRGB)
             }

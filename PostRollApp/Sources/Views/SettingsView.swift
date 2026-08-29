@@ -32,10 +32,20 @@ struct SettingsView: View {
 
     let keySource: KeySource
 
+    /// The handle book the saved handles panes list (#918).
+    ///
+    /// Injected for the same reason as the key above, and it is the same class
+    /// of problem: `SavedHandlesSection` already took its book as a parameter,
+    /// and this screen was the call site handing it `.shared`, so rendering
+    /// Settings anywhere read the book Dan has built up across every event he
+    /// has shot (L2). The app still passes the shared one.
+    let book: HandleBook
+
     @State private var apiKey: String
 
-    init(keySource: KeySource = .keychain) {
+    init(keySource: KeySource = .keychain, book: HandleBook = .shared) {
         self.keySource = keySource
+        self.book = book
         _apiKey = State(initialValue: keySource.read() ?? "")
     }
 
@@ -170,7 +180,7 @@ struct SettingsView: View {
                     .font(.system(size: 11))
             }
 
-            SavedHandlesSection(book: HandleBook.shared)
+            SavedHandlesSection(book: book)
 
             if let bytes = reclaimableBytes, bytes > 0 {
                 Section {

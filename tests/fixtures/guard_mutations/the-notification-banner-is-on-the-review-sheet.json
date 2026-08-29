@@ -1,0 +1,8 @@
+{
+  "name": "the-notification-banner-is-on-the-review-sheet",
+  "file": "PostRollApp/Tests/BannerLegibilityTests.swift",
+  "find": "        ] + Self.notificationBanners",
+  "replace": "        ]",
+  "test": "PostRollTests/BannerLegibilityTests/testEveryNotificationComplaintIsOnTheSheet",
+  "breaks": "the one sentence that has to be read while the window is open, saying nothing this app announces can arrive, goes back to being unrendered: its wording is unit tested and nothing has ever drawn it (#894, #918)"
+}

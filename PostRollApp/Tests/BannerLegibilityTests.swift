@@ -402,7 +402,94 @@ final class BannerLegibilityTests: XCTestCase {
                     ]).refusal,
                     isRunning: false,
                     action: {})))),
+        ] + Self.notificationBanners
+    }
+
+    /// The banner saying nothing this app announces can arrive (#894, #918).
+    ///
+    /// Named by #918 as one of two panes nobody had ever seen. It corrects that
+    /// issue's premise on one point: the banner is not in Settings, it is on
+    /// the main window (`MainWindowView.swift`), drawn above the save failure
+    /// because it silences everything else the app would have said. It is
+    /// genuinely unrendered though, which is what the issue was about:
+    /// `NotificationReachabilityTests` checks the SENTENCE each state produces
+    /// and nothing has ever drawn one.
+    ///
+    /// One per permission that has something to say, and which those are is
+    /// asked of the type rather than listed here, so a state that starts
+    /// complaining is on the sheet the day it does (L96).
+    static var notificationBanners: [(name: String, view: AnyView)] {
+        complainingPermissions.map { named in
+            ("notifications \(named.name)",
+             AnyView(BrandBanner(
+                icon: "bell.slash.fill",
+                message: NotificationNotice.message(permission: named.permission,
+                                                    hasAsked: true) ?? "",
+                style: .warning)))
+        }
+    }
+
+    /// Every permission a complaint can come from, with a name for the picture.
+    ///
+    /// The `switch` is exhaustive and has no `default`, so adding a case to
+    /// `NotificationPermission` stops this compiling rather than quietly
+    /// leaving a banner nobody has ever seen, which is the only completeness
+    /// Swift can enforce over an enum carrying an associated value (L113).
+    ///
+    /// `hasAsked` is true throughout, because that is the only way any of these
+    /// reaches the screen: the banner is deliberately silent before the app has
+    /// asked, so a run that has not asked yet has nothing to picture.
+    static var complainingPermissions: [(name: String, permission: NotificationPermission)] {
+        func name(of permission: NotificationPermission) -> String {
+            switch permission {
+            case .notAsked: return "asked for but never answered"
+            case .granted:  return "granted"
+            case .refused:  return "refused"
+            case .failed:   return "the request itself failed"
+            }
+        }
+
+        let every: [NotificationPermission] = [
+            .notAsked, .granted, .refused,
+            .failed("The application is not signed or lacks a bundle identifier"),
         ]
+        return every
+            .filter { NotificationNotice.message(permission: $0, hasAsked: true) != nil }
+            .map { (name(of: $0), $0) }
+    }
+
+    /// The filter above decides what is drawn, so it has to be seen keeping
+    /// something out as well as letting things through: a filter that admitted
+    /// everything, or nothing, would look identical here (L159, L98).
+    func testOnlyThePermissionsWithSomethingToSayAreDrawn() {
+        let names = Self.complainingPermissions.map(\.name)
+
+        XCTAssertFalse(names.contains("granted"),
+                       "a banner is drawn for the state where notifications work, "
+                       + "which is the false alarm that teaches somebody to ignore "
+                       + "this one")
+        XCTAssertEqual(names.count, 3,
+                       "the states that complain are \(names), and there are three "
+                       + "of them: asked but unanswered, refused, and the request "
+                       + "failing")
+    }
+
+    /// Every one of them is on the sheet, asked from the type's side.
+    ///
+    /// The dump counts what it wrote against what it was given, which is a
+    /// count compared with itself: dropping the whole group shrinks both sides
+    /// and passes (L70). This asks the other question.
+    func testEveryNotificationComplaintIsOnTheSheet() {
+        let names = states.map(\.name)
+
+        for complaint in Self.complainingPermissions {
+            XCTAssertTrue(names.contains { $0.contains(complaint.name) }, """
+                Nothing on the review sheet shows the notifications banner for \
+                "\(complaint.name)", so a visual change to the one sentence that has \
+                to be read while the window is open can only be reviewed by \
+                reproducing the permission state by hand.
+                """)
+        }
     }
 
     /// Every surface here puts its words on the page (#396, #612, #614).

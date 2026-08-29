@@ -155,6 +155,18 @@ enum WordFootprint {
             ? AnyView(content.textRenderer(WordSwitch()))
             : AnyView(content)
         let host = NSHostingView(rootView: root)
+        // The appearance the app pins itself to, not the machine's (#918).
+        //
+        // Without this the hosting view inherits whatever the test process has,
+        // so anything AppKit draws for ITSELF (a Form's background, a
+        // TextField's bezel, a Picker) followed the Mac while every colour this
+        // app NAMES stayed pinned to light by `PaintedSurfaces`. On a Mac in
+        // dark mode that renders a screen the app cannot produce: measured on
+        // 2026-08-29, AppKit's window background came out at brightness 0.119
+        // here against 1.0 in the app. Nothing went red, because no check
+        // measures the chrome (that gap is #930), and the review sheet is meant
+        // to be looked at, so it was a picture reviewed as if it were the app.
+        host.appearance = PaintedSurfaces.pinnedAppearance
         host.frame = NSRect(origin: .zero, size: size ?? host.fittingSize)
         host.layoutSubtreeIfNeeded()
         let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),

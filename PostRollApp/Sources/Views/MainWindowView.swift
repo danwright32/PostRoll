@@ -484,8 +484,8 @@ private struct WindowConfigurator: NSViewRepresentable {
             // Force light mode globally. NSApplication.shared is safe here (app is
             // running); NSApp would crash if called during App.init() before AppKit
             // sets the global. This covers all panels including DatePicker calendar.
-            NSApplication.shared.appearance = NSAppearance(named: .aqua)
-            window.appearance = NSAppearance(named: .aqua)
+            NSApplication.shared.appearance = PaintedSurfaces.pinnedAppearance
+            window.appearance = PaintedSurfaces.pinnedAppearance
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             // creamDeep (not cream) — this is what fills the title-strip area

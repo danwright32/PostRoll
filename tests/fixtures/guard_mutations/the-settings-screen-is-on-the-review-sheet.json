@@ -1,0 +1,8 @@
+{
+  "name": "the-settings-screen-is-on-the-review-sheet",
+  "file": "PostRollApp/Tests/HostedControlLegibilityTests.swift",
+  "find": "        surfaces.append((\"settings, nothing saved yet\",",
+  "replace": "        surfaces.append((\"settings, no key\",",
+  "test": "PostRollTests/HostedControlLegibilityTests/testTheSheetShowsEveryStateTheseChecksMeasure",
+  "breaks": "the Settings screen drops off the review sheet, so a visual change to it can only be reviewed by launching the app, which is the state it was in when two panes shipped there that nobody had ever seen (#918)"
+}

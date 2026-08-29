@@ -1,6 +1,6 @@
 # The hand check
 
-Three questions this repo cannot answer any other way. Everything else about
+Four questions this repo cannot answer any other way. Everything else about
 PostRoll is covered by the suites, and that now includes the alerts, the New
 Event form and the window's whole lifecycle, which used to be six of the steps
 here.
@@ -21,7 +21,7 @@ turned up later on whatever window opened next (#884).
 
 What is left here is what nothing automated can reach: which copy of PostRoll
 macOS hands a real link to, an alert macOS puts up during termination, the Dock
-icon, and Notification Center.
+icon, Notification Center, and what your own saved handles actually say.
 
 Run it after `make install`, and only when something in this list has been
 touched: deep links, what happens when the app is asked to quit, or what the
@@ -239,6 +239,82 @@ Finally, repeat that last part with the PostRoll window open and in front.
 **Expect:** no banner. The screen is already showing the failure, and a banner
 on top of it is the noise that teaches you to wave banners away. A banner
 appearing here is as much a defect as one failing to appear above.
+
+---
+
+## 4. Settings says what the app has learned, and what it cannot announce (#903, #894, #918)
+
+Covers: `PostRollApp/Sources/Views/SettingsView.swift`,
+`PostRollApp/Sources/Views/SavedHandlesSection.swift`,
+`PostRollApp/Sources/Models/NotificationNotice.swift`
+
+Since #918 both of these are on the review sheet, so how they LOOK is reviewable
+by looking at `make review-sheet` and does not need you. Two things are left
+that a render cannot answer, and they are the two the panes exist for.
+
+This step costs nothing: no generation, no API call, and about two minutes.
+
+It runs against your REAL library rather than a scratch one, deliberately, and
+it is the only step here that does. The handle book lives in the app's own
+preferences and there is no scratch copy of it, so a setup that planted one
+would be writing into the book you have built up across every event you have
+shot. Reading yours is also the more useful check: an invented book can only
+tell you the list renders, and what this pane was opened for (#903) is finding
+out that a real entry is wrong.
+
+So do not run a `hand-check.sh` state first. If you have just finished step 3,
+run `./PostRollApp/hand-check.sh end` before this one, so the app is pointed
+back at your own data.
+
+Open **PostRoll > Settings**.
+
+**The saved handles.** Three panes: Performers, Organisations, Venues. Read
+every row. Each says a name the app has learned and the value it will fill in
+from now on. What you are looking for is a value that is wrong, because a wrong
+one is filled into every future event at that name and there was no other way to
+see it before #903:
+
+- a handle for the wrong account, most likely on a common performer name, since
+  the book matches on the name alone and the next Sarah Chen gets the last one's
+- an organisation whose value is a sentence rather than an account, which is
+  allowed and is why that pane says so in its footer, but is worth seeing
+- anything you do not recognise at all
+
+Correct or delete what is wrong. That is the pane working, not a defect.
+
+Two things to judge while you are there. Every row has to be readable, including
+the name on the left, which is drawn quieter than the value. And the names read
+back lowercased, because that is the key the book is stored under rather than
+the name as you typed it: that is expected, and worth saying out loud so it is
+not reported as a bug.
+
+If a pane says "Nothing learned yet", that is the honest empty state and not a
+failure. It means no event has been advanced past Review since the book was last
+cleared.
+
+**The notifications banner.** This one is on the main window, not in Settings,
+which is worth knowing because the issue that asked for this step said otherwise.
+
+Look at the top of the main window. What should be there depends on the answer
+macOS has given PostRoll, so check that first, in **System Settings >
+Notifications > PostRoll**:
+
+- **allowed**: there must be NO bell banner. A banner here is a false alarm, and
+  a false alarm on a warning about silence is the one that teaches you to ignore
+  the real one.
+- **turned off**: a warning banner with a struck-through bell, saying every
+  completion and every failed run is announced to nobody, and naming System
+  Settings > Notifications as where to turn it back on.
+
+If it is allowed and you want to see the other state, turn PostRoll off in System
+Settings, relaunch PostRoll, and turn it back on afterwards. Relaunch is needed:
+the app asks once, at launch, so a permission changed underneath a running copy
+is not noticed until the next one.
+
+The sentence has to name what will not arrive rather than only the state.
+"Notifications are not permitted" tells you nothing about the captions you will
+never be told are ready, which is the whole reason this banner has the wording it
+has.
 
 ---
 
