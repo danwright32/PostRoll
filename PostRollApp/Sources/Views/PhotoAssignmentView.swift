@@ -197,6 +197,14 @@ struct PhotoAssignmentView: View {
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.lg)
 
+                // Above the day sections on purpose (#1007): this screen already
+                // prints "Collage uses the first N photos (M assigned)" for a day
+                // carrying more than its layout posts, and that note is where the
+                // problem is discovered. It had no control to act on it.
+                PostingLayoutControl(event: event, defaults: AppPreferences.store)
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.bottom, Spacing.lg)
+
                 ForEach(DayName.allCases, id: \.self) { day in
                     let enableCrop = (day == .wednesday || day == .thursday)
                     // Counted against the preset's target for THIS day, not a
