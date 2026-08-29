@@ -8,6 +8,21 @@ struct CaptionReviewView: View {
     @Environment(AppState.self) private var appState
     @Environment(HashtagStore.self) private var hashtagStore
 
+    /// The two shared stores this screen reads while it DRAWS (#937).
+    ///
+    /// Injected so the screen can be rendered for review. `AccountBook` holds
+    /// real follower counts for real accounts and this screen both reads and
+    /// records into it, so drawing it reached Dan's numbers (L2, L222).
+    /// `PreviewGraphicsManager` is in memory, and shared state a run before
+    /// could have left something in (L205).
+    ///
+    /// Deliberately NOT seamed here: `PythonBridge` and `NotificationService`.
+    /// Every use of those is inside an async action, which no render runs, and
+    /// neither is a store this screen READS to decide what to draw. Naming the
+    /// line rather than leaving it to be inferred (L129).
+    let accounts: AccountBook
+    let previews: PreviewGraphicsManager
+
     @State private var result: WeekGenerationResult
     @State private var expanded: ReviewSection? = nil
     /// How many separate events have tagged each account (#289). Held in state
@@ -128,8 +143,12 @@ struct CaptionReviewView: View {
         case blog
     }
 
-    init(event: Event) {
+    init(event: Event,
+         accounts: AccountBook = .shared,
+         previews: PreviewGraphicsManager = .shared) {
         self.event = event
+        self.accounts = accounts
+        self.previews = previews
         _result = State(initialValue: event.weekResult ?? WeekGenerationResult())
         var offsets: [String: [String: CropOffset]] = [:]
         for (key, pd) in event.days where !pd.collageCropOffsets.isEmpty {
@@ -208,7 +227,7 @@ struct CaptionReviewView: View {
     // EventDetailView remounts the screen via .id(event.id) on every event
     // switch, which used to discard this state while the Task kept running, so
     // coming back auto-started a second writer and showed no progress (#75).
-    private var graphics: PreviewGraphicsManager { PreviewGraphicsManager.shared }
+    private var graphics: PreviewGraphicsManager { previews }
     private var isGeneratingGraphics: Bool { graphics.isGenerating(event.id) }
     private var regeneratingDays: Set<DayName> { graphics.regeneratingDays(event.id) }
 
@@ -583,9 +602,9 @@ struct CaptionReviewView: View {
         .sheet(item: $editingAccount) { target in
             AccountNumbersSheet(
                 handle: target.handle,
-                stats: AccountBook.shared.stats(for: target.handle),
+                stats: accounts.stats(for: target.handle),
                 onSave: { followers, likes, comments in
-                    AccountBook.shared.record(handle: target.handle, followers: followers,
+                    accounts.record(handle: target.handle, followers: followers,
                                               likes: likes, comments: comments, on: Date())
                     // The suggestions are judged against this instant, so
                     // moving it is what makes the panel re-rank on the numbers
@@ -1315,9 +1334,9 @@ struct CaptionReviewView: View {
     private func collaborators(for day: DayName, in live: Event) -> CollaboratorPick.Result? {
         CollaboratorPick.suggest(event: live, day: day,
                                  preset: live.effectivePostingPreset,
-                                 stats: { AccountBook.shared.stats(for: $0) },
+                                 stats: { accounts.stats(for: $0) },
                                  asOf: suggestionsAsOf,
-                                 notes: [AccountBook.shared.recoveryNote].compactMap { $0 })
+                                 notes: [accounts.recoveryNote].compactMap { $0 })
     }
 
     private func applyCollageLayout(day: DayName, seed: Int) {

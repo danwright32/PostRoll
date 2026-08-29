@@ -356,7 +356,10 @@ final class RecurringAccountsTests: XCTestCase {
                 return String(rest[..<(rest.range(of: "onCancel:")?.lowerBound ?? rest.endIndex)])
             })
 
-        XCTAssertTrue(handler.contains("AccountBook.shared.record(handle: target.handle"),
+        // Through the screen's injected book since #937, not the shared one.
+        // The rule is unchanged: this handler has to RECORD, or the banner asks
+        // about the same account for ever.
+        XCTAssertTrue(handler.contains("accounts.record(handle: target.handle"),
                       "the form saves nothing, so the banner would ask forever")
         XCTAssertTrue(handler.contains("refreshRecurringAccounts()"),
                       "the banner is a claim about the book and is not re-read "

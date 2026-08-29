@@ -5,6 +5,15 @@ struct OCRProgressView: View {
     @Environment(AppState.self) private var appState
     @Environment(OCRManager.self) private var ocrManager
 
+    /// Where the estimate comes from (#937).
+    ///
+    /// Injected for the same reason the Settings screen's key source is: this
+    /// screen could not be rendered for review while it reached for a shared
+    /// store inside its own body, because the estimate is most of what it says
+    /// and a shared store holds whatever the run before happened to leave.
+    /// The app passes the shared one and behaves exactly as before.
+    var timings: TimingStore = .shared
+
     /// Derived from the app-scoped run so OCR survives the view being torn down
     /// when the user switches events (the detail pane is `.id(event.id)`-tagged).
     private var run: OCRManager.Run? { ocrManager.run(for: event.id) }
@@ -19,7 +28,7 @@ struct OCRProgressView: View {
     /// the scaling live in `OCRProgressText` (#607).
     private var currentPhase: String {
         phaseOverride ?? OCRProgressText.elapsedPhase(elapsedSeconds: elapsed,
-                                                      estimate: TimingStore.shared.ocrEstimate)
+                                                      estimate: timings.ocrEstimate)
     }
 
     /// When this run started, for measuring silence against.
@@ -74,8 +83,8 @@ struct OCRProgressView: View {
                     elapsedText: OCRProgressText.elapsed(seconds: elapsed),
                     footer: OCRProgressText.footer(
                         status: liveStatus(now: now),
-                        estimate: TimingStore.shared.ocrEstimate,
-                        formattedEstimate: TimingStore.shared.ocrEstimate
+                        estimate: timings.ocrEstimate,
+                        formattedEstimate: timings.ocrEstimate
                             .map(TimingStore.formatEstimate)))
             },
             onCancel: cancelOCR)

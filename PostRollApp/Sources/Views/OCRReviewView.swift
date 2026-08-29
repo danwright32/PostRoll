@@ -39,14 +39,36 @@ struct OCRReviewView: View {
     /// as guesses for as long as they are untouched (#459).
     @State private var bookSupplied: [UUID: String]
 
-    init(event: Event) {
+    /// The book this screen fills its handle fields from (#937).
+    ///
+    /// Injected, and it is `init` that reads it: building this screen at all
+    /// fills its handle fields from the book, so a render pictures whatever the
+    /// book held rather than a state somebody chose.
+    ///
+    /// NOT because the shared book is Dan's real one under test. It is not:
+    /// `HandleBook` reads `AppPreferences.store`, which is a scratch suite in
+    /// the test bundle. It is because that scratch suite is SHARED, so it holds
+    /// whatever else the run wrote and the guessed handle this screen marks
+    /// (#459) would come and go with test order (L205). The app passes the
+    /// shared one and behaves exactly as before.
+    ///
+    /// Every use, reads and WRITES both. This screen records what was typed
+    /// back into the book when the event moves on, and a seam covering only the
+    /// reads would leave a screen holding two books, writing into the real one
+    /// while being drawn from a fake (L173). The writes are the half that
+    /// matters: they change what every future event at that name gets filled
+    /// with.
+    let book: HandleBook
+
+    init(event: Event, book: HandleBook = .shared) {
         self.event = event
+        self.book = book
         var ocrData = event.ocrResult ?? OCRResult()
-        _bookSupplied = State(initialValue: HandleBook.shared.autoFill(
+        _bookSupplied = State(initialValue: book.autoFill(
             performers: &ocrData.performers))
         _ocr = State(initialValue: ocrData)
-        _orgHandles = State(initialValue: HandleBook.shared.handles(forOrg: event.org))
-        _venueHandles = State(initialValue: HandleBook.shared.handles(forVenue: event.venue))
+        _orgHandles = State(initialValue: book.handles(forOrg: event.org))
+        _venueHandles = State(initialValue: book.handles(forVenue: event.venue))
         _flags = State(initialValue: event.pendingFlags)
     }
 
@@ -215,10 +237,10 @@ struct OCRReviewView: View {
         // since it is a pair of model calls (#718).
         .onChange(of: reflowManager.isRunning(event.id)) { adoptStoredResultIfNeeded() }
         .onChange(of: orgHandles) {
-            HandleBook.shared.record(org: event.org, handles: orgHandles)
+            book.record(org: event.org, handles: orgHandles)
         }
         .onChange(of: venueHandles) {
-            HandleBook.shared.record(venue: event.venue, handles: venueHandles)
+            book.record(venue: event.venue, handles: venueHandles)
         }
     }
 
@@ -500,9 +522,9 @@ struct OCRReviewView: View {
 
     private func confirmAndAdvance() {
         // Save handles to HandleBook so future events at same org/venue auto-fill
-        HandleBook.shared.record(org: event.org, handles: orgHandles)
-        HandleBook.shared.record(venue: event.venue, handles: venueHandles)
-        HandleBook.shared.recordAll(performers: ocr.performers)
+        book.record(org: event.org, handles: orgHandles)
+        book.record(venue: event.venue, handles: venueHandles)
+        book.recordAll(performers: ocr.performers)
         // Combine org + venue handles into the event-wide string (comma-separated, deduped)
         let combined = [orgHandles, venueHandles]
             .flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }

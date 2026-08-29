@@ -34,21 +34,43 @@ final class TimingStore: @unchecked Sendable {
         }
     }
 
+    /// Where the timings are kept. A property rather than `AppPreferences.store`
+    /// reached for inline, so a screen that shows an estimate can be drawn with
+    /// one planted rather than with whatever the run happens to have left
+    /// behind (#937), the way `HandleBook` takes its own.
+    private let defaults: UserDefaults
+
     private var timings: Timings {
         get {
-            guard let data = AppPreferences.store.data(forKey: key),
+            guard let data = defaults.data(forKey: key),
                   let decoded = try? JSONDecoder().decode(Timings.self, from: data)
             else { return Timings() }
             return decoded
         }
         set {
             if let data = try? JSONEncoder().encode(newValue) {
-                AppPreferences.store.set(data, forKey: key)
+                defaults.set(data, forKey: key)
             }
         }
     }
 
-    private init() {}
+    private init() { defaults = AppPreferences.store }
+
+    #if POSTROLL_TESTS
+    /// A store on its own preferences suite (#937).
+    ///
+    /// Compiled only into the test bundle, so the shipping app cannot end up
+    /// with a second store by accident, and shaped like `HandleBook`'s for the
+    /// same reason: a screen that shows an estimate cannot be drawn for review
+    /// without one, because the estimate comes from here.
+    ///
+    /// `AppPreferences.store` is already a scratch suite under test, so this is
+    /// not about reaching live data. It is about being able to draw BOTH states
+    /// deliberately: a shared store holds whatever the run before happened to
+    /// leave, so the picture of "an estimate is known" would come and go with
+    /// test order (L205).
+    init(defaults: UserDefaults) { self.defaults = defaults }
+    #endif
 
     func recordOCR(seconds: Double) {
         var t = timings

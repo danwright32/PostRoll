@@ -6,6 +6,22 @@ struct ExportView: View {
     @Environment(ExportManager.self) private var exportManager
     @Environment(GenerationManager.self) private var genManager
 
+    /// The two shared stores this screen reads and writes (#937).
+    ///
+    /// Injected so the screen can be drawn for review. `AccountBook` is the
+    /// stronger reason of the two: it is a file of real follower counts for
+    /// real accounts, and rendering this screen read it and could write it
+    /// (L2, L222). `PreviewGraphicsManager` is in memory, and injected for the
+    /// same reason `TimingStore` is: a shared one holds whatever the run before
+    /// left, so which days are shown as rebuilding would come and go with test
+    /// order (L205).
+    ///
+    /// Every use, reads and writes both, rather than only the ones a render
+    /// reaches: a screen given a fake book that still recorded into the real
+    /// one would be holding two books (L173).
+    var accounts: AccountBook = .shared
+    var previews: PreviewGraphicsManager = .shared
+
     @State private var showingFolderPicker = false
     @State private var lastExportFolder: URL? = nil
     @State private var pendingSingleDay: DayName? = nil
@@ -50,7 +66,7 @@ struct ExportView: View {
     /// buttons did not, which left a second route to an export holding the
     /// pre-rebuild file (#225).
     private var regeneratingDays: Set<DayName> {
-        PreviewGraphicsManager.shared.regeneratingDays(event.id)
+        previews.regeneratingDays(event.id)
     }
 
     /// What the export is waiting for, or nil when it can run. Shown rather than
@@ -107,9 +123,9 @@ struct ExportView: View {
         .sheet(item: $editingRecurringAccount) { target in
             AccountNumbersSheet(
                 handle: target.handle,
-                stats: AccountBook.shared.stats(for: target.handle),
+                stats: accounts.stats(for: target.handle),
                 onSave: { followers, likes, comments in
-                    AccountBook.shared.record(handle: target.handle, followers: followers,
+                    accounts.record(handle: target.handle, followers: followers,
                                               likes: likes, comments: comments, on: Date())
                     editingRecurringAccount = nil
                     // The banner is a claim about the book, so it has to stop
@@ -161,7 +177,7 @@ struct ExportView: View {
     /// cadence (arriving at the screen, and an export finishing) and far too
     /// expensive on every redraw.
     private func refreshRecurringAccounts() {
-        let book = AccountBook.shared
+        let book = accounts
         recurringAccounts = RecurringAccounts.needingAttention(
             events: appState.events,
             stats: { book.stats(for: $0) },
