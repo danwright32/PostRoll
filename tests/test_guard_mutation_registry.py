@@ -24,9 +24,41 @@ from pathlib import Path
 
 import pytest
 
+from tools import perturbation_lock
 from tools.check_guards import DEFAULT_REGISTRY, Entry, load_registry
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def refuse_if_a_prover_is_working(repo_root: Path = None) -> None:
+    """Stop this check reporting a guard prover's deliberate break as a stale
+    entry (#920).
+
+    `check_guards.py` edits a real source file, runs one test and puts it back.
+    A suite run alongside it reads the file mid perturbation and fails on
+    whichever entry is in flight, naming a real file and a real entry, so it
+    reads exactly like a registry that needs updating. Four false alarms in two
+    days, all four green on a re-run.
+
+    Three outcomes, three reactions, because a running prover and an abandoned
+    lock are opposite situations (L11):
+
+    * nothing held: judge normally.
+    * a prover working: this check cannot judge, so it says so and stands down
+      rather than asserting something it cannot see.
+    * a lock nobody holds: FAIL. Standing down there would disable this check
+      for as long as the file sits on disk, and a check that cannot fail is
+      indistinguishable from one that passes (L182).
+    """
+    # Injectable so the three reactions can be asserted against a lock this
+    # test controls, rather than against whatever the real checkout happens to
+    # be doing. A helper whose input cannot be set is a helper nothing can
+    # prove (L196).
+    outcome, why = perturbation_lock.verdict(repo_root or REPO_ROOT)
+    if outcome is perturbation_lock.Verdict.CANNOT_JUDGE:
+        pytest.skip(why)
+    if outcome is perturbation_lock.Verdict.STALE:
+        pytest.fail(why)
 SWIFT_TESTS_DIR = REPO_ROOT / "PostRollApp" / "Tests"
 
 
@@ -51,6 +83,7 @@ def test_every_entry_file_on_disk_is_actually_loaded():
 
 @pytest.mark.parametrize("entry", entries(), ids=lambda e: e.name)
 def test_every_anchor_still_matches_its_file_exactly_once(entry: Entry):
+    refuse_if_a_prover_is_working()
     target = REPO_ROOT / entry.file
     assert target.is_file(), f"{entry.file} has moved; update the registry"
     count = target.read_text().count(entry.find)

@@ -62,6 +62,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+# As a module, deliberately: this file has its own `Verdict` and importing the
+# other one by name would shadow it silently.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from tools import perturbation_lock  # noqa: E402  after the path is set
+
 REQUIRED_FIELDS = ("name", "file", "find", "replace", "test", "breaks")
 DEFAULT_REGISTRY = Path("tests/fixtures/guard_mutations")
 # The one non-entry file the registry directory is allowed to hold: the prose
@@ -696,25 +701,32 @@ def run_entry(entry: Entry, repo_root: Path, runner, log=say) -> Result:
 
     # Recorded BEFORE the write, so a signal landing between the two finds the
     # original bytes to put back rather than nothing (#547).
-    _PENDING[target] = original
-    target.write_bytes(text.replace(entry.find, entry.replace).encode("utf-8"))
-    try:
-        # Swift entries build; Python ones do not, so only the former contend
-        # for the shared cache.
-        lock = build_lock_path(repo_root) if entry.test.startswith("PostRollTests/") else None
-        with build_lock(lock, log=log):
-            code, output = runner(command_for(entry, repo_root), repo_root)
-        verdict = classify(entry, code, output)
-    except Exception as exc:  # noqa: BLE001  the restore below must always run
-        verdict = Verdict(Outcome.ERROR, f"the runner failed: {exc}")
-    finally:
-        target.write_bytes(original)
-        _PENDING.pop(target, None)
-        if target.read_bytes() != original:
-            # Fail as loudly as possible: the working tree is now wrong.
-            raise RuntimeError(
-                f"{entry.file} could not be restored. Recover it with: "
-                f"git checkout -- {entry.file}")
+    # Held across the WHOLE window, from before the break lands to after the
+    # restore, so anything else reading the tree can tell "a prover is part way
+    # through" from "this entry is stale" (#920). Those two look identical from
+    # the outside and the second is what the suite used to report, four times
+    # in two days, every one of them green on a re-run.
+    with perturbation_lock.held_for(entry.name, repo_root):
+        _PENDING[target] = original
+        target.write_bytes(text.replace(entry.find, entry.replace).encode("utf-8"))
+        try:
+            # Swift entries build; Python ones do not, so only the former
+            # contend for the shared cache.
+            lock = (build_lock_path(repo_root)
+                    if entry.test.startswith("PostRollTests/") else None)
+            with build_lock(lock, log=log):
+                code, output = runner(command_for(entry, repo_root), repo_root)
+            verdict = classify(entry, code, output)
+        except Exception as exc:  # noqa: BLE001  the restore below must always run
+            verdict = Verdict(Outcome.ERROR, f"the runner failed: {exc}")
+        finally:
+            target.write_bytes(original)
+            _PENDING.pop(target, None)
+            if target.read_bytes() != original:
+                # Fail as loudly as possible: the working tree is now wrong.
+                raise RuntimeError(
+                    f"{entry.file} could not be restored. Recover it with: "
+                    f"git checkout -- {entry.file}")
     return Result(entry, verdict.outcome, verdict.detail)
 
 

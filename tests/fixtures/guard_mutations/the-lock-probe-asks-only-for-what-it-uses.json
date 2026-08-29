@@ -1,0 +1,8 @@
+{
+  "name": "the-lock-probe-asks-only-for-what-it-uses",
+  "file": "tools/perturbation_lock.py",
+  "find": "        handle = open(path, \"r\")",
+  "replace": "        handle = open(path, \"r+\")",
+  "test": "tests/test_perturbation_lock.py::test_a_READ_ONLY_lock_file_is_still_judged_rather_than_guessed_at",
+  "breaks": "the probe asks for write access it never uses, so a read-only lock file cannot be opened and the question of whether anybody holds it becomes unanswerable. The answer given anyway is 'nobody', which the registry check reports to the reader as a guard run that died without cleaning up, a claim nothing established (#920, L11)"
+}
