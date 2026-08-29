@@ -1105,6 +1105,11 @@ extension HostedControlLegibilityTests {
         surfaces.append(("tag fields, clean", { try self.renderTagFields(handles: "@guestartist") }))
         surfaces.append(("tag fields, a name typed as a handle",
                          { try self.renderTagFields(handles: "@guestartist, DPR Dance") }))
+        surfaces.append(("settings, nothing saved yet",
+                         { try self.renderSettings(key: nil, book: Self.emptyBook()) }))
+        surfaces.append(("settings, a key and a full handle book",
+                         { try self.renderSettings(key: "sk-ant-api03-not-a-real-key",
+                                                   book: Self.filledBook()) }))
 
         return surfaces
     }
@@ -1158,6 +1163,14 @@ extension HostedControlLegibilityTests {
         expect("tag fields, clean", "the tag fields with nothing to report")
         expect("tag fields, a name typed as a handle",
                "the tag fields warning that a value will be credited by name")
+        // Settings, which nothing rendered at all until #918. Two states,
+        // because the pane that lists what the app has learned is a different
+        // picture when it has learned nothing, and the first run is the empty
+        // one (L10).
+        expect("settings, nothing saved yet",
+               "the Settings screen on a machine with no key and an empty book")
+        expect("settings, a key and a full handle book",
+               "the Settings screen with the saved handles panes filled")
     }
 
     /// The Insights report, at the size the pane gives it (#645).
@@ -1401,6 +1414,62 @@ extension HostedControlLegibilityTests {
         return try WordFootprint.hosted(view,
                                         size: CGSize(width: width, height: 700),
                                         wordless: false)
+    }
+
+    /// The Settings screen, which nothing rendered until now (#918).
+    ///
+    /// Every store it reads is handed in, and that is the whole reason this
+    /// could not be done before. Drawn as it stood, this would read Dan's real
+    /// API key out of the login keychain, his real handle book, and his real
+    /// default posting layout, on every run of the suite and on every machine
+    /// including CI (L2). The key and the book are now parameters and the
+    /// preset store already came from the environment (#727).
+    ///
+    /// Tall and scrolled, because the screen is a Form of five sections and a
+    /// frame that cropped it would put the saved handles panes, which are the
+    /// newest and least seen part of it, below the cut.
+    private func renderSettings(key: String?,
+                                book: HandleBook,
+                                width: CGFloat = 560,
+                                height: CGFloat = 1200) throws -> NSBitmapImageRep {
+        let view = ScrollView {
+            SettingsView(keySource: .fixed(key), book: book)
+                .environment(PostingPresetStore(defaults: Self.scratchDefaults()))
+        }
+        .frame(width: width, height: height)
+        .background(PaintedSurfaces.page)
+
+        return try WordFootprint.hosted(view,
+                                        size: CGSize(width: width, height: height),
+                                        wordless: false)
+    }
+
+    /// A suite of its own per call, so nothing drawn here can reach, or be
+    /// reached by, the preferences the app really uses (L2).
+    private static func scratchDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "settings-render-\(UUID().uuidString)")!
+    }
+
+    private static func emptyBook() -> HandleBook {
+        HandleBook(defaults: scratchDefaults())
+    }
+
+    /// A book with something in all three, because the panes are three separate
+    /// stores and one filled book would picture two thirds of the screen in its
+    /// empty state while claiming to show the full one (L113).
+    ///
+    /// The values are the shapes the book really holds rather than tidy ones:
+    /// an org whose remembered value is prose instead of a handle is exactly
+    /// what #903 was opened about, and it is what the list has to make findable.
+    private static func filledBook() -> HandleBook {
+        let book = HandleBook(defaults: scratchDefaults())
+        book.setEntry(name: "Jordan Langworthy", value: "@jordanlangworthy",
+                      in: .performer)
+        book.setEntry(name: "Sarah Chen", value: "@sarahchendance", in: .performer)
+        book.setEntry(name: "Battery Dance", value: "@batterydance", in: .org)
+        book.setEntry(name: "DPR Dance", value: "ask the company", in: .org)
+        book.setEntry(name: "Wagner Park", value: "@wagnerpark", in: .venue)
+        return book
     }
 
     /// Writes every one of them into the shared folder (#623).

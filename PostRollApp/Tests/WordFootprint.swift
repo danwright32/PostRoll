@@ -137,6 +137,25 @@ enum WordFootprint {
             ? ImageRenderer(content: AnyView(content.textRenderer(WordSwitch())))
             : ImageRenderer(content: AnyView(content))
         renderer.scale = 2
+        // Deliberately NOT pinned to an appearance, unlike `hosted` below.
+        //
+        // A pin was added here first, on the assumption that this renderer
+        // followed the machine the way the hosted one does. Measured on
+        // 2026-08-29 with the pin removed, `ImageRenderer` draws AppKit's
+        // window background at brightness 1.0 under every combination of
+        // application appearance and drawing appearance: aqua/aqua,
+        // aqua/darkAqua, darkAqua/aqua and darkAqua/darkAqua. It follows
+        // neither, and always draws light.
+        //
+        // So the pin changed nothing, and its registry entry could never fail,
+        // which is worse than having no guard: a check that cannot go red reads
+        // as one that passes (L182). Both are gone, and this comment is what
+        // stops the next person adding it back from the same assumption.
+        //
+        // `RenderAppearanceTests` still covers this renderer. It asserts the
+        // PROPERTY, that both renderers come out in the appearance the app
+        // pins, rather than the mechanism, so if ImageRenderer ever starts
+        // following the machine it fails here instead of going unnoticed.
         let image = try XCTUnwrap(renderer.nsImage, "the view produced no image at all")
         let tiff = try XCTUnwrap(image.tiffRepresentation)
         return try XCTUnwrap(NSBitmapImageRep(data: tiff))
@@ -155,6 +174,18 @@ enum WordFootprint {
             ? AnyView(content.textRenderer(WordSwitch()))
             : AnyView(content)
         let host = NSHostingView(rootView: root)
+        // The appearance the app pins itself to, not the machine's (#918).
+        //
+        // Without this the hosting view inherits whatever the test process has,
+        // so anything AppKit draws for ITSELF (a Form's background, a
+        // TextField's bezel, a Picker) followed the Mac while every colour this
+        // app NAMES stayed pinned to light by `PaintedSurfaces`. On a Mac in
+        // dark mode that renders a screen the app cannot produce: measured on
+        // 2026-08-29, AppKit's window background came out at brightness 0.119
+        // here against 1.0 in the app. Nothing went red, because no check
+        // measures the chrome (that gap is #930), and the review sheet is meant
+        // to be looked at, so it was a picture reviewed as if it were the app.
+        host.appearance = PaintedSurfaces.pinnedAppearance
         host.frame = NSRect(origin: .zero, size: size ?? host.fittingSize)
         host.layoutSubtreeIfNeeded()
         let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds),
