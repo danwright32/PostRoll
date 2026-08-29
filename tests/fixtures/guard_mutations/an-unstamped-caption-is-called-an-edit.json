@@ -1,0 +1,8 @@
+{
+  "name": "an-unstamped-caption-is-called-an-edit",
+  "file": "PostRollApp/Sources/Views/PostingLayoutControl.swift",
+  "find": "        let edited = days.filter { event.weekResult?[$0]?.wasEdited == true }",
+  "replace": "        let edited = days.filter { ($0 == nil) ? false : (event.weekResult?[$0]?.caption != event.weekResult?[$0]?.generatedCaption) }",
+  "test": "PostRollTests/PostingLayoutCopyTests/testAnUnstampedCaptionIsNotReportedAsEdited",
+  "breaks": "a caption saved before generatedCaption was stamped reads as edited, so the switch warns Dan his edits will be replaced on every day of every older event, and a warning that cries wolf stops being read (#1007, L36)"
+}
