@@ -17,8 +17,11 @@ final class DeepLinkWiringTests: XCTestCase {
     }
 
     private func source(_ relativePath: String) throws -> String {
-        let url = sourcesDirectory.appendingPathComponent(relativePath)
-        return try String(contentsOf: url, encoding: .utf8)
+        try source(at: sourcesDirectory.appendingPathComponent(relativePath))
+    }
+
+    private func source(at url: URL) throws -> String {
+        try String(contentsOf: url, encoding: .utf8)
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.hasPrefix("//") }
@@ -27,16 +30,18 @@ final class DeepLinkWiringTests: XCTestCase {
 
     /// Every Swift file under `Sources`, so a sweep cannot be answered by the
     /// one file somebody remembered to list (L96).
+    ///
+    /// Through `RepoFixture.files` rather than by trimming the root off each
+    /// absolute path (#941). The trim is a substitution, so it removed a match
+    /// from the MIDDLE whenever `#filePath` and the enumerator disagreed about
+    /// symlinks, which they do for any checkout under `/tmp`: this suite failed
+    /// from a worktree with "privateAppState.swift", two names fused into one.
+    /// Reading the file through the url the walk handed back also means the
+    /// path is never rebuilt from a string a second time.
     private func everySource() throws -> [(path: String, code: String)] {
-        let root = sourcesDirectory
-        guard let walk = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else {
-            XCTFail("could not read \(root)")
-            return []
-        }
         var found: [(String, String)] = []
-        for case let url as URL in walk where url.pathExtension == "swift" {
-            let relative = url.path.replacingOccurrences(of: root.path + "/", with: "")
-            found.append((relative, try source(relative)))
+        for entry in RepoFixture.files(under: sourcesDirectory, withExtension: "swift") {
+            found.append((entry.relativePath, try source(at: entry.url)))
         }
         XCTAssertGreaterThan(found.count, 100,
                              "the sweep found \(found.count) files, so it is not reading Sources at all")

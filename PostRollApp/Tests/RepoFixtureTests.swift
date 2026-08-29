@@ -96,6 +96,102 @@ final class RepoFixtureTests: XCTestCase {
         XCTAssertTrue(text.contains("_layout.json"), "the helper did not return the file")
     }
 
+    // ── walking a source tree that lives on a symlinked path (#941) ──────────
+
+    /// A directory of Swift files, reached through a symlink to it.
+    ///
+    /// The exact shape the suite meets in a worktree: on macOS `/tmp` is a
+    /// symlink to `/private/tmp`, so the path a test compiled from and the path
+    /// an enumerator hands back differ by a leading `/private`.
+    private func treeReachedThroughASymlink() throws -> (real: URL, link: URL) {
+        let real = dir.appendingPathComponent("real", isDirectory: true)
+        let nested = real.appendingPathComponent("Views", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try "top".write(to: real.appendingPathComponent("AppState.swift"),
+                        atomically: true, encoding: .utf8)
+        try "nested".write(to: nested.appendingPathComponent("EventListView.swift"),
+                           atomically: true, encoding: .utf8)
+        try "not swift".write(to: real.appendingPathComponent("notes.txt"),
+                              atomically: true, encoding: .utf8)
+
+        let link = dir.appendingPathComponent("link", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        return (real, link)
+    }
+
+    func testAFileIsNamedRelativelyEvenWhenTheRootIsReachedThroughASymlink() throws {
+        let (_, link) = try treeReachedThroughASymlink()
+
+        let found = RepoFixture.files(under: link, withExtension: "swift")
+        XCTAssertEqual(found.map(\.relativePath).sorted(),
+                       ["AppState.swift", "Views/EventListView.swift"],
+                       "the sweep did not name the files relative to the root it was given")
+
+        for entry in found {
+            XCTAssertEqual(try String(contentsOf: entry.url, encoding: .utf8).isEmpty, false,
+                           "the url handed back does not open: \(entry.url.path)")
+        }
+    }
+
+    func testTheOldTrimmingWouldStillFuseTwoNamesTogether() throws {
+        // The control, and the shape that shipped (#941, L251). Trimming a root
+        // off the FRONT of a path removes a substring from the MIDDLE when the
+        // two disagree about symlinks, and the two halves fuse: `/private` plus
+        // `AppState.swift` became `privateAppState.swift`, a file nobody wrote.
+        //
+        // Kept so this suite fails if the defect stops being reproducible here,
+        // which would mean the new helper is being credited with a fix the
+        // platform made (L159).
+        let (real, link) = try treeReachedThroughASymlink()
+        let resolved = real.appendingPathComponent("AppState.swift").resolvingSymlinksInPath()
+        XCTAssertNotEqual(resolved.path, link.appendingPathComponent("AppState.swift").path,
+                          "the symlink and its target resolve to one path here, so this "
+                          + "machine cannot show the defect and the control proves nothing")
+
+        let trimmed = resolved.path.replacingOccurrences(of: link.path + "/", with: "")
+        XCTAssertNotEqual(trimmed, "AppState.swift",
+                          "trimming produced the right answer, so this control no longer "
+                          + "reproduces what #941 was")
+    }
+
+    func testAFileOutsideTheRootIsRefusedRatherThanNamedOddly() throws {
+        // The enumerator can only hand back what is under the root, so this is
+        // about the comparison itself: an answer of nil must not be turned into
+        // a plausible looking relative path by whatever is left after a trim.
+        let (real, _) = try treeReachedThroughASymlink()
+        let elsewhere = dir.appendingPathComponent("outside.swift")
+        XCTAssertNil(RepoFixture.relativePath(of: elsewhere, under: real),
+                     "a file outside the root was given a name relative to it")
+        XCTAssertEqual(RepoFixture.relativePath(of: real.appendingPathComponent("AppState.swift"),
+                                                under: real),
+                       "AppState.swift")
+    }
+
+    func testNoSuiteDerivesARelativePathByTrimmingARootOffTheFront() throws {
+        // The guard. This suite is the only place the trimming may appear, as
+        // the control above, and a rule about the SHAPE keeps it from coming
+        // back in the next sweep somebody writes (L30).
+        let testsDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let entries = try FileManager.default.contentsOfDirectory(
+            at: testsDir, includingPropertiesForKeys: nil)
+
+        var offenders: [String] = []
+        for url in entries where url.pathExtension == "swift" {
+            guard url.lastPathComponent != URL(fileURLWithPath: #filePath).lastPathComponent,
+                  let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            if text.contains("replacingOccurrences(of: root.path")
+                || text.contains(".path.replacingOccurrences(of:") {
+                offenders.append(url.lastPathComponent)
+            }
+        }
+        XCTAssertTrue(offenders.isEmpty,
+                      "these suites build a relative path by trimming a root off the front of "
+                      + "an absolute one, which removes a substring from the middle the moment "
+                      + "the two disagree about symlinks and fuses two names into a file "
+                      + "nobody wrote: \(offenders.sorted()). Use RepoFixture.files(under:) "
+                      + "or RepoFixture.relativePath(of:under:) (#941, L251).")
+    }
+
     func testEveryFixtureReadingSuiteGoesThroughTheHelper() throws {
         // Derived from the source rather than a list here, so a suite added
         // later is covered on the day it lands: the failure mode is that ONE

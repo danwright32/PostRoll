@@ -1,0 +1,8 @@
+{
+  "name": "a-symlinked-root-still-names-its-files",
+  "file": "PostRollApp/Tests/RepoFixture.swift",
+  "find": "        let base = root.resolvingSymlinksInPath().standardizedFileURL.pathComponents",
+  "replace": "        let base = root.standardizedFileURL.pathComponents",
+  "test": "PostRollTests/RepoFixtureTests/testAFileIsNamedRelativelyEvenWhenTheRootIsReachedThroughASymlink",
+  "breaks": "every source-scanning Swift suite stops working from a git worktree. The root a file was compiled from and the path an enumerator hands back disagree by a leading /private, so no file comes out as being inside the root at all (#941, L251)"
+}
