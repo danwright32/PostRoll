@@ -1223,9 +1223,11 @@ private struct BrandField: View {
         Group {
             if let lineLimit {
                 TextField(placeholder, text: $text, axis: .vertical)
+                    .textFieldStyle(.plain)
                     .lineLimit(lineLimit)
             } else {
                 TextField(placeholder, text: $text)
+                    .textFieldStyle(.plain)
             }
         }
         .focused($focused)
@@ -1357,6 +1359,7 @@ private struct HandleRow: View {
                 text: $text,
                 prompt: Text(placeholder).foregroundStyle(PaintedSurfaces.fieldPlaceholder)
             )
+            .textFieldStyle(.plain)
             .focused($focused)
             .font(.system(size: 12))
             .foregroundStyle(PaintedSurfaces.bodyText)

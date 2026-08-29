@@ -1,0 +1,8 @@
+{
+  "name": "every-text-field-states-its-style",
+  "file": "PostRollApp/Sources/Views/ProgramUploadView.swift",
+  "find": "                    TextField(\"https://dciny.org/events/…\", text: $eventURL)\n                        .textFieldStyle(.plain)",
+  "replace": "                    TextField(\"https://dciny.org/events/…\", text: $eventURL)",
+  "test": "PostRollTests/TextFieldStyleTests/testEveryTextFieldSaysHowItShouldBeDrawn",
+  "breaks": "a text field goes back to inheriting AppKit's bezel, which is drawn inside whatever background the view specifies. Measured on this field: the app paints deepPage with an edgeRule border and the bezel covered it with a white rounded rect, which is the same defect that made the posting screen's tag fields render as near black pills while every colour they named was right (#919, #930, L231)"
+}

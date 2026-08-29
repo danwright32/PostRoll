@@ -112,6 +112,7 @@ struct SettingsView: View {
                 // result was the same generic "invalid x-api-key" as a wrong
                 // key with nothing to tell the two apart (#128).
                 SecureField("Paste the whole key, starting sk-ant-", text: $apiKey)
+                    .textFieldStyle(.automatic)
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 380)
                     .onChange(of: apiKey) { saved = false; saveError = nil }

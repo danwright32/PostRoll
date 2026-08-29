@@ -540,6 +540,7 @@ struct HashtagSettingsSheet: View {
                             .font(.light(11))
                             .foregroundStyle(PaintedSurfaces.secondaryText)
                         TextField("e.g. #dwphotony #nyc #concertphotography", text: $globalRaw)
+                            .textFieldStyle(.plain)
                             .font(.system(size: 12))
                             .foregroundStyle(PaintedSurfaces.bodyText)
                             .padding(.horizontal, 8)
@@ -597,6 +598,7 @@ struct HashtagSettingsSheet: View {
                         if showingAddPreset {
                             VStack(alignment: .leading, spacing: Spacing.sm) {
                                 TextField("Preset name (e.g. DCINY concert)", text: $newPresetName)
+                                    .textFieldStyle(.plain)
                                     .font(.system(size: 12))
                                     .foregroundStyle(PaintedSurfaces.bodyText)
                                     .padding(.horizontal, 8)
@@ -608,6 +610,7 @@ struct HashtagSettingsSheet: View {
                                                 .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1))
                                     )
                                 TextField("Tags (space-separated)", text: $newPresetTags)
+                                    .textFieldStyle(.plain)
                                     .font(.system(size: 12))
                                     .foregroundStyle(PaintedSurfaces.bodyText)
                                     .padding(.horizontal, 8)

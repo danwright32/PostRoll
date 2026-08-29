@@ -45,6 +45,7 @@ struct ProgramUploadView: View {
                         .tracking(1.2)
                         .foregroundStyle(PaintedSurfaces.pageAccentText)
                     TextField("https://dciny.org/events/…", text: $eventURL)
+                        .textFieldStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(PaintedSurfaces.bodyText)
                         .padding(.horizontal, 8)
