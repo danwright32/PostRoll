@@ -1,0 +1,8 @@
+{
+  "name": "a-typed-name-does-not-reach-the-tag-list",
+  "file": "postroll/caption_blocks.py",
+  "find": "        if not is_real_handle(raw):\n            return\n        name = bare_username(raw)",
+  "replace": "        name = bare_username(raw)",
+  "test": "tests/test_week_tag_cap.py::test_python_satisfies_the_shared_tag_contract",
+  "breaks": "a name typed in a tag field reaches the list Dan pastes into Instagram's Tag people field, where it matches no account, and because Instagram tags at most MAX_TAGS_PER_POST accounts it also displaces a real person who is then silently not tagged (#917, L117)"
+}

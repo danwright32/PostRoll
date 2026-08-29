@@ -81,6 +81,38 @@ def is_handle_shaped(raw: str) -> bool:
     return all(character in _HANDLE_CHARACTERS for character in name)
 
 
+#: Values recorded because a lookup found nothing, rather than because somebody
+#: has an account by that name. Well shaped, every one of them, which is why
+#: shape alone cannot answer the question (#917).
+#:
+#: Defined here rather than beside the caption prompt so Python has ONE list:
+#: `postroll.ai.generate_captions` imports it. Swift keeps its own in
+#: `PythonBridge.handleSentinels`, and the two are held together by
+#: `tests/fixtures/caption_blocks.json`, which states the sentinel case once for
+#: both sides.
+#:
+#: A blacklist admits every placeholder nobody thought to list (L257). It is
+#: what ships today on both sides of the bridge, and widening it to a real
+#: account check is a separate change; what this must not do is grow a THIRD
+#: spelling of the same list.
+HANDLE_SENTINELS = frozenset({"unknown", "n/a", "na", "none", "-", "no", "skip"})
+
+
+def is_real_handle(raw: str) -> bool:
+    """Whether this value is an account that can actually be tagged (#917).
+
+    Shaped like a username AND not a sentinel. Both halves are needed and
+    neither answers the other: 'DPR Dance' is a real company and no account,
+    'unknown' is perfectly well shaped and nobody at all.
+
+    Mirrors `PythonBridge.isRealHandle` in Swift, which `TypedCredit` reads
+    through. Note that `generate_captions._is_real_handle` historically checked
+    the sentinel half ONLY, so a badly shaped value passed it; this is the
+    predicate to reach for.
+    """
+    return is_handle_shaped(raw) and bare_username(raw).lower() not in HANDLE_SENTINELS
+
+
 def week_tag_list(days: Iterable[tuple[dict[str, Any] | None,
                                        dict[str, list[str]] | None,
                                        list[Any] | None]]) -> list[str]:
@@ -118,6 +150,15 @@ def week_tags(days: Iterable[tuple[dict[str, Any] | None,
     day_level: list[str] = []
 
     def add(raw: str, into: list[str]) -> None:
+        # Only an account reaches the TAG LIST (#917). A name typed in either
+        # field is credited by name elsewhere (`CaptionCreditInputs` routes it
+        # through `TypedCredit`), so excluding it here loses nothing, while
+        # INCLUDING it costs a real person their slot: Instagram tags at most
+        # `MAX_TAGS_PER_POST` accounts and the pasted list is silently truncated
+        # past that, so a value that is not an account displaces one that is
+        # (L117).
+        if not is_real_handle(raw):
+            return
         name = bare_username(raw)
         if not name:
             return

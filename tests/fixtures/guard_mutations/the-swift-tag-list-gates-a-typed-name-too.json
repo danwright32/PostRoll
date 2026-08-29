@@ -1,0 +1,8 @@
+{
+  "name": "the-swift-tag-list-gates-a-typed-name-too",
+  "file": "PostRollApp/Sources/Services/CaptionBlocks.swift",
+  "find": "            guard case .mention = TypedCredit.read(raw) else { return }\n            let name = bareUsername(raw)",
+  "replace": "            let name = bareUsername(raw)",
+  "test": "PostRollTests/WeekTagCapTests/testSwiftSatisfiesTheSharedTagContract",
+  "breaks": "the Swift half stops gating the tag list while Python still does, and since CAPTIONS.txt is built on the Swift side the deliverable carries the typed name and loses a real account to the cap, which is the one-sided-rule shape the shared fixture exists to catch (#917, L117)"
+}
