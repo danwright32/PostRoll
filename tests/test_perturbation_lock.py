@@ -345,3 +345,51 @@ def test_an_unreadable_lock_says_so_rather_than_inventing_a_dead_run(tmp_path):
     assert "died without cleaning up" not in why, (
         f"nothing established that a run died: {why}")
     assert "delete" in why.lower(), "the remedy still has to be there (L111)"
+
+
+def test_a_prover_that_has_not_said_what_it_is_proving_yet_says_that(tmp_path):
+    """The instant between taking the lock and writing into it.
+
+    Real, not hypothetical: `held_for` locks BEFORE it writes, on purpose, so
+    that a reader can never catch the file present and unheld. The cost is this
+    window, where the file is locked and empty.
+
+    It must not borrow the abandoned-run sentence, and it must not report
+    itself as proving a guard called 'a guard prover just starting', which is
+    the placeholder name leaking into a sentence as though it were a fact
+    (L11).
+    """
+    import subprocess
+    import sys
+
+    path = lock_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+
+    # Written here rather than pointed at a file outside the repo: a test that
+    # depends on a scratch directory surviving is a test that fails for a
+    # reason it is not about.
+    script = tmp_path / "silent_holder.py"
+    script.write_text(
+        "import fcntl, sys, time\n"
+        "h = open(sys.argv[1], 'a+')\n"
+        "fcntl.flock(h, fcntl.LOCK_EX)\n"
+        "print('locked', flush=True)\n"
+        "time.sleep(60)\n")
+
+    holder = subprocess.Popen([sys.executable, str(script), str(path)],
+                              stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "locked"
+
+        outcome, why = verdict(tmp_path)
+
+        assert outcome is Verdict.CANNOT_JUDGE, (
+            "somebody is holding it, so this is a wait rather than a fault")
+        assert "has not said what it is proving yet" in why, f"got: {why}"
+        assert "just starting" not in why, (
+            f"the placeholder name must not appear as a guard name: {why}")
+        assert "died" not in why, f"nothing died: {why}"
+    finally:
+        holder.kill()
+        holder.wait()

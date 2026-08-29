@@ -1,0 +1,8 @@
+{
+  "name": "a-starting-prover-is-not-a-dead-one",
+  "file": "tools/perturbation_lock.py",
+  "find": "        if self.guard == self.STARTING and self.is_live:",
+  "replace": "        if False:",
+  "test": "tests/test_perturbation_lock.py::test_a_prover_that_has_not_said_what_it_is_proving_yet_says_that",
+  "breaks": "a prover caught in the instant between taking the lock and writing what it is proving is described using the placeholder name as though it were a guard, so the message reports it as proving something called 'a guard prover just starting' rather than saying the name is not known yet (#920, L11)"
+}
