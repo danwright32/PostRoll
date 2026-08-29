@@ -27,6 +27,20 @@ final class PreviewGraphicsManager {
     func failure(for eventID: UUID) -> String? { failures[eventID] }
     func clearFailure(for eventID: UUID) { failures.removeValue(forKey: eventID) }
 
+    /// How many times this day's graphic has been rebuilt (#1009).
+    ///
+    /// The number a rendered image is keyed on, so the view reloads the file
+    /// rather than showing the copy it already decoded. It was `@State` on the
+    /// caption review screen, so a redraw driven from anywhere else finished
+    /// and left that screen showing the previous collage with nothing saying so.
+    func graphicVersion(_ day: DayName, for eventID: UUID) -> Int {
+        state.graphicVersion(day, for: eventID)
+    }
+
+    func bumpGraphicVersion(_ day: DayName, for eventID: UUID) {
+        state.bumpGraphicVersion(day, for: eventID)
+    }
+
     /// Runs the full preview generation and writes the result back through
     /// `appState`. A no-op when one is already in flight for this event.
     /// `onFinish` runs on the main actor after the write-back, whether the run
