@@ -185,6 +185,7 @@ struct BrandTextField: View {
 
     var body: some View {
         TextField(placeholder, text: $text)
+            .textFieldStyle(.plain)
             .focused($focused)
             .font(.system(size: 13))
             .foregroundStyle(PaintedSurfaces.bodyText)

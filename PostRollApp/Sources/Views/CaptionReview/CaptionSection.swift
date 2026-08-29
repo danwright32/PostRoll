@@ -1079,6 +1079,7 @@ struct RevisionPanel: View {
                 .foregroundStyle(PaintedSurfaces.pageAccentText)
 
             TextField("e.g. make it shorter, add @dciny, don't mention the scene label", text: $feedbackText)
+                .textFieldStyle(.plain)
                 .focused($focused)
                 .font(.system(size: 12))
                 .foregroundStyle(PaintedSurfaces.bodyText)
