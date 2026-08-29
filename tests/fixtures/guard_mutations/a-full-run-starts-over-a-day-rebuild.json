@@ -1,0 +1,8 @@
+{
+  "name": "a-full-run-starts-over-a-day-rebuild",
+  "file": "PostRollApp/Sources/Services/PreviewRunState.swift",
+  "find": "        guard regeneratingDays(for: eventID).isEmpty else { return false }",
+  "replace": "        // mutation: the day check is gone",
+  "test": "PostRollTests/PreviewRunStateTests/testAFullRunIsRefusedWhileAnyDayIsRegenerating",
+  "breaks": "a full preview run starts while a day is already rebuilding, so two generate_media subprocesses write the same files and delete each other's per event progress file (#1009)"
+}
