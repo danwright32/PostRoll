@@ -246,7 +246,6 @@ struct CaptionReviewView: View {
     // orphan ran, and the elapsed time vanished while the manager-owned
     // spinner survived, which is exactly the indistinct state #135 exists to
     // prevent.
-    @State private var graphicVersions: [DayName: Int] = [:]
 
 
     // Collage crop offsets (separate from carousel) — keyed by day rawValue then photo URL absoluteString
@@ -318,7 +317,7 @@ struct CaptionReviewView: View {
                             onUndoRevision: { undoRevision(day: day) },
                             onPreview: { previewURL = $0 },
                             isRegeneratingGraphic: regeneratingDays.contains(day),
-                            graphicVersion: graphicVersions[day] ?? 0,
+                            graphicVersion: graphics.graphicVersion(day, for: event.id),
                             onRegenerateGraphic: {
                                 regenerateGraphic(day: day)
                                 // Tuesday's before/after reel and Friday's before/after
@@ -924,7 +923,7 @@ struct CaptionReviewView: View {
                         appState.updateEvent(ReelAudioSwap.recording(swapped, in: liveNow, day: day))
                     }
                     // Bump the version so SwiftUI rebuilds AVPlayer with the updated file.
-                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                    graphics.bumpGraphicVersion(day, for: event.id)
                     graphics.endDayRegen(day, for: event.id)
                     NotificationService.shared.notifyRegenerationComplete(
                         eventName: liveEvent.name,
@@ -1026,7 +1025,7 @@ struct CaptionReviewView: View {
                     if let liveNow = appState.events.first(where: { $0.id == event.id }) {
                         appState.updateEvent(ReelAudioSwap.recording(swapped, in: liveNow, day: day))
                     }
-                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                    graphics.bumpGraphicVersion(day, for: event.id)
                     graphics.endDayRegen(day, for: event.id)
                     NotificationService.shared.notifyRegenerationComplete(
                         eventName: liveEvent.name,
@@ -1207,7 +1206,7 @@ struct CaptionReviewView: View {
                     paths["reel"] = render.reelPath
                     current.previewMediaPaths[DayName.friday.rawValue] = paths
                     appState.updateEvent(current)
-                    graphicVersions[.friday] = (graphicVersions[.friday] ?? 0) + 1
+                    graphics.bumpGraphicVersion(.friday, for: event.id)
                 }
             } catch {
                 await MainActor.run {
@@ -1494,7 +1493,7 @@ struct CaptionReviewView: View {
             if day == .friday { ev.applyFridayClipPlan(result.fridayClipPlan) }
             ev.applyCoverPick(result.coverPicks[day.rawValue], forDay: day.rawValue)
             appState.updateEvent(ev)
-            graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+            graphics.bumpGraphicVersion(day, for: event.id)
             NotificationService.shared.notifyRegenerationComplete(
                 eventName: event.name,
                 what: day.displayName
@@ -1557,7 +1556,7 @@ struct CaptionReviewView: View {
                         ev.days[day.rawValue]?.coverOverride = overrideSource.path
                     }
                     appState.updateEvent(ev)
-                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                    graphics.bumpGraphicVersion(day, for: event.id)
                 }
             }
         }

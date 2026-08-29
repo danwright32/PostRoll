@@ -149,4 +149,45 @@ final class PreviewRunStateTests: XCTestCase {
         _ = state.beginFullRun(eventA)
         XCTAssertTrue(state.isBusy(eventA))
     }
+
+    // MARK: - The image refresh counter belongs here (#1009)
+
+    /// The counter that makes a rebuilt image actually appear on screen lived
+    /// as view state on the caption review screen, written in six places there
+    /// and read in one.
+    ///
+    /// So a redraw driven from any OTHER screen completed successfully and left
+    /// the review screen showing the previous collage, with nothing saying so.
+    /// A silent stale image after a successful rebuild is worse than a failed
+    /// one: the failure at least says something.
+    ///
+    /// Keyed by EVENT as well as day. As view state it was keyed by day alone
+    /// and survived only until the screen remounted, so it could not answer the
+    /// question at all once more than one screen could ask it.
+    func testAFinishedRedrawBumpsTheVersionForThatDayAndEvent() {
+        var state = PreviewRunState()
+
+        XCTAssertEqual(state.graphicVersion(.wednesday, for: eventA), 0,
+                       "a day nothing has rebuilt starts at zero")
+
+        state.bumpGraphicVersion(.wednesday, for: eventA)
+
+        XCTAssertEqual(state.graphicVersion(.wednesday, for: eventA), 1)
+        XCTAssertEqual(state.graphicVersion(.sunday, for: eventA), 0,
+                       "only the day that was redrawn refreshes")
+        XCTAssertEqual(state.graphicVersion(.wednesday, for: eventB), 0,
+                       "another event's Wednesday is a different image")
+    }
+
+    /// Two rebuilds of one day are two refreshes, not one.
+    ///
+    /// The reader compares the number it last drew against the number now, so a
+    /// counter that saturated would leave the second rebuild invisible.
+    func testASecondRedrawOfTheSameDayBumpsAgain() {
+        var state = PreviewRunState()
+        state.bumpGraphicVersion(.thursday, for: eventA)
+        state.bumpGraphicVersion(.thursday, for: eventA)
+
+        XCTAssertEqual(state.graphicVersion(.thursday, for: eventA), 2)
+    }
 }
