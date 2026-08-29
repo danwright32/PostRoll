@@ -101,6 +101,18 @@ enum CaptionBlocks {
         var dayLevel: [String] = []
 
         func add(_ raw: String, into list: inout [String]) {
+            // Only an account reaches the TAG LIST (#917). #912 gated the
+            // caption's mention list and left this path ungated, so a name
+            // typed in either field still landed in the list Dan pastes into
+            // Instagram's Tag people field.
+            //
+            // Excluding it loses nothing: `CaptionCreditInputs` reads both
+            // sources through the same `TypedCredit` and credits a name by
+            // name. INCLUDING it costs a real person their slot, because
+            // Instagram tags at most `maxTagsPerPost` accounts and silently
+            // ignores the rest, so a value that is not an account displaces one
+            // that is (L117).
+            guard case .mention = TypedCredit.read(raw) else { return }
             let name = bareUsername(raw)
             guard !name.isEmpty else { return }
             // Case-insensitively deduplicated: Instagram handles are not
