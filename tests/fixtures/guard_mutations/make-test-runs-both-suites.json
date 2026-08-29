@@ -1,0 +1,8 @@
+{
+  "name": "make-test-runs-both-suites",
+  "file": "Makefile",
+  "find": "\t@$(MAKE) --no-print-directory test-python",
+  "replace": "\t@true",
+  "test": "tests/test_make_test_runs_both_suites.py::test_make_test_runs_both_suites",
+  "breaks": "`make test` goes back to running the Swift suite alone while its name still promises everything, so a green run reads as the whole suite passing when roughly 4000 Python tests were never started (#932)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "each-suite-leg-counts-what-it-ran",
+  "file": "Makefile",
+  "find": "@venv/bin/python tools/suite_counts.py run python -- \\",
+  "replace": "@true; \\",
+  "test": "tests/test_make_test_runs_both_suites.py::test_each_leg_reports_how_many_tests_it_ran[test-python-python]",
+  "breaks": "a suite leg stops reporting how many tests it ran, and a count is the only thing that tells a full run from a half one: both runners exit 0 on a run that executed nothing (#932, L98)"
+}
