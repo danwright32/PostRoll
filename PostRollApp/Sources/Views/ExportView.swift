@@ -26,7 +26,6 @@ struct ExportView: View {
     @State private var lastExportFolder: URL? = nil
     @State private var pendingSingleDay: DayName? = nil
     /// A layout the user picked that needs confirmation before it rebuilds posts (#71).
-    @State private var pendingPreset: PostingPreset? = nil
 
     /// What the last export left in its folder (#247). Held in state and read
     /// on appear rather than computed in `body`, because it touches the disk
@@ -151,24 +150,6 @@ struct ExportView: View {
                 pendingSingleDay = nil
             }
         }
-        .confirmationDialog(
-            pendingPreset.map { "Switch this event to the \($0.displayName) layout?" } ?? "",
-            isPresented: Binding(
-                get: { pendingPreset != nil },
-                set: { if !$0 { pendingPreset = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            if let pendingPreset {
-                Button("Switch and rebuild") {
-                    applyPreset(pendingPreset)
-                    self.pendingPreset = nil
-                }
-                Button("Cancel", role: .cancel) { self.pendingPreset = nil }
-            }
-        } message: {
-            Text(pendingPresetRebuildMessage)
-        }
     }
 
     // MARK: - States
@@ -235,7 +216,7 @@ struct ExportView: View {
                 .padding(.horizontal, Spacing.xl)
             }
 
-            presetPicker
+            PostingLayoutControl(event: event, defaults: AppPreferences.store, previews: previews)
                 .padding(.horizontal, Spacing.xl)
 
             ExportSummaryCard(event: event, result: result) { day in
@@ -307,93 +288,6 @@ struct ExportView: View {
     /// default). Read live from AppState so it reflects the latest write.
     private var effectivePreset: PostingPreset {
         (appState.events.first(where: { $0.id == event.id }) ?? event).effectivePostingPreset
-    }
-
-    /// Posting layout for THIS event. Switching it sets a per-event override and
-    /// rebuilds Sunday/Monday/Wednesday (their captions and media change) so the
-    /// affected days are regenerated. The default for new events lives in Settings.
-    private var presetPicker: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            HStack(spacing: Spacing.md) {
-                Text("Posting layout")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(PaintedSurfaces.bodyText)
-                Picker("Posting layout", selection: Binding(
-                    get: { effectivePreset },
-                    set: { requestPresetChange($0) }
-                )) {
-                    ForEach(PostingPreset.allCases) { preset in
-                        Text(preset.displayName).tag(preset)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                // 480 rather than 360 since #900: three segments carry their
-                // counts in the label ("Opening (7·4·4)"), and a segmented
-                // control truncates rather than wrapping, so the numbers that
-                // make the labels worth reading are the first thing to go. It
-                // is a maximum, so a narrower window still takes less.
-                .frame(maxWidth: 480)
-                .disabled(isRegenerating)
-            }
-            if isRegenerating {
-                HStack(spacing: Spacing.xs) {
-                    ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
-                    Text("Rebuilding Sunday, Monday, and Wednesday for the new layout…")
-                        .font(.system(size: 12))
-                        .foregroundStyle(PaintedSurfaces.secondaryText)
-                }
-            } else {
-                // Derived from the preset rather than restated here (#1007).
-                // This was a two-way ternary over THREE presets, so selecting
-                // Opening printed Classic's sentence and said Sunday posts a
-                // single photo when it posts seven. Settings never had the bug
-                // because it reads `explanations` (L41).
-                Text(PostingLayoutCopy.thisEvent(effectivePreset))
-                    .font(.system(size: 12))
-                    .foregroundStyle(PaintedSurfaces.secondaryText)
-            }
-        }
-    }
-
-    /// Plain-language list of what a pending layout switch will rebuild.
-    private var pendingPresetRebuildMessage: String {
-        guard let pendingPreset,
-              let ev = appState.events.first(where: { $0.id == event.id }) else { return "" }
-        let days = pendingPreset.affectedDays(in: ev).map { $0.displayName }
-        let list = ListFormatter.localizedString(byJoining: days)
-        return "This rebuilds \(list) (captions and images) for this event."
-    }
-
-    /// Handle a picker selection. Switching the layout rebuilds the governed
-    /// days, so confirm first when there are posts to rebuild (#71); when nothing
-    /// would rebuild (no photos yet), just set the override silently.
-    private func requestPresetChange(_ newValue: PostingPreset) {
-        guard let ev = appState.events.first(where: { $0.id == event.id }),
-              newValue != ev.effectivePostingPreset else { return }
-        if newValue.affectedDays(in: ev).isEmpty {
-            applyPreset(newValue)
-        } else {
-            pendingPreset = newValue
-        }
-    }
-
-    /// Set this event's layout override and regenerate the days it governs. Their
-    /// previews are cleared first so a failed regen can't leave the export copying
-    /// stale assets from the previous layout.
-    private func applyPreset(_ newValue: PostingPreset) {
-        guard var ev = appState.events.first(where: { $0.id == event.id }),
-              newValue != ev.effectivePostingPreset else { return }
-        ev.postingPresetOverride = newValue
-
-        let affected = newValue.affectedDays(in: ev).map { $0.rawValue }
-        for day in affected { ev.previewMediaPaths.removeValue(forKey: day) }
-        appState.updateEvent(ev)
-
-        if !affected.isEmpty {
-            genManager.start(eventID: event.id, retryDays: Set(affected), appState: appState,
-                             regenerateGraphics: true)
-        }
     }
 
     private func progressContent(label: String) -> some View {

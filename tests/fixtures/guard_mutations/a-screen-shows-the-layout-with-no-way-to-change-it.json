@@ -1,0 +1,8 @@
+{
+  "name": "a-screen-shows-the-layout-with-no-way-to-change-it",
+  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
+  "find": "                    PostingLayoutControl(event: event, defaults: AppPreferences.store, previews: previews)",
+  "replace": "                    EmptyView()",
+  "test": "PostRollTests/PostingLayoutCopyTests/testEveryScreenThatShowsTheLayoutUsesTheOneControl",
+  "breaks": "the caption review screen goes back to showing what the layout produced with no way to change it, which is the defect Dan reported from his own screenshots (#1007)"
+}

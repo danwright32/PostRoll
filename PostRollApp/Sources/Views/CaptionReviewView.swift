@@ -283,6 +283,14 @@ struct CaptionReviewView: View {
                         .padding(.horizontal, Spacing.xl)
                         .padding(.bottom, Spacing.md)
 
+                    // Above the day list (#1007). This screen shows what the
+                    // layout produced, day by day, and could not change it: the
+                    // control was on the Export screen only, which is past the
+                    // point where the result is being read.
+                    PostingLayoutControl(event: event, defaults: AppPreferences.store, previews: previews)
+                        .padding(.horizontal, Spacing.xl)
+                        .padding(.bottom, Spacing.md)
+
                     ForEach(daysWithContent, id: \.self) { day in
                         let section = ReviewSection.caption(day)
                         // Read postingDay + previewPaths from liveEvent, not the

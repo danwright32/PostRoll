@@ -69,26 +69,169 @@ final class PostingLayoutCopyTests: XCTestCase {
     /// half alone is satisfied by deleting the sentence altogether and showing
     /// nothing (L178, L283). Together they say the old copy is gone and the
     /// derived one took its place.
-    func testExportViewReadsTheDerivedSentenceAndNoLongerCarriesTheOldOne() throws {
-        let source = try String(contentsOf: exportView, encoding: .utf8)
-
-        XCTAssertTrue(source.contains("PostingLayoutCopy.thisEvent("),
-                      "ExportView does not call the derived sentence, so whatever it "
-                      + "draws under the picker is maintained beside the presets")
+    func testTheScreensReadTheDerivedSentenceAndNoneCarriesTheOldOne() throws {
+        // The control owns the sentence since #1007 moved the picker out of
+        // ExportView. The positive half is asserted against the control; the
+        // absence is asserted against EVERY screen that shows the layout,
+        // because the defect this holds closed is a hand written sentence
+        // anywhere near the picker, not in one file.
+        let control = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
+                                 encoding: .utf8)
+        XCTAssertTrue(control.contains("PostingLayoutCopy.thisEvent("),
+                      "the layout control does not call the derived sentence, so "
+                      + "whatever it draws under the picker is maintained beside "
+                      + "the presets")
 
         // The exact words that shipped for Opening. Named rather than described,
         // because this half exists to hold one specific defect closed.
-        XCTAssertFalse(source.contains("Wednesday posts a 10 photo carousel"),
-                       "ExportView still carries Classic's hand written sentence, which "
-                       + "is what Opening was printing")
-        XCTAssertFalse(source.contains("each post a 4 photo carousel with a collage story"),
-                       "ExportView still carries Balanced's hand written sentence")
+        for name in Self.layoutScreens + ["PostingLayoutControl.swift"] {
+            let source = try String(contentsOf: viewFile(name), encoding: .utf8)
+            XCTAssertFalse(source.contains("Wednesday posts a 10 photo carousel"),
+                           "\(name) carries Classic's hand written sentence, which is "
+                           + "what Opening was printing")
+            XCTAssertFalse(source.contains("each post a 4 photo carousel with a collage story"),
+                           "\(name) carries Balanced's hand written sentence")
+        }
     }
 
-    private var exportView: URL {
+    /// Every screen that shows the layout's effect can change it (#1007).
+    ///
+    /// Asserted as a CONSTRUCTION, which a comment or an import cannot satisfy
+    /// (L135, L103), and paired with the absence of the inline picker it
+    /// replaced so a screen cannot end up carrying both.
+    func testEveryScreenThatShowsTheLayoutUsesTheOneControl() throws {
+        for name in Self.layoutScreens {
+            let source = try String(contentsOf: viewFile(name), encoding: .utf8)
+            XCTAssertTrue(source.contains("PostingLayoutControl("),
+                          "\(name) shows what the posting layout produced and offers "
+                          + "no way to change it")
+            XCTAssertFalse(source.contains("Picker(\"Posting layout\""),
+                           "\(name) builds its own layout picker beside the shared control")
+        }
+    }
+
+    /// The control draws no progress indicator of its own (#1007).
+    ///
+    /// Every screen it sits on already draws the rebuild's progress, with
+    /// elapsed time and an estimate. A spinner here stacks a second indicator
+    /// directly above that one, for the same piece of work, carrying less
+    /// information than the one below it. Two indistinguishable indicators for
+    /// one job is the display #135 exists to prevent.
+    ///
+    /// Checked in both directions: no spinner, AND the reason still shown, so
+    /// the fix cannot be satisfied by deleting the busy state altogether and
+    /// leaving a dead control with nothing saying why (L178, L148).
+    ///
+    /// A whole file scan is honest here in a way it usually is not: this file
+    /// is one control, and the rule is that it contains no progress indicator
+    /// anywhere, not that one region of it does not.
+    func testTheControlDrawsNoProgressIndicatorOfItsOwn() throws {
+        let source = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
+                                encoding: .utf8)
+        XCTAssertFalse(source.contains("ProgressView("),
+                       "the layout control draws its own spinner above the screen's "
+                       + "own progress line, which already carries elapsed time and "
+                       + "an estimate this one does not")
+        XCTAssertTrue(source.contains("cannot change yet"),
+                      "the control is disabled while a rebuild runs and has to say "
+                      + "why, or it is a dead control with no reason")
+    }
+
+    /// Named rather than derived, deliberately: what belongs here is a judgement
+    /// about which screens SHOW the layout's effect, which no scan can make. It
+    /// is three today, and a fourth is a decision somebody has to take.
+    private static let layoutScreens = [
+        "ExportView.swift", "CaptionReviewView.swift", "PhotoAssignmentView.swift",
+    ]
+
+    private func viewFile(_ name: String) -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Sources/Views/ExportView.swift")
+            .appendingPathComponent("Sources/Views/\(name)")
+    }
+
+    // MARK: - What a switch will replace (#1007)
+
+    private func scratchDefaults(_ preset: PostingPreset) -> UserDefaults {
+        let d = UserDefaults(suiteName: "layout-control-\(UUID().uuidString)")!
+        d.set(preset.rawValue, forKey: PostingPreset.storageKey)
+        return d
+    }
+
+    private func eventWithPhotos(on days: [DayName]) -> Event {
+        var event = Event(name: "Show", org: "Org", venue: "Hall",
+                          date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        for day in days {
+            var pd = PostingDay(day: day)
+            pd.photoPaths = [URL(fileURLWithPath: "/\(day.rawValue).jpg")]
+            event.days[day.rawValue] = pd
+        }
+        return event
+    }
+
+    /// Nothing to rebuild is not a confirmation.
+    ///
+    /// A dialog that appears with nothing to say trains Dan to dismiss the one
+    /// that matters, and the switch here takes nothing away.
+    func testAnEventWithNoPhotosNeedsNoConfirmation() {
+        let event = eventWithPhotos(on: [])
+        XCTAssertNil(PostingLayoutSwitch.confirmation(
+            switchingTo: .opening, in: event, defaults: scratchDefaults(.balanced)))
+    }
+
+    func testTheConfirmationNamesTheDaysThatRebuild() throws {
+        let event = eventWithPhotos(on: [.sunday, .monday])
+        let text = try XCTUnwrap(PostingLayoutSwitch.confirmation(
+            switchingTo: .opening, in: event, defaults: scratchDefaults(.balanced)))
+
+        XCTAssertTrue(text.contains("Sunday"), text)
+        XCTAssertTrue(text.contains("Monday"), text)
+        XCTAssertFalse(text.contains("Wednesday"),
+                       "Wednesday has no photos, so nothing about it rebuilds: \(text)")
+    }
+
+    /// The half the lessons audit caught.
+    ///
+    /// A day whose caption was typed over has real work in it, and the sentence
+    /// has to say so, because "the captions will be rebuilt" reads as routine
+    /// when what it means is that an hour of editing is about to go.
+    func testAnEditedCaptionIsNamedAsSomethingThatWillBeReplaced() throws {
+        var event = eventWithPhotos(on: [.sunday, .monday])
+        var sun = DayCaption()
+        sun.generatedCaption = "what the model wrote"
+        sun.caption = "what Dan wrote instead"
+        var result = WeekGenerationResult()
+        result.sunday = sun
+        event.weekResult = result
+
+        let text = try XCTUnwrap(PostingLayoutSwitch.confirmation(
+            switchingTo: .opening, in: event, defaults: scratchDefaults(.balanced)))
+        XCTAssertTrue(text.contains("edit"), "the edited day has to be called out: \(text)")
+        XCTAssertTrue(text.contains("Sunday"), text)
+    }
+
+    /// An older save has no record of what was generated, which is NOT evidence
+    /// that Dan edited it.
+    ///
+    /// `generatedCaption` is empty until `stampOriginals` runs, so a raw
+    /// `caption != generatedCaption` reads every unstamped day as edited and
+    /// warns about work nobody did. `DayCaption.wasEdited` already guards this
+    /// and is the thing to use.
+    func testAnUnstampedCaptionIsNotReportedAsEdited() throws {
+        var event = eventWithPhotos(on: [.sunday])
+        var sun = DayCaption()
+        sun.generatedCaption = ""              // never stamped
+        sun.caption = "a caption from before the stamp existed"
+        var result = WeekGenerationResult()
+        result.sunday = sun
+        event.weekResult = result
+
+        let text = try XCTUnwrap(PostingLayoutSwitch.confirmation(
+            switchingTo: .opening, in: event, defaults: scratchDefaults(.balanced)))
+        XCTAssertFalse(text.contains("edit"),
+                       "an unstamped caption is unknown, not edited, and warning about "
+                       + "edits nobody made is how a real warning stops being read: \(text)")
     }
 }
