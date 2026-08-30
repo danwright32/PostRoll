@@ -1,7 +1,7 @@
 {
   "name": "ci-builds-the-app",
   "file": ".github/workflows/swift.yml",
-  "find": "            -scheme PostRoll \\\n            -configuration Release \\\n            -destination 'platform=macOS' \\\n            -derivedDataPath PostRollApp/.derived-data \\\n            build\n",
+  "find": "            -scheme PostRoll \\\n            -configuration Release \\\n            -destination 'platform=macOS' \\\n            -derivedDataPath PostRollApp/.derived-data \\\n            ONLY_ACTIVE_ARCH=YES \\\n            build\n",
   "replace": "",
   "test": "tests/test_ci_caches_and_cancels.py::test_ci_compiles_the_app_and_not_only_the_test_target",
   "breaks": "nothing in CI compiles the view layer, so a file that does not build reaches main with every check green (L3, L88)"
