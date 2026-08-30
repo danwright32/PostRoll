@@ -110,6 +110,33 @@ final class PostingLayoutCopyTests: XCTestCase {
         }
     }
 
+    /// The control draws no progress indicator of its own (#1007).
+    ///
+    /// Every screen it sits on already draws the rebuild's progress, with
+    /// elapsed time and an estimate. A spinner here stacks a second indicator
+    /// directly above that one, for the same piece of work, carrying less
+    /// information than the one below it. Two indistinguishable indicators for
+    /// one job is the display #135 exists to prevent.
+    ///
+    /// Checked in both directions: no spinner, AND the reason still shown, so
+    /// the fix cannot be satisfied by deleting the busy state altogether and
+    /// leaving a dead control with nothing saying why (L178, L148).
+    ///
+    /// A whole file scan is honest here in a way it usually is not: this file
+    /// is one control, and the rule is that it contains no progress indicator
+    /// anywhere, not that one region of it does not.
+    func testTheControlDrawsNoProgressIndicatorOfItsOwn() throws {
+        let source = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
+                                encoding: .utf8)
+        XCTAssertFalse(source.contains("ProgressView("),
+                       "the layout control draws its own spinner above the screen's "
+                       + "own progress line, which already carries elapsed time and "
+                       + "an estimate this one does not")
+        XCTAssertTrue(source.contains("cannot change yet"),
+                      "the control is disabled while a rebuild runs and has to say "
+                      + "why, or it is a dead control with no reason")
+    }
+
     /// Named rather than derived, deliberately: what belongs here is a judgement
     /// about which screens SHOW the layout's effect, which no scan can make. It
     /// is three today, and a fourth is a decision somebody has to take.

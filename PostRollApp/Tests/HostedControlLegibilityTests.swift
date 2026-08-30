@@ -1538,7 +1538,14 @@ extension HostedControlLegibilityTests {
         let event = Self.sampleEvent(stage: .photosAssigned)
         return try renderScreen(
             PhotoAssignmentView(event: event)
-                .environment(Self.scratchAppState(event)))
+                .environment(Self.scratchAppState(event))
+                // Through the same list the app uses, like its three siblings
+                // here (#1007). This renderer was the one screen handed only an
+                // AppState, which held for as long as nothing on it read an
+                // owner. The posting layout control does, and a missing
+                // Observable is a FATAL ERROR rather than a failing assertion,
+                // so the whole sheet died and said nothing about the screen.
+                .withAppOwners(AppOwners()))
     }
 
     /// Stage 4: the screen that runs the week's generation (#937).

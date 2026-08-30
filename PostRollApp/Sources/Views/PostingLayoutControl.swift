@@ -121,12 +121,19 @@ struct PostingLayoutControl: View {
                 .disabled(isBusy)
             }
             if isBusy {
-                HStack(spacing: Spacing.xs) {
-                    ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
-                    Text("Rebuilding this event, so the layout cannot change yet.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(PaintedSurfaces.secondaryText)
-                }
+                // Deliberately NO spinner here, only the reason the control is
+                // disabled.
+                //
+                // Every screen this sits on already draws the rebuild's own
+                // progress, with elapsed time and an estimate. A second spinner
+                // stacked above it says the same thing with less information,
+                // and two indicators for one piece of work is the indistinct
+                // display #135 exists to prevent. The first version of this had
+                // one and it was caught by rendering the screen, not by any
+                // test: the render tests are excluded from the ordinary suite.
+                Text("Rebuilding, so the layout cannot change yet.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
             } else {
                 Text(PostingLayoutCopy.thisEvent(effectivePreset))
                     .font(.system(size: 12))
