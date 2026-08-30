@@ -215,6 +215,29 @@ def _steps(job_body: str) -> list[str]:
     return [block for block in blocks if block.strip().startswith("- ")]
 
 
+def _condition(step: str) -> str:
+    """One step's `if:` expression, or "" when it has none.
+
+    Read off the `if:` line rather than searched for anywhere in the step. A
+    check that matches the whole block is answered by the COMMENT explaining
+    the condition as readily as by the condition, so removing the condition and
+    leaving the comment behind passes it (L103, L135). That is not
+    hypothetical: the first version of
+    `test_the_confirming_step_still_runs_when_the_job_goes_red` survived its own
+    registry mutation for exactly this reason.
+
+    Eight spaces exactly, which is a step's own key. A `run: |` script body is
+    indented deeper, so nothing inside one can answer for a step's condition.
+    """
+    match = re.search(r"^        if: (.+)$", step, re.M)
+    return match.group(1).strip() if match else ""
+
+
+def _name(step: str) -> str:
+    first = step.split("\n")[0].strip()
+    return first.split("- name:", 1)[1].strip() if "- name:" in first else first
+
+
 def _gated_jobs() -> dict[str, list[str]]:
     """Every job in every workflow that carries the gate, by `file::job`."""
     found = {}
@@ -248,10 +271,10 @@ def test_every_step_after_the_gate_asks_the_gate():
                 continue
             if not seen_gate:
                 continue
-            name = step.split("\n")[0].strip()
-            assert ASKS_THE_GATE in step, (
-                f"{job}: the step {name!r} comes after the gate and does not "
-                f"ask it, so it runs on every merge whatever the gate decided")
+            assert ASKS_THE_GATE in _condition(step), (
+                f"{job}: the step {_name(step)!r} comes after the gate and its "
+                f"condition {_condition(step)!r} does not ask it, so it runs "
+                "on every merge whatever the gate decided")
 
 
 def test_no_step_asks_the_gate_the_unsafe_way_round():
@@ -270,15 +293,14 @@ def test_the_gate_only_fires_on_a_push():
     is judged by."""
     for job, steps in sorted(_gated_jobs().items()):
         gate = next(s for s in steps if f"id: {GATE_ID}" in s)
-        assert "if: github.event_name == 'push'" in gate, (
+        assert _condition(gate) == "github.event_name == 'push'", (
             f"{job}: the gate is not restricted to a push, so it can skip a "
             "check on the pull request that check exists to judge")
 
 
 def test_every_gated_job_ends_with_the_step_the_duration_series_reads():
     for job, steps in sorted(_gated_jobs().items()):
-        last = steps[-1]
-        assert f"name: {WORK_STEP}" in last, (
+        assert _name(steps[-1]) == WORK_STEP, (
             f"{job}: its last step is not {WORK_STEP!r}, so a merge that "
             "skipped this job's work reads in tools/check_job_durations.py as "
             "the job having become fast")
@@ -287,8 +309,7 @@ def test_every_gated_job_ends_with_the_step_the_duration_series_reads():
 def test_the_confirming_step_still_runs_when_the_job_goes_red():
     """A job that got slower until it failed must stay in the series."""
     for job, steps in sorted(_gated_jobs().items()):
-        last = steps[-1]
-        assert "!cancelled()" in last, (
+        assert "!cancelled()" in _condition(steps[-1]), (
             f"{job}: {WORK_STEP!r} does not run on a failed job, so a red run "
             "drops out of the duration series, which hides a job getting "
             "slower right up to the moment it breaks")
@@ -324,8 +345,7 @@ def test_the_duration_series_knows_every_step_a_gate_can_skip():
     from tools.check_job_durations import WORK_STEPS
 
     for job, steps in sorted(_gated_jobs().items()):
-        first_line = steps[-1].split("\n")[0]
-        name = first_line.split("- name:", 1)[1].strip()
+        name = _name(steps[-1])
         assert name in WORK_STEPS, (
             f"{job} ends with the step {name!r}, which "
             "tools/check_job_durations.py does not know about, so a merge that "
