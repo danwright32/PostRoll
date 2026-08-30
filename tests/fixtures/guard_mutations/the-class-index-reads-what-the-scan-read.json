@@ -1,0 +1,8 @@
+{
+  "name": "the-class-index-reads-what-the-scan-read",
+  "file": "tests/test_guard_mutation_registry.py",
+  "find": "_DECLARES = re.compile(r\"\\bclass (\\w+)\\b\")",
+  "replace": "_DECLARES = re.compile(r\"^final class (\\w+)\\b\")",
+  "test": "tests/test_guard_mutation_registry.py::test_the_class_index_agrees_with_scanning_for_one",
+  "breaks": "the index answers a narrower question than the per-entry scan it replaced, so entries naming a class declared any other way are reported as dead (#1018, L263)"
+}

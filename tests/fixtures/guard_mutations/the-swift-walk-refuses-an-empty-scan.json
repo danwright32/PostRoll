@@ -1,0 +1,8 @@
+{
+  "name": "the-swift-walk-refuses-an-empty-scan",
+  "file": "tests/source_text.py",
+  "find": "    files = tuple(sorted(root.rglob(\"*.swift\")))\n    assert files, f\"no Swift files under {root}, so this guard checked nothing\"\n    return files",
+  "replace": "    return tuple(sorted(root.rglob(\"*.swift\")))",
+  "test": "tests/test_source_reads_happen_once.py::test_the_walk_never_memoises_an_empty_scan",
+  "breaks": "an empty walk is cached, so a root that was empty once reads as empty for the rest of the process and every source-scanning sweep over it passes at the same moment (#1018, L286, L98)"
+}

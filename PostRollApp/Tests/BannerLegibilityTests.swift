@@ -63,9 +63,24 @@ final class BannerLegibilityTests: XCTestCase {
     /// Every banner state the app can show, each carrying the message its own
     /// shipping code produces. Nothing here is hand written copy: a preview of
     /// invented text would show something the app never says.
-    static var measuredStates: [(name: String, view: AnyView)] { BannerLegibilityTests().states }
+    static var measuredStates: [(name: String, view: AnyView)] { allStates }
 
-    fileprivate var states: [(name: String, view: AnyView)] {
+    fileprivate var states: [(name: String, view: AnyView)] { Self.allStates }
+
+    /// Built once per run, not once per access (#1018).
+    ///
+    /// Three tests here sweep it and `UnseenSurfaceTests` and
+    /// `HostedControlLegibilityTests` take it through `measuredStates`, so a
+    /// property rebuilding forty view trees on every access was rebuilding them
+    /// several hundred times for an answer that cannot change: nothing below
+    /// reads anything but its own app types.
+    ///
+    /// `static let` rather than a cache with a key, because there is only ever
+    /// one answer, so there is no key to get wrong and no empty result a memo
+    /// could latch onto (L286).
+    private static let allStates: [(name: String, view: AnyView)] = buildStates()
+
+    private static func buildStates() -> [(name: String, view: AnyView)] {
         let refusal = ProgramReadiness.missingFiles([
             URL(fileURLWithPath: "/programs/Gala_p3.png"),
         ]).refusal ?? ""
@@ -406,6 +421,42 @@ final class BannerLegibilityTests: XCTestCase {
         ] + Self.notificationBanners
     }
 
+    /// One state's word footprint at one width, measured once per run (#1018).
+    ///
+    /// `testEveryBannerActuallyDrawsItsMessage` and
+    /// `testTheThinnestRealSurfaceStillClearsTheThresholdWithRoom` compute the
+    /// IDENTICAL pair for every state: the same view, at the same 520pt, once
+    /// as it ships and once with its type switched off. Two renders each, forty
+    /// states, twice over, for one set of numbers. That was most of this file's
+    /// 74s on the runner (audit lesson 30).
+    ///
+    /// Keyed by WIDTH as well as by state, which is load bearing:
+    /// `testEveryBannerStillDrawsItsMessageWhenNarrow` asks the same question at
+    /// 300pt, and a memo keyed on the state alone would hand it the 520pt
+    /// answer for every surface. It would then measure nothing at all while
+    /// passing, which is the one direction nothing else here would catch (L98).
+    /// `testTheShareMemoIsKeyedByWidthAsWellAsByState` holds that open.
+    ///
+    /// A render that THROWS stores nothing, because the store happens after it:
+    /// a cached failure would be read as a measurement by every later caller.
+    private struct ShareKey: Hashable {
+        let state: String
+        let width: CGFloat
+    }
+
+    private static var measuredShares: [ShareKey: Double] = [:]
+
+    private func wordShare(of state: (name: String, view: AnyView),
+                           width: CGFloat = 520) throws -> Double {
+        let key = ShareKey(state: state.name, width: width)
+        if let already = Self.measuredShares[key] { return already }
+        let share = WordFootprint.share(
+            try render(state.view, width: width),
+            try render(state.view, width: width, wordless: true))
+        Self.measuredShares[key] = share
+        return share
+    }
+
     /// The banner saying nothing this app announces can arrive (#894, #918).
     ///
     /// Named by #918 as one of two panes nobody had ever seen. It corrects that
@@ -516,8 +567,7 @@ final class BannerLegibilityTests: XCTestCase {
                              + "nothing about the ones it did not draw")
 
         for state in states {
-            let share = WordFootprint.share(try render(state.view),
-                                            try render(state.view, wordless: true))
+            let share = try wordShare(of: state)
             XCTAssertGreaterThan(share, WordFootprint.drawn, """
                 Switching every word off the "\(state.name)" banner changed \
                 \(String(format: "%.4f", share)) of the render, which is nothing. Its \
@@ -542,9 +592,7 @@ final class BannerLegibilityTests: XCTestCase {
     func testTheThinnestRealSurfaceStillClearsTheThresholdWithRoom() throws {
         var measured: [(String, Double)] = []
         for state in states {
-            measured.append((state.name,
-                             WordFootprint.share(try render(state.view),
-                                                 try render(state.view, wordless: true))))
+            measured.append((state.name, try wordShare(of: state)))
         }
         let sorted = measured.sorted { $0.1 < $1.1 }
         for (name, share) in sorted {
@@ -560,13 +608,53 @@ final class BannerLegibilityTests: XCTestCase {
             """)
     }
 
+    /// The memo #1018 put in front of the render, checked against the render.
+    ///
+    /// Two implementations behind one name are never compared and can drift
+    /// apart indefinitely with every caller reading as correct (L263), so this
+    /// asks the memo and the direct measurement the same question and requires
+    /// the same answer. At BOTH widths, because a memo that ignored width would
+    /// agree at the first one it was asked and be wrong at the second.
+    func testTheShareMemoAnswersWhatAFreshMeasurementDoes() throws {
+        let state = try XCTUnwrap(states.first)
+        for width in [CGFloat(520), CGFloat(300)] {
+            let fresh = WordFootprint.share(
+                try render(state.view, width: width),
+                try render(state.view, width: width, wordless: true))
+            XCTAssertEqual(try wordShare(of: state, width: width), fresh,
+                           accuracy: 0.0001, """
+                the memo and a fresh measurement of "\(state.name)" at \(width)pt \
+                disagree, so the three sweeps in this file are no longer measuring \
+                what they say they are.
+                """)
+        }
+    }
+
+    /// The one way this memo could silently empty a whole test.
+    ///
+    /// Keyed on the state alone, `testEveryBannerStillDrawsItsMessageWhenNarrow`
+    /// would be handed the 520pt answer for all forty surfaces and would stop
+    /// measuring the narrow layout entirely, while passing (L98). A count rather
+    /// than a comparison of the two numbers, because two widths CAN legitimately
+    /// measure the same and a check that assumed otherwise would be flaky.
+    func testTheShareMemoIsKeyedByWidthAsWellAsByState() throws {
+        let state = try XCTUnwrap(states.first)
+        _ = try wordShare(of: state, width: 520)
+        _ = try wordShare(of: state, width: 300)
+
+        let kept = Self.measuredShares.keys.filter { $0.state == state.name }
+        XCTAssertEqual(kept.count, 2, """
+            the memo holds \(kept.count) entries for "\(state.name)" across two \
+            widths, so one width is answering for the other and the narrow sweep is \
+            re-reading the wide one's numbers.
+            """)
+    }
+
     /// A banner is worth nothing if the words run past the edge of it. Rendering
     /// at a narrow width is where a long message with a two button row breaks.
     func testEveryBannerStillDrawsItsMessageWhenNarrow() throws {
         for state in states {
-            let share = WordFootprint.share(
-                try render(state.view, width: 300),
-                try render(state.view, width: 300, wordless: true))
+            let share = try wordShare(of: state, width: 300)
             XCTAssertGreaterThan(share, WordFootprint.drawn,
                                  "the \"\(state.name)\" banner lost its message at 300pt wide")
         }

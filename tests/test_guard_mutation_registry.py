@@ -20,10 +20,12 @@ tree, which is `make check-guards`.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
 
+from source_text import swift_files, text_of
 from tools import perturbation_lock
 from tools.check_guards import DEFAULT_REGISTRY, Entry, load_registry
 
@@ -86,26 +88,55 @@ def test_every_anchor_still_matches_its_file_exactly_once(entry: Entry):
     refuse_if_a_prover_is_working()
     target = REPO_ROOT / entry.file
     assert target.is_file(), f"{entry.file} has moved; update the registry"
-    count = target.read_text().count(entry.find)
+    count = text_of(target).count(entry.find)
     assert count == 1, (
         f"the anchor for {entry.name} matches {count} places in {entry.file} "
         f"instead of exactly one, so the recorded perturbation no longer "
         f"names one real place. Anchor: {entry.find!r}")
 
 
+#: Which file declares each Swift test class, taken once instead of once per
+#: entry (#1018).
+#:
+#: `test_every_named_test_still_exists` re-scanned all 294 files under
+#: PostRollApp/Tests for every one of the 439 entries, which is 129,066 reads
+#: and regex searches for an answer that does not change during a run: 20s of
+#: the runner's Python leg, measured 2026-08-30.
+#:
+#: The same question, asked the same way. It reads RAW text, comments included,
+#: exactly as the per-entry search did, so a class named only in a comment is
+#: still found by both and this is a change of cost rather than of meaning
+#: (L263). `test_the_class_index_agrees_with_scanning_for_one` holds that.
+#:
+#: Built off `swift_files`, which refuses an empty walk rather than caching
+#: one: an empty index would report every registry entry as naming a class that
+#: does not exist, which is loud, but the memo must still never be able to hold
+#: it (L286).
+_DECLARES = re.compile(r"\bclass (\w+)\b")
+
+
+@lru_cache(maxsize=None)
+def swift_test_classes() -> dict[str, tuple[Path, ...]]:
+    found: dict[str, list[Path]] = {}
+    for path in swift_files(SWIFT_TESTS_DIR):
+        for name in set(_DECLARES.findall(text_of(path))):
+            found.setdefault(name, []).append(path)
+    assert found, (
+        f"no class is declared anywhere under {SWIFT_TESTS_DIR}, so every "
+        "registry entry naming a Swift test would be reported as dead")
+    return {name: tuple(sorted(paths)) for name, paths in found.items()}
+
+
 @pytest.mark.parametrize("entry", entries(), ids=lambda e: e.name)
 def test_every_named_test_still_exists(entry: Entry):
     if entry.test.startswith("PostRollTests/"):
         _, class_name, method = entry.test.split("/")
-        matches = [
-            path for path in sorted(SWIFT_TESTS_DIR.glob("*.swift"))
-            if re.search(rf"\bclass {re.escape(class_name)}\b", path.read_text())
-        ]
+        matches = swift_test_classes().get(class_name, ())
         assert len(matches) == 1, (
             f"{class_name} is declared in {len(matches)} files under "
             f"PostRollApp/Tests; the registry entry {entry.name} needs a real "
             "test class")
-        assert f"func {method}(" in matches[0].read_text(), (
+        assert f"func {method}(" in text_of(matches[0]), (
             f"{class_name} no longer has {method}; update the {entry.name} "
             "entry")
     else:
@@ -121,7 +152,7 @@ def test_every_named_test_still_exists(entry: Entry):
         method = rest[-1].split("[")[0]
         test_file = REPO_ROOT / path_part
         assert test_file.is_file(), f"{path_part} has moved"
-        source = test_file.read_text()
+        source = text_of(test_file)
         if class_name:
             assert f"class {class_name}" in source, (
                 f"{path_part} no longer declares {class_name}; update the "
@@ -156,7 +187,7 @@ def test_no_swift_mutation_assigns_to_a_name_nothing_declares(entry: Entry):
     assert target.is_file(), f"{entry.file} has moved; update the registry"
     # The replacement's own locals count as declared: a perturbation may
     # introduce a variable and then write to it.
-    declared = target.read_text() + entry.replace
+    declared = text_of(target) + entry.replace
     for name in sorted(set(re.findall(r"(?m)^\s*([a-z_][A-Za-z0-9_]*)\s*=\s*[^=]",
                                       entry.replace))):
         if name == "_":
@@ -166,3 +197,72 @@ def test_no_swift_mutation_assigns_to_a_name_nothing_declares(entry: Entry):
             f"{entry.file} does not declare, so the mutated tree cannot build "
             f"and the guard can only ever report as unproven rather than as "
             f"kept or broken")
+
+
+# ── the class index answers the same question the per-entry scan did ─────────
+#
+# #1018 replaced a scan of all 294 Swift test files, run once per registry
+# entry, with one index built per run. A replacement is only safe if it answers
+# the SAME question: two implementations behind one name are never compared and
+# can implement different rules indefinitely, with every caller reading as
+# correct (L263). So the old scan is kept here, as the thing the index is
+# checked against, rather than deleted.
+
+def _scanned_for(class_name: str) -> list[Path]:
+    """The per-entry scan #1018 replaced, kept as the reference answer."""
+    return sorted(
+        path for path in sorted(SWIFT_TESTS_DIR.glob("*.swift"))
+        if re.search(rf"\bclass {re.escape(class_name)}\b",
+                     path.read_text(encoding="utf-8"))
+    )
+
+
+def test_the_class_index_agrees_with_scanning_for_one():
+    """Every class the registry actually names, checked in ONE pass.
+
+    Asked per class it would be one full scan per class, which is the very cost
+    #1018 removed, so the reference is built by reading each file once and
+    running the OLD expression against it for each named class. The expression
+    is what is being compared; the number of passes is not.
+    """
+    named = sorted({entry.test.split("/")[1] for entry in entries()
+                    if entry.test.startswith("PostRollTests/")})
+    assert len(named) > 5, (
+        f"only {named} Swift test classes are named by the registry, so this "
+        "comparison is measuring almost nothing")
+
+    reference: dict[str, list[Path]] = {name: [] for name in named}
+    for path in sorted(SWIFT_TESTS_DIR.glob("*.swift")):
+        source = path.read_text(encoding="utf-8")
+        for name in named:
+            if re.search(rf"\bclass {re.escape(name)}\b", source):
+                reference[name].append(path)
+
+    index = swift_test_classes()
+    for name in named:
+        assert list(index.get(name, ())) == sorted(reference[name]), (
+            f"the index and a direct scan disagree about where {name} is "
+            "declared, so one of them is answering a different question")
+
+
+def test_the_index_and_the_scan_agree_that_an_absent_class_is_absent():
+    """The negative direction, which is the one a wrong index would pass."""
+    missing = "AClassNoFileDeclaresAnywhereInThisRepository"
+    assert swift_test_classes().get(missing) is None
+    assert _scanned_for(missing) == []
+
+
+def test_the_index_is_built_once():
+    """Otherwise the cost this replaced is still being paid (L289)."""
+    swift_test_classes.cache_clear()
+    swift_test_classes()
+    swift_test_classes()
+    assert swift_test_classes.cache_info().hits == 1
+
+
+def test_the_index_covers_the_real_tree():
+    """An index of nothing would report every entry as naming a dead class,
+    and a memo that could hold one would make that permanent (L98, L286)."""
+    index = swift_test_classes()
+    assert len(index) > 100, f"the index holds only {len(index)} classes"
+    assert all(paths for paths in index.values())

@@ -21,6 +21,9 @@ line still reads the same line.
 
 from __future__ import annotations
 
+from functools import lru_cache
+from pathlib import Path
+
 
 def swift_without_comments(source: str) -> str:
     """`source` with every Swift comment blanked out.
@@ -255,3 +258,59 @@ def swift_code_only(source: str) -> str:
     quoting a declaration (#436) or a snippet inside a test fixture (#722).
     """
     return swift_without_string_literals(swift_without_comments(source))
+
+
+# ── reading the tree once per run, not once per test (#1018) ─────────────────
+#
+# Several guards here sweep the same tree in every one of their tests, and the
+# READ is the cost rather than the check: 9.4s in
+# tests/test_swift_tests_never_reach_live_data.py over 22 tests and 20s in
+# tests/test_guard_mutation_registry.py over 439 entries, measured 2026-08-30.
+#
+# The memo is on the walk and on the file text, keyed by path, so every guard
+# above it is unchanged. Callers that inject their own root keep working, and
+# are the tests OF the walkers, so they must: a memo that answered for a
+# fixture root would make those tests measure the wrong tree (L286).
+#
+# The one thing this must never do is hold an EMPTY answer. A sweep with
+# nothing in it objects to nothing, so one failed walk cached at the top of a
+# run turns every source-scanning guard in that process green at the same
+# moment (L286, L98). `swift_files` raises rather than returning `[]`, and a
+# raise stores nothing, which is what tests/test_source_reads_happen_once.py
+# holds open.
+#
+# Per PROCESS, so a perturbation applied between two `check_guards` runs is
+# read fresh by each of them; they are separate pytest invocations.
+
+@lru_cache(maxsize=None)
+def swift_files(root: Path) -> tuple[Path, ...]:
+    """Every `.swift` file under `root`, sorted, taken once per root.
+
+    A tuple because the cached value is handed to every caller: a list would be
+    one shared mutable object any of them could reorder or empty under the
+    others.
+
+    An empty root REFUSES. Returning nothing would be read as a clean sweep by
+    everything downstream, and caching that reading would make it permanent for
+    the rest of the run (L98, L286).
+    """
+    files = tuple(sorted(root.rglob("*.swift")))
+    assert files, f"no Swift files under {root}, so this guard checked nothing"
+    return files
+
+
+@lru_cache(maxsize=None)
+def text_of(path: Path) -> str:
+    """One file's text, read once per path."""
+    return path.read_text(encoding="utf-8")
+
+
+@lru_cache(maxsize=None)
+def code_of(path: Path) -> str:
+    """One file's text with comments and string literals blanked, once per path.
+
+    The pairing every sweep in this repository actually wants: `swift_code_only`
+    is what keeps a guard from being satisfied by a comment, and computing it
+    per test was the other half of the cost.
+    """
+    return swift_code_only(text_of(path))

@@ -152,6 +152,7 @@
     "test_select_reel_clips.py": 0.56,
     "test_side_crop_readings.py": 0.0,
     "test_slider_program_plate.py": 69.89,
+    "test_source_reads_happen_once.py": 0.01,
     "test_source_text.py": 0.01,
     "test_source_tree_is_read_only.py": 0.0,
     "test_stitch_notes.py": 0.0,
