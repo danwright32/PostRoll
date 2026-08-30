@@ -1,0 +1,8 @@
+{
+  "name": "the-swift-suite-runs-in-parallel",
+  "file": ".github/workflows/swift.yml",
+  "find": "              -parallel-testing-enabled YES \\\n",
+  "replace": "",
+  "test": "tests/test_both_swift_runners_agree.py::test_the_ci_step_carries_it",
+  "breaks": "the Swift suite goes back to running one test at a time on the runner, which was 294s of test bodies against 106s in parallel and is the last job to finish on 29 of 52 pull requests (#992)"
+}

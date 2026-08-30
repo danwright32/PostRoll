@@ -1,0 +1,8 @@
+{
+  "name": "review-sheet-rotation-is-per-group",
+  "file": "PostRollApp/Tests/ReviewSheet.swift",
+  "find": "        for name in try manager.contentsOfDirectory(atPath: folder.path)\n        where name.hasPrefix(prefix) && name.hasSuffix(\".png\") {",
+  "replace": "        for name in try manager.contentsOfDirectory(atPath: folder.path)\n        where name.hasSuffix(\".png\") {",
+  "test": "PostRollTests/ReviewSheetGroupIsolationTests/testRotatingOneGroupLeavesEveryOtherGroupAlone",
+  "breaks": "one dump test's rotation clears every group out of the review sheet, which under parallel testing is one worker destroying another's images mid-run: that is how the screens dump failed the first time the suite ran in parallel, having rendered 82 screens and found fewer on disk (#992, L204)"
+}

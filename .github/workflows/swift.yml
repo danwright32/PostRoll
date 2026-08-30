@@ -203,14 +203,41 @@ jobs:
       # tests/test_swift_leg_meets_its_floor.py holds that gap inside the
       # tolerance, so growing REVIEW_TESTS reports the problem rather than
       # quietly pushing local runs under the floor.
+      #
+      # Parallel since #992, which is worth most of this step. Measured on
+      # 2026-08-30 against Xcode 26.6, the version the pin selects: the suite is
+      # 294s of test bodies serially and 106s wall in parallel, and the packing
+      # is near perfect up to four workers before it hits its floor, which is the
+      # heaviest single class at 68s.
+      #
+      # The flag is here rather than in the SCHEME, deliberately. The flag alone
+      # parallelises with the scheme still saying parallelizable="NO", and
+      # keeping it out of the scheme leaves `tools/check_guards.py` alone: that
+      # prover runs one test at a time to watch it go red, parallelism means
+      # nothing to it, and the scheme setting would have taken the
+      # `Executed N tests` line away from all 60-odd of its Swift entries.
+      #
+      # No -parallel-testing-worker-count: the default is the runner's core
+      # count, which is the number this wants, and one written here would be
+      # wrong on the laptop that runs the same command through `make test-swift`.
+      #
+      # -resultBundlePath because a parallel run prints NO executed-tests total
+      # at all, and its per-test lines are written to one stdout by every worker
+      # and interleave: one was corrupted mid-write on the first run anybody
+      # tried, undercounting by 1 in 2,614. The bundle is written through the
+      # test framework instead, and suite_counts.py clears it first because
+      # xcodebuild refuses to run when the path already exists.
       - name: Run the Swift unit tests
         run: |
-          python3 tools/suite_counts.py run swift -- \
+          python3 tools/suite_counts.py run swift \
+            --result-bundle PostRollApp/.derived-data/swift-suite.xcresult -- \
             xcodebuild \
               -project PostRollApp/PostRoll.xcodeproj \
               -scheme PostRollTests \
               -destination 'platform=macOS' \
               -derivedDataPath PostRollApp/.derived-data \
+              -resultBundlePath PostRollApp/.derived-data/swift-suite.xcresult \
+              -parallel-testing-enabled YES \
               test
 
       # Compile the GUI test target, without running it (#874).

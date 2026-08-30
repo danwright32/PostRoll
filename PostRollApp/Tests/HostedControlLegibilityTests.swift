@@ -1696,6 +1696,8 @@ extension HostedControlLegibilityTests {
     /// write, because counting the loop is counting itself.
     func testDumpEveryMeasuredScreenForReview() throws {
         let surfaces = reviewSurfaces
+        // This group only, so a sibling worker's images survive (#992).
+        try ReviewSheet.begin(group: Self.reviewGroup)
         XCTAssertGreaterThan(surfaces.count, 20,
                              "the sheet claims \(surfaces.count) surfaces, which is "
                              + "fewer than this file measures, so it is a review of "
