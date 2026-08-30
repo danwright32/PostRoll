@@ -1,0 +1,8 @@
+{
+  "name": "a-skipped-sweep-is-not-a-proof",
+  "file": "tools/check_guard_sweep_freshness.py",
+  "find": "    return bool(sweep.ran_shards)",
+  "replace": "    return True",
+  "test": "tests/test_guard_sweep_freshness.py::test_a_scheduled_run_that_skipped_its_proof_does_not_count_as_a_sweep",
+  "breaks": "a scheduled run that skipped its proof counts as the sweep having happened, so a gate stuck shut reads as a live schedule for as long as it lasts and nothing re-proves a single guard (#989, L106)"
+}

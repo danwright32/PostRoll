@@ -22,7 +22,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from tools.check_guard_sweep_freshness import Freshness, verdict
+from tools.check_guard_sweep_freshness import (
+    Freshness, proved_anything, runs_that_proved, verdict)
+from tools.guard_sweep_history import Sweep
 
 WINDOW = timedelta(days=14)
 NOW = datetime(2026, 8, 14, 12, 0, tzinfo=timezone.utc)
@@ -116,3 +118,82 @@ def test_the_message_names_the_workflow_so_it_can_be_acted_on():
     them nowhere to go (L80)."""
     result = verdict([run_at(NOW - timedelta(days=30))], now=NOW, window=WINDOW)
     assert "Guard proofs" in result.message
+
+
+# ── a run that skipped its proof is not evidence the sweep is alive (#989) ────
+#
+# The sweep became a daily schedule whose steps are conditional, so a run that
+# had nothing to prove skips them and still concludes `success`. This check used
+# to count successful scheduled RUNS, and by that reading a workflow whose gate
+# had latched off would keep reporting a healthy schedule forever while nothing
+# was proved: a liveness signal emitted over dead work (L106).
+#
+# So what it counts is a run whose proof step actually EXECUTED, whatever that
+# step concluded. Red is not the question here; red is reported by the sweep
+# itself. The question is whether any proving is still happening.
+
+def swept(days_ago: float, *, ran: bool, run_id: int = 1) -> Sweep:
+    return Sweep(run_id=run_id, head_sha="c" * 40,
+                 created_at=NOW - timedelta(days=days_ago), event="schedule",
+                 ran_shards=frozenset({1}) if ran else frozenset(),
+                 passed_shards=frozenset())
+
+
+def test_a_scheduled_run_that_skipped_its_proof_does_not_count_as_a_sweep():
+    assert runs_that_proved([swept(1, ran=False)]) == []
+
+
+def test_a_scheduled_run_that_proved_something_counts():
+    assert len(runs_that_proved([swept(1, ran=True)])) == 1
+
+
+def test_a_red_sweep_still_counts_as_the_schedule_being_alive():
+    """A shard that ran and failed is a shard that ran. Counting only green
+    would make one broken guard read as a dead schedule, which is an alarm
+    about the wrong thing and cannot be cleared by the remedy it names (L144).
+    """
+    red = Sweep(run_id=2, head_sha="c" * 40, created_at=NOW - timedelta(days=1),
+                event="schedule", ran_shards=frozenset({1, 2}),
+                passed_shards=frozenset({1}))
+    assert len(runs_that_proved([red])) == 1
+
+
+def test_the_stamps_it_hands_on_are_the_ones_the_verdict_reads():
+    """The filter and the verdict are two halves of one answer, so this asserts
+    they still fit rather than trusting the shape."""
+    assert verdict(runs_that_proved([swept(2, ran=True)]),
+                   now=NOW, window=WINDOW).state is Freshness.FRESH
+
+
+def test_a_history_of_nothing_but_skips_is_alarming_and_is_not_read_as_a_new_schedule():
+    """The whole failure this exists to catch, end to end: the gate latched off
+    a month ago, every scheduled run since concluded success, and nothing
+    proved a single guard.
+
+    Reported as its own state rather than as NOT_YET_RUN, which is what an
+    empty list used to mean and is deliberately quiet: a schedule that has not
+    come round yet and one that has been firing daily into a closed gate are
+    opposite situations, and the quiet one would be the answer given to the
+    dangerous one (L11, L98).
+    """
+    skipped = [swept(day, ran=False, run_id=day) for day in range(1, 31)]
+    result = verdict(runs_that_proved(skipped), now=NOW, window=WINDOW,
+                     ran_but_proved_nothing=len(skipped))
+    assert result.state is Freshness.NEVER_PROVED
+    assert result.is_alarming
+    assert "30" in result.message
+
+
+def test_a_first_run_that_has_not_fallen_due_is_still_the_quiet_state():
+    """The distinction above only exists because there is something to see. With
+    no scheduled runs at all, NOT_YET_RUN stays the honest answer."""
+    result = verdict([], now=NOW, window=WINDOW, ran_but_proved_nothing=0)
+    assert result.state is Freshness.NOT_YET_RUN
+    assert not result.is_alarming
+
+
+def test_what_counts_as_having_proved_something_is_one_predicate():
+    """Read by the filter here and by the count beside it, so the two cannot
+    drift into disagreeing about which runs were real (L261)."""
+    assert proved_anything(swept(1, ran=True))
+    assert not proved_anything(swept(1, ran=False))
