@@ -151,6 +151,21 @@ def job_durations(runs: list[dict]) -> dict[str, list[float]]:
     A job that has not finished contributes NOTHING rather than a zero. A zero
     would pull the median down and read as the job having become fast, which is
     the opposite of what an unfinished run means (L215).
+
+    A SKIPPED job contributes nothing either, and it is excluded by its SHAPE
+    rather than by its label. Measured on 2026-08-30 against this repository's
+    API, GitHub stamps a skipped job's `completed_at` one second BEFORE its
+    `started_at`: the `full` job, skipped on every pull request, reported
+    13:19:13Z to 13:19:12Z. A non-positive duration is never a reading of
+    anything, whatever produced it (L50), so that one test covers the skipped
+    case and every other inverted pair at once.
+
+    A second check on `conclusion == "skipped"` was written first and removed:
+    `check_guards` reported it SURVIVED its mutation, because breaking it
+    changed no test, because every skipped job the API actually produces is
+    already caught by the shape. A branch nothing can be shown to need is a
+    branch nobody can maintain, and keeping it "to be safe" would have meant
+    shipping an unproven one (L29).
     """
     series: dict[str, list[float]] = {}
     for run in runs:
@@ -163,8 +178,10 @@ def job_durations(runs: list[dict]) -> dict[str, list[float]]:
                 end = datetime.fromisoformat(completed.replace("Z", "+00:00"))
             except (ValueError, AttributeError):
                 continue
-            series.setdefault(str(job.get("name", "?")), []).append(
-                (end - begin).total_seconds())
+            lasted = (end - begin).total_seconds()
+            if lasted <= 0:
+                continue
+            series.setdefault(str(job.get("name", "?")), []).append(lasted)
     return series
 
 
