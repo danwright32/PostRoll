@@ -172,6 +172,29 @@ jobs:
       # every check green, and was found only when a stale local build cache was
       # deleted and the first clean Release build in weeks failed (#485).
       # Debug still gets compiled either way, by the test scheme below.
+      # ONLY_ACTIVE_ARCH=YES, on the CI build only (#993).
+      #
+      # Release builds universal by default, so this compiled the whole module
+      # twice and linked twice. Read off a runner log on 2026-08-30: one
+      # whole-module `SwiftCompile normal arm64`, one whole-module `SwiftCompile
+      # normal x86_64`, and two `Ld` lines under Release/PostRoll.build. The
+      # step was 132s of a 410s job on the pull request critical path.
+      #
+      # The x86_64 slice runs on no machine this app is installed on, and it is
+      # not what this step is for: it exists for the Release-only diagnostics of
+      # #485 and #521, which are identical for both slices.
+      #
+      # HERE ONLY. `make build` and PostRollApp/build-install.sh still build both,
+      # because that is the bundle somebody installs, and a universal app built
+      # for one architecture runs on one kind of Mac. That failure looks exactly
+      # like this speedup and is far worse, so
+      # tests/test_ci_builds_one_architecture.py asserts both directions rather
+      # than only the one this change is about (L142).
+      #
+      # Safe only while nothing is architecture-specific, which is true today
+      # and is checked rather than promised: that same file fails on any
+      # `#if arch` or `#if targetEnvironment` appearing in Sources or Tests, so
+      # the exemption has a reviewer (L96, L129).
       - name: Build the app
         run: |
           xcodebuild \
@@ -180,6 +203,7 @@ jobs:
             -configuration Release \
             -destination 'platform=macOS' \
             -derivedDataPath PostRollApp/.derived-data \
+            ONLY_ACTIVE_ARCH=YES \
             build
 
       # Through tools/suite_counts.py rather than calling xcodebuild directly
