@@ -1,46 +1,5 @@
 import SwiftUI
 
-/// What a posting layout switch will replace, said in terms of this event
-/// (#1007).
-///
-/// Pure, and here rather than inside the view, for the reason `PostingLayoutCopy`
-/// is: the sentence it replaced was a two way ternary inside a view body, which
-/// no test could reach, and it was wrong for a year.
-enum PostingLayoutSwitch {
-
-    /// The confirmation for switching `event` to `preset`, or nil when there is
-    /// nothing to confirm.
-    ///
-    /// nil rather than an empty string: a dialog that appears with nothing to
-    /// say trains Dan to dismiss the one that matters, and a switch that
-    /// rebuilds nothing takes nothing away.
-    ///
-    /// Derived from the days that would actually rebuild and from whether their
-    /// captions carry edits, never asserted. A warning shown identically on
-    /// every switch carries no information (L180).
-    static func confirmation(switchingTo preset: PostingPreset,
-                             in event: Event,
-                             defaults: UserDefaults) -> String? {
-        let days = preset.affectedDays(in: event)
-        guard !days.isEmpty else { return nil }
-
-        let all = SentenceList.of(days.map(\.displayName))
-
-        // `wasEdited`, never a raw `caption != generatedCaption`.
-        // `generatedCaption` is empty until `stampOriginals` runs, so the raw
-        // comparison reads every unstamped day as edited and warns Dan about
-        // work he never did. A warning that cries wolf stops being read (L36).
-        let edited = days.filter { event.weekResult?[$0]?.wasEdited == true }
-
-        guard !edited.isEmpty else {
-            return "This rebuilds the captions and images for \(all)."
-        }
-        let editedList = SentenceList.of(edited.map(\.displayName))
-        return "This rebuilds the captions and images for \(all). "
-             + "Your edits to \(editedList) will be replaced."
-    }
-}
-
 /// The per event posting layout picker, its sentence, and its confirmation, in
 /// one place used by every screen that shows the layout's effect (#1007).
 ///
@@ -150,7 +109,7 @@ struct PostingLayoutControl: View {
             Button("Cancel", role: .cancel) { pending = nil }
         } message: {
             Text(pending.flatMap {
-                PostingLayoutSwitch.confirmation(switchingTo: $0, in: live, defaults: defaults)
+                PostingLayoutSwitch.confirmation(from: effectivePreset, to: $0, in: live)
             } ?? "")
         }
     }
@@ -161,31 +120,50 @@ struct PostingLayoutControl: View {
     private func request(_ newValue: PostingPreset) {
         let ev = live
         guard newValue != ev.effectivePostingPreset(in: defaults) else { return }
-        if PostingLayoutSwitch.confirmation(switchingTo: newValue, in: ev, defaults: defaults) == nil {
+        if PostingLayoutSwitch.confirmation(from: ev.effectivePostingPreset(in: defaults),
+                                            to: newValue, in: ev) == nil {
             apply(newValue)
         } else {
             pending = newValue
         }
     }
 
-    /// Set this event's override and rebuild the days it governs.
-    ///
-    /// Still the whole affected set, which is more than a switch needs to
-    /// touch. Narrowing that to the days whose post actually changes is #1010,
-    /// which lands the decision separately; this change is about WHERE the
-    /// control is, and deliberately does not alter what a switch does.
+    /// Set this event's override and touch only the days that actually change.
     private func apply(_ newValue: PostingPreset) {
         var ev = live
-        guard newValue != ev.effectivePostingPreset(in: defaults) else { return }
-        ev.postingPresetOverride = newValue
+        let old = ev.effectivePostingPreset(in: defaults)
+        guard newValue != old else { return }
 
-        let affected = newValue.affectedDays(in: ev).map(\.rawValue)
-        for day in affected { ev.previewMediaPaths.removeValue(forKey: day) }
+        // Only the days this switch actually changes, and split by what each
+        // one costs (#1010). Before this, every governed day with photos went
+        // to the caption generator: Balanced to Opening moves Sunday from 4
+        // photos to 7 and leaves Monday and Wednesday alone, yet all three were
+        // regenerated. Two paid API calls that changed no output, and any
+        // caption Dan had typed on those days replaced.
+        let work = PostingLayoutSwitch.work(
+            PostingLayoutSwitch.plan(from: old, to: newValue, in: ev))
+
+        // Claimed BEFORE the event is touched, so a refusal leaves nothing to
+        // undo. Mutating first and claiming second means a busy day leaves the
+        // layout changed with its previews deleted and no run to replace them
+        // (L197, L5).
+        var claimedRedraw = false
+        if !work.redrawDays.isEmpty {
+            claimedRedraw = previews.startRedraw(work.redrawDays, for: event.id,
+                                                 appState: appState)
+            guard claimedRedraw else { return }
+        }
+
+        ev.postingPresetOverride = newValue
+        // Cleared only for the days being REBUILT. A day only being redrawn
+        // keeps its current image until the new one lands, so a failed redraw
+        // leaves the previous graphic rather than nothing at all.
+        for day in work.rebuildDays { ev.previewMediaPaths.removeValue(forKey: day) }
         appState.updateEvent(ev)
 
-        if !affected.isEmpty {
-            genManager.start(eventID: event.id, retryDays: Set(affected), appState: appState,
-                             regenerateGraphics: true)
+        if !work.rebuildDays.isEmpty {
+            genManager.start(eventID: event.id, retryDays: work.rebuildDays,
+                             appState: appState, regenerateGraphics: true)
         }
     }
 }

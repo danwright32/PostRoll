@@ -144,6 +144,172 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
+/// What one day needs when the posting layout changes (#1010).
+enum DayLayoutChange: Equatable {
+    /// Its images are different, its post is not. No caption call.
+    case redrawImages
+    /// It becomes a different KIND of post, so its caption is written
+    /// differently and has to be regenerated.
+    case rebuildPost
+}
+
+/// Which days a posting layout switch actually has to touch (#1010).
+///
+/// `PostingPreset.affectedDays` answers a different question: every governed
+/// day that HAS PHOTOS, without ever comparing the two layouts. Switching
+/// Balanced to Opening moves Sunday from 4 photos to 7 and leaves Monday and
+/// Wednesday exactly as they were, yet all three were caption regenerated: paid
+/// API calls that changed nothing, and any typed caption edits on those two
+/// days destroyed.
+enum PostingLayoutSwitch {
+
+    /// Per day, what changing from `old` to `new` requires of `event`.
+    ///
+    /// Days needing nothing are ABSENT rather than present with a "no change"
+    /// case, so a caller cannot accidentally pass the whole map to a generator.
+    ///
+    /// Two predicates, not one. The plan for this originally keyed the paid
+    /// half on the FORMAT, which is wrong: Python decides a day's post type
+    /// with `is_collage_carousel(preset, day) and photo_count > 1`, so a
+    /// collage day with ONE photo is a feed_photo exactly like a single day
+    /// with one. Balanced to Classic on such a day changes the format and does
+    /// not change the post, and rebuilding its caption buys nothing.
+    ///
+    /// Counts are EFFECTIVE counts, because the renderer takes `photos[:count]`.
+    /// A Sunday with three photos posts three under every layout that governs
+    /// it, so no switch between them touches that day at all.
+    static func plan(from old: PostingPreset,
+                     to new: PostingPreset,
+                     in event: Event) -> [DayName: DayLayoutChange] {
+        var plan: [DayName: DayLayoutChange] = [:]
+        for day in DayName.allCases {
+            // A day no preset governs has a fixed format that no switch moves.
+            guard old.format(for: day) != nil || new.format(for: day) != nil else { continue }
+
+            let assigned = event.days[day.rawValue]?.photoPaths.count ?? 0
+            // Nothing to draw and nothing to write about, either way.
+            guard assigned > 0 else { continue }
+
+            if old.postType(for: day, assigned: assigned)
+                != new.postType(for: day, assigned: assigned) {
+                plan[day] = .rebuildPost
+            } else if old.format(for: day)?.format != new.format(for: day)?.format
+                || old.effectiveCount(for: day, assigned: assigned)
+                    != new.effectiveCount(for: day, assigned: assigned) {
+                plan[day] = .redrawImages
+            }
+        }
+        return plan
+    }
+
+
+
+
+    /// The confirmation for switching `event` from `old` to `new`, or nil when
+    /// there is nothing to confirm.
+    ///
+    /// nil rather than an empty string: a dialog that appears with nothing to
+    /// say trains Dan to dismiss the one that matters, and a switch that
+    /// changes nothing takes nothing away.
+    ///
+    /// Built from the PLAN, so it names only the days that actually change
+    /// (#1010). It used to name every governed day with photos, which meant
+    /// Balanced to Opening warned that Monday and Wednesday would be rebuilt
+    /// when neither was going to move. A warning has to describe what will
+    /// happen or it teaches the reader to stop reading it (L180, L36).
+    ///
+    /// The two kinds of change get different sentences, because they cost
+    /// different things: a rebuilt day loses its caption, a redrawn day does
+    /// not (L11).
+    static func confirmation(from old: PostingPreset,
+                             to new: PostingPreset,
+                             in event: Event) -> String? {
+        let plan = plan(from: old, to: new, in: event)
+        guard !plan.isEmpty else { return nil }
+
+        let rebuilt = DayName.allCases.filter { plan[$0] == .rebuildPost }
+        let redrawn = DayName.allCases.filter { plan[$0] == .redrawImages }
+
+        var sentences: [String] = []
+        if !redrawn.isEmpty {
+            sentences.append("This redraws the images for "
+                             + "\(SentenceList.of(redrawn.map(\.displayName)))"
+                             + ". Their captions are untouched.")
+        }
+        if !rebuilt.isEmpty {
+            sentences.append("This rebuilds the captions and images for "
+                             + "\(SentenceList.of(rebuilt.map(\.displayName))) "
+                             + "because they become a different kind of post.")
+            // `wasEdited`, never a raw `caption != generatedCaption`.
+            // `generatedCaption` is empty until `stampOriginals` runs, so the
+            // raw comparison reads every unstamped day as edited and warns Dan
+            // about work he never did (L36).
+            let edited = rebuilt.filter { event.weekResult?[$0]?.wasEdited == true }
+            if !edited.isEmpty {
+                sentences.append("Your edits to "
+                                 + "\(SentenceList.of(edited.map(\.displayName)))"
+                                 + " will be replaced.")
+            }
+        }
+        return sentences.joined(separator: " ")
+    }
+
+    /// The two kinds of work a plan asks for, kept apart because one of them
+    /// costs money and the other does not.
+    struct Work: Equatable {
+        /// Day names for the caption generator, in its own currency (raw
+        /// strings, which is what `retryDays` takes). Empty means NO caption
+        /// call, which is the whole point of #1010.
+        let rebuildDays: Set<String>
+        /// Days needing only their images redrawn. Sorted, so a switch reports
+        /// and runs the same way twice rather than in dictionary order.
+        let redrawDays: [DayName]
+    }
+
+    /// The confirmation for switching `event` to `preset`, or nil when there is
+    /// nothing to confirm.
+    ///
+    /// nil rather than an empty string: a dialog that appears with nothing to
+    /// say trains Dan to dismiss the one that matters, and a switch that
+    /// rebuilds nothing takes nothing away.
+    ///
+    /// Derived from the days that would actually rebuild and from whether their
+    /// captions carry edits, never asserted. A warning shown identically on
+    /// every switch carries no information (L180).
+    static func confirmation(switchingTo preset: PostingPreset,
+                             in event: Event,
+                             defaults: UserDefaults) -> String? {
+        let days = preset.affectedDays(in: event)
+        guard !days.isEmpty else { return nil }
+
+        let all = SentenceList.of(days.map(\.displayName))
+
+        // `wasEdited`, never a raw `caption != generatedCaption`.
+        // `generatedCaption` is empty until `stampOriginals` runs, so the raw
+        // comparison reads every unstamped day as edited and warns Dan about
+        // work he never did. A warning that cries wolf stops being read (L36).
+        let edited = days.filter { event.weekResult?[$0]?.wasEdited == true }
+
+        guard !edited.isEmpty else {
+            return "This rebuilds the captions and images for \(all)."
+        }
+        let editedList = SentenceList.of(edited.map(\.displayName))
+        return "This rebuilds the captions and images for \(all). "
+             + "Your edits to \(editedList) will be replaced."
+    }
+
+    /// Split a plan into what has to be regenerated and what only has to be
+    /// redrawn.
+    ///
+    /// A day lands in exactly one of the two. Both halves write that day's
+    /// media, so a day in both would be two writers on one file, which is the
+    /// hazard #1009's claim exclusion exists to prevent.
+    static func work(_ plan: [DayName: DayLayoutChange]) -> Work {
+        Work(rebuildDays: Set(plan.filter { $0.value == .rebuildPost }.keys.map(\.rawValue)),
+             redrawDays: DayName.allCases.filter { plan[$0] == .redrawImages })
+    }
+}
+
 /// Copy for the per-event posting layout picker (#1007).
 ///
 /// Here rather than inside the view, because the sentence was written as a

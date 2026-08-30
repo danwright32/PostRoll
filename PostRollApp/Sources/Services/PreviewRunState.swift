@@ -116,4 +116,33 @@ struct PreviewRunState: Equatable {
     func isBusy(_ eventID: UUID) -> Bool {
         isRunningFull(eventID) || !regeneratingDays(for: eventID).isEmpty
     }
+
+    // MARK: - The image refresh counter (#1009)
+
+    /// How many times each day's graphic has been rebuilt, per event.
+    ///
+    /// The number a rendered image is keyed on, so the view reloads the file
+    /// instead of showing the copy it already decoded. It lived as `@State` on
+    /// the caption review screen, written in six places there and read in one,
+    /// which meant a redraw driven from any other screen finished successfully
+    /// and left that screen showing the previous collage with nothing saying so.
+    ///
+    /// Keyed by event as well as day, which the view state could not be: it was
+    /// keyed by day alone and thrown away on the remount that every event
+    /// switch causes, so it could not answer the question at all once more than
+    /// one screen could ask it.
+    private var graphicVersions: [UUID: [DayName: Int]] = [:]
+
+    func graphicVersion(_ day: DayName, for eventID: UUID) -> Int {
+        graphicVersions[eventID]?[day] ?? 0
+    }
+
+    /// Records that this day's graphic has been redrawn.
+    ///
+    /// Monotonic per day rather than a flag: the reader compares the number it
+    /// last drew against the number now, so two rebuilds have to be two
+    /// different answers or the second one is invisible.
+    mutating func bumpGraphicVersion(_ day: DayName, for eventID: UUID) {
+        graphicVersions[eventID, default: [:]][day, default: 0] += 1
+    }
 }

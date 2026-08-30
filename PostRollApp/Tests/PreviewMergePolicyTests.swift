@@ -8,6 +8,82 @@ final class PreviewMergePolicyTests: XCTestCase {
 
     // MARK: - shouldRenderGraphics
 
+    // MARK: - What a finished day redraw actually produced (#1009)
+
+    /// The three way branch `applyRegenResult` decides, lifted out of the
+    /// caption review screen so it can be tested and so any screen can drive a
+    /// redraw.
+    ///
+    /// It matters because two of the three outcomes are failures that a run
+    /// exiting zero still produces, and both used to be swallowed: Python
+    /// reporting a per day error, and Python reporting nothing at all for the
+    /// day it was asked about. Either one silently left the old graphic on
+    /// screen while the completion notification fired.
+
+    private func result(paths: [String: [String: String]] = [:],
+                        errors: [String: String] = [:])
+    -> PythonBridge.PreviewGenerationResult {
+        PythonBridge.PreviewGenerationResult(paths: paths, errors: errors)
+    }
+
+    func testAPipelineErrorForTheDayIsAFailureWhateverElseCameBack() {
+        let outcome = DayRedrawOutcome.of(
+            result(paths: ["wednesday": ["collage": "/out/collage.png"]],
+                   errors: ["wednesday": "collage failed: too few photos"]),
+            day: .wednesday)
+
+        guard case .failed(let reason) = outcome else {
+            return XCTFail("a day Python reported an error for did not fail: \(outcome)")
+        }
+        XCTAssertTrue(reason.contains("too few photos"),
+                      "the pipeline's own words have to reach the card that offers a "
+                      + "remedy, not a sentence wrapped around them (#730): \(reason)")
+    }
+
+    func testNoOutputForTheDayIsAFailureRatherThanASilentSuccess() {
+        let outcome = DayRedrawOutcome.of(result(paths: ["sunday": ["collage": "/a.png"]]),
+                                          day: .wednesday)
+
+        guard case .failed = outcome else {
+            return XCTFail("a run that produced nothing for the day it was asked about "
+                           + "must not report success: \(outcome)")
+        }
+    }
+
+    func testAnEmptyPathSetForTheDayIsAlsoAFailure() {
+        let outcome = DayRedrawOutcome.of(result(paths: ["wednesday": [:]]), day: .wednesday)
+
+        guard case .failed = outcome else {
+            return XCTFail("an empty set of paths is nothing rendered: \(outcome)")
+        }
+    }
+
+    func testPathsForTheDayWithNoErrorSucceedAndCarryThem() {
+        let outcome = DayRedrawOutcome.of(
+            result(paths: ["wednesday": ["collage": "/out/collage.png"]]), day: .wednesday)
+
+        guard case .succeeded(let paths) = outcome else {
+            return XCTFail("a day that rendered did not succeed: \(outcome)")
+        }
+        XCTAssertEqual(paths["collage"], "/out/collage.png")
+    }
+
+    /// Another day's error is not this day's problem.
+    ///
+    /// A redraw claims named days, and folding the whole result's errors into
+    /// one verdict would fail a day that rendered perfectly because a different
+    /// one did not (L53).
+    func testAnotherDaysErrorDoesNotFailThisDay() {
+        let outcome = DayRedrawOutcome.of(
+            result(paths: ["wednesday": ["collage": "/out/collage.png"]],
+                   errors: ["friday": "clip reel failed"]),
+            day: .wednesday)
+
+        guard case .succeeded = outcome else {
+            return XCTFail("Friday's failure was charged to Wednesday: \(outcome)")
+        }
+    }
+
     func testFullRunRendersGraphicsByDefault() {
         XCTAssertTrue(PreviewMergePolicy.shouldRenderGraphics(regenerateGraphics: nil, isFullRun: true))
     }

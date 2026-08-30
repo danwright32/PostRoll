@@ -1,0 +1,8 @@
+{
+  "name": "a-redraw-refreshes-nothing-outside-the-review-screen",
+  "file": "PostRollApp/Sources/Services/PreviewRunState.swift",
+  "find": "        graphicVersions[eventID, default: [:]][day, default: 0] += 1",
+  "replace": "        _ = eventID; _ = day",
+  "test": "PostRollTests/PreviewRunStateTests/testAFinishedRedrawBumpsTheVersionForThatDayAndEvent",
+  "breaks": "a finished redraw never changes the number the rendered image is keyed on, so the screen goes on showing the collage it already decoded and a successful rebuild is invisible, which is worse than a failed one (#1009)"
+}

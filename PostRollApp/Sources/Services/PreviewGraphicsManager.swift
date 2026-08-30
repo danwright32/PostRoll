@@ -27,6 +27,20 @@ final class PreviewGraphicsManager {
     func failure(for eventID: UUID) -> String? { failures[eventID] }
     func clearFailure(for eventID: UUID) { failures.removeValue(forKey: eventID) }
 
+    /// How many times this day's graphic has been rebuilt (#1009).
+    ///
+    /// The number a rendered image is keyed on, so the view reloads the file
+    /// rather than showing the copy it already decoded. It was `@State` on the
+    /// caption review screen, so a redraw driven from anywhere else finished
+    /// and left that screen showing the previous collage with nothing saying so.
+    func graphicVersion(_ day: DayName, for eventID: UUID) -> Int {
+        state.graphicVersion(day, for: eventID)
+    }
+
+    func bumpGraphicVersion(_ day: DayName, for eventID: UUID) {
+        state.bumpGraphicVersion(day, for: eventID)
+    }
+
     /// Runs the full preview generation and writes the result back through
     /// `appState`. A no-op when one is already in flight for this event.
     /// `onFinish` runs on the main actor after the write-back, whether the run
@@ -322,6 +336,109 @@ final class PreviewGraphicsManager {
 
     func coverFailure(_ day: DayName, for eventID: UUID) -> String? {
         coverFailures[DaySlot(eventID: eventID, day: day)]
+    }
+
+    // MARK: - Redraw a day's images without touching its caption (#1010)
+
+    /// Redraw these days' images, with no caption run anywhere near it (#1010).
+    ///
+    /// Claims BEFORE anything else happens and answers false if it cannot, so
+    /// a caller that has to mutate the event first can find out it was refused
+    /// while there is still nothing to undo (L197).
+    ///
+    /// Returns whether the run started. Not `@discardableResult`, for the same
+    /// reason `beginDayRegen` is not: the answer is the only thing standing
+    /// between this and a second writer on the same files (#728).
+    func startRedraw(_ days: [DayName], for eventID: UUID, appState: AppState) -> Bool {
+        guard !days.isEmpty else { return false }
+        guard let snapshot = appState.events.first(where: { $0.id == eventID }) else {
+            return false
+        }
+        guard beginDayRegen(days, for: eventID) else { return false }
+
+        Task { [weak self] in
+            let outcome: Result<PythonBridge.PreviewGenerationResult, Error>
+            do {
+                outcome = .success(try await PythonBridge.shared.runPreviewGeneration(
+                    event: snapshot, days: days.map(\.rawValue)))
+            } catch {
+                outcome = .failure(error)
+            }
+            await MainActor.run {
+                guard let self else { return }
+                switch outcome {
+                case .success(let result):
+                    self.applyRedraw(result, days: days, for: eventID, appState: appState)
+                case .failure(let error):
+                    // A run that DIED says nothing per day, so every day it
+                    // claimed has to be failed by hand or each keeps a spinner
+                    // for work that already stopped (L110).
+                    for day in days {
+                        self.failDayRegen(
+                            day, for: eventID,
+                            reason: "\(day.displayName) images could not be redrawn: "
+                                  + "\(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    /// Land a finished redraw onto the live event.
+    ///
+    /// Separate from the run that produced it so it can be tested: the run
+    /// itself goes through `PythonBridge.shared`, which has no seam, and the
+    /// interesting part is not the subprocess but what gets written when it
+    /// comes back.
+    ///
+    /// Deliberately does NOT touch captions. That is the whole point of #1010:
+    /// a switch that only changes how many photos a day posts needs its images
+    /// redrawn and its caption left exactly as Dan left it.
+    ///
+    /// Narrow by construction. It handles no Friday clip plan and no Thursday
+    /// speculative reel, because a posting layout switch can never name those
+    /// days: no preset governs them, which `PostingPresetTests` asserts over
+    /// every ordered pair of layouts. The review screen keeps its own richer
+    /// path for the days that do need those.
+    func applyRedraw(_ result: PythonBridge.PreviewGenerationResult,
+                     days: [DayName],
+                     for eventID: UUID,
+                     appState: AppState) {
+        guard var ev = appState.events.first(where: { $0.id == eventID }) else {
+            // The event went away mid run. Release every slot rather than
+            // leaving spinners on a day nothing will ever finish.
+            for day in days { endDayRegen(day, for: eventID) }
+            return
+        }
+
+        var wrote = false
+        var succeeded: [DayName] = []
+        for day in days {
+            switch DayRedrawOutcome.of(result, day: day) {
+            case .failed(let reason):
+                // Each day judged alone, so one day's failure does not take
+                // away another day's finished work (L53). `failDayRegen`
+                // records the reason AND releases the slot.
+                if let pipelineError = result.errors[day.rawValue] {
+                    failDayRegen(day, for: eventID, pipelineError: pipelineError)
+                } else {
+                    failDayRegen(day, for: eventID, reason: reason)
+                }
+            case .succeeded(let paths):
+                ev.previewMediaPaths[day.rawValue] = paths
+                wrote = true
+                succeeded.append(day)
+            }
+        }
+
+        // One write for the whole batch, then the version bumps, so the screen
+        // cannot redraw against an event that is half updated.
+        if wrote { appState.updateEvent(ev) }
+        for day in succeeded {
+            endDayRegen(day, for: eventID)
+            bumpGraphicVersion(day, for: eventID)
+        }
     }
 
     /// The day rebuild ended badly. Records why AND releases the slot, in one

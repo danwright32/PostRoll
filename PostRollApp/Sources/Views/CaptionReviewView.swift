@@ -246,7 +246,6 @@ struct CaptionReviewView: View {
     // orphan ran, and the elapsed time vanished while the manager-owned
     // spinner survived, which is exactly the indistinct state #135 exists to
     // prevent.
-    @State private var graphicVersions: [DayName: Int] = [:]
 
 
     // Collage crop offsets (separate from carousel) — keyed by day rawValue then photo URL absoluteString
@@ -318,7 +317,7 @@ struct CaptionReviewView: View {
                             onUndoRevision: { undoRevision(day: day) },
                             onPreview: { previewURL = $0 },
                             isRegeneratingGraphic: regeneratingDays.contains(day),
-                            graphicVersion: graphicVersions[day] ?? 0,
+                            graphicVersion: graphics.graphicVersion(day, for: event.id),
                             onRegenerateGraphic: {
                                 regenerateGraphic(day: day)
                                 // Tuesday's before/after reel and Friday's before/after
@@ -924,7 +923,7 @@ struct CaptionReviewView: View {
                         appState.updateEvent(ReelAudioSwap.recording(swapped, in: liveNow, day: day))
                     }
                     // Bump the version so SwiftUI rebuilds AVPlayer with the updated file.
-                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                    graphics.bumpGraphicVersion(day, for: event.id)
                     graphics.endDayRegen(day, for: event.id)
                     NotificationService.shared.notifyRegenerationComplete(
                         eventName: liveEvent.name,
@@ -1026,7 +1025,7 @@ struct CaptionReviewView: View {
                     if let liveNow = appState.events.first(where: { $0.id == event.id }) {
                         appState.updateEvent(ReelAudioSwap.recording(swapped, in: liveNow, day: day))
                     }
-                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                    graphics.bumpGraphicVersion(day, for: event.id)
                     graphics.endDayRegen(day, for: event.id)
                     NotificationService.shared.notifyRegenerationComplete(
                         eventName: liveEvent.name,
@@ -1207,7 +1206,7 @@ struct CaptionReviewView: View {
                     paths["reel"] = render.reelPath
                     current.previewMediaPaths[DayName.friday.rawValue] = paths
                     appState.updateEvent(current)
-                    graphicVersions[.friday] = (graphicVersions[.friday] ?? 0) + 1
+                    graphics.bumpGraphicVersion(.friday, for: event.id)
                 }
             } catch {
                 await MainActor.run {
@@ -1481,12 +1480,22 @@ struct CaptionReviewView: View {
         recordMediaOutcome(day: day, error: result.errors[day.rawValue],
                            warning: result.warnings[day.rawValue])
 
-        if let pyError = result.errors[day.rawValue] {
-            // The pipeline's own text, not a sentence wrapped around it: the
-            // marker it uses for the cases with a remedy has to survive to the
-            // card that offers one (#730). The manager builds the wording.
-            graphics.failDayRegen(day, for: event.id, pipelineError: pyError)
-        } else if let dayPaths = result.paths[day.rawValue], !dayPaths.isEmpty {
+        // The three way branch is `DayRedrawOutcome` since #1009, so it can be
+        // tested and so a redraw driven from another screen reaches the same
+        // verdict rather than a second copy of it. What is left here is what to
+        // DO with each answer, which is this screen's business.
+        switch DayRedrawOutcome.of(result, day: day) {
+        case .failed(let reason):
+            // The pipeline's own text where it had one, not a sentence wrapped
+            // around it: the marker it uses for the cases with a remedy has to
+            // survive to the card that offers one (#730). The manager builds
+            // the wording.
+            if let pipelineError = result.errors[day.rawValue] {
+                graphics.failDayRegen(day, for: event.id, pipelineError: pipelineError)
+            } else {
+                graphics.failDayRegen(day, for: event.id, reason: reason)
+            }
+        case .succeeded(let dayPaths):
             // Read the CURRENT event — not self.event which may be stale
             // (e.g. after assignReelPhotosAndGenerate saved new photos).
             var ev = appState.events.first(where: { $0.id == event.id }) ?? event
@@ -1494,15 +1503,11 @@ struct CaptionReviewView: View {
             if day == .friday { ev.applyFridayClipPlan(result.fridayClipPlan) }
             ev.applyCoverPick(result.coverPicks[day.rawValue], forDay: day.rawValue)
             appState.updateEvent(ev)
-            graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+            graphics.bumpGraphicVersion(day, for: event.id)
             NotificationService.shared.notifyRegenerationComplete(
                 eventName: event.name,
                 what: day.displayName
             )
-        } else {
-            graphics.failDayRegen(
-                day, for: event.id,
-                reason: "\(day.displayName) regeneration produced no output")
         }
     }
 
@@ -1557,7 +1562,7 @@ struct CaptionReviewView: View {
                         ev.days[day.rawValue]?.coverOverride = overrideSource.path
                     }
                     appState.updateEvent(ev)
-                    graphicVersions[day] = (graphicVersions[day] ?? 0) + 1
+                    graphics.bumpGraphicVersion(day, for: event.id)
                 }
             }
         }
