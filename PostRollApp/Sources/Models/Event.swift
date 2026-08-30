@@ -247,6 +247,18 @@ extension Event {
     /// rule about clearing that lives in a private method of one view is a rule
     /// the other one has to remember.
     @discardableResult
+    /// Record which layout these days' images were just drawn under (#1010).
+    ///
+    /// One method rather than a line at each of the three places that write
+    /// rendered paths (the full run, a per day render, and a generation run's
+    /// graphics pass), because a writer that forgets it leaves that day
+    /// permanently unjudgeable and the export gate silently stops covering it.
+    mutating func recordRenderedLayout(_ preset: PostingPreset, forDays renderedDays: [String]) {
+        for name in renderedDays {
+            days[name]?.renderedPostingPreset = preset
+        }
+    }
+
     mutating func recordMediaOutcome(day: String, error: String?, warning: String?) -> Bool {
         guard mediaErrors[day] != error || mediaWarnings[day] != warning else { return false }
         if let error { mediaErrors[day] = error } else { mediaErrors.removeValue(forKey: day) }
@@ -853,6 +865,18 @@ struct PostingDay: Codable, Hashable {
     // non-nil-means-user override semantics as fridayClipPlan/fridayClipOverride.
     var coverPick: CoverPick? = nil
     var coverOverride: String? = nil
+    /// The posting layout this day's CURRENT images were drawn under (#1010).
+    ///
+    /// A layout switch redraws only the days it changes, so a redraw that fails
+    /// leaves the event saying one layout while that day's collage is still the
+    /// other one's. Nothing recorded that, and the export shipped it.
+    ///
+    /// nil means no evidence, not "matches": every day saved before this
+    /// existed carries nil, which is precisely the backlog a marker based check
+    /// cannot see (L223), and reading the absence as a mismatch would refuse
+    /// every export in the library at once. It is filled in by the next render
+    /// of that day.
+    var renderedPostingPreset: PostingPreset? = nil
 }
 
 // MARK: - Standalone media slots

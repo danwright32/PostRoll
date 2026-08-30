@@ -17,6 +17,26 @@ import Observation
 final class PreviewGraphicsManager {
     static let shared = PreviewGraphicsManager()
 
+    #if POSTROLL_TESTS
+    /// Test seam: the real one shells out to Python and renders a week of
+    /// media, which no test may do (L2).
+    ///
+    /// Takes the event it renders as an argument rather than reading one, so a
+    /// test can see WHICH event a run was built from. That is the whole
+    /// question behind #1010: the claim is taken before the caller writes its
+    /// switch, so a run built from the event as it stood at claim time renders
+    /// the layout the switch is moving away from.
+    var renderPreview: @Sendable (Event, [String]?)
+        async throws -> PythonBridge.PreviewGenerationResult = {
+            try await PythonBridge.shared.runPreviewGeneration(event: $0, days: $1)
+        }
+    #else
+    let renderPreview: @Sendable (Event, [String]?)
+        async throws -> PythonBridge.PreviewGenerationResult = {
+            try await PythonBridge.shared.runPreviewGeneration(event: $0, days: $1)
+        }
+    #endif
+
     private(set) var state = PreviewRunState()
     /// Last failure per event, so a run that died isn't just an idle screen.
     private(set) var failures: [UUID: String] = [:]
@@ -55,7 +75,7 @@ final class PreviewGraphicsManager {
             }
             guard let live = appState.events.first(where: { $0.id == eventID }) else { return }
             do {
-                let result = try await PythonBridge.shared.runPreviewGeneration(event: live)
+                let result = try await renderPreview(live, nil)
                 applyFullRunResult(result, for: eventID, appState: appState)
             } catch {
                 // Loud, not silent: this used to be a `try?`, so a failed run
@@ -117,6 +137,9 @@ final class PreviewGraphicsManager {
 
         if !result.paths.isEmpty {
             ev.previewMediaPaths = result.paths
+            ev.recordRenderedLayout(
+                ev.effectivePostingPreset,
+                forDays: PreviewMergePolicy.renderedDays(in: result.paths))
             ev.applyFridayClipPlan(result.fridayClipPlan)
             for (day, pick) in result.coverPicks { ev.applyCoverPick(pick, forDay: day) }
         }
@@ -351,21 +374,43 @@ final class PreviewGraphicsManager {
     /// between this and a second writer on the same files (#728).
     func startRedraw(_ days: [DayName], for eventID: UUID, appState: AppState) -> Bool {
         guard !days.isEmpty else { return false }
-        guard let snapshot = appState.events.first(where: { $0.id == eventID }) else {
-            return false
-        }
+        // Claimed against an event that is really there, but deliberately NOT
+        // rendered from the copy read here.
+        guard appState.events.contains(where: { $0.id == eventID }) else { return false }
         guard beginDayRegen(days, for: eventID) else { return false }
 
         Task { [weak self] in
+            guard let self else { return }
+            // Read at RUN time, never at claim time (#1010).
+            //
+            // The claim is taken BEFORE the caller writes its switch, on
+            // purpose, so a refusal costs nothing and leaves nothing to undo
+            // (L197, L5). That ordering is exactly what makes a snapshot taken
+            // back there wrong: it still carries the layout the switch is
+            // moving AWAY from, and the manifest handed to Python carries
+            // `effectivePostingPreset`. A Balanced to Opening switch on a
+            // Sunday with seven photos redrew it at four again, landed the
+            // identical images, and reported a finished switch that changed
+            // nothing at all.
+            //
+            // Safe because the caller writes synchronously: this body is
+            // enqueued on the main actor, and there is no await between the
+            // caller's claim and its write for it to run in.
+            guard let live = appState.events.first(where: { $0.id == eventID }) else {
+                // The event went away between the claim and the run. Release
+                // every slot rather than leaving spinners on days nothing will
+                // ever finish (L110).
+                for day in days { self.endDayRegen(day, for: eventID) }
+                return
+            }
+
             let outcome: Result<PythonBridge.PreviewGenerationResult, Error>
             do {
-                outcome = .success(try await PythonBridge.shared.runPreviewGeneration(
-                    event: snapshot, days: days.map(\.rawValue)))
+                outcome = .success(try await self.renderPreview(live, days.map(\.rawValue)))
             } catch {
                 outcome = .failure(error)
             }
             await MainActor.run {
-                guard let self else { return }
                 switch outcome {
                 case .success(let result):
                     self.applyRedraw(result, days: days, for: eventID, appState: appState)
@@ -385,59 +430,197 @@ final class PreviewGraphicsManager {
         return true
     }
 
-    /// Land a finished redraw onto the live event.
+    /// Render a day whose slot is ALREADY claimed, and land what comes back.
     ///
-    /// Separate from the run that produced it so it can be tested: the run
-    /// itself goes through `PythonBridge.shared`, which has no seam, and the
-    /// interesting part is not the subprocess but what gets written when it
-    /// comes back.
+    /// The day scoped driver, callable from any screen (#1009). It was
+    /// `CaptionReviewView.renderClaimedDay`: private, on a SwiftUI view, with
+    /// the landing and the asset screen's bookkeeping as two more private
+    /// methods beside it. No other screen could redraw a day's images.
+    ///
+    /// Split from the claim rather than claiming here, because two actions on
+    /// the review screen claim Tuesday and Friday together and then render
+    /// both, and a claim in here would refuse its own caller.
+    func renderClaimedDay(_ day: DayName, for eventID: UUID, appState: AppState,
+                          newLayout: Bool = false) {
+        guard appState.events.contains(where: { $0.id == eventID }) else {
+            // Nothing to render from. The slot is released rather than left
+            // spinning for work nobody is doing (L110).
+            endDayRegen(day, for: eventID)
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            // The live event at RUN time, for the same reason `startRedraw`
+            // reads one: whatever the caller wrote while claiming this day is
+            // the state that has to be rendered, and a copy read before the
+            // claim describes the day as it was before the change.
+            guard let live = appState.events.first(where: { $0.id == eventID }) else {
+                self.endDayRegen(day, for: eventID)
+                return
+            }
+            // Thursday first tries to adopt a speculative pre-render, kicked
+            // off when Dan edited. `newLayout` randomizes the seed, so there is
+            // nothing pre-rendered that matches and a fresh encode is the only
+            // answer.
+            if day == .thursday, !newLayout,
+               let adopted = await self.speculativeReel(for: eventID)
+                                       .take(matching: live) {
+                self.landRender(adopted, day: day, for: eventID, appState: appState)
+                return
+            }
+            // No usable pre-render: make sure no stale speculative encode is
+            // still writing the same output file before starting a fresh one.
+            if day == .thursday { self.speculativeReel(for: eventID).cancelAll() }
+
+            // The result is captured so that "Python crashed" and "Python
+            // exited zero and reported a per day error" stay different answers.
+            // Both were once swallowed by a `try?`, which fired the completion
+            // notice while the mockup went on showing the old MP4.
+            let outcome: Result<PythonBridge.PreviewGenerationResult, Error>
+            do {
+                outcome = .success(try await self.renderPreview(live, [day.rawValue]))
+            } catch {
+                outcome = .failure(error)
+            }
+
+            switch outcome {
+            case .failure(let error):
+                // A run that DIED reports nothing per day, so the day it
+                // claimed has to be failed by hand or it keeps a spinner for
+                // work that has already stopped (L110).
+                self.failDayRegen(
+                    day, for: eventID,
+                    reason: "\(day.displayName) regeneration failed: "
+                          + "\(error.localizedDescription)")
+            case .success(let result):
+                self.landRender(result, day: day, for: eventID, appState: appState)
+            }
+        }
+    }
+
+    /// Land a render and, when the day actually landed, say so.
+    ///
+    /// The notice is sent here rather than inside `applyDayRender`, so the
+    /// landing can be shared with the redraw path below without a posting
+    /// layout switch announcing one finished rebuild per day it touched: that
+    /// is one action Dan took, not three.
+    private func landRender(_ result: PythonBridge.PreviewGenerationResult,
+                            day: DayName, for eventID: UUID, appState: AppState) {
+        guard applyDayRender(result, day: day, for: eventID, appState: appState)
+        else { return }
+        // The live name, read after the write: the run takes a minute or more
+        // and the event may have been renamed while it ran.
+        guard let name = appState.events.first(where: { $0.id == eventID })?.name
+        else { return }
+        NotificationService.shared.notifyRegenerationComplete(
+            eventName: name, what: day.displayName)
+    }
+
+    /// Record (or clear) what the last render said about a day, onto the live
+    /// event, so the asset screen's list agrees with the screen the render was
+    /// driven from (#1009).
+    ///
+    /// Its own call as well as part of `applyDayRender`, because a Friday reel
+    /// edit re-renders one file without going through a day render at all and
+    /// still has to say what came back. Both are passed every time and nil
+    /// CLEARS: these describe the LAST render of that day, and a note kept past
+    /// the render it was about is not merely stale, it is false (#824).
+    func recordMediaOutcome(day: DayName, for eventID: UUID, appState: AppState,
+                            error: String?, warning: String?) {
+        guard var ev = appState.events.first(where: { $0.id == eventID }) else { return }
+        guard ev.recordMediaOutcome(day: day.rawValue, error: error, warning: warning)
+        else { return }
+        appState.updateEvent(ev)
+    }
+
+    /// Land a finished redraw onto the live event, day by day.
+    ///
+    /// A loop over `applyDayRender` rather than a landing of its own (#1009).
+    /// It was a second implementation beside the review screen's private one,
+    /// which is two places for the next fix to land in and one of them to be
+    /// forgotten: what a day reporting nothing means, what a failure has to
+    /// leave behind, which stored note a successful render takes away.
     ///
     /// Deliberately does NOT touch captions. That is the whole point of #1010:
     /// a switch that only changes how many photos a day posts needs its images
-    /// redrawn and its caption left exactly as Dan left it.
-    ///
-    /// Narrow by construction. It handles no Friday clip plan and no Thursday
-    /// speculative reel, because a posting layout switch can never name those
-    /// days: no preset governs them, which `PostingPresetTests` asserts over
-    /// every ordered pair of layouts. The review screen keeps its own richer
-    /// path for the days that do need those.
+    /// redrawn and its caption left exactly as Dan left it. It announces
+    /// nothing either, for the reason `landRender` records.
     func applyRedraw(_ result: PythonBridge.PreviewGenerationResult,
                      days: [DayName],
                      for eventID: UUID,
                      appState: AppState) {
-        guard var ev = appState.events.first(where: { $0.id == eventID }) else {
-            // The event went away mid run. Release every slot rather than
-            // leaving spinners on a day nothing will ever finish.
-            for day in days { endDayRegen(day, for: eventID) }
-            return
-        }
-
-        var wrote = false
-        var succeeded: [DayName] = []
+        // Each day judged alone, so one day's failure does not take away
+        // another day's finished work (L53).
         for day in days {
-            switch DayRedrawOutcome.of(result, day: day) {
-            case .failed(let reason):
-                // Each day judged alone, so one day's failure does not take
-                // away another day's finished work (L53). `failDayRegen`
-                // records the reason AND releases the slot.
-                if let pipelineError = result.errors[day.rawValue] {
-                    failDayRegen(day, for: eventID, pipelineError: pipelineError)
-                } else {
-                    failDayRegen(day, for: eventID, reason: reason)
-                }
-            case .succeeded(let paths):
-                ev.previewMediaPaths[day.rawValue] = paths
-                wrote = true
-                succeeded.append(day)
-            }
+            _ = applyDayRender(result, day: day, for: eventID, appState: appState)
+        }
+    }
+
+    /// Land one finished (or adopted) day render onto the live event: the new
+    /// images, what the run said about the day, the clip plan and cover pick it
+    /// came back with, the slot released, and the number the screen reloads on.
+    ///
+    /// Separate from the run that produced it so it can be tested: the run goes
+    /// through `PythonBridge.shared`, which has no seam, and what a finished
+    /// result MEANS is the half worth testing.
+    ///
+    /// Returns whether the day actually landed. A finished rebuild is announced
+    /// from this answer, so a failure cannot be announced as ready.
+    @discardableResult
+    func applyDayRender(_ result: PythonBridge.PreviewGenerationResult,
+                        day: DayName,
+                        for eventID: UUID,
+                        appState: AppState) -> Bool {
+        // Live read at write-back: a render takes a minute or more, and a
+        // snapshot taken when it started would revert anything edited since.
+        guard var ev = appState.events.first(where: { $0.id == eventID }) else {
+            // The event went away mid run. Release the slot rather than leaving
+            // a spinner on a day nothing will ever finish (L110).
+            endDayRegen(day, for: eventID)
+            return false
         }
 
-        // One write for the whole batch, then the version bumps, so the screen
-        // cannot redraw against an event that is half updated.
-        if wrote { appState.updateEvent(ev) }
-        for day in succeeded {
+        // Keep the asset screen's failure list in step with what happened here,
+        // so a day fixed (or broken again) from one screen does not leave a
+        // contradictory message behind on the other. The recording is on the
+        // model (#824), so the rule that a note is CLEARED when the next render
+        // has nothing to say is one rule rather than one per screen. Recorded
+        // alongside the error rather than folded into it: a day that rendered
+        // without an optional photo is not a day with no graphics (#265).
+        let noted = ev.recordMediaOutcome(day: day.rawValue,
+                                          error: result.errors[day.rawValue],
+                                          warning: result.warnings[day.rawValue])
+
+        switch DayRedrawOutcome.of(result, day: day) {
+        case .failed(let reason):
+            if noted { appState.updateEvent(ev) }
+            // The pipeline's own text where it had one, not a sentence wrapped
+            // around it: the marker it uses for the cases that have a remedy
+            // has to survive to the card that offers one (#730). The wording is
+            // built by `failDayRegen`, which records it AND releases the slot.
+            if let pipelineError = result.errors[day.rawValue] {
+                failDayRegen(day, for: eventID, pipelineError: pipelineError)
+            } else {
+                failDayRegen(day, for: eventID, reason: reason)
+            }
+            return false
+        case .succeeded(let dayPaths):
+            ev.previewMediaPaths[day.rawValue] = dayPaths
+            // What these images were drawn under, so a later switch can tell a
+            // day it has moved past from one it never touched (#1010). Read
+            // from the event being written, which is the same expression
+            // `PythonBridge.buildMediaManifest` puts in the manifest, so the
+            // record and the render cannot name different layouts.
+            ev.recordRenderedLayout(ev.effectivePostingPreset, forDays: [day.rawValue])
+            if day == .friday { ev.applyFridayClipPlan(result.fridayClipPlan) }
+            ev.applyCoverPick(result.coverPicks[day.rawValue], forDay: day.rawValue)
+            appState.updateEvent(ev)
+            // Both after the write, so a screen redrawing on the new number
+            // cannot read a half updated event.
             endDayRegen(day, for: eventID)
             bumpGraphicVersion(day, for: eventID)
+            return true
         }
     }
 

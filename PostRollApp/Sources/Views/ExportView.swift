@@ -64,6 +64,13 @@ struct ExportView: View {
     /// consulted these before offering Approve & Export (#89); this screen's own
     /// buttons did not, which left a second route to an export holding the
     /// pre-rebuild file (#225).
+    /// Read live from AppState so it reflects the latest write, not the copy
+    /// this view was handed: the posting layout switch writes through AppState,
+    /// and the export gate has to judge what the event says NOW.
+    private var live: Event {
+        appState.events.first(where: { $0.id == event.id }) ?? event
+    }
+
     private var regeneratingDays: Set<DayName> {
         previews.regeneratingDays(event.id)
     }
@@ -72,7 +79,8 @@ struct ExportView: View {
     /// just disabling the button, because a control that greys out with no
     /// explanation reads as broken.
     private var exportBlockedReason: String? {
-        ExportReadiness.blockedReason(regeneratingDays: regeneratingDays)
+        ExportReadiness.blockedReason(for: live, preset: live.effectivePostingPreset,
+                                      regeneratingDays: regeneratingDays)
     }
 
     var body: some View {

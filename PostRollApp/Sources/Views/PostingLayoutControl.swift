@@ -55,6 +55,25 @@ struct PostingLayoutControl: View {
         genManager.isRunning(event.id) || previews.state.isBusy(event.id)
     }
 
+    /// Days whose images were drawn under a layout this event has moved past,
+    /// through the same predicate the export gate refuses on, so the sentence
+    /// here and the refusal there cannot disagree (L263).
+    private var staleDays: [DayName] {
+        PostingLayoutSwitch.staleDays(in: live, preset: effectivePreset)
+    }
+
+    /// Redraw exactly those days, images only.
+    ///
+    /// Nothing is written first: the layout is already what Dan chose, and the
+    /// only thing that failed was the drawing. A refused claim leaves the
+    /// sentence and the button exactly where they were, which is the honest
+    /// state, because nothing was rebuilt.
+    private func redrawStale() {
+        let days = staleDays
+        guard !days.isEmpty else { return }
+        _ = previews.startRedraw(days, for: event.id, appState: appState)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(spacing: Spacing.md) {
@@ -97,6 +116,24 @@ struct PostingLayoutControl: View {
                 Text(PostingLayoutCopy.thisEvent(effectivePreset))
                     .font(.system(size: 12))
                     .foregroundStyle(PaintedSurfaces.secondaryText)
+                // A day the switch never finished redrawing, said HERE (#1010).
+                //
+                // The export refuses such a day, and its reason is on the export
+                // screen; this is the screen showing the layout that day
+                // disagrees with. The remedy is a control rather than a
+                // sentence, because the condition persists in the event and
+                // every other route to it is closed: re-picking the layout
+                // already selected fires no change at all.
+                if let left = PostingLayoutCopy.stale(staleDays),
+                   let redraw = PostingLayoutCopy.redrawAction(staleDays) {
+                    HStack(spacing: Spacing.sm) {
+                        Text(left)
+                            .font(.system(size: 12))
+                            .foregroundStyle(PaintedSurfaces.stateWarningText)
+                        Button(redraw) { redrawStale() }
+                            .font(.system(size: 12))
+                    }
+                }
             }
         }
         .alert("Change the posting layout?",

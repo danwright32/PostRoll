@@ -113,7 +113,8 @@ final class HostedControlLegibilityTests: XCTestCase {
             // spinner is the part that says the wait is live rather than stuck.
             ("waiting on rebuild bar", AnyView(CaptionReviewActionBar(
                 activity: .waitingOnRebuild(reason: ExportReadiness.blockedReason(
-                    regeneratingDays: [.thursday, .wednesday]) ?? ""))), 90),
+                    regeneratingDays: [.thursday, .wednesday],
+                    staleDays: []) ?? ""))), 90),
         ]
     }
 
@@ -1020,7 +1021,7 @@ final class HostedControlLegibilityTests: XCTestCase {
     func testANoticeWrapsWhenTheWindowNarrowsRatherThanTruncating() throws {
         let bar = CaptionReviewActionBar(activity: .waitingOnRebuild(
             reason: ExportReadiness.blockedReason(
-                regeneratingDays: [.thursday, .wednesday]) ?? ""))
+                regeneratingDays: [.thursday, .wednesday], staleDays: []) ?? ""))
 
         let needed = requiredWidth(bar)
         print(String(format: "  waiting bar requires %.0fpt", needed))

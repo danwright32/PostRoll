@@ -328,7 +328,10 @@ actor PythonBridge {
     /// render reproduces it. Returns the candidates (empty on failure).
     func renderCollageCandidates(event: Event, day: DayName, count: Int = 6) async throws -> [CollageCandidate] {
         guard let pd = event.days[day.rawValue], !pd.photoPaths.isEmpty else { return [] }
-        let photoCount = event.effectivePostingPreset.format(for: day)?.count ?? pd.photoPaths.count
+        // `effectiveCount`, like every other place that asks how many of a
+        // day's photos are actually posted (#1010).
+        let photoCount = event.effectivePostingPreset
+            .effectiveCount(for: day, assigned: pd.photoPaths.count) ?? pd.photoPaths.count
         let photos = Array(pd.photoPaths.prefix(photoCount)).map { $0.path }
         guard !photos.isEmpty else { return [] }
 

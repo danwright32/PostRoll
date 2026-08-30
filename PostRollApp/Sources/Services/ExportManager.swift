@@ -76,7 +76,14 @@ final class ExportManager {
         // visible failure rather than a silent return, using the same
         // deactivated-run shape as the folder-access refusal below, so the
         // button says what it is waiting for instead of doing nothing (#182).
-        if let waiting = ExportReadiness.blockedReason(regeneratingDays: regeneratingDays) {
+        // The event is read BEFORE the gate rather than after it, because half
+        // of what the gate asks is about the event itself: whether any day's
+        // images are still drawn for the layout this event has moved away from
+        // (#1010).
+        guard let gated = appState.events.first(where: { $0.id == eventID }) else { return }
+        if let waiting = ExportReadiness.blockedReason(
+            for: gated, preset: gated.effectivePostingPreset,
+            regeneratingDays: regeneratingDays) {
             let blocked = "\(waiting) before exporting, so the folder gets the new files rather than the previous ones."
             tracker.begin(Run(phase: .failed(blocked),
                               isFullExport: onlyDay == nil), for: eventID)
