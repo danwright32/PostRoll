@@ -1,0 +1,8 @@
+{
+  "name": "a-short-duration-window-is-not-called-steady",
+  "file": "tools/check_job_durations.py",
+  "find": "    if len(seconds) < MINIMUM_WINDOW:",
+  "replace": "    if len(seconds) < 0:",
+  "test": "tests/test_job_duration_drift.py::test_too_short_a_window_is_refused_rather_than_called_steady",
+  "breaks": "too little history is reported as STEADY, so a job nothing has measured reads exactly like a job measured and found healthy (#1019, L98)"
+}

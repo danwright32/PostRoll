@@ -1,0 +1,8 @@
+{
+  "name": "an-unfinished-job-has-no-duration",
+  "file": "tools/check_job_durations.py",
+  "find": "            if not started or not completed:\n                continue",
+  "replace": "            if not started or not completed:\n                series.setdefault(str(job.get(\"name\", \"?\")), []).append(0.0)\n                continue",
+  "test": "tests/test_job_duration_drift.py::test_an_unfinished_job_contributes_nothing_rather_than_zero",
+  "breaks": "a job still running is counted as taking zero seconds, which pulls the median down and reads as the job having got FASTER, the one direction nobody questions (#1019, L215)"
+}
