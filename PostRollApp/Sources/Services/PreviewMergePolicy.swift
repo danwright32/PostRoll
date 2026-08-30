@@ -3,6 +3,47 @@ import Foundation
 /// Pure decisions for how a generation run handles preview graphics, extracted
 /// from GenerationManager so they can be unit-tested without the async task,
 /// PythonBridge, or AppState.
+/// What a finished day redraw actually produced, for one named day (#1009).
+///
+/// Lifted out of `CaptionReviewView.applyRegenResult`, where it was three
+/// branches inside a private method on a SwiftUI view. That is what made a day
+/// scoped redraw unusable from any other screen, and it also meant the branch
+/// itself could not be tested.
+///
+/// Two of the three outcomes are failures a run exiting ZERO still produces:
+/// Python reporting a per day error, and Python reporting nothing at all for
+/// the day it was asked about. Both were once swallowed by a `try?`, which
+/// fired the completion notification while the old graphic stayed on screen.
+enum DayRedrawOutcome: Equatable {
+    case succeeded([String: String])
+    case failed(String)
+
+    /// Judges `day` alone.
+    ///
+    /// Another day's error is not this day's problem: a redraw claims named
+    /// days, and folding the whole result's errors into one verdict fails a day
+    /// that rendered perfectly because a different one did not (L53).
+    static func of(_ result: PythonBridge.PreviewGenerationResult,
+                   day: DayName) -> DayRedrawOutcome {
+        // The pipeline's own text, unwrapped: the marker it uses for the cases
+        // that have a remedy has to survive to the card that offers one (#730,
+        // L199). Checked BEFORE the paths, because a run can write a file and
+        // still report the day as failed, and the error is the truer answer.
+        if let pipelineError = result.errors[day.rawValue] {
+            return .failed(pipelineError)
+        }
+        guard let paths = result.paths[day.rawValue], !paths.isEmpty else {
+            // An empty set of paths is nothing rendered, which is a different
+            // sentence from a pipeline error and needs its own (L11). Reported
+            // as a failure rather than a quiet success, because the screen
+            // otherwise goes on showing the graphic this run was meant to
+            // replace.
+            return .failed("\(day.displayName) regeneration produced no output")
+        }
+        return .succeeded(paths)
+    }
+}
+
 enum PreviewMergePolicy {
 
     /// Whether a run should (re)render preview graphics.

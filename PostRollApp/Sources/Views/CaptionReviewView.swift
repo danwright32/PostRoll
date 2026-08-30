@@ -1480,12 +1480,22 @@ struct CaptionReviewView: View {
         recordMediaOutcome(day: day, error: result.errors[day.rawValue],
                            warning: result.warnings[day.rawValue])
 
-        if let pyError = result.errors[day.rawValue] {
-            // The pipeline's own text, not a sentence wrapped around it: the
-            // marker it uses for the cases with a remedy has to survive to the
-            // card that offers one (#730). The manager builds the wording.
-            graphics.failDayRegen(day, for: event.id, pipelineError: pyError)
-        } else if let dayPaths = result.paths[day.rawValue], !dayPaths.isEmpty {
+        // The three way branch is `DayRedrawOutcome` since #1009, so it can be
+        // tested and so a redraw driven from another screen reaches the same
+        // verdict rather than a second copy of it. What is left here is what to
+        // DO with each answer, which is this screen's business.
+        switch DayRedrawOutcome.of(result, day: day) {
+        case .failed(let reason):
+            // The pipeline's own text where it had one, not a sentence wrapped
+            // around it: the marker it uses for the cases with a remedy has to
+            // survive to the card that offers one (#730). The manager builds
+            // the wording.
+            if result.errors[day.rawValue] != nil {
+                graphics.failDayRegen(day, for: event.id, pipelineError: reason)
+            } else {
+                graphics.failDayRegen(day, for: event.id, reason: reason)
+            }
+        case .succeeded(let dayPaths):
             // Read the CURRENT event — not self.event which may be stale
             // (e.g. after assignReelPhotosAndGenerate saved new photos).
             var ev = appState.events.first(where: { $0.id == event.id }) ?? event
@@ -1498,10 +1508,6 @@ struct CaptionReviewView: View {
                 eventName: event.name,
                 what: day.displayName
             )
-        } else {
-            graphics.failDayRegen(
-                day, for: event.id,
-                reason: "\(day.displayName) regeneration produced no output")
         }
     }
 
