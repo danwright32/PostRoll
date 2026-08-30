@@ -91,7 +91,9 @@ final class CheckoutNoticeFreshnessTests: XCTestCase {
 
         var returned: CheckoutRevision.Reading?
         let heard = announcements(on: center) {
-            returned = CheckoutRevision.read(inRepo: repo, announcingTo: center)
+            returned = CheckoutRevision.read(inRepo: repo,
+                                             timeout: CheckoutRevision.deadlineForTests,
+                                             announcingTo: center)
         }
 
         XCTAssertEqual(heard.count, 1, "one read, one announcement")
@@ -110,7 +112,9 @@ final class CheckoutNoticeFreshnessTests: XCTestCase {
             .appendingPathComponent("gone-\(UUID().uuidString)")
 
         let heard = announcements(on: center) {
-            _ = CheckoutRevision.read(inRepo: missing, announcingTo: center)
+            _ = CheckoutRevision.read(inRepo: missing,
+                                      timeout: CheckoutRevision.deadlineForTests,
+                                      announcingTo: center)
         }
 
         XCTAssertEqual(heard.count, 1)

@@ -1,0 +1,8 @@
+{
+  "name": "checkout-reads-in-tests-name-their-own-deadline",
+  "file": "PostRollApp/Tests/CheckoutRevisionTests.swift",
+  "find": "                CheckoutRevision.read(inRepo: repo,\n                                      timeout: CheckoutRevision.deadlineForTests) else {",
+  "replace": "                CheckoutRevision.read(inRepo: repo) else {",
+  "test": "tests/test_parallel_suite_assumptions.py::test_every_checkout_read_in_a_test_names_its_own_deadline",
+  "breaks": "a test times git against the product's 5 second deadline, which is a budget for a person waiting on a generation and not for a machine the parallel suite is loading, so the test asserts about how busy the runner is (#992, L290, L522)"
+}

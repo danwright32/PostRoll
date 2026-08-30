@@ -84,7 +84,8 @@ final class CheckoutRevisionTests: XCTestCase {
         let head = try git(repo, ["rev-parse", "HEAD"])
 
         guard case .known(let commit, let branch, let dirty) =
-                CheckoutRevision.read(inRepo: repo) else {
+                CheckoutRevision.read(inRepo: repo,
+                                      timeout: CheckoutRevision.deadlineForTests) else {
             return XCTFail("a real repository must read as known")
         }
 
@@ -101,7 +102,8 @@ final class CheckoutRevisionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: repo) }
         try Data("edited".utf8).write(to: repo.appendingPathComponent("a.txt"))
 
-        guard case .known(_, _, let dirty) = CheckoutRevision.read(inRepo: repo) else {
+        guard case .known(_, _, let dirty) = CheckoutRevision.read(inRepo: repo,
+                                      timeout: CheckoutRevision.deadlineForTests) else {
             return XCTFail("an edited repository still reads as known")
         }
 
@@ -116,7 +118,8 @@ final class CheckoutRevisionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: repo) }
         try Data("new".utf8).write(to: repo.appendingPathComponent("brand_new.py"))
 
-        guard case .known(_, _, let dirty) = CheckoutRevision.read(inRepo: repo) else {
+        guard case .known(_, _, let dirty) = CheckoutRevision.read(inRepo: repo,
+                                      timeout: CheckoutRevision.deadlineForTests) else {
             return XCTFail("a repository with an untracked file reads as known")
         }
 
@@ -128,7 +131,8 @@ final class CheckoutRevisionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: repo) }
         _ = try git(repo, ["checkout", "-q", "-b", "wip/pinned-text-shaper"])
 
-        guard case .known(_, let branch, _) = CheckoutRevision.read(inRepo: repo) else {
+        guard case .known(_, let branch, _) = CheckoutRevision.read(inRepo: repo,
+                                      timeout: CheckoutRevision.deadlineForTests) else {
             return XCTFail("a branch checkout reads as known")
         }
 
@@ -141,7 +145,8 @@ final class CheckoutRevisionTests: XCTestCase {
         try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: plain) }
 
-        guard case .unknown(let reason) = CheckoutRevision.read(inRepo: plain) else {
+        guard case .unknown(let reason) = CheckoutRevision.read(
+                inRepo: plain, timeout: CheckoutRevision.deadlineForTests) else {
             return XCTFail("a directory that is not a repository cannot read as known")
         }
 
@@ -150,7 +155,8 @@ final class CheckoutRevisionTests: XCTestCase {
 
     func testAMissingCheckoutIsUnknown() {
         guard case .unknown = CheckoutRevision.read(
-            inRepo: URL(fileURLWithPath: "/nowhere/at/all")) else {
+            inRepo: URL(fileURLWithPath: "/nowhere/at/all"),
+            timeout: CheckoutRevision.deadlineForTests) else {
             return XCTFail("a path that does not exist cannot read as known")
         }
     }

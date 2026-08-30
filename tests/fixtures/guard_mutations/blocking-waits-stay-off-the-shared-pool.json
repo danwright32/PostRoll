@@ -1,0 +1,8 @@
+{
+  "name": "blocking-waits-stay-off-the-shared-pool",
+  "file": "PostRollApp/Sources/Services/CheckoutRevision.swift",
+  "find": "        let waiter = Thread {\n            process.waitUntilExit()\n            exited.signal()\n        }",
+  "replace": "        DispatchQueue.global().async {\n            process.waitUntilExit()\n            exited.signal()\n        }",
+  "test": "tests/test_parallel_suite_assumptions.py::test_no_blocking_wait_is_parked_on_the_global_queue",
+  "breaks": "a blocking wait goes back on the bounded global pool, which does not grow to order, so once enough blocking work sits on it a later block never gets a thread and the wait reads as the child process having hung: CheckoutRevisionTests failed about one run in three under the parallel suite this way (#992, L241)"
+}
