@@ -30,6 +30,7 @@ from pathlib import Path
 import pytest
 
 from tools.suite_counts import (
+    recorded_swift_count,
     SuiteCountError,
     python_tests_run,
     swift_tests_run,
@@ -151,13 +152,27 @@ def _run_tool(*args: str) -> subprocess.CompletedProcess:
 
 
 def test_the_tool_names_the_leg_and_the_count_it_read(tmp_path):
+    """What the tool SAYS, judged on a transcript the floor also accepts.
+
+    `SWIFT_GREEN` above is 927 tests, which was a fine stand-in while the only
+    Swift refusals were an absent total and a zero. #1017 added a third, a floor
+    derived from the recorded suite size, and 927 is below it. The fixture is
+    built from the record rather than typed, so this test cannot drift out of
+    agreement with the floor the way a second hand written number would (L41).
+    """
+    full = recorded_swift_count()
     log = tmp_path / "swift.log"
-    log.write_text(SWIFT_GREEN, encoding="utf-8")
+    log.write_text(
+        f"Test Suite 'All tests' passed at 2026-08-29 22:00:00.000.\n"
+        f"\t Executed {full} tests, with 0 failures (0 unexpected) in "
+        f"118.4 (119.0) seconds\n"
+        f"** TEST SUCCEEDED **\n",
+        encoding="utf-8")
 
     result = _run_tool("swift", str(log))
 
     assert result.returncode == 0, result.stderr
-    assert "927" in result.stdout, result.stdout
+    assert str(full) in result.stdout, result.stdout
     assert "Swift" in result.stdout, result.stdout
 
 

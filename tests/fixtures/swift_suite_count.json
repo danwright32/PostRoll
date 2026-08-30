@@ -1,0 +1,7 @@
+{
+  "count": 2599,
+  "measured_on": "2026-08-29",
+  "measured_at_commit": "417574da3b99faa2f1358ec32f094d7b32b4c748",
+  "measured_from": "Executed 2599 tests, with 0 failures, read from ci-swift-unit-417574d.log",
+  "re_measure_with": "venv/bin/python tools/record_suite_count.py"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "a-missing-suite-count-record-is-refused",
+  "file": "tools/suite_counts.py",
+  "find": "    if recorded <= 0:",
+  "replace": "    if recorded < 0:",
+  "test": "tests/test_swift_leg_meets_its_floor.py::test_a_record_of_zero_is_its_own_refusal",
+  "breaks": "an unwritten or corrupt record derives a floor of zero, which every run on earth clears, so the floor goes on reading as an active safeguard while refusing nobody (#1017, L98, L182)"
+}
