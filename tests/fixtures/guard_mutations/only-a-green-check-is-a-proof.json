@@ -1,0 +1,8 @@
+{
+  "name": "only-a-green-check-is-a-proof",
+  "file": "tools/check_tree_already_checked.py",
+  "find": "    concluded = str(pull.checks.get(check, \"\")).lower()\n    if concluded != GREEN:",
+  "replace": "    concluded = str(pull.checks.get(check, \"\")).lower()\n    if concluded not in (GREEN, \"skipped\"):",
+  "test": "tests/test_tree_already_checked.py::test_a_check_that_is_anything_but_success_runs_the_job",
+  "breaks": "a merge reads the LAST merge's skip as a proof, so the gate latches off permanently and every job skips forever with the workflow green throughout (#990, L98, L106)"
+}

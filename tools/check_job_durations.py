@@ -40,12 +40,20 @@ import statistics
 import sys
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Iterable
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from tools.guard_sweep_history import PROOF_STEP  # noqa: E402
+from tools.check_tree_already_checked import WORK_STEP  # noqa: E402
+
+#: Every step name a gate in this repository can skip. Passed for every
+#: workflow: `did_its_work` leaves a job carrying none of them alone, so each
+#: workflow is affected only by the name its own jobs actually have, and there
+#: is no per-workflow table to keep in step with the workflows (L96).
+WORK_STEPS = (PROOF_STEP, WORK_STEP)
 from tools.wait_for_checks import GhUnusable, gh_json  # noqa: E402
 
 #: How far the two halves' medians must differ before it is worth saying.
@@ -146,12 +154,20 @@ def drift_of(job: str, seconds: list[float]) -> Verdict:
         f"{job}: faster, {moved}")
 
 
-def did_its_work(job: dict, work_step: str | None) -> bool:
-    """Whether a job that HAS the named work step actually ran it.
+def did_its_work(job: dict, work_step: str | Iterable[str] | None) -> bool:
+    """Whether a job that HAS one of the named work steps actually ran it.
 
-    True for every job with no step by that name, which is what lets one step
-    name be passed for all three workflows instead of a per-workflow table
-    somebody has to remember to extend (L96).
+    True for every job carrying none of them, which is what lets the whole set
+    of names be passed for every workflow instead of a per-workflow table
+    somebody has to remember to extend (L96). Two workflows need it: the guard
+    sweep's shards skip their proof step (#989) and #990's gate skips the work
+    of `python`, `macos`, `swift-unit` and `reference-frames` on a merge whose
+    tree a green pull request already carried.
+
+    A bare string is one name, not four characters. A string is iterable, so
+    accepting several names without saying so would silently compare each step
+    against `R`, `e`, `-` and match nothing, restoring the population this rule
+    exists to drop while every existing caller still read as correct.
 
     Ran, not passed. A shard whose proof went red spent the time, and dropping
     it would hide a job getting slower right up until the moment it goes red,
@@ -159,8 +175,12 @@ def did_its_work(job: dict, work_step: str | None) -> bool:
     """
     if not work_step:
         return True
+    wanted = ({work_step} if isinstance(work_step, str)
+              else {str(name) for name in work_step if name})
+    if not wanted:
+        return True
     for step in job.get("steps") or []:
-        if str(step.get("name") or "").strip() != work_step:
+        if str(step.get("name") or "").strip() not in wanted:
             continue
         return str(step.get("conclusion") or "").lower() not in (
             "skipped", "cancelled", "")
@@ -168,7 +188,8 @@ def did_its_work(job: dict, work_step: str | None) -> bool:
 
 
 def job_durations(runs: list[dict], *,
-                  work_step: str | None = None) -> dict[str, list[float]]:
+                  work_step: str | Iterable[str] | None = None,
+                  ) -> dict[str, list[float]]:
     """Seconds each named job took, newest run first.
 
     A job that has not finished contributes NOTHING rather than a zero. A zero
@@ -251,10 +272,14 @@ def main(argv: list[str] | None = None) -> int:
                         help="the workflow file to read the series from")
     parser.add_argument("--window", type=int, default=16,
                         help="how many completed runs to read")
-    parser.add_argument("--work-step", default=PROOF_STEP,
+    parser.add_argument("--work-step", action="append", default=None,
                         help="a job carrying a step by this name is measured "
                              "only when that step actually ran; jobs without "
-                             "one are unaffected")
+                             "one are unaffected. Repeatable. Defaults to "
+                             "every step name a gate in this repository can "
+                             "skip, which is safe to pass for every workflow "
+                             "because a job carrying none of them is left "
+                             "alone (L96)")
     args = parser.parse_args(argv)
 
     try:
@@ -269,7 +294,8 @@ def main(argv: list[str] | None = None) -> int:
     verdicts = [
         drift_of(job, seconds)
         for job, seconds in sorted(
-            job_durations(runs, work_step=args.work_step).items())]
+            job_durations(runs,
+                          work_step=args.work_step or WORK_STEPS).items())]
 
     lines = []
     for verdict in verdicts:

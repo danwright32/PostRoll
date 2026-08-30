@@ -1,8 +1,8 @@
 {
   "name": "pip-wheels-cached",
   "file": ".github/workflows/tests.yml",
-  "find": "          python-version: \"3.11\"\n          cache: pip\n\n      - name: Install dependencies\n        run: pip install -r requirements.txt\n\n      # Static checks",
-  "replace": "          python-version: \"3.11\"\n\n      - name: Install dependencies\n        run: pip install -r requirements.txt\n\n      # Static checks",
+  "find": "          python-version: \"3.11\"\n          cache: pip\n\n      - name: Install dependencies\n        if: steps.already.outputs.run != 'false'\n        run: pip install -r requirements.txt\n\n      # Static checks",
+  "replace": "          python-version: \"3.11\"\n\n      - name: Install dependencies\n        if: steps.already.outputs.run != 'false'\n        run: pip install -r requirements.txt\n\n      # Static checks",
   "test": "tests/test_ci_caches_and_cancels.py::test_the_python_workflow_caches_its_wheels",
   "breaks": "every run re-downloads the same pinned wheels, and a comment still names the setting (L103)"
 }

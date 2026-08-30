@@ -371,6 +371,7 @@ def test_the_readings_reach_the_log_and_not_only_the_summary():
 # is one people learn to read past (L36).
 
 import ci_workflow  # noqa: E402
+from tools.check_tree_already_checked import ASKS_THE_GATE  # noqa: E402
 
 TESTS_DIR = REPO_ROOT / "tests"
 
@@ -442,7 +443,14 @@ def selected_by(condition: str) -> list[str]:
         "here can say which shards it selects")
     stripped = re.sub(
         rf"contains\(\s*{re.escape(SHARD_FILES)}\s*,\s*'[^']+'\s*\)", "", condition)
-    leftover = stripped.replace("always()", "").replace("&&", "").strip()
+    # #990's gate is subtracted by its exact text rather than shrugged at. It
+    # says whether this MERGE has anything to do, which is a different question
+    # from which SHARD a step belongs to, so it selects nothing here; but a
+    # parser that ignored expressions it did not recognise would report a step
+    # as correctly scoped whatever else had been bolted onto it.
+    leftover = (stripped.replace("always()", "")
+                .replace(ASKS_THE_GATE, "")
+                .replace("&&", "").strip())
     assert not leftover, (
         f"the condition {condition!r} has a part this cannot evaluate: "
         f"{leftover!r}. Rather than guess, which would report a step as scoped "
