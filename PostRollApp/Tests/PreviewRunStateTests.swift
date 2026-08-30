@@ -190,4 +190,84 @@ final class PreviewRunStateTests: XCTestCase {
 
         XCTAssertEqual(state.graphicVersion(.thursday, for: eventA), 2)
     }
+
+    // MARK: - Landing a day redraw (#1010)
+
+    /// What a finished redraw writes back, without a caption run anywhere near
+    /// it.
+    ///
+    /// This is the half of the layout switch that #1010 makes free. A switch
+    /// that only changes how many photos a day posts needs its images redrawn
+    /// and its caption left exactly alone, so this asserts the caption is
+    /// untouched as hard as it asserts the paths are written.
+    @MainActor
+    func testALandedRedrawWritesTheNewPathsAndLeavesTheCaptionAlone() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("redraw-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var event = Event(name: "Show", org: "Org", venue: "Hall",
+                          date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        event.previewMediaPaths["sunday"] = ["collage": "/old/collage.png"]
+        var cap = DayCaption()
+        cap.caption = "a caption Dan typed"
+        cap.generatedCaption = "what the model wrote"
+        var week = WeekGenerationResult()
+        week.sunday = cap
+        event.weekResult = week
+
+        let state = AppState(events: [event],
+                             storeURL: root.appendingPathComponent("events.json"),
+                             dataRoot: root)
+        let manager = PreviewGraphicsManager()
+
+        manager.applyRedraw(
+            PythonBridge.PreviewGenerationResult(
+                paths: ["sunday": ["collage": "/new/collage.png"]], errors: [:]),
+            days: [.sunday], for: event.id, appState: state)
+
+        let landed = try XCTUnwrap(state.events.first(where: { $0.id == event.id }))
+        XCTAssertEqual(landed.previewMediaPaths["sunday"]?["collage"], "/new/collage.png",
+                       "the redrawn image has to replace the one it was drawn to replace")
+        XCTAssertEqual(landed.weekResult?.sunday?.caption, "a caption Dan typed",
+                       "a redraw must not touch the caption, which is the whole point "
+                       + "of splitting the two kinds of work")
+        XCTAssertEqual(manager.graphicVersion(.sunday, for: event.id), 1,
+                       "the screen has to be told to reload the file it already drew")
+    }
+
+    /// A day the run failed on keeps its old image and says why.
+    ///
+    /// Silently leaving the previous graphic while reporting success is the
+    /// failure this whole path was built to avoid: the export would then ship
+    /// an image built for the layout Dan just moved away from.
+    @MainActor
+    func testAFailedDayIsRecordedRatherThanQuietlyLeavingTheOldImage() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("redraw-fail-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var event = Event(name: "Show", org: "Org", venue: "Hall",
+                          date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        event.previewMediaPaths["sunday"] = ["collage": "/old/collage.png"]
+        let state = AppState(events: [event],
+                             storeURL: root.appendingPathComponent("events.json"),
+                             dataRoot: root)
+        let manager = PreviewGraphicsManager()
+
+        manager.applyRedraw(
+            PythonBridge.PreviewGenerationResult(
+                paths: [:], errors: ["sunday": "collage failed: too few photos"]),
+            days: [.sunday], for: event.id, appState: state)
+
+        XCTAssertNotNil(manager.dayFailure(.sunday, for: event.id),
+                        "a day that failed has to say so, or the screen shows the old "
+                        + "collage with nothing explaining it")
+        XCTAssertEqual(manager.graphicVersion(.sunday, for: event.id), 0,
+                       "nothing was redrawn, so nothing should be reloaded")
+    }
 }

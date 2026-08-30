@@ -159,46 +159,67 @@ final class PostingLayoutCopyTests: XCTestCase {
         return d
     }
 
-    private func eventWithPhotos(on days: [DayName]) -> Event {
+    private func eventWithPhotos(on days: [DayName], each: Int = 1) -> Event {
         var event = Event(name: "Show", org: "Org", venue: "Hall",
                           date: Date(timeIntervalSince1970: 1_700_000_000),
                           shootType: .fullShow)
         for day in days {
             var pd = PostingDay(day: day)
-            pd.photoPaths = [URL(fileURLWithPath: "/\(day.rawValue).jpg")]
+            pd.photoPaths = (0..<each).map {
+                URL(fileURLWithPath: "/\(day.rawValue)-\($0).jpg")
+            }
             event.days[day.rawValue] = pd
         }
         return event
     }
 
-    /// Nothing to rebuild is not a confirmation.
+    /// A switch that changes nothing is not a confirmation.
     ///
     /// A dialog that appears with nothing to say trains Dan to dismiss the one
-    /// that matters, and the switch here takes nothing away.
-    func testAnEventWithNoPhotosNeedsNoConfirmation() {
-        let event = eventWithPhotos(on: [])
+    /// that matters, and a switch that moves no day takes nothing away.
+    func testASwitchThatChangesNothingNeedsNoConfirmation() {
         XCTAssertNil(PostingLayoutSwitch.confirmation(
-            switchingTo: .opening, in: event, defaults: scratchDefaults(.balanced)))
+            from: .balanced, to: .opening, in: eventWithPhotos(on: [])))
     }
 
-    func testTheConfirmationNamesTheDaysThatRebuild() throws {
-        let event = eventWithPhotos(on: [.sunday, .monday])
+    /// The defect this replaced.
+    ///
+    /// The confirmation used to name every governed day with photos, so
+    /// Balanced to Opening warned that Monday and Wednesday would be rebuilt
+    /// when neither was going to move. A warning has to describe what will
+    /// actually happen or it teaches the reader to stop reading it (L180, L36).
+    func testTheConfirmationNamesOnlyTheDaysThatActuallyChange() throws {
+        let event = eventWithPhotos(on: [.sunday, .monday, .wednesday], each: 8)
         let text = try XCTUnwrap(PostingLayoutSwitch.confirmation(
-            switchingTo: .opening, in: event, defaults: scratchDefaults(.balanced)))
+            from: .balanced, to: .opening, in: event))
 
         XCTAssertTrue(text.contains("Sunday"), text)
-        XCTAssertTrue(text.contains("Monday"), text)
-        XCTAssertFalse(text.contains("Wednesday"),
-                       "Wednesday has no photos, so nothing about it rebuilds: \(text)")
+        XCTAssertFalse(text.contains("Monday"),
+                       "Monday posts 4 photos under both layouts, so nothing about it "
+                       + "changes: \(text)")
+        XCTAssertFalse(text.contains("Wednesday"), text)
     }
 
-    /// The half the lessons audit caught.
-    ///
-    /// A day whose caption was typed over has real work in it, and the sentence
-    /// has to say so, because "the captions will be rebuilt" reads as routine
-    /// when what it means is that an hour of editing is about to go.
-    func testAnEditedCaptionIsNamedAsSomethingThatWillBeReplaced() throws {
-        var event = eventWithPhotos(on: [.sunday, .monday])
+    /// The two kinds of change cost different things, so they say different
+    /// things (L11).
+    func testARedrawSaysTheCaptionsAreUntouched() throws {
+        let text = try XCTUnwrap(PostingLayoutSwitch.confirmation(
+            from: .balanced, to: .opening, in: eventWithPhotos(on: [.sunday], each: 8)))
+        XCTAssertTrue(text.contains("untouched"),
+                      "a redraw leaves the caption alone and has to say so: \(text)")
+    }
+
+    func testARebuildSaysWhyTheCaptionHasToChange() throws {
+        let text = try XCTUnwrap(PostingLayoutSwitch.confirmation(
+            from: .balanced, to: .classic, in: eventWithPhotos(on: [.sunday], each: 8)))
+        XCTAssertTrue(text.contains("different kind of post"),
+                      "a rebuild costs a caption, and the reason is what makes that "
+                      + "worth accepting: \(text)")
+    }
+
+    /// A day whose caption was typed over has real work in it.
+    func testAnEditedCaptionOnARebuiltDayIsNamed() throws {
+        var event = eventWithPhotos(on: [.sunday, .monday], each: 8)
         var sun = DayCaption()
         sun.generatedCaption = "what the model wrote"
         sun.caption = "what Dan wrote instead"
@@ -207,8 +228,8 @@ final class PostingLayoutCopyTests: XCTestCase {
         event.weekResult = result
 
         let text = try XCTUnwrap(PostingLayoutSwitch.confirmation(
-            switchingTo: .opening, in: event, defaults: scratchDefaults(.balanced)))
-        XCTAssertTrue(text.contains("edit"), "the edited day has to be called out: \(text)")
+            from: .balanced, to: .classic, in: event))
+        XCTAssertTrue(text.contains("edits"), "the edited day has to be called out: \(text)")
         XCTAssertTrue(text.contains("Sunday"), text)
     }
 
@@ -216,11 +237,10 @@ final class PostingLayoutCopyTests: XCTestCase {
     /// that Dan edited it.
     ///
     /// `generatedCaption` is empty until `stampOriginals` runs, so a raw
-    /// `caption != generatedCaption` reads every unstamped day as edited and
-    /// warns about work nobody did. `DayCaption.wasEdited` already guards this
-    /// and is the thing to use.
+    /// comparison reads every unstamped day as edited and warns about work
+    /// nobody did.
     func testAnUnstampedCaptionIsNotReportedAsEdited() throws {
-        var event = eventWithPhotos(on: [.sunday])
+        var event = eventWithPhotos(on: [.sunday], each: 8)
         var sun = DayCaption()
         sun.generatedCaption = ""              // never stamped
         sun.caption = "a caption from before the stamp existed"
@@ -229,8 +249,8 @@ final class PostingLayoutCopyTests: XCTestCase {
         event.weekResult = result
 
         let text = try XCTUnwrap(PostingLayoutSwitch.confirmation(
-            switchingTo: .opening, in: event, defaults: scratchDefaults(.balanced)))
-        XCTAssertFalse(text.contains("edit"),
+            from: .balanced, to: .classic, in: event))
+        XCTAssertFalse(text.contains("edits"),
                        "an unstamped caption is unknown, not edited, and warning about "
                        + "edits nobody made is how a real warning stops being read: \(text)")
     }

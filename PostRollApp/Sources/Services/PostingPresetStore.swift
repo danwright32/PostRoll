@@ -202,6 +202,58 @@ enum PostingLayoutSwitch {
         return plan
     }
 
+
+
+
+    /// The confirmation for switching `event` from `old` to `new`, or nil when
+    /// there is nothing to confirm.
+    ///
+    /// nil rather than an empty string: a dialog that appears with nothing to
+    /// say trains Dan to dismiss the one that matters, and a switch that
+    /// changes nothing takes nothing away.
+    ///
+    /// Built from the PLAN, so it names only the days that actually change
+    /// (#1010). It used to name every governed day with photos, which meant
+    /// Balanced to Opening warned that Monday and Wednesday would be rebuilt
+    /// when neither was going to move. A warning has to describe what will
+    /// happen or it teaches the reader to stop reading it (L180, L36).
+    ///
+    /// The two kinds of change get different sentences, because they cost
+    /// different things: a rebuilt day loses its caption, a redrawn day does
+    /// not (L11).
+    static func confirmation(from old: PostingPreset,
+                             to new: PostingPreset,
+                             in event: Event) -> String? {
+        let plan = plan(from: old, to: new, in: event)
+        guard !plan.isEmpty else { return nil }
+
+        let rebuilt = DayName.allCases.filter { plan[$0] == .rebuildPost }
+        let redrawn = DayName.allCases.filter { plan[$0] == .redrawImages }
+
+        var sentences: [String] = []
+        if !redrawn.isEmpty {
+            sentences.append("This redraws the images for "
+                             + "\(SentenceList.of(redrawn.map(\.displayName)))"
+                             + ". Their captions are untouched.")
+        }
+        if !rebuilt.isEmpty {
+            sentences.append("This rebuilds the captions and images for "
+                             + "\(SentenceList.of(rebuilt.map(\.displayName))) "
+                             + "because they become a different kind of post.")
+            // `wasEdited`, never a raw `caption != generatedCaption`.
+            // `generatedCaption` is empty until `stampOriginals` runs, so the
+            // raw comparison reads every unstamped day as edited and warns Dan
+            // about work he never did (L36).
+            let edited = rebuilt.filter { event.weekResult?[$0]?.wasEdited == true }
+            if !edited.isEmpty {
+                sentences.append("Your edits to "
+                                 + "\(SentenceList.of(edited.map(\.displayName)))"
+                                 + " will be replaced.")
+            }
+        }
+        return sentences.joined(separator: " ")
+    }
+
     /// The two kinds of work a plan asks for, kept apart because one of them
     /// costs money and the other does not.
     struct Work: Equatable {
@@ -212,6 +264,38 @@ enum PostingLayoutSwitch {
         /// Days needing only their images redrawn. Sorted, so a switch reports
         /// and runs the same way twice rather than in dictionary order.
         let redrawDays: [DayName]
+    }
+
+    /// The confirmation for switching `event` to `preset`, or nil when there is
+    /// nothing to confirm.
+    ///
+    /// nil rather than an empty string: a dialog that appears with nothing to
+    /// say trains Dan to dismiss the one that matters, and a switch that
+    /// rebuilds nothing takes nothing away.
+    ///
+    /// Derived from the days that would actually rebuild and from whether their
+    /// captions carry edits, never asserted. A warning shown identically on
+    /// every switch carries no information (L180).
+    static func confirmation(switchingTo preset: PostingPreset,
+                             in event: Event,
+                             defaults: UserDefaults) -> String? {
+        let days = preset.affectedDays(in: event)
+        guard !days.isEmpty else { return nil }
+
+        let all = SentenceList.of(days.map(\.displayName))
+
+        // `wasEdited`, never a raw `caption != generatedCaption`.
+        // `generatedCaption` is empty until `stampOriginals` runs, so the raw
+        // comparison reads every unstamped day as edited and warns Dan about
+        // work he never did. A warning that cries wolf stops being read (L36).
+        let edited = days.filter { event.weekResult?[$0]?.wasEdited == true }
+
+        guard !edited.isEmpty else {
+            return "This rebuilds the captions and images for \(all)."
+        }
+        let editedList = SentenceList.of(edited.map(\.displayName))
+        return "This rebuilds the captions and images for \(all). "
+             + "Your edits to \(editedList) will be replaced."
     }
 
     /// Split a plan into what has to be regenerated and what only has to be
