@@ -173,6 +173,57 @@ final class PostingLayoutCopyTests: XCTestCase {
         return event
     }
 
+    // MARK: - The control actually applies the plan (#1010)
+
+    /// A plan nothing calls changes nothing.
+    ///
+    /// The pure tests over `plan` and `work` pass whether or not the control
+    /// uses them, so they would have gone on passing while the switch kept
+    /// rebuilding every day. `check_guards` caught exactly that: the first
+    /// version of this guard stayed GREEN on a control rewired to the old
+    /// behaviour, which means it was protecting nothing.
+    ///
+    /// Checked in both directions. The positive alone is satisfied by a call
+    /// added beside the old rule; the negative alone by deleting the rebuild
+    /// entirely (L178).
+    func testTheControlAsksThePlanWhatToRebuild() throws {
+        let source = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
+                                encoding: .utf8)
+
+        XCTAssertTrue(source.contains("PostingLayoutSwitch.work("),
+                      "the control does not split the switch into paid and free work, "
+                      + "so whatever it rebuilds is decided somewhere else")
+        XCTAssertTrue(source.contains("PostingLayoutSwitch.plan("),
+                      "the control does not ask which days actually change")
+        XCTAssertFalse(source.contains("affectedDays"),
+                       "the control still reaches for the old rule, which names every "
+                       + "governed day with photos whether or not the switch moves it")
+    }
+
+    /// A refused claim has to STOP the switch, not just be noticed.
+    ///
+    /// The claim is taken before the event is touched precisely so a refusal
+    /// costs nothing. Reading the answer and carrying on regardless leaves the
+    /// layout changed with no run to redraw it, which is worse than refusing
+    /// the switch outright (L197, L5).
+    func testARefusedRedrawClaimStopsTheSwitch() throws {
+        let source = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
+                                encoding: .utf8)
+        XCTAssertTrue(source.contains("guard claimedRedraw"),
+                      "the control reads whether the redraw was claimed and does not "
+                      + "act on the answer, so a busy day still gets its layout changed")
+
+        // Order matters as much as presence: claiming after the write is the
+        // same defect wearing a guard.
+        guard let claim = source.range(of: "startRedraw("),
+              let write = source.range(of: "ev.postingPresetOverride = newValue") else {
+            return XCTFail("the control no longer claims or no longer writes the override")
+        }
+        XCTAssertTrue(claim.lowerBound < write.lowerBound,
+                      "the redraw is claimed AFTER the event is changed, so a refusal "
+                      + "leaves the layout switched with nothing rebuilding it")
+    }
+
     /// A switch that changes nothing is not a confirmation.
     ///
     /// A dialog that appears with nothing to say trains Dan to dismiss the one

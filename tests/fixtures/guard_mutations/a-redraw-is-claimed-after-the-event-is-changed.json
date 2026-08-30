@@ -1,0 +1,8 @@
+{
+  "name": "a-redraw-is-claimed-after-the-event-is-changed",
+  "file": "PostRollApp/Sources/Views/PostingLayoutControl.swift",
+  "find": "            guard claimedRedraw else { return }",
+  "replace": "            _ = claimedRedraw",
+  "test": "PostRollTests/PostingLayoutCopyTests/testARefusedRedrawClaimStopsTheSwitch",
+  "breaks": "a refused claim no longer stops the switch, so a busy day ends with the layout changed and no run to redraw it (#1010, L197)"
+}
