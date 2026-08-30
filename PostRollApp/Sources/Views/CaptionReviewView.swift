@@ -1490,8 +1490,8 @@ struct CaptionReviewView: View {
             // around it: the marker it uses for the cases with a remedy has to
             // survive to the card that offers one (#730). The manager builds
             // the wording.
-            if result.errors[day.rawValue] != nil {
-                graphics.failDayRegen(day, for: event.id, pipelineError: reason)
+            if let pipelineError = result.errors[day.rawValue] {
+                graphics.failDayRegen(day, for: event.id, pipelineError: pipelineError)
             } else {
                 graphics.failDayRegen(day, for: event.id, reason: reason)
             }

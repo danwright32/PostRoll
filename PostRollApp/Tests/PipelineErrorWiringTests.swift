@@ -18,21 +18,28 @@ import XCTest
 final class PipelineErrorWiringTests: XCTestCase {
 
     private static func viewSources() throws -> [URL] {
-        let views = URL(fileURLWithPath: #filePath)
+        // Services as well as Views since #1010. Recording a day's failure
+        // used to happen only on a screen; the day scoped redraw put it on the
+        // manager too, which moved it straight out from under this scan. A
+        // guard scoped to where the code WAS is exempt from wherever it goes
+        // next (L247).
+        let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Sources/Views")
-        return (FileManager.default.enumerator(at: views, includingPropertiesForKeys: nil)?
-            .compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "swift" } ?? [])
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        return ["Sources/Views", "Sources/Services"].flatMap { folder -> [URL] in
+            let dir = root.appendingPathComponent(folder)
+            return (FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil)?
+                .compactMap { $0 as? URL }
+                .filter { $0.pathExtension == "swift" } ?? [])
+        }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
     /// How a per-day error from the Python side is named where it is read.
     ///
     /// Both spellings, because the wrapping that shipped bound it to a local
     /// first and a rule reading only the subscript would have passed it.
-    private static let pipelineErrorNames = ["pyError", "result.errors["]
+    private static let pipelineErrorNames = ["pyError", "pipelineError", "result.errors["]
 
     /// Calls that record a rebuild failure by folding a pipeline error into a
     /// sentence, losing the marker the card matches on.

@@ -420,8 +420,8 @@ final class PreviewGraphicsManager {
                 // Each day judged alone, so one day's failure does not take
                 // away another day's finished work (L53). `failDayRegen`
                 // records the reason AND releases the slot.
-                if result.errors[day.rawValue] != nil {
-                    failDayRegen(day, for: eventID, pipelineError: reason)
+                if let pipelineError = result.errors[day.rawValue] {
+                    failDayRegen(day, for: eventID, pipelineError: pipelineError)
                 } else {
                     failDayRegen(day, for: eventID, reason: reason)
                 }
