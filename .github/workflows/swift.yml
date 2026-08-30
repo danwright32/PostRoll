@@ -217,9 +217,19 @@ jobs:
       # nothing to it, and the scheme setting would have taken the
       # `Executed N tests` line away from all 60-odd of its Swift entries.
       #
-      # No -parallel-testing-worker-count: the default is the runner's core
-      # count, which is the number this wants, and one written here would be
-      # wrong on the laptop that runs the same command through `make test-swift`.
+      # -parallel-testing-worker-count from the machine's own core count.
+      #
+      # This said "no worker count: the default is the runner's core count",
+      # which was wrong and is the reason the number is measured here now. The
+      # first parallel run on this runner used TWO worker processes, counted off
+      # its own transcript, so xcodebuild's default is not the core count and a
+      # sentence asserting it was doing the sizing (L316).
+      #
+      # Computed on the machine rather than written down, so the laptop that
+      # runs the same command through `make test-swift` and the runner each get
+      # their own number and neither is a constant that is wrong for the other.
+      # The count is echoed beside the core count, so the next reader can see
+      # what it actually ran on instead of trusting this comment (L210).
       #
       # -resultBundlePath because a parallel run prints NO executed-tests total
       # at all, and its per-test lines are written to one stdout by every worker
@@ -229,6 +239,8 @@ jobs:
       # xcodebuild refuses to run when the path already exists.
       - name: Run the Swift unit tests
         run: |
+          workers="$(sysctl -n hw.ncpu)"
+          echo "::notice::Swift suite on ${workers} workers, ${workers} cores"
           python3 tools/suite_counts.py run swift \
             --result-bundle PostRollApp/.derived-data/swift-suite.xcresult -- \
             xcodebuild \
@@ -238,6 +250,7 @@ jobs:
               -derivedDataPath PostRollApp/.derived-data \
               -resultBundlePath PostRollApp/.derived-data/swift-suite.xcresult \
               -parallel-testing-enabled YES \
+              -parallel-testing-worker-count "${workers}" \
               test
 
       # Compile the GUI test target, without running it (#874).

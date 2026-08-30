@@ -127,9 +127,11 @@ SWIFT_RESULTS := $(BUILD_DIR)/swift-suite.xcresult
 # the `Executed N tests` line the scheme setting would have taken away from all
 # 60-odd of its Swift entries.
 #
-# No -parallel-testing-worker-count. The default is the machine's core count,
-# which is the number this wants on both a twelve core laptop and a three core
-# runner, and a number written here would be one of them wrong.
+# -parallel-testing-worker-count from this machine's own core count, computed
+# rather than written down so the laptop and the runner each get their own.
+#
+# Not left to xcodebuild's default: measured on the runner 2026-08-30, that
+# default was TWO worker processes, whatever the core count was.
 #
 # tests/test_both_swift_runners_agree.py holds this target and the CI step to
 # the same flags, so local and CI cannot disagree about what they ran (L41).
@@ -140,6 +142,7 @@ test-swift:
 		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
 		-resultBundlePath "$(SWIFT_RESULTS)" \
 		-parallel-testing-enabled YES \
+		-parallel-testing-worker-count $(shell sysctl -n hw.ncpu) \
 		$(foreach t,$(REVIEW_TESTS),-skip-testing:$(t)) \
 		test
 

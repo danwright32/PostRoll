@@ -43,6 +43,7 @@ SETTINGS = {
     "parallel execution": "-parallel-testing-enabled YES",
     "a result bundle for xcodebuild to write": "-resultBundlePath",
     "that bundle handed to the counter": "--result-bundle",
+    "a worker count sized on the machine": "-parallel-testing-worker-count",
 }
 
 
