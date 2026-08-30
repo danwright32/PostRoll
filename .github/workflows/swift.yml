@@ -346,10 +346,6 @@ jobs:
             -destination 'platform=macOS' \
             -derivedDataPath PostRollApp/.derived-data \
             -quiet
-  # No Xcode work here at all: these render through Python and Pillow and read
-  # pixels back out. They need this runner for its FONTS, not for a build, so the
-  # job deliberately does not install XcodeGen or compile the app.
-
       # What tells a job that DID its work from one this gate skipped (#990).
       #
       # A skipped job still checks out, asks the gate and exits successful in
@@ -368,6 +364,9 @@ jobs:
         # elapsed time measures when somebody stopped it.
         if: ${{ !cancelled() && steps.already.outputs.run != 'false' }}
         run: echo "swift-unit ran its checks on tree $(git rev-parse HEAD^{tree})"
+  # No Xcode work here at all: these render through Python and Pillow and read
+  # pixels back out. They need this runner for its FONTS, not for a build, so the
+  # job deliberately does not install XcodeGen or compile the app.
   reference-frames:
     name: reference-frames (${{ matrix.shard.name }})
     runs-on: macos-15
