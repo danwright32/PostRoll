@@ -1,7 +1,7 @@
 {
   "name": "the-runner-reads-its-own-test-count",
   "file": ".github/workflows/swift.yml",
-  "find": "          python3 tools/suite_counts.py run swift -- \\\n            xcodebuild \\",
+  "find": "          python3 tools/suite_counts.py run swift \\\n            --result-bundle PostRollApp/.derived-data/swift-suite.xcresult -- \\\n            xcodebuild \\",
   "replace": "          xcodebuild \\",
   "test": "tests/test_swift_leg_meets_its_floor.py::test_the_runner_reads_its_own_test_count",
   "breaks": "the swift-unit job calls xcodebuild directly again, so no count is read on the runner at all and a half run reports as a full green run in the one place nobody watches the scroll (#1017, L3)"

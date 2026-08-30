@@ -25,7 +25,9 @@ from pathlib import Path
 
 import pytest
 
-from tools.record_suite_count import RecordError, count_from_transcript
+from tools.record_suite_count import (
+    RecordError, count_from_result_bundle, count_from_transcript)
+from tools.suite_counts import SuiteCountError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TOOL = REPO_ROOT / "tools" / "record_suite_count.py"
@@ -128,3 +130,43 @@ def test_the_recorded_commit_can_be_the_one_the_run_actually_happened_at(tmp_pat
     assert result.returncode == 0, result.stdout + result.stderr
     held = json.loads(record.read_text(encoding="utf-8"))
     assert held["measured_at_commit"] == elsewhere
+
+
+# ── a parallel transcript can no longer be recorded from (#992) ───────────────
+#
+# The Swift suite runs in parallel now, and a parallel run prints no
+# `Executed N tests` line at all. This tool's whole job is to re-record the
+# floor from a green run, and the run it was written to read is the one CI
+# stopped producing.
+#
+# It refuses, which is right, and the refusal has to say where the number lives
+# NOW. A message naming no remedy leaves the reader knowing something is wrong
+# and with nowhere to go (L80), and the remedy it used to imply, read the CI
+# log, is the one thing that can no longer work.
+
+
+def test_a_parallel_transcript_is_refused_by_name():
+    parallel = ("Test case 'BannerLegibilityTests.testOne()' passed on "
+                "'My Mac - xctest (1)' (0.003 seconds)\n** TEST SUCCEEDED **\n")
+    with pytest.raises(RecordError) as refused:
+        count_from_transcript(parallel)
+    assert "--result-bundle" in str(refused.value), (
+        "the refusal does not name the option that reads the count now, so it "
+        "sends the reader back to a transcript that structurally cannot carry "
+        "one (L80, L111)")
+
+
+def test_a_bundle_supplies_the_count_a_parallel_transcript_cannot():
+    assert count_from_result_bundle(
+        None, read=lambda path: 2618) == 2618
+
+
+def test_a_red_bundle_is_refused_for_the_same_reason_a_red_transcript_is():
+    """A run that failed may have stopped early, and a floor recorded too LOW is
+    refused by nothing forever after (L182). The source of the number changing
+    does not change that rule."""
+    def red(path):
+        raise SuiteCountError("the bundle reports 3 failures")
+    with pytest.raises(RecordError) as refused:
+        count_from_result_bundle(None, read=red)
+    assert "3 failures" in str(refused.value)

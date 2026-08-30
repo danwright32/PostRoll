@@ -115,10 +115,34 @@ test:
 # whether the suite was REACHED; xcodebuild's own exit code still decides
 # whether it was green, because one field answering both questions is how a run
 # of nothing came to read as a full suite (L53).
+# Where the executed-test count is read from since #992, because a parallel run
+# does not print one. Under the build directory so `make clean` takes it.
+SWIFT_RESULTS := $(BUILD_DIR)/swift-suite.xcresult
+
+# -parallel-testing-enabled here and in .github/workflows/swift.yml, and in
+# neither case in the SCHEME. Measured 2026-08-30: the flag alone parallelises
+# with the scheme still saying parallelizable="NO", and keeping it out of the
+# scheme is what leaves `tools/check_guards.py` alone. That prover runs ONE test
+# at a time to watch it go red, parallelism means nothing to it, and it reads
+# the `Executed N tests` line the scheme setting would have taken away from all
+# 60-odd of its Swift entries.
+#
+# -parallel-testing-worker-count from this machine's own core count, computed
+# rather than written down so the laptop and the runner each get their own.
+#
+# Not left to xcodebuild's default: measured on the runner 2026-08-30, that
+# default was TWO worker processes, whatever the core count was.
+#
+# tests/test_both_swift_runners_agree.py holds this target and the CI step to
+# the same flags, so local and CI cannot disagree about what they ran (L41).
 test-swift:
-	@venv/bin/python tools/suite_counts.py run swift -- \
+	@venv/bin/python tools/suite_counts.py run swift \
+		--result-bundle "$(SWIFT_RESULTS)" -- \
 		$(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
 		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
+		-resultBundlePath "$(SWIFT_RESULTS)" \
+		-parallel-testing-enabled YES \
+		-parallel-testing-worker-count $(shell sysctl -n hw.ncpu) \
 		$(foreach t,$(REVIEW_TESTS),-skip-testing:$(t)) \
 		test
 

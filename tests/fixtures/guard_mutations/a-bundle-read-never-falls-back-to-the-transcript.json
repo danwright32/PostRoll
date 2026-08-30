@@ -1,0 +1,8 @@
+{
+  "name": "a-bundle-read-never-falls-back-to-the-transcript",
+  "file": "tools/suite_counts.py",
+  "find": "        return count_from_summary(read_summary(bundle))",
+  "replace": "        try:\n            return count_from_summary(read_summary(bundle))\n        except SuiteCountError:\n            pass",
+  "test": "tests/test_swift_count_from_result_bundle.py::test_a_bundle_that_cannot_be_read_never_falls_back_to_the_transcript",
+  "breaks": "a result bundle that could not be read falls back to the transcript, which in a parallel run is present and carries at most one sub-suite's number, so a short run is reported as a full one (#992, L214)"
+}

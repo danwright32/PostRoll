@@ -1,0 +1,8 @@
+{
+  "name": "the-swift-count-comes-from-the-result-bundle",
+  "file": ".github/workflows/swift.yml",
+  "find": "              -resultBundlePath PostRollApp/.derived-data/swift-suite.xcresult \\\n",
+  "replace": "",
+  "test": "tests/test_both_swift_runners_agree.py::test_the_ci_step_carries_it",
+  "breaks": "the parallel run has nowhere to write the count, and its transcript prints no executed-tests total at all, so the only thing that tells a full run from one that lost a worker's share is gone (#992, L98)"
+}

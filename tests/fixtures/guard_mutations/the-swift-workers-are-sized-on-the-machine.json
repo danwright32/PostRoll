@@ -1,0 +1,8 @@
+{
+  "name": "the-swift-workers-are-sized-on-the-machine",
+  "file": ".github/workflows/swift.yml",
+  "find": "              -parallel-testing-worker-count \"${workers}\" \\\n",
+  "replace": "",
+  "test": "tests/test_both_swift_runners_agree.py::test_the_ci_step_carries_it",
+  "breaks": "the worker count falls back to xcodebuild's default, which was measured at TWO on this runner on 2026-08-30 whatever the core count was, so the suite runs on fewer workers than the machine has and the parallelism buys less than it can (#992)"
+}

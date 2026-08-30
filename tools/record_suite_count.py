@@ -42,7 +42,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from tools.check_guards import EXECUTED  # noqa: E402
-from tools.suite_counts import RECORDED_COUNT  # noqa: E402
+from tools.suite_counts import (  # noqa: E402
+    RECORDED_COUNT, SuiteCountError, swift_tests_run)
 
 
 class RecordError(Exception):
@@ -59,9 +60,12 @@ def count_from_transcript(log: str) -> int:
     totals = EXECUTED.findall(log)
     if not totals:
         raise RecordError(
-            "the transcript never reported an executed-tests total, so the "
-            "build broke before any test ran or the log was written somewhere "
-            "else. Nothing can be recorded from it")
+            "the transcript never reported an executed-tests total. Either the "
+            "build broke before any test ran, the log was written somewhere "
+            "else, or the run was PARALLEL: since #992 the Swift suite runs "
+            "with -parallel-testing-enabled and xcodebuild prints no total at "
+            "all in that mode. Re-record from the run's result bundle instead: "
+            "record_suite_count.py --result-bundle <path.xcresult>")
 
     executed, failures = int(totals[-1][0]), int(totals[-1][1])
 
@@ -79,6 +83,32 @@ def count_from_transcript(log: str) -> int:
             "would set a floor every run on earth clears")
 
     return executed
+
+
+def count_from_result_bundle(bundle, read=None) -> int:
+    """How many tests a green PARALLEL run executed, from its result bundle.
+
+    The transcript reader above cannot serve a parallel run, and counting the
+    per-test lines instead is not an option: six workers write them to one
+    stdout and they interleave, undercounting by 1 in 2,614 the first time it
+    was measured. The bundle is written through the test framework rather than
+    through a shared pipe.
+
+    `swift_tests_run` already refuses an absent bundle, an unreadable one, a
+    total that is not a count and a total of zero, so those are not restated
+    here: two readings of one number is how they drift (L41). What IS restated
+    is the refusal that belongs to this tool rather than to that one, that a run
+    which was not green may have stopped early and must not set the floor
+    (L182).
+    """
+    reader = read if read is not None else (
+        lambda path: swift_tests_run("", bundle=path))
+    try:
+        return reader(bundle)
+    except SuiteCountError as refusal:
+        raise RecordError(
+            f"nothing can be recorded from that result bundle: {refusal}"
+        ) from refusal
 
 
 def _commit() -> str:
@@ -99,8 +129,11 @@ def _commit() -> str:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("log", type=Path,
-                        help="a transcript of a green Swift run")
+    parser.add_argument("log", type=Path, nargs="?",
+                        help="a transcript of a green SERIAL Swift run")
+    parser.add_argument("--result-bundle", type=Path, default=None,
+                        help="a green run's .xcresult, which is the only source "
+                             "a PARALLEL run leaves (#992)")
     parser.add_argument("--record", type=Path, default=RECORDED_COUNT,
                         help="where to write it (defaults to the committed record)")
     # Needed whenever the transcript came from somewhere other than this
@@ -113,30 +146,51 @@ def main(argv: list[str]) -> int:
                              "transcript did not come from this checkout")
     args = parser.parse_args(argv)
 
-    try:
-        transcript = args.log.read_text(encoding="utf-8", errors="replace")
-    except OSError as error:
-        # A missing FILE, never an empty run. A transcript that went somewhere
-        # else must not be recorded as a suite that holds nothing (L11, L100).
-        print(f"could not read {args.log}: {error}", file=sys.stderr)
-        return 1
+    # Exactly one source, named by the caller. Neither is guessed at and
+    # neither falls back to the other: a parallel transcript is PRESENT and
+    # quietly carries no total, so a fallback written for an absent source would
+    # land straight on it (L214).
+    if (args.log is None) == (args.result_bundle is None):
+        print("give exactly one of a transcript path (a serial run) or "
+              "--result-bundle (a parallel one). Since #992 the suite runs in "
+              "parallel and prints no executed-tests total, so a run from CI or "
+              "from `make test-swift` is the second kind.", file=sys.stderr)
+        return 2
 
-    try:
-        counted = count_from_transcript(transcript)
-    except RecordError as refusal:
-        # Nothing is written on this path, deliberately. Writing a partial or
-        # placeholder record here is how the floor would come to be pinned to a
-        # run that did not finish.
-        print(f"not recorded: {refusal}", file=sys.stderr)
-        return 1
+    if args.result_bundle is not None:
+        source = args.result_bundle.name
+        try:
+            counted = count_from_result_bundle(args.result_bundle)
+        except RecordError as refusal:
+            print(f"not recorded: {refusal}", file=sys.stderr)
+            return 1
+    else:
+        source = args.log.name
+        try:
+            transcript = args.log.read_text(encoding="utf-8", errors="replace")
+        except OSError as error:
+            # A missing FILE, never an empty run. A transcript that went
+            # somewhere else must not be recorded as a suite that holds nothing
+            # (L11, L100).
+            print(f"could not read {args.log}: {error}", file=sys.stderr)
+            return 1
+
+        try:
+            counted = count_from_transcript(transcript)
+        except RecordError as refusal:
+            # Nothing is written on this path, deliberately. Writing a partial
+            # or placeholder record here is how the floor would come to be
+            # pinned to a run that did not finish.
+            print(f"not recorded: {refusal}", file=sys.stderr)
+            return 1
 
     args.record.write_text(
         json.dumps({
             "count": counted,
             "measured_on": date.today().isoformat(),
             "measured_at_commit": args.commit or _commit(),
-            "measured_from": f"Executed {counted} tests, with 0 failures, "
-                             f"read from {args.log.name}",
+            "measured_from": f"{counted} tests, no failures, "
+                             f"read from {source}",
             "re_measure_with": "venv/bin/python tools/record_suite_count.py",
         }, indent=2) + "\n",
         encoding="utf-8")

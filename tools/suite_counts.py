@@ -27,12 +27,28 @@ somewhere unrelated (L11).
 `tools.check_guards` already reads this exact line for the guard sweep, and
 already decided that the LAST match in a transcript is the grand total rather
 than the last class's. Two readings of one line is how they drift (L41).
+
+## And why the Swift half has a second source since #992
+
+Running the suite in parallel removes that line from the transcript entirely:
+zero occurrences of `Executed N tests` in a whole 2,940 line parallel run,
+measured on 2026-08-30. The per-test lines that remain are written to one stdout
+by six worker processes and interleave, so one was corrupted mid-write and a
+count taken from them was short by exactly 1 in 2,614 on the first run anybody
+tried, which is well inside the floor's 51 test tolerance.
+
+So a parallel run is counted from its RESULT BUNDLE, which the workers write
+through the test framework rather than through a shared pipe, and the transcript
+reader stays exactly as it was for every serial caller, `check_guards` above all.
+Which source is used is decided by the caller passing a bundle, never guessed
+at, and there is deliberately no fallback between them: see `swift_tests_run`.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -114,8 +130,91 @@ _RAN = ("passed", "failed", "error", "errors", "skipped", "xfailed", "xpassed")
 _OUTCOME = re.compile(r"\b(\d+) (" + "|".join(_RAN) + r")\b")
 
 
-def swift_tests_run(log: str) -> int:
-    """How many tests xcodebuild reported executing, from the grand total."""
+#: How the result bundle is read. Named here so a test can pass its own reader
+#: and never shell out, and so the one place that knows the command is the one
+#: place that has to change when Xcode moves it again.
+XCRESULTTOOL = ("xcrun", "xcresulttool", "get", "test-results", "summary")
+
+
+def count_from_summary(payload: object) -> int:
+    """The executed-test total out of one `xcresulttool` summary.
+
+    Pure, so the refusals below can be tested without a bundle on disk. Every
+    shape that is not a whole positive count is refused rather than coerced: a
+    value parsed from another tool's output must not feed a comparison directly
+    (L50), and an absent field is a broken read rather than a measurement of
+    zero (L11).
+    """
+    if not isinstance(payload, dict):
+        raise SuiteCountError(
+            f"the result bundle summary was {type(payload).__name__}, not an "
+            "object, so nothing here can say how many tests ran")
+    if "totalTestCount" not in payload:
+        raise SuiteCountError(
+            "the result bundle summary carries no totalTestCount, so the "
+            "bundle was written by something this cannot read. That is a "
+            "failure of this reader, not a suite that ran no tests")
+    total = payload["totalTestCount"]
+    if isinstance(total, bool) or not isinstance(total, int) or total < 0:
+        raise SuiteCountError(
+            f"the result bundle reported totalTestCount={total!r}, which is "
+            "not a count of anything")
+    if total == 0:
+        raise SuiteCountError(
+            "the result bundle reports 0 tests. A test spec that matches "
+            "nothing still exits green, so this looks exactly like a full run "
+            "(L98). Check the scheme and the -only-testing/-skip-testing names")
+    return total
+
+
+def read_bundle_summary(bundle: Path) -> dict:
+    """`xcresulttool`'s summary for one bundle, as a dict.
+
+    Every way this can fail raises, because an empty answer read as a real one
+    is the single thing the count exists to prevent (L98).
+    """
+    command = [*XCRESULTTOOL, "--path", str(bundle), "--compact"]
+    try:
+        done = subprocess.run(command, capture_output=True, text=True,
+                              check=False)
+    except OSError as error:
+        raise SuiteCountError(
+            f"could not run xcresulttool: {error}") from error
+    if done.returncode != 0:
+        raise SuiteCountError(
+            f"xcresulttool exited {done.returncode} reading {bundle.name}: "
+            f"{(done.stderr.strip() or done.stdout.strip())[:200] or '(silence)'}")
+    try:
+        return json.loads(done.stdout)
+    except json.JSONDecodeError as error:
+        raise SuiteCountError(
+            f"xcresulttool printed something that is not JSON for "
+            f"{bundle.name}: {error}") from error
+
+
+def swift_tests_run(log: str, bundle: Path | None = None,
+                    read_summary=read_bundle_summary) -> int:
+    """How many tests xcodebuild reported executing.
+
+    From the result bundle when the caller names one, and from the transcript
+    otherwise. The caller decides, because it is the caller that knows whether
+    it asked for a parallel run.
+
+    There is deliberately NO fallback from the bundle to the transcript. A
+    fallback written for a source being ABSENT must not be reached when the
+    source is present and broken (L214), and in a parallel run the transcript is
+    exactly that: present, and quietly missing the total. Worse, it can carry a
+    number from one sub-suite, so falling back would report a short run as a
+    full one, which is the defect this whole file exists to prevent.
+    """
+    if bundle is not None:
+        if not bundle.exists():
+            raise SuiteCountError(
+                f"the run named {bundle} as its result bundle and there is "
+                "nothing there, so it never got as far as writing one. That is "
+                "not a suite that ran zero tests")
+        return count_from_summary(read_summary(bundle))
+
     totals = EXECUTED.findall(log)
     if not totals:
         raise SuiteCountError(
@@ -188,8 +287,13 @@ def swift_run_meets_floor(executed: int, recorded: int) -> None:
             f"the {recorded - executed} that did not run")
 
 
-def python_tests_run(log: str) -> int:
+def python_tests_run(log: str, bundle: Path | None = None) -> int:
     """How many tests pytest reported running, from its final summary line.
+
+    `bundle` is accepted and ignored, so both legs answer one call shape and the
+    caller does not have to know which leg it is holding (L263). Only the Swift
+    leg has a result bundle; pytest's own summary is not written through a
+    shared pipe and does not interleave.
 
     Read from the LAST summary line rather than by scanning the transcript.
     `-ra` prints a short summary section above it and a test's own captured
@@ -236,7 +340,8 @@ LEGS = {
 }
 
 
-def run_leg(leg: str, command: list[str]) -> int:
+def run_leg(leg: str, command: list[str],
+            bundle: Path | None = None) -> int:
     """Run one leg, stream its output, and report how many tests it ran.
 
     The transcript is streamed line by line rather than captured and printed at
@@ -273,7 +378,7 @@ def run_leg(leg: str, command: list[str]) -> int:
     status = process.wait()
 
     try:
-        counted = read("".join(captured))
+        counted = read("".join(captured), bundle)
     except SuiteCountError as refusal:
         print(f"{label}: {refusal}", file=sys.stderr, flush=True)
         return status or 1
@@ -294,12 +399,46 @@ def run_leg(leg: str, command: list[str]) -> int:
 
 
 USAGE = ("usage: suite_counts.py <swift|python> <logfile>\n"
-         "       suite_counts.py run <swift|python> -- <command> [args...]")
+         "       suite_counts.py run <swift|python> "
+         "[--result-bundle <path.xcresult>] -- <command> [args...]")
+
+
+def cleared_bundle(path: Path) -> Path:
+    """Remove a stale result bundle so xcodebuild will write a fresh one.
+
+    xcodebuild REFUSES to run when `-resultBundlePath` already exists, so
+    something has to clear it, and the tool that is going to READ it is the one
+    that should: a caller clearing a path this then reads from is two places
+    spelling one path (L41).
+
+    Refuses anything not named `.xcresult`. This deletes a directory tree, and
+    the argument comes from a command line, so a mistyped path must fail rather
+    than take whatever is there with it (L5, L9).
+    """
+    if path.suffix != ".xcresult":
+        raise SuiteCountError(
+            f"{path} is not named .xcresult, and this removes whatever it is "
+            "pointed at, so it refuses rather than guessing")
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+    return path
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) >= 4 and argv[0] == "run" and argv[1] in LEGS and argv[2] == "--":
-        return run_leg(argv[1], argv[3:])
+    if len(argv) >= 4 and argv[0] == "run" and argv[1] in LEGS:
+        rest = list(argv[2:])
+        bundle: Path | None = None
+        if len(rest) >= 2 and rest[0] == "--result-bundle":
+            bundle = Path(rest[1])
+            rest = rest[2:]
+        if rest and rest[0] == "--":
+            if bundle is not None:
+                try:
+                    cleared_bundle(bundle)
+                except SuiteCountError as refusal:
+                    print(f"{LEGS[argv[1]][0]}: {refusal}", file=sys.stderr)
+                    return 1
+            return run_leg(argv[1], rest[1:], bundle)
 
     if len(argv) != 2 or argv[0] not in LEGS:
         print(USAGE, file=sys.stderr)
@@ -317,7 +456,7 @@ def main(argv: list[str]) -> int:
         return 1
 
     try:
-        counted = read(text)
+        counted = read(text, None)
     except SuiteCountError as refusal:
         print(f"{label}: {refusal}", file=sys.stderr)
         return 1

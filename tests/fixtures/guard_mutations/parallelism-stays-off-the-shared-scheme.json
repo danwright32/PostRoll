@@ -1,0 +1,8 @@
+{
+  "name": "parallelism-stays-off-the-shared-scheme",
+  "file": "PostRollApp/project.yml",
+  "find": "  PostRollTests:\n    build:\n      targets:\n        PostRollTests: [test]\n    test:\n      targets:\n        - PostRollTests\n",
+  "replace": "  PostRollTests:\n    build:\n      targets:\n        PostRollTests: [test]\n    test:\n      targets:\n        - name: PostRollTests\n          parallelizable: true\n",
+  "test": "tests/test_both_swift_runners_agree.py::test_neither_side_puts_parallelism_in_the_scheme",
+  "breaks": "parallel testing moves into the scheme, which tools/check_guards.py also runs, so all 60-odd Swift guard entries lose the executed-tests total they are classified by and every one reports ERROR instead of a verdict (#992)"
+}

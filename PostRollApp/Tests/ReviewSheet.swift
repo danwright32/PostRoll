@@ -60,37 +60,75 @@ enum ReviewSheet {
     /// Declared from `root` rather than from `folder`, because a static let
     /// that read `folder` while `folder` was being initialised would deadlock
     /// on its own once-token.
+    /// Created alongside `folder`, so `begin(group:)` can always list it.
     static let previous = root.appendingPathComponent("review-sheet-previous")
 
-    /// The folder itself, emptied once per test process.
+    /// The folder itself. Created if it is not there, and never emptied here.
     ///
-    /// Emptied, because an image left by an earlier run is a picture of a state
-    /// the app may no longer produce, and reviewing that is worse than
-    /// reviewing nothing. Once per process rather than once per dump test,
-    /// because three test classes write into this one folder and a clear inside
-    /// each would delete the others' work. `static let` is Swift's once, which
-    /// is what makes that safe without any ordering between the classes.
+    /// It used to be emptied from this initialiser, with the reason written
+    /// beside it: "once per process rather than once per dump test, because
+    /// three test classes write into this one folder and a clear inside each
+    /// would delete the others' work. `static let` is Swift's once, which is
+    /// what makes that safe without any ordering between the classes."
     ///
-    /// The clear MOVES rather than deletes, so the run being replaced becomes
-    /// the baseline.
+    /// That is true while there is exactly one test process, and #992 removes
+    /// that. XCTest's parallel mode runs test classes in separate processes, so
+    /// every worker runs this initialiser and clears the one shared folder.
+    /// Measured on 2026-08-30, the first parallel run of this suite:
+    /// `testDumpEveryMeasuredScreenForReview` rendered 82 screens and found
+    /// fewer on disk, because a sibling worker had emptied the folder
+    /// underneath it. The comment above was the only record of the invariant,
+    /// and the code it justified became destructive the moment it went (L204).
+    ///
+    /// So the clearing moved to `begin(group:)`, which each dump test calls for
+    /// its OWN group. A group is written by exactly one test in exactly one
+    /// class, so two workers never touch the same files and the answer no
+    /// longer depends on how many processes there are.
+    ///
+    /// The markers still print once per process, which is once per worker now.
+    /// The `review-sheet` make target already takes `head -1` of each, so
+    /// several identical lines say the same thing they always did.
     static let folder: URL = {
         let url = root.appendingPathComponent("review-sheet")
         let manager = FileManager.default
-
-        try? manager.removeItem(at: previous)
-        // Only when there is something to keep. A failed move would otherwise
-        // leave the previous run pointing at whatever was there before, and a
-        // stale baseline reports every screen as moved.
-        if manager.fileExists(atPath: url.path) {
-            try? manager.moveItem(at: url, to: previous)
-        }
-
-        try? manager.removeItem(at: url)
         try? manager.createDirectory(at: url, withIntermediateDirectories: true)
+        try? manager.createDirectory(at: previous, withIntermediateDirectories: true)
         print("\(folderMarker)\(url.path)")
         print("\(baselineMarker)\(previous.path)")
         return url
     }()
+
+    /// Clears one group out of the sheet, keeping it as that group's baseline.
+    ///
+    /// Called by each dump test before it writes. Scoped to the group for the
+    /// reason above, and MOVING rather than deleting for the reason it always
+    /// did: the run being replaced is what `make review-sheet` compares against,
+    /// and "19 of 82 screens moved" is the answer that makes a change reviewable
+    /// (#636).
+    ///
+    /// The layout stays flat. The make target reads the folder with
+    /// `ls | grep '\.png$'` and iterates `"$folder"/*.png`, so putting each
+    /// group in its own subdirectory would have broken the sheet itself.
+    ///
+    /// Throwing rather than `try?`. A rotation that silently did nothing leaves
+    /// last run's images in place and the dump then counts them as its own, so
+    /// a sheet of stale pictures would report as a full one (L98).
+    static func begin(group: String) throws {
+        let manager = FileManager.default
+        _ = folder                                  // creates both directories
+        let prefix = "\(fileSafe(group))--"
+
+        for name in try manager.contentsOfDirectory(atPath: previous.path)
+        where name.hasPrefix(prefix) && name.hasSuffix(".png") {
+            try manager.removeItem(at: previous.appendingPathComponent(name))
+        }
+
+        for name in try manager.contentsOfDirectory(atPath: folder.path)
+        where name.hasPrefix(prefix) && name.hasSuffix(".png") {
+            try manager.moveItem(at: folder.appendingPathComponent(name),
+                                 to: previous.appendingPathComponent(name))
+        }
+    }
 
     /// Writes one surface under a name a person can read off a file listing.
     ///

@@ -166,6 +166,9 @@ extension PhotoLightboxTests {
         let states = [("a file that has gone", "DSC_4417.jpg"),
                       ("a file with no name", "")]
 
+        // This group only, so a sibling worker's images survive (#992).
+        try ReviewSheet.begin(group: Self.reviewGroup)
+
         for (name, fileName) in states {
             try ReviewSheet.write(try render(wordless: false, fileName: fileName),
                                   group: Self.reviewGroup, name: name)

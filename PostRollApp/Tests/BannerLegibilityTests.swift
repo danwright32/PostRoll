@@ -2135,8 +2135,14 @@ extension BannerLegibilityTests {
     func testDumpBannersForReview() throws {
         // Into the one shared folder now (#623), so the notices sit beside the
         // screens they appear on rather than in a directory of their own that
-        // has to be found separately. `ReviewSheet` empties it once per process
-        // and prints where it is.
+        // has to be found separately. `ReviewSheet` prints where it is.
+        //
+        // Clearing THIS group rather than the folder (#992). The folder used to
+        // be emptied once per test process, which stopped being once per run the
+        // moment the suite went parallel: every worker cleared it and the dumps
+        // deleted each other's work mid-run.
+        try ReviewSheet.begin(group: Self.reviewGroup)
+
         for state in states {
             try ReviewSheet.write(try render(state.view),
                                   group: Self.reviewGroup, name: state.name)
