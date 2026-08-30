@@ -1,0 +1,8 @@
+{
+  "name": "an-unreadable-sweep-history-still-runs-the-sweep",
+  "file": "tools/check_guard_sweep_due.py",
+  "find": "    if history is None:\n        return Decision(Due.HISTORY_UNREADABLE, (",
+  "replace": "    if history is None:\n        return Decision(Due.ALREADY_PROVED, (",
+  "test": "tests/test_guard_sweep_due.py::test_a_history_that_could_not_be_read_runs_and_says_which_it_was",
+  "breaks": "a run-history query that failed is read as a tree already proved, so any outage of the GitHub API silently switches the whole guard sweep off and reports it nowhere (#989, L119)"
+}

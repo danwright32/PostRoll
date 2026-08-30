@@ -1,8 +1,8 @@
 {
   "name": "guards-reproved-on-a-schedule",
   "file": ".github/workflows/guards.yml",
-  "find": "  schedule:\n    - cron: \"0 7 * * 1\"",
+  "find": "  schedule:\n    - cron: \"0 7 * * *\"",
   "replace": "  # schedule removed",
   "test": "tests/test_ci_gates.py::test_the_full_sweep_also_runs_on_a_schedule",
-  "breaks": "the guards are re-proved only when something merges, so through a quiet period nothing re-proves them and a runner image or Xcode moving underneath them first shows up as a red merge on an unrelated change (#551)"
+  "breaks": "the guards are re-proved only when a pull request touches them, so through a quiet period nothing re-proves them and a runner image or Xcode moving underneath them first shows up as a red run on an unrelated change (#551, #989)"
 }

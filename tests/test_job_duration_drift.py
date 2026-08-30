@@ -38,6 +38,7 @@ from tools.check_job_durations import (
     drift_of,
     job_durations,
 )
+from tools.guard_sweep_history import PROOF_STEP
 
 
 def _series(older: list[float], recent: list[float]) -> list[float]:
@@ -258,3 +259,75 @@ def test_a_negative_duration_never_reaches_the_series():
     ])
 
     assert "odd" not in series, f"a negative duration was recorded: {series}"
+
+
+# ── a job that had nothing to do is not a reading of that job (#989) ──────────
+#
+# The guard sweep's cadence moved from every merge to a daily schedule, and what
+# makes a daily schedule cheap is that each shard skips its own expensive steps
+# when the tree it is looking at was already proved. That shard still RUNS: it
+# checks out, sets up Python, asks the gate, and exits successful in about forty
+# seconds.
+#
+# Forty seconds is a real duration and a positive one, so the existing shape
+# check that catches a skipped job lets it straight into the series. The series
+# then holds two populations, roughly 1,400s when there was something to prove
+# and roughly 40s when there was not, and the halves it compares are decided by
+# how many quiet days happened to fall on each side. That is a warning fired by
+# the merge pattern rather than by anything about the job, and this is the one
+# instrument #991 and #992 are judged by, so poisoning it would take the
+# measurement away from the two issues it was built for (L36, L102).
+
+
+def _run(*jobs: dict) -> dict:
+    return {"jobs": list(jobs)}
+
+
+def _job(name: str, seconds: int, *steps: tuple[str, str]) -> dict:
+    return {"name": name,
+            "started_at": "2026-08-30T07:00:00Z",
+            "completed_at": f"2026-08-30T07:{seconds // 60:02d}:{seconds % 60:02d}Z",
+            "steps": [{"name": n, "conclusion": c} for n, c in steps]}
+
+
+def test_a_shard_that_skipped_its_proof_contributes_no_duration():
+    series = job_durations(
+        [_run(_job("full (1)", 40, (PROOF_STEP, "skipped")))],
+        work_step=PROOF_STEP)
+    assert series == {}, (
+        "a shard that had nothing to prove is in the series, so the guard "
+        "sweep's duration now measures how many quiet days fell in each half")
+
+
+def test_a_shard_that_did_prove_something_is_measured_as_before():
+    series = job_durations(
+        [_run(_job("full (1)", 1400, (PROOF_STEP, "success")))],
+        work_step=PROOF_STEP)
+    assert series == {"full (1)": [1400.0]}
+
+
+def test_a_shard_whose_proof_went_red_still_counts_as_time_spent():
+    """It did the work; the work failed. Dropping it would hide a job that got
+    slower until it went red, which is the direction that matters most."""
+    series = job_durations(
+        [_run(_job("full (2)", 1700, (PROOF_STEP, "failure")))],
+        work_step=PROOF_STEP)
+    assert series == {"full (2)": [1700.0]}
+
+
+def test_a_job_with_no_step_by_that_name_is_left_alone():
+    """The rule is about jobs that HAVE the named work and did not do it. Every
+    other job in every other workflow reads exactly as it did, which is what
+    lets one step name be passed for all three workflows rather than a per
+    workflow table nobody maintains (L96)."""
+    series = job_durations(
+        [_run(_job("swift-unit", 655, ("Run the Swift unit tests", "success")))],
+        work_step=PROOF_STEP)
+    assert series == {"swift-unit": [655.0]}
+
+
+def test_without_a_work_step_nothing_is_dropped_for_it():
+    """The default has to leave every existing caller reading what it read
+    before, or this fix silently empties a series somewhere else."""
+    series = job_durations([_run(_job("full (1)", 40, (PROOF_STEP, "skipped")))])
+    assert series == {"full (1)": [40.0]}

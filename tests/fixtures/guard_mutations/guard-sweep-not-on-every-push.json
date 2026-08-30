@@ -1,0 +1,8 @@
+{
+  "name": "guard-sweep-not-on-every-push",
+  "file": ".github/workflows/guards.yml",
+  "find": "on:\n  pull_request:\n    branches: [main]\n",
+  "replace": "on:\n  pull_request:\n    branches: [main]\n  push:\n    branches: [main]\n",
+  "test": "tests/test_ci_gates.py::test_the_sweep_does_not_run_on_every_push_to_main",
+  "breaks": "the full sweep runs on every merge again, which was 3,079 of this repository's 6,207 macOS runner-minutes over two weeks, 50% of them, for a job nothing waits on, taken out of the queue every pull request sits in (#989)"
+}

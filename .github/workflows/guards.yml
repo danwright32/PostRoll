@@ -22,23 +22,40 @@ name: Guard proofs
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
-  # Weekly, because the proofs depend on things no commit here touches: the
-  # macos-26 runner image, the Xcode that PostRollApp/.ci-xcode-version pins,
-  # and Homebrew packages (#551). Any of those can move without a commit, and
-  # with the sweep running only on a merge the first sign is a red merge on
-  # whatever unrelated change happens to land next, which is the worst moment to
-  # meet it and the hardest to attribute.
+  # Daily, rather than on every push to main (#989).
+  #
+  # The full sweep used to run on every merge. Measured over the two weeks to
+  # 2026-08-30 that was 3,079 of this repository's 6,207 macOS runner-minutes,
+  # 50% of them, spent on a job nobody waits for: it runs AFTER the merge, and
+  # the entries a merge touched were already proved on the pull request by the
+  # `changed` job below. GitHub allows five concurrent macOS runners and a pull
+  # request here asks for six, so those minutes came out of the queue every pull
+  # request sits in. Median pull request wall clock over the same window was
+  # 22.4 minutes against a longest single job of 11.1, so more than eight of
+  # those minutes were spent waiting for a runner this job was holding.
+  #
+  # What the merge cadence bought was the same tree re-proved within minutes
+  # instead of within a day, on a warning nobody reads at either cadence. What
+  # it cost was every pull request in flight.
+  #
+  # ONE cron rather than the daily-plus-weekly pair the issue proposed. The
+  # weekly run existed because the proofs depend on things no commit here
+  # touches: the macos-26 runner image, the Xcode PostRollApp/.ci-xcode-version
+  # pins, and Homebrew packages (#551). That is now the gate's own staleness
+  # window, so it is one rule in one place instead of two cadences that have to
+  # agree about which of them covers what (L41).
   #
   # The two known weaknesses of a schedule are recorded rather than pretended
   # away. Its failures are only as visible as GitHub's own email, and GitHub
   # disables a repository's schedules after 60 days with no push, reporting
-  # nothing at all rather than reporting that it stopped (L13). Neither is a
-  # reason to have no schedule; both are reasons this is the SECOND cadence and
-  # not the only one, with the merge sweep still the cadence that gates.
+  # nothing at all rather than reporting that it stopped (L13). Both are why the
+  # step below asks out loud whether the sweep is still happening, and why since
+  # #989 that question counts runs that PROVED something rather than runs that
+  # finished: the sweep's own steps are conditional now, so a run that skipped
+  # still concludes success and would otherwise read as a healthy schedule for
+  # as long as it lasted (L106).
   schedule:
-    - cron: "0 7 * * 1"
+    - cron: "0 7 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -158,12 +175,22 @@ jobs:
   # so no pull request would re-prove it (L88, a filtered job skipping the very
   # change that breaks it).
   #
-  # On merges rather than on a schedule, deliberately. It costs nothing on a day
-  # with no merges, it runs within minutes of the shared change actually
-  # landing, and a scheduled job has two failure modes this one does not: its
-  # failures are only as visible as GitHub's own email, and GitHub disables a
-  # repository's schedules after 60 days without a push, which reports nothing
-  # at all rather than reporting that it stopped (L13).
+  # Once a day, on any day main moved (#989). It used to run on every merge, on
+  # the argument that a schedule costs nothing on a quiet day and reports its
+  # own failures only by email. Both halves of that still hold and neither was
+  # worth what the merge cadence cost: half of every macOS runner-minute this
+  # repository spends, taken out of the queue that every pull request waits in.
+  # The email weakness is answered by the freshness step at the foot of this
+  # job, which is the same answer it always was.
+  #
+  # A quiet day still costs nothing, because the first step of each shard asks
+  # whether this exact tree has already been proved by this exact shard and the
+  # rest of the shard runs only if it has not. Every answer that is not a
+  # positive proof runs the sweep: an unproved tree, a proof older than the
+  # window, and a run history that could not be read at all. The direction that
+  # costs money is a sweep that runs when it could have skipped; the direction
+  # that costs coverage is a sweep that skips when it should have run, and that
+  # one is silent (L98).
   #
   # Measured before choosing, locally: 60 entries proved by xcodebuild at about
   # 13s each with a warm cache and 57 by pytest at under a second, so roughly 15
@@ -214,7 +241,32 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Ungated, along with the Python setup below it, because the two reporting
+      # steps at the foot of this job need them whatever the sweep decides. They
+      # are about twenty seconds, which is what a day with no merges costs here.
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Does this shard still have anything to prove? (#989)
+      #
+      # A step rather than a job on purpose. A new job is a new CHECK NAME, and
+      # tools/wait_for_checks.py derives the bar a pull request has to clear
+      # from these workflow files, calibrated against a recorded reply from a
+      # real green pull request. Adding a name means a run carrying it can only
+      # be green once the fixture already holds it, so there is no green run to
+      # record from and breaking the loop costs a knowingly red merge (L48).
+      # The same reason the two steps at the foot of this job are steps.
+      - name: Say whether this shard still has anything to prove
+        id: due
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/check_guard_sweep_due.py --shard ${{ matrix.shard }}
+
       - name: Select the recorded Xcode
+        if: steps.due.outputs.due == 'true'
         run: |
           version="$(cat PostRollApp/.ci-xcode-version)"
           app="/Applications/Xcode_${version}.app"
@@ -227,27 +279,26 @@ jobs:
           sudo xcode-select --switch "${app}"
 
       - name: Install XcodeGen
+        if: steps.due.outputs.due == 'true'
         run: brew install xcodegen
 
       - name: Generate the Xcode project
+        if: steps.due.outputs.due == 'true'
         working-directory: PostRollApp
         run: xcodegen generate
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: pip
-
       - name: Install dependencies
+        if: steps.due.outputs.due == 'true'
         run: pip install -r requirements.txt
 
       # Same reason as the `changed` job above: a guard whose test renders a
       # reel skips without ffmpeg, and a skip is not a proof (#777).
       - name: Install ffmpeg
+        if: steps.due.outputs.due == 'true'
         run: brew install ffmpeg
 
       - name: Re-prove this shard of the guards
+        if: steps.due.outputs.due == 'true'
         # The deadline sits well under `timeout-minutes` on purpose. Whichever
         # fires first decides what is reported, and only this one can say which
         # entries went unproven.

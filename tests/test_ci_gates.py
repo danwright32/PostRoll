@@ -365,26 +365,76 @@ def test_every_pull_request_reproves_the_entries_it_touches(guards):
         "nothing of its own")
 
 
-def test_the_whole_registry_is_reproved_on_every_merge(guards):
+# ── the whole registry is re-proved once a day, not once a merge (#989) ──────
+#
+# There used to be a test here asserting a `push: branches: [main]` trigger, on
+# the argument that a merge is when a shared change actually lands. That is the
+# decision #989 reversed, so the test is gone rather than adjusted: its entire
+# content was the rule being removed, and a test edited to permit the new
+# behaviour while still describing the old one is the guard defending the thing
+# that was rejected (L252).
+#
+# What replaced it is measured. Over the two weeks to 2026-08-30 the merge
+# sweep took 3,079 of this repository's 6,207 macOS runner-minutes, 50% of them,
+# for a job nothing waits on: it ran after the merge, and the entries the merge
+# touched had already been proved on the pull request by the `changed` leg. The
+# minutes came out of the queue every pull request sits in, five concurrent
+# macOS runners against the six a pull request here asks for: median pull
+# request wall clock 22.4 minutes against a longest single job of 11.1.
+#
+# The tests below hold the shape that replaced it, and the one that matters
+# most is the last: a gate is only cheap while the steps behind it are the
+# expensive ones and the steps that REPORT are in front of it.
+
+
+def _steps(body: str) -> list[tuple[str, str]]:
+    """Each step in a job body, as (name, text).
+
+    Comment lines are dropped first, for the reason this file gives everywhere
+    else: every setting here is introduced by prose naming it, so a scan of the
+    raw text can be satisfied by a comment describing a rule that was deleted
+    (L103).
+    """
+    lines = [line for line in body.splitlines()
+             if not line.strip().startswith("#")]
+    steps: list[tuple[str, list[str]]] = []
+    for line in lines:
+        started = re.match(r"^      - (?:name|uses):\s*(.+?)\s*$", line)
+        if started:
+            steps.append((started.group(1), [line]))
+        elif steps and line.startswith("        "):
+            steps[-1][1].append(line)
+    assert steps, ("no steps were read out of this job, so every check over "
+                   "them passed across an empty set (L98)")
+    return [(name, "\n".join(body)) for name, body in steps]
+
+
+def _full_job(guards: str) -> str:
+    return guards.split("  full:", 1)[1]
+
+
+def test_the_whole_registry_is_reproved_on_a_daily_cadence(guards):
     """The half that catches a guard broken by something UNDERNEATH it.
 
     The diff-scoped leg re-proves an entry when the code it guards, its record,
     or its own test file changes. It cannot know about the shared conftest
     nearly every test imports, or a shared fixture module: a change there can
     stop a guard failing on broken code while touching none of the three, so no
-    pull request would re-prove it (L88).
+    pull request would re-prove it (L88). That is why the full sweep exists at
+    all, and it is unaffected by moving from a merge cadence to a daily one:
+    the shared change is found within a day rather than within 25 minutes, on a
+    signal nobody read at 25 minutes either.
     """
-    assert re.search(r"push:\s*\n\s*branches:\s*\[main\]", guards), (
-        "nothing runs the full sweep, so the expensive half only happens when "
-        "somebody remembers to type it")
+    assert re.search(r'schedule:\s*\n\s*- cron: "0 \d+ \* \* \*"', guards), (
+        "the full sweep has no daily cron, so the only cadences left are a "
+        "pull request diff and somebody remembering to type it")
 
     # It has to be the FULL sweep. Scoping this one to a diff would report green
-    # on every merge while proving nothing, because a merge commit's diff
-    # against main is empty (L98).
-    full = guards.split("  full:", 1)[1]
-    assert "--changed" not in full, (
-        "the merge run is scoped to a diff, and a merge has no diff against "
-        "main, so it would prove nothing while reporting green")
+    # every day while proving nothing, because the tip of main has no diff
+    # against main (L98).
+    assert "--changed" not in _full_job(guards), (
+        "the scheduled run is scoped to a diff, and the tip of main has no diff "
+        "against main, so it would prove nothing while reporting green")
 
     # A backstop, not an expectation: measured at roughly 15 minutes of proving
     # plus one build. An hour-plus timeout on a job this size hides a hang.
@@ -392,6 +442,67 @@ def test_the_whole_registry_is_reproved_on_every_merge(guards):
     assert timeout and int(timeout.group(1)) <= 120, (
         "the timeout is far above the measured runtime, so a wedged run bills "
         "for hours before anything says so")
+
+
+def test_the_sweep_does_not_run_on_every_push_to_main(guards):
+    """Re-adding this trigger silently doubles the repository's macOS bill and
+    puts eight minutes back on every pull request's queue, and it would look
+    like a tightening rather than a cost (#989)."""
+    assert not re.search(r"^\s*push:", guards, re.M), (
+        "the guard sweep runs on pushes to main again. That was 50% of this "
+        "repository's macOS runner-minutes for a job nothing waits on, taken "
+        "out of the queue every pull request sits in. If it has to come back, "
+        "the measurement in #989 is what has to be answered.")
+
+
+def test_every_expensive_step_of_the_sweep_is_behind_the_due_gate(guards):
+    """What makes a daily cadence cost nothing on a quiet day.
+
+    Derived from what a step DOES rather than from a list of step names kept
+    beside it, so a new brew install or a second proving command is covered the
+    day it lands rather than the day somebody remembers this file (L96).
+    """
+    gate = "steps.due.outputs.due == 'true'"
+    costly = re.compile(r"brew install|xcodegen generate|pip install|check_guards\.py")
+    ungated = [name for name, text in _steps(_full_job(guards))
+               if costly.search(text) and gate not in text]
+    assert not ungated, (
+        f"these steps of the daily sweep run whether or not there is anything "
+        f"to prove, so a day with no merges still pays for them: {ungated}")
+
+
+def test_the_gate_is_asked_before_anything_it_gates(guards):
+    """A condition on a step whose `id` has not run yet is empty, and an empty
+    condition is false, so a gate placed after its dependants silently switches
+    the whole sweep off rather than failing (L98)."""
+    names = [name for name, _ in _steps(_full_job(guards))]
+    texts = dict(_steps(_full_job(guards)))
+    asking = next(i for i, name in enumerate(names) if "anything to prove" in name)
+    gated = [i for i, name in enumerate(names)
+             if "steps.due.outputs.due" in texts[name]]
+    assert gated, "nothing is behind the gate, so the gate decides nothing"
+    assert min(gated) > asking, (
+        "a step is gated on an answer that has not been given yet, which reads "
+        "as false and skips the sweep every single day")
+
+
+def test_the_steps_that_report_are_not_behind_the_gate(guards):
+    """The failure this pairing exists to prevent.
+
+    The sweep's steps are conditional now, so a gate stuck shut produces runs
+    that complete, conclude success, and prove nothing. The two steps that would
+    SAY so are the freshness check and the duration series. Behind the gate they
+    would go quiet in exactly the situation they exist to report, and the
+    workflow would look healthy for as long as it lasted (L106, a liveness
+    signal emitted over dead work).
+    """
+    silent = [name for name, text in _steps(_full_job(guards))
+              if ("check_guard_sweep_freshness" in text
+                  or "check_job_durations" in text)
+              and "steps.due.outputs.due" in text]
+    assert not silent, (
+        f"these reporting steps only run when the sweep does, so a gate stuck "
+        f"shut would silence the only things that could report it: {silent}")
 
 
 def test_it_can_be_run_by_hand(guards):

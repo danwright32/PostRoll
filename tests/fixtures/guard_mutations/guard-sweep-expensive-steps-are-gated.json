@@ -1,0 +1,8 @@
+{
+  "name": "guard-sweep-expensive-steps-are-gated",
+  "file": ".github/workflows/guards.yml",
+  "find": "      - name: Install ffmpeg\n        if: steps.due.outputs.due == 'true'\n",
+  "replace": "      - name: Install ffmpeg\n",
+  "test": "tests/test_ci_gates.py::test_every_expensive_step_of_the_sweep_is_behind_the_due_gate",
+  "breaks": "a step of the daily sweep runs whether or not there is anything to prove, so a day with no merges pays for it anyway and the cadence change stops saving what it was measured to save (#989)"
+}
