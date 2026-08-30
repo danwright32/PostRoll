@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from ci_workflow import IGNORE_FLAG
 from golden_drift import LOG_VARIABLE, destination, line, report
 from test_golden_frames import CHANNEL_TOLERANCE, assert_matches_golden
 
@@ -267,9 +268,17 @@ def rendering_jobs() -> dict[tuple[str, str], str]:
                                  settings, re.M | re.S):
             name, body = match.group(1), match.group(2)
             runs_on_mac = re.search(r"runs-on:\s*macos", body)
-            runs_pytest = (re.search(r"^\s+run:.*\bpytest\b", body, re.M)
-                           or re.search(r"run: >\s*\n\s*pytest", body))
-            if runs_on_mac and runs_pytest:
+            runs_pytest = re.search(r"\bpytest\b", body)
+            # A job that DESELECTS the reference frames cannot take a reading of
+            # them, however much pytest it runs. Since #995 the `macos` leg is
+            # exactly that: it runs the suite on a Mac with every
+            # reference-frame file ignored, because the shards render them. Left
+            # in, it would be required to collect readings it structurally
+            # cannot produce, and the check below would be asserting about a job
+            # that renders nothing (L144: judge by the same predicate the action
+            # used).
+            skips_the_frames = IGNORE_FLAG in body
+            if runs_on_mac and runs_pytest and not skips_the_frames:
                 found[(path.name, name)] = body
     assert found, (
         "no job in .github/workflows runs pytest on macOS, which is not this "
@@ -278,19 +287,26 @@ def rendering_jobs() -> dict[tuple[str, str], str]:
     return found
 
 
-def test_the_derivation_finds_both_jobs_that_render_the_frames():
+def test_the_derivation_finds_the_job_that_renders_the_frames():
     """The control for the scan above.
 
-    Named rather than implied, because the two it has to find are the two the
-    reference frames actually run in, and a derivation that quietly found only
-    one would leave the other unchecked while reporting green.
+    Named rather than implied, because a derivation that quietly found NOTHING
+    would leave every check below passing over an empty set while reporting
+    green (L98).
+
+    It used to require TWO jobs, `swift.yml / reference-frames` and
+    `tests.yml / macos`, because both rendered the frames. #995 removed that
+    duplication: the Mac leg deselects exactly the files the shards render, so
+    it takes no readings and is no longer a rendering job. The old assertion is
+    replaced rather than widened, because its content was the duplication
+    itself (L252).
     """
     found = set(rendering_jobs())
 
-    assert found == {("swift.yml", "reference-frames"), ("tests.yml", "macos")}, (
-        f"the jobs that run pytest on macOS are now {sorted(found)}. If that is "
-        "a deliberate change, the checks below follow it automatically; this is "
-        "here so the change is noticed rather than silent.")
+    assert found == {("swift.yml", "reference-frames")}, (
+        f"the jobs that render the reference frames are now {sorted(found)}. If "
+        "that is a deliberate change, the checks below follow it automatically; "
+        "this is here so the change is noticed rather than silent.")
 
 
 def test_every_rendering_job_collects_the_readings():

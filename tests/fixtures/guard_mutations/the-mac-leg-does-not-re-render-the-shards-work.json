@@ -1,0 +1,8 @@
+{
+  "name": "the-mac-leg-does-not-re-render-the-shards-work",
+  "file": ".github/workflows/tests.yml",
+  "find": "          xargs pytest -v -n auto --durations=25 < \"${RUNNER_TEMP}/ignore.txt\"",
+  "replace": "          pytest -v -n auto --durations=25",
+  "test": "tests/test_ci_runs_the_font_dependent_checks.py::test_the_list_it_asks_for_actually_reaches_pytest",
+  "breaks": "the Mac leg computes its ignore list and then discards it, so it renders all nine reference-frame files a second time on every pull request: 1,433s of the suite's 2,050s of recorded test time, on a macOS runner the queue is short of (#995)"
+}

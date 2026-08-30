@@ -143,3 +143,50 @@ def step_command(text: str | None = None) -> str:
             "checks derived from it are reading nothing")
     block = parts[1].split("\n\n", 1)[0]
     return without_comments(block)
+
+
+#: The flag the Mac leg passes so it does not re-render what the shards render.
+IGNORE_FLAG = "--pytest-ignore"
+
+
+def macos_leg_ignores(text: str | None = None) -> list[str]:
+    """The `--ignore` arguments the Mac leg passes to pytest (#995).
+
+    One per file the reference-frame matrix already renders, derived from that
+    matrix rather than listed beside it. The two jobs ran the same font-gated
+    files on the same image: 1,433s of the suite's 2,050s of recorded test time,
+    rendered twice, and the Mac leg held a macOS runner for 8.5 minutes on every
+    pull request and merge to do it. Under GitHub's five concurrent macOS
+    runners that came out of the queue every pull request sits in.
+
+    A second hand-written list here is the whole thing this avoids: a copy that
+    drifts is a file rendered twice again, or worse, one rendered nowhere while
+    both sides believe the other has it (L41).
+
+    Raises rather than returning an empty list, through `shards()`. An empty
+    ignore list is a Mac leg that silently goes back to running everything,
+    which reads as a slow job rather than as a broken derivation (L98).
+    """
+    return [f"--ignore=tests/{name}"
+            for name in sorted(reference_frame_files(text))]
+
+
+def _main() -> int:
+    """Print the ignore arguments, one per line, for the workflow to consume.
+
+    A CLI on a test helper because the workflow needs the same answer the guards
+    check, and the alternative is the workflow spelling the list itself, which is
+    the copy this exists to prevent.
+    """
+    import sys
+
+    if len(sys.argv) != 2 or sys.argv[1] != IGNORE_FLAG:
+        print(f"usage: ci_workflow.py {IGNORE_FLAG}", file=sys.stderr)
+        return 2
+    for argument in macos_leg_ignores():
+        print(argument)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

@@ -224,36 +224,48 @@ jobs:
             echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
-      # Collect the drift readings the reference frames take (#787) into one
-      # file, then publish it twice below. Into a file rather than straight
-      # into the step summary because the readings have two audiences: a
-      # person opening the run reads the summary, and anything asking the API
-      # what a run measured can only read the LOG, since a step summary is
-      # not fetchable.
-      - name: Collect reference-frame drift readings
-        run: echo "POSTROLL_GOLDEN_DRIFT_LOG=${RUNNER_TEMP}/golden-drift.txt" >> "${GITHUB_ENV}"
+      # The reference-frame drift readings (#787) are NOT collected here any
+      # more. This leg no longer renders those files at all since #995: the
+      # shards in swift.yml do, and they collect the readings. Left in place,
+      # the publishing step below would report "no readings were taken, so this
+      # run measured nothing" on every single run. That sentence exists to catch
+      # a broken run (L98), and a warning that fires every time is one nobody
+      # reads (L36).
 
-      # The SAME command as the Linux leg. A narrower one here would make this
-      # job a different check wearing the same name, and the platform
-      # differences it exists to catch are exactly the ones a subset drops.
+      # The Linux leg's command, minus the files the reference-frame matrix in
+      # swift.yml already renders (#995).
+      #
+      # This used to say "the SAME command as the Linux leg. A narrower one here
+      # would make this job a different check wearing the same name, and the
+      # platform differences it exists to catch are exactly the ones a subset
+      # drops." That argument is about narrowing by GUESS. What is dropped here
+      # is not a guess: it is exactly the set of files another macOS job renders,
+      # on the same image, with fonts and ffmpeg, and with POSTROLL_REQUIRE_GOLDENS
+      # set, which this job does not set. Those files are checked more strictly
+      # there than here, so running them twice bought nothing.
+      #
+      # #571 recorded the duplication as deliberate and priced it at "about 200s
+      # of wall clock and nothing else" because the runners are free. They are
+      # free in money. Measured over the two weeks to 2026-08-30 they are not
+      # free in queue: these two jobs held 28% of the macOS runner-minutes while
+      # other jobs waited, and this leg held a runner for 8.5 minutes on every
+      # pull request and merge. The nine files are 1,433s of the suite's 2,050s
+      # of recorded test time, 70% of it. Dan decided on that arithmetic on
+      # 2026-08-29.
+      #
+      # The list is DERIVED from the matrix at run time rather than written here.
+      # A copy would drift, and the bad direction is silent: a file dropped from
+      # the matrix and still ignored here runs in neither place, with both sides
+      # believing the other has it (L41). tests/ci_workflow.py raises rather than
+      # printing an empty list, so a derivation that broke fails this step
+      # instead of quietly restoring the whole suite (L98), and the count is
+      # echoed so a reader can see what it actually skipped.
       - name: Run tests
         env:
           POSTROLL_REQUIRE_FFMPEG: "1"
-        run: pytest -v -n auto --durations=25
-
-      # Both audiences, and on a failed run too: a red run is when the numbers
-      # are most worth having, and a step that only ran on success would drop
-      # them exactly then. A run that collected NOTHING says so rather than
-      # publishing an empty list, which would read as a run in which nothing
-      # drifted (L98).
-      - name: Publish the reference-frame drift readings
-        if: always()
         run: |
           set -euo pipefail
-          if [ ! -s "${POSTROLL_GOLDEN_DRIFT_LOG:-/nonexistent}" ]; then
-            echo "no reference-frame drift readings were taken, so this run measured nothing"
-            exit 0
-          fi
-          echo "### reference-frame drift: pixels differing from the committed frame by more than the per-channel tolerance, as a share of the canvas (#787)" >> "${GITHUB_STEP_SUMMARY}"
-          cat "${POSTROLL_GOLDEN_DRIFT_LOG}" >> "${GITHUB_STEP_SUMMARY}"
-          cat "${POSTROLL_GOLDEN_DRIFT_LOG}"
+          python tests/ci_workflow.py --pytest-ignore > "${RUNNER_TEMP}/ignore.txt"
+          echo "not re-rendering $(wc -l < "${RUNNER_TEMP}/ignore.txt" | tr -d ' ') files the reference-frame shards already render:"
+          cat "${RUNNER_TEMP}/ignore.txt"
+          xargs pytest -v -n auto --durations=25 < "${RUNNER_TEMP}/ignore.txt"

@@ -3,6 +3,6 @@
   "file": ".github/workflows/tests.yml",
   "find": "        run: pytest -v -n auto --durations=25\n\n  # The same suite on a Mac",
   "replace": "        run: pytest -v -n auto --durations=25 -k \"not reel\"\n\n  # The same suite on a Mac",
-  "test": "tests/test_ci_gates.py::test_the_mac_leg_runs_the_same_command_as_the_linux_one",
-  "breaks": "one leg quietly runs a narrower command than the other while both report under the same name, so the platform differences the Mac leg exists to catch are exactly what the subset drops (#510)"
+  "test": "tests/test_ci_gates.py::test_neither_leg_quietly_narrows_what_it_runs",
+  "breaks": "a leg narrows itself with a -k expression, which selects by name and so covers less every time a test is renamed with nothing reporting it, while both legs go on reporting under the same name (#510, #995)"
 }

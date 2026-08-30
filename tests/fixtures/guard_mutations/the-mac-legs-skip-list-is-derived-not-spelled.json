@@ -1,0 +1,8 @@
+{
+  "name": "the-mac-legs-skip-list-is-derived-not-spelled",
+  "file": ".github/workflows/tests.yml",
+  "find": "          python tests/ci_workflow.py --pytest-ignore > \"${RUNNER_TEMP}/ignore.txt\"",
+  "replace": "          echo --ignore=tests/test_golden_frames.py > \"${RUNNER_TEMP}/ignore.txt\"",
+  "test": "tests/test_ci_runs_the_font_dependent_checks.py::test_the_mac_leg_names_no_test_file_of_its_own",
+  "breaks": "the Mac leg's skip list becomes a second hand-written copy of the reference-frame matrix, which drifts silently: a file dropped from the matrix and still skipped here runs in NEITHER place while both jobs stay green (#995, L41)"
+}
