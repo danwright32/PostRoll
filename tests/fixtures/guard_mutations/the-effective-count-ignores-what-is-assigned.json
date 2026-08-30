@@ -1,0 +1,8 @@
+{
+  "name": "the-effective-count-ignores-what-is-assigned",
+  "file": "postroll/posting_preset.py",
+  "find": "    return min(assigned, fmt[1])",
+  "replace": "    return fmt[1]",
+  "test": "tests/test_posting_preset.py::test_effective_count_matches_the_fixture",
+  "breaks": "the effective count reports the preset's target rather than what the day can actually post, so a Sunday with three photos looks like it changes when a switch moves the target it never reaches (#1010)"
+}

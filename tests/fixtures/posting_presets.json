@@ -12,7 +12,13 @@
   "Thursday, Friday have fixed formats) and the caller uses that day's own",
   "handling. That is different from a day that does not exist.",
   "",
-  "`opening` is the third preset (#900). Sunday carries 7, which is the day Dan had 7 photos worth using and the app used 4; Monday and Wednesday stay at 4. A preset governs all three collage days at once, so this cannot say \"Sunday only\" without also declaring what the other two do, which is why they are pinned here rather than left out."
+  "`opening` is the third preset (#900). Sunday carries 7, which is the day Dan had 7 photos worth using and the app used 4; Monday and Wednesday stay at 4. A preset governs all three collage days at once, so this cannot say \"Sunday only\" without also declaring what the other two do, which is why they are pinned here rather than left out.",
+  "",
+  "`effective_counts` and `post_types` are the two predicates a posting layout SWITCH is decided by (#1010). They are separate on purpose: switching rebuilds a day's captions only when its POST TYPE changes, and redraws its images only when the format or the effective count changes. Keying the paid half on format alone pays for a caption rebuild on a day whose post type did not move.",
+  "",
+  "`effective` is min(assigned, count), because generate_media renders photos[:count]. What a day actually posts is never more than what is assigned to it, so a preset target above the assigned count changes nothing.",
+  "",
+  "`post_type` mirrors generate_week._auto_post_type, whose rule includes `photo_count > 1`. That is why a collage day with ONE assigned photo is a feed_photo, identical to a single day with one: the two presets disagree about the format and produce the same post."
  ],
  "default_preset": "balanced",
  "formats": {
@@ -141,6 +147,214 @@
    "day": "sunday",
    "format": "collage_carousel",
    "count": 4
+  }
+ ],
+ "effective_counts": [
+  {
+   "preset": "balanced",
+   "day": "sunday",
+   "assigned": 0,
+   "effective": 0
+  },
+  {
+   "preset": "opening",
+   "day": "sunday",
+   "assigned": 0,
+   "effective": 0
+  },
+  {
+   "preset": "classic",
+   "day": "sunday",
+   "assigned": 0,
+   "effective": 0
+  },
+  {
+   "preset": "balanced",
+   "day": "sunday",
+   "assigned": 3,
+   "effective": 3
+  },
+  {
+   "preset": "opening",
+   "day": "sunday",
+   "assigned": 4,
+   "effective": 4
+  },
+  {
+   "preset": "classic",
+   "day": "wednesday",
+   "assigned": 4,
+   "effective": 4
+  },
+  {
+   "preset": "balanced",
+   "day": "sunday",
+   "assigned": 4,
+   "effective": 4
+  },
+  {
+   "preset": "opening",
+   "day": "sunday",
+   "assigned": 7,
+   "effective": 7
+  },
+  {
+   "preset": "classic",
+   "day": "sunday",
+   "assigned": 1,
+   "effective": 1
+  },
+  {
+   "preset": "classic",
+   "day": "wednesday",
+   "assigned": 10,
+   "effective": 10
+  },
+  {
+   "preset": "balanced",
+   "day": "sunday",
+   "assigned": 7,
+   "effective": 4
+  },
+  {
+   "preset": "opening",
+   "day": "sunday",
+   "assigned": 9,
+   "effective": 7
+  },
+  {
+   "preset": "opening",
+   "day": "monday",
+   "assigned": 7,
+   "effective": 4
+  },
+  {
+   "preset": "classic",
+   "day": "sunday",
+   "assigned": 5,
+   "effective": 1
+  },
+  {
+   "preset": "classic",
+   "day": "wednesday",
+   "assigned": 12,
+   "effective": 10
+  },
+  {
+   "preset": "balanced",
+   "day": "tuesday",
+   "assigned": 5,
+   "effective": null
+  },
+  {
+   "preset": "opening",
+   "day": "thursday",
+   "assigned": 40,
+   "effective": null
+  },
+  {
+   "preset": "classic",
+   "day": "friday",
+   "assigned": 3,
+   "effective": null
+  }
+ ],
+ "post_types": [
+  {
+   "preset": "balanced",
+   "day": "sunday",
+   "assigned": 1,
+   "post_type": "feed_photo"
+  },
+  {
+   "preset": "classic",
+   "day": "sunday",
+   "assigned": 1,
+   "post_type": "feed_photo"
+  },
+  {
+   "preset": "opening",
+   "day": "sunday",
+   "assigned": 1,
+   "post_type": "feed_photo"
+  },
+  {
+   "preset": "balanced",
+   "day": "sunday",
+   "assigned": 2,
+   "post_type": "carousel"
+  },
+  {
+   "preset": "balanced",
+   "day": "sunday",
+   "assigned": 7,
+   "post_type": "carousel"
+  },
+  {
+   "preset": "opening",
+   "day": "sunday",
+   "assigned": 7,
+   "post_type": "carousel"
+  },
+  {
+   "preset": "classic",
+   "day": "wednesday",
+   "assigned": 4,
+   "post_type": "carousel"
+  },
+  {
+   "preset": "classic",
+   "day": "sunday",
+   "assigned": 5,
+   "post_type": "feed_photo"
+  },
+  {
+   "preset": "classic",
+   "day": "monday",
+   "assigned": 9,
+   "post_type": "feed_photo"
+  },
+  {
+   "preset": "balanced",
+   "day": "sunday",
+   "assigned": 0,
+   "post_type": "feed_photo"
+  },
+  {
+   "preset": "classic",
+   "day": "wednesday",
+   "assigned": 0,
+   "post_type": "feed_photo"
+  },
+  {
+   "preset": "balanced",
+   "day": "thursday",
+   "assigned": 40,
+   "post_type": "scroll_reel"
+  },
+  {
+   "preset": "opening",
+   "day": "thursday",
+   "assigned": 40,
+   "post_type": "scroll_reel"
+  },
+  {
+   "preset": "balanced",
+   "day": "thursday",
+   "assigned": 1,
+   "post_type": "feed_photo"
+  },
+  {
+   "preset": "balanced",
+   "day": "tuesday",
+   "assigned": 3,
+   "post_type": "feed_photo"
+  },
+  {
+   "preset": "balanced",
+   "day": "friday",
+   "assigned": 3,
+   "post_type": "feed_photo"
   }
  ]
 }

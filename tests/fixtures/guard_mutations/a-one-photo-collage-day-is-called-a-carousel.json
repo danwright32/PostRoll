@@ -1,0 +1,8 @@
+{
+  "name": "a-one-photo-collage-day-is-called-a-carousel",
+  "file": "postroll/posting_preset.py",
+  "find": "    if is_collage_carousel(preset, day) and assigned > 1:",
+  "replace": "    if is_collage_carousel(preset, day):",
+  "test": "tests/test_posting_preset.py::test_a_collage_day_with_one_photo_posts_the_same_as_a_single_day",
+  "breaks": "a collage day with ONE assigned photo is called a carousel when generate_week calls it a feed_photo, so a Balanced to Classic switch pays for a caption rebuild on a day whose post did not change (#1010)"
+}

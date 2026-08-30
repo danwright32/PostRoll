@@ -63,7 +63,7 @@ from .generate_captions import generate_caption
 from .generate_blog import generate_blog
 from .progress import ProgressWriter
 from .select_reel_photos import select_reel_photos, DEFAULT_MAX_REEL_PHOTOS
-from ..posting_preset import DEFAULT_PRESET, is_collage_carousel
+from ..posting_preset import DEFAULT_PRESET, post_type
 
 
 DAY_ORDER = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]
@@ -165,12 +165,13 @@ def _auto_post_type(day: str, photo_count: int, preset: str = DEFAULT_PRESET) ->
     Sunday/Monday/Wednesday are governed by the posting preset: a
     collage_carousel day is a "carousel" (so the caption pipeline emits one alt
     text per photo), a single day is a "feed_photo".
+
+    Delegates rather than restating the rule (#1010). The app has to answer the
+    same question to decide whether a layout switch needs a caption rebuild, and
+    a second copy of this would drift in whichever direction flattered the side
+    a test happened to read.
     """
-    if is_collage_carousel(preset, day) and photo_count > 1:
-        return "carousel"
-    if day in ("thursday",) and photo_count > 1:
-        return "scroll_reel"
-    return "feed_photo"
+    return post_type(preset, day, photo_count)
 
 
 def generate_week(manifest: dict[str, Any], output_path: Path,

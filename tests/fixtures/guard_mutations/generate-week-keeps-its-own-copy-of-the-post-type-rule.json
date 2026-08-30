@@ -1,0 +1,8 @@
+{
+  "name": "generate-week-keeps-its-own-copy-of-the-post-type-rule",
+  "file": "postroll/ai/generate_week.py",
+  "find": "    return post_type(preset, day, photo_count)",
+  "replace": "    return \"carousel\" if photo_count > 1 else \"feed_photo\"",
+  "test": "tests/test_posting_preset.py::test_post_type_is_the_same_function_generate_week_uses",
+  "breaks": "the pipeline answers what kind of post a day is differently from the app, so the app can decide a switch needs no caption rebuild while the pipeline would have written a different post (#1010, L263)"
+}

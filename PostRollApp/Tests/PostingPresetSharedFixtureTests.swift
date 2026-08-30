@@ -17,9 +17,26 @@ final class PostingPresetSharedFixtureTests: XCTestCase {
             let format: String?
             let count: Int?
         }
+        /// One row of the effective count table (#1010): how many of a day's
+        /// assigned photos this preset actually posts.
+        struct EffectiveCount: Decodable {
+            let preset: String
+            let day: String
+            let assigned: Int
+            let effective: Int?
+        }
+        /// One row of the post type table (#1010).
+        struct PostType: Decodable {
+            let preset: String
+            let day: String
+            let assigned: Int
+            let post_type: String
+        }
         let default_preset: String
         let cases: [Case]
         let unknown_preset_falls_back_to_default: [Case]
+        let effective_counts: [EffectiveCount]
+        let post_types: [PostType]
     }
 
     /// Located from this file, not a bundle resource: the test target has no
@@ -51,6 +68,43 @@ final class PostingPresetSharedFixtureTests: XCTestCase {
     func testTheFixtureIsReadable() throws {
         let fixture = try loadFixture()
         XCTAssertFalse(fixture.cases.isEmpty, "an empty fixture would assert nothing")
+    }
+
+    /// Each new table gets its OWN emptiness assertion (#1010).
+    ///
+    /// The one above only ever covered `cases`, so an array that came back
+    /// empty would be iterated zero times and every test over it would pass
+    /// while proving nothing (L98).
+    func testTheEffectiveCountTableIsNotEmpty() throws {
+        XCTAssertFalse(try loadFixture().effective_counts.isEmpty,
+                       "an empty table would assert nothing")
+    }
+
+    func testThePostTypeTableIsNotEmpty() throws {
+        XCTAssertFalse(try loadFixture().post_types.isEmpty,
+                       "an empty table would assert nothing")
+    }
+
+    func testEveryEffectiveCountMatchesTheSwiftMirror() throws {
+        for row in try loadFixture().effective_counts {
+            guard let d = day(named: row.day) else {
+                XCTFail("fixture names a day Swift does not have: \(row.day)"); continue
+            }
+            XCTAssertEqual(preset(named: row.preset).effectiveCount(for: d, assigned: row.assigned),
+                           row.effective,
+                           "\(row.preset)/\(row.day) with \(row.assigned) assigned")
+        }
+    }
+
+    func testEveryPostTypeMatchesTheSwiftMirror() throws {
+        for row in try loadFixture().post_types {
+            guard let d = day(named: row.day) else {
+                XCTFail("fixture names a day Swift does not have: \(row.day)"); continue
+            }
+            XCTAssertEqual(preset(named: row.preset).postType(for: d, assigned: row.assigned),
+                           row.post_type,
+                           "\(row.preset)/\(row.day) with \(row.assigned) assigned")
+        }
     }
 
     func testTheDefaultPresetMatchesTheFixture() throws {
