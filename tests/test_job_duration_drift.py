@@ -207,3 +207,54 @@ def test_the_duration_check_reads_the_workflow_on_the_critical_path():
     assert "swift.yml" in step, (
         f"the duration check does not read swift.yml, which is the workflow "
         f"the drift was measured on: {step!r}")
+
+
+def test_a_skipped_job_contributes_nothing():
+    """GitHub stamps a skipped job's end BEFORE its start, so it measures negative.
+
+    Measured on 2026-08-30 against this repository's own API: the `full` job,
+    skipped on pull requests, reports started_at 13:19:13Z and completed_at
+    13:19:12Z. That is one second of NEGATIVE duration, and before this it went
+    into the series and dragged the median under zero, tripping UNREADABLE on
+    every run.
+
+    The refusal was at least honest rather than a wrong number, but a check
+    whose entire value is that it does not cry wolf cannot afford to warn on
+    every run about a job that was never going to run (L36).
+
+    Excluded by its SHAPE rather than by its `skipped` label. A label check was
+    written first and removed: `check_guards` reported it SURVIVED its mutation,
+    because every skipped job the API really produces is already caught by the
+    non-positive duration, so nothing could show the branch was needed (L29).
+    """
+    series = job_durations([
+        {"jobs": [{"name": "full", "conclusion": "skipped",
+                   "started_at": "2026-08-30T13:19:13Z",
+                   "completed_at": "2026-08-30T13:19:12Z"}]},
+        {"jobs": [{"name": "swift-unit", "conclusion": "success",
+                   "started_at": "2026-08-30T13:19:13Z",
+                   "completed_at": "2026-08-30T13:25:12Z"}]},
+    ])
+
+    assert "full" not in series, (
+        f"the skipped job entered the series: {series}")
+    assert series["swift-unit"] == [359.0], (
+        "the positive control did not survive, so this test would pass on a "
+        "reader that dropped everything (L159)")
+
+
+def test_a_negative_duration_never_reaches_the_series():
+    """Belt and braces on the SHAPE, not just on the label.
+
+    Keying only on `conclusion == "skipped"` would leave any other source of an
+    inverted pair going straight into the median, and a negative number there
+    is never a measurement of anything (L50). The two checks answer different
+    questions and both are kept.
+    """
+    series = job_durations([
+        {"jobs": [{"name": "odd", "conclusion": "success",
+                   "started_at": "2026-08-30T13:19:13Z",
+                   "completed_at": "2026-08-30T13:19:12Z"}]},
+    ])
+
+    assert "odd" not in series, f"a negative duration was recorded: {series}"
