@@ -399,15 +399,22 @@ jobs:
     # has to appear in exactly one shard, or it runs nowhere while CI stays
     # green.
     #
-    # These same files ALSO run in the `macos` job of tests.yml, which runs the
-    # whole suite. That duplication is deliberate and was decided rather than
-    # overlooked (#571). The two runs are not the same run: this one shards so
-    # `-n auto` can use more than one runner's three cores, and that one exists
-    # so the Mac leg runs the SAME command as the Linux leg, which two earlier
-    # attempts at narrowing already broke. The runners are free on a public
-    # repo, so the second run costs about 200s of wall clock and nothing else.
-    # Anyone about to remove one of them should read tests.yml's comment on the
-    # `macos` job first, and #562 for where that job's time actually goes.
+    # These files USED to run here and again in the `macos` job of tests.yml,
+    # which runs the whole suite. #571 decided that duplication deliberately and
+    # priced it at "about 200s of wall clock and nothing else" because the
+    # runners are free on a public repo.
+    #
+    # They are free in money and not in queue (#995). Measured over the two weeks
+    # to 2026-08-30, these shards and that leg together held 28% of this
+    # repository's macOS runner-minutes while other jobs waited on GitHub's five
+    # concurrent macOS runners, and the nine files here are 1,433s of the suite's
+    # 2,050s of recorded test time. Dan decided on that arithmetic on 2026-08-29.
+    #
+    # So the Mac leg now deselects exactly these files, deriving the list from
+    # this matrix through tests/ci_workflow.py rather than repeating it. This is
+    # where they run, and it is the STRICTER of the two places: this job sets
+    # POSTROLL_REQUIRE_GOLDENS and that one does not, so a missing system face is
+    # a failure here and was only ever a silent skip there.
     strategy:
       # One shard going red says nothing about the other, and cancelling it
       # would hide a second failure until the first is fixed and re-run.

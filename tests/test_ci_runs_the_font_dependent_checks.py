@@ -166,3 +166,142 @@ def test_no_test_file_is_run_by_two_shards():
     assert not duplicated, (
         "these test files are run by more than one shard of the reference-frame "
         f"job, so CI pays to render them twice: {duplicated}")
+
+
+# ── and runs them in exactly ONE place (#995) ─────────────────────────────────
+#
+# The Mac leg used to run the whole suite, so every file above rendered twice on
+# macos-15: once in a shard here and once there. #571 decided that deliberately
+# and priced it at "about 200s of wall clock and nothing else" because the
+# runners are free on a public repo.
+#
+# They are free in money and not in queue. Measured over the two weeks to
+# 2026-08-30: the shards and the Mac leg together held 28% of this repository's
+# macOS runner-minutes while other jobs waited on GitHub's five concurrent macOS
+# runners, and these nine files are 1,433s of the suite's 2,050s of recorded
+# test time, 70% of it.
+#
+# The tests below hold the shape that replaced it. The one that matters is the
+# last: the ignore list has to be DERIVED from the matrix, because a copy drifts
+# in a direction nobody sees. A file dropped from the matrix and still named in
+# a hand-written ignore list runs in NEITHER place, with each side believing the
+# other has it, and both jobs stay green (L41, L98).
+
+from ci_workflow import IGNORE_FLAG, macos_leg_ignores  # noqa: E402
+
+TESTS_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
+
+
+def _macos_job() -> str:
+    """The `macos` job's body, so a claim about it cannot be met by the Linux
+    leg sitting in the same file (L135)."""
+    import re
+    text = TESTS_WORKFLOW.read_text(encoding="utf-8")
+    settings = "\n".join(line for line in text.splitlines()
+                         if not line.strip().startswith("#"))
+    match = re.search(r"^  macos:[ \t]*$(.*?)(?=^  \S|\Z)", settings, re.M | re.S)
+    assert match, (
+        "there is no `macos:` job in tests.yml any more, so every check here is "
+        "reading nothing (L98)")
+    return match.group(1)
+
+
+def test_the_ignore_list_covers_every_file_the_shards_render():
+    ignored = macos_leg_ignores()
+    assert len(ignored) == len(reference_frame_files()), (
+        f"the Mac leg's ignore list and the matrix disagree about how many "
+        f"files there are: {ignored} against {sorted(reference_frame_files())}")
+    for name in reference_frame_files():
+        assert f"--ignore=tests/{name}" in ignored, (
+            f"{name} is rendered by a shard and still rendered by the Mac leg, "
+            "so it costs a macOS runner twice on every pull request")
+
+
+def test_the_ignore_list_is_never_silently_empty():
+    """An empty list is a Mac leg that quietly went back to running everything,
+    which reads as a slow job rather than as a broken derivation (L98)."""
+    import pytest as _pytest
+    with _pytest.raises(AssertionError):
+        macos_leg_ignores("jobs:\n  reference-frames:\n    steps: []\n")
+
+
+def test_the_mac_leg_asks_for_the_list_rather_than_spelling_it():
+    """The whole point. A hand-written copy beside the matrix drifts, and the
+    bad direction is silent: a file dropped from the matrix and still ignored
+    here runs in neither place while both jobs stay green (L41)."""
+    job = _macos_job()
+    assert IGNORE_FLAG in job, (
+        f"the Mac leg does not ask ci_workflow.py for its ignore list "
+        f"({IGNORE_FLAG}), so whatever it skips is a second copy of the matrix "
+        "that nothing keeps in step with the first")
+
+
+def test_the_list_it_asks_for_actually_reaches_pytest():
+    """Asking for the list and then not using it is the same job it was before.
+
+    Written after the check above SURVIVED its mutation: replacing the pytest
+    invocation with a plain `pytest -v -n auto` left the line that computes the
+    list sitting untouched above it, so the guard went green over a Mac leg that
+    computed nine ignore arguments and threw them away (L100, L178).
+
+    So this follows the path: whatever file the generating command redirects
+    into has to be the file the pytest invocation reads from.
+    """
+    import re
+    job = _macos_job()
+    written = re.search(rf"{re.escape(IGNORE_FLAG)}\s*>\s*(\S+)", job)
+    assert written, (
+        f"the Mac leg runs ci_workflow.py {IGNORE_FLAG} but does not redirect "
+        "it anywhere, so nothing can be reading the list it prints")
+    destination = written.group(1)
+
+    # The generating line is excluded explicitly. Written without that, this
+    # test matched it and passed: the flag is spelled `--pytest-ignore`, so the
+    # line that PRODUCES the list contains the substring "pytest" and the
+    # destination, and answered as its own consumer. A success check that
+    # matches a substring of the thing being talked about also matches the line
+    # talking about it (L156). Caught by the mutation this test was written for
+    # surviving twice.
+    consuming = [line for line in job.splitlines()
+                 if "pytest" in line and destination in line
+                 and IGNORE_FLAG not in line]
+    assert consuming, (
+        f"the Mac leg writes its ignore list to {destination} and no pytest "
+        f"invocation reads it back, so the list is computed and discarded and "
+        f"the job renders every file the shards render all over again. The "
+        f"pytest lines it does have: "
+        f"{[l.strip() for l in job.splitlines() if 'pytest' in l]}")
+
+
+def test_the_mac_leg_names_no_test_file_of_its_own():
+    """Derived means derived. A single filename appearing in the job is the copy
+    starting, and it would be correct on the day it was written."""
+    job = _macos_job()
+    named = [name for name in reference_frame_files() if name in job]
+    assert not named, (
+        f"the Mac leg spells these test file names itself: {named}. They come "
+        "from the reference-frame matrix, and a second spelling of them is a "
+        "list that will disagree with it")
+
+
+def test_every_font_dependent_file_still_runs_somewhere():
+    """The rule the two halves add up to, asserted as one thing.
+
+    Each font-gated file is named by exactly one shard, and the Mac leg ignores
+    exactly the files the shards name. Together that is "runs in exactly one
+    place". Checked here rather than left to the reader of two other tests,
+    because the failure this guards against is a file that falls between them
+    (L178: two conditions over one body of text prove neither half).
+    """
+    gated = font_dependent_test_files()
+    rendered = reference_frame_files()
+    assert gated, "the scan found no font-gated files, so this is vacuous (L98)"
+
+    nowhere = sorted(gated - rendered)
+    assert not nowhere, (
+        f"these files need macOS fonts and no shard renders them, and the Mac "
+        f"leg no longer runs everything, so they now run NOWHERE: {nowhere}")
+
+    assert not files_in_more_than_one_shard(), (
+        "a font-gated file is named by more than one shard, so it renders twice "
+        "again, which is what #995 removed")

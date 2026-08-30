@@ -297,16 +297,41 @@ def test_the_suite_runs_on_a_mac_as_well_as_linux():
     assert "macos" in text.lower(), "the Mac leg is gone, so the suite is Linux only again"
 
 
-def test_the_mac_leg_runs_the_same_command_as_the_linux_one():
-    """A narrower command here would make this a different check wearing the
-    same name, and a platform difference is exactly what a subset drops. This is
-    the no-silent-caps rule: if the Mac leg ever runs less, it has to say so
-    here rather than quietly cover less."""
+# There used to be a test here requiring the two legs to run the IDENTICAL
+# pytest command, on the no-silent-caps rule: if the Mac leg ever runs less, it
+# has to say so rather than quietly cover less. #995 narrows the Mac leg
+# deliberately, so the test is gone rather than adjusted: its entire content was
+# the rule being changed, and a test edited to permit the new behaviour while
+# still describing the old one is the guard defending the thing that was
+# rejected (L252).
+#
+# The rule it protected is not abandoned, it moved and got stricter. The Mac leg
+# skips exactly the files another macOS job renders, and
+# tests/test_ci_runs_the_font_dependent_checks.py holds that: the skip list is
+# derived from that job's matrix rather than written down, the derivation cannot
+# come back empty, the list has to reach pytest rather than merely be computed,
+# and every font-gated file has to run in exactly one of the two places. That is
+# a stronger statement than "the two commands match", which was satisfied by
+# both legs being wrong in the same way.
+
+
+def test_neither_leg_quietly_narrows_what_it_runs():
+    """What survives of the rule above: a leg may only skip what it can name a
+    reason for, and the only sanctioned reason is another job already running it.
+
+    So a bare `-k`, `-m` or `--deselect` on either leg is still refused here.
+    Those select by expression, which is the narrowing nobody can audit: it
+    covers less every time a test is renamed, and nothing reports it (L96).
+    """
     runs = re.findall(r"run: (pytest[^\n]*)", TESTS.read_text())
-    assert len(runs) >= 2, f"expected a pytest command per leg, found {runs}"
-    assert len(set(runs)) == 1, (
-        f"the legs run different commands, so one of them covers less than its "
-        f"name suggests: {sorted(set(runs))}")
+    runs += re.findall(r"^\s*xargs pytest([^\n]*)", TESTS.read_text(), re.M)
+    assert runs, "no pytest command in the workflow at all, so this is vacuous"
+    for command in runs:
+        for flag in (" -k ", " -m ", "--deselect"):
+            assert flag not in command, (
+                f"a leg narrows itself with {flag.strip()}, which selects by "
+                f"expression and so covers less every time a test is renamed, "
+                f"with nothing reporting it: {command.strip()}")
 
 
 def test_both_legs_report_where_their_time_went():
@@ -319,8 +344,14 @@ def test_both_legs_report_where_their_time_went():
     and it stays on for the same reason the ffmpeg version is recorded: a
     number nobody can reproduce is not evidence.
     """
-    runs = re.findall(r"run: (pytest[^\n]*)", TESTS.read_text())
-    assert runs, "no pytest command in the workflow at all"
+    text = TESTS.read_text()
+    # Both spellings: the Linux leg runs pytest directly and the Mac leg reaches
+    # it through xargs since #995. A pattern that only knew the first would have
+    # stopped checking the Mac leg on the day that changed, and gone on passing
+    # over the one leg the #562 measurement was about (L100).
+    runs = re.findall(r"run: (pytest[^\n]*)", text)
+    runs += re.findall(r"^\s*xargs (pytest[^\n]*)", text, re.M)
+    assert len(runs) >= 2, f"expected a pytest command per leg, found {runs}"
     for command in runs:
         assert "--durations" in command, (
             f"this leg reports no per-test timings, so the next person asking "
