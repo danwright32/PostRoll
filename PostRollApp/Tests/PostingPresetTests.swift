@@ -124,6 +124,102 @@ final class PostingPresetTests: XCTestCase {
         XCTAssertFalse(affected.contains(.tuesday), "Tuesday isn't governed by the preset")
     }
 
+    // MARK: - What a switch actually has to rebuild (#1010)
+
+    private func eventWith(_ counts: [DayName: Int]) -> Event {
+        var event = Event(name: "Show", org: "Org", venue: "Hall",
+                          date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        for (day, n) in counts {
+            var pd = PostingDay(day: day)
+            pd.photoPaths = (0..<n).map { URL(fileURLWithPath: "/\(day.rawValue)-\($0).jpg") }
+            event.days[day.rawValue] = pd
+        }
+        return event
+    }
+
+    /// Dan's own case, and the whole reason for #1010.
+    ///
+    /// Balanced to Opening moves Sunday from 4 photos to 7 and leaves Monday
+    /// and Wednesday exactly as they were. Today every governed day with photos
+    /// is rebuilt, so two days are caption regenerated for nothing: paid API
+    /// calls, and any caption edits on those days destroyed.
+    func testBalancedToOpeningTouchesSundayAlone() {
+        let event = eventWith([.sunday: 8, .monday: 8, .wednesday: 8])
+        let plan = PostingLayoutSwitch.plan(from: .balanced, to: .opening, in: event)
+
+        XCTAssertEqual(plan[.sunday], .redrawImages,
+                       "Sunday goes from 4 photos to 7, so its images change")
+        XCTAssertNil(plan[.monday], "Monday posts 4 either way, so nothing about it changes")
+        XCTAssertNil(plan[.wednesday], "Wednesday posts 4 either way")
+    }
+
+    /// A day whose post TYPE changes is the only kind that costs a caption call.
+    func testBalancedToClassicRebuildsTheDaysThatBecomeADifferentPost() {
+        let event = eventWith([.sunday: 8, .monday: 8, .wednesday: 8])
+        let plan = PostingLayoutSwitch.plan(from: .balanced, to: .classic, in: event)
+
+        XCTAssertEqual(plan[.sunday], .rebuildPost,
+                       "a 4 photo carousel becoming a single photo post is a different post")
+        XCTAssertEqual(plan[.monday], .rebuildPost)
+        XCTAssertEqual(plan[.wednesday], .redrawImages,
+                       "Wednesday stays a carousel and only its count moves, 4 to 10")
+    }
+
+    /// The case the plan for this originally got wrong.
+    ///
+    /// A collage day with ONE assigned photo is a feed_photo under Python's own
+    /// rule, exactly like a single day with one. So Balanced to Classic changes
+    /// the FORMAT and does not change the post, and keying the paid half on
+    /// format alone would pay for a caption rebuild that changes nothing.
+    func testADayWithOnePhotoNeedsNoCaptionRebuildWhenTheFormatChanges() {
+        let event = eventWith([.sunday: 1])
+        let plan = PostingLayoutSwitch.plan(from: .balanced, to: .classic, in: event)
+
+        XCTAssertNotEqual(plan[.sunday], .rebuildPost,
+                          "one photo posts the same way under both layouts, so a paid "
+                          + "caption call here buys nothing")
+    }
+
+    /// Effective counts, not preset targets.
+    ///
+    /// A Sunday with three photos posts three under Balanced and three under
+    /// Opening, because the renderer takes photos[:count] and there are only
+    /// three. Nothing about that day changes, so nothing about it rebuilds.
+    func testADayWithFewerPhotosThanEitherTargetIsUntouched() {
+        let event = eventWith([.sunday: 3])
+        XCTAssertTrue(PostingLayoutSwitch.plan(from: .balanced, to: .opening, in: event).isEmpty,
+                      "both layouts post all three photos, so the switch changes nothing")
+    }
+
+    func testADayWithNoPhotosIsNeverInThePlan() {
+        let event = eventWith([.sunday: 0, .monday: 5])
+        let plan = PostingLayoutSwitch.plan(from: .balanced, to: .classic, in: event)
+        XCTAssertNil(plan[.sunday], "there is nothing to draw or write for a day with no photos")
+    }
+
+    /// Days no preset governs are never in the plan, whatever is assigned.
+    func testUngovernedDaysAreNeverInThePlan() {
+        let event = eventWith([.tuesday: 6, .thursday: 40, .friday: 3])
+        let plan = PostingLayoutSwitch.plan(from: .balanced, to: .classic, in: event)
+        XCTAssertTrue(plan.isEmpty, "Tuesday, Thursday and Friday have fixed formats")
+    }
+
+    /// Switching back is symmetric, and just as narrow.
+    func testOpeningBackToBalancedAlsoTouchesSundayAlone() {
+        let event = eventWith([.sunday: 8, .monday: 8, .wednesday: 8])
+        let plan = PostingLayoutSwitch.plan(from: .opening, to: .balanced, in: event)
+        XCTAssertEqual(plan[.sunday], .redrawImages)
+        XCTAssertNil(plan[.monday])
+        XCTAssertNil(plan[.wednesday])
+    }
+
+    /// A switch to the layout already in force is not a switch.
+    func testSwitchingToTheSameLayoutPlansNothing() {
+        let event = eventWith([.sunday: 8, .monday: 8, .wednesday: 8])
+        XCTAssertTrue(PostingLayoutSwitch.plan(from: .opening, to: .opening, in: event).isEmpty)
+    }
+
     // MARK: - Per-event override (#66)
 
     private func makeEvent() -> Event {

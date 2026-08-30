@@ -144,6 +144,65 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
+/// What one day needs when the posting layout changes (#1010).
+enum DayLayoutChange: Equatable {
+    /// Its images are different, its post is not. No caption call.
+    case redrawImages
+    /// It becomes a different KIND of post, so its caption is written
+    /// differently and has to be regenerated.
+    case rebuildPost
+}
+
+/// Which days a posting layout switch actually has to touch (#1010).
+///
+/// `PostingPreset.affectedDays` answers a different question: every governed
+/// day that HAS PHOTOS, without ever comparing the two layouts. Switching
+/// Balanced to Opening moves Sunday from 4 photos to 7 and leaves Monday and
+/// Wednesday exactly as they were, yet all three were caption regenerated: paid
+/// API calls that changed nothing, and any typed caption edits on those two
+/// days destroyed.
+enum PostingLayoutSwitch {
+
+    /// Per day, what changing from `old` to `new` requires of `event`.
+    ///
+    /// Days needing nothing are ABSENT rather than present with a "no change"
+    /// case, so a caller cannot accidentally pass the whole map to a generator.
+    ///
+    /// Two predicates, not one. The plan for this originally keyed the paid
+    /// half on the FORMAT, which is wrong: Python decides a day's post type
+    /// with `is_collage_carousel(preset, day) and photo_count > 1`, so a
+    /// collage day with ONE photo is a feed_photo exactly like a single day
+    /// with one. Balanced to Classic on such a day changes the format and does
+    /// not change the post, and rebuilding its caption buys nothing.
+    ///
+    /// Counts are EFFECTIVE counts, because the renderer takes `photos[:count]`.
+    /// A Sunday with three photos posts three under every layout that governs
+    /// it, so no switch between them touches that day at all.
+    static func plan(from old: PostingPreset,
+                     to new: PostingPreset,
+                     in event: Event) -> [DayName: DayLayoutChange] {
+        var plan: [DayName: DayLayoutChange] = [:]
+        for day in DayName.allCases {
+            // A day no preset governs has a fixed format that no switch moves.
+            guard old.format(for: day) != nil || new.format(for: day) != nil else { continue }
+
+            let assigned = event.days[day.rawValue]?.photoPaths.count ?? 0
+            // Nothing to draw and nothing to write about, either way.
+            guard assigned > 0 else { continue }
+
+            if old.postType(for: day, assigned: assigned)
+                != new.postType(for: day, assigned: assigned) {
+                plan[day] = .rebuildPost
+            } else if old.format(for: day)?.format != new.format(for: day)?.format
+                || old.effectiveCount(for: day, assigned: assigned)
+                    != new.effectiveCount(for: day, assigned: assigned) {
+                plan[day] = .redrawImages
+            }
+        }
+        return plan
+    }
+}
+
 /// Copy for the per-event posting layout picker (#1007).
 ///
 /// Here rather than inside the view, because the sentence was written as a
