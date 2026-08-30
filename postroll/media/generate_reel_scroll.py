@@ -61,7 +61,13 @@ from .layout_sidecar import layout_sidecar_path
 
 CANVAS_W = 1080
 CANVAS_H = 1920
-FPS = 30
+# 60 rather than 30 (#. 2026-08-30). The strip's speed is set by how long it is
+# and how long the scroll runs, neither of which the renderer chooses: 234
+# photos over 35 seconds is 29,000px of gallery, and at 30fps that advanced
+# 30.4px between frames, which the eye sees as jumps rather than motion.
+# Doubling the frame rate halves the jump for the same reel and the same photo
+# count. Instagram accepts 60fps.
+FPS = 60
 
 ROW_GAP = GAP          # gap between rows
 COL_GAP = GAP          # gap between photos in a row
@@ -164,15 +170,45 @@ def load_logo(logo_path: str | None) -> Image.Image | None:
     return load(logo_path, LOGO_WIDTH)
 
 
+#: How much of the scroll is spent getting up to speed, and the same again
+#: slowing down. The rest of it runs at a constant speed.
+EASE_RAMP = 0.15
+
+
+def _smoothstep_area(u: float) -> float:
+    """Area under smoothstep from 0 to `u`, both in units of the ramp width."""
+    return u ** 3 - u ** 4 / 2
+
+
 def ease_in_out(t: float) -> float:
-    """More dramatic ease — slower start and end, noticeable acceleration."""
-    if t < 0.12:
-        return (t / 0.12) ** 2.5 * 0.06
-    elif t > 0.88:
-        p = (t - 0.88) / 0.12
-        return 0.94 + (1 - (1 - p) ** 2.5) * 0.06
-    else:
-        return 0.06 + (t - 0.12) / 0.76 * 0.88
+    """How far through the strip the scroll has travelled at `t` in [0, 1].
+
+    A trapezoidal speed profile: smoothstep up over the first `EASE_RAMP`,
+    constant through the middle, smoothstep down over the last `EASE_RAMP`.
+    Smoothstep rather than a straight ramp because its own slope is zero at
+    both ends, so the speed is continuous everywhere the three pieces meet.
+
+    It replaced three formulas stitched together whose speed jumped about 8% at
+    each seam. Measured in the delivered reel on 2026-08-30: 33px a frame
+    either side of t=0.12, dropping instantly to 30, and the mirror of it at
+    t=0.88. Two lurches per reel, both visible, and neither of them intended.
+
+    Peak speed is 1/(1 - EASE_RAMP) of the average, which at 0.15 is 1.18. The
+    old curve cruised at 1.16, so the reel still moves the way it did: what
+    changes is that it gets there without a step.
+    """
+    if t <= 0.0:
+        return 0.0
+    if t >= 1.0:
+        return 1.0
+
+    a = EASE_RAMP
+    total = 1.0 - a  # area under the speed profile, which normalises position
+    if t < a:
+        return a * _smoothstep_area(t / a) / total
+    if t <= 1.0 - a:
+        return (a * 0.5 + (t - a)) / total
+    return 1.0 - a * _smoothstep_area((1.0 - t) / a) / total
 
 
 def build_collage_strip(
@@ -464,8 +500,12 @@ def max_scroll_for(strip_height: int) -> int:
     return max(0, strip_height - VIEWPORT_H)
 
 
-def place_strip(strip: Image.Image, scroll_y: int) -> Image.Image:
+def place_strip(strip: Image.Image, scroll_y: float) -> Image.Image:
     """Where the photography lands in the frame, before any chrome is drawn.
+
+    `scroll_y` is fractional. It used to be truncated to whole pixels by the
+    caller, which at a true 30.4px a frame produced an alternating 30, 31 and
+    wobbled the speed a few percent on every single frame of the reel.
 
     Split out from `compose_frame` so a check can ask where the prints ARE
     rather than where they can still be SEEN. The band and the footer mask are
@@ -473,13 +513,26 @@ def place_strip(strip: Image.Image, scroll_y: int) -> Image.Image:
     them whether they are covering a photograph or the mat, and a check written
     that way cannot fail (L1, L159).
     """
+    limit = max_scroll_for(strip.height)
+    scroll_y = min(max(float(scroll_y), 0.0), float(limit))
+    top = int(scroll_y)
+    frac = scroll_y - top
+
+    window = strip.crop((0, top, CANVAS_W, top + VIEWPORT_H))
+    if frac and top < limit:
+        # The row below, weighted by how far between the two the scroll sits.
+        # Clamped rather than padded: cropping past the last row of the strip
+        # returns black, which would put a growing black band under the last
+        # photograph at exactly the end of the scroll.
+        window = Image.blend(
+            window, strip.crop((0, top + 1, CANVAS_W, top + 1 + VIEWPORT_H)), frac)
+
     frame = Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
-    frame.paste(strip.crop((0, scroll_y, CANVAS_W, scroll_y + VIEWPORT_H)),
-                (0, VIEWPORT_TOP))
+    frame.paste(window, (0, VIEWPORT_TOP))
     return frame
 
 
-def compose_frame(strip: Image.Image, scroll_y: int, event_name: str,
+def compose_frame(strip: Image.Image, scroll_y: float, event_name: str,
                   org: str, venue: str) -> Image.Image:
     """One frame of the reel: the strip at `scroll_y`, with the chrome over it.
 
@@ -487,6 +540,12 @@ def compose_frame(strip: Image.Image, scroll_y: int, event_name: str,
     what is measured is what ships. Reading the composition off the encoder's
     loop meant a check re-stating the crop beside it, which is a second
     definition of the frame that drifts silently (L107).
+
+    Motion blur was built here and taken back out on 2026-08-30. It made the
+    scroll marginally smoother and the photographs visibly softer, and at 60fps
+    the jumps it was written to hide are already small enough to fuse. Judged
+    by watching a matched pair of the reported reel side by side, at 130.7s
+    against 38.4s to render. It is in the history if the trade ever changes.
     """
     return apply_chrome(place_strip(strip, scroll_y), event_name, org, venue)
 
@@ -518,12 +577,17 @@ def scroll_frames(strip: Image.Image, *, event_name: str, org: str, venue: str,
     n_hold = int(HOLD_END * fps)
     max_scroll = max_scroll_for(strip.height)
 
-    def framed(scroll_y: int) -> Image.Image:
+    def at(i: int) -> float:
+        """Where the strip sits on scroll frame `i`. Fractional: truncating it
+        to whole pixels is what used to wobble the speed frame to frame."""
+        return ease_in_out(min(i, n_scroll) / n_scroll) * max_scroll
+
+    def framed(scroll_y: float) -> Image.Image:
         return compose_frame(strip, scroll_y, event_name, org, venue)
 
     for i in range(total_frames):
         if i < n_scroll:
-            yield framed(int(ease_in_out(i / n_scroll) * max_scroll))
+            yield framed(at(i))
         elif i < n_scroll + n_hold:
             yield framed(max_scroll)
         elif closing_frame is not None:
@@ -564,7 +628,14 @@ def encode_frames(frames, audio_in: str, audio_af: str, total_duration: float,
         # highest resolution video stream across all inputs, and MP3
         # cover art counts, which can replace the reel with album art.
         "-map", "0:v:0", "-map", "1:a:0",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        # Pinned rather than left to libx264's defaults (#. 2026-08-30). Every
+        # frame of a scroll is entirely new content, so the default CRF 23 spent
+        # its budget re-describing the whole gallery each frame and fine detail
+        # pumped between mushy and sharp, which read as more instability on top
+        # of the jitter. Measured on this Mac: at CRF 18 `slow` produced the
+        # same 6.4 MB as `medium` for 2.2x the encode time, so medium it is.
+        "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+        "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-af", audio_af,
         "-t", str(total_duration),

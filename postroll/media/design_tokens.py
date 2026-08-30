@@ -138,7 +138,7 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # pair opened every reel sliced in half and was never seen whole at any point
     # in the file. The strip scrolls in a viewport between the two pieces of
     # chrome now, so no print can be painted over by either.
-    "reel_scroll": 3,
+    "reel_scroll": 4,
     # The still the Thursday crop editor draws over. Same layout maths as the
     # reel it previews, so a redesign of one dates the other: 3 is #898's
     # viewport, which moved this strip's own padding at both ends.
@@ -228,7 +228,7 @@ MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
     "reel_screen": DesignChange(version=2, day="2026-08-21"),
     "reel_morph": DesignChange(version=3, day="2026-08-21"),
     "reel_slider": DesignChange(version=3, day="2026-08-21"),
-    "reel_scroll": DesignChange(version=3, day="2026-08-27"),
+    "reel_scroll": DesignChange(version=4, day="2026-08-30"),
     "reel_preview": DesignChange(version=3, day="2026-08-27"),
     "reel_clip": DesignChange(version=2, day="2026-08-22"),
 }
