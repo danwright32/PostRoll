@@ -39,6 +39,7 @@ from tools.check_job_durations import (
     job_durations,
 )
 from tools.guard_sweep_history import PROOF_STEP
+from tools.check_tree_already_checked import WORK_STEP
 
 
 def _series(older: list[float], recent: list[float]) -> list[float]:
@@ -331,3 +332,54 @@ def test_without_a_work_step_nothing_is_dropped_for_it():
     before, or this fix silently empties a series somewhere else."""
     series = job_durations([_run(_job("full (1)", 40, (PROOF_STEP, "skipped")))])
     assert series == {"full (1)": [40.0]}
+
+
+# ── the same rule, for the jobs #990's gate can skip ─────────────────────────
+#
+# #990 gives `python`, `macos`, `swift-unit` and `reference-frames` the same
+# shape the sweep has: on a push to main whose tree a green pull request already
+# carried, their expensive steps skip and the job exits successful in well under
+# a minute. That is the identical trap, in three more workflows, and this series
+# is read for all of them.
+#
+# One shared step name across every gated job rather than a name per workflow.
+# `did_its_work` already leaves a job carrying none of the names alone, so the
+# whole set can be passed everywhere and each workflow is only affected by the
+# name its own jobs actually carry (L96).
+
+def test_a_gated_job_that_skipped_its_work_contributes_no_duration():
+    series = job_durations(
+        [_run(_job("swift-unit", 44, (WORK_STEP, "skipped")))],
+        work_step=(PROOF_STEP, WORK_STEP))
+    assert series == {}, (
+        "a job whose tree was already proved on its pull request is in the "
+        "series, so swift.yml's durations now measure the merge pattern")
+
+
+def test_a_gated_job_that_did_its_work_is_measured_as_before():
+    series = job_durations(
+        [_run(_job("swift-unit", 434, (WORK_STEP, "success")))],
+        work_step=(PROOF_STEP, WORK_STEP))
+    assert series == {"swift-unit": [434.0]}
+
+
+def test_one_name_being_present_does_not_drop_a_job_carrying_the_other():
+    """Both names are passed everywhere, so a sweep shard must still be judged
+    by its own step and a gated job by its own, with neither answering for the
+    other (L70)."""
+    series = job_durations(
+        [_run(_job("full (1)", 1400, (PROOF_STEP, "success")),
+              _job("swift-unit", 44, (WORK_STEP, "skipped")))],
+        work_step=(PROOF_STEP, WORK_STEP))
+    assert series == {"full (1)": [1400.0]}
+
+
+def test_a_single_step_name_still_works_as_a_bare_string():
+    """Every existing caller passes one name, and this must not become a
+    per-character scan of it: a string is iterable, so a change that forgot
+    this would compare each step name against 'R', 'e', '-' and match nothing,
+    silently restoring the population the rule exists to drop."""
+    series = job_durations(
+        [_run(_job("full (1)", 40, (PROOF_STEP, "skipped")))],
+        work_step=PROOF_STEP)
+    assert series == {}

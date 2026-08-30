@@ -1,0 +1,8 @@
+{
+  "name": "an-uncertain-answer-runs-the-job",
+  "file": "tools/check_tree_already_checked.py",
+  "find": "        return self.answer is not Answer.ALREADY_CHECKED",
+  "replace": "        return self.answer in (Answer.CHECK_NOT_GREEN, Answer.TREE_DIFFERS)",
+  "test": "tests/test_tree_already_checked.py::test_an_unreadable_history_runs_the_job",
+  "breaks": "a query that FAILED skips the job just as a proof that succeeded would, so a GitHub wobble silently stops main being checked at all (#990, L98, L119)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "the-gate-never-fires-on-a-pull-request",
+  "file": ".github/workflows/swift.yml",
+  "find": "        id: already\n        if: github.event_name == 'push'\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: python3 tools/check_tree_already_checked.py --check \"swift-unit\"",
+  "replace": "        id: already\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: python3 tools/check_tree_already_checked.py --check \"swift-unit\"",
+  "test": "tests/test_tree_already_checked.py::test_the_gate_only_fires_on_a_push",
+  "breaks": "an up-to-date branch carries its own head's tree, so a re-run finds the previous run's green and skips the very check the merge is judged by (#990)"
+}

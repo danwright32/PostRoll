@@ -1,0 +1,8 @@
+{
+  "name": "gated-steps-ask-the-gate-the-safe-way",
+  "file": ".github/workflows/tests.yml",
+  "find": "      - name: Lint\n        if: steps.already.outputs.run != 'false'",
+  "replace": "      - name: Lint\n        if: steps.already.outputs.run == 'true'",
+  "test": "tests/test_tree_already_checked.py::test_no_step_asks_the_gate_the_unsafe_way_round",
+  "breaks": "the gate is absent on a pull request, so an equality test makes the empty answer SKIP the work rather than run it, and the check a merge is judged by never runs (#990, L72)"
+}

@@ -31,16 +31,52 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Has a green pull request already checked this exact tree? (#990)
+      #
+      # Every commit on main is a squash merge made by
+      # tools/wait_for_checks.py --merge, which refuses a head that does not
+      # contain main (exit 6, #680) and merges the exact commit it judged. A
+      # squash of a head containing its base produces the head's tree byte for
+      # byte, so the steps below would re-run python against content it has
+      # already passed on. Measured over the 25 most recent merges, each had
+      # exactly one associated pull request and the trees matched 25 times out
+      # of 25; measured over the last 24 pushes to main, the jobs this gate can
+      # skip are 23 macOS runner-minutes per merge.
+      #
+      # A step rather than a job on purpose. A new job is a new CHECK NAME, and
+      # tools/wait_for_checks.py derives the bar a pull request has to clear
+      # from these workflow files, calibrated against a recorded reply from a
+      # real green pull request. Adding a name means a run carrying it can only
+      # go green once the fixture already holds it, so there is no green run to
+      # record from and breaking the loop costs a knowingly red merge (L48).
+      #
+      # `push` only. On a pull request this must never fire: an up-to-date
+      # branch can carry the same tree as its own head, so a re-run would find
+      # the previous run's green and skip the very check the merge is judged by.
+      #
+      # Every step below asks `!= 'false'` rather than `== 'true'`, so the gate
+      # not running at all, or answering nothing, runs the work. Only the one
+      # positive answer skips (L98).
+      - name: Say whether a green pull request already checked this tree
+        id: already
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/check_tree_already_checked.py --check "python"
+
+
       # `cache: pip` keys the wheel cache on requirements.txt, which is pinned
       # exactly (test_ci_gates.py holds that true), so a restore can only ever
       # be the same wheels this run asked for (#430).
       - name: Set up Python
+        if: steps.already.outputs.run != 'false'
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Install dependencies
+        if: steps.already.outputs.run != 'false'
         run: pip install -r requirements.txt
 
       # Static checks before the suite: a syntax error or an undefined name is
@@ -48,6 +84,7 @@ jobs:
       # (#113). The rule set is deliberately narrow, real defects rather than
       # style opinions, so it can be enforced rather than ignored.
       - name: Lint
+        if: steps.already.outputs.run != 'false'
         run: ruff check .
 
       # Installed explicitly rather than inherited from whatever the runner
@@ -59,6 +96,7 @@ jobs:
       # bump re-downloads instead of trying to install packages built for the
       # last one.
       - name: Restore the ffmpeg packages
+        if: steps.already.outputs.run != 'false'
         uses: actions/cache@v4
         with:
           path: ~/ffmpeg-debs
@@ -72,6 +110,7 @@ jobs:
       # restore, and a silent skip for want of ffmpeg is the whole failure mode
       # this install exists to close (#106).
       - name: Install ffmpeg
+        if: steps.already.outputs.run != 'false'
         run: |
           set -euo pipefail
           install_from_apt() {
@@ -102,9 +141,11 @@ jobs:
       # read the diff, which is where the answer will not be. The presence check
       # already produced this text; this keeps it.
       - name: Confirm ffmpeg is actually here
+        if: steps.already.outputs.run != 'false'
         run: ffmpeg -version && ffprobe -version
 
       - name: Record the ffmpeg version this leg ran against
+        if: steps.already.outputs.run != 'false'
         run: |
           set -euo pipefail
           {
@@ -119,6 +160,7 @@ jobs:
       # tests cannot quietly stop running if a future image drops ffmpeg.
       # -ra reports every skip that does remain, so none is invisible.
       - name: Run tests
+        if: steps.already.outputs.run != 'false'
         env:
           POSTROLL_REQUIRE_FFMPEG: "1"
         # No PYTHONPATH prefix: pyproject.toml puts the repo root on the path
@@ -186,24 +228,80 @@ jobs:
   # nothing else, and it buys a second run of the most expensive and most
   # visual part of the suite. Do not re-open it on the strength of the wall
   # clock alone.
+
+      # What tells a job that DID its work from one this gate skipped (#990).
+      #
+      # A skipped job still checks out, asks the gate and exits successful in
+      # under a minute. That is a positive duration, so tools/check_job_durations.py
+      # would read it as this job having become fast and the series would then
+      # hold two populations divided by the week's merge pattern rather than by
+      # anything about the job (L102, L331). It reads this step's own
+      # conclusion instead, under one name shared by every gated job, so there
+      # is no per-workflow table to keep in step (L96).
+      - name: Confirm this job ran its checks
+        # `!cancelled()` rather than nothing, so a job whose checks went RED
+        # still counts as time spent. Dropping a red run would hide a job
+        # getting slower right up to the moment it fails, which is the
+        # direction that matters most, and it is the rule the sweep's proof
+        # step already follows. A CANCELLED job is excluded, because its
+        # elapsed time measures when somebody stopped it.
+        if: ${{ !cancelled() && steps.already.outputs.run != 'false' }}
+        run: echo "python ran its checks on tree $(git rev-parse HEAD^{tree})"
   macos:
     runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
+      # Has a green pull request already checked this exact tree? (#990)
+      #
+      # Every commit on main is a squash merge made by
+      # tools/wait_for_checks.py --merge, which refuses a head that does not
+      # contain main (exit 6, #680) and merges the exact commit it judged. A
+      # squash of a head containing its base produces the head's tree byte for
+      # byte, so the steps below would re-run macos against content it has
+      # already passed on. Measured over the 25 most recent merges, each had
+      # exactly one associated pull request and the trees matched 25 times out
+      # of 25; measured over the last 24 pushes to main, the jobs this gate can
+      # skip are 23 macOS runner-minutes per merge.
+      #
+      # A step rather than a job on purpose. A new job is a new CHECK NAME, and
+      # tools/wait_for_checks.py derives the bar a pull request has to clear
+      # from these workflow files, calibrated against a recorded reply from a
+      # real green pull request. Adding a name means a run carrying it can only
+      # go green once the fixture already holds it, so there is no green run to
+      # record from and breaking the loop costs a knowingly red merge (L48).
+      #
+      # `push` only. On a pull request this must never fire: an up-to-date
+      # branch can carry the same tree as its own head, so a re-run would find
+      # the previous run's green and skip the very check the merge is judged by.
+      #
+      # Every step below asks `!= 'false'` rather than `== 'true'`, so the gate
+      # not running at all, or answering nothing, runs the work. Only the one
+      # positive answer skips (L98).
+      - name: Say whether a green pull request already checked this tree
+        id: already
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/check_tree_already_checked.py --check "macos"
+
+
       - name: Set up Python
+        if: steps.already.outputs.run != 'false'
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Install dependencies
+        if: steps.already.outputs.run != 'false'
         run: pip install -r requirements.txt
 
       # Same reason as the Linux leg: a silent skip for want of ffmpeg is
       # indistinguishable from a pass, so it is installed rather than hoped for.
       - name: Install ffmpeg
+        if: steps.already.outputs.run != 'false'
         run: brew install ffmpeg
 
       # The same record as the Linux leg (#552). This is the half that makes the
@@ -211,9 +309,11 @@ jobs:
       # cannot tell a platform difference from a version difference, which is
       # the one question this job exists to answer.
       - name: Confirm ffmpeg is actually here
+        if: steps.already.outputs.run != 'false'
         run: ffmpeg -version && ffprobe -version
 
       - name: Record the ffmpeg version this leg ran against
+        if: steps.already.outputs.run != 'false'
         run: |
           set -euo pipefail
           {
@@ -261,6 +361,7 @@ jobs:
       # instead of quietly restoring the whole suite (L98), and the count is
       # echoed so a reader can see what it actually skipped.
       - name: Run tests
+        if: steps.already.outputs.run != 'false'
         env:
           POSTROLL_REQUIRE_FFMPEG: "1"
         run: |
@@ -269,3 +370,22 @@ jobs:
           echo "not re-rendering $(wc -l < "${RUNNER_TEMP}/ignore.txt" | tr -d ' ') files the reference-frame shards already render:"
           cat "${RUNNER_TEMP}/ignore.txt"
           xargs pytest -v -n auto --durations=25 < "${RUNNER_TEMP}/ignore.txt"
+
+      # What tells a job that DID its work from one this gate skipped (#990).
+      #
+      # A skipped job still checks out, asks the gate and exits successful in
+      # under a minute. That is a positive duration, so tools/check_job_durations.py
+      # would read it as this job having become fast and the series would then
+      # hold two populations divided by the week's merge pattern rather than by
+      # anything about the job (L102, L331). It reads this step's own
+      # conclusion instead, under one name shared by every gated job, so there
+      # is no per-workflow table to keep in step (L96).
+      - name: Confirm this job ran its checks
+        # `!cancelled()` rather than nothing, so a job whose checks went RED
+        # still counts as time spent. Dropping a red run would hide a job
+        # getting slower right up to the moment it fails, which is the
+        # direction that matters most, and it is the rule the sweep's proof
+        # step already follows. A CANCELLED job is excluded, because its
+        # elapsed time measures when somebody stopped it.
+        if: ${{ !cancelled() && steps.already.outputs.run != 'false' }}
+        run: echo "macos ran its checks on tree $(git rev-parse HEAD^{tree})"

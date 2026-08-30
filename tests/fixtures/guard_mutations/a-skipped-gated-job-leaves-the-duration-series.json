@@ -1,0 +1,8 @@
+{
+  "name": "a-skipped-gated-job-leaves-the-duration-series",
+  "file": "tools/check_job_durations.py",
+  "find": "WORK_STEPS = (PROOF_STEP, WORK_STEP)",
+  "replace": "WORK_STEPS = (PROOF_STEP,)",
+  "test": "tests/test_tree_already_checked.py::test_the_duration_series_knows_every_step_a_gate_can_skip",
+  "breaks": "a merge that skipped its work enters the series at forty seconds, so swift.yml's durations measure the week's merge pattern rather than the job (#990, L102, L331)"
+}

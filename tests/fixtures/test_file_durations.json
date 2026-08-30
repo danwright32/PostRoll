@@ -170,6 +170,7 @@
     "test_top_anchored_crop.py": 0.06,
     "test_transport_is_reported.py": 0.04,
     "test_transport_seam.py": 0.0,
+    "test_tree_already_checked.py": 0.01,
     "test_ui_tests_quote_the_real_alerts.py": 0.0,
     "test_unread_page_identity.py": 0.18,
     "test_unreadable_photo_skip.py": 4.870000000000002,

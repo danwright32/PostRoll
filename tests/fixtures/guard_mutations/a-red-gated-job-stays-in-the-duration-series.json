@@ -1,0 +1,8 @@
+{
+  "name": "a-red-gated-job-stays-in-the-duration-series",
+  "file": ".github/workflows/swift.yml",
+  "find": "        if: ${{ !cancelled() && steps.already.outputs.run != 'false' }}\n        run: echo \"swift-unit ran its checks on tree $(git rev-parse HEAD^{tree})\"",
+  "replace": "        if: steps.already.outputs.run != 'false'\n        run: echo \"swift-unit ran its checks on tree $(git rev-parse HEAD^{tree})\"",
+  "test": "tests/test_tree_already_checked.py::test_the_confirming_step_still_runs_when_the_job_goes_red",
+  "breaks": "a job that went red drops out of the duration series, which hides a job getting slower right up to the moment it breaks (#990, #1019)"
+}
