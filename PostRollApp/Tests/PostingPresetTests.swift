@@ -220,6 +220,86 @@ final class PostingPresetTests: XCTestCase {
         XCTAssertTrue(PostingLayoutSwitch.plan(from: .opening, to: .opening, in: event).isEmpty)
     }
 
+    /// What licenses giving a layout switch its own narrow redraw route.
+    ///
+    /// The review screen's render driver is tangled up with Thursday's
+    /// speculative reel adoption and Friday's clip plan. None of that can ever
+    /// apply to a layout switch, because no preset governs those days: whatever
+    /// the two layouts are, a switch between them can only ever name Sunday,
+    /// Monday or Wednesday.
+    ///
+    /// Asserted rather than assumed, over EVERY ordered pair of layouts, because
+    /// the narrow route is only safe for as long as it stays true. A fourth
+    /// preset that governed Thursday would make it false silently.
+    func testNoSwitchBetweenAnyTwoLayoutsCanEverNameThursdayOrFriday() {
+        let event = eventWith([.sunday: 9, .monday: 9, .wednesday: 9,
+                               .tuesday: 9, .thursday: 40, .friday: 9])
+        for old in PostingPreset.allCases {
+            for new in PostingPreset.allCases {
+                let days = Set(PostingLayoutSwitch.plan(from: old, to: new, in: event).keys)
+                XCTAssertTrue(days.isSubset(of: [.sunday, .monday, .wednesday]),
+                              "\(old.rawValue) to \(new.rawValue) names \(days), and a "
+                              + "switch that can reach Thursday or Friday cannot use the "
+                              + "narrow redraw route")
+            }
+        }
+    }
+
+    // MARK: - Splitting the plan into the two kinds of work (#1010)
+
+    /// The whole point of #1010, stated as a value.
+    ///
+    /// Only days whose POST changes cost a caption call. Everything else is
+    /// images, which are free. Today every governed day with photos went to the
+    /// caption generator, so this is the assertion that the money stops.
+    func testBalancedToOpeningAsksForNoCaptionWorkAtAll() {
+        let event = eventWith([.sunday: 8, .monday: 8, .wednesday: 8])
+        let work = PostingLayoutSwitch.work(
+            PostingLayoutSwitch.plan(from: .balanced, to: .opening, in: event))
+
+        XCTAssertTrue(work.rebuildDays.isEmpty,
+                      "no day becomes a different post, so no caption call is needed: "
+                      + "\(work.rebuildDays)")
+        XCTAssertEqual(work.redrawDays, [.sunday],
+                       "Sunday's images change and nothing else does")
+    }
+
+    func testBalancedToClassicSplitsTheTwoKindsOfWork() {
+        let event = eventWith([.sunday: 8, .monday: 8, .wednesday: 8])
+        let work = PostingLayoutSwitch.work(
+            PostingLayoutSwitch.plan(from: .balanced, to: .classic, in: event))
+
+        XCTAssertEqual(work.rebuildDays, ["sunday", "monday"],
+                       "both become single photo posts, which are written differently")
+        XCTAssertEqual(work.redrawDays, [.wednesday],
+                       "Wednesday stays a carousel and only its count moves")
+    }
+
+    func testAnEmptyPlanAsksForNothing() {
+        let work = PostingLayoutSwitch.work([:])
+        XCTAssertTrue(work.rebuildDays.isEmpty)
+        XCTAssertTrue(work.redrawDays.isEmpty)
+    }
+
+    /// A day is in exactly one of the two, never both.
+    ///
+    /// Both halves write that day's media, so a day in both would be two
+    /// writers on one file, which is what #1009's exclusion exists to stop.
+    func testNoDayIsInBothKindsOfWork() {
+        let event = eventWith([.sunday: 8, .monday: 8, .wednesday: 8])
+        for old in PostingPreset.allCases {
+            for new in PostingPreset.allCases {
+                let work = PostingLayoutSwitch.work(
+                    PostingLayoutSwitch.plan(from: old, to: new, in: event))
+                let overlap = work.rebuildDays.intersection(
+                    Set(work.redrawDays.map(\.rawValue)))
+                XCTAssertTrue(overlap.isEmpty,
+                              "\(old.rawValue) to \(new.rawValue) would run two writers "
+                              + "on \(overlap)")
+            }
+        }
+    }
+
     // MARK: - Per-event override (#66)
 
     private func makeEvent() -> Event {

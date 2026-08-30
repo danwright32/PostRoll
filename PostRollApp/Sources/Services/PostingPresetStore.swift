@@ -201,6 +201,29 @@ enum PostingLayoutSwitch {
         }
         return plan
     }
+
+    /// The two kinds of work a plan asks for, kept apart because one of them
+    /// costs money and the other does not.
+    struct Work: Equatable {
+        /// Day names for the caption generator, in its own currency (raw
+        /// strings, which is what `retryDays` takes). Empty means NO caption
+        /// call, which is the whole point of #1010.
+        let rebuildDays: Set<String>
+        /// Days needing only their images redrawn. Sorted, so a switch reports
+        /// and runs the same way twice rather than in dictionary order.
+        let redrawDays: [DayName]
+    }
+
+    /// Split a plan into what has to be regenerated and what only has to be
+    /// redrawn.
+    ///
+    /// A day lands in exactly one of the two. Both halves write that day's
+    /// media, so a day in both would be two writers on one file, which is the
+    /// hazard #1009's claim exclusion exists to prevent.
+    static func work(_ plan: [DayName: DayLayoutChange]) -> Work {
+        Work(rebuildDays: Set(plan.filter { $0.value == .rebuildPost }.keys.map(\.rawValue)),
+             redrawDays: DayName.allCases.filter { plan[$0] == .redrawImages })
+    }
 }
 
 /// Copy for the per-event posting layout picker (#1007).
