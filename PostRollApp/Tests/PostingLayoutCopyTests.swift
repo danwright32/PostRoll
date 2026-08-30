@@ -305,4 +305,57 @@ final class PostingLayoutCopyTests: XCTestCase {
                        "an unstamped caption is unknown, not edited, and warning about "
                        + "edits nobody made is how a real warning stops being read: \(text)")
     }
+
+    // MARK: - A day the switch did not finish (#1010)
+
+    /// A failed redraw leaves the event on the new layout with one day still
+    /// drawn for the old one. The control that made the switch is where that
+    /// has to be said, because it is the only screen showing the layout the day
+    /// disagrees with.
+    func testTheStaleSentenceNamesTheDayAndReadsAsOneThingLeftOver() {
+        XCTAssertEqual(PostingLayoutCopy.stale([.sunday]),
+                       "Sunday still shows the previous layout.")
+        XCTAssertEqual(PostingLayoutCopy.stale([.sunday, .monday]),
+                       "Sunday and Monday still show the previous layout.")
+    }
+
+    /// Nothing left over, nothing said. A notice that appears when there is no
+    /// problem teaches Dan to stop reading the one that matters (L36).
+    func testNothingStaleSaysNothing() {
+        XCTAssertNil(PostingLayoutCopy.stale([]))
+        XCTAssertNil(PostingLayoutCopy.redrawAction([]))
+    }
+
+    /// The way out, named as the action it performs.
+    ///
+    /// It has to be a control of its own: the export refuses a stale day, and
+    /// picking the layout that is already selected fires nothing at all, so
+    /// without this the only route back is switching to a third layout and
+    /// returning, which nothing on screen suggests (L109, L126).
+    func testTheRemedyIsOfferedAsAnAction() {
+        XCTAssertEqual(PostingLayoutCopy.redrawAction([.sunday]), "Redraw Sunday")
+        XCTAssertEqual(PostingLayoutCopy.redrawAction([.sunday, .monday]),
+                       "Redraw Sunday and Monday")
+    }
+
+    /// The control has to actually offer it, not merely be able to phrase it.
+    ///
+    /// Checked in both directions, like the rebuild scan above: the positive
+    /// alone is satisfied by a sentence rendered with no way to act on it
+    /// (L178).
+    func testTheControlShowsTheStaleDaysAndOffersTheRedraw() throws {
+        let source = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
+                                encoding: .utf8)
+
+        XCTAssertTrue(source.contains("PostingLayoutCopy.stale("),
+                      "the control never says a day was left on the previous "
+                      + "layout, so the export refuses with the reason on another "
+                      + "screen")
+        XCTAssertTrue(source.contains("PostingLayoutCopy.redrawAction("),
+                      "the reason is stated with no way to act on it, and picking "
+                      + "the layout already selected fires nothing")
+        XCTAssertTrue(source.contains("PostingLayoutSwitch.staleDays("),
+                      "the control decides staleness some other way than the "
+                      + "predicate the export gate uses, so the two can disagree")
+    }
 }

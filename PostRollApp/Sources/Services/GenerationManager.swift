@@ -244,6 +244,12 @@ final class GenerationManager {
         // regenerated days so other days' approved previews survive.
         saved.previewMediaPaths = PreviewMergePolicy.merge(
             existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: onlyDays == nil)
+        // The layout these images were drawn under, for every day this pass
+        // actually rendered (#1010). Recorded here as well as on the per day
+        // path because a day this pass rendered and left unrecorded can never
+        // be judged stale, and the export gate would silently stop covering it.
+        saved.recordRenderedLayout(saved.effectivePostingPreset,
+                                   forDays: PreviewMergePolicy.renderedDays(in: mediaPaths))
 
         // Which days this graphics pass is allowed to speak for (#763). A pass
         // that said nothing at all owns none, whatever it was asked to render:
@@ -311,6 +317,8 @@ final class GenerationManager {
         // keeping them means re-rendering work that is already done.
         saved.previewMediaPaths = PreviewMergePolicy.merge(
             existing: saved.previewMediaPaths, fresh: mediaPaths, isFullRun: false)
+        saved.recordRenderedLayout(saved.effectivePostingPreset,
+                                   forDays: PreviewMergePolicy.renderedDays(in: mediaPaths))
         // The same decision as the ordinary completion (#763): a pass that said
         // nothing owns no days, and a run the watchdog killed is exactly when
         // its graphics are most likely to have said nothing.

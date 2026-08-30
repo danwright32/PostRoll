@@ -114,15 +114,6 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
         return "feed_photo"
     }
 
-    /// The days a switch to this layout would rebuild for `event`: the
-    /// preset-governed days (Sunday/Monday/Wednesday) that actually have photos.
-    /// Used to warn before a switch regenerates posts (#71).
-    func affectedDays(in event: Event) -> [DayName] {
-        DayName.allCases.filter {
-            format(for: $0) != nil && !(event.days[$0.rawValue]?.photoPaths.isEmpty ?? true)
-        }
-    }
-
     /// UserDefaults key shared with `PostingPresetStore`.
     static let storageKey = "postroll.posting.preset.v1"
 
@@ -155,12 +146,13 @@ enum DayLayoutChange: Equatable {
 
 /// Which days a posting layout switch actually has to touch (#1010).
 ///
-/// `PostingPreset.affectedDays` answers a different question: every governed
-/// day that HAS PHOTOS, without ever comparing the two layouts. Switching
-/// Balanced to Opening moves Sunday from 4 photos to 7 and leaves Monday and
-/// Wednesday exactly as they were, yet all three were caption regenerated: paid
-/// API calls that changed nothing, and any typed caption edits on those two
-/// days destroyed.
+/// The rule this replaced, `PostingPreset.affectedDays`, answered a different
+/// question: every governed day that HAS PHOTOS, without ever comparing the two
+/// layouts. Switching Balanced to Opening moves Sunday from 4 photos to 7 and
+/// leaves Monday and Wednesday exactly as they were, yet all three were caption
+/// regenerated: paid API calls that changed nothing, and any typed caption edits
+/// on those two days destroyed. It is deleted rather than left beside this, so
+/// there is no second answer for a future caller to reach for (L29).
 enum PostingLayoutSwitch {
 
     /// Per day, what changing from `old` to `new` requires of `event`.
@@ -254,6 +246,26 @@ enum PostingLayoutSwitch {
         return sentences.joined(separator: " ")
     }
 
+    /// Days whose images were drawn under a layout that is no longer this
+    /// event's, in the week's own order (#1010).
+    ///
+    /// Asked with the same `plan` the switch itself runs on, not by comparing
+    /// the recorded NAME against the current one. Those are different
+    /// questions: a Sunday with three photos posts three under every layout
+    /// that governs it, and no preset governs Tuesday at all, so a name
+    /// comparison would refuse exports that are perfectly correct and teach Dan
+    /// to work around the refusal (L36, L144).
+    ///
+    /// A day with nothing recorded is not accused: nil is no evidence, not a
+    /// mismatch (L223).
+    static func staleDays(in event: Event, preset: PostingPreset) -> [DayName] {
+        DayName.allCases.filter { day in
+            guard let drawn = event.days[day.rawValue]?.renderedPostingPreset,
+                  drawn != preset else { return false }
+            return plan(from: drawn, to: preset, in: event)[day] != nil
+        }
+    }
+
     /// The two kinds of work a plan asks for, kept apart because one of them
     /// costs money and the other does not.
     struct Work: Equatable {
@@ -294,6 +306,32 @@ enum PostingLayoutCopy {
     /// which of the two they are looking at.
     static func thisEvent(_ preset: PostingPreset) -> String {
         "This event: \(preset.explanation)."
+    }
+
+    /// What to say about days whose images were left drawn for the layout this
+    /// event has moved away from (#1010), or nil when there are none.
+    ///
+    /// nil rather than an empty string, for the same reason the confirmation is
+    /// nil when nothing changes: a notice that appears with nothing to report
+    /// teaches the reader to skip the one that matters (L36).
+    static func stale(_ days: [DayName]) -> String? {
+        guard !days.isEmpty else { return nil }
+        let names = days.map(\.displayName)
+        return "\(SentenceList.of(names)) still "
+             + "\(SentenceList.verb(names, singular: "shows", plural: "show")) "
+             + "the previous layout."
+    }
+
+    /// The control that puts that right, named as the action it performs.
+    ///
+    /// A control of its own because the condition PERSISTS in the event while
+    /// every other route to it is closed: the export refuses a stale day, and
+    /// picking the layout that is already selected fires no change at all, so
+    /// the only way back would be switching to a third layout and returning
+    /// (L109, L126).
+    static func redrawAction(_ days: [DayName]) -> String? {
+        guard !days.isEmpty else { return nil }
+        return "Redraw \(SentenceList.of(days.map(\.displayName)))"
     }
 }
 

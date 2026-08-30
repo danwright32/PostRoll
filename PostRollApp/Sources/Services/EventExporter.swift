@@ -117,8 +117,15 @@ struct EventExporter {
             try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
 
             if preset.isCollageCarousel(day) {
-                let count = preset.format(for: day)?.count ?? 0
-                let photos = Array((event.days[day.rawValue]?.photoPaths ?? []).prefix(count))
+                // `effectiveCount`, the one spelling of how many of a day's
+                // photos actually get posted (#1010). This read
+                // `format(for:)?.count ?? 0`, one of four fallbacks across the
+                // app that each guessed differently (0 here, 10 in the picker,
+                // the assigned count in two more) for a day no preset governs.
+                let assigned = event.days[day.rawValue]?.photoPaths ?? []
+                let count = preset.effectiveCount(for: day, assigned: assigned.count)
+                    ?? assigned.count
+                let photos = Array(assigned.prefix(count))
                 if !photos.isEmpty {
                     let carouselDir = dayDir.appendingPathComponent("carousel")
                     try? FileManager.default.createDirectory(at: carouselDir, withIntermediateDirectories: true)

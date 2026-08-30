@@ -1,8 +1,8 @@
 {
   "name": "a-pipeline-marker-is-not-wrapped-in-prose",
-  "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
-  "find": "                graphics.failDayRegen(day, for: event.id, pipelineError: pipelineError)",
-  "replace": "                graphics.failDayRegen(day, for: event.id,\n                                      reason: \"\\(day.displayName) regeneration failed: \\(pipelineError)\")",
+  "file": "PostRollApp/Sources/Services/PreviewGraphicsManager.swift",
+  "find": "            if let pipelineError = result.errors[day.rawValue] {\n                failDayRegen(day, for: eventID, pipelineError: pipelineError)",
+  "replace": "            if let pipelineError = result.errors[day.rawValue] {\n                failDayRegen(day, for: eventID,\n                             reason: \"\\(day.displayName) regeneration failed: \\(pipelineError)\")",
   "test": "PostRollTests/PipelineErrorWiringTests/testNoScreenFoldsAPipelineErrorIntoAFailureSentence",
   "breaks": "the day's failure is recorded as a sentence with the pipeline's marker buried inside it, so the Friday card's prefix check cannot match and the one failure with two ways out is shown with neither, on a day that will fail identically on every retry (#730, L199)"
 }

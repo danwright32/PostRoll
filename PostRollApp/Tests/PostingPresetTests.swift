@@ -102,28 +102,6 @@ final class PostingPresetTests: XCTestCase {
         XCTAssertTrue(message?.contains("Sunday") ?? false)
     }
 
-    // MARK: - Days a layout switch rebuilds (#71)
-
-    func testAffectedDaysAreGovernedDaysWithPhotos() {
-        var event = Event(name: "Show", org: "Org", venue: "Hall",
-                          date: Date(timeIntervalSince1970: 1_700_000_000), shootType: .fullShow)
-        var sun = PostingDay(day: .sunday); sun.photoPaths = [URL(fileURLWithPath: "/a.jpg")]
-        var wed = PostingDay(day: .wednesday); wed.photoPaths = [URL(fileURLWithPath: "/b.jpg")]
-        let mon = PostingDay(day: .monday) // no photos
-        var tue = PostingDay(day: .tuesday); tue.photoPaths = [URL(fileURLWithPath: "/c.jpg")]
-        event.days = [
-            DayName.sunday.rawValue: sun,
-            DayName.monday.rawValue: mon,
-            DayName.wednesday.rawValue: wed,
-            DayName.tuesday.rawValue: tue,
-        ]
-        let affected = PostingPreset.balanced.affectedDays(in: event)
-        XCTAssertEqual(Set(affected), [.sunday, .wednesday],
-                       "only preset-governed days that actually have photos rebuild")
-        XCTAssertFalse(affected.contains(.monday), "a governed day with no photos is skipped")
-        XCTAssertFalse(affected.contains(.tuesday), "Tuesday isn't governed by the preset")
-    }
-
     // MARK: - What a switch actually has to rebuild (#1010)
 
     private func eventWith(_ counts: [DayName: Int]) -> Event {

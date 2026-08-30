@@ -142,7 +142,10 @@ final class CollageLayoutLoader {
     /// to agree about it and the sheet is no longer the only thing that asks.
     static func fingerprint(event: Event, day: DayName) -> String {
         guard let posting = event.days[day.rawValue] else { return day.rawValue }
-        let count = event.effectivePostingPreset.format(for: day)?.count
+        // The same `effectiveCount` the switch and the exporter ask (#1010),
+        // rather than a fourth spelling of it with its own fallback.
+        let count = event.effectivePostingPreset
+            .effectiveCount(for: day, assigned: posting.photoPaths.count)
             ?? posting.photoPaths.count
         let parts = posting.photoPaths.prefix(count).map { url -> String in
             let offset = posting.collageCropOffsets[url.absoluteString] ?? CropOffset()

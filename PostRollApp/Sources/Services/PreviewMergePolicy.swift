@@ -46,6 +46,17 @@ enum DayRedrawOutcome: Equatable {
 
 enum PreviewMergePolicy {
 
+    /// The days a run actually produced images for.
+    ///
+    /// Keys alone are not the answer: a day can appear carrying an empty set of
+    /// paths, which is a day that rendered NOTHING, and recording that as a
+    /// finished render would mark the failure as up to date (L67). One spelling
+    /// of the question, because its three callers each write it once and the
+    /// one that gets it wrong is invisible.
+    static func renderedDays(in paths: [String: [String: String]]?) -> [String] {
+        (paths ?? [:]).filter { !$0.value.isEmpty }.map(\.key)
+    }
+
     /// Whether a run should (re)render preview graphics.
     ///
     /// By default graphics render only on a full run (captions and graphics in

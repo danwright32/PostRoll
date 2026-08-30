@@ -270,7 +270,8 @@ final class BannerLegibilityTests: XCTestCase {
             // testTheUnrenderableControlsAreNamedRatherThanMeasured.
             ("caption bar, waiting on rebuild", AnyView(CaptionReviewActionBar(
                 activity: .waitingOnRebuild(reason: ExportReadiness.blockedReason(
-                    regeneratingDays: [.thursday, .wednesday]) ?? "")))),
+                    regeneratingDays: [.thursday, .wednesday],
+                    staleDays: []) ?? "")))),
             // The rows rather than the region that holds them (#743). The stack
             // is capped and scrolls past `CaptionReviewNotices.maximumHeight`,
             // so hosting it here would measure the contrast of whichever three

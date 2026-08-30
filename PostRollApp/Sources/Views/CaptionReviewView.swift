@@ -527,6 +527,7 @@ struct CaptionReviewView: View {
                                      estimate: "~1 min")
                         .padding(Spacing.xl)
                 } else if let waiting = ExportReadiness.blockedReason(
+                            for: liveEvent, preset: liveEvent.effectivePostingPreset,
                             regeneratingDays: regeneratingDays) {
                     // The two states that are not a LongRunIndicator are their own
                     // view taking plain values (#396). The indicator branches
@@ -1068,8 +1069,8 @@ struct CaptionReviewView: View {
         // Now generate the reel for Tuesday and the Friday before/after story.
         // Both slots are already claimed, so these render rather than claim
         // again, which would refuse its own caller.
-        renderClaimedDay(.tuesday)
-        renderClaimedDay(.friday)
+        graphics.renderClaimedDay(.tuesday, for: event.id, appState: appState)
+        graphics.renderClaimedDay(.friday, for: event.id, appState: appState)
     }
 
     /// Add or change the optional B&W after on an already-generated before/after.
@@ -1199,8 +1200,9 @@ struct CaptionReviewView: View {
                     // Passed even when nil, which is what clears the note from
                     // the last render: a warning that outlives the thing it was
                     // about is worse than none, because it is now false.
-                    recordMediaOutcome(day: .friday, error: nil,
-                                       warning: render.titleCardSkipped)
+                    graphics.recordMediaOutcome(
+                        day: .friday, for: event.id, appState: appState,
+                        error: nil, warning: render.titleCardSkipped)
                     var current = appState.events.first(where: { $0.id == event.id }) ?? liveEvent
                     var paths = current.previewMediaPaths[DayName.friday.rawValue] ?? [:]
                     paths["reel"] = render.reelPath
@@ -1414,116 +1416,9 @@ struct CaptionReviewView: View {
             }
         }) else { return false }
 
-        renderClaimedDay(day, newLayout: newLayout)
+        graphics.renderClaimedDay(day, for: event.id, appState: appState,
+                                  newLayout: newLayout)
         return true
-    }
-
-    /// Render a day whose slot is ALREADY claimed.
-    ///
-    /// Split from the claim because two actions claim Tuesday and Friday
-    /// together and then render both, and a second claim in here would refuse
-    /// its own caller.
-    private func renderClaimedDay(_ day: DayName, newLayout: Bool = false) {
-        let eventSnapshot = appState.events.first(where: { $0.id == event.id }) ?? event
-        Task {
-            // For Thursday, try to adopt a speculative pre-render that was kicked
-            // off when the user edited. `newLayout` randomizes the seed, so there's
-            // nothing pre-rendered to match — skip straight to a fresh encode.
-            if day == .thursday, !newLayout,
-               let result = await graphics.speculativeReel(for: event.id).take(matching: eventSnapshot) {
-                await MainActor.run {
-                    graphics.endDayRegen(day, for: event.id)
-                    applyRegenResult(result, day: day)
-                }
-                return
-            }
-            // No usable pre-render: make sure no stale speculative encode is still
-            // writing the same output file before we start a fresh one.
-            if day == .thursday { graphics.speculativeReel(for: event.id).cancelAll() }
-
-            // Capture the result so we can distinguish "Python crashed" from
-            // "Python exited 0 but reported a per-day error". Both used to be
-            // swallowed by `try?`, which fired the success notification while
-            // the mockup silently kept showing the old MP4.
-            let outcome: Result<PythonBridge.PreviewGenerationResult, Error>
-            do {
-                let result = try await PythonBridge.shared.runPreviewGeneration(
-                    event: eventSnapshot, days: [day.rawValue]
-                )
-                outcome = .success(result)
-            } catch {
-                outcome = .failure(error)
-            }
-
-            await MainActor.run {
-                switch outcome {
-                case .failure(let error):
-                    graphics.failDayRegen(
-                        day, for: event.id,
-                        reason: "\(day.displayName) regeneration failed: "
-                              + "\(error.localizedDescription)")
-                case .success(let result):
-                    graphics.endDayRegen(day, for: event.id)
-                    applyRegenResult(result, day: day)
-                }
-            }
-        }
-    }
-
-    /// Land a finished (or adopted) reel render onto the live event: swap in the
-    /// new media paths, bump the version so AVPlayer reloads, and notify.
-    @MainActor
-    private func applyRegenResult(_ result: PythonBridge.PreviewGenerationResult, day: DayName) {
-        // Keep the asset screen's failure list in step with what happened here, so
-        // a day fixed (or broken again) from the review screen doesn't leave a
-        // contradictory message behind on the previous screen.
-        recordMediaOutcome(day: day, error: result.errors[day.rawValue],
-                           warning: result.warnings[day.rawValue])
-
-        // The three way branch is `DayRedrawOutcome` since #1009, so it can be
-        // tested and so a redraw driven from another screen reaches the same
-        // verdict rather than a second copy of it. What is left here is what to
-        // DO with each answer, which is this screen's business.
-        switch DayRedrawOutcome.of(result, day: day) {
-        case .failed(let reason):
-            // The pipeline's own text where it had one, not a sentence wrapped
-            // around it: the marker it uses for the cases with a remedy has to
-            // survive to the card that offers one (#730). The manager builds
-            // the wording.
-            if let pipelineError = result.errors[day.rawValue] {
-                graphics.failDayRegen(day, for: event.id, pipelineError: pipelineError)
-            } else {
-                graphics.failDayRegen(day, for: event.id, reason: reason)
-            }
-        case .succeeded(let dayPaths):
-            // Read the CURRENT event — not self.event which may be stale
-            // (e.g. after assignReelPhotosAndGenerate saved new photos).
-            var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-            ev.previewMediaPaths[day.rawValue] = dayPaths
-            if day == .friday { ev.applyFridayClipPlan(result.fridayClipPlan) }
-            ev.applyCoverPick(result.coverPicks[day.rawValue], forDay: day.rawValue)
-            appState.updateEvent(ev)
-            graphics.bumpGraphicVersion(day, for: event.id)
-            NotificationService.shared.notifyRegenerationComplete(
-                eventName: event.name,
-                what: day.displayName
-            )
-        }
-    }
-
-    /// Record (or clear) a day's graphics failure on the live event, so the asset
-    /// screen's failure list reflects the latest attempt from either screen.
-    @MainActor
-    private func recordMediaOutcome(day: DayName, error: String?, warning: String? = nil) {
-        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
-        // The recording itself is on the model (#824), so the rule that a note
-        // is CLEARED when the next render has nothing to say is one rule rather
-        // than one per screen. Recorded alongside the error rather than folded
-        // into it: a day that rendered without an optional photo used to report
-        // as a failed regeneration, which was simply untrue (#265).
-        guard ev.recordMediaOutcome(day: day.rawValue, error: error, warning: warning)
-        else { return }
-        appState.updateEvent(ev)
     }
 
     /// Regenerate (or manually override) just the day's cover image (#141).
@@ -1622,7 +1517,9 @@ struct CaptionReviewView: View {
         // Belt and braces with the bar above: a rebuild that starts between
         // the button rendering and the press must not let a stale export
         // through (#89).
-        guard ExportReadiness.canExport(regeneratingDays: regeneratingDays) else { return }
+        guard ExportReadiness.canExport(for: liveEvent,
+                                        preset: liveEvent.effectivePostingPreset,
+                                        regeneratingDays: regeneratingDays) else { return }
         save()
         let hasEdits = DayName.allCases.contains { result[$0]?.wasEdited == true }
         guard hasEdits else {
