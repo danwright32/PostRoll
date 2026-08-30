@@ -1,8 +1,8 @@
 {
   "name": "derived-data-actually-built-into",
   "file": ".github/workflows/swift.yml",
-  "find": "            -scheme PostRollTests \\\n            -destination 'platform=macOS' \\\n            -derivedDataPath PostRollApp/.derived-data \\\n",
-  "replace": "            -scheme PostRollTests \\\n            -destination 'platform=macOS' \\\n",
+  "find": "              -scheme PostRollTests \\\n              -destination 'platform=macOS' \\\n              -derivedDataPath PostRollApp/.derived-data \\\n",
+  "replace": "              -scheme PostRollTests \\\n              -destination 'platform=macOS' \\\n",
   "test": "tests/test_ci_caches_and_cancels.py::test_the_swift_tests_build_into_the_folder_that_is_cached",
   "breaks": "the cache is restored and saved while xcodebuild builds somewhere else, so it is uploaded and never read (L3)"
 }

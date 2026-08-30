@@ -31,18 +31,65 @@ than the last class's. Two readings of one line is how they drift (L41).
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 from tools.check_guards import EXECUTED  # noqa: E402
+
+#: What the Swift suite was last MEASURED at, beside the other measured records
+#: (`test_file_durations.json` is written by a tool and read by a guard the same
+#: way). Written by `tools/record_suite_count.py` from a green run, never by
+#: hand: a number typed in is a number nobody measured, and it reads as a
+#: current fact for as long as it sits there (L32, L316).
+RECORDED_COUNT = REPO_ROOT / "tests" / "fixtures" / "swift_suite_count.json"
 
 
 class SuiteCountError(Exception):
     """The transcript does not support a claim that the leg ran."""
+
+
+def recorded_swift_count(path: Path | None = None) -> int:
+    """How many Swift tests the suite was last measured at.
+
+    Three refusals rather than one, because an ABSENT file, an unreadable one
+    and a present file that does not answer are three different things to go and
+    fix, and a single message would send two of the three somewhere unrelated
+    (L11).
+
+    No default standing for absent anywhere in here. `.get("count", 0)` would
+    turn a renamed key into a floor of zero, which every run on earth clears, so
+    the guard would keep reading as a safeguard while refusing nobody (L138).
+    """
+    record = RECORDED_COUNT if path is None else path
+
+    try:
+        text = record.read_text(encoding="utf-8")
+    except OSError as error:
+        raise SuiteCountError(
+            f"could not read the recorded Swift test count at {record}: "
+            f"{error}. Without it there is no floor and nothing held this run "
+            f"to one. Re-record it with tools/record_suite_count.py") from error
+
+    try:
+        held = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise SuiteCountError(
+            f"the recorded Swift test count at {record} is not readable JSON: "
+            f"{error}. That is a corrupt record, not a short suite") from error
+
+    if not isinstance(held, dict) or "count" not in held:
+        raise SuiteCountError(
+            f"the record at {record} has no `count`, so it cannot say what the "
+            f"suite holds. A record that does not answer the question is not a "
+            f"floor of zero, it is no floor at all")
+
+    return int(held["count"])
 
 
 #: The tail of a pytest summary line: `in 3.93s`, or `in 130.02s (0:02:10)`
@@ -86,6 +133,61 @@ def swift_tests_run(log: str) -> int:
     return executed
 
 
+#: How far below the recorded count a Swift run may land before it is refused.
+#:
+#: 2% of the suite, which is 51 tests at the 2,599 recorded today. The number is
+#: chosen from both directions rather than picked for feeling careful:
+#:
+#: It has to CATCH a lost worker's share, which is what #992 can produce. The
+#: runner has three cores, so one worker is about a third of the suite and every
+#: whole class is well above this line.
+#:
+#: It has to NOT fire on ordinary deletion between re-recordings. A change that
+#: removes more than fifty tests at once is a deliberate removal, and the
+#: refusal names the tool that re-records, so it costs one command rather than a
+#: puzzle.
+#:
+#: Expressed as a share rather than a count so it tracks the suite instead of
+#: going quietly slack as the suite grows (L182).
+FLOOR_TOLERANCE = 0.02
+
+
+def swift_run_meets_floor(executed: int, recorded: int) -> None:
+    """Refuse a Swift leg that ran far fewer tests than the suite is known to hold.
+
+    `swift_tests_run` already refuses a total that is ABSENT and one that is
+    ZERO. This is the third refusal, and it is the one the other two cannot
+    make: a leg that ran 1,300 of 2,599 reports a perfectly well-formed total,
+    exits green, and prints TEST SUCCEEDED.
+
+    Separate from `swift_tests_run` on purpose. That function answers what the
+    transcript SAYS, and this one answers whether that is enough. Folding the
+    floor into the reader would give one function two verdicts, which is how a
+    run of nothing came to read as a full suite in the first place (L53).
+    """
+    if recorded <= 0:
+        # Named as a missing RECORD, not as a short run. A recorded count of
+        # zero derives a floor of zero, which every run clears, so without this
+        # the check reads as an active safeguard while refusing nobody (L98).
+        # The remedy is to write the record, which is nothing to do with the
+        # suite that just ran perfectly well (L11).
+        raise SuiteCountError(
+            f"the recorded Swift test count is {recorded}, so there is no "
+            f"floor to judge against and this run was not held to one. That is "
+            f"a missing record, not a short suite: re-record the count from a "
+            f"green run")
+
+    floor = int(recorded * (1 - FLOOR_TOLERANCE))
+    if executed < floor:
+        raise SuiteCountError(
+            f"the Swift leg executed {executed} tests, below the floor of "
+            f"{floor} derived from the {recorded} last recorded. A leg that "
+            f"loses a worker's share still exits green and still prints TEST "
+            f"SUCCEEDED, so this looks exactly like a full run (L98). If tests "
+            f"were deliberately removed, re-record the count; otherwise find "
+            f"the {recorded - executed} that did not run")
+
+
 def python_tests_run(log: str) -> int:
     """How many tests pytest reported running, from its final summary line.
 
@@ -114,10 +216,23 @@ def python_tests_run(log: str) -> int:
         "that ran zero tests, and the two need different fixes")
 
 
-#: What each leg is called when it reports, and how to read its transcript.
+def _swift_floor(executed: int) -> None:
+    """Hold a Swift run to the recorded count. Raises, or says nothing."""
+    swift_run_meets_floor(executed, recorded_swift_count())
+
+
+#: What each leg is called when it reports, how to read its transcript, and what
+#: holds its count to a floor.
+#:
+#: The Python leg deliberately carries NO floor, and the reason is that it
+#: already has one that works: pytest-xdist reports a crashed worker's tests as
+#: FAILURES rather than dropping them, so a Python leg that loses a share goes
+#: red on its own exit code. The Swift leg has no such property, which is the
+#: whole of #1017. This is an exemption with a written reason rather than an
+#: entry nobody thought about (L233).
 LEGS = {
-    "swift": ("Swift", swift_tests_run),
-    "python": ("Python", python_tests_run),
+    "swift": ("Swift", swift_tests_run, _swift_floor),
+    "python": ("Python", python_tests_run, None),
 }
 
 
@@ -135,7 +250,7 @@ def run_leg(leg: str, command: list[str]) -> int:
     so a refused count fails the leg even on an exit code of 0, and a red runner
     stays red even when the count is fine.
     """
-    label, read = LEGS[leg]
+    label, read, floor = LEGS[leg]
     try:
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -158,10 +273,23 @@ def run_leg(leg: str, command: list[str]) -> int:
     status = process.wait()
 
     try:
-        print(f"{label}: {read(''.join(captured))} tests", flush=True)
+        counted = read("".join(captured))
     except SuiteCountError as refusal:
         print(f"{label}: {refusal}", file=sys.stderr, flush=True)
         return status or 1
+
+    # Printed BEFORE the floor is applied, so the number is on the screen
+    # whichever way the verdict goes. A floor that refuses silently leaves an
+    # operator unable to tell a suite that grew from one sitting just above the
+    # line, and the count is the thing they need in both cases.
+    print(f"{label}: {counted} tests", flush=True)
+
+    if floor is not None:
+        try:
+            floor(counted)
+        except SuiteCountError as refusal:
+            print(f"{label}: {refusal}", file=sys.stderr, flush=True)
+            return status or 1
     return status
 
 
@@ -177,7 +305,7 @@ def main(argv: list[str]) -> int:
         print(USAGE, file=sys.stderr)
         return 2
 
-    label, read = LEGS[argv[0]]
+    label, read, floor = LEGS[argv[0]]
     path = Path(argv[1])
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -189,10 +317,23 @@ def main(argv: list[str]) -> int:
         return 1
 
     try:
-        print(f"{label}: {read(text)} tests")
+        counted = read(text)
     except SuiteCountError as refusal:
         print(f"{label}: {refusal}", file=sys.stderr)
         return 1
+
+    # The same order as `run_leg`, for the same reason: the count is printed
+    # whichever way the floor goes. Reading a transcript from a file is how CI
+    # judges a run it did not launch, so the two paths must not disagree about
+    # what a short run is (L263).
+    print(f"{label}: {counted} tests")
+
+    if floor is not None:
+        try:
+            floor(counted)
+        except SuiteCountError as refusal:
+            print(f"{label}: {refusal}", file=sys.stderr)
+            return 1
     return 0
 
 

@@ -1,0 +1,8 @@
+{
+  "name": "a-swift-leg-that-ran-half-is-refused",
+  "file": "tools/suite_counts.py",
+  "find": "    floor = int(recorded * (1 - FLOOR_TOLERANCE))\n    if executed < floor:",
+  "replace": "    floor = int(recorded * (1 - FLOOR_TOLERANCE))\n    if executed < 0:",
+  "test": "tests/test_swift_leg_meets_its_floor.py::test_a_swift_leg_that_ran_half_the_suite_fails_though_xcodebuild_said_success",
+  "breaks": "a Swift leg that executed half the suite is reported as a full run. xcodebuild prints TEST SUCCEEDED and exits 0 whether or not a worker's share was lost, so the count against a floor is the only thing that tells the two apart (#1017, L98)"
+}
