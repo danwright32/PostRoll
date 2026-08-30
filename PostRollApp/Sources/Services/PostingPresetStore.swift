@@ -266,37 +266,6 @@ enum PostingLayoutSwitch {
         let redrawDays: [DayName]
     }
 
-    /// The confirmation for switching `event` to `preset`, or nil when there is
-    /// nothing to confirm.
-    ///
-    /// nil rather than an empty string: a dialog that appears with nothing to
-    /// say trains Dan to dismiss the one that matters, and a switch that
-    /// rebuilds nothing takes nothing away.
-    ///
-    /// Derived from the days that would actually rebuild and from whether their
-    /// captions carry edits, never asserted. A warning shown identically on
-    /// every switch carries no information (L180).
-    static func confirmation(switchingTo preset: PostingPreset,
-                             in event: Event,
-                             defaults: UserDefaults) -> String? {
-        let days = preset.affectedDays(in: event)
-        guard !days.isEmpty else { return nil }
-
-        let all = SentenceList.of(days.map(\.displayName))
-
-        // `wasEdited`, never a raw `caption != generatedCaption`.
-        // `generatedCaption` is empty until `stampOriginals` runs, so the raw
-        // comparison reads every unstamped day as edited and warns Dan about
-        // work he never did. A warning that cries wolf stops being read (L36).
-        let edited = days.filter { event.weekResult?[$0]?.wasEdited == true }
-
-        guard !edited.isEmpty else {
-            return "This rebuilds the captions and images for \(all)."
-        }
-        let editedList = SentenceList.of(edited.map(\.displayName))
-        return "This rebuilds the captions and images for \(all). "
-             + "Your edits to \(editedList) will be replaced."
-    }
 
     /// Split a plan into what has to be regenerated and what only has to be
     /// redrawn.
