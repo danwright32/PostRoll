@@ -69,7 +69,8 @@ final class CheckoutReReadTests: XCTestCase {
         var reading: CheckoutRevision.Reading?
         let heard = announcements(on: center) {
             reading = CheckoutRevision.readIfStale(
-                inRepo: repo, at: noon, announcingTo: center,
+                inRepo: repo, at: noon,
+                timeout: CheckoutRevision.deadlineForTests, announcingTo: center,
                 recording: CheckoutRevision.Recency())
         }
 
@@ -86,9 +87,11 @@ final class CheckoutReReadTests: XCTestCase {
         var second: CheckoutRevision.Reading?
         let heard = announcements(on: center) {
             _ = CheckoutRevision.readIfStale(inRepo: repo, at: noon,
+                                             timeout: CheckoutRevision.deadlineForTests,
                                              announcingTo: center, recording: recency)
             second = CheckoutRevision.readIfStale(
                 inRepo: repo, at: noon.addingTimeInterval(2),
+                timeout: CheckoutRevision.deadlineForTests,
                 announcingTo: center, recording: recency)
         }
 
@@ -110,10 +113,12 @@ final class CheckoutReReadTests: XCTestCase {
         var second: CheckoutRevision.Reading?
         let heard = announcements(on: center) {
             _ = CheckoutRevision.readIfStale(inRepo: repo, at: noon,
+                                             timeout: CheckoutRevision.deadlineForTests,
                                              announcingTo: center, recording: recency)
             second = CheckoutRevision.readIfStale(
                 inRepo: repo,
                 at: noon.addingTimeInterval(CheckoutRevision.reuseWindow + 1),
+                timeout: CheckoutRevision.deadlineForTests,
                 announcingTo: center, recording: recency)
         }
 
@@ -133,9 +138,11 @@ final class CheckoutReReadTests: XCTestCase {
         var refreshed: CheckoutRevision.Reading?
         let heard = announcements(on: center) {
             _ = CheckoutRevision.read(inRepo: repo, at: noon,
+                                      timeout: CheckoutRevision.deadlineForTests,
                                       announcingTo: center, recording: recency)
             refreshed = CheckoutRevision.readIfStale(
                 inRepo: repo, at: noon.addingTimeInterval(1),
+                timeout: CheckoutRevision.deadlineForTests,
                 announcingTo: center, recording: recency)
         }
 
@@ -156,8 +163,10 @@ final class CheckoutReReadTests: XCTestCase {
 
         let heard = announcements(on: center) {
             _ = CheckoutRevision.read(inRepo: repo, at: noon,
+                                      timeout: CheckoutRevision.deadlineForTests,
                                       announcingTo: center, recording: recency)
             _ = CheckoutRevision.read(inRepo: repo, at: noon.addingTimeInterval(1),
+                                      timeout: CheckoutRevision.deadlineForTests,
                                       announcingTo: center, recording: recency)
         }
 
@@ -177,9 +186,11 @@ final class CheckoutReReadTests: XCTestCase {
         let recency = CheckoutRevision.Recency()
 
         _ = CheckoutRevision.readIfStale(inRepo: repo, at: noon,
+                                         timeout: CheckoutRevision.deadlineForTests,
                                          announcingTo: center, recording: recency)
         let skipped = CheckoutRevision.readIfStale(
             inRepo: repo, at: noon.addingTimeInterval(1),
+            timeout: CheckoutRevision.deadlineForTests,
             announcingTo: center, recording: recency)
 
         if case .unknown(let reason)? = skipped {

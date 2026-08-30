@@ -161,3 +161,32 @@ enum RepoFixture {
         return found
     }
 }
+
+#if POSTROLL_TESTS
+extension CheckoutRevision {
+
+    /// How long git gets when a TEST is the one waiting (#992 fallout).
+    ///
+    /// `CheckoutRevision.deadline` is 5 seconds, and that is the right number
+    /// for the product: a person is waiting on a generation, and losing the
+    /// revision record beats losing the run (L110).
+    ///
+    /// It is the wrong number for a test to inherit. `measure(inRepo:timeout:)`
+    /// runs THREE git subprocesses, and since #992 the suite runs in parallel on
+    /// as many workers as the machine has cores, so the machine a test is timing
+    /// git against is loaded by the test runner itself. Measured on 2026-08-30
+    /// at twelve workers: `CheckoutRevisionTests` failed on roughly one run in
+    /// three, its reads taking 5.5s and 8.5s and coming back `.unknown`, which
+    /// the tests correctly refused. Nothing was wrong with the code under test.
+    /// The tests were asserting about how busy the machine was (L290, L522: a
+    /// budget calibrated for one execution context is wrong when the same code
+    /// is reached from another).
+    ///
+    /// Generous on purpose. Nothing here is measuring how FAST git is, so a
+    /// large number costs nothing on a healthy run and only stops a loaded one
+    /// reporting a defect that is not there. The deadline's own behaviour is
+    /// still tested, deliberately and separately, by the test that passes
+    /// `timeout: 0.5` against `/bin/sleep 30` and requires no answer back.
+    static let deadlineForTests: TimeInterval = 120
+}
+#endif

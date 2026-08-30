@@ -244,21 +244,41 @@ enum CheckoutRevision {
             return nil
         }
 
-        // Drained on another queue rather than after the wait: a pipe holds
+        // Drained on another thread rather than after the wait: a pipe holds
         // about 64KB, and `git status` in a thoroughly dirty tree writes more
         // than that, so a reader that waited first would block the child on a
         // full pipe and then time out on a command that was working perfectly.
+        //
+        // Dedicated THREADS rather than DispatchQueue.global(), which is what
+        // these were until #992. Both of these blocks BLOCK, one until EOF and
+        // one until the child exits, and the global queue is a bounded pool that
+        // does not grow to order: park enough blocking work on it and later
+        // blocks never get a thread at all (L241).
+        //
+        // That is not theoretical here. Six test classes in this suite spawn
+        // processes, and since #992 the suite runs in parallel, so several of
+        // them share one worker process and one pool. Measured on 2026-08-30:
+        // CheckoutRevisionTests failed about one run in three, and raising its
+        // deadline from 5s to 120s did not fix it, it simply failed at 121s
+        // instead. The wait was not slow, it had never started. A thread cannot
+        // be starved by a saturated pool, and two short-lived threads per git
+        // call is the right trade against a read that may never run.
         let collected = Box(Data())
         let read = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
+        let reader = Thread {
             collected.value = out.fileHandleForReading.readDataToEndOfFile()
             read.signal()
         }
+        reader.name = "CheckoutRevision.read"
+        reader.start()
+
         let exited = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
+        let waiter = Thread {
             process.waitUntilExit()
             exited.signal()
         }
+        waiter.name = "CheckoutRevision.wait"
+        waiter.start()
 
         guard exited.wait(timeout: .now() + timeout) == .success else {
             process.terminate()
