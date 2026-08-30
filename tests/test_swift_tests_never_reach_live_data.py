@@ -21,6 +21,7 @@ they name the defect in the terms it was filed in.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -106,8 +107,23 @@ BARE_STORES = {
 }
 
 
-def _swift_files(root: Path) -> list[Path]:
-    files = sorted(root.rglob("*.swift"))
+@lru_cache(maxsize=None)
+def _swift_files(root: Path) -> tuple[Path, ...]:
+    """Every Swift file under `root`, walked once per run rather than per test.
+
+    Memoised because 22 parametrised tests each re-walked the tree and re-read
+    every file, 17.5s of the Python suite for one answer that cannot change
+    inside a run (#1018).
+
+    Keyed on the root, so a caller that injects its own directory still gets its
+    own walk. The memo is the shared no-argument case, not the parameter.
+
+    The emptiness assertion stays INSIDE the memoised function on purpose. A
+    memo that can store an empty scan hands the same nothing to every reader at
+    once, and each of them then reports a clean run over no files at all
+    (L286, L98). Raising here means nothing is ever stored.
+    """
+    files = tuple(sorted(root.rglob("*.swift")))
     assert files, f"no Swift files under {root}, so this guard checked nothing"
     return files
 

@@ -65,6 +65,57 @@ final class BannerLegibilityTests: XCTestCase {
     /// invented text would show something the app never says.
     static var measuredStates: [(name: String, view: AnyView)] { BannerLegibilityTests().states }
 
+    /// Every state's word footprint at the default width, measured ONCE for the
+    /// whole class (#1018).
+    ///
+    /// `testEveryBannerActuallyDrawsItsMessage` and
+    /// `testTheThinnestRealSurfaceStillClearsTheThresholdWithRoom` were
+    /// rendering the identical (state, width 520, wordless or not) pairs: about
+    /// forty states, two renders each, twice over. This class was 67s of the
+    /// suite's 294s of test bodies locally, joint heaviest with
+    /// `UnseenSurfaceTests`, and since #992 runs the suite in parallel the
+    /// heaviest class is the floor the whole run cannot go below.
+    ///
+    /// A `Result` rather than a bare array, and never an empty array. A memo
+    /// that can capture a failed or empty scan passes every reader at once and
+    /// each of them reports a clean run over nothing (L286, L98). Stored
+    /// failures are rethrown by `measuredShares()` so a render breaking is still
+    /// an ordinary test failure naming what broke, rather than a crash in a
+    /// static initialiser with no test attached to it.
+    ///
+    /// Once per PROCESS, which since #992 is once per parallel worker. XCTest
+    /// distributes whole classes to workers, so the class that reads this runs
+    /// in exactly one of them and the memo is built exactly once either way.
+    private static let defaultWidthShares: Result<[(name: String, share: Double)], Error> = {
+        let harness = BannerLegibilityTests()
+        do {
+            return .success(try harness.states.map { state in
+                (state.name,
+                 WordFootprint.share(try harness.render(state.view),
+                                     try harness.render(state.view, wordless: true)))
+            })
+        } catch {
+            return .failure(error)
+        }
+    }()
+
+    /// The measured shares, with the two ways this can be worthless refused.
+    ///
+    /// The count check is the same one `testEveryBannerActuallyDrawsItsMessage`
+    /// always made about `states`, kept here so it now guards the MEMO: a sweep
+    /// that reads nothing objects to nothing, and a memoised nothing would be
+    /// read as clean by both tests rather than by one (L98).
+    fileprivate func measuredShares() throws -> [(name: String, share: Double)] {
+        let shares = try Self.defaultWidthShares.get()
+        XCTAssertGreaterThan(shares.count, 30,
+                             "the sweep found \(shares.count) states, so it is proving "
+                             + "nothing about the ones it did not draw")
+        XCTAssertEqual(shares.count, states.count,
+                       "the memo holds \(shares.count) states and the suite declares "
+                       + "\(states.count), so some banner is measured by nothing")
+        return shares
+    }
+
     fileprivate var states: [(name: String, view: AnyView)] {
         let refusal = ProgramReadiness.missingFiles([
             URL(fileURLWithPath: "/programs/Gala_p3.png"),
@@ -510,16 +561,11 @@ final class BannerLegibilityTests: XCTestCase {
     /// here, 0.01 for a notice and 0.005 twice for a sparser screen, each
     /// honestly measured against its own surface and each lower than the last.
     func testEveryBannerActuallyDrawsItsMessage() throws {
-        // A sweep that reads nothing objects to nothing (L98).
-        XCTAssertGreaterThan(states.count, 30,
-                             "the sweep found \(states.count) states, so it is proving "
-                             + "nothing about the ones it did not draw")
-
-        for state in states {
-            let share = WordFootprint.share(try render(state.view),
-                                            try render(state.view, wordless: true))
+        // Measured once for the class (#1018); the emptiness guard that used to
+        // sit here now guards the memo, in `measuredShares()`.
+        for (name, share) in try measuredShares() {
             XCTAssertGreaterThan(share, WordFootprint.drawn, """
-                Switching every word off the "\(state.name)" banner changed \
+                Switching every word off the "\(name)" banner changed \
                 \(String(format: "%.4f", share)) of the render, which is nothing. Its \
                 message is in the view tree and not on the screen, and the fill, the \
                 border and the buttons this surface paints for itself would keep a flat \
@@ -540,13 +586,11 @@ final class BannerLegibilityTests: XCTestCase {
     /// floor depends on, that the thinnest real surface still clears it with
     /// room, so adding a screen cannot quietly drag the band down onto blank.
     func testTheThinnestRealSurfaceStillClearsTheThresholdWithRoom() throws {
-        var measured: [(String, Double)] = []
-        for state in states {
-            measured.append((state.name,
-                             WordFootprint.share(try render(state.view),
-                                                 try render(state.view, wordless: true))))
-        }
-        let sorted = measured.sorted { $0.1 < $1.1 }
+        // The same measurement the check above reads, taken once (#1018). These
+        // two rendered the identical pairs, which is what made this class the
+        // heaviest in the suite and so the floor of every parallel run.
+        let sorted = try measuredShares().map { ($0.name, $0.share) }
+            .sorted { $0.1 < $1.1 }
         for (name, share) in sorted {
             print(String(format: "  %.4f  %@", share, name))
         }

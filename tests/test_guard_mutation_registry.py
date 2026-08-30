@@ -20,6 +20,7 @@ tree, which is `make check-guards`.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -81,12 +82,32 @@ def test_every_entry_file_on_disk_is_actually_loaded():
     assert {path.stem for path in files} == {e.name for e in entries()}
 
 
+
+@lru_cache(maxsize=None)
+def _text(path: Path) -> str:
+    """One file's text, read once per run (#1018).
+
+    Three parametrised tests walk the whole registry and each re-reads every one
+    of its target files, 29.4s of the Python suite to read the same bytes three
+    times over. The files cannot change during a run: `refuse_if_a_prover_is_working`
+    is what stops a sweep perturbing the tree underneath these, and it runs
+    before any of them.
+
+    Refuses an empty read rather than caching it, for the reason a memo always
+    has to: a stored nothing is handed to every reader at once and each reports
+    a clean check over no content (L286, L98).
+    """
+    text = path.read_text()
+    assert text, f"{path} is empty, so every check reading it would pass over nothing"
+    return text
+
+
 @pytest.mark.parametrize("entry", entries(), ids=lambda e: e.name)
 def test_every_anchor_still_matches_its_file_exactly_once(entry: Entry):
     refuse_if_a_prover_is_working()
     target = REPO_ROOT / entry.file
     assert target.is_file(), f"{entry.file} has moved; update the registry"
-    count = target.read_text().count(entry.find)
+    count = _text(target).count(entry.find)
     assert count == 1, (
         f"the anchor for {entry.name} matches {count} places in {entry.file} "
         f"instead of exactly one, so the recorded perturbation no longer "
@@ -121,7 +142,7 @@ def test_every_named_test_still_exists(entry: Entry):
         method = rest[-1].split("[")[0]
         test_file = REPO_ROOT / path_part
         assert test_file.is_file(), f"{path_part} has moved"
-        source = test_file.read_text()
+        source = _text(test_file)
         if class_name:
             assert f"class {class_name}" in source, (
                 f"{path_part} no longer declares {class_name}; update the "
@@ -156,7 +177,7 @@ def test_no_swift_mutation_assigns_to_a_name_nothing_declares(entry: Entry):
     assert target.is_file(), f"{entry.file} has moved; update the registry"
     # The replacement's own locals count as declared: a perturbation may
     # introduce a variable and then write to it.
-    declared = target.read_text() + entry.replace
+    declared = _text(target) + entry.replace
     for name in sorted(set(re.findall(r"(?m)^\s*([a-z_][A-Za-z0-9_]*)\s*=\s*[^=]",
                                       entry.replace))):
         if name == "_":

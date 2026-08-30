@@ -145,7 +145,18 @@ final class CollapsedGroupLabelTests: XCTestCase {
             .appendingPathComponent("Sources")
     }
 
-    private static func sources() throws -> [URL] {
+    /// Every Swift source, walked ONCE for the class rather than once per test
+    /// (#1018).
+    ///
+    /// Three tests here read this and each re-walked the tree for the same
+    /// answer, which cannot change inside a run.
+    ///
+    /// A `static let`, so it is built exactly once, and it holds the walk's
+    /// RESULT rather than a closure that could be re-entered. An empty walk is
+    /// refused at the point of use rather than stored as an answer: a memo that
+    /// can capture nothing hands the same nothing to all three readers at once
+    /// and each reports a clean sweep over no files (L286, L98).
+    private static let allSources: [URL] = {
         var urls: [URL] = []
         let files = FileManager.default.enumerator(at: sourcesDir,
                                                    includingPropertiesForKeys: nil)
@@ -153,6 +164,14 @@ final class CollapsedGroupLabelTests: XCTestCase {
             if url.pathExtension == "swift" { urls.append(url) }
         }
         return urls.sorted { $0.path < $1.path }
+    }()
+
+    private static func sources() throws -> [URL] {
+        let found = allSources
+        XCTAssertFalse(found.isEmpty,
+                       "no Swift sources were found under \(sourcesDir.path), so every "
+                       + "check reading this swept nothing at all")
+        return found
     }
 
     // MARK: - The sweep
