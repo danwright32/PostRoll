@@ -1,0 +1,8 @@
+{
+  "name": "ci-builds-one-architecture",
+  "file": ".github/workflows/swift.yml",
+  "find": "            ONLY_ACTIVE_ARCH=YES \\\n",
+  "replace": "",
+  "test": "tests/test_ci_builds_one_architecture.py::test_the_ci_release_build_compiles_one_architecture",
+  "breaks": "the CI Release build compiles the whole module twice and links twice for an x86_64 slice that runs on no machine this app is installed on, on the step that is 132s of the pull request critical path (#993)"
+}

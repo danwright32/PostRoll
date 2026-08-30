@@ -1,0 +1,8 @@
+{
+  "name": "the-shipped-build-stays-universal",
+  "file": "Makefile",
+  "find": "\t\t-destination 'platform=macOS' \\\n\t\t-quiet \\\n\t\tbuild",
+  "replace": "\t\t-destination 'platform=macOS' \\\n\t\tONLY_ACTIVE_ARCH=YES \\\n\t\t-quiet \\\n\t\tbuild",
+  "test": "tests/test_ci_builds_one_architecture.py::test_the_shipped_build_still_compiles_both",
+  "breaks": "the bundle somebody installs is built for whichever architecture happened to build it, so it runs on one kind of Mac and the failure is invisible until it is installed on the other (#993)"
+}
