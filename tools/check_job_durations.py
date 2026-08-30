@@ -45,6 +45,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from tools.guard_sweep_history import PROOF_STEP  # noqa: E402
 from tools.wait_for_checks import GhUnusable, gh_json  # noqa: E402
 
 #: How far the two halves' medians must differ before it is worth saying.
@@ -145,7 +146,29 @@ def drift_of(job: str, seconds: list[float]) -> Verdict:
         f"{job}: faster, {moved}")
 
 
-def job_durations(runs: list[dict]) -> dict[str, list[float]]:
+def did_its_work(job: dict, work_step: str | None) -> bool:
+    """Whether a job that HAS the named work step actually ran it.
+
+    True for every job with no step by that name, which is what lets one step
+    name be passed for all three workflows instead of a per-workflow table
+    somebody has to remember to extend (L96).
+
+    Ran, not passed. A shard whose proof went red spent the time, and dropping
+    it would hide a job getting slower right up until the moment it goes red,
+    which is the direction that matters most here.
+    """
+    if not work_step:
+        return True
+    for step in job.get("steps") or []:
+        if str(step.get("name") or "").strip() != work_step:
+            continue
+        return str(step.get("conclusion") or "").lower() not in (
+            "skipped", "cancelled", "")
+    return True
+
+
+def job_durations(runs: list[dict], *,
+                  work_step: str | None = None) -> dict[str, list[float]]:
     """Seconds each named job took, newest run first.
 
     A job that has not finished contributes NOTHING rather than a zero. A zero
@@ -160,6 +183,18 @@ def job_durations(runs: list[dict]) -> dict[str, list[float]]:
     anything, whatever produced it (L50), so that one test covers the skipped
     case and every other inverted pair at once.
 
+    A job that RAN and had nothing to do contributes nothing either, which is
+    a different case and needs its own rule (#989). Since the guard sweep moved
+    to a daily cadence its shards skip their own expensive STEPS rather than the
+    job, so a shard with nothing to prove still checks out, asks the gate and
+    exits successful in about forty seconds. That is a positive duration, so the
+    shape check below waves it through, and the series then holds two
+    populations: roughly 1,400s when there was something to prove and roughly
+    40s when there was not. Which half of the window each falls in is decided by
+    the week's merge pattern, so the comparison would report drift that is
+    nothing but that pattern (L36, and L102: a cost measured while the expensive
+    path is switched off measures the short circuit rather than the work).
+
     A second check on `conclusion == "skipped"` was written first and removed:
     `check_guards` reported it SURVIVED its mutation, because breaking it
     changed no test, because every skipped job the API actually produces is
@@ -172,6 +207,8 @@ def job_durations(runs: list[dict]) -> dict[str, list[float]]:
         for job in run.get("jobs", []):
             started, completed = job.get("started_at"), job.get("completed_at")
             if not started or not completed:
+                continue
+            if not did_its_work(job, work_step):
                 continue
             try:
                 begin = datetime.fromisoformat(started.replace("Z", "+00:00"))
@@ -214,6 +251,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="the workflow file to read the series from")
     parser.add_argument("--window", type=int, default=16,
                         help="how many completed runs to read")
+    parser.add_argument("--work-step", default=PROOF_STEP,
+                        help="a job carrying a step by this name is measured "
+                             "only when that step actually ran; jobs without "
+                             "one are unaffected")
     args = parser.parse_args(argv)
 
     try:
@@ -225,8 +266,10 @@ def main(argv: list[str] | None = None) -> int:
               f"{args.workflow}, so no job's duration was judged: {unusable}")
         return 0
 
-    verdicts = [drift_of(job, seconds)
-                for job, seconds in sorted(job_durations(runs).items())]
+    verdicts = [
+        drift_of(job, seconds)
+        for job, seconds in sorted(
+            job_durations(runs, work_step=args.work_step).items())]
 
     lines = []
     for verdict in verdicts:

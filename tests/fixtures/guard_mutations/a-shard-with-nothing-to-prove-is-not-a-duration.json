@@ -1,0 +1,8 @@
+{
+  "name": "a-shard-with-nothing-to-prove-is-not-a-duration",
+  "file": "tools/check_job_durations.py",
+  "find": "            if not did_its_work(job, work_step):\n                continue",
+  "replace": "            if False:\n                continue",
+  "test": "tests/test_job_duration_drift.py::test_a_shard_that_skipped_its_proof_contributes_no_duration",
+  "breaks": "a guard sweep shard that had nothing to prove goes into the duration series at about 40s beside the 1,400s of a shard that did the work, so the two halves the drift check compares are decided by the week's merge pattern and the one instrument #991 and #992 are judged by reports noise (#989, L36)"
+}
