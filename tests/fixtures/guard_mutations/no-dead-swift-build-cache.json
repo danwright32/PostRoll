@@ -1,0 +1,8 @@
+{
+  "name": "no-dead-swift-build-cache",
+  "file": ".github/workflows/swift.yml",
+  "find": "      - name: Build the app\n",
+  "replace": "      - name: Restore the build cache\n        uses: actions/cache/restore@v4\n        with:\n          path: PostRollApp/.derived-data\n          key: k\n\n      - name: Build the app\n",
+  "test": "tests/test_no_dead_build_cache.py::test_nothing_caches_the_swift_build_products",
+  "breaks": "a DerivedData build cache comes back, and the last one restored on every run, hit its exact primary key on three consecutive commits with identical Swift sources, compiled 530 units every time, and held 19 GB against GitHub's 10 GB limit while evicting the pip and ffmpeg caches that do work (#991)"
+}

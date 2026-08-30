@@ -3,6 +3,6 @@
   "file": ".github/workflows/swift.yml",
   "find": "              -scheme PostRollTests \\\n              -destination 'platform=macOS' \\\n              -derivedDataPath PostRollApp/.derived-data \\\n",
   "replace": "              -scheme PostRollTests \\\n              -destination 'platform=macOS' \\\n",
-  "test": "tests/test_ci_caches_and_cancels.py::test_the_swift_tests_build_into_the_folder_that_is_cached",
-  "breaks": "the cache is restored and saved while xcodebuild builds somewhere else, so it is uploaded and never read (L3)"
+  "test": "tests/test_ci_caches_and_cancels.py::test_every_xcodebuild_in_the_job_shares_one_derived_data_path",
+  "breaks": "one xcodebuild in the job writes to the shared default derived-data folder instead of the one the others use, so it recompiles from scratch what the step before it just built, inside a single run (#485, #991, L3)"
 }
