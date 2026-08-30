@@ -22,6 +22,7 @@ import random
 import subprocess
 import sys
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 from PIL import Image, ImageDraw
 
@@ -338,20 +339,19 @@ def build_collage_strip(
     return strip
 
 
-def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
-                        venue: str) -> Image.Image:
-    """Draw the cream title band and the footer mask.
+def _draw_chrome_onto(frame_rgba: Image.Image, event_name: str, org: str,
+                      venue: str) -> Image.Image:
+    """Lay the band, the hairlines, the title and the footer onto an RGBA image.
 
-    No wordmark, and no parameter to pass one (#774). It used to take a logo
-    and paste it into the footer at `CANVAS_H - FOOTER_H`, which is inside the
-    band Instagram lays its account row and caption over (#753). Nothing ever
-    passed one, so it never shipped, but a dead parameter whose only effect is
-    to put the signature where nobody can read it is a trap rather than an
-    option. The reel's colophon is baked into the scrolling strip instead, well
-    clear of that band.
+    Split out of `draw_branded_chrome` so the chrome can be drawn ONCE onto a
+    transparent canvas and reused, rather than re-laid-out on every frame of a
+    scroll where none of it moves (#. measured 2026-08-30: 6.5ms of a frame,
+    8s of a 1230 frame render, for the same pixels 1230 times).
+
+    Both the per-frame path and the cached overlay come through here, so the
+    two cannot draw different chrome: a restatement beside the overlay would be
+    a second definition that drifts silently (L107).
     """
-    frame_rgba = frame.convert("RGBA")
-
     band = Image.new("RGBA", (CANVAS_W, TITLE_BAND_H), (*CREAM, 255))
     frame_rgba.paste(band, (0, TITLE_BAND_TOP), band)
     draw = ImageDraw.Draw(frame_rgba)
@@ -386,7 +386,72 @@ def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
     footer = Image.new("RGBA", (CANVAS_W, FOOTER_H), (*CREAM, 255))
     frame_rgba.paste(footer, (0, footer_y), footer)
 
-    return frame_rgba.convert("RGB")
+    return frame_rgba
+
+
+def draw_branded_chrome(frame: Image.Image, event_name: str, org: str,
+                        venue: str) -> Image.Image:
+    """Draw the cream title band and the footer mask.
+
+    No wordmark, and no parameter to pass one (#774). It used to take a logo
+    and paste it into the footer at `CANVAS_H - FOOTER_H`, which is inside the
+    band Instagram lays its account row and caption over (#753). Nothing ever
+    passed one, so it never shipped, but a dead parameter whose only effect is
+    to put the signature where nobody can read it is a trap rather than an
+    option. The reel's colophon is baked into the scrolling strip instead, well
+    clear of that band.
+
+    This is the one-shot path, kept because it is what the reference checks and
+    the other templates' readings come through. A scroll render uses
+    `apply_chrome`, which paints the identical picture from a cached overlay.
+    """
+    return _draw_chrome_onto(frame.convert("RGBA"), event_name, org,
+                             venue).convert("RGB")
+
+
+@lru_cache(maxsize=4)
+def chrome_tiles(event_name: str, org: str, venue: str
+                 ) -> tuple[tuple[int, Image.Image], ...]:
+    """The chrome, drawn once, as the (top, tile) pastes a frame needs.
+
+    Derived from what `_draw_chrome_onto` actually PAINTS rather than from the
+    band and footer constants: the rows are found by reading back which of them
+    carry ink, so chrome added somewhere new is carried automatically instead
+    of being silently dropped by an optimisation that knew about two bands
+    (L96). The 2px hairline straddling `TITLE_BAND_TOP` is why this matters
+    already: it paints a row ABOVE the band it belongs to.
+
+    Cached because the arguments are the event's own name, org and venue, which
+    do not change within a render.
+    """
+    overlay = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
+    _draw_chrome_onto(overlay, event_name, org, venue)
+
+    alpha = overlay.getchannel("A")
+    inked = [y for y in range(CANVAS_H)
+             if alpha.crop((0, y, CANVAS_W, y + 1)).getbbox() is not None]
+
+    tiles: list[tuple[int, Image.Image]] = []
+    for y in inked:
+        if tiles and y == tiles[-1][0] + tiles[-1][1]:
+            tiles[-1] = (tiles[-1][0], tiles[-1][1] + 1)
+        else:
+            tiles.append((y, 1))
+    return tuple((top, overlay.crop((0, top, CANVAS_W, top + height)))
+                 for top, height in tiles)
+
+
+def apply_chrome(frame: Image.Image, event_name: str, org: str,
+                 venue: str) -> Image.Image:
+    """`draw_branded_chrome`'s picture, pasted from the cached overlay.
+
+    Asserted pixel for pixel against the drawn version in
+    `tests/test_reel_scroll_render_path.py`, so this is a cost change and not a
+    design one.
+    """
+    for top, tile in chrome_tiles(event_name, org, venue):
+        frame.paste(tile, (0, top), tile)
+    return frame
 
 
 def max_scroll_for(strip_height: int) -> int:
@@ -423,8 +488,118 @@ def compose_frame(strip: Image.Image, scroll_y: int, event_name: str,
     loop meant a check re-stating the crop beside it, which is a second
     definition of the frame that drifts silently (L107).
     """
-    return draw_branded_chrome(place_strip(strip, scroll_y),
-                               event_name, org, venue)
+    return apply_chrome(place_strip(strip, scroll_y), event_name, org, venue)
+
+
+
+def scroll_frames(strip: Image.Image, *, event_name: str, org: str, venue: str,
+                  scroll_duration: float, fps: int | None = None,
+                  closing_frame: Image.Image | None = None):
+    """Every frame of the reel, in order, as an iterator.
+
+    The loop used to live inside `generate_reel_scroll` between the strip and
+    ffmpeg, which meant the only way for a check to read a frame was to glob
+    the temp PNGs while the encoder held them. There are no temp PNGs now, and
+    a check that wants to know what a frame SHOWS should not have to run an
+    encode to find out. So the frames are a generator: the encoder consumes it
+    and so can a test, and both see the same pictures.
+
+    Yielded lazily on purpose. A 60fps reel is thousands of 6 MB frames and
+    materialising them would cost more memory than the strip.
+
+    `fps` is resolved from the module at call time rather than defaulted in the
+    signature, so a test that lowers `FPS` to keep a fixture quick actually
+    lowers it (a default bound at import would freeze the shipping value).
+    """
+    fps = FPS if fps is None else fps
+    total_duration = scroll_duration + HOLD_END + CLOSING_FRAME_DURATION
+    total_frames = int(total_duration * fps)
+    n_scroll = int(scroll_duration * fps)
+    n_hold = int(HOLD_END * fps)
+    max_scroll = max_scroll_for(strip.height)
+
+    def framed(scroll_y: int) -> Image.Image:
+        return compose_frame(strip, scroll_y, event_name, org, venue)
+
+    for i in range(total_frames):
+        if i < n_scroll:
+            yield framed(int(ease_in_out(i / n_scroll) * max_scroll))
+        elif i < n_scroll + n_hold:
+            yield framed(max_scroll)
+        elif closing_frame is not None:
+            closing_i = i - n_scroll - n_hold
+            if closing_i < fps:
+                yield Image.blend(framed(max_scroll), closing_frame,
+                                  closing_i / fps)
+            else:
+                yield closing_frame
+        else:
+            yield framed(max_scroll)
+
+
+def encode_frames(frames, audio_in: str, audio_af: str, total_duration: float,
+                  encode_tmp: Path, fps: int | None = None) -> None:
+    """Mux an iterator of frames and a track into `encode_tmp`.
+
+    Frames go to ffmpeg's stdin as raw RGB rather than through a directory of
+    PNGs. Measured on 2026-08-30 against the reel this was reported on: saving
+    a frame as PNG cost 107.7ms of a 115.3ms frame, so 1230 frames spent about
+    two minutes compressing 2.1 GB that ffmpeg then decompressed again.
+
+    Raw video carries no frame boundaries: the demuxer cuts the stream every
+    `CANVAS_W * CANVAS_H * 3` bytes and trusts the producer. A frame of the
+    wrong size or mode would not fail, it would shear every frame after it and
+    encode the result happily, so the size is asserted per frame rather than
+    assumed (L23, and fail loud rather than silently).
+    """
+    fps = FPS if fps is None else fps
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "rawvideo", "-pix_fmt", "rgb24",
+        "-s", f"{CANVAS_W}x{CANVAS_H}",
+        "-framerate", str(fps),
+        "-i", "pipe:0",
+        "-i", str(audio_in),
+        # Select streams explicitly: without -map, ffmpeg picks the
+        # highest resolution video stream across all inputs, and MP3
+        # cover art counts, which can replace the reel with album art.
+        "-map", "0:v:0", "-map", "1:a:0",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-af", audio_af,
+        "-t", str(total_duration),
+        str(encode_tmp),
+    ]
+
+    expected = (CANVAS_W, CANVAS_H)
+    # stderr to a file rather than a pipe: a pipe nobody drains fills its buffer
+    # and deadlocks against our own writes, which is a hang rather than a
+    # failure and therefore the worse outcome (L110).
+    with tempfile.TemporaryFile("w+") as err:
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL, stderr=err)
+        try:
+            for i, frame in enumerate(frames):
+                if frame.size != expected or frame.mode != "RGB":
+                    raise RuntimeError(
+                        f"frame {i} is {frame.mode} {frame.size}, and the raw "
+                        f"stream is cut on RGB {expected}: every later frame "
+                        f"would be sheared rather than rejected")
+                proc.stdin.write(frame.tobytes())
+        except BrokenPipeError:
+            pass  # ffmpeg is gone; its stderr below says why
+        finally:
+            try:
+                proc.stdin.close()
+            except BrokenPipeError:
+                pass
+            returncode = proc.wait()
+        err.seek(0)
+        stderr = err.read()
+
+    if returncode != 0:
+        Path(encode_tmp).unlink(missing_ok=True)
+        raise RuntimeError(f"ffmpeg failed: {stderr[-500:]}")
 
 
 from postroll.ai.audio_tags import THURSDAY_FALLBACK_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402
@@ -594,10 +769,6 @@ def generate_reel_scroll(
 
     total_duration = scroll_duration + HOLD_END + CLOSING_FRAME_DURATION
 
-    # Scroll exactly to bottom of strip — bottom_pad handles footer clearance.
-    # When the strip exactly fills the canvas this is 0 (a static frame).
-    max_scroll = max_scroll_for(strip_h)
-
     # The colophon is baked into the strip (above), so the footer chrome is just a
     # cream mask now: pass no logo to it.
 
@@ -607,48 +778,19 @@ def generate_reel_scroll(
         closing_frame = Image.open(closing_frame_path).convert("RGB")
         closing_frame = closing_frame.resize((CANVAS_W, CANVAS_H), Image.LANCZOS)
 
-    total_frames = int(total_duration * FPS)
-    scroll_frames = int(scroll_duration * FPS)
-    hold_frames = int(HOLD_END * FPS)
+    print(f"Generating {int(total_duration * FPS)} frames "
+          f"({scroll_duration}s scroll)...")
 
-    print(f"Generating {total_frames} frames ({scroll_duration}s scroll)...")
+    # Encode to a temp name and rename into place atomically: a cancelled
+    # render orphans its ffmpeg child, which can keep writing for seconds
+    # while a replacement encode targets the same final path. The pid
+    # suffix keeps the two encodes from sharing a temp file either.
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    encode_tmp = output.with_suffix(f".{os.getpid()}.tmp.mp4")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
-
-        for i in range(total_frames):
-            if i < scroll_frames:
-                t = i / scroll_frames
-                eased = ease_in_out(t)
-                scroll_y = int(eased * max_scroll)
-                frame = compose_frame(strip, scroll_y, event_name, org, venue)
-
-            elif i < scroll_frames + hold_frames:
-                frame = compose_frame(strip, max_scroll, event_name, org, venue)
-
-            else:
-                if closing_frame:
-                    closing_i = i - scroll_frames - hold_frames
-                    if closing_i < FPS:
-                        blend = closing_i / FPS
-                        last = compose_frame(strip, max_scroll, event_name,
-                                             org, venue)
-                        frame = Image.blend(last, closing_frame, blend)
-                    else:
-                        frame = closing_frame
-                else:
-                    frame = compose_frame(strip, max_scroll, event_name,
-                                          org, venue)
-
-            frame.save(str(tmpdir / f"frame_{i:05d}.png"), "PNG")
-
-        # Encode to a temp name and rename into place atomically: a cancelled
-        # render orphans its ffmpeg child, which can keep writing for seconds
-        # while a replacement encode targets the same final path. The pid
-        # suffix keeps the two encodes from sharing a temp file either.
-        output = Path(output_path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        encode_tmp = output.with_suffix(f".{os.getpid()}.tmp.mp4")
 
         # Fit the audio to the reel length first: short tracks are looped with
         # crossfaded seams (no jarring restart) rather than padded with silence.
@@ -666,26 +808,11 @@ def generate_reel_scroll(
             audio_in = audio_path
             audio_af = f"atrim=0:{total_duration},{fade},apad"
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-framerate", str(FPS),
-            "-i", str(tmpdir / "frame_%05d.png"),
-            "-i", audio_in,
-            # Select streams explicitly: without -map, ffmpeg picks the
-            # highest resolution video stream across all inputs, and MP3
-            # cover art counts, which can replace the reel with album art.
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-af", audio_af,
-            "-t", str(total_duration),
-            str(encode_tmp),
-        ]
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            encode_tmp.unlink(missing_ok=True)
-            raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
+        frames = scroll_frames(
+            strip, event_name=event_name, org=org, venue=venue,
+            scroll_duration=scroll_duration, closing_frame=closing_frame,
+        )
+        encode_frames(frames, audio_in, audio_af, total_duration, encode_tmp)
         os.replace(encode_tmp, output)
 
     print(f"Scroll reel generated: {output} ({total_duration:.1f}s, {n} photos)")
