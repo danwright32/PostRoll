@@ -278,3 +278,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python tools/check_guard_sweep_freshness.py
+
+      # How long each CI job has been taking, compared against itself (#1019).
+      #
+      # Nothing read its own duration over time, so the Swift step's median
+      # moved 11% in the week of 2026-08-22 and the guard sweep drifted to
+      # within a few entries of its own deadline, both found by an audit rather
+      # than by anything running. This is also the instrument #991 and #992 are
+      # judged by, which is why it lands ahead of them (L309).
+      #
+      # Here, on one shard, for exactly the reason written above the step it
+      # sits beside: a new job is a new CHECK NAME, and adding one costs a
+      # knowingly red merge. Same placement, same reason.
+      #
+      # It warns and never gates. A job getting slower does not make the change
+      # being merged wrong, and failing a run for it is how a check teaches
+      # everyone to bypass it (L36).
+      - name: Say whether any CI job's duration has moved
+        if: always() && matrix.shard == 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for workflow in swift.yml tests.yml guards.yml; do
+            python tools/check_job_durations.py --workflow "${workflow}"
+          done

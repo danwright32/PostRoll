@@ -1,0 +1,8 @@
+{
+  "name": "the-duration-series-is-actually-taken",
+  "file": ".github/workflows/guards.yml",
+  "find": "            python tools/check_job_durations.py --workflow \"${workflow}\"",
+  "replace": "            true",
+  "test": "tests/test_job_duration_drift.py::test_something_actually_runs_the_duration_check",
+  "breaks": "nothing takes the CI duration series, so a job getting slower is found by an audit rather than by anything running, which is how the Swift step moved 11% in a week unnoticed (#1019, L3)"
+}

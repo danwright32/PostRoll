@@ -1,0 +1,8 @@
+{
+  "name": "duration-drift-ignores-run-to-run-noise",
+  "file": "tools/check_job_durations.py",
+  "find": "MATERIAL_SHIFT = 0.08",
+  "replace": "MATERIAL_SHIFT = 0.0001",
+  "test": "tests/test_job_duration_drift.py::test_ordinary_run_to_run_noise_does_not_fire",
+  "breaks": "the duration warning fires on ordinary run to run variation, and a check that cries wolf every run is one everybody learns to scroll past, which is the same as having none (#1019, L36)"
+}

@@ -94,6 +94,7 @@
     "test_import_meta_csv.py": 0.09999999999999999,
     "test_jamendo_outage_short_circuit.py": 0.0,
     "test_jamendo_status_envelope.py": 0.0,
+    "test_job_duration_drift.py": 0.21,
     "test_layout_sidecar.py": 0.09,
     "test_make_test_runs_both_suites.py": 0.7500000000000002,
     "test_manifest_contract.py": 0.42000000000000004,
