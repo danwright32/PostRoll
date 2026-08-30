@@ -117,25 +117,25 @@ def test_consecutive_merges_do_not_queue_behind_one_another(name, request):
         "have to share a group, or the superseded run is never cancelled")
 
 
-# ── not compiling the app from scratch every run ─────────────────────────────
-
-
-def test_the_build_cache_key_carries_the_toolchain(macos):
-    """CI runs an older Xcode than the dev machine.
-
-    Modules built by one toolchain are not valid input for another, so a key
-    without the version restores a cache that is worse than no cache: a build
-    that fails for a reason unrelated to the change (#412).
-    """
-    assert "xcodebuild -version" in macos, (
-        "nothing reads the toolchain version, so the build cache key cannot "
-        "be carrying it")
-
-    key = re.search(r'echo "key=(.+?)" >>', macos)
-    assert key, "no build-cache key is computed"
-    assert "prefix" in key.group(1), (
-        f"the cache key is {key.group(1)!r}, which does not include the "
-        "toolchain-derived prefix")
+# ── not rebuilding within one job what it just built ─────────────────────────
+#
+# There were three more tests here, about the DerivedData build cache: that its
+# key carried the toolchain, that the restore and the save spelled that key one
+# way, and that the folder was measured against a cap before upload. #991
+# deleted the cache, so they are deleted rather than adjusted: their entire
+# content was the mechanism that is gone (L252, L29).
+#
+# The cache went because it never worked. Measured 2026-08-30: three consecutive
+# commits with identical Swift sources got exact primary-key hits and compiled
+# 530 units each, while the entries held 19 GB against GitHub's 10 GB limit and
+# evicted the pip and ffmpeg caches that do hit. What replaced those tests is
+# tests/test_no_dead_build_cache.py, which refuses a new one without an answer
+# to that measurement.
+#
+# The test below is NOT about the cache and survives it. Two xcodebuild
+# invocations in one job have to share one derived-data path, or the second
+# rebuilds from scratch what the first just built, inside a single run, with no
+# cache involved at all.
 
 
 def test_ci_compiles_the_app_and_not_only_the_test_target(macos):
@@ -159,15 +159,25 @@ def test_ci_compiles_the_app_and_not_only_the_test_target(macos):
         f"view layer before it reaches main. Schemes run: {[s for s, _ in runs]}")
 
 
-def test_the_swift_tests_build_into_the_folder_that_is_cached(macos):
+def test_every_xcodebuild_in_the_job_shares_one_derived_data_path(macos):
     """Built is not wired (L3).
 
-    A cache that is restored and saved while xcodebuild writes somewhere else
-    is pure cost: it uploads a folder nothing reads, and the job stays as slow
-    as it was while looking like it was fixed.
+    This used to be phrased about the build CACHE, and #991 removed that. The
+    rule survives it and is not about caching at all: the `swift-unit` job runs
+    xcodebuild three times, and if they write to different derived-data folders
+    the test build recompiles from scratch everything the app build just
+    produced, within one job, on one runner, with nothing shared between them.
+
+    The expected path is taken from the first invocation rather than from a
+    cache declaration, because there is no longer a cache to read it from. Any
+    ONE of them could be the odd one out, so the check is that they all agree
+    rather than that they match a value written here (L63).
     """
-    cached = re.search(r"path:\s*(\S*derived-data\S*)", macos)
-    assert cached, "no derived-data folder is cached"
+    first = re.search(r"-derivedDataPath\s+(\S+)", macos)
+    assert first, (
+        "no xcodebuild in this job is given -derivedDataPath, so each writes to "
+        "the shared default and nothing here can say whether they agree")
+    cached = first
 
     # EVERY invocation, not the first one. This read `re.search` until #485,
     # which only ever looked at the app build, so dropping the flag from the
@@ -185,39 +195,9 @@ def test_the_swift_tests_build_into_the_folder_that_is_cached(macos):
             f"this xcodebuild is not given -derivedDataPath, so it writes to the "
             f"shared default and the cached folder stays empty: {first_line}")
         assert cached.group(1).rstrip("/") == built_into.group(1).rstrip("/"), (
-            f"the cache holds {cached.group(1)} but this xcodebuild builds into "
-            f"{built_into.group(1)}, so the cache is never read: {first_line}")
-
-
-def test_the_restore_and_the_save_spell_the_key_one_way(macos):
-    """Two literal keys drift, and the failure is silent: the save writes one
-    key while the restore looks for another, so it is a cold build every time
-    with a green cache step above it (L41)."""
-    keys = re.findall(r"^\s*key:\s*(.+)$", macos, re.MULTILINE)
-    computed = [k for k in keys if "steps.cache-key.outputs.key" in k]
-
-    assert len(computed) >= 2, (
-        f"expected the restore and the save to share one computed key, found "
-        f"{keys}")
-
-
-def test_the_build_cache_is_measured_against_a_cap_before_it_is_uploaded(macos):
-    """An unbounded upload is the same defect as overture#2585, one layer up.
-
-    GitHub evicts a repo's oldest entries once it holds 10 GB, so a folder that
-    grows without limit here would quietly push out the pip and ffmpeg caches
-    and slow down the very runs this was added to speed up.
-    """
-    assert "Index.noindex" in macos, (
-        "the editor's symbol index is the bulk of the folder and nothing on a "
-        "runner reads it; it has to be pruned before the upload")
-
-    save = macos.split("Save the build cache", 1)
-    assert len(save) == 2, "no step saves the build cache"
-    condition = save[1].split("\n\n", 1)[0]
-    assert "over-cap" in condition, (
-        "the save is not conditioned on the measured size, so a folder over "
-        "the cap is uploaded anyway and the measurement is decoration")
+            f"this xcodebuild builds into {built_into.group(1)} while another "
+            f"builds into {cached.group(1)}, so one of them recompiles from "
+            f"scratch what the other just built: {first_line}")
 
 
 # ── not re-downloading the same packages every run ───────────────────────────

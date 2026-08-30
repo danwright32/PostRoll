@@ -1,8 +1,0 @@
-{
-  "name": "derived-data-cache-capped",
-  "file": ".github/workflows/swift.yml",
-  "find": " && steps.cache-size.outputs.over-cap == 'false' }}",
-  "replace": " }}",
-  "test": "tests/test_ci_caches_and_cancels.py::test_the_build_cache_is_measured_against_a_cap_before_it_is_uploaded",
-  "breaks": "the folder is uploaded however large it is, evicting the other caches (#430, overture#2585)"
-}
