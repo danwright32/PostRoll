@@ -68,6 +68,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Mapping
 
@@ -91,11 +92,36 @@ WORK_STEP = "Confirm this job ran its checks"
 GATE_ID = "already"
 ASKS_THE_GATE = f"steps.{GATE_ID}.outputs.run != 'false'"
 
+#: How long a proof stands before the job runs whatever the tree says (#1075).
+#:
+#: A tree is not the only input to these checks. The runner image, the Xcode
+#: `PostRollApp/.ci-xcode-version` pins, ffmpeg and Homebrew packages all move
+#: with no commit here, so an unchanged tree is not an unchanged result. Before
+#: the gate, the post-merge run met the new environment; with it, nothing does
+#: until somebody opens the next pull request.
+#:
+#: One day rather than the guard sweep's seven (`UNCONDITIONAL_AFTER` in
+#: `tools/check_guard_sweep_due.py`), because the two are protecting different
+#: gaps. The sweep's window is how long a proof of an unchanged tree stays
+#: meaningful in absolute terms. This one is the gap between a pull request's
+#: run and the merge that lands it, which is normally minutes: a pull request
+#: still merging a day later is exactly the case worth re-running, and the cost
+#: of being wrong is one job that need not have run.
+UNCONDITIONAL_AFTER = timedelta(days=1)
+
 #: The one conclusion that is a proof. Everything else runs the job, including
 #: `skipped`, which is what this gate itself produces: reading one as a proof
 #: would latch the gate off permanently, each merge finding the last merge's
 #: skip and skipping again, green throughout (L98, L106).
 GREEN = "success"
+
+
+def _spoken(span: timedelta) -> str:
+    """A duration a person reads, rather than a float of seconds."""
+    hours = span.total_seconds() / 3600
+    if hours >= 48:
+        return f"{int(hours // 24)} days"
+    return f"{int(hours)} hours" if hours >= 2 else f"{int(span.total_seconds() // 60)} minutes"
 
 
 class HistoryUnreadable(Exception):
@@ -109,6 +135,7 @@ class Answer(enum.Enum):
     SEVERAL_PULL_REQUESTS = "several pull requests"
     TREE_DIFFERS = "tree differs"
     CHECK_NOT_GREEN = "check not green"
+    PROOF_IS_STALE = "proof is stale"
     HISTORY_UNREADABLE = "history unreadable"
 
 
@@ -125,6 +152,11 @@ class PullRequest:
     #: ran; it is not the same as one that ran and concluded nothing, and both
     #: run the job.
     checks: Mapping[str, str]
+    #: When the named check finished on this head. None when it could not be
+    #: read, which is treated as stale rather than as fresh: an unreadable value
+    #: landing on the permissive side of an age comparison is the one way a
+    #: check reports healthy for a reason unrelated to the truth (L50).
+    checked_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -137,12 +169,15 @@ class Decision:
         return self.answer is not Answer.ALREADY_CHECKED
 
 
-def decide(*, tree: str, check: str,
-           pulls: list[PullRequest] | None) -> Decision:
+def decide(*, tree: str, check: str, pulls: list[PullRequest] | None,
+           now: datetime,
+           unconditional_after: timedelta = UNCONDITIONAL_AFTER) -> Decision:
     """What this job should do about a commit whose tree is `tree`.
 
     `pulls` is None when the association could not be read, which is a different
-    fact from an empty list and must not be able to arrive as one (L119).
+    fact from an empty list and must not be able to arrive as one (L119). `now`
+    is injected so a test pins both ends of the age comparison rather than one
+    (L130).
     """
     if not tree:
         raise ValueError(
@@ -193,11 +228,28 @@ def decide(*, tree: str, check: str,
             f"the check {check!r} {was} on its head, so nothing has proved this "
             f"tree against it. It runs."))
 
+    # Asked LAST, after the tree and the check, on purpose. A stale reading
+    # about the wrong tree is not staleness, and reporting it as such would send
+    # a reader looking at the runner image for what is really a different
+    # commit (L11).
+    age = None if pull.checked_at is None else now - pull.checked_at
+    if age is None or age > unconditional_after:
+        when = ("its finish time could not be read"
+                if age is None
+                else f"it finished {_spoken(age)} ago, past the "
+                     f"{_spoken(unconditional_after)} window")
+        return Decision(Answer.PROOF_IS_STALE, (
+            f"Pull request #{pull.number} carries this exact tree {short} and "
+            f"{check!r} succeeded on its head, but {when}. The runner image, "
+            "the pinned Xcode and Homebrew packages all move with no commit "
+            "here, so an unchanged tree is not an unchanged result (#1075). "
+            "It runs."))
+
     return Decision(Answer.ALREADY_CHECKED, (
         f"Pull request #{pull.number} carries this exact tree {short} and "
-        f"{check!r} succeeded on its head {pull.head_sha[:12]}, so this job "
-        "would re-run a check that has already passed on identical content. "
-        "Skipping its work."))
+        f"{check!r} succeeded on its head {pull.head_sha[:12]} "
+        f"{_spoken(age)} ago, so this job would re-run a check that has "
+        "already passed on identical content. Skipping its work."))
 
 
 # ── reading the answer out of GitHub ─────────────────────────────────────────
@@ -216,8 +268,21 @@ def _gh_json(path: str):
             f"gh api {path} did not return JSON ({broken})") from None
 
 
-def _checks_on(sha: str) -> dict[str, str]:
-    """The newest conclusion for each check run name on `sha`.
+def _when(stamp: object) -> datetime | None:
+    """One API timestamp, or None when it cannot be read.
+
+    Never defaulted to now. An unreadable stamp landing on the permissive side
+    of the age comparison would report a proof as fresh for a reason unrelated
+    to the truth (L50).
+    """
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _checks_on(sha: str) -> tuple[dict[str, str], dict[str, datetime | None]]:
+    """The newest conclusion and finish time for each check run name on `sha`.
 
     Newest wins because that is what GitHub itself shows and what a re-run after
     a red check means. A run still in flight has no conclusion, so it lands here
@@ -229,19 +294,26 @@ def _checks_on(sha: str) -> dict[str, str]:
     if not isinstance(runs, list):
         raise HistoryUnreadable(
             f"the check runs for {sha[:12]} came back without a list")
-    newest: dict[str, tuple[str, str]] = {}
+    newest: dict[str, tuple[str, str, datetime | None]] = {}
     for run in runs:
         name = str(run.get("name") or "")
         if not name:
             continue
         started = str(run.get("started_at") or "")
         if name not in newest or started >= newest[name][0]:
-            newest[name] = (started, str(run.get("conclusion") or "").lower())
-    return {name: concluded for name, (_, concluded) in newest.items()}
+            newest[name] = (started,
+                            str(run.get("conclusion") or "").lower(),
+                            _when(run.get("completed_at")))
+    return ({name: c for name, (_, c, _f) in newest.items()},
+            {name: f for name, (_, _c, f) in newest.items()})
 
 
-def pulls_for(sha: str) -> list[PullRequest]:
-    """Every pull request GitHub associates with `sha`, with its head's tree."""
+def pulls_for(sha: str, check: str) -> list[PullRequest]:
+    """Every pull request GitHub associates with `sha`, with its head's tree.
+
+    `check` names which check run's finish time to carry, because staleness is
+    asked about THIS job's proof rather than about the pull request as a whole.
+    """
     associated = _gh_json(
         f"repos/{{owner}}/{{repo}}/commits/{sha}/pulls?per_page=100")
     if not isinstance(associated, list):
@@ -261,8 +333,10 @@ def pulls_for(sha: str) -> list[PullRequest]:
         if not tree:
             raise HistoryUnreadable(
                 f"the head {head[:12]} of #{number} reported no tree sha")
+        conclusions, finished = _checks_on(head)
         found.append(PullRequest(number=number, head_sha=head, tree_sha=tree,
-                                 checks=_checks_on(head)))
+                                 checks=conclusions,
+                                 checked_at=finished.get(check)))
     return found
 
 
@@ -291,12 +365,13 @@ def main(argv: list[str] | None = None) -> int:
             f"{args.check!r} has already passed on it is unknown. It runs."))
     else:
         try:
-            pulls = pulls_for(args.sha) if args.sha else pulls_for("HEAD")
+            pulls = pulls_for(args.sha or "HEAD", args.check)
         except HistoryUnreadable as unreadable:
             print(f"the pull request association could not be read: "
                   f"{unreadable}")
             pulls = None
-        decision = decide(tree=tree, check=args.check, pulls=pulls)
+        decision = decide(tree=tree, check=args.check, pulls=pulls,
+                          now=datetime.now(timezone.utc))
 
     print(decision.message)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")

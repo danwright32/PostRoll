@@ -1,0 +1,8 @@
+{
+  "name": "a-proof-is-not-fresh-forever",
+  "file": "tools/check_tree_already_checked.py",
+  "find": "    age = None if pull.checked_at is None else now - pull.checked_at\n    if age is None or age > unconditional_after:",
+  "replace": "    age = None if pull.checked_at is None else now - pull.checked_at\n    if False:",
+  "test": "tests/test_tree_already_checked.py::test_a_proof_older_than_the_window_runs_the_job_anyway",
+  "breaks": "a green earned against an older runner image, Xcode or Homebrew stands forever, so main is never re-checked against a build environment that moved with no commit here (#1075, #551)"
+}
