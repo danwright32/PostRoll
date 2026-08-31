@@ -1,0 +1,8 @@
+{
+  "name": "an-unread-log-is-not-a-run-that-passed",
+  "file": "tools/check_job_durations.py",
+  "find": "        if log:\n            failures.setdefault(name, []).append(failed_tests(log, name))",
+  "replace": "        failures.setdefault(name, []).append(failed_tests(log, name))",
+  "test": "tests/test_job_duration_drift.py::test_a_log_that_could_not_be_read_adds_no_run_to_the_flake_window",
+  "breaks": "a run whose log could not be downloaded counts as a run in which nothing failed, so the flake denominator grows and a real repeat offender reads as rarer than it is (#1060, L98)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "a-test-that-fails-every-time-is-not-a-flake",
+  "file": "tools/check_job_durations.py",
+  "find": "            if times < len(runs):",
+  "replace": "            if times <= len(runs):",
+  "test": "tests/test_job_duration_drift.py::test_a_test_that_failed_every_time_is_not_a_flake",
+  "breaks": "a test that is simply broken is ranked as intermittent, which buries the ones that fail only sometimes, and those are the ones nothing else can surface (#1060, L293)"
+}
