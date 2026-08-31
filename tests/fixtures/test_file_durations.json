@@ -65,6 +65,7 @@
     "test_enrich_step_attribution.py": 0.01,
     "test_event_manifest.py": 0.01,
     "test_event_slug_parity.py": 0.03,
+    "test_every_tool_runs_as_a_script.py": 1.91,
     "test_extract_json_strings.py": 0.0,
     "test_failure_needles_have_producers.py": 0.05,
     "test_fast_subset_stays_honest.py": 0.27,
@@ -84,10 +85,12 @@
     "test_golden_drift_is_reported.py": 2.0399999999999996,
     "test_golden_frames.py": 451.04999999999995,
     "test_golden_recording_door.py": 0.05,
+    "test_guard_entry_costs.py": 0.0,
     "test_guard_mutation_registry.py": 29.370000000000072,
     "test_guard_sweep_due.py": 0.0,
     "test_guard_sweep_fits_its_deadline.py": 0.04,
     "test_guard_sweep_freshness.py": 0.04,
+    "test_guard_work_line.py": 0.0,
     "test_gui_launch_budget.py": 0.0,
     "test_gui_tests_cannot_hang_silently.py": 0.0,
     "test_hand_check_document.py": 0.0,
@@ -136,6 +139,7 @@
     "test_record_codec_change.py": 44.010000000000005,
     "test_record_design_change.py": 0.69,
     "test_record_design_fingerprints.py": 48.89,
+    "test_record_guard_costs.py": 0.0,
     "test_record_suite_count.py": 0.32,
     "test_record_test_durations.py": 2.34,
     "test_reel_audio_failure.py": 3.0299999999999994,
@@ -454,6 +458,10 @@
       "run": "full-before-2026-08-30",
       "scale": 1.0
     },
+    "test_every_tool_runs_as_a_script.py": {
+      "run": "partial-2026-08-31T16:30Z",
+      "scale": 0.463
+    },
     "test_extract_json_strings.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
@@ -530,6 +538,10 @@
       "run": "full-before-2026-08-30",
       "scale": 1.0
     },
+    "test_guard_entry_costs.py": {
+      "run": "partial-2026-08-31T16:30Z",
+      "scale": 0.463
+    },
     "test_guard_mutation_registry.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
@@ -545,6 +557,10 @@
     "test_guard_sweep_freshness.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_guard_work_line.py": {
+      "run": "partial-2026-08-31T16:30Z",
+      "scale": 0.463
     },
     "test_gui_launch_budget.py": {
       "run": "full-before-2026-08-30",
@@ -737,6 +753,10 @@
     "test_record_design_fingerprints.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_record_guard_costs.py": {
+      "run": "partial-2026-08-31T16:30Z",
+      "scale": 0.463
     },
     "test_record_suite_count.py": {
       "run": "full-before-2026-08-30",

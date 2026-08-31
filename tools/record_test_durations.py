@@ -106,6 +106,13 @@ REFERENCE_FILES = (
 # #1090, which needs the same thing for guard registry entries. Re-exported here
 # because this module is where they were, and every caller and test names them
 # through it (L41: one implementation, not two that drift).
+#
+# The path insert is what makes `python tools/record_test_durations.py` work.
+# Running a file as a script puts its OWN directory on sys.path, not the repo
+# root, so `from tools import ...` finds nothing; pytest adds the root, so the
+# whole suite stayed green while the command in the Makefile died on its first
+# line (L3). tools/check_guards.py has carried the same two lines since #920.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tools.measured_record import Provenance, added, scale_from  # noqa: E402,F401
 
 
