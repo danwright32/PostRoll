@@ -112,7 +112,11 @@ jobs:
   changed:
     if: github.event_name == 'pull_request'
     runs-on: macos-26
-    timeout-minutes: 45
+    # Above the 900s deadline plus this job's setup (Xcode, xcodegen, pip,
+    # ffmpeg: about five minutes), so the DEADLINE is what fires and the cap is
+    # only there for a hang. Whichever fires first decides what is reported, and
+    # only the deadline can say which entries went unproven (L110, L313).
+    timeout-minutes: 30
     steps:
       # Full history: --changed diffs against the merge base with origin/main,
       # and a shallow checkout has no merge base to find.
@@ -162,8 +166,31 @@ jobs:
       # Prints what it skipped and why, because "0 entries affected" is a real
       # answer here and has to be told apart from a run that found nothing to do
       # because it was broken (L98).
+      #
+      # ── the deadline, and who it blocks (#1086) ─────────────────────────────
+      #
+      # This job had no deadline at all: a wide diff either finished or was
+      # killed by `timeout-minutes` 45 minutes later with nothing saying what it
+      # reached, and a job killed by the cap reports CANCELLED, which is what a
+      # superseded run reports too (L11).
+      #
+      # 900s, chosen from the distribution rather than picked round (L172).
+      # Measured over 28 runs: 165s median, 393s at p90, 1,511s at worst. So it
+      # is 2.3x p90 and fires only on the wide diffs that were actually the
+      # problem: over 2026-08-30 and 31 this job was the SOLE thing holding five
+      # separate merges, for 15 to 19 minutes each, with every other check green,
+      # and #1072 waited 1,140s on it alone.
+      #
+      # What it does when it fires is the decision this issue carried. An
+      # unreached entry FAILS the run only when this diff EDITED that guard,
+      # meaning its test file or its own registry record changed: a guard edited
+      # into uselessness in the same change that edits it is the case this job
+      # exists to catch. An entry selected only because the guarded FILE moved is
+      # named and warned about, because failing there turns a wide diff into a
+      # blocked merge, and #989's daily sweep re-proves every entry within a day
+      # either way.
       - name: Re-prove the guards this diff touches
-        run: python tools/check_guards.py --changed
+        run: python tools/check_guards.py --changed --deadline-seconds 900
 
   # The whole registry, on every merge to main.
   #
