@@ -1,0 +1,8 @@
+{
+  "name": "an-unnormalisable-move-is-not-called-slower",
+  "file": "tools/check_job_durations.py",
+  "find": "    if rates is None:\n        return Verdict(\n            Drift.NOT_NORMALISED,",
+  "replace": "    if False:\n        return Verdict(\n            Drift.NOT_NORMALISED,",
+  "test": "tests/test_job_duration_drift.py::test_a_material_move_with_no_divisor_is_not_called_slower",
+  "breaks": "a job whose workload nobody measured is reported as SLOWER with the same confidence as one that was, which is how `changed: faster, 227s to 50s` was used to argue #997 was not worth doing (#1041, L98)"
+}
