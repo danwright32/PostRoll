@@ -291,7 +291,6 @@
 		5F378F01B4EC67A6349E676A /* ReviewMediaFileRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB5909772AA6E48F5BF28F98 /* ReviewMediaFileRow.swift */; };
 		5FC5FA4C2FA68B2F3527ACF7 /* InsightsWorkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 569BC909451D7C03BFB747D3 /* InsightsWorkManager.swift */; };
 		5FCD1F3126286FECDB79D7FD /* PreviewFolderReclaimTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115105E48D1AE863FB39C408 /* PreviewFolderReclaimTests.swift */; };
-		616D66684D8DEC793B55C7F0 /* TestTargetHygieneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8FCB22FC37C59AF0CF4F0F /* TestTargetHygieneTests.swift */; };
 		61AC0FE41F9DB8E0F65EF5D4 /* BottomBanners.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09121CA767135344E75B4E8F /* BottomBanners.swift */; };
 		61E91BEA54C8C616D326945B /* AnalyticsStaleness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D3665A364DA1FF11D7C5CF9 /* AnalyticsStaleness.swift */; };
 		625260ED9B1EE3E06F7A9AE8 /* WebPerformersOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25603C60709F20EBA8741903 /* WebPerformersOutcome.swift */; };
@@ -468,7 +467,6 @@
 		A144EBA6EFFDCFCCB7FA1B4F /* InterpolatedReasonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B870BFB249761EE38332129 /* InterpolatedReasonTests.swift */; };
 		A1F1182CFF9964B4F27C9A83 /* WindowFit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0EAB536E4F8B740B8F73AA6 /* WindowFit.swift */; };
 		A250EB96CD1671B8DD6C93BE /* PreviewGraphicThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4942DAABA42D0D834855C839 /* PreviewGraphicThumbnail.swift */; };
-		A262485404781BB2A8149B33 /* TestSourceInventoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C321849538539EFF1B13E672 /* TestSourceInventoryTests.swift */; };
 		A31053B9327067DE9682D270 /* DirectoryListing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5928EFD8FB594B21FF72FD5D /* DirectoryListing.swift */; };
 		A46E85EE5C78A3C72FE33409 /* RecurringAccounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = D88A4510D24DC819083357DA /* RecurringAccounts.swift */; };
 		A520DDCF54379E1ADEE03B6F /* RenderAppearanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC753FA6DC3FB84ED67F492 /* RenderAppearanceTests.swift */; };
@@ -1134,7 +1132,6 @@
 		B99F9FEA065BB7EA05E6D421 /* OCRPartialSalvageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRPartialSalvageTests.swift; sourceTree = "<group>"; };
 		B9A86CA116C936D1606AED8E /* AppUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdate.swift; sourceTree = "<group>"; };
 		BA81931541575D6CD57C287D /* AnalyticsStalenessNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsStalenessNotice.swift; sourceTree = "<group>"; };
-		BA8FCB22FC37C59AF0CF4F0F /* TestTargetHygieneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestTargetHygieneTests.swift; sourceTree = "<group>"; };
 		BAAF1A31C246B3B362668BED /* PhotoTagSheetNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTagSheetNote.swift; sourceTree = "<group>"; };
 		BB388F91AF57E3531CA7CD54 /* SharedChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedChrome.swift; sourceTree = "<group>"; };
 		BBA2048CD4E33FC9476ED3CC /* CollageDividerHandle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollageDividerHandle.swift; sourceTree = "<group>"; };
@@ -1150,7 +1147,6 @@
 		C137661992FCCFE51C4072D3 /* PhotoTagBatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTagBatch.swift; sourceTree = "<group>"; };
 		C16419F304571C2E7411DB9C /* WindowAlertPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAlertPresentationTests.swift; sourceTree = "<group>"; };
 		C31EAD74A0B9D8B73495268C /* UnreadProgramPagesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadProgramPagesTests.swift; sourceTree = "<group>"; };
-		C321849538539EFF1B13E672 /* TestSourceInventoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSourceInventoryTests.swift; sourceTree = "<group>"; };
 		C60F6BEEBD5DA1C9636768AF /* TagFieldNoteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagFieldNoteTests.swift; sourceTree = "<group>"; };
 		C760455BFD608EC0CEF12BBE /* ProgramPDFBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramPDFBuilderTests.swift; sourceTree = "<group>"; };
 		C80FB3A1B89A714E114242B6 /* LaunchedApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchedApp.swift; sourceTree = "<group>"; };
@@ -1824,8 +1820,6 @@
 				C60F6BEEBD5DA1C9636768AF /* TagFieldNoteTests.swift */,
 				CEE48A71B691F32EB4500B1A /* TaggedHandlesStampedOnSuccessTests.swift */,
 				AEFB547F177CB82808A0E142 /* TemporarySandboxes.swift */,
-				C321849538539EFF1B13E672 /* TestSourceInventoryTests.swift */,
-				BA8FCB22FC37C59AF0CF4F0F /* TestTargetHygieneTests.swift */,
 				92C5F7445510F567D6BAD6C2 /* TextFieldStyleTests.swift */,
 				19ECACDDD7D7D79F095DE3B5 /* TitleCardToggleLabelTests.swift */,
 				0CB1AA0FD3CA6E5455265FC5 /* TopAnchoredCropTests.swift */,
@@ -2708,8 +2702,6 @@
 				307122BE2C05C01B6A993B0C /* TagFieldNoteTests.swift in Sources */,
 				C1897C022DADD14F57571C50 /* TaggedHandlesStampedOnSuccessTests.swift in Sources */,
 				CD905803574115D2C996DE0A /* TemporarySandboxes.swift in Sources */,
-				A262485404781BB2A8149B33 /* TestSourceInventoryTests.swift in Sources */,
-				616D66684D8DEC793B55C7F0 /* TestTargetHygieneTests.swift in Sources */,
 				738C97A0C292F90666F7D5CD /* TextFieldStyleTests.swift in Sources */,
 				41196E2FF2C78497F0F85635 /* TimingStore.swift in Sources */,
 				B5096EF2FE1F82413AFC4C30 /* TitleCardToggleLabelTests.swift in Sources */,

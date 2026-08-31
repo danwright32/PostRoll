@@ -169,6 +169,7 @@
     "test_swift_test_target_covers_sources.py": 0.01,
     "test_swift_tests_never_reach_live_data.py": 17.540000000000003,
     "test_the_suite_spreads_its_slowest_work.py": 0.0,
+    "test_the_test_target_stays_self_contained.py": 0.19,
     "test_thursday_reel_legibility.py": 231.13000000000002,
     "test_toolchain_matches_ci.py": 0.09,
     "test_top_anchored_crop.py": 0.06,
@@ -866,6 +867,10 @@
     "test_the_suite_spreads_its_slowest_work.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_the_test_target_stays_self_contained.py": {
+      "run": "partial-2026-08-31T14:57Z",
+      "scale": 1.455
     },
     "test_thursday_reel_legibility.py": {
       "run": "full-before-2026-08-30",

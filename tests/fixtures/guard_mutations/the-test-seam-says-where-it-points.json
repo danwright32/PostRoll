@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/AppState.swift",
   "find": "         storeURL: URL,\n         dataRoot: URL) {",
   "replace": "         storeURL: URL = EventStore.storeURL,\n         dataRoot: URL) {",
-  "test": "PostRollTests/TestTargetHygieneTests/testTheAppStateTestSeamSaysWhereItPoints",
+  "test": "tests/test_the_test_target_stays_self_contained.py::test_the_app_state_test_seam_says_where_it_points",
   "breaks": "the test seam defaults to the LIVE events.json again, so any test that leaves the location out is handed the real store and the real media tree while its call still reads as the safe constructor, and the launch sweeps delete media for every event not in the list they hold (#684)"
 }

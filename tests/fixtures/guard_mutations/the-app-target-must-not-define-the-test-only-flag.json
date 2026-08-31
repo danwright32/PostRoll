@@ -3,6 +3,6 @@
   "file": "PostRollApp/project.yml",
   "find": "        SWIFT_STRICT_CONCURRENCY: targeted\n        ASSETCATALOG",
   "replace": "        SWIFT_STRICT_CONCURRENCY: targeted\n        SWIFT_ACTIVE_COMPILATION_CONDITIONS: POSTROLL_TESTS\n        ASSETCATALOG",
-  "test": "PostRollTests/TestTargetHygieneTests/testOnlyTheTestTargetDefinesTheTestOnlyFlag",
+  "test": "tests/test_the_test_target_stays_self_contained.py::test_only_the_test_target_defines_the_test_only_flag",
   "breaks": "the shipping app compiles the test-only seams, so the initialiser that starts AppState on a given event list with no read of the store is reachable in the app Dan runs: it would open showing an empty library while the real events.json sat untouched on disk, and that would not look like an accident (#684, L2)"
 }

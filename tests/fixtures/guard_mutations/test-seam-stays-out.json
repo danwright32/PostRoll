@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/AppState.swift",
   "find": "    #if POSTROLL_TESTS\n    /// Test seam: an AppState holding exactly these events,",
   "replace": "    #if true\n    /// Test seam: an AppState holding exactly these events,",
-  "test": "PostRollTests/TestTargetHygieneTests/testTheAppStateTestSeamStaysOutOfTheShippingApp",
+  "test": "tests/test_the_test_target_stays_self_contained.py::test_the_app_state_test_seam_stays_out_of_the_shipping_app",
   "breaks": "the test-only seam ships in the app target"
 }

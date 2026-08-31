@@ -64,8 +64,10 @@ final class AppEntryPointUITests: XCTestCase {
     /// exactly the state the first found.
     ///
     /// A test that DOES need a cold start must say so and launch its own, and
-    /// `TestTargetHygieneTests` holds this file to launching once so that adding
-    /// one is a decision somebody takes rather than a cost that creeps back.
+    /// `tests/test_the_test_target_stays_self_contained.py` holds this file to
+    /// launching once so that adding one is a decision somebody takes rather
+    /// than a cost that creeps back. It reads this source as text (#1089): the
+    /// rule never needed a build, and paying one to re-prove it bought nothing.
     /// `nonisolated(unsafe)` because XCTest runs the methods of one class one
     /// at a time on one thread, so there is no concurrent access to protect
     /// against, and the alternatives do not work here: `@MainActor` on the
