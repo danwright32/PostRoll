@@ -1,0 +1,8 @@
+{
+  "name": "an-undecided-reel-layout-is-not-pre-rendered",
+  "file": "PostRollApp/Sources/Services/SpeculativeReelRenderer.swift",
+  "find": "              let seed = pd.reelSeed\n        else { return nil }",
+  "replace": "              let seed = Optional(pd.reelSeed ?? 0)\n        else { return nil }",
+  "test": "PostRollTests/ReelLayoutSeedTests/testAReelWithNoSeedIsNotFingerprintedAtAll",
+  "breaks": "a day whose layout has not been decided is fingerprinted anyway, so two renders that produce different collages share one fingerprint and the pre-render taken under one is adopted for the other. Its own entry rather than resting on the Python refusal, because these are two halves that fail independently (#1062, L75)"
+}

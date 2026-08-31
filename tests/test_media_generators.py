@@ -590,7 +590,7 @@ def test_scroll_reel_ffmpeg_command(tmp_path, monkeypatch):
         result = scroll_mod.generate_reel_scroll(
             [str(p) for p in photos], str(audio), str(out),
             event_name="Ev", org="Org", venue="Venue",
-            scroll_duration=2.0,
+            seed=163, scroll_duration=2.0,
         )
 
     ffmpeg_cmds = [c for c in cap.commands if c[0] == "ffmpeg"]
@@ -683,7 +683,7 @@ def test_scroll_reel_short_strip_pads_instead_of_black_band(tmp_path, monkeypatc
     with patch("subprocess.run", new=cap):
         scroll_mod.generate_reel_scroll(
             [str(p) for p in photos], str(audio), str(out),
-            event_name="Ev", org="Org", venue="Venue",
+            event_name="Ev", org="Org", venue="Venue", seed=163,
         )
 
     # No black band: the padded area is the cream background

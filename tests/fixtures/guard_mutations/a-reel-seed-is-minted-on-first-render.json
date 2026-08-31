@@ -1,0 +1,8 @@
+{
+  "name": "a-reel-seed-is-minted-on-first-render",
+  "file": "postroll/media/generate_reel_scroll.py",
+  "find": "    if seed is None:\n",
+  "replace": "    if False:\n",
+  "test": "tests/test_reel_layout_seed_is_required.py::test_a_strip_with_no_seed_is_refused",
+  "breaks": "the reel's masonry is seeded from system entropy again whenever no seed is stored, so every render lays out all 234 photographs differently, adjusting one crop reshuffles the whole reel, and a speculative pre-render can be adopted for a render that is a different collage (#1062, L339)"
+}
