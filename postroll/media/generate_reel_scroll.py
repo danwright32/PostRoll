@@ -61,13 +61,19 @@ from .layout_sidecar import layout_sidecar_path
 
 CANVAS_W = 1080
 CANVAS_H = 1920
-# 60 rather than 30 (#. 2026-08-30). The strip's speed is set by how long it is
-# and how long the scroll runs, neither of which the renderer chooses: 234
-# photos over 35 seconds is 29,000px of gallery, and at 30fps that advanced
-# 30.4px between frames, which the eye sees as jumps rather than motion.
-# Doubling the frame rate halves the jump for the same reel and the same photo
-# count. Instagram accepts 60fps.
-FPS = 60
+# 30, and it was briefly 60 (#. 2026-08-30). Instagram RE-ENCODES every reel to
+# 30fps and it DROPS frames rather than blending them, both measured off a reel
+# posted and saved back that day: 720x1280, 30fps, 0.70 Mbps, and its frames as
+# vertically sharp as our master (ratio 0.99), which a blend could not be.
+#
+# So a 60fps master reaches nobody. Half its frames are discarded and the
+# survivors are the ones we would have rendered anyway, which makes the movement
+# a viewer sees identical either way. What 60fps DID change was the preview: it
+# looked twice as smooth as the posted reel, and a whole evening of judging
+# scroll speed was spent against a file no viewer sees. Rendering at the rate
+# that ships is what keeps what is reviewed and what is published the same
+# picture (L64).
+FPS = 30
 
 ROW_GAP = GAP          # gap between rows
 COL_GAP = GAP          # gap between photos in a row

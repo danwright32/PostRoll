@@ -8,11 +8,12 @@ visible gallery was replaced every 1.6 seconds. Past roughly 8 to 12 pixels a
 frame the eye stops fusing successive frames into motion and starts seeing the
 jumps, which is what "jittery" was describing.
 
-Three separate things were wrong, and each has its own check here, because a
-single "does it look smooth" reading would be satisfied by fixing any one of
-them (L11, L178):
+Three separate things were wrong. Only the last two belong to the renderer, and
+each has its own check here, because a single "does it look smooth" reading
+would be satisfied by fixing any one of them (L11, L178):
 
-1. the strip moved too far between frames;
+1. the strip moved too far between frames, which is not a renderer defect: it
+   is 234 photographs in 35 seconds, and belongs to #1064 and #1066;
 2. `int(eased * max_scroll)` truncated a 30.4px step to an alternating 30, 31,
    so the speed wobbled a few percent on EVERY frame;
 3. `ease_in_out` was piecewise with a genuine velocity discontinuity at its
@@ -36,10 +37,20 @@ from postroll.media import generate_reel_scroll as scroll_mod
 REPORTED_STRIP_H = 29000
 REPORTED_DURATION = 35.0
 
-#: What a frame may advance. Chosen from where fusion breaks down rather than
-#: from what the code currently does: at 60fps the reported reel lands at
-#: 15.2px, so this is not a ratchet fitted to the present value.
-MAX_TRAVEL_PX = 16.0
+#: What a frame may advance before the scroll reads as rushed, in the units the
+#: renderer works in and at the frame rate that actually ships.
+#:
+#: Not chosen from theory. Dan judged a ladder of the reported reel on
+#: 2026-08-30, one layout, one photo set, speed the only variable: 11.50 px a
+#: frame read as fast and 10.81 read as right. Instagram re-encodes every reel
+#: to 30fps regardless of what it is given, so these are the numbers a viewer
+#: sees rather than numbers only the master has.
+COMFORTABLE_TRAVEL_PX = 10.81
+
+#: What the reported reel needs to reach that speed, given its 234 photographs.
+#: Its shipped 35s is a third of this, which is the defect, and the fix belongs
+#: to the photo count and the duration rather than to anything in here.
+COMFORTABLE_DURATION_S = 100.0
 
 EVENT = ("Battery Dance Festival", "Battery Dance", "Wagner Park")
 
@@ -55,17 +66,26 @@ def scroll_positions(strip_height: int, duration: float) -> list[float]:
     return [scroll_mod.ease_in_out(i / n) * travel for i in range(n + 1)]
 
 
-def test_the_strip_never_moves_more_than_the_eye_can_fuse():
-    steps = scroll_positions(REPORTED_STRIP_H, REPORTED_DURATION)
-    travel = [b - a for a, b in zip(steps, steps[1:])]
-    worst = max(travel)
-    assert worst <= MAX_TRAVEL_PX, (
-        f"the strip advances {worst:.1f}px between frames at cruise "
-        f"({worst * scroll_mod.FPS:.0f}px/s, the {scroll_mod.VIEWPORT_H}px "
-        f"viewport replaced every "
-        f"{scroll_mod.VIEWPORT_H / (worst * scroll_mod.FPS):.1f}s). "
-        f"Past about {MAX_TRAVEL_PX:.0f}px a frame this reads as jumps rather "
-        f"than motion, which is the defect this reel was reported for.")
+def test_a_reel_sized_for_comfort_scrolls_at_the_speed_it_was_sized_for():
+    """The renderer does not choose the speed, but it must not alter it.
+
+    How fast a reel scrolls comes from the photo count and the duration, both of
+    which are the user's. This file cannot assert a ceiling on that: it did,
+    briefly, and the assertion was really about how many photographs somebody
+    picked (#1064, #1066).
+
+    What the renderer DOES own is the easing, whose cruise factor turns the
+    average speed into the peak. #1066's warning is computed from that factor,
+    so if `EASE_RAMP` moves, every warning it produces is wrong by the same
+    proportion and nothing else here would notice.
+    """
+    steps = scroll_positions(REPORTED_STRIP_H, COMFORTABLE_DURATION_S)
+    worst = max(b - a for a, b in zip(steps, steps[1:]))
+    assert worst == pytest.approx(COMFORTABLE_TRAVEL_PX, rel=0.02), (
+        f"a {REPORTED_STRIP_H}px strip over {COMFORTABLE_DURATION_S}s advances "
+        f"{worst:.2f}px a frame, not the {COMFORTABLE_TRAVEL_PX}px it was sized "
+        f"for. The easing's cruise factor has moved, so every speed warning "
+        f"derived from it is now wrong by the same proportion.")
 
 
 def test_the_scroll_has_no_lurch_in_it():
