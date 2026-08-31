@@ -1253,6 +1253,106 @@ def test_a_sweep_past_its_deadline_fails_and_names_what_it_never_reached(
     assert "unproven" in text.lower() or "never reached" in text.lower(), text
 
 
+# ── who a missed deadline actually blocks (#1086) ─────────────────────────────
+#
+# The `full` sweep must FAIL on any unreached entry: it is the only thing that
+# re-proves the whole registry, so an entry it silently skipped is one nothing
+# proves at all.
+#
+# The per-pull-request `changed` job is a different question, and it is the one
+# #1086 is about. Measured over 2026-08-30 and 31 it was the sole thing holding
+# FIVE separate merges, for 15 to 19 minutes each, with every other check green.
+# Failing a wide diff there turns a slow job into a blocked merge, and #989's
+# daily sweep re-proves everything within a day either way.
+#
+# So the deadline blocks only the entries this diff EDITED: the ones whose guard
+# test file or whose own registry record changed. That is the case the job exists
+# to catch, a guard edited into uselessness in the same change that edits it.
+# An entry selected only because the guarded FILE moved is warned about and left
+# to the daily sweep.
+
+
+def test_an_unreached_entry_this_diff_edited_blocks(repo: Path, tmp_path: Path):
+    """The case the job exists to catch."""
+    from tools.check_guards import check_guards
+
+    registry = write_registry(
+        tmp_path / "registry",
+        [registry_dict(name=f"g-{i}", test=f"tests/test_x.py::test_{i}")
+         for i in range(6)])
+    lines: list[str] = []
+    code = check_guards(repo, registry, a_runner(1, "1 failed"),
+                        deadline_seconds=0, blocking={"g-0"},
+                        log=lines.append)
+    text = "\n".join(lines)
+    assert code == 1, f"an entry this diff edited went unproven and merged: {text}"
+    assert "g-0" in text, text
+
+
+def test_an_unreached_entry_this_diff_only_touched_warns(repo: Path,
+                                                         tmp_path: Path):
+    """A wide diff must not become a blocked merge.
+
+    The entries are still named, and the daily sweep re-proves them within a
+    day, so this is a warning with a reader and a remedy rather than silence
+    (L98, L126).
+    """
+    from tools.check_guards import check_guards
+
+    registry = write_registry(
+        tmp_path / "registry",
+        [registry_dict(name=f"g-{i}", test=f"tests/test_x.py::test_{i}")
+         for i in range(6)])
+    lines: list[str] = []
+    code = check_guards(repo, registry, a_runner(1, "1 failed"),
+                        deadline_seconds=0, blocking=set(),
+                        log=lines.append)
+    text = "\n".join(lines)
+    assert code == 0, f"a wide diff was turned into a blocked merge: {text}"
+    assert "g-0" in text, "the unreached entries are not named at all"
+    assert "unproven" in text.lower() or "never reached" in text.lower(), text
+
+
+def test_a_sweep_with_no_diff_still_blocks_on_every_unreached_entry(
+        repo: Path, tmp_path: Path):
+    """The full sweep's behaviour, unchanged.
+
+    `blocking=None` means there is no diff to judge against, which is the daily
+    sweep. Reversing #989's decision here would leave the one job that re-proves
+    the WHOLE registry able to skip entries and go green (L98).
+    """
+    from tools.check_guards import check_guards
+
+    registry = write_registry(
+        tmp_path / "registry",
+        [registry_dict(name=f"g-{i}", test=f"tests/test_x.py::test_{i}")
+         for i in range(6)])
+    lines: list[str] = []
+    code = check_guards(repo, registry, a_runner(1, "1 failed"),
+                        deadline_seconds=0, blocking=None, log=lines.append)
+    assert code == 1, "\n".join(lines)
+
+
+def test_a_red_guard_still_fails_even_when_nothing_blocks(repo: Path,
+                                                          tmp_path: Path):
+    """A SURVIVED guard is a verdict about coverage, not about time.
+
+    Without this, softening the deadline could soften the whole exit code and
+    a guard that stayed green on broken code would merge (L53).
+    """
+    from tools.check_guards import check_guards
+
+    registry = write_registry(
+        tmp_path / "registry",
+        [registry_dict(name="g-0", test="tests/test_x.py::test_0")])
+    lines: list[str] = []
+    code = check_guards(repo, registry, a_runner(0, "1 passed"),
+                        deadline_seconds=3600, blocking=set(),
+                        log=lines.append)
+    assert code == 1, "\n".join(lines)
+    assert "SURVIVED" in "\n".join(lines)
+
+
 def test_a_sweep_inside_its_deadline_is_unaffected(repo: Path, tmp_path: Path):
     """The control. A deadline that fired on ordinary runs would be turned off,
     and then it would be protecting nothing (L36)."""

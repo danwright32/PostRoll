@@ -1147,12 +1147,18 @@ def write_timings(path: Path, results: list[Result], repo_root: Path,
     # measurement anyone has of what the cold build costs, and shipping the fix
     # would destroy the evidence the diagnosis was made from (L277).
     #
-    # What this leaves: those six entries are estimated from their kind's median
-    # for as long as the deal is stable, because a shard runs its entries in
-    # registry order and the same one is therefore first every time. Six of five
-    # hundred, at an estimate that is the right order of magnitude, and it is
-    # named here rather than left for somebody to rediscover as a gap in the
-    # record. The fix that would close it is to build the app ONCE before the
+    # What this leaves, measured rather than reasoned (2026-08-31, simulating
+    # two consecutive sweeps over the real registry): the excluded set PARTLY
+    # rotates. Giving the six a real reading changes their cost, which changes
+    # the deal, which changes which entry is first in each shard, so two of the
+    # six move. Four do not, and the reason is structural rather than
+    # accidental: a shard runs its entries in registry order, so an entry
+    # sorting early alphabetically is the first Swift one of whatever shard it
+    # lands in, whichever shard that is. Those four are estimated from their
+    # kind's median indefinitely.
+    #
+    # Four of five hundred, at an estimate of the right order of magnitude, and
+    # named here rather than left for somebody to rediscover as a gap. The fix that would close it is to build the app ONCE before the
     # loop, so no entry pays for it and every reading is the steady-state cost;
     # that is a change to what the sweep does rather than to what it records,
     # which is why it is not in #1090.
@@ -1267,6 +1273,7 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
                  shard: tuple[int, int] | None = None,
                  deadline_seconds: float | None = None,
                  timings_path: Path | None = None,
+                 blocking: set[str] | None = None,
                  log=say) -> int:
     # Installed here rather than in main() so every caller that can perturb the
     # tree is covered, including the tests that drive this directly (#547).
@@ -1280,6 +1287,17 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
     if not entries:
         log("the registry holds no guards, so nothing was proven (L98)")
         return 1
+
+    # Which unreached entries FAIL the run when the deadline fires (#1086).
+    #
+    # None means every one of them, which is the daily `full` sweep: it is the
+    # only thing that re-proves the whole registry, so an entry it silently
+    # skipped is one nothing proves at all (L98).
+    #
+    # A SET is the per-pull-request `changed` job, and it holds the entries this
+    # diff EDITED rather than merely touched. Filled in below from the same
+    # `--changed` selection, unless a caller passed its own.
+    blocking_names = blocking
 
     if changed_only:
         base = merge_base(repo_root)
@@ -1312,6 +1330,13 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
         selected = [e for e in entries
                     if e.file in touched or e.name in stale
                     or e.name in through_tests]
+        # The entries this diff EDITED, as opposed to the ones whose guarded
+        # FILE it moved. A guard edited into uselessness in the same change that
+        # edits it is the case this job exists to catch, so those are the ones
+        # worth holding a merge for; the rest are re-proved by the daily sweep
+        # within a day either way (#1086, #989).
+        if blocking_names is None:
+            blocking_names = set(stale) | set(through_tests)
         log(f"--changed: {len(selected)} of {len(entries)} entries affected "
             f"by the diff against {base[:12]}; {len(entries) - len(selected)} "
             "skipped as untouched, which proves nothing about them (run "
@@ -1361,10 +1386,20 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
         if deadline_seconds is not None \
                 and time.monotonic() - started >= deadline_seconds:
             unproven = entries[number - 1:]
+            held = [e for e in unproven
+                    if blocking_names is None or e.name in blocking_names]
             log(f"the {deadline_seconds:.0f}s deadline passed with "
                 f"{len(unproven)} entries never reached, so they are UNPROVEN. "
-                "This is a failure, not a cancellation: split the sweep further "
-                "or raise the deadline, but do not read it as a clean run.")
+                "This is a stopping point chosen here, not a cancellation: the "
+                "entries are named below.")
+            if held:
+                log(f"{len(held)} of them are guards THIS DIFF EDITED, which is "
+                    "the case this run exists to catch, so it fails. Split the "
+                    "change or raise the deadline; do not read it as a clean run.")
+            elif blocking_names is not None:
+                log("none of them is a guard this diff edited, so this run "
+                    "warns rather than blocking the merge: the daily sweep "
+                    "(#989) re-proves every one of them within a day.")
             break
         # How far in and how long so far, on every line, because the thing a
         # person watching needs to tell apart is progress from a hang (#641).
@@ -1399,16 +1434,24 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
                                 unproven=unproven)
         log(f"wrote {written} entry timing(s) to {timings_path}")
     for skipped in unproven:
+        edited = blocking_names is None or skipped.name in blocking_names
         log(f"  {skipped.name}: never reached before the deadline, so nothing "
-            "here says whether it still protects "
-            f"{skipped.file}")
+            f"here says whether it still protects {skipped.file}"
+            + (" (and this diff edited it)" if edited else
+               " (this diff did not edit it; the daily sweep covers it)"))
     for r in bad:
         if r.outcome is Outcome.SURVIVED:
             log(f"  {r.entry.name}: the guard stayed GREEN on broken code. "
                 f"It is not protecting {r.entry.file} and needs rewriting.")
         else:
             log(f"  {r.entry.name}: {r.detail}")
-    return 1 if (bad or unproven) else 0
+    # A SURVIVED or ERROR verdict fails whatever the deadline did: that is a
+    # statement about coverage, not about time, and folding the two into one
+    # exit code is how a guard that stayed green on broken code would merge
+    # (L53).
+    held = [e for e in unproven
+            if blocking_names is None or e.name in blocking_names]
+    return 1 if (bad or held) else 0
 
 
 def main(argv: list[str] | None = None) -> int:
