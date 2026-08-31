@@ -1,0 +1,8 @@
+{
+  "name": "the-deadline-rule-reads-the-workflow-directory",
+  "file": "tests/test_ci_gates.py",
+  "find": "    found = sorted(path.name for path in WORKFLOWS.iterdir()\n                   if path.suffix in (\".yml\", \".yaml\"))",
+  "replace": "    found = [\"tests.yml\", \"swift.yml\", \"guards.yml\"]",
+  "test": "tests/test_ci_gates.py::test_every_workflow_on_disk_is_checked_for_a_deadline",
+  "breaks": "the deadline rule goes back to a hand-written list, so a workflow missing from it is exempt from the very check meant to catch it and the guard reports green while blind (#996, L96)"
+}
