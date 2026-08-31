@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/CollaboratorPanel.swift",
   "find": ".strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)",
   "replace": ".strokeBorder(Color.creamEdge, lineWidth: 1)",
-  "test": "PostRollTests/BannerLegibilityTests/testEveryPaintedFileDrawsFromTheNamedColours",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_every_painted_file_draws_from_the_named_colours",
   "breaks": "a border goes back to a colour written at the point of use, where nothing else can name it, notice it changing, or hold it to the decision that a hairline carries no meaning on its own. 31 were written that way while the rule read as covering every painted surface (#628)"
 }

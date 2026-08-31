@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/ImageLoad.swift",
   "find": "        PaintedSurfaces.photoPlaceholder.overlay {",
   "replace": "        Color.creamDeep.overlay {",
-  "test": "PostRollTests/BannerLegibilityTests/testEveryPaintedFileDrawsFromTheNamedColours",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_every_painted_file_draws_from_the_named_colours",
   "breaks": "a surface painted by using a colour as a view goes unnamed again, which is the spelling neither fill check could express while nine of them were drawn that way and the sweep reported clean (#586)"
 }
