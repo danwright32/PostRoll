@@ -1,6 +1,7 @@
 {
   "seconds": {
     "test_a_new_test_file_is_measured.py": 1.28,
+    "test_a_pull_request_fits_the_runner_limit.py": 0.04,
     "test_a_refusal_and_a_failure_are_visible.py": 1.16,
     "test_a_wedged_test_names_itself.py": 24.62,
     "test_ai_claude_client.py": 1.8,
@@ -203,6 +204,10 @@
     "test_a_new_test_file_is_measured.py": {
       "run": "partial-2026-08-31",
       "scale": 1.39
+    },
+    "test_a_pull_request_fits_the_runner_limit.py": {
+      "run": "partial-2026-08-31T18:18Z",
+      "scale": 0.97
     },
     "test_a_refusal_and_a_failure_are_visible.py": {
       "run": "partial-2026-08-31T15:26Z",
