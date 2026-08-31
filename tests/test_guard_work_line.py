@@ -113,3 +113,68 @@ def test_the_line_says_how_many_of_its_entries_were_measured(record):
     such (L11)."""
     line = guard_work_line([result("s1", swift=True), result("brand-new", swift=True)])
     assert "2 entries, 1 of them measured" in line
+
+
+# ── the first Swift entry pays for the build the rest reuse (#1090) ───────────
+
+def test_the_first_swift_entry_is_not_recorded_as_its_own_cost(tmp_path):
+    """The reading that would have priced six ordinary guards at five times
+    what they cost.
+
+    Measured on run 33409212726, one reading per shard and always the first
+    SWIFT entry of that shard: 85.0, 90.4, 120.2, 126.6, 127.9 and 137.8
+    seconds against a Swift median of 24.0. `deal` would then spread six
+    phantoms one per shard, while the entry that actually pays the build next
+    time is priced as if it did not.
+    """
+    from tools.check_guards import write_timings
+
+    results = [result("p0", swift=False, seconds=0.5),
+               result("s1", swift=True, seconds=120.0),
+               result("s2", swift=True, seconds=25.0),
+               result("s3", swift=True, seconds=24.0)]
+    path = tmp_path / "timings.json"
+    written = write_timings(path, results, tmp_path)
+
+    payload = json.loads(path.read_text())
+    assert "s1" not in payload["seconds"], (
+        "the entry that paid for the cold build was recorded as costing what "
+        "the build costs")
+    assert payload["cold"] == {"entry": "s1", "seconds": 120.0}, (
+        "the cold reading was dropped rather than kept: it is the only "
+        "measurement anyone has of what the build costs, and shipping the fix "
+        "must not destroy the evidence it was diagnosed from (L277)")
+    assert set(payload["seconds"]) == {"p0", "s2", "s3"}
+    assert written == 3
+
+
+def test_a_python_entry_before_the_first_swift_one_keeps_its_reading(tmp_path):
+    """Two of the six shards ran a Python entry first, and it did not pay for
+    the build: the entry after it did. So the rule is the first SWIFT entry,
+    not the first entry (L173: the remedy has to reach every way it happens)."""
+    from tools.check_guards import write_timings
+
+    results = [result("p0", swift=False, seconds=7.6),
+               result("s1", swift=True, seconds=127.9),
+               result("s2", swift=True, seconds=23.0)]
+    path = tmp_path / "timings.json"
+    write_timings(path, results, tmp_path)
+
+    payload = json.loads(path.read_text())
+    assert payload["seconds"]["p0"] == 7.6
+    assert payload["cold"]["entry"] == "s1"
+
+
+def test_a_run_with_no_swift_entry_records_no_cold_build(tmp_path):
+    """A shard of nothing but Python entries never built the app, so there is
+    no cold reading to set aside and every entry keeps its cost."""
+    from tools.check_guards import write_timings
+
+    results = [result("p0", swift=False, seconds=0.5),
+               result("p1", swift=False, seconds=0.8)]
+    path = tmp_path / "timings.json"
+    write_timings(path, results, tmp_path)
+
+    payload = json.loads(path.read_text())
+    assert payload["cold"] is None
+    assert set(payload["seconds"]) == {"p0", "p1"}
