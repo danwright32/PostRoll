@@ -161,6 +161,66 @@ WORK_PATTERNS: dict[str, tuple[str, str]] = {
 }
 
 
+#: How each job family names a test that FAILED, in its own log (#1060).
+#:
+#: The logs are already read for the work counts, so the failures in them cost
+#: nothing extra. A job family absent from here reports no failures rather than
+#: guessing at a format, and the caller only counts a run it could actually read.
+FAILURE_PATTERNS: dict[str, str] = {
+    "swift-unit": r"Test case '([A-Za-z_]+\.[A-Za-z_]+\(\))' failed",
+    "python": r"^FAILED (\S+)",
+    "macos": r"^FAILED (\S+)",
+    "reference-frames": r"^FAILED (\S+)",
+    "changed": r"^FAILED (\S+)",
+    "full": r"^FAILED (\S+)",
+}
+
+#: The fewest runs a flake can be told from a single red run in.
+#:
+#: Two, because one run holding one failure is exactly what CI already shows,
+#: and calling it intermittent would be a claim nothing measured (L98).
+MINIMUM_FLAKE_WINDOW = 2
+
+
+def failed_tests(log: str, job: str) -> set[str]:
+    """Which tests failed in one run of `job`, read out of its own log."""
+    pattern = FAILURE_PATTERNS.get(work_family(job))
+    if not pattern:
+        return set()
+    return set(re.findall(pattern, log, re.M))
+
+
+def flakes(failures: dict[str, list[set[str]]]) -> list[tuple[str, str, int, int]]:
+    """Tests that failed in SOME runs of a window and not others, worst first.
+
+    `failures` holds one set per run, newest first, aligned with the durations.
+
+    A test that failed in EVERY run is not returned. It is broken rather than
+    intermittent, it is already somebody's current problem, and ranking it here
+    would bury the intermittent ones this exists to surface. That is the whole
+    distinction: CI runs each commit once, so one red run reads as a real
+    failure and a re-push reads as a fix, and nothing counted how often a given
+    test did that (L293).
+
+    Failures only, never passes. Reading which tests PASSED would mean parsing
+    2,600 lines a run across the window for an answer this does not need: a
+    count of failures against the number of runs READ says the same thing at no
+    cost.
+    """
+    ranked: list[tuple[str, str, int, int]] = []
+    for job, runs in sorted(failures.items()):
+        if len(runs) < MINIMUM_FLAKE_WINDOW:
+            continue
+        counted: dict[str, int] = {}
+        for run in runs:
+            for name in run:
+                counted[name] = counted.get(name, 0) + 1
+        for name, times in counted.items():
+            if times < len(runs):
+                ranked.append((job, name, times, len(runs)))
+    return sorted(ranked, key=lambda row: (-row[2], row[0], row[1]))
+
+
 def work_family(job: str) -> str:
     """A job name with its matrix suffix removed."""
     return job.split(" (")[0].strip()
@@ -405,21 +465,43 @@ def job_log(job_id: int, read=None) -> str:
         return ""
 
 
-def work_series(runs: list[dict], *, work_step: str | Iterable[str] | None = None,
-                read_log=None) -> dict[str, list[int | None]]:
-    """How much work each named job did, run by run, aligned with `job_durations`.
+def read_logs(runs: list[dict], *, work_step: str | Iterable[str] | None = None,
+              read_log=None,
+              ) -> tuple[dict[str, list[int | None]], dict[str, list[set[str]]]]:
+    """Each job's work count and its failed tests, run by run.
 
-    Aligned by construction: it walks `measurable_jobs`, the same generator, so
-    the two cannot select different jobs however either changes.
+    One pass and one log download per job, because both answers come out of the
+    same text and fetching it twice would double the only expensive part of this
+    (#1039, #1060).
+
+    Aligned by construction: it walks `measurable_jobs`, the same generator
+    `job_durations` walks, so the three cannot select different jobs however any
+    of them changes (L228).
+
+    A job whose log could not be read contributes NO run to the flake window
+    rather than an empty set of failures. An empty set is the same shape as a
+    run that passed everything, so counting one would quietly grow the
+    denominator and make a real flake look rarer than it is (L98).
     """
-    series: dict[str, list[int | None]] = {}
+    counts: dict[str, list[int | None]] = {}
+    failures: dict[str, list[set[str]]] = {}
     for name, _lasted, job in measurable_jobs(runs, work_step=work_step):
         identifier = job.get("id")
-        counted = None
-        if isinstance(identifier, int) and work_family(name) in WORK_PATTERNS:
-            counted = work_done(job_log(identifier, read=read_log), name)
-        series.setdefault(name, []).append(counted)
-    return series
+        family = work_family(name)
+        wanted = family in WORK_PATTERNS or family in FAILURE_PATTERNS
+        log = (job_log(identifier, read=read_log)
+               if isinstance(identifier, int) and wanted else "")
+        counts.setdefault(name, []).append(
+            work_done(log, name) if log else None)
+        if log:
+            failures.setdefault(name, []).append(failed_tests(log, name))
+    return counts, failures
+
+
+def work_series(runs: list[dict], *, work_step: str | Iterable[str] | None = None,
+                read_log=None) -> dict[str, list[int | None]]:
+    """How much work each named job did, run by run, aligned with `job_durations`."""
+    return read_logs(runs, work_step=work_step, read_log=read_log)[0]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -452,10 +534,11 @@ def main(argv: list[str] | None = None) -> int:
 
     steps = args.work_step or WORK_STEPS
     durations = job_durations(runs, work_step=steps)
-    work = ({} if args.no_work_counts
-            else work_series(runs, work_step=steps))
+    work, failures = (({}, {}) if args.no_work_counts
+                      else read_logs(runs, work_step=steps))
     verdicts = [drift_of(job, seconds, work=work.get(job))
                 for job, seconds in sorted(durations.items())]
+    repeat_offenders = flakes(failures)
 
     lines = []
     for verdict in verdicts:
@@ -470,6 +553,18 @@ def main(argv: list[str] | None = None) -> int:
         # healthy quiet week unless it is said out loud (L98).
         print(f"::warning::{args.workflow} reported no finished jobs in its "
               f"last {args.window} runs, so nothing was measured")
+
+    # Beside the durations rather than anywhere else, because a flake is a
+    # speed cost priced at a full re-run and belongs with the speed findings
+    # rather than in a reliability backlog nobody reads (L293).
+    for job, name, times, of in repeat_offenders:
+        note = (f"{job}: {name} failed {times} of {of} runs. A test that fails "
+                "only sometimes reads as a real failure once and as fixed on "
+                "the re-push, so its cost is paid again every time")
+        print(f"::warning::{note}")
+        lines.append(f"- {note}")
+    if not repeat_offenders and failures:
+        print(f"no test failed in some runs of {args.workflow} and not others")
 
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:

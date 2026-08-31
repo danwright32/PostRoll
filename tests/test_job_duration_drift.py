@@ -608,3 +608,130 @@ def test_the_log_is_asked_for_by_the_job_s_own_id():
     job_log(4242, read=lambda path: asked.append(path) or "")
 
     assert asked == ["repos/{owner}/{repo}/actions/jobs/4242/logs"]
+
+
+# ── a test that fails only sometimes (#1060) ─────────────────────────────────
+#
+# CI runs each commit once, so an intermittent failure is invisible to it: one
+# red run reads as a real failure and a re-push reads as a fix. Nothing recorded
+# how often a given test did that, so the cost was paid over and over as re-runs
+# and never attributed to anything.
+#
+# On 2026-08-30 `CheckoutRevisionTests` was failing roughly one local run in
+# three after #992 made the Swift suite parallel, and it was found only by
+# running the suite eight times by hand while working on something else. It
+# reached main and sat there. The defect was real (blocking waits on a bounded
+# dispatch pool) and is fixed, but nothing would have surfaced the pattern.
+#
+# The logs are already being read for the work counts, so the failures in them
+# are free. A test that failed in SOME runs of the window and not others is a
+# flake; one that failed in all of them is simply broken and is somebody's
+# current problem rather than a pattern worth ranking (L293).
+
+def test_a_test_that_failed_once_in_a_window_is_named():
+    from tools.check_job_durations import flakes
+
+    found = flakes({"swift-unit": [{"A"}, set(), set(), set(), set(), set()]})
+    assert found == [("swift-unit", "A", 1, 6)]
+
+
+def test_a_test_that_failed_every_time_is_not_a_flake():
+    """It is broken, not intermittent, and it is already somebody's problem.
+    Ranking it here would bury the intermittent ones it exists to surface."""
+    from tools.check_job_durations import flakes
+
+    assert flakes({"swift-unit": [{"A"}] * 6}) == []
+
+
+def test_the_worst_offender_comes_first():
+    """Ranked, because the point is to know which one to fix (L293)."""
+    from tools.check_job_durations import flakes
+
+    found = flakes({"python": [{"A", "B"}, {"B"}, {"B"}, set(), set(), set()]})
+    assert [name for _job, name, _n, _of in found] == ["B", "A"]
+
+
+def test_a_window_with_no_failures_at_all_names_nobody():
+    from tools.check_job_durations import flakes
+
+    assert flakes({"swift-unit": [set()] * 6}) == []
+
+
+def test_a_window_too_short_to_tell_names_nobody():
+    """One run holding one failure is not evidence of intermittency, it is a
+    single red run, which is what CI already shows (L98)."""
+    from tools.check_job_durations import flakes
+
+    assert flakes({"swift-unit": [{"A"}]}) == []
+
+
+# ── reading the failures out of a log ────────────────────────────────────────
+
+def test_a_failed_swift_test_is_read_from_its_own_line():
+    from tools.check_job_durations import failed_tests
+
+    log = ("Test case 'CheckoutRevisionTests.testReadsTheRevision()' failed on "
+           "'My Mac - xctest (123)' (5.001 seconds)\n"
+           "Test case 'OtherTests.testFine()' passed on 'My Mac' (0.1 seconds)\n")
+    assert failed_tests(log, "swift-unit") == {
+        "CheckoutRevisionTests.testReadsTheRevision()"}
+
+
+def test_a_failed_python_test_is_read_from_its_own_line():
+    from tools.check_job_durations import failed_tests
+
+    log = ("FAILED tests/test_thing.py::test_one - AssertionError: nope\n"
+           "FAILED tests/test_thing.py::test_two[case]\n"
+           "4410 passed, 2 failed\n")
+    assert failed_tests(log, "python") == {
+        "tests/test_thing.py::test_one", "tests/test_thing.py::test_two[case]"}
+
+
+def test_a_green_log_reports_no_failures():
+    from tools.check_job_durations import failed_tests
+
+    assert failed_tests("Swift: 2622 tests\nall good\n", "swift-unit") == set()
+
+
+def test_a_job_this_cannot_read_reports_nothing_rather_than_guessing():
+    """Distinct from a green run in the caller, which requires a run to have
+    been READ before it counts one (L98)."""
+    from tools.check_job_durations import failed_tests
+
+    assert failed_tests("FAILED tests/x.py::t", "some-job-nobody-taught") == set()
+
+
+def test_the_log_is_downloaded_once_per_job_not_once_per_answer():
+    """Both answers come out of the same text, and the download is the only
+    expensive part of this whole check."""
+    from tools.check_job_durations import read_logs
+
+    asked: list[str] = []
+
+    def record(path):
+        asked.append(path)
+        return "Swift: 2600 tests"
+
+    counts, failures = read_logs([_run(_job_with("swift-unit", 400, 901))],
+                                 read_log=record)
+
+    assert len(asked) == 1, f"the log was fetched {len(asked)} times: {asked}"
+    assert counts == {"swift-unit": [2600]}
+    assert failures == {"swift-unit": [set()]}
+
+
+def test_a_log_that_could_not_be_read_adds_no_run_to_the_flake_window():
+    """An empty set of failures is the same shape as a run that passed
+    everything, so counting one would grow the denominator and make a real
+    flake look rarer than it is (L98)."""
+    from tools.check_job_durations import read_logs
+
+    def refuses(path):
+        raise RuntimeError("gh fell over")
+
+    counts, failures = read_logs([_run(_job_with("swift-unit", 400, 901))],
+                                 read_log=refuses)
+
+    assert counts == {"swift-unit": [None]}
+    assert failures == {}, (
+        "a run nobody could read was counted as a run in which nothing failed")
