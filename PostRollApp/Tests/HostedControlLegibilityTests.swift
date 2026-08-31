@@ -1694,6 +1694,59 @@ extension HostedControlLegibilityTests {
     /// cannot fail is indistinguishable from one that silently stopped working.
     /// It counts what is ON DISK afterwards rather than what the loop meant to
     /// write, because counting the loop is counting itself.
+    /// Every screen on the review sheet still RENDERS, on every push (#1030).
+    ///
+    /// `testDumpEveryMeasuredScreenForReview` below is in `REVIEW_TESTS` and is
+    /// skipped by `make test`, correctly: comparing pictures is a judgement no
+    /// check can make. But "does this screen render without killing the
+    /// process" is a hard pass or fail, and nothing was asking it.
+    ///
+    /// On 2026-08-29 a change made `PhotoAssignmentView` read an Observable its
+    /// renderer did not provide. A missing `@Environment` object is a FATAL
+    /// ERROR rather than a failing assertion, so the render died. The full
+    /// suite passed 2,565 tests and said nothing, and it was found only by
+    /// running `make review-sheet` by hand.
+    ///
+    /// It rides the SAME `reviewSurfaces` list the sheet is built from, so a
+    /// screen added to the sheet is covered here automatically rather than
+    /// needing a second registry to be kept in step (L96, L41).
+    ///
+    /// It writes and compares NOTHING. There is no image to keep, no baseline
+    /// to go stale, and no judgement being claimed: the only thing asserted is
+    /// that the render happened and produced a surface with pixels in it.
+    /// Measured at 1.0s for the whole sheet, which is what makes it affordable
+    /// on every push rather than on a person's say so.
+    ///
+    /// Its registry entry renders one screen at NO SIZE rather than removing an
+    /// Observable, and that is deliberate. Removing the Observable was tried
+    /// first: it takes the whole test process down, xcodebuild reports zero
+    /// tests executed, and `check_guards` correctly refuses to read that as a
+    /// kill, because a crash is indistinguishable from the named test never
+    /// having run (L154). So the entry proves the half that can be attributed,
+    /// that this really does read what each surface rendered, and the crash
+    /// half is covered by the render simply happening here at all: nothing else
+    /// in `make test` calls these renderers, which is the whole gap #1030 is
+    /// about.
+    func testEveryReviewSurfaceStillRenders() throws {
+        let surfaces = reviewSurfaces
+
+        // A sweep that renders nothing objects to nothing (L98).
+        XCTAssertGreaterThan(surfaces.count, 20,
+                             "the sheet claims \(surfaces.count) surfaces, which is "
+                             + "fewer than this file measures, so this is checking "
+                             + "whichever ones happened to be listed")
+
+        for surface in surfaces {
+            let rendered = try surface.render()
+            XCTAssertGreaterThan(rendered.pixelsWide * rendered.pixelsHigh, 0, """
+                "\(surface.name)" rendered a surface with no pixels in it. Reaching \
+                here at all means it did not take the app down, so this is a screen \
+                that laid out to nothing rather than one that crashed, and either way \
+                the picture on the review sheet is of nothing.
+                """)
+        }
+    }
+
     func testDumpEveryMeasuredScreenForReview() throws {
         let surfaces = reviewSurfaces
         // This group only, so a sibling worker's images survive (#992).

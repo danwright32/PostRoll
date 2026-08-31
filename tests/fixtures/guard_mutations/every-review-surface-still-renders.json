@@ -1,0 +1,8 @@
+{
+  "name": "every-review-surface-still-renders",
+  "file": "PostRollApp/Tests/HostedControlLegibilityTests.swift",
+  "find": "        .environment(store)\n        .frame(width: width, height: 900)\n        .background(PaintedSurfaces.page)\n\n        return try WordFootprint.hosted(view,\n                                        size: CGSize(width: width, height: 900),\n                                        wordless: false)",
+  "replace": "        .environment(store)\n        .frame(width: width, height: 900)\n        .background(PaintedSurfaces.page)\n\n        return try WordFootprint.hosted(view,\n                                        size: CGSize(width: 0, height: 0),\n                                        wordless: false)",
+  "test": "PostRollTests/HostedControlLegibilityTests/testEveryReviewSurfaceStillRenders",
+  "breaks": "a screen on the review sheet renders at no size, so the picture reviewed is of nothing and every check measuring it reads whatever the empty page happens to be (#1030, L98)"
+}
