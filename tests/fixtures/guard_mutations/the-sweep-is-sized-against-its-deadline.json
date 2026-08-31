@@ -1,0 +1,8 @@
+{
+  "name": "the-sweep-is-sized-against-its-deadline",
+  "file": "tests/test_guard_sweep_fits_its_deadline.py",
+  "find": "DEADLINE_SHARE = 0.80",
+  "replace": "DEADLINE_SHARE = 2.00",
+  "test": "tests/test_guard_sweep_fits_its_deadline.py::test_the_projection_would_notice_the_registry_growing",
+  "breaks": "the limit is widened past the deadline it is measured against, so the sweep can grow until a shard runs out of time and reports its remaining entries as UNPROVEN while going green (#989, L98, L182)"
+}

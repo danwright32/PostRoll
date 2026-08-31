@@ -80,7 +80,7 @@ class Sweep:
 def shard_of_job_name(name: str) -> int | None:
     """Which shard a job name is, or None when it is not a sweep shard.
 
-    A matrix over `shard: [1, 2, 3, 4]` names its jobs `full (1)` and so on. The
+    A matrix over `shard: [1, 2, 3, 4, 5, 6]` names its jobs `full (1)` and so on. The
     `changed` job and every job in another workflow have to answer None here, or
     one job's success would stand in for a shard's (L70).
     """
