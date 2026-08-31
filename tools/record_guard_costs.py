@@ -20,6 +20,14 @@ Two modes, the same pair `tools/record_test_durations.py` has:
         the record KEEP the readings they had, because re-writing them from a
         different run is the churn #1038 exists to avoid.
 
+    tools/record_guard_costs.py --from-run <workflow run id>
+        The same as `--from`, with the shards' artifacts fetched from that run
+        of guards.yml first. This is the form a person actually types, and it
+        exists because the other one is a rule living in a comment: the daily
+        sweep uploads its readings and nothing folds them in, so without one
+        command that does the whole thing the record ages until a guard says so
+        and then the remedy is four manual steps (L27, L111).
+
 The shape and the scaling are `tools/measured_record.py`, shared with the test
 file record rather than cloned, so a refusal added to one is not missing from
 the other (L41).
@@ -38,7 +46,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import time
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -48,7 +59,7 @@ from tools.guard_entry_costs import RECORD  # noqa: E402
 NOUN = "guard entry"
 
 
-def readings_of(paths: list[Path]) -> tuple[dict[str, float], str]:
+def readings_of(paths: list[Path]) -> tuple[dict[str, float], dict[str, bool], str]:
     """Every reading in `paths`, and the one run they all came from.
 
     A disagreement about the run is refused rather than resolved. Shards of one
@@ -57,6 +68,7 @@ def readings_of(paths: list[Path]) -> tuple[dict[str, float], str]:
     nothing in the record saying so (L224).
     """
     seconds: dict[str, float] = {}
+    kinds: dict[str, bool] = {}
     runs: set[str] = set()
     for path in paths:
         if not path.exists():
@@ -69,6 +81,7 @@ def readings_of(paths: list[Path]) -> tuple[dict[str, float], str]:
                 "as free, which is a partition that looks balanced and is not. "
                 "Nothing was written.")
         runs.add(str(payload.get("run") or "unknown"))
+        recorded_kinds = payload.get("kinds") or {}
         for name, value in found.items():
             reading = float(value)
             if reading <= 0:
@@ -83,18 +96,83 @@ def readings_of(paths: list[Path]) -> tuple[dict[str, float], str]:
                     "means these are not the shards of one sweep. Nothing was "
                     "written.")
             seconds[name] = reading
+            if name in recorded_kinds:
+                kinds[name] = bool(recorded_kinds[name])
     if len(runs) > 1:
         raise SystemExit(
             f"these readings come from {len(runs)} different runs "
             f"({', '.join(sorted(runs))}). Readings taken under different load "
             "cannot be averaged into one record without saying so, which is "
             "the whole point of stamping them. Nothing was written.")
-    return seconds, runs.pop()
+    return seconds, kinds, runs.pop()
+
+
+def fetch_run(run_id: str, into: Path) -> list[Path]:
+    """Every `guard-timings-*` artifact of one guards.yml run, downloaded.
+
+    Refuses an empty download rather than writing an empty record. A run whose
+    shards all SKIPPED (the tree was already proved) uploads nothing, and that
+    is a different thing from a run that measured nothing: recording either as
+    the sweep's cost prices the registry from a sweep that never happened
+    (L98, L331).
+    """
+    try:
+        subprocess.run(
+            ["gh", "run", "download", str(run_id), "--pattern", "guard-timings-*",
+             "--dir", str(into)],
+            check=True, capture_output=True, text=True)
+    except FileNotFoundError as missing:
+        raise SystemExit(
+            "the gh CLI is not on PATH, so the artifacts cannot be fetched. "
+            "Download them by hand and use --from. Nothing was written."
+        ) from missing
+    except subprocess.CalledProcessError as failed:
+        raise SystemExit(
+            f"gh could not download run {run_id}: "
+            f"{failed.stderr.strip() or failed.stdout.strip()}. "
+            "Nothing was written."
+        ) from failed
+
+    found = sorted(into.rglob("guard-timings-*.json"))
+    if not found:
+        raise SystemExit(
+            f"run {run_id} carries no guard-timings artifact. Either its shards "
+            "skipped, because the tree was already proved, or it predates "
+            "#1090. Pick a run whose sweep actually ran. Nothing was written.")
+    return found
 
 
 def write(record: dict, path: Path) -> None:
     path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n",
                     encoding="utf-8")
+
+
+def _whole(paths: list[Path], record_path: Path) -> int:
+    """One sweep's readings, replacing the record.
+
+    Replacing rather than merging, because a whole sweep IS the registry: an
+    entry it does not hold is one the registry no longer has, and keeping it
+    would leave the deal pricing guards that were deleted.
+    """
+    seconds, kinds, run = readings_of(paths)
+    write({
+        "seconds": {name: round(value, 2)
+                    for name, value in sorted(seconds.items())},
+        # Which KIND each reading was taken as, so a reading survives only as
+        # long as the entry it describes is still proved the same way. An entry
+        # moved from a Swift test to a Python one costs about 1/90th of what it
+        # did, and a bare seconds map cannot tell that from an entry that got
+        # faster (L133).
+        "kinds": dict(sorted(kinds.items())),
+        "measured": Provenance.full(run, sorted(seconds)),
+        "measured_on": time.strftime("%Y-%m-%d"),
+        "measured_from_run": run,
+        "re_measure_with": (
+            "tools/record_guard_costs.py --from-run <the newest guards.yml run "
+            "whose shards actually swept>"),
+    }, record_path)
+    print(f"recorded {len(seconds)} entries from run {run}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -104,27 +182,31 @@ def main(argv: list[str] | None = None) -> int:
                         help="one sweep's readings files, replacing the record")
     parser.add_argument("--add", nargs="+", type=Path, default=None,
                         help="a later run's readings, scaled onto the record")
+    parser.add_argument("--from-run", dest="run_id", default=None,
+                        help="a guards.yml run id, whose shard artifacts are "
+                             "downloaded and then treated as --from")
     parser.add_argument("--record", type=Path, default=RECORD)
     args = parser.parse_args(argv)
 
-    if bool(args.whole) == bool(args.add):
-        parser.error("say either --from (a whole sweep) or --add (a later run)")
+    asked = [bool(args.whole), bool(args.add), bool(args.run_id)]
+    if sum(asked) != 1:
+        parser.error("say exactly one of --from, --add or --from-run")
+
+    if args.run_id:
+        with tempfile.TemporaryDirectory() as scratch:
+            return _whole(fetch_run(args.run_id, Path(scratch)), args.record)
 
     if args.whole:
-        seconds, run = readings_of(args.whole)
-        record = {
-            "seconds": {name: round(value, 2)
-                        for name, value in sorted(seconds.items())},
-            "measured": Provenance.full(run, sorted(seconds)),
-        }
-        write(record, args.record)
-        print(f"recorded {len(seconds)} entries from run {run}")
-        return 0
+        return _whole(args.whole, args.record)
 
-    seconds, run = readings_of(args.add)
+    seconds, kinds, run = readings_of(args.add)
     existing = json.loads(args.record.read_text(encoding="utf-8")) \
         if args.record.exists() else {"seconds": {}, "measured": {}}
     record = added(existing, seconds, run, noun=NOUN)
+    record["kinds"] = dict(sorted({**(existing.get("kinds") or {}), **kinds}.items()))
+    for key in ("measured_on", "measured_from_run", "re_measure_with"):
+        if key in existing:
+            record[key] = existing[key]
     write(record, args.record)
     new = sorted(set(record["seconds"]) - set(existing.get("seconds") or {}))
     print(f"added {len(new)} entries from run {run}")

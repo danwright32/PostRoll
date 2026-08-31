@@ -38,6 +38,8 @@ import json
 import re
 from pathlib import Path
 
+from tools import guard_entry_costs
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TIMING = REPO_ROOT / "tests" / "fixtures" / "guard_sweep_timing.json"
 REGISTRY = REPO_ROOT / "tests" / "fixtures" / "guard_mutations"
@@ -91,10 +93,35 @@ def seconds_per_entry() -> float:
     return total / reading["entries"]
 
 
+def registry_kinds() -> dict[str, bool]:
+    """Every entry the registry holds now, and whether it pays an app build."""
+    kinds: dict[str, bool] = {}
+    for path in sorted(REGISTRY.glob("*.json")):
+        entry = json.loads(path.read_text(encoding="utf-8"))
+        kinds[entry["name"]] = entry["test"].startswith("PostRollTests/")
+    assert kinds, (
+        f"no registry entries under {REGISTRY.relative_to(REPO_ROOT)}, so the "
+        "projection below is about a sweep with nothing in it")
+    return kinds
+
+
 def imbalance() -> float:
-    """How much larger the biggest shard was than the average one."""
-    seconds = measured()["shard_seconds"]
-    return max(seconds) / (sum(seconds) / len(seconds))
+    """How much larger the biggest shard is than the average one.
+
+    Computed from the DEAL the sweep will actually make, over the registry as
+    it is now, priced from tests/fixtures/guard_entry_costs.json (#1090).
+
+    It used to be read off the four shard totals of one recorded sweep. That
+    number could only ever describe the deal that had already happened, under
+    the class-wise round robin that #1090 replaced, and there was no way to
+    re-measure it without paying for a whole sweep on the runner. This one is
+    re-derived on every run of the suite, so a change to the dealing or to the
+    registry moves it immediately.
+    """
+    costs = guard_entry_costs.costs_for(registry_kinds())
+    shards = guard_entry_costs.deal(list(costs.seconds), shards_now(),
+                                    costs.seconds)
+    return guard_entry_costs.imbalance(shards, costs.seconds)
 
 
 def projected_largest_shard() -> float:
@@ -112,17 +139,40 @@ def test_the_recorded_reading_covers_every_shard_it_claims():
     assert all(second > 0 for second in reading["shard_seconds"])
 
 
-def test_the_shards_really_were_close_to_balanced():
-    """The reason #989's dealing half is worth little, held to the measurement.
+def test_the_deal_the_sweep_will_make_is_balanced():
+    """Measured over the deal itself, not over one recorded sweep's totals.
 
-    If a future reading shows real imbalance this goes red and dealing entries
-    by measured time becomes the answer after all, rather than being dismissed
-    on a number nobody re-checked (L316).
+    The old version read the imbalance off four shard totals from a sweep that
+    had already run, so it could not notice the dealing getting worse and could
+    not be re-measured without paying for another sweep. This deals the registry
+    as it stands and measures the result, in the same seconds the deal is made
+    in, so a check on the balance cannot pass while measuring something else
+    (L63).
     """
-    assert imbalance() < 1.25, (
-        f"the largest shard was {imbalance():.2f}x the mean, so the shards are "
-        "no longer balanced by count alone and dealing them by measured time "
-        "is worth doing (#989)")
+    spread = imbalance()
+    assert spread < 1.10, (
+        f"the largest shard is dealt {spread:.2f}x the mean. Dealing by measured "
+        "cost should get well inside this; a spread this wide means either the "
+        "cost record has gone stale (most entries estimated rather than "
+        "measured) or one entry is now larger than a whole shard's fair share")
+
+
+def test_most_of_the_deal_is_measured_rather_than_estimated():
+    """An estimate and a reading deal identically.
+
+    So a record covering three entries out of five hundred produces a confident
+    looking partition of almost entirely guessed numbers, and every projection
+    below inherits that (L11, L98). This is what says the record still describes
+    the registry, and its remedy is one command.
+    """
+    costs = guard_entry_costs.costs_for(registry_kinds())
+    total = len(costs.seconds)
+    share = costs.measured / total
+    assert share > 0.85, (
+        f"only {costs.measured} of {total} registry entries carry a measured "
+        f"cost ({share:.0%}); the rest are estimated from the median of their "
+        "kind, so the deal below is mostly guesswork. Re-record from the newest "
+        "sweep: tools/record_guard_costs.py --from-run <run id>")
 
 
 # ── the sweep fits ───────────────────────────────────────────────────────────

@@ -124,9 +124,19 @@ def costs_for(names_by_kind: Mapping[str, bool],
     other kind's median, which would be the same 90x error wearing a reason.
     """
     record = read_record(path)
-    recorded: dict[str, float] = {
-        name: float(value) for name, value in record["seconds"].items()
-    }
+    was = record.get("kinds") or {}
+    recorded: dict[str, float] = {}
+    for name, value in record["seconds"].items():
+        # A reading is only valid for the KIND it was taken as. #1089 moved
+        # seven entries from a Swift test to a Python one, and their readings
+        # went on saying 29s for something that now costs 0.2s: an entry that
+        # changes kind changes cost by about 90x, and nothing in a bare
+        # name-to-seconds map can tell that from an entry that got slower
+        # (L133). Discarded rather than kept, so it is re-estimated from the
+        # median of the kind it is now and re-measured by the next sweep.
+        if name in was and name in names_by_kind and was[name] != names_by_kind[name]:
+            continue
+        recorded[name] = float(value)
 
     medians: dict[bool, float] = {}
     for swift in (True, False):

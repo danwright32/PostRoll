@@ -254,7 +254,7 @@ final class PreviewGraphicsManager {
     func beginDayRegen(_ days: [DayName], for eventID: UUID) -> Bool {
         guard !days.isEmpty else { return false }
         let busy = state.regeneratingDays(for: eventID)
-        if false { _ = busy }
+        guard days.allSatisfy({ !busy.contains($0) }) else { return false }
         for day in days { _ = beginDayRegen(day, for: eventID) }
         return true
     }
