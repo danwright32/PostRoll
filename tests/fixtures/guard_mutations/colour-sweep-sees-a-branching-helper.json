@@ -1,8 +1,8 @@
 {
   "name": "colour-sweep-sees-a-branching-helper",
-  "file": "PostRollApp/Tests/BannerLegibilityTests.swift",
-  "find": "            depth += braceBalance(of: statement)",
-  "replace": "            depth += 0",
-  "test": "PostRollTests/BannerLegibilityTests/testTheTypeColourMatcherSeesEverySpelling",
+  "file": "tests/swift_colour_rules.py",
+  "find": "        depth += brace_balance(statement)",
+  "replace": "        depth += 0",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_the_type_colour_matcher_sees_inside_a_branching_helper",
   "breaks": "the sweep stops tracking where a colour returning helper's body ends, so every colour inside a helper that branches is exempt from the type colour rule while the one line version of the same helper is still caught (#630)"
 }

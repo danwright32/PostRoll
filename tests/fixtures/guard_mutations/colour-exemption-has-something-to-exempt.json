@@ -1,8 +1,8 @@
 {
   "name": "colour-exemption-has-something-to-exempt",
-  "file": "PostRollApp/Tests/BannerLegibilityTests.swift",
-  "find": "        \"Services/CollageRenderer.swift\":",
-  "replace": "        \"Services/ExportStaging.swift\":",
-  "test": "PostRollTests/BannerLegibilityTests/testEveryColourExemptionStillHasSomethingToExempt",
+  "file": "tests/swift_colour_rules.py",
+  "find": "    \"Services/CollageRenderer.swift\":",
+  "replace": "    \"Services/ExportStaging.swift\":",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_every_colour_exemption_still_has_something_to_exempt",
   "breaks": "an exemption points at a file with no colour of its own, so it silently covers whatever arrives in that file next while reading as a decision somebody is still standing behind (#620, L96)"
 }

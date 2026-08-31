@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/ProgramUploadView.swift",
   "find": "isHere ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText",
   "replace": "isHere ? Color.roseGold : Color.warmMid.opacity(0.35)",
-  "test": "PostRollTests/BannerLegibilityTests/testNoScreenDrawsTypeInARawPaletteColour",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_no_screen_draws_type_in_a_raw_palette_colour",
   "breaks": "a screen goes back to drawing type in a colour written at the point of use, which nothing can hold to a level because nothing else can name what is behind it. Here that is the stage breadcrumb, whose blocked step measured 1.60:1 and whose current step measured 4.31:1 as 9pt text (#620)"
 }

@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/OCRProgressView.swift",
   "find": "                            .foregroundStyle(PaintedSurfaces.tertiaryText)",
   "replace": "                            .foregroundStyle(Color.warmFaint)",
-  "test": "PostRollTests/BannerLegibilityTests/testTheFaintToneIsNeverDrawnAtACallSite",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_the_faint_tone_is_never_drawn_at_a_call_site",
   "breaks": "a screen draws type in the raw faint tone, which is 2.43:1 on the page and names no role, so nothing can hold it to a level and the words Dan reads while a program is being read go back under the line (#611)"
 }

@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/PhotoAssignmentView.swift",
   "find": "                                        .foregroundStyle(PaintedSurfaces.bodyText)\n                                        .lineLimit(1)",
   "replace": "                                        .foregroundStyle(PaintedSurfaces.quietMark)\n                                        .lineLimit(1)",
-  "test": "PostRollTests/BannerLegibilityTests/testTheQuietToneOnlyEverDressesAMark",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_the_quiet_tone_only_ever_dresses_a_mark",
   "breaks": "a sentence is drawn in the tone kept for marks, which is 4.33:1 against the 4.5:1 words need. The pair walk cannot report it because that tone is registered as an interface element and the ratio it is held to is the one a mark needs (#629)"
 }
