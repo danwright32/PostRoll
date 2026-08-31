@@ -292,9 +292,11 @@ targets:
         # a seam the shipping app cannot reach would be testing a build nobody
         # runs.
         #
-        # Naming it here used to fail TestTargetHygieneTests, which counted every
-        # occurrence in this file including comments and required exactly one
-        # (#853). It counts definitions now, so this comment says what it means.
+        # Naming it here used to fail the guard that counts definitions of the
+        # flag, which counted every occurrence in this file including comments
+        # and required exactly one (#853). It counts definitions now, so this
+        # comment says what it means. That guard reads this file from Python
+        # since #1089: tests/test_the_test_target_stays_self_contained.py.
 
 schemes:
   PostRoll:

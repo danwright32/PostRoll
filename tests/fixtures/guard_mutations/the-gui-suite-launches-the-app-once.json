@@ -3,6 +3,6 @@
   "file": "PostRollApp/UITests/AppEntryPointUITests.swift",
   "find": "        if Self.sharedLaunch == nil {\n            Self.sharedLaunch = Result { try LaunchedApp.launch(dataRoot: Self.dataRoot) }\n        }",
   "replace": "        Self.sharedLaunch = Result { try LaunchedApp.launch(dataRoot: Self.dataRoot) }\n        if Self.sharedLaunch == nil {\n            Self.sharedLaunch = Result { try LaunchedApp.launch(dataRoot: Self.dataRoot) }\n        }",
-  "test": "PostRollTests/TestTargetHygieneTests/testTheGUITargetLaunchesTheAppOnce",
+  "test": "tests/test_the_test_target_stays_self_contained.py::test_the_gui_target_launches_the_app_once",
   "breaks": "the GUI suite goes back to starting the app once per test, which costs about 42 seconds each on the runner and grows the job in 42 second steps while the amount of real testing does not (#864)"
 }

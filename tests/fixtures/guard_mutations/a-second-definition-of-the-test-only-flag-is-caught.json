@@ -1,8 +1,8 @@
 {
   "name": "a-second-definition-of-the-test-only-flag-is-caught",
-  "file": "PostRollApp/Tests/TestTargetHygieneTests.swift",
-  "find": "        return code.components(separatedBy: Self.testOnlyFlag).count - 1",
-  "replace": "        return 1",
-  "test": "PostRollTests/TestTargetHygieneTests/testASecondDefinitionIsStillCaught",
+  "file": "tests/swift_target_hygiene.py",
+  "find": "    return code.count(TEST_ONLY_FLAG)",
+  "replace": "    return 1",
+  "test": "tests/test_the_test_target_stays_self_contained.py::test_a_second_definition_is_still_caught",
   "breaks": "the count that decides whether the test-only flag is defined more than once always answers one, so the app target can define it and every test-only seam becomes reachable from the shipping app with nothing saying so (#853)"
 }

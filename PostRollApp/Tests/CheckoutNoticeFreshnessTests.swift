@@ -39,7 +39,7 @@ final class CheckoutNoticeFreshnessTests: XCTestCase {
     /// sweeps delete media for every event NOT in the list they were handed.
     /// Pointed at a temporary tree instead, so this suite is structurally
     /// unable to reach live data (L2). Held to by
-    /// `TestTargetHygieneTests.testNoTestBuildsAnAppStateThroughTheShippingInitialiser`,
+    /// `tests/test_the_test_target_stays_self_contained.py` (#1089),
     /// because the rule is worth nothing while the unsafe path is shorter to
     /// type.
     @MainActor
