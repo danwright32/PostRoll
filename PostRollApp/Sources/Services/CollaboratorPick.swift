@@ -102,8 +102,20 @@ enum CollaboratorPick {
         var seen = Set<String>()
         var keys: [String] = []
         for raw in handles {
+            // A value that is not an account cannot be invited to collaborate,
+            // so it is neither ranked NOR counted (#981). The count is what
+            // decides whether this panel appears at all, so excluding junk from
+            // the ranking alone would still raise a panel over a post with no
+            // editorial decision to make.
+            //
+            // `isRealHandle` rather than either half of it spelled again: this
+            // was the tenth surface reading a stored handle and the only one
+            // not asking it. It subsumes the emptiness test that used to stand
+            // here, because its own first guard is that same question asked of
+            // the same normalized name.
+            guard PythonBridge.isRealHandle(raw) else { continue }
             let key = AccountBook.key(raw)
-            guard !key.isEmpty, seen.insert(key).inserted else { continue }
+            guard seen.insert(key).inserted else { continue }
             keys.append(key)
         }
 
