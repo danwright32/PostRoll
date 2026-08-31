@@ -1,0 +1,8 @@
+{
+  "name": "a-contraction-rewrite-keeps-its-marker",
+  "file": "postroll/ai/generate_blog.py",
+  "find": "        if _block_holds_marker(original):\n            raise ValueError(_marker_refusal(\"contraction\", index, original))\n",
+  "replace": "",
+  "test": "tests/test_blog_rewrite_keeps_inline_markers.py::test_a_paragraph_holding_a_marker_is_refused_before_the_model_sees_it",
+  "breaks": "the contraction pass sends a paragraph holding an inline photo marker to a model and splices back whatever comes out. Its own entry rather than resting on the second person one, because two passes that each have to refuse are two guards, and one of them going missing is invisible from the other's test (#998, L178)"
+}

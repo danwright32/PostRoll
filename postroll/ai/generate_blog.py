@@ -49,6 +49,7 @@ from .ai_tells import (
     is_humanizer_available,
     load_humanizer_rules,
     markers_preserved_validator,
+    photo_marker_filenames,
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_prompt, run_review_pass, load_brand_voice, ClaudeError
@@ -1565,6 +1566,43 @@ def _paragraphs_with_second_person(body: str) -> list[str]:
     return offenders
 
 
+def _block_holds_marker(block: str) -> bool:
+    """Whether a paragraph carries a photo marker ANYWHERE in it (#998).
+
+    CONTAINS, not starts with. Every index builder in this module already
+    excludes a block that STARTS with a marker, so a refusal keyed on the start
+    can never fire, and the case that actually reaches the rewriters below is
+    the inline one: a marker part way through a paragraph, which is prose to
+    the index builders and a marker to everything else.
+
+    The bare opening rather than the full `[PHOTO: name | alt]` pattern,
+    because a marker missing its pipe is not something these rewriters may hand
+    to a model either. It still names a photograph, and losing it loses the
+    picture just the same.
+
+    One predicate for both rewriters, so there is one definition of this
+    question rather than two that read the same and can drift (L263).
+    """
+    return "[PHOTO:" in block
+
+
+def _marker_refusal(pass_name: str, index: int, block: str) -> str:
+    """Why one rewriter will not touch one paragraph.
+
+    Takes the pass name so the two rewriters cannot end up speaking the same
+    sentence: two causes with one message are one outcome in practice, and the
+    reader is left without the one fact that says where to look (L11).
+    """
+    names = photo_marker_filenames(block) or ["an unreadable marker"]
+    return (
+        f"the {pass_name} pass refuses paragraph {index}: it holds the photo "
+        f"marker for {', '.join(names)} inline rather than on its own line. "
+        f"Rewording it would send the marker to the model and splice back "
+        f"whatever came out, and a marker dropped that way is a photograph "
+        f"silently gone from the post with nothing reported (#998)."
+    )
+
+
 def _fix_second_person(body: str) -> str:
     """Reword each second-person prose paragraph (one focused call each),
     then splice it back. Leaves a paragraph unchanged if the call fails or
@@ -1576,6 +1614,8 @@ def _fix_second_person(body: str) -> str:
         return body
     for index in offenders:
         original = parts[index].strip()
+        if _block_holds_marker(original):
+            raise ValueError(_marker_refusal("second person", index, original))
         try:
             raw = run_prompt(
                 _SECOND_PERSON_PARAGRAPH_PROMPT.format(paragraph=original),
@@ -1591,7 +1631,11 @@ def _fix_second_person(body: str) -> str:
         reworded = max(candidates, key=len)
         if "[PHOTO:" not in reworded and len(reworded) < len(original) * 2 + 80:
             # By position: the paragraph the check judged is the one that
-            # changes, and a marker can never be at a prose index (#109).
+            # changes. This used to say a marker can never be at a prose index,
+            # which was the belief the whole of #998 rested on: a marker INSIDE
+            # a paragraph is at a prose index, and the loop above now refuses
+            # rather than reword it. The `[PHOTO:` test below stays for the
+            # other direction, a rewrite that INVENTED one.
             parts[index] = reworded
     body = "\n\n".join(parts)
     leftover = _paragraphs_with_second_person(body)
@@ -1614,6 +1658,8 @@ def _fix_missing_contractions(body: str) -> str:
         return body
     for index in offenders:
         original = parts[index].strip()
+        if _block_holds_marker(original):
+            raise ValueError(_marker_refusal("contraction", index, original))
         try:
             raw = run_prompt(
                 _CONTRACTION_PARAGRAPH_PROMPT.format(paragraph=original),

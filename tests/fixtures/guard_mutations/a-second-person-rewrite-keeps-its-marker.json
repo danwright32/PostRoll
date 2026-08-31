@@ -1,0 +1,8 @@
+{
+  "name": "a-second-person-rewrite-keeps-its-marker",
+  "file": "postroll/ai/generate_blog.py",
+  "find": "        if _block_holds_marker(original):\n            raise ValueError(_marker_refusal(\"second person\", index, original))\n",
+  "replace": "",
+  "test": "tests/test_blog_rewrite_keeps_inline_markers.py::test_a_paragraph_holding_a_marker_is_refused_before_the_model_sees_it",
+  "breaks": "the second person pass sends a paragraph holding an inline photo marker to a model and splices back whatever comes out, so a marker the model drops is a photograph silently gone from the post, with nothing red and nothing printed (#998)"
+}
