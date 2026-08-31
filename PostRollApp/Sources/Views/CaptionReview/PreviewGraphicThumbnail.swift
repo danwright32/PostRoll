@@ -85,7 +85,9 @@ struct PreviewGraphicThumbnail: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { if !isRegenerating { onPreview() } }
-        .task { load = await ImageLoad.read(url) }
+        // The height this actually renders at, which moves with the window
+        // and the screen, rather than a number written here (#966).
+        .task { load = await ImageLoad.read(url, fitting: resolvedMaxHeight) }
     }
 }
 struct ReviewThumb: View {
@@ -105,6 +107,6 @@ struct ReviewThumb: View {
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
-        .task { load = await ImageLoad.read(url) }
+        .task { load = await ImageLoad.read(url, fitting: 80) }
     }
 }

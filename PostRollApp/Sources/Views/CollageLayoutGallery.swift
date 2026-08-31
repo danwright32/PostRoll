@@ -83,22 +83,55 @@ struct CollageLayoutGallery: View {
 
     @ViewBuilder
     private func candidateThumb(_ candidate: CollageCandidate) -> some View {
-        if let img = NSImage(contentsOfFile: candidate.path) {
-            Image(nsImage: img)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                        .stroke(PaintedSurfaces.treatmentTileBorder, lineWidth: 1)
-                )
-        } else {
-            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .fill(PaintedSurfaces.imagePlaceholderFill)
-                .frame(height: 220)
-        }
+        CollageCandidateThumb(path: candidate.path)
     }
 
     /// Identity of the layout inputs: the day, its photos (in order), and their
+}
+
+
+/// One rendered collage option in the gallery grid.
+///
+/// A view of its own rather than a `@ViewBuilder` helper, because the load has
+/// to be a `.task` and a task needs somewhere to put its result (#966). As a
+/// helper this called `NSImage(contentsOfFile:)` in the body, so every redraw
+/// of the sheet decoded a full collage render synchronously on the main thread,
+/// once per option on screen.
+struct CollageCandidateThumb: View {
+    let path: String
+    @State private var load: ImageLoad = .loading
+
+    var body: some View {
+        Group {
+            switch load {
+            case .loaded(let image):
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                            .stroke(PaintedSurfaces.treatmentTileBorder, lineWidth: 1)
+                    )
+            case .loading:
+                LoadingPhotoPlaceholder()
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                    .frame(height: 220)
+            case .missing:
+                // A render that is not on disk is not a slow render. It used to
+                // draw as an empty tile, which reads as an option still coming
+                // (L10).
+                MissingPhotoBadge(label: "render missing")
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                    .frame(height: 220)
+            }
+        }
+        // 300pt: the grid is `.adaptive(minimum: 150)` inside a 580pt sheet, so
+        // a column is never wider than twice its minimum before the grid splits
+        // it again.
+        .task(id: path) {
+            load = await ImageLoad.read(URL(fileURLWithPath: path), fitting: 300)
+        }
+    }
 }

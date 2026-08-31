@@ -198,7 +198,8 @@ struct CollageCellOverlay: View {
         )
         .task(id: photoURL) {
             photo = nil  // clear stale image before loading so old photo never renders at new crop offset
-            photo = await ImageLoad.read(photoURL).image
+            // The cell's own size, which is what this is drawn into (#966).
+            photo = await ImageLoad.read(photoURL, fitting: max(cellW, cellH)).image
         }
     }
 }

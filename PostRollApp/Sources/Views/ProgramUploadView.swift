@@ -553,7 +553,10 @@ private struct ProgramThumbnail: View {
             // Through ImageLoad so the BYTES cross the actor boundary rather
             // than an NSImage, which is not Sendable and does not compile under
             // strict concurrency.
-            let load = await ImageLoad.read(url)
+            // 240pt: the grid is `.adaptive(minimum: 110)`, so a column is
+            // never wider than twice its minimum before the grid splits it
+            // again, and the card is 96pt tall (#966).
+            let load = await ImageLoad.read(url, fitting: 240)
             state = load.isMissing ? .missing : (load.image.map(LoadState.loaded) ?? .missing)
         }
     }
