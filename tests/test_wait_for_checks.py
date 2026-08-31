@@ -32,9 +32,25 @@ Each run's `repository`, `head_repository`, `pull_requests`, `head_commit`,
 because nothing here reads them and they are most of the bytes. Every field
 this tool touches is as GitHub sent it.
 
-`tests/fixtures/gh_pr_checks_real.json` is kept beside them: the real
-`gh pr checks 561 --json name,state,bucket,workflow` reply from 2026-08-14,
-which is what the verdict rules were calibrated against and still are.
+`tests/fixtures/gh_pr_checks_real.json` is kept beside them: a real
+`gh pr checks --json name,state,bucket,workflow` reply, which is what the
+verdict rules were calibrated against and still are.
+
+Re-recorded by #1095 from pull request 1102, all seven checks green, because
+that change removed the `reference-frames (thursday-reel)` job and the previous
+recording, from pull request 561 on 2026-08-14, described eight. It is a whole
+reply as GitHub gave it, not the old one with a row taken out: an intermediate
+commit did delete that row to get the pull request green, and it was replaced
+with this the moment a real green reply of the new shape existed, because a
+fixture adjusted to agree with the thing it verifies is no longer evidence of
+anything (L48, L58).
+
+That is the loop these names live in. They are CHECK names and the bar is
+derived from the workflows, so a pull request carrying a changed set can only go
+green once the recording matches it, and the recording can only come from a
+green pull request. Removing a name is the cheap direction: delete the row,
+go green, re-record. Adding one costs a knowingly red run to record from.
+
 """
 
 from __future__ import annotations
@@ -148,12 +164,22 @@ def test_the_derived_set_matches_a_real_pull_request() -> None:
 
 
 def test_a_matrix_job_is_expected_once_per_shard() -> None:
+    """Two shards since #1095, not three.
+
+    The names are written out rather than derived from the workflow, which
+    would only prove the derivation agrees with itself (L70). `thursday-reel`
+    was REMOVED so that a pull request asks for five macOS jobs rather than six,
+    the number GitHub runs at once; both surviving names already existed, so
+    nothing new had to be bootstrapped into the recorded reply.
+    """
     names = {check.name for check in real_expected()}
     assert {
         "reference-frames (legibility)",
-        "reference-frames (thursday-reel)",
         "reference-frames (goldens)",
     } <= names
+    assert "reference-frames (thursday-reel)" not in names, (
+        "the third shard is back, so a pull request asks for six macOS jobs "
+        "against a limit of five and one of them waits for a slot (#1095)")
 
 
 def test_two_jobs_may_share_a_name_across_workflows() -> None:

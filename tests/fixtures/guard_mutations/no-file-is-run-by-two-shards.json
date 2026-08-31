@@ -1,8 +1,8 @@
 {
   "name": "no-file-is-run-by-two-shards",
   "file": ".github/workflows/swift.yml",
-  "find": "            files: tests/test_thursday_reel_legibility.py tests/test_frame_legibility.py",
-  "replace": "            files: tests/test_thursday_reel_legibility.py tests/test_frame_legibility.py tests/test_golden_frames.py",
+  "find": "            files: tests/test_golden_frames.py tests/test_thursday_reel_legibility.py tests/test_frame_names_its_show.py",
+  "replace": "            files: tests/test_golden_frames.py tests/test_thursday_reel_legibility.py tests/test_frame_names_its_show.py tests/test_frame_legibility.py",
   "test": "tests/test_ci_runs_the_font_dependent_checks.py::test_no_test_file_is_run_by_two_shards",
   "breaks": "two shards render the same reels, so CI pays for them twice and the measured shard balance is silently wrong (#507)"
 }

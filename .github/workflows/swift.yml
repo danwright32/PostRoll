@@ -469,13 +469,47 @@ jobs:
       # would hide a second failure until the first is fixed and re-run.
       fail-fast: false
       matrix:
+        # TWO shards since #1095, not three, and the reason is the account's
+        # runner limit rather than anything about these files.
+        #
+        # GitHub runs five concurrent macOS jobs per ACCOUNT. A pull request
+        # here asked for six: swift-unit, three of these, the Mac pytest leg and
+        # the guard prover. So one always waited even with nothing else
+        # happening, and two pull requests meant twelve jobs against five.
+        # Measured on #1093, the clean reading with nothing else in flight, the
+        # sixth job waited 163s; on a run with a guard sweep in flight the same
+        # shape cost 18m22s, counted off the sweep's own sixth shard. Six into
+        # five becomes five into five here, so nothing queues.
+        #
+        # What this does NOT buy is a faster pull request, and it should not be
+        # sold as one. `swift-unit` is the critical path at 528s and this whole
+        # leg was finished by 341s, so the queueing landed on a job with 187
+        # seconds of slack. Two shards of about 240s each still finish well
+        # inside it. Half of swift-unit is compiling rather than testing, and
+        # that is where wall clock actually lives.
+        #
+        # The price is the third runner's cores, which is #507's split partly
+        # undone: three shards were three machines' worth of parallelism, and a
+        # standard macOS runner has three cores, so `-n auto` inside one job can
+        # only divide these files three ways. Paid deliberately, because the
+        # slack above says this leg can afford to be slower and the queue says
+        # the repository cannot afford the job.
+        #
+        # The files are dealt by MEASURED cost, largest first, by the same
+        # tools/guard_entry_costs.py `deal` #1090 wrote for the guard shards:
+        # 715.1s against 717.8s, an imbalance of 1.0019.
+        # tests/test_reference_frame_shards_are_balanced.py holds it, and it
+        # compares the heaviest shard against the best a split could achieve,
+        # so it stays meaningful at two shards without being touched.
+        #
+        # Both names already existed, and that is deliberate: a name here is a
+        # CHECK name, so `thursday-reel` is REMOVED and nothing is added. A
+        # shard's name is still its heaviest file.
         shard:
-          - name: legibility
-            files: tests/test_closing_crossfade_legibility.py tests/test_phone_safe_area.py tests/test_story_title_clamp.py tests/test_gallery_alignment.py
-          - name: thursday-reel
-            files: tests/test_thursday_reel_legibility.py tests/test_frame_legibility.py
           - name: goldens
-            files: tests/test_golden_frames.py tests/test_slider_program_plate.py tests/test_frame_names_its_show.py
+            files: tests/test_golden_frames.py tests/test_thursday_reel_legibility.py tests/test_frame_names_its_show.py
+          - name: legibility
+            files: tests/test_closing_crossfade_legibility.py tests/test_frame_legibility.py tests/test_slider_program_plate.py tests/test_phone_safe_area.py tests/test_gallery_alignment.py tests/test_story_title_clamp.py
     steps:
       - uses: actions/checkout@v5
 
