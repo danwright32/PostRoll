@@ -150,6 +150,7 @@
     "test_revise_caption_backstops.py": 0.0,
     "test_safe_area_tokens.py": 0.0,
     "test_screen_reel_logo_contrast.py": 0.0,
+    "test_screens_draw_from_named_colours.py": 0.55,
     "test_select_cover_photo.py": 0.03,
     "test_select_reel_clips.py": 0.56,
     "test_side_crop_readings.py": 0.0,
@@ -789,6 +790,10 @@
     "test_screen_reel_logo_contrast.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_screens_draw_from_named_colours.py": {
+      "run": "partial-2026-08-31T03:08Z",
+      "scale": 0.97
     },
     "test_select_cover_photo.py": {
       "run": "full-before-2026-08-30",

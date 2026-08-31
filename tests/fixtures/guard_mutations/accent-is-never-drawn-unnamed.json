@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/ExportDoneSummary.swift",
   "find": "                    .foregroundStyle(PaintedSurfaces.pageAccentText)",
   "replace": "                    .foregroundStyle(Color.roseGold)",
-  "test": "PostRollTests/BannerLegibilityTests/testTheAccentIsNeverDrawnUnnamed",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_the_accent_is_never_drawn_unnamed",
   "breaks": "a screen draws a foreground in the raw accent, which does not say whether it is type or a symbol, so nothing can hold it to the level its role asks for (#580)"
 }

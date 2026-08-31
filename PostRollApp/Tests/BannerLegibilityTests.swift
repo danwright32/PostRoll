@@ -976,294 +976,42 @@ final class BannerLegibilityTests: XCTestCase {
                              + "behind the words, or the composite is wrong")
     }
 
-    /// Built is not wired (L3). Names that the views do not draw from would let
-    /// this file assert a palette the app has stopped using, which is the same
-    /// self-confirming check the pairs exist to avoid. Comments are stripped,
-    /// because these files explain the naming in prose right beside the code
-    /// (L103), and each assertion is scoped to the file it is about (L135).
-    ///
-    /// Every view file, not the five #574 named (#582). A list of the files
-    /// somebody had thought about is exactly the list a new painted surface is
-    /// missing from, and seventeen other files were painting fills nothing
-    /// could read the words against, including the stage pill: seven washes of
-    /// a colour with that same colour as the label on them, between 2.42:1 and
-    /// 3.67:1, under a design note claiming they were calibrated for it (L96).
-    func testEveryPaintedFileDrawsFromTheNamedColours() throws {
-        let files = try everySourceFile()
 
-        // A sweep that reads nothing objects to nothing (L98). The five-file
-        // version of this could not have told you it had gone blind either.
-        XCTAssertGreaterThan(files.count, 20,
-                             "the sweep read \(files.count) source files, so it is proving "
-                             + "nothing about the ones it did not open")
+    // ── the named-colour sweep moved out of this file (#1045) ──────────────
+    //
+    // `testEveryPaintedFileDrawsFromTheNamedColours` and the two matchers that
+    // proved it now live in `tests/test_screens_draw_from_named_colours.py`.
+    // They read nothing but source text, so they never needed the app build
+    // that every registry entry naming this file pays: 33 entries name it, and
+    // re-proving one costs about 29s of xcodebuild.
+    //
+    // Their five registry entries moved with them, unchanged, and each was
+    // re-proved against the Python rule before the Swift side was deleted. The
+    // fixtures that say the matchers see every spelling moved verbatim, because
+    // the tree is clean and they are the only thing that can prove a matcher
+    // did not narrow in the move (L48, L159, L263).
+    //
+    // Since then the accent rule and its matcher have moved too, with their
+    // three entries, including the wrapped-ternary one that spans three lines.
+    //
+    // Eight of the fifteen text-only entries have moved. A diff touching this
+    // file re-proves 25 entries rather than 33, about 12 minutes rather than 16.
+    //
+    // What is LEFT to move, and why it was not done in the same pass: the type
+    // colour rule and the quiet mark rule. Both matchers are intricate in a way
+    // the moved ones are not. `rawTypeColourUses` tracks the body of anything
+    // declared `-> Color` by brace depth, because a colour handed to a
+    // foreground by a helper is type just as much as one written into the
+    // modifier, and the mutation written for that guard once put a raw colour
+    // back into such a helper and stayed green (L1). `quietMarksOnWords` reads
+    // twelve lines back for the thing being dressed and then forward for an
+    // accessibility escape. Porting either carelessly narrows a rule while
+    // every check stays green, which is the whole risk this file records, so
+    // they want their own pass with their own fixtures rather than the tail of
+    // a long one.
+    //
+    // The rules BELOW still render or still read Swift types, so they stay.
 
-        for relative in files {
-            let code = try appSource("Sources/\(relative)")
-
-            // The two spellings where the colour is an argument to a painting
-            // modifier. Read per line rather than over the whole file, so the
-            // failure names the line and so a colour reached through a ternary
-            // or built from numbers is caught too (#600): the first version
-            // looked for the literal text ".background(Color." and a condition
-            // between the bracket and the colour was enough to walk past it.
-            for (number, line) in unnamedFills(in: code) {
-                XCTFail("""
-                    \(relative):\(number) paints from a colour written at the point of \
-                    use. Nothing can check the words against it, because nothing else \
-                    can name it. Add it to PaintedSurfaces and draw from there.
-
-                    \(line)
-                    """)
-            }
-
-            // The third spelling (#586). A colour is a view in its own right, so
-            // it paints an area with no modifier around it at all, and neither
-            // check above can express that. Seven placeholders were drawn this
-            // way while this file reported a clean sweep over the same screens,
-            // which is worse than not checking them: an unreadable spelling and
-            // an absent surface look identical from here.
-            for (number, line) in bareColourViews(in: code) {
-                XCTFail("""
-                    \(relative):\(number) paints an area by using a colour as a view, \
-                    which is the same unnamed surface the two checks above refuse in \
-                    their own spellings. Add it to PaintedSurfaces and draw from there.
-
-                    \(line)
-                    """)
-            }
-        }
-    }
-
-    /// Lines painting a background or a shape from a colour written there.
-    ///
-    /// A line offends when it calls one of the two painting modifiers AND
-    /// mentions a colour by value: `Color.<token>`, or one built from literal
-    /// components. `PaintedSurfaces.x`, a local, or a computed pair mention no
-    /// colour and pass.
-    ///
-    /// `Color.clear` is excluded because it paints nothing: it is a spacer and
-    /// a hit area, with no surface behind any words. Excluded by name here so
-    /// the exemption is one decision written down once (L129).
-    private func unnamedFills(in code: String) -> [(Int, String)] {
-        code.split(separator: "\n", omittingEmptySubsequences: false)
-            .enumerated()
-            .compactMap { index, raw in
-                let line = raw.trimmingCharacters(in: .whitespaces)
-                // The two painting modifiers, plus the four that draw a LINE or
-                // a shadow rather than an area (#628). A border is still exempt
-                // from the contrast level, for the reason written over the pair
-                // list, but exempt from being MEASURED is not exempt from being
-                // named: 31 of these were colours written at the point of use,
-                // where nothing else can say what they are or notice one
-                // changing. The fill rule had covered the two spellings that
-                // fill an area and read as though it covered the rest.
-                guard [".background(", ".fill(", ".stroke(",
-                       ".strokeBorder(", ".border(", ".shadow("]
-                        .contains(where: line.contains) else {
-                    return nil
-                }
-                let mentionsAColour = line.range(of: #"Color\.[A-Za-z]"#,
-                                                 options: .regularExpression) != nil
-                    || line.range(of: #"Color\(\s*(red|white|hue|nsColor|\.)"#,
-                                  options: .regularExpression) != nil
-                guard mentionsAColour, !line.contains("Color.clear") else { return nil }
-                return (index + 1, line)
-            }
-    }
-
-    /// The fill matcher is asked directly what it can see (#600, L1).
-    ///
-    /// The tree is clean, so a matcher that sees one spelling and one that sees
-    /// three give the same silent pass, which is how two of these shipped
-    /// looking like a rule that held. The same proof
-    /// `testTheColourAsAViewMatcherSeesEverySpelling` gets, for the two
-    /// spellings it does not cover.
-    func testTheUnnamedFillMatcherSeesEverySpelling() {
-        let mustCatch = [
-            "            .background(Color.creamDeep)",
-            "            .fill(Color.roseGold.opacity(0.12))",
-            "            .background(Color(red: 0.10, green: 0.09, blue: 0.08))",
-            "                    Color(white: 0.92)",
-            "            .background(isDragging ? Color.roseGold : Color.black.opacity(0.65))",
-            "                Capsule().fill((stale ? Color.warmMid : Color.roseDeep).opacity(0.12))",
-            "            .fill(LinearGradient(colors: [Color(red: 1.0, green: 0.78, blue: 0.22)],",
-            // The four that draw a line or a shadow rather than an area (#628).
-            // These were outside the rule entirely, and 31 borders had been
-            // written at the point of use while this check read as covering
-            // every painted surface in the app.
-            "                .strokeBorder(Color.creamEdge, lineWidth: 1)",
-            "                .stroke(Color.warmMid.opacity(0.2), lineWidth: 1)",
-            "        .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: 2)",
-            "            .border(Color.roseGold)",
-            "            .strokeBorder(isSelected ? Color.roseGold : Color.creamEdge, lineWidth: 1)",
-        ]
-        for line in mustCatch {
-            let hits = unnamedFills(in: line).count + bareColourViews(in: line).count
-            XCTAssertEqual(hits, 1, """
-                the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as a \
-                painted surface written at the point of use, so a fill spelled that way \
-                is exempt from the rule and reads exactly like no fill at all
-                """)
-        }
-
-        let mustAllow = [
-            "            .background(PaintedSurfaces.page)",
-            "            .fill(pill.wash)",
-            "            .background(isSelected ? PaintedSurfaces.selectedPillFill : pill.wash)",
-            "            .fill(PaintedSurfaces.captionFindings(stale: stale).panel)",
-            "            .background(Color.clear)",
-            "            .foregroundStyle(Color.warmDark)",
-            "                .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1)",
-            "                .stroke(PaintedSurfaces.accentBorder.opacity(0.2), lineWidth: 1)",
-            "    static let creamDeep = Color(red: 237/255, green: 232/255, blue: 224/255)",
-        ]
-        for line in mustAllow {
-            let hits = unnamedFills(in: line).count + bareColourViews(in: line).count
-            XCTAssertEqual(hits, 0, """
-                the check reports \(line.trimmingCharacters(in: .whitespaces)) as an \
-                unnamed painted surface, which it is not. A rule that fires on correct \
-                code is the rule people learn to work around
-                """)
-        }
-    }
-
-    /// Lines where a colour is used as a view, with its 1-based line number.
-    ///
-    /// Matches the colour at the START of the line and lets anything follow,
-    /// because a painted area routinely carries its modifiers on the same line
-    /// (`Color.creamDeep.overlay { … }`, `Color.cream.ignoresSafeArea()`).
-    ///
-    /// The first version of this ended the pattern at the line break, so it saw
-    /// the ten sites written with nothing after the colour and none of the
-    /// thirteen written with a modifier. Every one of those thirteen had
-    /// already been named by hand, so the whole suite was green and the check
-    /// looked like it worked: it was `check_guards` putting one site back that
-    /// showed it had never been protecting them (L1).
-    ///
-    /// `Color.clear` is excluded because it paints nothing: it is a spacer and
-    /// a hit area, and there is no surface behind any words. Excluded here by
-    /// name rather than by the caller skipping it, so the exemption is one
-    /// decision written down once (L129).
-    private func bareColourViews(in code: String) -> [(Int, String)] {
-        code.split(separator: "\n", omittingEmptySubsequences: false)
-            .enumerated()
-            .compactMap { index, raw in
-                let line = raw.trimmingCharacters(in: .whitespaces)
-                // A named colour, or one built from literal components (#600):
-                // the placeholder square inside the Instagram card was
-                // `Color(white: 0.92)` on a line of its own, which is this
-                // spelling and this rule, and the pattern could not say so.
-                guard line.range(of: #"^Color(\.[A-Za-z][A-Za-z0-9]*\b|\(\s*(red|white|hue)\b)"#,
-                                 options: .regularExpression) != nil,
-                      !line.hasPrefix("Color.clear") else { return nil }
-                return (index + 1, line)
-            }
-    }
-
-    /// The detector above is asked directly what it can see (#586).
-    ///
-    /// Running it over the real tree cannot answer this. The tree is clean, so
-    /// a detector that sees one spelling and a detector that sees both give the
-    /// same silent pass, and the narrow one shipped looking correct. A guard is
-    /// only real once it has been seen to fail, and the thing that has to fail
-    /// is the matcher, not the codebase around it (L1).
-    func testTheColourAsAViewMatcherSeesEverySpelling() {
-        let mustCatch = [
-            "        Color.creamDeep",
-            "        Color.creamDeep.overlay { Text(\"x\") }",
-            "        Color.cream.ignoresSafeArea()",
-            "        Color.creamEdge.frame(height: 0.5)",
-            "        Color.black.opacity(0.4)",
-        ]
-        for line in mustCatch {
-            XCTAssertEqual(bareColourViews(in: line).count, 1, """
-                the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as a \
-                painted area, so a surface written that way is exempt from it and \
-                reads exactly like no surface at all
-                """)
-        }
-
-        let mustAllow = [
-            "        Color.clear",
-            "        Color.clear.frame(width: 8)",
-            "        .background(PaintedSurfaces.page)",
-            "        .foregroundStyle(Color.warmDark)",
-            "        let x = Color.roseGold",
-        ]
-        for line in mustAllow {
-            XCTAssertEqual(bareColourViews(in: line).count, 0, """
-                the check reports \(line.trimmingCharacters(in: .whitespaces)) as an \
-                unnamed painted area, which it is not. A rule that fires on correct \
-                code is the rule people learn to work around
-                """)
-        }
-    }
-
-    /// The accent may not be drawn without saying which role it is in (#580).
-    ///
-    /// `roseGold` measures 4.31:1 on the page and 3.68:1 on the deeper one:
-    /// right for a symbol or a rule, under the line for a label, and it was
-    /// drawn as both in about ninety places. Ink cannot report it, because this
-    /// type draws perfectly well and is simply too pale, so the only thing that
-    /// can is the call site saying what it is drawing. Once every foreground
-    /// goes through `pageAccentText` or `iconAccent`, the pair walk above holds
-    /// each of them to its own level.
-    ///
-    /// Tints as well as foregrounds (#591). This read only lines containing
-    /// "foreground", so twenty five sites setting a spinner, a slider or a date
-    /// picker's colour with `.tint(Color.roseGold)` were outside it, and so was
-    /// the app-wide tint every system control inherits. Measured, the accent is
-    /// right in that role, so nothing was wrong on screen: what was wrong is
-    /// that if the accent moved the way #580 moved it for type, nothing would
-    /// have reported these. A rule that covers one of two spellings reads
-    /// exactly like a rule that holds (#586).
-    ///
-    /// Matched case-insensitively so `listRowSeparatorTint` and friends are the
-    /// same rule rather than a way round it.
-    func testTheAccentIsNeverDrawnUnnamed() throws {
-        let sources = sourcesDir
-        let files = try everySourceFile()
-
-        // Finding nothing to look at is not a pass (L98). If this walk ever
-        // stops seeing the view tree it would report every screen as clean.
-        XCTAssertGreaterThan(files.count, 20,
-                             "the sweep found \(files.count) source files, so it is "
-                             + "proving nothing about the ones it did not read")
-
-        for relative in files {
-            let code = SwiftSourceText.withoutComments(
-                try String(contentsOf: sources.appendingPathComponent(relative),
-                           encoding: .utf8))
-            for line in unnamedAccentUses(in: code) {
-                XCTFail("""
-                    \(relative) draws the raw accent, which does not say whether it is \
-                    type or a symbol. As type it is 4.31:1 on the page, under the level \
-                    it needs, and nothing else can tell. Use \
-                    PaintedSurfaces.pageAccentText or PaintedSurfaces.iconAccent.
-
-                    \(line)
-                    """)
-            }
-        }
-    }
-
-    /// Lines drawing the raw accent in a role that has a name for it.
-    ///
-    /// Both of the ways a colour reaches a control: as a foreground, and as the
-    /// tint a spinner, a slider or a picker draws itself in. "tint(" is matched
-    /// on the lowercased line so `listRowSeparatorTint` and any other spelling
-    /// ending in it are the same rule.
-    ///
-    /// Read over whole statements rather than lines (#611). A colour chosen by
-    /// a ternary wraps, and the half naming the colours is then a line with no
-    /// `foregroundStyle` on it at all: three of those were drawing the accent as
-    /// a button's label while this reported the tree clean, which is the shape
-    /// of every guard in this file that has gone blind on a spelling.
-    private func unnamedAccentUses(in code: String) -> [String] {
-        statements(in: code)
-            .filter { $0.contains("foreground") || $0.lowercased().contains("tint(") }
-            .filter { $0.contains("Color.roseGold") }
-    }
 
     /// Source rejoined into statements, so a modifier and the colours a wrapped
     /// ternary chooses are one string to match against.
@@ -1853,78 +1601,6 @@ final class BannerLegibilityTests: XCTestCase {
             """)
     }
 
-    /// The matcher is asked directly what it can see (#591, L1).
-    ///
-    /// Running it over the real tree cannot answer this once the tree is clean:
-    /// a matcher that reads foregrounds only and one that reads tints as well
-    /// give the same silent pass, and the narrow one shipped for two issues
-    /// looking correct. What has to be seen to fail is the matcher, not the
-    /// codebase around it (#586).
-    func testTheAccentMatcherSeesEveryRoleTheAccentIsDrawnIn() {
-        let mustCatch = [
-            "            .foregroundStyle(Color.roseGold)",
-            "                .tint(Color.roseGold)",
-            "                ProgressView().controlSize(.small).tint(Color.roseGold)",
-            "            .listRowSeparatorTint(Color.roseGold)",
-        ]
-        // The wrapped ternary, invisible here until #611: the half naming the
-        // colours carries no modifier at all. Both widths, because the first
-        // version of the fix read two lines, the real one in
-        // PhotoAssignmentView spans three, and it went green on exactly the
-        // mutation written for it (L144).
-        let wrapped = [
-            """
-            .foregroundStyle(canGoPrevious
-                             ? Color.roseGold : PaintedSurfaces.disabledControlLabel)
-            """,
-            """
-            .foregroundStyle(tagsBinding.wrappedValue.isEmpty
-                             ? PaintedSurfaces.disabledControlLabel
-                             : Color.roseGold)
-            """,
-        ]
-        for spelling in wrapped {
-            XCTAssertEqual(unnamedAccentUses(in: spelling).count, 1, """
-                the check cannot see the accent chosen by a ternary spread over \
-                \(spelling.split(separator: "\n").count) lines, so a label drawn that way \
-                is exempt from the rule while reading as covered by it
-                """)
-        }
-
-        // A bracket inside a sentence is not structure. Left uncounted, the
-        // statement below never closes and everything after it joins on, which
-        // would have this reporting matches in code nobody wrote.
-        XCTAssertEqual(unnamedAccentUses(in: """
-            .help("Copies this photo's tags onto every photo :-( in this day")
-            .foregroundStyle(PaintedSurfaces.pageAccentText)
-            Capsule().fill(Color.roseGold.opacity(0.15))
-            """).count, 0, """
-            the check joins a statement past an unbalanced bracket inside a string, so it \
-            reads a fill three lines away as part of a foreground and fails on correct code
-            """)
-        for line in mustCatch {
-            XCTAssertEqual(unnamedAccentUses(in: line).count, 1, """
-                the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as the \
-                raw accent, so a control coloured that way is exempt from the rule and \
-                reads exactly like a screen that has none
-                """)
-        }
-
-        let mustAllow = [
-            "                .tint(PaintedSurfaces.iconAccent)",
-            "                .tint(PaintedSurfaces.photoPlaceholderSpinner)",
-            "            .foregroundStyle(PaintedSurfaces.pageAccentText)",
-            "                .tint(Color.warmMid)",
-            "    static let iconAccent = Color.roseGold",
-        ]
-        for line in mustAllow {
-            XCTAssertEqual(unnamedAccentUses(in: line).count, 0, """
-                the check reports \(line.trimmingCharacters(in: .whitespaces)) as the raw \
-                accent, which it is not. A rule that fires on correct code is the rule \
-                people learn to work around
-                """)
-        }
-    }
 
     /// Lines drawing a system colour as type or as a control's tint.
     ///

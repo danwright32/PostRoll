@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/LongRunIndicator.swift",
   "find": "                    ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)",
   "replace": "                    ProgressView().controlSize(.small).tint(Color.roseGold)",
-  "test": "PostRollTests/BannerLegibilityTests/testTheAccentIsNeverDrawnUnnamed",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_the_accent_is_never_drawn_unnamed",
   "breaks": "a control goes back to being coloured in the raw accent, which does not say whether it is type or a symbol, so nothing holds it to the level its role asks for. The foreground half of this rule was already proved; this is the tint half, which was outside it for two issues while looking covered (#591)"
 }

@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/PhotoAssignmentBodies.swift",
   "find": "                .fill(PaintedSurfaces.missingMediaPanel)",
   "replace": "                .fill(Color.roseGold.opacity(0.08))",
-  "test": "PostRollTests/BannerLegibilityTests/testEveryPaintedFileDrawsFromTheNamedColours",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_every_painted_file_draws_from_the_named_colours",
   "breaks": "a surface paints a fill written at the point of use, which no legibility check can name or read the words against, and the list of pairs falls behind the code with nothing noticing (#574)"
 }

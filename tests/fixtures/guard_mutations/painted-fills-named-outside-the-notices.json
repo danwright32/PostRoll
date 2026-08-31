@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/CollaboratorPanel.swift",
   "find": "                .fill(PaintedSurfaces.deepPage)",
   "replace": "                .fill(Color.creamDeep)",
-  "test": "PostRollTests/BannerLegibilityTests/testEveryPaintedFileDrawsFromTheNamedColours",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_every_painted_file_draws_from_the_named_colours",
   "breaks": "a view file outside the five the notices live in paints an unnamed fill again, which is the state seventeen files were in while the check read only those five and reported a clean sweep (#582)"
 }
