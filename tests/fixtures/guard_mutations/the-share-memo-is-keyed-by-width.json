@@ -1,0 +1,8 @@
+{
+  "name": "the-share-memo-is-keyed-by-width",
+  "file": "PostRollApp/Tests/BannerLegibilityTests.swift",
+  "find": "    private struct ShareKey: Hashable {\n        let state: String\n        let width: CGFloat\n    }",
+  "replace": "    private struct ShareKey: Hashable {\n        let state: String\n        let width: CGFloat\n\n        static func == (a: Self, b: Self) -> Bool { a.state == b.state }\n        func hash(into hasher: inout Hasher) { hasher.combine(state) }\n    }",
+  "test": "PostRollTests/BannerLegibilityTests/testTheShareMemoIsKeyedByWidthAsWellAsByState",
+  "breaks": "the narrow sweep is handed the 520pt answer for all forty surfaces, so it stops measuring the narrow layout entirely while passing (#1018, L98)"
+}

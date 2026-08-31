@@ -27,7 +27,9 @@ import pytest
 
 from tests.source_text import (
     swift_as_the_test_bundle_sees_it,
+    code_of,
     swift_code_only,
+    swift_files,
     swift_without_comments,
 )
 
@@ -106,10 +108,13 @@ BARE_STORES = {
 }
 
 
-def _swift_files(root: Path) -> list[Path]:
-    files = sorted(root.rglob("*.swift"))
-    assert files, f"no Swift files under {root}, so this guard checked nothing"
-    return files
+# `swift_files` and `code_of` rather than a walk and a read per test (#1018).
+# Six sweeps here re-walked the same two trees and re-read every file in them,
+# 22 times over, which was 9.4s of the runner's Python leg. The memo lives in
+# source_text.py so the registry guard shares it, and it refuses an empty walk
+# rather than caching one, because a memoised empty scan passes every sweep
+# here at once (L286).
+_swift_files = swift_files
 
 
 def _hits(pattern: re.Pattern[str], text: str) -> list[int]:
@@ -129,7 +134,7 @@ def test_no_swift_test_constructs_a_store_with_no_explicit_source(store):
         # Code only: AppOwnersTests carries a Swift snippet in a string literal
         # as another guard's fixture, and matching that named an innocent file
         # (L104).
-        text = swift_code_only(path.read_text(encoding="utf-8"))
+        text = code_of(path)
         offenders += [f"{path.relative_to(REPO)}:{line}"
                       for line in _hits(_bare(store), text)]
 
@@ -143,7 +148,7 @@ def test_no_swift_test_constructs_a_store_with_no_explicit_source(store):
 def test_no_swift_test_hands_a_store_one_of_the_live_locations():
     offenders = []
     for path in _swift_files(SWIFT_TESTS):
-        text = swift_code_only(path.read_text(encoding="utf-8"))
+        text = code_of(path)
         offenders += [f"{path.relative_to(REPO)}:{line}"
                       for line in _hits(LIVE_ARGUMENT, text)]
 
@@ -159,7 +164,7 @@ def test_no_store_the_test_bundle_compiles_defaults_to_a_live_location():
     offenders = []
     for path in _swift_files(SOURCES):
         text = swift_as_the_test_bundle_sees_it(
-            swift_code_only(path.read_text(encoding="utf-8")))
+            code_of(path))
         offenders += [f"{path.relative_to(REPO)}:{line}"
                       for line in _hits(LIVE_DEFAULT, text)]
 
@@ -177,7 +182,7 @@ def test_no_singleton_the_test_bundle_compiles_is_built_from_a_live_location():
     offenders = []
     for path in _swift_files(SOURCES):
         text = swift_as_the_test_bundle_sees_it(
-            swift_code_only(path.read_text(encoding="utf-8")))
+            code_of(path))
         offenders += [f"{path.relative_to(REPO)}:{line}"
                       for line in _hits(LIVE_SINGLETON, text)]
 
@@ -195,7 +200,7 @@ def test_no_code_the_test_bundle_compiles_names_the_live_preferences():
     offenders = []
     for path in _swift_files(SOURCES):
         text = swift_as_the_test_bundle_sees_it(
-            swift_code_only(path.read_text(encoding="utf-8")))
+            code_of(path))
         offenders += [f"{path.relative_to(REPO)}:{line}"
                       for line in _hits(LIVE_PREFERENCES, text)]
 
