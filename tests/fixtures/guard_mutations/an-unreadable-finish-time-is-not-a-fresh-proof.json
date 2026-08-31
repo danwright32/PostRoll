@@ -1,0 +1,8 @@
+{
+  "name": "an-unreadable-finish-time-is-not-a-fresh-proof",
+  "file": "tools/check_tree_already_checked.py",
+  "find": "    try:\n        return datetime.fromisoformat(str(stamp).replace(\"Z\", \"+00:00\"))\n    except (TypeError, ValueError):\n        return None",
+  "replace": "    try:\n        return datetime.fromisoformat(str(stamp).replace(\"Z\", \"+00:00\"))\n    except (TypeError, ValueError):\n        return datetime.now(timezone.utc)",
+  "test": "tests/test_tree_already_checked.py::test_an_unreadable_api_timestamp_is_not_read_as_now",
+  "breaks": "a stamp that could not be read is treated as just now, so it lands on the permissive side of the age comparison and every unreadable proof reports as fresh (#1075, L50)"
+}

@@ -48,6 +48,8 @@ claim that would let one job's proof stand in for another's.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from tools.check_tree_already_checked import (
@@ -57,6 +59,9 @@ from tools.check_tree_already_checked import (
     decide,
 )
 
+NOW = datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc)
+WINDOW = timedelta(days=1)
+
 TREE = "t" * 40
 OTHER_TREE = "u" * 40
 HEAD = "h" * 40
@@ -64,17 +69,20 @@ CHECK = "swift-unit"
 
 
 def pull_request(*, number: int = 7, tree: str = TREE,
-                 checks: dict[str, str] | None = None) -> PullRequest:
+                 checks: dict[str, str] | None = None,
+                 hours_ago: float = 1.0) -> PullRequest:
     return PullRequest(
         number=number,
         head_sha=HEAD,
         tree_sha=tree,
         checks=dict(checks if checks is not None else {CHECK: "success"}),
+        checked_at=NOW - timedelta(hours=hours_ago),
     )
 
 
 def call(pulls, *, tree: str = TREE, check: str = CHECK) -> Decision:
-    return decide(tree=tree, check=check, pulls=pulls)
+    return decide(tree=tree, check=check, pulls=pulls, now=NOW,
+                  unconditional_after=WINDOW)
 
 
 # ── the one answer that skips ────────────────────────────────────────────────
@@ -149,6 +157,79 @@ def test_another_job_being_green_is_not_this_job_being_green():
     assert decision.run
 
 
+# ── a tree is not the only input to a check (#1075) ──────────────────────────
+#
+# The runner image, the Xcode `PostRollApp/.ci-xcode-version` pins, ffmpeg and
+# Homebrew packages all move with no commit here, so an unchanged tree is not an
+# unchanged result. Before #990 the post-merge run met the new environment; with
+# the gate it does not, and nothing else does until somebody opens the next pull
+# request.
+#
+# The exposure is small, because every merge follows a pull request run that DID
+# meet the environment, so the window is the gap between that run and the merge.
+# It is not zero: a pull request that sits for a day can be merged against an
+# image that moved underneath it. The guard sweep faced the same thing and
+# answered it with an unconditional window (#551), and this is the same answer
+# at a shorter cadence, because the gap here is hours rather than a week.
+
+def test_a_proof_older_than_the_window_runs_the_job_anyway():
+    decision = call([pull_request(hours_ago=30)])
+    assert decision.answer is Answer.PROOF_IS_STALE
+    assert decision.run
+
+
+def test_a_proof_inside_the_window_still_skips():
+    decision = call([pull_request(hours_ago=23)])
+    assert decision.answer is Answer.ALREADY_CHECKED
+    assert not decision.run
+
+
+def test_the_stale_message_says_how_old_the_proof_is_and_why_that_matters():
+    """A reader has to be able to tell this from a tree that never passed."""
+    message = call([pull_request(hours_ago=50)]).message
+    assert "50" in message or "2 day" in message, message
+    assert "runner image" in message, message
+
+
+def test_a_check_with_no_recorded_time_is_not_treated_as_fresh():
+    """`None` is not `now`. An unreadable stamp landing on the permissive side
+    of an age comparison is the one way a check reports healthy for a reason
+    unrelated to the truth (L50)."""
+    pull = PullRequest(number=7, head_sha=HEAD, tree_sha=TREE,
+                       checks={CHECK: "success"}, checked_at=None)
+    decision = call([pull])
+    assert decision.answer is Answer.PROOF_IS_STALE
+    assert decision.run
+
+
+def test_an_unreadable_api_timestamp_is_not_read_as_now():
+    """The reader itself, not just the decision that consumes it.
+
+    `test_a_check_with_no_recorded_time_is_not_treated_as_fresh` builds the
+    record by hand and so cannot see how the timestamp got there. This is the
+    other half: an absent or malformed stamp from the API has to arrive as
+    None, because defaulting it to now would put every unreadable proof on the
+    permissive side of the age comparison and report it as fresh (L50).
+    """
+    from tools.check_tree_already_checked import _when
+
+    assert _when(None) is None
+    assert _when("") is None
+    assert _when("not a timestamp at all") is None
+    assert _when("2026-08-31T12:00:00Z") == datetime(
+        2026, 8, 31, 12, 0, tzinfo=timezone.utc)
+
+
+def test_staleness_is_asked_after_the_tree_and_the_check_not_before():
+    """A stale reading about the WRONG tree is not staleness, and reporting it
+    as such would send someone looking at the runner image for a mismatch that
+    is really a different commit (L11)."""
+    assert call([pull_request(tree=OTHER_TREE, hours_ago=99)]).answer \
+        is Answer.TREE_DIFFERS
+    assert call([pull_request(checks={}, hours_ago=99)]).answer \
+        is Answer.CHECK_NOT_GREEN
+
+
 # ── the messages are distinct, so a reader can tell the causes apart (L11) ───
 
 def test_every_answer_has_its_own_wording():
@@ -158,6 +239,7 @@ def test_every_answer_has_its_own_wording():
         call([pull_request(number=1), pull_request(number=2)]).message,
         call([pull_request(tree=OTHER_TREE)]).message,
         call([pull_request(checks={})]).message,
+        call([pull_request(hours_ago=99)]).message,
         call([pull_request()]).message,
     }
     assert len(messages) == len(Answer), (
@@ -174,12 +256,12 @@ def test_a_reason_that_ran_says_it_is_running_the_job():
 
 def test_a_gate_asked_about_no_tree_refuses():
     with pytest.raises(ValueError, match="tree"):
-        decide(tree="", check=CHECK, pulls=[pull_request()])
+        decide(tree="", check=CHECK, pulls=[pull_request()], now=NOW)
 
 
 def test_a_gate_asked_about_no_check_refuses():
     with pytest.raises(ValueError, match="check"):
-        decide(tree=TREE, check="", pulls=[pull_request()])
+        decide(tree=TREE, check="", pulls=[pull_request()], now=NOW)
 
 
 # ── the wiring in the workflow files ─────────────────────────────────────────

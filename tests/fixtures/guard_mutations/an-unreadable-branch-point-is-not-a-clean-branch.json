@@ -1,0 +1,8 @@
+{
+  "name": "an-unreadable-branch-point-is-not-a-clean-branch",
+  "file": "tests/file_durations.py",
+  "find": "    point = git(\"merge-base\", base, \"HEAD\")\n    if not point:\n        return None",
+  "replace": "    point = git(\"merge-base\", base, \"HEAD\")\n    if not point:\n        return ()",
+  "test": "tests/test_a_new_test_file_is_measured.py::test_a_missing_base_ref_is_not_an_empty_answer",
+  "breaks": "a branch point that could not be found reports the same empty answer as a branch that added nothing, so the check reports a clean branch for a question nobody managed to ask (#1058, L98, L119)"
+}

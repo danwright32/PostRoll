@@ -850,7 +850,28 @@ def test_the_freshness_question_is_asked_once_not_once_per_shard(guards):
 # is a job added tomorrow inheriting the rule instead of somebody having to
 # remember it (L96).
 
-WORKFLOW_FILES = ("tests.yml", "swift.yml", "guards.yml")
+def workflow_files() -> list[str]:
+    """Every workflow in the directory, rather than three named by hand (#996).
+
+    This was a tuple of `tests.yml`, `swift.yml` and `guards.yml`. `ui.yml` was
+    not in it and carried its deadlines by habit, so the rule below checked only
+    what the tuple listed and a fifth workflow, or the fourth losing its
+    deadline, was exempt from the very check meant to catch it (L96, L135).
+
+    An empty directory REFUSES rather than answering with an empty list. A
+    deadline sweep over no workflows objects to nothing and reads exactly like
+    every job having one (L98).
+
+    Both spellings, because GitHub accepts either and a workflow written as
+    `.yaml` would otherwise be silently outside the rule.
+    """
+    found = sorted(path.name for path in WORKFLOWS.iterdir()
+                   if path.suffix in (".yml", ".yaml"))
+    assert found, (
+        f"no workflows were found in {WORKFLOWS}, so the deadline check below "
+        "would pass over an empty set")
+    return found
+
 
 
 def jobs_without_a_deadline(text: str) -> list[str]:
@@ -892,7 +913,7 @@ def jobs_without_a_deadline(text: str) -> list[str]:
 
 def test_every_ci_job_carries_a_deadline():
     missing: list[str] = []
-    for name in WORKFLOW_FILES:
+    for name in workflow_files():
         text = (WORKFLOWS / name).read_text()
         missing += [f"{name}: {job}" for job in jobs_without_a_deadline(text)]
 
@@ -900,6 +921,36 @@ def test_every_ci_job_carries_a_deadline():
         "these CI jobs have no timeout-minutes, so a run that stops making "
         "progress in one of them sits until the platform's own default rather "
         "than failing: " + ", ".join(missing))
+
+
+def test_every_workflow_on_disk_is_checked_for_a_deadline():
+    """The list is DERIVED from the directory, never kept beside it (#996).
+
+    A hand-written registry checks only what it lists, so anything missing from
+    it is exempt from the very check meant to catch it, and the guard reports
+    green while blind (L96). That was not hypothetical here: `ui.yml` held two
+    jobs, one of them a 45 minute macOS run, and was outside this rule entirely.
+    """
+    on_disk = {path.name for path in WORKFLOWS.iterdir()
+               if path.suffix in (".yml", ".yaml")}
+
+    assert set(workflow_files()) == on_disk, (
+        "the deadline check reads a different set of workflows from the ones "
+        f"on disk. Checked: {sorted(workflow_files())}. On disk: "
+        f"{sorted(on_disk)}. A workflow outside the list carries no deadline "
+        "rule at all")
+
+
+def test_the_workflow_list_refuses_an_empty_directory(tmp_path, monkeypatch):
+    """An empty sweep objects to nothing, so it must refuse rather than pass."""
+    monkeypatch.setattr("test_ci_gates.WORKFLOWS", tmp_path)
+    with pytest.raises(AssertionError, match="no workflows"):
+        workflow_files()
+
+
+def test_the_workflow_list_finds_more_than_the_three_it_used_to_name():
+    """The point of #996: the rule now covers ui.yml as well."""
+    assert "ui.yml" in workflow_files()
 
 
 def test_the_deadline_reader_can_see_a_job_that_lacks_one():

@@ -1,0 +1,8 @@
+{
+  "name": "every-ui-job-carries-a-deadline",
+  "file": ".github/workflows/ui.yml",
+  "find": "    timeout-minutes: 45",
+  "replace": "    # timeout-minutes: 45",
+  "test": "tests/test_ci_gates.py::test_every_ci_job_carries_a_deadline",
+  "breaks": "the 45 minute macOS GUI job loses its deadline and can only hang rather than fail, and before #996 nothing checked ui.yml at all so this could not have been caught (#996, L110)"
+}
