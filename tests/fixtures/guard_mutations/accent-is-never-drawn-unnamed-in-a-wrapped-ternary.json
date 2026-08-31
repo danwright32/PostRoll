@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/PhotoAssignmentView.swift",
   "find": "                                             : PaintedSurfaces.pageAccentText)",
   "replace": "                                             : Color.roseGold)",
-  "test": "PostRollTests/BannerLegibilityTests/testTheAccentIsNeverDrawnUnnamed",
+  "test": "tests/test_screens_draw_from_named_colours.py::test_the_accent_is_never_drawn_unnamed",
   "breaks": "the raw accent comes back as a button's label on the half of a wrapped ternary that carries no modifier, which the rule read past for three sites while reporting the tree clean (#611)"
 }

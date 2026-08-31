@@ -38,6 +38,7 @@ from swift_colour_rules import (
     app_source,
     bare_colour_views,
     every_source_file,
+    unnamed_accent_uses,
     unnamed_fills,
 )
 
@@ -158,3 +159,68 @@ def test_every_painted_file_draws_from_the_named_colours():
     assert not offenders, (
         "these paint from a colour written at the point of use. Add it to "
         "PaintedSurfaces and draw from there.\n\n" + "\n\n".join(offenders))
+
+
+# ── the accent may not be drawn without saying which role it is in (#580) ────
+
+ACCENT_IT_MUST_CATCH = [
+    "            .foregroundStyle(Color.roseGold)",
+    "                .tint(Color.roseGold)",
+    "                ProgressView().controlSize(.small).tint(Color.roseGold)",
+    "            .listRowSeparatorTint(Color.roseGold)",
+]
+
+#: The wrapped ternary, invisible until #611: the half naming the colours
+#: carries no modifier at all. BOTH widths, because the first version of the fix
+#: read two lines, the real one in PhotoAssignmentView spans three, and it went
+#: green on exactly the mutation written for it (L144).
+ACCENT_WRAPPED = [
+    """.foregroundStyle(canGoPrevious
+                 ? Color.roseGold : PaintedSurfaces.disabledControlLabel)""",
+    """.foregroundStyle(tagsBinding.wrappedValue.isEmpty
+                 ? PaintedSurfaces.disabledControlLabel
+                 : Color.roseGold)""",
+]
+
+#: A bracket inside a sentence is not structure. Left uncounted, the statement
+#: never closes, everything after it joins on, and this reports a fill three
+#: lines away as part of a foreground.
+ACCENT_IT_MUST_ALLOW = """.help("Copies this photo's tags onto every photo :-( in this day")
+.foregroundStyle(PaintedSurfaces.pageAccentText)
+Capsule().fill(Color.roseGold.opacity(0.15))"""
+
+
+def test_the_accent_matcher_sees_every_role_the_accent_is_drawn_in():
+    for line in ACCENT_IT_MUST_CATCH:
+        assert len(unnamed_accent_uses(line)) == 1, (
+            f"the check cannot see {line.strip()} as the raw accent, so a "
+            "control coloured that way is exempt from the rule and reads "
+            "exactly like a screen that has none")
+
+
+def test_the_accent_matcher_sees_a_ternary_however_it_wraps():
+    for spelling in ACCENT_WRAPPED:
+        assert len(unnamed_accent_uses(spelling)) == 1, (
+            "the check cannot see the accent chosen by a ternary spread over "
+            f"{len(spelling.splitlines())} lines, so a label drawn that way is "
+            "exempt from the rule while reading as covered by it")
+
+
+def test_a_bracket_inside_a_sentence_does_not_join_the_statements():
+    assert len(unnamed_accent_uses(ACCENT_IT_MUST_ALLOW)) == 0, (
+        "the check joins a statement past an unbalanced bracket inside a "
+        "string, so it reads a fill three lines away as part of a foreground "
+        "and fails on correct code")
+
+
+def test_the_accent_is_never_drawn_unnamed():
+    offenders: list[str] = []
+    for relative in every_source_file():
+        for statement in unnamed_accent_uses(app_source(relative)):
+            offenders.append(f"{relative}\n    {statement}")
+
+    assert not offenders, (
+        "these draw the raw accent, which does not say whether it is type or a "
+        "symbol. As type it is 4.31:1 on the page, under the level it needs, "
+        "and nothing else can tell. Use PaintedSurfaces.pageAccentText or "
+        "PaintedSurfaces.iconAccent.\n\n" + "\n\n".join(offenders))

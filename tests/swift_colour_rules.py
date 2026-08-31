@@ -128,3 +128,71 @@ def bare_colour_views(code: str) -> list[tuple[int, str]]:
             continue
         found.append((number, line))
     return found
+
+
+# ── statements, so a wrapped ternary is one string to match against ──────────
+
+#: A string literal, so its contents cannot be counted as structure.
+A_STRING = re.compile(r'"(\\.|[^"\\])*"')
+
+
+def bracket_balance(line: str) -> int:
+    """Open brackets minus closed ones, counting neither inside a string.
+
+    A bracket inside a sentence is not structure. Left uncounted, a statement
+    never closes and everything after it joins on, and the rules above would
+    then report matches in code nobody wrote (#630).
+
+    A multi-line literal's delimiter line carries no structure of its own.
+    """
+    if '"""' in line:
+        return 0
+    bare = A_STRING.sub('""', line)
+    return bare.count("(") - bare.count(")")
+
+
+def statements(code: str) -> list[str]:
+    """Source rejoined into statements, by bracket depth.
+
+    A modifier and the colours a wrapped ternary chooses become one string.
+
+    A WINDOW of lines cannot do this, and the first Swift version of the
+    widened accent rule was one: it read two lines, the real ternary in
+    `PhotoAssignmentView` spans three, and the guard went green on the mutation
+    written for it while passing the two-line case it had been shaped around
+    (L144). Depth is a property of the code rather than a number measured off
+    whichever spelling happened to exist that day.
+    """
+    out: list[str] = []
+    buffer = ""
+    depth = 0
+    for raw in code.split("\n"):
+        line = raw.strip()
+        buffer = line if not buffer else buffer + " " + line
+        depth += bracket_balance(line)
+        if depth <= 0:
+            if buffer:
+                out.append(buffer)
+            buffer = ""
+            depth = 0
+    if buffer:
+        out.append(buffer)
+    return out
+
+
+def unnamed_accent_uses(code: str) -> list[str]:
+    """Statements drawing the raw accent in a role that has a name for it.
+
+    Both of the ways a colour reaches a control: as a foreground, and as the
+    tint a spinner, a slider or a picker draws itself in. `tint(` is matched on
+    the lowercased statement so `listRowSeparatorTint` and any other spelling
+    ending in it are the same rule rather than a way round it (#591).
+
+    `roseGold` measures 4.31:1 on the page: right for a symbol or a rule, under
+    the line for a label, and it was drawn as both in about ninety places. Ink
+    cannot report it, because this type draws perfectly well and is simply too
+    pale, so the only thing that can is the call site saying what it is drawing.
+    """
+    return [statement for statement in statements(code)
+            if ("foreground" in statement or "tint(" in statement.lower())
+            and "Color.roseGold" in statement]

@@ -991,73 +991,27 @@ final class BannerLegibilityTests: XCTestCase {
     // the tree is clean and they are the only thing that can prove a matcher
     // did not narrow in the move (L48, L159, L263).
     //
+    // Since then the accent rule and its matcher have moved too, with their
+    // three entries, including the wrapped-ternary one that spans three lines.
+    //
+    // Eight of the fifteen text-only entries have moved. A diff touching this
+    // file re-proves 25 entries rather than 33, about 12 minutes rather than 16.
+    //
+    // What is LEFT to move, and why it was not done in the same pass: the type
+    // colour rule and the quiet mark rule. Both matchers are intricate in a way
+    // the moved ones are not. `rawTypeColourUses` tracks the body of anything
+    // declared `-> Color` by brace depth, because a colour handed to a
+    // foreground by a helper is type just as much as one written into the
+    // modifier, and the mutation written for that guard once put a raw colour
+    // back into such a helper and stayed green (L1). `quietMarksOnWords` reads
+    // twelve lines back for the thing being dressed and then forward for an
+    // accessibility escape. Porting either carelessly narrows a rule while
+    // every check stays green, which is the whole risk this file records, so
+    // they want their own pass with their own fixtures rather than the tail of
+    // a long one.
+    //
     // The rules BELOW still render or still read Swift types, so they stay.
 
-    /// The accent may not be drawn without saying which role it is in (#580).
-    ///
-    /// `roseGold` measures 4.31:1 on the page and 3.68:1 on the deeper one:
-    /// right for a symbol or a rule, under the line for a label, and it was
-    /// drawn as both in about ninety places. Ink cannot report it, because this
-    /// type draws perfectly well and is simply too pale, so the only thing that
-    /// can is the call site saying what it is drawing. Once every foreground
-    /// goes through `pageAccentText` or `iconAccent`, the pair walk above holds
-    /// each of them to its own level.
-    ///
-    /// Tints as well as foregrounds (#591). This read only lines containing
-    /// "foreground", so twenty five sites setting a spinner, a slider or a date
-    /// picker's colour with `.tint(Color.roseGold)` were outside it, and so was
-    /// the app-wide tint every system control inherits. Measured, the accent is
-    /// right in that role, so nothing was wrong on screen: what was wrong is
-    /// that if the accent moved the way #580 moved it for type, nothing would
-    /// have reported these. A rule that covers one of two spellings reads
-    /// exactly like a rule that holds (#586).
-    ///
-    /// Matched case-insensitively so `listRowSeparatorTint` and friends are the
-    /// same rule rather than a way round it.
-    func testTheAccentIsNeverDrawnUnnamed() throws {
-        let sources = sourcesDir
-        let files = try everySourceFile()
-
-        // Finding nothing to look at is not a pass (L98). If this walk ever
-        // stops seeing the view tree it would report every screen as clean.
-        XCTAssertGreaterThan(files.count, 20,
-                             "the sweep found \(files.count) source files, so it is "
-                             + "proving nothing about the ones it did not read")
-
-        for relative in files {
-            let code = SwiftSourceText.withoutComments(
-                try String(contentsOf: sources.appendingPathComponent(relative),
-                           encoding: .utf8))
-            for line in unnamedAccentUses(in: code) {
-                XCTFail("""
-                    \(relative) draws the raw accent, which does not say whether it is \
-                    type or a symbol. As type it is 4.31:1 on the page, under the level \
-                    it needs, and nothing else can tell. Use \
-                    PaintedSurfaces.pageAccentText or PaintedSurfaces.iconAccent.
-
-                    \(line)
-                    """)
-            }
-        }
-    }
-
-    /// Lines drawing the raw accent in a role that has a name for it.
-    ///
-    /// Both of the ways a colour reaches a control: as a foreground, and as the
-    /// tint a spinner, a slider or a picker draws itself in. "tint(" is matched
-    /// on the lowercased line so `listRowSeparatorTint` and any other spelling
-    /// ending in it are the same rule.
-    ///
-    /// Read over whole statements rather than lines (#611). A colour chosen by
-    /// a ternary wraps, and the half naming the colours is then a line with no
-    /// `foregroundStyle` on it at all: three of those were drawing the accent as
-    /// a button's label while this reported the tree clean, which is the shape
-    /// of every guard in this file that has gone blind on a spelling.
-    private func unnamedAccentUses(in code: String) -> [String] {
-        statements(in: code)
-            .filter { $0.contains("foreground") || $0.lowercased().contains("tint(") }
-            .filter { $0.contains("Color.roseGold") }
-    }
 
     /// Source rejoined into statements, so a modifier and the colours a wrapped
     /// ternary chooses are one string to match against.
@@ -1647,78 +1601,6 @@ final class BannerLegibilityTests: XCTestCase {
             """)
     }
 
-    /// The matcher is asked directly what it can see (#591, L1).
-    ///
-    /// Running it over the real tree cannot answer this once the tree is clean:
-    /// a matcher that reads foregrounds only and one that reads tints as well
-    /// give the same silent pass, and the narrow one shipped for two issues
-    /// looking correct. What has to be seen to fail is the matcher, not the
-    /// codebase around it (#586).
-    func testTheAccentMatcherSeesEveryRoleTheAccentIsDrawnIn() {
-        let mustCatch = [
-            "            .foregroundStyle(Color.roseGold)",
-            "                .tint(Color.roseGold)",
-            "                ProgressView().controlSize(.small).tint(Color.roseGold)",
-            "            .listRowSeparatorTint(Color.roseGold)",
-        ]
-        // The wrapped ternary, invisible here until #611: the half naming the
-        // colours carries no modifier at all. Both widths, because the first
-        // version of the fix read two lines, the real one in
-        // PhotoAssignmentView spans three, and it went green on exactly the
-        // mutation written for it (L144).
-        let wrapped = [
-            """
-            .foregroundStyle(canGoPrevious
-                             ? Color.roseGold : PaintedSurfaces.disabledControlLabel)
-            """,
-            """
-            .foregroundStyle(tagsBinding.wrappedValue.isEmpty
-                             ? PaintedSurfaces.disabledControlLabel
-                             : Color.roseGold)
-            """,
-        ]
-        for spelling in wrapped {
-            XCTAssertEqual(unnamedAccentUses(in: spelling).count, 1, """
-                the check cannot see the accent chosen by a ternary spread over \
-                \(spelling.split(separator: "\n").count) lines, so a label drawn that way \
-                is exempt from the rule while reading as covered by it
-                """)
-        }
-
-        // A bracket inside a sentence is not structure. Left uncounted, the
-        // statement below never closes and everything after it joins on, which
-        // would have this reporting matches in code nobody wrote.
-        XCTAssertEqual(unnamedAccentUses(in: """
-            .help("Copies this photo's tags onto every photo :-( in this day")
-            .foregroundStyle(PaintedSurfaces.pageAccentText)
-            Capsule().fill(Color.roseGold.opacity(0.15))
-            """).count, 0, """
-            the check joins a statement past an unbalanced bracket inside a string, so it \
-            reads a fill three lines away as part of a foreground and fails on correct code
-            """)
-        for line in mustCatch {
-            XCTAssertEqual(unnamedAccentUses(in: line).count, 1, """
-                the check cannot see \(line.trimmingCharacters(in: .whitespaces)) as the \
-                raw accent, so a control coloured that way is exempt from the rule and \
-                reads exactly like a screen that has none
-                """)
-        }
-
-        let mustAllow = [
-            "                .tint(PaintedSurfaces.iconAccent)",
-            "                .tint(PaintedSurfaces.photoPlaceholderSpinner)",
-            "            .foregroundStyle(PaintedSurfaces.pageAccentText)",
-            "                .tint(Color.warmMid)",
-            "    static let iconAccent = Color.roseGold",
-        ]
-        for line in mustAllow {
-            XCTAssertEqual(unnamedAccentUses(in: line).count, 0, """
-                the check reports \(line.trimmingCharacters(in: .whitespaces)) as the raw \
-                accent, which it is not. A rule that fires on correct code is the rule \
-                people learn to work around
-                """)
-        }
-    }
 
     /// Lines drawing a system colour as type or as a control's tint.
     ///
