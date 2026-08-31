@@ -48,6 +48,7 @@
     "test_ci_builds_one_architecture.py": 0.03,
     "test_ci_caches_and_cancels.py": 0.0,
     "test_ci_gates.py": 1.8800000000000001,
+    "test_ci_log_patterns_read_a_real_log.py": 0.07,
     "test_ci_runs_the_font_dependent_checks.py": 0.07,
     "test_clip_scorer.py": 15.770000000000001,
     "test_closing_crossfade_legibility.py": 363.02,
@@ -390,6 +391,10 @@
     "test_ci_gates.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_ci_log_patterns_read_a_real_log.py": {
+      "run": "partial-2026-08-31T16:57Z",
+      "scale": 0.604
     },
     "test_ci_runs_the_font_dependent_checks.py": {
       "run": "full-before-2026-08-30",

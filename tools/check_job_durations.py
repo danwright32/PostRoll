@@ -176,13 +176,33 @@ WORK_PATTERNS: dict[str, tuple[str, str]] = {
 #: The logs are already read for the work counts, so the failures in them cost
 #: nothing extra. A job family absent from here reports no failures rather than
 #: guessing at a format, and the caller only counts a run it could actually read.
+#: The pytest families' pattern, in one place rather than five copies (L41).
+#:
+#: NOT anchored to the start of a line, which is how it was written and why it
+#: had never matched anything (#1085). GitHub's raw job log prefixes every line
+#: with an ISO 8601 timestamp, so `^FAILED` met `2026-08-30T21:57:23.6243408Z
+#: FAILED tests/...` and reported an empty set on every run there has ever been.
+#: An empty set is what the flake counter treats as a clean run, so the counter
+#: had never counted a failure and nothing said so.
+#:
+#: `\S+::\S+` rather than `\S+`, because a pytest node id always carries `::`
+#: and that is what tells this from any other line containing the word FAILED,
+#: such as xcodebuild's `** TEST FAILED **` (L104). Verified against two real
+#: recorded logs by tests/test_ci_log_patterns_read_a_real_log.py.
+A_PYTEST_FAILURE = r"FAILED (\S+::\S+)"
+
 FAILURE_PATTERNS: dict[str, str] = {
+    # The parallel runner's form, `Test case 'Class.method()' failed on
+    # '<worker>'`. The serial runner printed `Test Case '-[Module.Class method]'
+    # failed` and is not matched, deliberately: the suite has run in parallel
+    # since #992 and a pattern covering a form nothing produces is a pattern
+    # nothing can check.
     "swift-unit": r"Test case '([A-Za-z_]+\.[A-Za-z_]+\(\))' failed",
-    "python": r"^FAILED (\S+)",
-    "macos": r"^FAILED (\S+)",
-    "reference-frames": r"^FAILED (\S+)",
-    "changed": r"^FAILED (\S+)",
-    "full": r"^FAILED (\S+)",
+    "python": A_PYTEST_FAILURE,
+    "macos": A_PYTEST_FAILURE,
+    "reference-frames": A_PYTEST_FAILURE,
+    "changed": A_PYTEST_FAILURE,
+    "full": A_PYTEST_FAILURE,
 }
 
 #: The fewest runs a flake can be told from a single red run in.

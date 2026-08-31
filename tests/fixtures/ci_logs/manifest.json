@@ -1,0 +1,88 @@
+{
+  "logs": {
+    "guard-full": {
+      "bytes": 103508,
+      "conclusion": "success",
+      "holds": {
+        "failed_tests": [],
+        "read_off": "guard work: 1151350 recorded entry-ms over 83 entries, 83 of them measured; and 83 guards checked, 83 killed their mutation, 0 did not",
+        "work": 1151350
+      },
+      "job": 99563555672,
+      "job_name": "full (3)",
+      "lines": 782,
+      "recorded_on": "2026-08-31",
+      "run": 33415040753,
+      "started_at": "2026-08-31T16:36:33Z",
+      "why_this_one": "The `changed` and `full` families share one work pattern over one producer, so one guard log is evidence for both. Their FAILURE pattern is pytest's and is held to python-red for the same reason. This log is from the first sweep run after #1090, which is the first one whose cost record existed: before it the work line said `unmeasured` and was no evidence at all."
+    },
+    "macos-red": {
+      "bytes": 1259775,
+      "conclusion": "failure",
+      "holds": {
+        "failed_tests": [
+          "tests/test_fast_subset_stays_honest.py::test_the_record_still_covers_the_suite"
+        ],
+        "read_off": "============ 1 failed, 4262 passed, 3 skipped in 193.64s (0:03:13) =============, and the FAILED line above it",
+        "work": 4262
+      },
+      "job": 99327722647,
+      "job_name": "macos",
+      "lines": 9038,
+      "recorded_on": "2026-08-31",
+      "run": 33337781597,
+      "started_at": "2026-08-30T21:58:38Z"
+    },
+    "python-red": {
+      "bytes": 1349084,
+      "conclusion": "failure",
+      "holds": {
+        "failed_tests": [
+          "tests/test_fast_subset_stays_honest.py::test_the_record_still_covers_the_suite"
+        ],
+        "read_off": "=========== 1 failed, 4335 passed, 106 skipped in 196.26s (0:03:16) ============, and the FAILED line above it",
+        "work": 4335
+      },
+      "job": 99327722593,
+      "job_name": "python",
+      "lines": 9813,
+      "recorded_on": "2026-08-31",
+      "run": 33337781597,
+      "started_at": "2026-08-30T21:56:46Z"
+    },
+    "reference-frames-green": {
+      "bytes": 50461,
+      "conclusion": "success",
+      "holds": {
+        "failed_tests": [],
+        "read_off": "======================== 53 passed in 150.22s (0:02:30) ========================",
+        "work": 53
+      },
+      "job": 99534011483,
+      "job_name": "reference-frames (goldens)",
+      "lines": 550,
+      "recorded_on": "2026-08-31",
+      "run": 33406118847,
+      "started_at": "2026-08-31T15:12:32Z"
+    },
+    "swift-red": {
+      "bytes": 1019340,
+      "conclusion": "failure",
+      "holds": {
+        "failed_tests": [
+          "WorkWithNoWindowTests.testNothingRunningIsIdle()"
+        ],
+        "read_off": "Swift: 2587 tests, printed by tools/suite_counts.py; and Test case 'WorkWithNoWindowTests.testNothingRunningIsIdle()' failed on 'My Mac - xctest (7812)' (0.589 seconds)",
+        "work": 2587
+      },
+      "job": 99556002030,
+      "job_name": "swift-unit",
+      "lines": 7122,
+      "recorded_on": "2026-08-31",
+      "run": 33412748120,
+      "started_at": "2026-08-31T16:11:52Z",
+      "why_this_one": "Recorded from a run made deliberately red on the throwaway branch measure-a-red-parallel-swift-log, because no ordinary red swift-unit run existed in parallel mode: the only historical one predates #992 and is in the SERIAL format, `Test Case '-[Module.Class method]' failed`, which is not what the runner prints any more. One red log is evidence for both this family's patterns, since it carries a work count AND a failure, which a green log cannot (L159)."
+    }
+  },
+  "note": "What each log HOLDS is read off it by hand and written here, never produced by the code under test: a fixture whose expectations came from the pattern can only prove the pattern agrees with itself (L58, L70). `read_off` quotes the line each number came from so the next reader can check it without trusting this file."
+}
