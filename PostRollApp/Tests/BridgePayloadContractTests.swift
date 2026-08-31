@@ -179,8 +179,13 @@ final class BridgePayloadContractTests: XCTestCase {
         blog.generatedBody = "b"
         blog.findingsBody = "b"
 
-        // generated_body and findings_body are stamped here, not sent by Python.
-        let ours: Set<String> = ["generated_body", "findings_body"]
+        // `generated_body` is stamped on this side: it answers "has Dan edited
+        // this", which only the app can know. `findings_body` used to be listed
+        // beside it and was not the same thing at all: it answers "do these
+        // findings still describe what is on screen", which only the half that
+        // ran the checks knows. Nothing emitted it, so it decoded empty on
+        // every generated post and the panel could never go stale (#974).
+        let ours: Set<String> = ["generated_body"]
         try assertCovers("blog_output", try encodedKeys(blog).subtracting(ours))
         XCTAssertEqual(try JSONDecoder().decode(
             BlogOutput.self, from: try JSONEncoder().encode(blog)), blog)
@@ -190,8 +195,9 @@ final class BridgePayloadContractTests: XCTestCase {
         var blog = BlogOutput(title: "t", body: "b")
         blog.photoCount = 1
         blog.findings = [QualityFinding(code: "c", message: "m", detail: "d")]
+        blog.findingsBody = "b"
         try assertCovers("revised_blog",
-                         try encodedKeys(blog).subtracting(["generated_body", "findings_body"]))
+                         try encodedKeys(blog).subtracting(["generated_body"]))
     }
 
     func testSwappedBlogReadsEveryDeclaredKey() throws {
@@ -200,8 +206,9 @@ final class BridgePayloadContractTests: XCTestCase {
         var blog = BlogOutput(title: "", body: "b")
         blog.photoCount = 1
         blog.findings = []
+        blog.findingsBody = "b"
         let sent = try encodedKeys(blog)
-            .subtracting(["generated_body", "findings_body", "title"])
+            .subtracting(["generated_body", "title"])
         try assertCovers("swapped_blog", sent)
     }
 

@@ -153,7 +153,8 @@
       "title": "swift",
       "body": "swift",
       "photo_count": "swift",
-      "findings": "swift"
+      "findings": "swift",
+      "findings_body": "swift"
     }
   },
   "revised_caption": {
@@ -194,7 +195,8 @@
       "title": "swift",
       "body": "swift",
       "photo_count": "swift",
-      "findings": "swift"
+      "findings": "swift",
+      "findings_body": "swift"
     }
   },
   "swapped_blog": {
@@ -212,7 +214,8 @@
     "keys": {
       "body": "swift",
       "photo_count": "swift",
-      "findings": "swift"
+      "findings": "swift",
+      "findings_body": "swift"
     }
   },
   "ocr_result": {

@@ -486,6 +486,62 @@ final class CaptionWorkManagerTests: XCTestCase {
         XCTAssertEqual(state.events.first?.weekResult?.blog?.photoCount, 2)
     }
 
+    /// #974: the checked body is taken from the payload, not recomputed here.
+    ///
+    /// Python runs the checks and rewrites the body afterwards (em dashes
+    /// stripped, marker filenames repaired), so it is the only half that knows
+    /// which text they ran on. These two write paths used to assign
+    /// `checkedBody: revised.body` and `checkedBody: updated.body`, a second
+    /// place for that answer to live which happened to agree (L41).
+    ///
+    /// The payloads below pin a body DIFFERENT from the one they return, which
+    /// is the only shape that tells the two implementations apart: on the real
+    /// paths they are equal, so a realistic fixture would pass either way
+    /// (L504). What is being proved is where the value comes FROM.
+    nonisolated private static let separatePin = "the text the checks actually ran on"
+
+    func testARevisedBlogKeepsThePinThePayloadSent() async throws {
+        let event = eventWithBlog()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.reviseBlog = { _, _, _ in
+            var out = BlogOutput(title: "t", body: "new body")
+            out.applyFindings([QualityFinding(code: "invented_number", message: "m", detail: "d")],
+                              checkedBody: Self.separatePin)
+            return out
+        }
+
+        manager.startRevisingBlog(eventID: event.id, feedback: "shorter",
+                                  saveToBrandVoice: false, appState: state)
+        await settle()
+
+        let stored = state.events.first?.weekResult?.blog
+        XCTAssertEqual(stored?.findingsBody, Self.separatePin,
+                       "the write path recomputed the pin from the body it was handed")
+        XCTAssertEqual(stored?.findings.count, 1, "the findings came across with it")
+    }
+
+    func testASwappedBlogKeepsThePinThePayloadSent() async throws {
+        let event = eventWithBlog()
+        let state = state([event])
+        let manager = CaptionWorkManager()
+        manager.swapBlogPhotos = { _, _, _ in
+            var out = BlogOutput(title: "t", body: "body with new photos")
+            out.applyFindings([QualityFinding(code: "invented_number", message: "m", detail: "d")],
+                              checkedBody: Self.separatePin)
+            return out
+        }
+
+        manager.startSwappingBlogPhotos(
+            eventID: event.id, urls: [URL(fileURLWithPath: "/tmp/a.jpg")], appState: state)
+        await settle()
+
+        let stored = state.events.first?.weekResult?.blog
+        XCTAssertEqual(stored?.findingsBody, Self.separatePin,
+                       "the write path recomputed the pin from the body it was handed")
+        XCTAssertEqual(stored?.findings.count, 1)
+    }
+
     func testAFailedPhotoSwapLeavesTheOldPathsAlone() async throws {
         struct Refused: LocalizedError {
             var errorDescription: String? { "could not read the photos" }

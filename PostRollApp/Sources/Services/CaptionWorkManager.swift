@@ -283,10 +283,13 @@ final class CaptionWorkManager {
             appState: appState) { [reviseBlog] in
             try await reviseBlog(live, feedback, current)
         } write: { [weak self] revised, state in
-            var next = revised
-            // The revision rewrote the body, so its own checks describe THIS
-            // body rather than the one they were run against.
-            next.applyFindings(revised.findings, checkedBody: revised.body)
+            // The pin comes from Python, which is the only half that knows
+            // which text `check_blog` actually ran on: every blog path rewrites
+            // the body after Claude answers (#974). This used to re-derive it
+            // here as `revised.body`, which happened to agree and was a second
+            // place for the answer to live (L41). `revised` carries both the
+            // findings and their body already, so there is nothing to apply.
+            let next = revised
             self?.writeWeek(to: eventID, in: state) { $0.blog = next }
             return Outcome(previousBlog: current)
         }
@@ -310,8 +313,12 @@ final class CaptionWorkManager {
             var next = current
             next.body = updated.body
             next.photoCount = urls.count
-            // The swap rewrites every alt text, so its checks describe THIS body.
-            next.applyFindings(updated.findings, checkedBody: updated.body)
+            // Taken from the payload rather than from `updated.body`, so the
+            // text the checks ran on is stated once, by the half that ran them
+            // (#974). The swap rewrites every marker after Claude answers, so
+            // the two are not interchangeable in principle even where they
+            // agree in practice.
+            next.applyFindings(updated.findings, checkedBody: updated.findingsBody)
             self?.writeWeek(to: eventID, in: state) { $0.blog = next }
             // Re-read after the week write so this lands on top of it rather
             // than on the copy taken before.
