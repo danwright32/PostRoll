@@ -69,6 +69,72 @@ final class CollaboratorPickTests: XCTestCase {
                                               stats: lookup(table), asOf: now))
     }
 
+    // MARK: - A value that is not an account is not a candidate (#981)
+
+    /// `unknown` is the sentinel `caption_blocks` records when a lookup found
+    /// nobody, and it is perfectly well shaped, so only the sentinel half of
+    /// `isRealHandle` rejects it. It sits in the live store today: eight
+    /// performer records in "The Music of Eric Whitacre" carry it.
+    func testASentinelIsNeitherRankedNorListed() {
+        let handles = ["a", "b", "c", "d", "e", "f", "unknown"]
+        let table = Dictionary(uniqueKeysWithValues:
+            ["a", "b", "c", "d", "e", "f"].map { ($0, stats(1_000, 50, 5)) })
+        let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                              stats: lookup(table), asOf: now)
+        let named = (result?.suggested.map(\.handle) ?? []) + (result?.unranked.map(\.handle) ?? [])
+        XCTAssertFalse(named.contains("unknown"),
+                       "a person called unknown must not be offered as one of five invites")
+    }
+
+    /// `DPR Dance` is a company display name with a space, the exact value #899
+    /// was written about, and it is still in the store on a Battery Dance
+    /// Festival performer. Shaped wrong rather than sentinel, so it is the
+    /// other half of the predicate.
+    func testADisplayNameWithASpaceIsNeitherRankedNorListed() {
+        let handles = ["a", "b", "c", "d", "e", "f", "DPR Dance"]
+        let table = Dictionary(uniqueKeysWithValues:
+            ["a", "b", "c", "d", "e", "f"].map { ($0, stats(1_000, 50, 5)) })
+        let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                              stats: lookup(table), asOf: now)
+        let named = (result?.suggested.map(\.handle) ?? []) + (result?.unranked.map(\.handle) ?? [])
+        XCTAssertFalse(named.contains(where: { $0.contains(" ") }),
+                       "a value with a space is no account and cannot be invited")
+    }
+
+    /// The threshold effect, which is the half a ranking assertion misses. The
+    /// count of candidates is what decides whether the panel appears at all, so
+    /// junk that is merely excluded from the ranking still raises a panel over
+    /// a post with no editorial decision to make.
+    func testFiveRealTagsPlusASentinelRaiseNoPanel() {
+        let handles = ["a", "b", "c", "d", "e", "unknown"]
+        let table = Dictionary(uniqueKeysWithValues:
+            ["a", "b", "c", "d", "e"].map { ($0, stats(1_000, 50, 5)) })
+        XCTAssertNil(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                              stats: lookup(table), asOf: now),
+                     "five real accounts is five candidates, whatever junk is tagged beside them")
+    }
+
+    /// The same for the shape half, so neither half is left resting on the
+    /// other's test (L178).
+    func testFiveRealTagsPlusADisplayNameRaiseNoPanel() {
+        let handles = ["a", "b", "c", "d", "e", "DPR Dance"]
+        let table = Dictionary(uniqueKeysWithValues:
+            ["a", "b", "c", "d", "e"].map { ($0, stats(1_000, 50, 5)) })
+        XCTAssertNil(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                              stats: lookup(table), asOf: now))
+    }
+
+    /// The positive control for the four above: the same six real accounts,
+    /// with nothing junk among them, DO raise a panel. Without it every
+    /// assertion here is satisfied by a `suggest` that refuses everything
+    /// (L159).
+    func testSixRealTagsStillRaiseAPanel() {
+        let handles = ["a", "b", "c", "d", "e", "f"]
+        let table = Dictionary(uniqueKeysWithValues: handles.map { ($0, stats(1_000, 50, 5)) })
+        XCTAssertNotNil(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                                 stats: lookup(table), asOf: now))
+    }
+
     // MARK: - Engagement quality beats audience size
 
     func testASmallLiveAudienceOutranksALargeDeadOne() {
