@@ -244,6 +244,12 @@ final class ExportManager {
 
             var daysNeedingPython: [String] = []
             var contentDayCount = 0
+            /// The days this run actually wrote, collected where the run
+            /// decides it rather than recomputed afterwards from the event: a
+            /// second derivation of "which days did we export" would drift from
+            /// this loop silently, and a single day re-export must not leave a
+            /// claim about the rest of the week (L263, L166).
+            var daysExported: [DayName] = []
             // Held rather than reported straight away: the day these came from
             // falls through to Python, which may well produce the file anyway,
             // and a warning about a file that IS in the folder is its own defect.
@@ -261,6 +267,7 @@ final class ExportManager {
                     || (day == .friday && capturedEvent.days[day.rawValue] != nil)
                 guard hasContent else { continue }
                 contentDayCount += 1
+                daysExported.append(day)
 
                 // Collage-carousel days (Wednesday always; Sunday/Monday under
                 // the balanced preset): render directly from the live SwiftUI
@@ -417,6 +424,7 @@ final class ExportManager {
 
             finishSuccess(eventID: eventID, folder: destination, onlyDay: onlyDay,
                           daysNeedingPython: daysNeedingPython,
+                          daysExported: daysExported,
                           mediaError: errorWithSwap.isEmpty ? nil : errorWithSwap,
                           mediaWarning: combinedWarning.isEmpty ? nil : combinedWarning,
                           tagStamp: tagStamp,
@@ -446,7 +454,8 @@ final class ExportManager {
     }
 
     private func finishSuccess(eventID: Event.ID, folder: URL, onlyDay: DayName?,
-                               daysNeedingPython: [String], mediaError: String?,
+                               daysNeedingPython: [String],
+                               daysExported: [DayName] = [], mediaError: String?,
                                mediaWarning: String? = nil,
                                tagStamp: ExportTagStamp? = nil,
                                appState: AppState) {
@@ -503,8 +512,29 @@ final class ExportManager {
                 } else {
                     extra = ExportManifest.writeFailureNotice
                 }
-                if let extra {
-                    let combined = [mediaWarning, extra].compactMap { $0 }
+
+                // Each exported day records, in its own PREVIEW folder, that it
+                // has gone out (#925). That folder is the one the design sweep
+                // already walks and the one nothing moves; the manifest above
+                // is a per day fact too, but it lives inside the export folder,
+                // and every export folder on Dan's Mac has since been filed
+                // somewhere else, so a sweep reading it would find nothing
+                // exported forever.
+                //
+                // Written on the same condition as the manifest and the archive
+                // stamp: only a full run that lost nothing is the milestone
+                // this record claims.
+                let unrecorded = DayExportRecord.stamp(days: daysExported, in: ev,
+                                                       at: Date())
+                if !unrecorded.isEmpty {
+                    NSLog("DayExportRecord could not record: "
+                          + unrecorded.map(\.rawValue).joined(separator: ", "))
+                }
+
+                let notices = [extra, DayExportRecord.recordFailureNotice(unrecorded)]
+                    .compactMap { $0 }
+                if !notices.isEmpty {
+                    let combined = ([mediaWarning] + notices).compactMap { $0 }
                         .joined(separator: "\n\n")
                     tracker.update(eventID) {
                         $0.phase = .done(folder, mediaError: nil, mediaWarning: combined)

@@ -10,6 +10,13 @@ struct StaleDay: Identifiable, Hashable {
     let dayLabel: String
     /// Which of the day's assets are behind, as `DesignStamp` names them.
     let templates: [String]
+    /// When this day's assets were last exported, or nil when nothing on disk
+    /// says they ever were (#925).
+    ///
+    /// Nil is "nothing here says so", NOT "this day never went out". Every day
+    /// folder rendered before `DayExportRecord` existed carries no record, and
+    /// the surface reading this has to keep the two apart (L214).
+    var exportedAt: Date? = nil
 
     var id: String { dayFolder.path }
 
@@ -43,6 +50,20 @@ struct DesignScanResult: Equatable {
     var daysWithAssets: Int
     /// Of those, how many record which design made them, so could be compared.
     var daysWithARecord: Int
+
+    /// The stale days worth acting on: nothing on disk records them as having
+    /// been exported (#925).
+    ///
+    /// A split rather than a stored count, so the two halves cannot come to
+    /// disagree with the list they are drawn from (L16), and so every stale day
+    /// lands in exactly one of them.
+    var staleNotExported: [StaleDay] { stale.filter { $0.exportedAt == nil } }
+
+    /// The stale days that have already gone out. Rebuilding one changes
+    /// nothing anyone will see, so they are set apart rather than dropped: a
+    /// day silently removed would make "nothing stale" and "nothing stale that
+    /// has not gone out yet" the same answer (L98).
+    var staleExported: [StaleDay] { stale.filter { $0.exportedAt != nil } }
 }
 
 /// Every day, across every event, whose cached assets are behind the current
@@ -83,10 +104,14 @@ enum DesignStaleScan {
 
                 let stale = DesignStamp.staleTemplates(in: dayDir)
                 guard !stale.isEmpty else { continue }
+                // Read only for a day already found stale, which is the only
+                // day the answer changes anything about. A day that is current
+                // is not listed whether it went out or not.
                 found.append(StaleDay(eventSlug: eventDir.lastPathComponent,
                                       dayFolder: dayDir,
                                       dayLabel: dayLabel(from: dayDir.lastPathComponent),
-                                      templates: stale))
+                                      templates: stale,
+                                      exportedAt: DayExportRecord.read(in: dayDir)))
             }
         }
         return DesignScanResult(stale: found,

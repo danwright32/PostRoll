@@ -129,6 +129,132 @@ final class OutdatedDesignsDisplayTests: XCTestCase {
             .hasPrefix("7 days"))
     }
 
+    // MARK: - Days that have already gone out (#925)
+
+    private func survey(staleNotExported: Int, staleExported: Int,
+                        days: Int, recorded: Int) -> DesignScanResult {
+        let exportedAt = Date(timeIntervalSince1970: 1_780_000_000)
+        let out = (0..<staleExported).map {
+            StaleDay(eventSlug: "gone\($0)",
+                     dayFolder: URL(fileURLWithPath: "/tmp/gone\($0)"),
+                     dayLabel: "Thursday", templates: ["reel_scroll"],
+                     exportedAt: exportedAt)
+        }
+        let waiting = (0..<staleNotExported).map {
+            StaleDay(eventSlug: "here\($0)",
+                     dayFolder: URL(fileURLWithPath: "/tmp/here\($0)"),
+                     dayLabel: "Thursday", templates: ["reel_scroll"])
+        }
+        return DesignScanResult(stale: waiting + out,
+                                daysWithAssets: days, daysWithARecord: recorded)
+    }
+
+    /// The whole point of #925: the list meant to point at work worth doing is
+    /// padded with days where there is none, and the ratio gets worse as
+    /// history builds. The count that leads the sentence is the actionable one.
+    func testTheLeadingCountIsTheDaysStillWorthRebuilding() {
+        let text = OutdatedDesignsDisplay.summary(
+            survey(staleNotExported: 2, staleExported: 9, days: 11, recorded: 11),
+            hasPreviewRoot: true)
+
+        XCTAssertTrue(text.hasPrefix("2 days"),
+                      "nine of the eleven have gone out and are not work: \(text)")
+    }
+
+    /// Counted, never dropped, so "nothing stale" stays a different answer from
+    /// "nothing stale that has not gone out yet" (L98).
+    func testTheExportedOnesAreStillCountedInTheSentence() {
+        let text = OutdatedDesignsDisplay.summary(
+            survey(staleNotExported: 2, staleExported: 9, days: 11, recorded: 11),
+            hasPreviewRoot: true)
+
+        XCTAssertTrue(text.contains("9"), text)
+    }
+
+    /// Exported is not posted, and the sentence may only claim what the record
+    /// supports. The app knows the files were written into an export folder; it
+    /// does not know they reached Instagram.
+    func testTheSentenceSaysExportedRatherThanPosted() {
+        let text = OutdatedDesignsDisplay.summary(
+            survey(staleNotExported: 1, staleExported: 3, days: 4, recorded: 4),
+            hasPreviewRoot: true).lowercased()
+
+        XCTAssertTrue(text.contains("export"), text)
+        XCTAssertFalse(text.contains("posted"), text)
+        XCTAssertFalse(text.contains("published"), text)
+    }
+
+    /// With nothing recorded, the list has not shrunk and the sentence has to
+    /// say why rather than let it read as "none of these has gone out". Every
+    /// day folder on the machine is in that state the day this ships (L223).
+    func testWithNoRecordsAtAllTheSentenceOwnsThatItCouldNotTell() {
+        let text = OutdatedDesignsDisplay.summary(
+            survey(staleNotExported: 12, staleExported: 0, days: 12, recorded: 12),
+            hasPreviewRoot: true)
+
+        XCTAssertTrue(text.hasPrefix("12 days"), text)
+        XCTAssertTrue(text.lowercased().contains("records"), text)
+        XCTAssertFalse(text.lowercased().contains("none of them has gone out"), text)
+    }
+
+    /// And it stops saying it once there is something to go on, so the line is
+    /// not a permanent fixture nobody reads (L36).
+    func testTheCouldNotTellLineGoesAwayOnceADayRecordsAnExport() {
+        let text = OutdatedDesignsDisplay.summary(
+            survey(staleNotExported: 11, staleExported: 1, days: 12, recorded: 12),
+            hasPreviewRoot: true)
+
+        XCTAssertFalse(text.lowercased().contains("no day here records"), text)
+    }
+
+    /// Nothing stale at all is still the reassuring sentence, and the export
+    /// record has nothing to add to it.
+    func testAnEntirelyCurrentLibraryIsUnchangedByTheExportRecord() {
+        let text = OutdatedDesignsDisplay.summary(
+            survey(staleNotExported: 0, staleExported: 0, days: 4, recorded: 4),
+            hasPreviewRoot: true)
+
+        XCTAssertTrue(text.contains("matches the current design"), text)
+        XCTAssertFalse(text.lowercased().contains("export"), text)
+    }
+
+    /// Every day that has gone out is still reachable in its own section rather
+    /// than hidden behind a count, so the surface never claims a cleaner
+    /// machine than it measured.
+    func testTheExportedDaysStillGroupIntoOpenableRows() {
+        let e = event("Vocal Color", org: "DCINY", date: "2026-03-30")
+        let slug = ArchiveCleanup.slug(event: e)
+        let gone = StaleDay(eventSlug: slug,
+                            dayFolder: URL(fileURLWithPath: "/tmp/\(slug)/Thursday"),
+                            dayLabel: "Thursday", templates: ["reel_scroll"],
+                            exportedAt: Date(timeIntervalSince1970: 1_780_000_000))
+
+        let groups = OutdatedDesignsDisplay.groups([gone], events: [e])
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].eventID, e.id)
+    }
+
+    /// What one already exported row says. It names the date, because "already
+    /// exported" with no when is a claim the reader cannot weigh against a
+    /// design change they remember making.
+    func testAnExportedRowNamesWhenItWentOut() {
+        let gone = StaleDay(eventSlug: "e", dayFolder: URL(fileURLWithPath: "/tmp/e"),
+                            dayLabel: "Thursday", templates: ["reel_scroll"],
+                            exportedAt: Date(timeIntervalSince1970: 1_780_000_000))
+
+        let label = OutdatedDesignsDisplay.rowLabel(gone)
+
+        XCTAssertTrue(label.contains("Thursday"), label)
+        XCTAssertTrue(label.lowercased().contains("exported"), label)
+    }
+
+    func testARowWithNoRecordSaysNothingAboutExporting() {
+        let label = OutdatedDesignsDisplay.rowLabel(day(slug: "e"))
+
+        XCTAssertFalse(label.lowercased().contains("export"), label)
+    }
+
     func testStaleDaysAndUncheckedDaysAreBothNamed() {
         // Two different facts about the same library, and reporting only the
         // first makes the second invisible for as long as it lasts.

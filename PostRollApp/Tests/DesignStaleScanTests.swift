@@ -43,6 +43,61 @@ final class DesignStaleScanTests: XCTestCase {
         MediaDesign.version(of: "reel_scroll") ?? 1
     }
 
+    // MARK: - Whether the day has already gone out (#925)
+
+    /// The sweep is loudest exactly when it is meant to be most useful: a
+    /// design bump marks every day that ever rendered that template, and
+    /// regenerating a day whose files have already gone out changes nothing
+    /// anyone will see. The scan reads the record the export leaves in the same
+    /// folder it is already walking.
+    func testAStaleDayCarriesTheDateItWasExported() {
+        let dir = day("event_a_2026-01-01", "5. Thursday", version: currentScrollVersion - 1)
+        let exportedAt = Date(timeIntervalSince1970: 1_780_000_000)
+        XCTAssertTrue(DayExportRecord.write(exportedAt: exportedAt, in: dir))
+
+        let found = DesignStaleScan.scan(previewRoot: root).stale
+
+        XCTAssertEqual(found.count, 1)
+        XCTAssertEqual(found[0].exportedAt, exportedAt)
+    }
+
+    /// Nil is "nothing here says so", not "this never went out". Every day
+    /// folder rendered before the record existed is in that state, so the two
+    /// must not be read as each other (L214).
+    func testAStaleDayWithNoExportRecordCarriesNoDate() {
+        day("event_a_2026-01-01", "5. Thursday", version: currentScrollVersion - 1)
+
+        XCTAssertNil(DesignStaleScan.scan(previewRoot: root).stale.first?.exportedAt)
+    }
+
+    /// Counted, never dropped. A day silently removed from the sweep makes
+    /// "nothing stale" and "nothing stale that has not gone out yet" the same
+    /// answer, and only one of them is a clean bill of health (L98).
+    func testAnExportedStaleDayIsStillReportedAsStale() {
+        let dir = day("event_a_2026-01-01", "5. Thursday", version: currentScrollVersion - 1)
+        DayExportRecord.write(exportedAt: Date(), in: dir)
+
+        let found = DesignStaleScan.scan(previewRoot: root)
+
+        XCTAssertEqual(found.stale.count, 1)
+        XCTAssertEqual(found.staleExported.count, 1)
+        XCTAssertEqual(found.staleNotExported.count, 0)
+    }
+
+    func testTheTwoHalvesAreSplitOnTheRecordAndCoverEveryStaleDay() {
+        let gone = day("event_a_2026-01-01", "5. Thursday", version: currentScrollVersion - 1)
+        DayExportRecord.write(exportedAt: Date(), in: gone)
+        day("event_b_2026-02-02", "5. Thursday", version: currentScrollVersion - 1)
+
+        let found = DesignStaleScan.scan(previewRoot: root)
+
+        XCTAssertEqual(found.staleExported.map(\.eventSlug), ["event_a_2026-01-01"])
+        XCTAssertEqual(found.staleNotExported.map(\.eventSlug), ["event_b_2026-02-02"])
+        XCTAssertEqual(found.staleExported.count + found.staleNotExported.count,
+                       found.stale.count,
+                       "every stale day lands in exactly one of the two (L517)")
+    }
+
     // MARK: - What it finds
 
     func testADayStampedBehindTheCurrentDesignIsListed() {

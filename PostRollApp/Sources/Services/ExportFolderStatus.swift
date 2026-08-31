@@ -184,4 +184,15 @@ extension DateFormatter {
         f.timeStyle = .short
         return f
     }()
+
+    /// The same date without the time, for a list row where the hour is noise
+    /// (#925). Declared beside `exportStamp` rather than near its own call
+    /// site, so the two renderings of an export date are decided in one place
+    /// and cannot drift into two house styles (L39).
+    static let exportDay: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
 }

@@ -82,20 +82,76 @@ enum OutdatedDesignsDisplay {
             + "record which design made \(unchecked == 1 ? "it" : "them"), so "
             + "\(unchecked == 1 ? "it" : "they") could not be checked."
 
-        switch result.stale.count {
-        case 0:
-            return "Every day that records its design matches the current design."
-                 + tail
-        case 1:
-            return "One day was made with an older version of the design." + tail
-        default:
-            return "\(result.stale.count) days were made with an older version "
-                 + "of the design." + tail
+        guard !result.stale.isEmpty else {
+            return "Every day that records its design matches the current design." + tail
         }
+
+        return staleSentence(result) + tail
+    }
+
+    /// The stale half of the summary, which since #925 has to separate work
+    /// from history.
+    ///
+    /// The sweep is loudest exactly when it is meant to be most useful: a
+    /// design bump marks every day that ever rendered that template, and
+    /// regenerating a day whose files have already gone out changes nothing
+    /// anyone will see. So the count that LEADS is the actionable one, and the
+    /// days already exported are counted after it rather than dropped, because
+    /// a day silently removed would make "nothing stale" and "nothing stale
+    /// that has not gone out yet" the same answer (L98).
+    ///
+    /// It says EXPORTED, never posted or published. What the app records is
+    /// that the files were written into an export folder; it has no way to know
+    /// they reached Instagram, and a sentence may only claim what its record
+    /// supports (L11).
+    private static func staleSentence(_ result: DesignScanResult) -> String {
+        let waiting = result.staleNotExported.count
+        let gone = result.staleExported.count
+
+        // Nothing recorded either way. The list has not shrunk, and the reason
+        // is that nothing on this machine can say which of these have gone out,
+        // which is the state every day folder is in until it is exported again
+        // (L223). Said plainly rather than left to read as "none of these has
+        // been exported", which is a claim nothing here measured.
+        guard gone > 0 else {
+            let lead = waiting == 1
+                ? "One day was made with an older version of the design."
+                : "\(waiting) days were made with an older version of the design."
+            return lead + " No day here records having been exported yet, so none "
+                 + "could be set aside as finished with. Each starts recording the "
+                 + "first time it is exported from here."
+        }
+
+        // Every stale day has already gone out. There is nothing to rebuild,
+        // and saying so is a different answer from a library that is current:
+        // these assets ARE behind the design, they just are not work.
+        guard waiting > 0 else {
+            let they = gone == 1 ? "The one day" : "All \(gone) days"
+            let it = gone == 1 ? "it" : "them"
+            return "\(they) made with an older version of the design "
+                 + "\(gone == 1 ? "has" : "have") already been exported, so rebuilding "
+                 + "\(it) would not change anything that has gone out."
+        }
+
+        let lead = waiting == 1
+            ? "One day was made with an older version of the design."
+            : "\(waiting) days were made with an older version of the design."
+        let other = gone == 1 ? "day was" : "days were"
+        let has = gone == 1 ? "has" : "have"
+        let it = gone == 1 ? "it" : "them"
+        return lead + " \(gone) other \(other) made with an older version too and "
+             + "\(has) already been exported, so rebuilding \(it) would not change "
+             + "anything that has gone out."
     }
 
     /// What one row says about a day.
+    ///
+    /// A row for a day that has gone out names WHEN. "Already exported" with no
+    /// date is a claim the reader cannot weigh against a design change they
+    /// remember making, and this list exists to be weighed.
     static func rowLabel(_ day: StaleDay) -> String {
-        "\(day.dayLabel): \(day.listedTemplates)"
+        let base = "\(day.dayLabel): \(day.listedTemplates)"
+        guard let exportedAt = day.exportedAt else { return base }
+        return base + " (exported \(DateFormatter.exportDay.string(from: exportedAt)))"
     }
 }
