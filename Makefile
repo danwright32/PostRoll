@@ -180,9 +180,25 @@ test-python:
 test-python-fast:
 	@venv/bin/python -m pytest tests/ -q -m "not slow" -n auto
 
-# Re-measure what each test file costs, which is what decides the set above. Run
-# it after adding a file heavy enough to belong to the full run only; a file's
-# cost does not drift on its own, so nothing else needs it (#766).
+# Re-measure what each test file costs, which is what decides the set above.
+#
+# Prefer `--add` for a NEW file, which is what #1058 asks a branch for. A full
+# re-record re-reads every file and re-derives every share, and the shares move
+# with the machine's load rather than with the tests: one on 2026-08-30 moved
+# the total 31.7% and unevenly, carrying a file across the expensive floor and
+# turning a guard red on a suite nobody had changed (#1038).
+#
+#     venv/bin/python tools/record_test_durations.py --add tests/test_new.py
+#
+# That measures the new file beside seven files already in the record, in one
+# run, scales the reading onto the record's own run by the median of their
+# ratios, and writes down which run it came from and the scale it used. The
+# files already in the record keep the readings they had.
+#
+# The full re-record below is for when the record has drifted as a whole, and it
+# wants an idle machine. `tests/test_fast_subset_stays_honest.py` says when: it
+# goes red once most of the record has been scaled on from elsewhere rather than
+# measured in one run.
 record-test-durations:
 	@venv/bin/python tools/record_test_durations.py
 

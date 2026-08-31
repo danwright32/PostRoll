@@ -1,0 +1,8 @@
+{
+  "name": "a-scale-of-one-is-a-claim-not-a-default",
+  "file": "tools/record_test_durations.py",
+  "find": "    if not measured:\n        raise SystemExit(\n            \"this run measured no reference file, so there is no scale to put \"",
+  "replace": "    if not measured:\n        return 1.0\n    if False:\n        raise SystemExit(\n            \"this run measured no reference file, so there is no scale to put \"",
+  "test": "tests/test_record_test_durations.py::test_no_references_at_all_is_refused_rather_than_scaled_by_one",
+  "breaks": "a run with nothing to compare against is scaled by 1.0, which is the positive claim that it matched the record's run, and that is the one thing it cannot know (#1038, L11, L98)"
+}

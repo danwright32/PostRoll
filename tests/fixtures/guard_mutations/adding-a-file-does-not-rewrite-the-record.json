@@ -1,0 +1,8 @@
+{
+  "name": "adding-a-file-does-not-rewrite-the-record",
+  "file": "tools/record_test_durations.py",
+  "find": "    for name, reading in sorted(measured.items()):\n        if name in seconds:\n            continue",
+  "replace": "    for name, reading in sorted(measured.items()):\n        if False:\n            continue",
+  "test": "tests/test_record_test_durations.py::test_an_added_file_is_scaled_and_says_so",
+  "breaks": "adding one file rewrites every reference's recorded seconds from this run, so every share in the record moves for files nobody changed, which is the churn #1038 exists to avoid"
+}

@@ -188,5 +188,759 @@
     "test_wait_for_checks.py": 0.3900000000000001,
     "test_week_tag_cap.py": 0.01,
     "test_wordmark_required.py": 2.57
+  },
+  "measured": {
+    "test_a_new_test_file_is_measured.py": {
+      "run": "partial-2026-08-31",
+      "scale": 1.39
+    },
+    "test_a_wedged_test_names_itself.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ai_claude_client.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ai_enrichment.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ai_generators.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ai_learn_from_edits.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ai_review_loop.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ai_tells.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_alt_text_group_shots.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_alt_text_photo_anchor.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_analyze_posts.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_audio.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_audio_cache.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_audio_download_failures.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_audio_fit.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_backup_doc_inventory.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_backstop_splice.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_correction_fixtures.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_draft_text.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_filename_rules_on_every_path.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_marker_filenames.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_marker_near_miss_repair.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_meta.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_number_false_positives.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_photo_subsampling.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_blog_quality_checks.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_both_swift_runners_agree.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_brand_hashtag_survives.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_brand_text.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_brand_voice_path.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_bridge_contract_covers_the_code.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_bridge_payload_contract.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_bridge_payload_keys.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_build_and_test_gates.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_build_cache_location.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_cap_signals.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_cap_signals_never_touch_live_data.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_caption_backstops.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_caption_blocks.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_caption_credit_dedup.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_caption_credit_enforcement.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_caption_review_is_split.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_check_guards.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_check_guards_reminder.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ci_builds_one_architecture.py": {
+      "run": "partial-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ci_caches_and_cancels.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ci_gates.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ci_runs_the_font_dependent_checks.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_clip_scorer.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_closing_crossfade_legibility.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_codec_fidelity.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_collage_arrangements.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_collage_crop_budget_warning.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_collage_design_version.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_collage_survives_the_phone_chrome.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_compare_transports.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_cover_photo_reuse.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_crop_geometry_parity.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_debug_build_signs_nested_code.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_design_tokens.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_enrich_program_shapes.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_enrich_step_attribution.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_event_manifest.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_event_slug_parity.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_extract_json_strings.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_failure_needles_have_producers.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_fast_subset_stays_honest.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ffmpeg_prerequisite.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_font_loading.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_frame_legibility.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_frame_names_its_show.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_gallery_alignment.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_generate_before_after.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_generate_cover.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_generate_media_cover.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_generate_media_friday_clips.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_generate_story.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_generate_title_card.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_generate_week_friday_clips.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_generate_week_halt.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_golden_drift_is_reported.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_golden_frames.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_golden_recording_door.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_guard_mutation_registry.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_guard_sweep_due.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_guard_sweep_fits_its_deadline.py": {
+      "run": "partial-2026-08-31",
+      "scale": 1.33
+    },
+    "test_guard_sweep_freshness.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_gui_launch_budget.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_gui_tests_cannot_hang_silently.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_hand_check_document.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_hand_check_reminder.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_hand_check_states.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_handle_shape.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_heic_staging.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_icloud_duplicates.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_image_block_cache.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_import_meta_csv.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_jamendo_outage_short_circuit.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_jamendo_status_envelope.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_job_duration_drift.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_layout_sidecar.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_make_test_runs_both_suites.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_manifest_contract.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_manifest_read_keys.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_measure_clip_reel_encodes.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_media_design_fingerprint.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_media_design_version.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_media_generators.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_media_probe.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_media_warnings.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_missing_bw_photo.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_model_pinning.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_no_dead_build_cache.py": {
+      "run": "partial-2026-08-30",
+      "scale": 1.0
+    },
+    "test_no_dead_tuning_controls.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ocr_batch_durability.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ocr_batching.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ocr_rescan_merge.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_optional_organisation.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_page_regions.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_paid_default_path.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_parallel_suite_assumptions.py": {
+      "run": "partial-2026-08-30",
+      "scale": 1.0
+    },
+    "test_performer_hashtag_gate.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_permission_is_asked_after_launch.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_perturbation_lock.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_phone_safe_area.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_posting_preset.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_prd_matches_the_build.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_print_rect.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_progress_reporting.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_project_plugin_settings.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_project_root_recorded.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_readme_documents_every_make_target.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_record_codec_change.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_record_design_change.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_record_design_fingerprints.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_record_suite_count.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_record_test_durations.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_reel_audio_failure.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_reel_audio_fallback.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_reel_photo_selection_batching.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_reel_scroll_viewport.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_reel_style_default.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_reference_frame_shards_are_balanced.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_reference_frames_are_safe_to_parallelise.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_render_clip_reel.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_render_friday_override.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_resolve_reel_audio.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_revise_caption_backstops.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_safe_area_tokens.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_screen_reel_logo_contrast.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_select_cover_photo.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_select_reel_clips.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_side_crop_readings.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_slider_program_plate.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_source_reads_happen_once.py": {
+      "run": "partial-2026-08-30",
+      "scale": 1.0
+    },
+    "test_source_text.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_source_tree_is_read_only.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_stitch_notes.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_story_title_clamp.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_subscription_transport.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_suite_hygiene.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_swap_blog_photos.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_swap_reel_audio_result.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_swift_count_from_result_bundle.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_swift_leg_meets_its_floor.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_swift_test_target_covers_sources.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_swift_tests_never_reach_live_data.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_the_suite_spreads_its_slowest_work.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_thursday_reel_legibility.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_toolchain_matches_ci.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_top_anchored_crop.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_transport_is_reported.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_transport_seam.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_tree_already_checked.py": {
+      "run": "partial-2026-08-30",
+      "scale": 1.0
+    },
+    "test_ui_tests_quote_the_real_alerts.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_unread_page_identity.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_unreadable_photo_skip.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_update_wrapper.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_url_scheme_registered.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_url_scheme_registrations.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_usage_log.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_usage_log_timestamps.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_usage_recorded_on_sdk_calls.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_view_file_manager_isolation.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_vision_cross_check.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_wait_for_checks.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_week_tag_cap.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    },
+    "test_wordmark_required.py": {
+      "run": "full-before-2026-08-30",
+      "scale": 1.0
+    }
   }
 }

@@ -444,3 +444,112 @@ def test_the_parser_reads_a_report_a_real_pytest_run_wrote(tmp_path: Path):
         "a test that blew up in its fixture came back as a plain failure, so "
         "the recorder would tolerate one in the guard file as drift being "
         "reported when the guard never ran at all")
+
+
+# ── adding one file without re-reading the whole suite (#1038) ───────────────
+#
+# `make record-test-durations` re-reads every file and re-derives every share,
+# and the shares move with the machine's load rather than with the tests. A full
+# re-record on 2026-08-30 moved the total 31.7% and UNEVENLY, which carried a
+# file across the expensive floor and turned a guard red on a suite nobody had
+# changed. So the record cannot be re-taken casually, and until now the only
+# other way to add a file was to measure it by hand and paste a number in, which
+# was done three times on 2026-08-30 and 31 and is exactly the mixing of runs
+# this issue is about (L224).
+#
+# `--add` is that hand procedure, automated and written down. It measures the
+# new files BESIDE files already in the record, in one run, so the reading can
+# be scaled into the record's own run instead of mixed across runs. The scale
+# is the MEDIAN of the reference ratios, because the spread is wide: measured on
+# 2026-08-31 over seven references it ran 0.16 to 3.57, which is the same
+# contention the issue is about, and a median is what survives it.
+
+from tools.record_test_durations import (  # noqa: E402
+    Provenance,
+    added,
+    scale_from,
+)
+
+
+def test_the_scale_is_the_median_of_the_reference_ratios():
+    """One reference under contention must not carry the whole scale."""
+    scale = scale_from(recorded={"a.py": 1.0, "b.py": 2.0, "c.py": 3.0},
+                       measured={"a.py": 1.0, "b.py": 1.0, "c.py": 1.0})
+    assert scale == 2.0
+
+
+def test_a_reference_missing_from_the_run_is_refused():
+    """Scaling against a reference that did not run is scaling against nothing,
+    and the answer would look exactly as confident (L98)."""
+    with pytest.raises(SystemExit, match="did not run"):
+        scale_from(recorded={"a.py": 1.0, "b.py": 2.0},
+                   measured={"a.py": 1.0})
+
+
+def test_a_reference_the_record_has_never_seen_is_refused():
+    with pytest.raises(SystemExit, match="not in the record"):
+        scale_from(recorded={"a.py": 1.0},
+                   measured={"a.py": 1.0, "stranger.py": 1.0})
+
+
+def test_a_reference_that_measured_as_nothing_is_refused():
+    """Dividing by it gives an infinite scale, which would then be applied to
+    the file being added."""
+    with pytest.raises(SystemExit, match="measured 0"):
+        scale_from(recorded={"a.py": 1.0, "b.py": 2.0, "c.py": 3.0},
+                   measured={"a.py": 0.0, "b.py": 1.0, "c.py": 1.0})
+
+
+def test_no_references_at_all_is_refused_rather_than_scaled_by_one():
+    """A scale of 1.0 is a claim that this run matched the record's run, and
+    that is the one thing a run with no references cannot know (L11)."""
+    with pytest.raises(SystemExit, match="no reference"):
+        scale_from(recorded={"a.py": 1.0}, measured={})
+
+
+# ── what the record then says about itself ───────────────────────────────────
+
+def test_an_added_file_is_scaled_and_says_so():
+    """Three references with DIFFERENT ratios on purpose.
+
+    With one reference the scale is exactly its own ratio, so re-writing it
+    from this run reproduces the number it already had and a check on that
+    number passes whether the record was rewritten or not. Ratios of 1, 2 and 4
+    make the median 2 and leave every reference's rewritten value different
+    from its recorded one, so the check can see the difference (L159).
+    """
+    record = {
+        "seconds": {"one.py": 1.0, "two.py": 2.0, "four.py": 4.0},
+        "measured": {name: {"run": "full-x", "scale": 1.0}
+                     for name in ("one.py", "two.py", "four.py")},
+    }
+    grown = added(record,
+                  measured={"new.py": 3.0,
+                            "one.py": 1.0, "two.py": 1.0, "four.py": 1.0},
+                  run="partial-y")
+
+    assert grown["seconds"]["new.py"] == 6.0, "the reading was not scaled by 2.0"
+    assert [grown["seconds"][name] for name in ("one.py", "two.py", "four.py")] \
+        == [1.0, 2.0, 4.0], (
+            "adding a file rewrote the references' recorded seconds, so every "
+            "share in the record moved for files nobody changed")
+    assert grown["measured"]["new.py"] == {"run": "partial-y", "scale": 2.0}
+
+
+def test_the_provenance_covers_exactly_the_files_recorded():
+    """A record whose two halves disagree can say a file was measured that has
+    no reading, or hold a reading nothing accounts for (L225)."""
+    record = {"seconds": {"ref.py": 2.0},
+              "measured": {"ref.py": {"run": "full-x", "scale": 1.0}}}
+    grown = added(record, measured={"new.py": 3.0, "ref.py": 1.0}, run="partial-y")
+
+    assert set(grown["seconds"]) == set(grown["measured"])
+
+
+def test_a_full_record_says_every_file_came_from_the_same_run():
+    """The state the record is in after `make record-test-durations`: one run,
+    no scaling, and nothing to reconcile."""
+    stamped = Provenance.full("full-2026-08-31", ["a.py", "b.py"])
+
+    assert stamped == {"a.py": {"run": "full-2026-08-31", "scale": 1.0},
+                       "b.py": {"run": "full-2026-08-31", "scale": 1.0}}
