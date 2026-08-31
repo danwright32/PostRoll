@@ -227,6 +227,13 @@ struct CaptionReviewNotices: View {
                 BrandBanner(icon: "exclamationmark.triangle",
                             message: regenerateError, style: .error)
             }
+            if let refusal {
+                BrandBanner(
+                    icon: "exclamationmark.triangle",
+                    message: Sentence.closed(refusal),
+                    style: .error,
+                    actions: [BrandBannerAction(label: "Dismiss") { onDismissRefusal() }])
+            }
             if let rebuildRefusal {
                 BrandBanner(
                     icon: "exclamationmark.triangle",
