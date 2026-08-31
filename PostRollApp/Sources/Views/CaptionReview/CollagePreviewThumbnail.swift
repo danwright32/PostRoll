@@ -135,10 +135,11 @@ struct CollagePreviewThumbnail: View {
                     // Gap fill — covers stale PNG content showing through new gaps after a
                     // frame-divider drag. Cream rectangles are drawn at the current (post-drag)
                     // divider positions, sitting on top of the PNG but under cell overlays.
-                    // Skip the strip divider (actualGapPx > 16 = the ~90px text/logo band).
+                    // Skip the branded strip, which carries the title and the wordmark
+                    // rather than a gap, so filling it would paint over them.
                     if cellOverride.wrappedValue != nil {
                         ForEach(Array(dividers.enumerated()), id: \.0) { _, div in
-                            if div.actualGapPx <= 16 {
+                            if !div.isBrandedStrip {
                                 switch div.kind {
                                 case .horizontal:
                                     Rectangle()
@@ -208,7 +209,10 @@ struct CollagePreviewThumbnail: View {
                     // Each handle owns its drag state via @GestureState internally;
                     // the parent only hears back once when the drag commits.
                     if selectedCellIndex == nil && !isRegenerating && !baseCells.isEmpty {
-                        ForEach(Array(dividers.enumerated()), id: \.0) { _, div in
+                        // Draggable boundaries only. The branded strip carries
+                        // the title and the wordmark rather than a gap, and it
+                        // used to get a handle like any other (#965).
+                        ForEach(Array(dividers.filter(\.isDraggable).enumerated()), id: \.0) { _, div in
                             let scale = div.kind == .horizontal ? sy : sx
                             let minDelta = CGFloat(div.minPos - div.canvasPos) * scale
                             let maxDelta = CGFloat(div.maxPos - div.canvasPos) * scale
