@@ -33,6 +33,7 @@ import pytest
 
 from ci_log_fixtures import (
     FAILURE_EVIDENCE,
+    REPO_ROOT,
     WORK_EVIDENCE,
     holds,
     manifest,
@@ -165,4 +166,42 @@ def test_an_anchored_pattern_would_be_caught_here():
     assert re.findall(r"FAILED (\S+::\S+)", log), (
         "nothing in the recorded log looks like a pytest FAILED line at all, so "
         "this fixture is not evidence of anything"
+    )
+
+
+# ── the one format left unmatched, tied to the thing that decides it ─────────
+
+PARALLEL_FLAG = "-parallel-testing-enabled YES"
+SWIFT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "swift.yml"
+
+
+def test_the_swift_pattern_matches_the_format_the_workflow_asks_for():
+    """`swift-unit`'s failure pattern reads the PARALLEL runner's form,
+    `Test case 'Class.method()' failed on '<worker>'`.
+
+    The serial runner printed `Test Case '-[Module.Class method]' failed` and is
+    deliberately not matched, because the suite has run in parallel since #992
+    and a pattern covering a form nothing produces is a pattern nothing can
+    check.
+
+    That leaves one way for this to break silently, which is the very thing this
+    file exists to prevent: turn parallel running off and the live logs go back
+    to the serial form while the recorded fixture, still parallel, keeps every
+    check here green. So the pattern is tied to the flag that decides the
+    format rather than to a comment saying which one is in use (L27, L316).
+    """
+    workflow = SWIFT_WORKFLOW.read_text(encoding="utf-8")
+    assert PARALLEL_FLAG in workflow, (
+        f"swift.yml no longer passes `{PARALLEL_FLAG}`, so the runner is back "
+        "to the SERIAL format, `Test Case '-[Module.Class method]' failed`, "
+        "which FAILURE_PATTERNS['swift-unit'] does not match. The flake counter "
+        "would report every run clean with nothing saying so. Either restore "
+        "the flag, or widen the pattern and record a red serial log to hold it "
+        "to."
+    )
+    # And the recorded log really is from a parallel run, so the fixture and the
+    # flag are describing the same thing rather than agreeing by accident.
+    assert " failed on '" in recorded("swift-red"), (
+        "the recorded swift-red log carries no parallel-mode failure line, so "
+        "it is not evidence for the pattern above"
     )
