@@ -852,8 +852,18 @@ private struct HandleSuggestionRow: View {
 
             Spacer()
 
-            // Verify link — opens Instagram profile
-            if let urlString = suggestion.profileURL, let url = URL(string: urlString) {
+            // Verify link, opening the Instagram profile through the one
+            // piece of behaviour that answers where a profile is (#973). It
+            // used to build the URL here, which is what left the collaborator
+            // panel with nowhere to reach for and no link at all.
+            //
+            // The stored URL still wins where there is one: the research step
+            // checked it against the real account. What changed is that a
+            // suggestion carrying a usable handle and no stored URL now offers
+            // the button too, instead of leaving the one screen that can check
+            // a handle unable to.
+            if let url = ProfileLink.url(handle: suggestion.handle ?? "",
+                                         storedProfileURL: suggestion.profileURL) {
                 Button {
                     NSWorkspace.shared.open(url)
                 } label: {
@@ -862,7 +872,9 @@ private struct HandleSuggestionRow: View {
                         .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .buttonStyle(.plain)
-                .help("Open Instagram profile to verify")
+                .help(ProfileLink.accessibilityLabel(handle: suggestion.handle ?? ""))
+                .accessibilityLabel(
+                    ProfileLink.accessibilityLabel(handle: suggestion.handle ?? ""))
             }
 
             // Not offered at all when the handle is taken, rather than offered
