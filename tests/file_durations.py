@@ -31,7 +31,9 @@ which nothing is slow (L98).
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import subprocess
+from pathlib import Path, PurePosixPath
+from typing import Iterable, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = REPO_ROOT / "tests"
@@ -285,3 +287,78 @@ def files_on_disk() -> set[str]:
             "not this suite. A scan that had stopped matching would make every "
             "comparison against it pass over almost nothing.")
     return found
+
+
+# ── the branch that adds a test file is the one that measures it (#1058) ─────
+#
+# `worst_case_unmeasured_share` above bounds the ACCUMULATION, which is the
+# right question for whether the floor's distribution still describes this
+# suite. It is the wrong question for who pays: one or two new files sit under
+# the bound and the debt lands on whoever later tips it over, for files they did
+# not write.
+#
+# These answer the narrower question that has a clear owner. Both checks stay,
+# because neither covers the other (L129): this one cannot see the backlog that
+# landed before it existed, nor a file arriving by any route other than a commit
+# on a branch, and the aggregate one cannot say whose change caused it.
+
+#: What the record holds one entry per. `test_*.py` is what pytest collects, so
+#: a helper module beside them (conftest.py, this file) has no duration of its
+#: own and demanding one would be a rule nothing could satisfy.
+_MEASURED_PREFIX = "test_"
+
+
+def unmeasured_additions(added: Iterable[str],
+                         recorded: Mapping[str, float]) -> list[str]:
+    """The added paths that name a test file the record has never seen.
+
+    Membership, never truthiness: a file recorded at 0.0 seconds has been
+    measured, and several real guard files are, so reading a falsy value as
+    unmeasured would demand they be re-measured forever with no value that ever
+    satisfied it (L11).
+    """
+    named = []
+    for path in added:
+        parts = PurePosixPath(path)
+        if parts.parent != PurePosixPath("tests"):
+            continue
+        if not (parts.name.startswith(_MEASURED_PREFIX)
+                and parts.suffix == ".py"):
+            continue
+        if parts.name not in recorded:
+            named.append(parts.name)
+    return sorted(named)
+
+
+def added_test_files(repo_root: Path, base: str = "origin/main",
+                     ) -> tuple[str, ...] | None:
+    """Paths this branch ADDS under tests/, against its branch point with `base`.
+
+    `None` when that cannot be established, and never `()`. No git, no `base`
+    ref, a shallow clone with no merge base: none of those is evidence that the
+    branch added nothing, and answering with an empty tuple would report a clean
+    branch for a question nobody managed to ask (L98, L119).
+
+    Committed changes only. A file being written right now is not yet a claim
+    about anything, and failing the suite the moment a new test file appears
+    would fire in the middle of every piece of test-first work, which is when it
+    is least useful and most likely to be worked around. Reading the merge base
+    means it fires once the file is committed, still before the push.
+
+    ADDED, not touched. `--diff-filter=A` is the whole point: editing an
+    existing test file is not creating one, and reporting it would make every
+    branch owe a measurement for work it did not create.
+    """
+    def git(*arguments: str) -> str | None:
+        done = subprocess.run(["git", "-C", str(repo_root), *arguments],
+                              capture_output=True, text=True, check=False)
+        return done.stdout.strip() if done.returncode == 0 else None
+
+    point = git("merge-base", base, "HEAD")
+    if not point:
+        return None
+    listed = git("diff", "--name-only", "--diff-filter=A", point, "HEAD",
+                 "--", "tests/")
+    if listed is None:
+        return None
+    return tuple(line.strip() for line in listed.splitlines() if line.strip())

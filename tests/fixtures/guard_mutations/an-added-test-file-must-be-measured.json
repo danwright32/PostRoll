@@ -1,0 +1,8 @@
+{
+  "name": "an-added-test-file-must-be-measured",
+  "file": "tests/file_durations.py",
+  "find": "        if parts.name not in recorded:\n            named.append(parts.name)",
+  "replace": "        if parts.name not in recorded and recorded:\n            named.append(parts.name)",
+  "test": "tests/test_a_new_test_file_is_measured.py::test_an_empty_record_names_every_addition_rather_than_none",
+  "breaks": "a missing record reads as every added file being measured, so the check that names the branch owing a measurement passes hardest at the moment the record is gone (#1058, L98)"
+}

@@ -1,5 +1,6 @@
 {
   "seconds": {
+    "test_a_new_test_file_is_measured.py": 1.28,
     "test_a_wedged_test_names_itself.py": 24.62,
     "test_ai_claude_client.py": 1.8,
     "test_ai_enrichment.py": 0.3500000000000001,
