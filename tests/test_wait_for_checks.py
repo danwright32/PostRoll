@@ -32,25 +32,25 @@ Each run's `repository`, `head_repository`, `pull_requests`, `head_commit`,
 because nothing here reads them and they are most of the bytes. Every field
 this tool touches is as GitHub sent it.
 
-`tests/fixtures/gh_pr_checks_real.json` is kept beside them: the real
-`gh pr checks 561 --json name,state,bucket,workflow` reply from 2026-08-14,
-which is what the verdict rules were calibrated against and still are.
+`tests/fixtures/gh_pr_checks_real.json` is kept beside them: a real
+`gh pr checks --json name,state,bucket,workflow` reply, which is what the
+verdict rules were calibrated against and still are.
 
-It has been edited exactly once, by #1095, and the edit was a DELETION: the row
-for `reference-frames (thursday-reel)`, whose job no longer exists. Every
-surviving row is still GitHub's own words, unaltered, and no value was invented
-to make anything pass. That distinction is the whole reason this file is worth
-having, because a fixture adjusted to agree with the thing it verifies is no
-longer evidence of anything (L48, L58).
+Re-recorded by #1095 from pull request 1102, all seven checks green, because
+that change removed the `reference-frames (thursday-reel)` job and the previous
+recording, from pull request 561 on 2026-08-14, described eight. It is a whole
+reply as GitHub gave it, not the old one with a row taken out: an intermediate
+commit did delete that row to get the pull request green, and it was replaced
+with this the moment a real green reply of the new shape existed, because a
+fixture adjusted to agree with the thing it verifies is no longer evidence of
+anything (L48, L58).
 
-The same deletion was made in `gh_actions_jobs_real.json`, for the same job.
+That is the loop these names live in. They are CHECK names and the bar is
+derived from the workflows, so a pull request carrying a changed set can only go
+green once the recording matches it, and the recording can only come from a
+green pull request. Removing a name is the cheap direction: delete the row,
+go green, re-record. Adding one costs a knowingly red run to record from.
 
-Why it could not simply be re-recorded from a newer pull request: these are
-CHECK names, and the derivation is calibrated against this reply, so a pull
-request carrying a changed set can only go green once the recording already
-matches it. #1095 removed a name rather than adding one and deleted the row it
-described, which is the smallest honest way through that loop; adding a name
-still costs a knowingly red run to record from.
 """
 
 from __future__ import annotations
