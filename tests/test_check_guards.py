@@ -1081,6 +1081,24 @@ def test_a_run_that_waits_for_the_lock_says_so(tmp_path: Path):
 # guard unproven, which looks exactly like a clean sweep.
 
 
+def costs_of(entries, swift_seconds=29.0, python_seconds=0.8):
+    """A cost for each entry, so the deal under test is not measuring whatever
+    the live record happens to hold today (L196, L2).
+
+    Every Swift entry the same and every Python entry the same, because these
+    tests are about the PARTITION rather than about the readings: the tests that
+    exercise the readings themselves are in tests/test_guard_entry_costs.py.
+    """
+    from tools.guard_entry_costs import Costs
+
+    seconds = {
+        e.name: (swift_seconds if e.test.startswith("PostRollTests/")
+                 else python_seconds)
+        for e in entries
+    }
+    return Costs(seconds=seconds, estimated=frozenset())
+
+
 def test_every_entry_lands_in_exactly_one_shard():
     """The property the whole split rests on.
 
@@ -1095,30 +1113,60 @@ def test_every_entry_lands_in_exactly_one_shard():
     for total in (1, 2, 3, 5, 8, 13):
         seen: list[str] = []
         for index in range(1, total + 1):
-            seen += [e.name for e in shard_of(entries, index, total)]
+            seen += [e.name for e in shard_of(entries, index, total,
+                                              costs_of(entries))]
         assert sorted(seen) == sorted(names), (
             f"the {total}-way split does not cover the registry exactly once"
         )
 
 
-def test_the_split_balances_the_expensive_entries():
+def test_the_split_balances_the_measured_cost():
     """Swift entries pay a build each; Python ones are under a second.
 
     A split that put every Swift entry in one shard would leave that shard as
-    slow as the whole sweep was, which is the thing being fixed.
+    slow as the whole sweep was, which is the thing being fixed. Asserted in
+    SECONDS since #1090, not in a count of expensive entries: the count was a
+    proxy, and a proxy passes while the thing it stands for drifts (L63).
     """
     from tools.check_guards import shard_of
+    from tools.guard_entry_costs import imbalance
 
     entries = ([entry(name=f"swift-{i}") for i in range(40)]
                + [entry(name=f"py-{i}", test=f"tests/test_x.py::test_{i}")
                   for i in range(40)])
-    counts = []
-    for index in range(1, 5):
-        shard = shard_of(entries, index, 4)
-        counts.append(sum(1 for e in shard if e.test.startswith("PostRollTests/")))
-    assert max(counts) - min(counts) <= 1, (
-        f"the expensive entries are spread {counts}, so one shard carries the "
-        "sweep and the split buys nothing"
+    costs = costs_of(entries)
+    shards = [[e.name for e in shard_of(entries, index, 4, costs)]
+              for index in range(1, 5)]
+
+    assert imbalance(shards, costs.seconds) < 1.02, (
+        f"the shards are dealt {[round(sum(costs.seconds[n] for n in s)) for s in shards]} "
+        "seconds apart, so one runner carries the sweep and the split buys "
+        "little"
+    )
+
+
+def test_one_very_expensive_entry_is_dealt_on_its_own():
+    """What a count could never get right.
+
+    Six entries, one of them thirty times the rest. Balancing the count puts
+    three and three, so one shard carries 30s and the other 2.5s; balancing the
+    cost gives the expensive one a runner to itself.
+    """
+    from tools.check_guards import shard_of
+    from tools.guard_entry_costs import Costs
+
+    entries = ([entry(name="big")]
+               + [entry(name=f"py-{i}", test=f"tests/test_x.py::test_{i}")
+                  for i in range(5)])
+    costs = Costs(seconds={"big": 30.0, **{f"py-{i}": 0.5 for i in range(5)}},
+                  estimated=frozenset())
+
+    heavy = [e.name for e in shard_of(entries, 1, 2, costs)]
+    light = [e.name for e in shard_of(entries, 2, 2, costs)]
+    assert sorted(heavy + light) == sorted(e.name for e in entries)
+    assert ["big"] in (heavy, light), (
+        "the expensive entry was dealt alongside cheap ones, so this is still "
+        "balancing a count"
     )
 
 
@@ -1131,7 +1179,7 @@ def test_a_shard_that_would_be_empty_is_refused():
     from tools.check_guards import shard_of
 
     with pytest.raises(ValueError):
-        shard_of([entry(name="only-one")], 2, 2)
+        shard_of([entry(name="only-one")], 2, 2, costs_of([entry(name="only-one")]))
 
 
 def test_a_shard_spec_outside_the_split_is_refused():
@@ -1140,10 +1188,11 @@ def test_a_shard_spec_outside_the_split_is_refused():
     entries = [entry(name=f"g-{i}") for i in range(4)]
     for bad in ((0, 2), (3, 2), (1, 0)):
         with pytest.raises(ValueError):
-            shard_of(entries, *bad)
+            shard_of(entries, *bad, costs_of(entries))
 
 
-def test_the_sweep_says_which_shard_it_ran_and_how_many_it_left(repo: Path, tmp_path: Path):
+def test_the_sweep_says_which_shard_it_ran_and_how_many_it_left(
+        repo: Path, tmp_path: Path, monkeypatch):
     """A shard's output must not read like a whole sweep.
 
     Every other scoping in this tool says what it skipped, for the same reason:
@@ -1155,6 +1204,14 @@ def test_the_sweep_says_which_shard_it_ran_and_how_many_it_left(repo: Path, tmp_
         tmp_path / "registry",
         [registry_dict(name=f"g-{i}", test=f"tests/test_x.py::test_{i}")
          for i in range(4)])
+    # A record this test owns, so what it asserts about the log is not decided
+    # by whatever the live one happens to hold today (L196).
+    costs = tmp_path / "costs.json"
+    costs.write_text(json.dumps({
+        "seconds": {f"g-{i}": 0.5 + i for i in range(4)},
+        "measured": {f"g-{i}": {"run": "r", "scale": 1.0} for i in range(4)},
+    }))
+    monkeypatch.setattr("tools.guard_entry_costs.RECORD", costs)
     lines: list[str] = []
     code = check_guards(repo, registry, a_runner(1, "1 failed"),
                         shard=(1, 2), log=lines.append)
@@ -1162,6 +1219,9 @@ def test_the_sweep_says_which_shard_it_ran_and_how_many_it_left(repo: Path, tmp_
     assert code == 0
     assert "shard 1 of 2" in text, text
     assert "2 of 4" in text, text
+    # And what the deal was made OF, because an estimate and a reading deal
+    # identically and a partition of guesses reads as one of readings (L11).
+    assert "dealt by measured cost: 2 of 2 entries" in text, text
 
 
 # ── A deadline that reports as a failure, not as a cancellation ───────────────

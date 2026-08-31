@@ -75,13 +75,20 @@ class Costs:
         return len(self.seconds) - len(self.estimated)
 
 
-def read_record(path: Path = RECORD) -> dict:
+def read_record(path: Path | None = None) -> dict:
     """The record as written, or a refusal naming what is wrong.
+
+    `path` defaults to `RECORD` at CALL time, not at definition time, so a test
+    can point the module at a record it owns. A default bound at definition time
+    is a dependency the function constructs for itself, which no caller and no
+    test can replace (L196), and the test that tries reads the live record while
+    reporting on its own fixture.
 
     Absent, unparseable and empty are three different failures and each says so
     in its own words, because the remedy differs: write the record, fix it, or
     run a sweep that measures something (L11).
     """
+    path = path if path is not None else RECORD
     if not path.exists():
         raise CostRecordError(
             f"{path} does not exist, so nothing knows what a guard entry costs. "
@@ -100,7 +107,8 @@ def read_record(path: Path = RECORD) -> dict:
     return record
 
 
-def costs_for(names_by_kind: Mapping[str, bool], path: Path = RECORD) -> Costs:
+def costs_for(names_by_kind: Mapping[str, bool],
+              path: Path | None = None) -> Costs:
     """A cost for every entry, measured where there is a reading and estimated
     where there is not.
 

@@ -1052,6 +1052,39 @@ def run_entry(entry: Entry, repo_root: Path, runner, log=say) -> Result:
                   seconds=time.monotonic() - began)
 
 
+#: The exact wording tools/check_job_durations.py matches. Named here rather
+#: than only in the pattern, because a line and the regex reading it are two
+#: halves of one contract and the pattern is the half that fails silently: it
+#: returns None on a miss, which both readers treat as "could not measure"
+#: (#1085). tests/test_guard_work_line.py holds the two together.
+GUARD_WORK_PREFIX = "guard work: "
+
+
+def guard_work_line(results: list[Result]) -> str:
+    """How much RECORDED work this run proved, as one line for the log.
+
+    Falls back to naming the reason when the record cannot answer, rather than
+    printing a zero: a zero divisor is not a measurement of a job that did
+    nothing, it is the absence of one, and the two must not read alike (L11).
+    """
+    kinds = {r.entry.name: r.entry.test.startswith("PostRollTests/")
+             for r in results}
+    if not kinds:
+        return f"{GUARD_WORK_PREFIX}no entries were proved, so there is no work to report"
+    try:
+        costs = guard_entry_costs.costs_for(kinds)
+    except guard_entry_costs.CostRecordError as refusal:
+        return (f"{GUARD_WORK_PREFIX}unmeasured, because the cost record could "
+                f"not answer: {refusal}")
+    total = sum(costs.of(name) for name in kinds)
+    # Milliseconds, as a whole number, because the reader on the other side
+    # parses an integer and a `changed` run proving one Python entry is under a
+    # second: rounded to seconds that run reports ZERO work, and a zero divisor
+    # is refused as unmeasurable rather than read as a very fast job (L11).
+    return (f"{GUARD_WORK_PREFIX}{round(total * 1000)} recorded entry-ms over "
+            f"{len(kinds)} entries, {costs.measured} of them measured")
+
+
 def write_timings(path: Path, results: list[Result], repo_root: Path) -> int:
     """Write one run's per-entry readings, for `tools/record_guard_costs.py`.
 
@@ -1099,7 +1132,8 @@ def head_commit(repo_root: Path) -> str:
     return out.stdout.strip() or "unknown"
 
 
-def shard_of(entries: list[Entry], index: int, total: int) -> list[Entry]:
+def shard_of(entries: list[Entry], index: int, total: int,
+             costs: guard_entry_costs.Costs | None = None) -> list[Entry]:
     """The `index` of `total` slice of `entries`, one runner's share (#719 follow-up).
 
     The post-merge sweep stopped finishing: it hit the workflow's 60 minute cap,
@@ -1144,7 +1178,10 @@ def shard_of(entries: list[Entry], index: int, total: int) -> list[Entry]:
             "nothing reads exactly like a clean sweep")
 
     kinds = {e.name: e.test.startswith("PostRollTests/") for e in entries}
-    costs = guard_entry_costs.costs_for(kinds)
+    # Injected by the tests that drive the deal directly, so they are not
+    # measuring whatever the live record happens to hold today; None here means
+    # the real record, which is what the sweep uses (L196).
+    costs = costs if costs is not None else guard_entry_costs.costs_for(kinds)
     dealt = guard_entry_costs.deal(list(kinds), total, costs.seconds)
     mine = set(dealt[index - 1])
     return [e for e in entries if e.name in mine]
@@ -1268,13 +1305,20 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
     bad = [r for r in results if r.outcome is not Outcome.KILLED]
     log(f"{len(results)} guard{'s' if len(results) != 1 else ''} checked, "
         f"{len(results) - len(bad)} killed their mutation, {len(bad)} did not")
-    # The unit this job's duration has to be divided by, printed in the unit it
-    # is actually spent in (#1041, #1090). A count of entries is the wrong
-    # divisor: a Swift entry rebuilds the app at about 29s and a Python one is
-    # under a second, so two runs proving the same NUMBER of entries can differ
-    # by 90x and a bare comparison of totals would call that a regression.
-    log(f"guard work: {sum(r.seconds for r in results):.1f} entry-seconds "
-        f"over {len(results)} entries")
+    # The unit this job's duration has to be divided by (#1041, #1090).
+    #
+    # A count of entries is the wrong divisor: a Swift entry rebuilds the app at
+    # about 29s and a Python one is under a second, so two runs proving the same
+    # NUMBER of entries can differ by 90x and a bare comparison of totals would
+    # call that a regression.
+    #
+    # The RECORDED cost, not this run's own measurement. Dividing the duration
+    # by the seconds this very run spent gives a ratio near one whatever
+    # happens, which is dividing the reading by itself: it can never move and
+    # would read as a stable rate for a job that had doubled (L63). Against the
+    # record it is a real rate: a slower runner raises it, and a diff selecting
+    # more expensive entries raises both halves and leaves it where it was.
+    log(guard_work_line(results))
     if timings_path is not None:
         written = write_timings(timings_path, results, repo_root)
         log(f"wrote {written} entry timing(s) to {timings_path}")

@@ -572,6 +572,40 @@ def _scratch_repo(tmp_path: Path) -> Path:
     return repo
 
 
+def copy_check_guards_into(repo) -> list[str]:
+    """`tools/check_guards.py` and every tools module it imports, into `repo`.
+
+    DERIVED from check_guards' own import line rather than listed here (L41,
+    L96). It was a hand-maintained pair, and #1090 added a third module: each
+    of the three tests below then died on the import and passed or failed for a
+    reason it is not about. A list maintained beside the thing it mirrors goes
+    stale in exactly the change that needed it.
+
+    Returns what it copied, and REFUSES an empty answer: a run that copied
+    nothing but check_guards itself would die on the import, and this exists so
+    that cannot happen quietly (L98).
+    """
+    import re as _re
+    import shutil as _shutil
+
+    (repo / "tools").mkdir(exist_ok=True)
+    source = (REPO_ROOT / "tools" / "check_guards.py").read_text(encoding="utf-8")
+    names: list[str] = []
+    for line in source.splitlines():
+        found = _re.match(r"from tools import ([A-Za-z0-9_, ]+)", line)
+        if found:
+            names += [n.strip() for n in found.group(1).split(",") if n.strip()]
+    assert names, (
+        "check_guards imports no tools module by that spelling any more, so "
+        "this copied only check_guards itself and the run below would die on "
+        "an import rather than testing what it claims")
+
+    _shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
+    for name in names:
+        _shutil.copy(REPO_ROOT / "tools" / f"{name}.py", repo / "tools")
+    return names
+
+
 def test_a_scoped_run_with_nothing_to_diff_against_refuses(tmp_path):
     """A checkout with no origin/main and no upstream, which is what a shallow
     clone in CI looks like. It must refuse rather than report that no guard
@@ -582,11 +616,7 @@ def test_a_scoped_run_with_nothing_to_diff_against_refuses(tmp_path):
 
     repo = _scratch_repo(tmp_path)
     (repo / "tools").mkdir()
-    shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
-    # check_guards imports this at module level since #920. Without it the run
-    # dies on the import, and this test then passes or fails for a reason it is
-    # not about.
-    shutil.copy(REPO_ROOT / "tools" / "perturbation_lock.py", repo / "tools")
+    copy_check_guards_into(repo)
     (repo / "tests" / "fixtures" / "guard_mutations").mkdir(parents=True)
     shutil.copy(
         next((REPO_ROOT / "tests" / "fixtures" / "guard_mutations").glob("*.json")),
@@ -611,11 +641,7 @@ def test_an_empty_registry_refuses_rather_than_passing(tmp_path):
 
     repo = _scratch_repo(tmp_path)
     (repo / "tools").mkdir()
-    shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
-    # check_guards imports this at module level since #920. Without it the run
-    # dies on the import, and this test then passes or fails for a reason it is
-    # not about.
-    shutil.copy(REPO_ROOT / "tools" / "perturbation_lock.py", repo / "tools")
+    copy_check_guards_into(repo)
     (repo / "tests" / "fixtures" / "guard_mutations").mkdir(parents=True)
 
     result = subprocess.run(
@@ -659,11 +685,7 @@ def test_the_guard_runner_does_not_insist_on_a_venv(tmp_path):
 
     repo = _scratch_repo(tmp_path)
     (repo / "tools").mkdir()
-    shutil.copy(REPO_ROOT / "tools" / "check_guards.py", repo / "tools")
-    # check_guards imports this at module level since #920. Without it the run
-    # dies on the import, and this test then passes or fails for a reason it is
-    # not about.
-    shutil.copy(REPO_ROOT / "tools" / "perturbation_lock.py", repo / "tools")
+    copy_check_guards_into(repo)
     registry = repo / "tests" / "fixtures" / "guard_mutations"
     registry.mkdir(parents=True)
 
