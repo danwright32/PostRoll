@@ -36,7 +36,9 @@ from __future__ import annotations
 import argparse
 import enum
 import os
+import re
 import statistics
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -49,12 +51,13 @@ sys.path.insert(0, str(REPO_ROOT))
 from tools.guard_sweep_history import PROOF_STEP  # noqa: E402
 from tools.check_tree_already_checked import WORK_STEP  # noqa: E402
 
+from tools.wait_for_checks import GhUnusable, gh_json  # noqa: E402
+
 #: Every step name a gate in this repository can skip. Passed for every
 #: workflow: `did_its_work` leaves a job carrying none of them alone, so each
 #: workflow is affected only by the name its own jobs actually have, and there
 #: is no per-workflow table to keep in step with the workflows (L96).
 WORK_STEPS = (PROOF_STEP, WORK_STEP)
-from tools.wait_for_checks import GhUnusable, gh_json  # noqa: E402
 
 #: How far the two halves' medians must differ before it is worth saying.
 #:
@@ -87,6 +90,12 @@ class Drift(enum.Enum):
     #: The API could not be asked, or answered something unusable. Distinct
     #: from finding nothing, for the same reason.
     UNREADABLE = "unreadable"
+    #: The duration moved materially and there is no measure of how much work
+    #: the job did, so a job that got SLOWER and one that was given MORE TO DO
+    #: are the same reading (#1041). Its own state rather than a SLOWER with a
+    #: caveat, because a caveat in the second sentence is read as a hedge on a
+    #: verdict already given, and this is not a verdict.
+    NOT_NORMALISED = "not normalised"
 
     @property
     def exit_code(self) -> int:
@@ -100,7 +109,14 @@ class Drift(enum.Enum):
 
     @property
     def is_alarming(self) -> bool:
-        """Whether this deserves a warning annotation rather than a log line."""
+        """Whether this deserves a warning annotation rather than a log line.
+
+        NOT_NORMALISED deliberately is not. It is the state that exists because
+        an un-normalised comparison was raised with the confidence of a real
+        one and used to argue #997 was not worth doing. A warning that cannot
+        distinguish a regression from a busy week is exactly the alarm people
+        learn to read past (L36), so it is reported and not raised.
+        """
         return self in (Drift.SLOWER, Drift.UNREADABLE)
 
 
@@ -110,10 +126,89 @@ class Verdict:
     message: str
 
 
-def drift_of(job: str, seconds: list[float]) -> Verdict:
+#: How each job family says, in its own log, how much work it did (#1039).
+#:
+#: Read from the log because nothing cheaper carries it: measured on 2026-08-31,
+#: a job's step summary and its annotations both come back EMPTY from the checks
+#: API, so the log is the only place the count reaches. One is 1.15MB and 0.7s
+#: for the Swift job, so a sixteen run window is about twelve seconds and 18MB
+#: once a day, which is affordable and was the thing #1039 asked to be checked
+#: before building on it.
+#:
+#: Keyed on the family, which is the job name before any matrix suffix, so
+#: `full (2)` and `reference-frames (goldens)` are covered by one entry each.
+#:
+#: This IS a hand-kept table and a job missing from it is not silently exempt
+#: (L96): it falls to NOT_NORMALISED, which says out loud that its workload
+#: could not be measured.
+#: The guard proof jobs are deliberately ABSENT, and that is a finding rather
+#: than an omission. Their logs do report `N guards checked`, and dividing by it
+#: does not normalise them: measured over ten runs on 2026-08-31 the rate ran
+#: from 1,174ms to 106,500ms per guard, a factor of 90, because a Swift entry
+#: rebuilds the app at about 29s and a Python one is under a second. A count of
+#: ITEMS is not a measure of WORK when the items differ that much (L63, L296),
+#: and a divisor that wrong would give a bare comparison the confidence of a
+#: normalised one, which is the exact defect #1041 exists to remove.
+#:
+#: So `changed` and `full` land in NOT_NORMALISED and say so. Giving them a real
+#: divisor means having check_guards report the cost it actually incurred, for
+#: instance how many entries rebuilt, which is its own change.
+WORK_PATTERNS: dict[str, tuple[str, str]] = {
+    "swift-unit": (r"Swift: (\d+) tests", "tests executed"),
+    "python": (r"(\d+) passed", "tests passed"),
+    "macos": (r"(\d+) passed", "tests passed"),
+    "reference-frames": (r"(\d+) passed", "tests passed"),
+}
+
+
+def work_family(job: str) -> str:
+    """A job name with its matrix suffix removed."""
+    return job.split(" (")[0].strip()
+
+
+def work_done(log: str, job: str) -> int | None:
+    """How much work one run of `job` did, read out of its own log.
+
+    `None`, never 0, when it cannot be found. Zero is a real measurement of a
+    job that did nothing, and the two must not collapse into one another (L11).
+
+    The LAST match wins. A log holds every line the job printed, including a
+    pytest header and any earlier partial run, and the final summary is the one
+    that describes the whole job.
+    """
+    found = WORK_PATTERNS.get(work_family(job))
+    if not found:
+        return None
+    matches = re.findall(found[0], log)
+    return int(matches[-1]) if matches else None
+
+
+def _rates(seconds: list[float],
+           work: list[int | None] | None) -> list[float] | None:
+    """Seconds per unit of work, or None when the whole window cannot be.
+
+    All or nothing on purpose. Dropping the runs whose count is missing would
+    move which runs fall in each half, so the comparison would be between two
+    different populations chosen by which logs happened to parse (L288).
+    """
+    if work is None or len(work) != len(seconds):
+        return None
+    if any(count is None or count <= 0 for count in work):
+        return None
+    return [second / count for second, count in zip(seconds, work)]
+
+
+def drift_of(job: str, seconds: list[float],
+             work: list[int | None] | None = None) -> Verdict:
     """Compare the recent half of a job's durations against the older half.
 
-    `seconds` arrives newest first, the order the Actions API returns runs in.
+    `seconds` arrives newest first, the order the Actions API returns runs in,
+    and `work` is aligned with it.
+
+    Divided by the work done wherever that can be had, so the series is a RATE
+    rather than a total (#1041). A job whose cost depends on the CONTENT of the
+    change it runs against, like the per-pull-request guard proof, otherwise
+    reports the week's pull request sizes as a change in the job.
     """
     if len(seconds) < MINIMUM_WINDOW:
         return Verdict(
@@ -123,18 +218,27 @@ def drift_of(job: str, seconds: list[float]) -> Verdict:
             f"claimed about it either way")
 
     half = len(seconds) // 2
-    recent = statistics.median(seconds[:half])
-    older = statistics.median(seconds[half:])
+    rates = _rates(seconds, work)
+    unit = WORK_PATTERNS.get(work_family(job), (None, ""))[1]
+
+    if rates is not None:
+        recent, older = statistics.median(rates[:half]), statistics.median(rates[half:])
+        counts = f"{statistics.median(work[half:]):.0f} to {statistics.median(work[:half]):.0f} {unit}"
+        scale, per = 1000, f"ms per {unit.rstrip('s').split()[-1]}"
+    else:
+        recent, older = statistics.median(seconds[:half]), statistics.median(seconds[half:])
+        counts, scale, per = "", 1, "s"
 
     if older <= 0:
         return Verdict(
             Drift.UNREADABLE,
-            f"{job}: the older half medians {older:.0f}s, which cannot be "
+            f"{job}: the older half medians {older:.0f}{per}, which cannot be "
             f"compared against. That is a job reporting no duration, not a "
             f"job that is fast")
 
     shift = (recent - older) / older
-    moved = f"{older:.0f}s to {recent:.0f}s ({shift:+.0%})"
+    moved = (f"{older * scale:.0f} to {recent * scale:.0f}{per} ({shift:+.0%})"
+             + (f", on {counts}" if counts else ""))
 
     if abs(shift) < MATERIAL_SHIFT:
         return Verdict(
@@ -142,12 +246,19 @@ def drift_of(job: str, seconds: list[float]) -> Verdict:
             f"{job}: {moved}, inside the {MATERIAL_SHIFT:.0%} that ordinary "
             f"run to run variation covers")
 
+    if rates is None:
+        return Verdict(
+            Drift.NOT_NORMALISED,
+            f"{job}: {moved}, and this job's workload could not be measured, "
+            "so a job that got slower and a job that was given more to do are "
+            "the same reading here. Nothing is claimed either way (#1041)")
+
     if shift > 0:
         return Verdict(
             Drift.SLOWER,
-            f"{job}: SLOWER, {moved}. Check the executed test count beside "
-            f"this: a count rising with the seconds is a suite doing more "
-            f"work, the same count taking longer is a regression")
+            f"{job}: SLOWER, {moved}. The work is divided out, so this is the "
+            "job costing more per unit rather than the week bringing bigger "
+            "changes")
 
     return Verdict(
         Drift.FASTER,
@@ -187,10 +298,15 @@ def did_its_work(job: dict, work_step: str | Iterable[str] | None) -> bool:
     return True
 
 
-def job_durations(runs: list[dict], *,
-                  work_step: str | Iterable[str] | None = None,
-                  ) -> dict[str, list[float]]:
-    """Seconds each named job took, newest run first.
+def measurable_jobs(runs: list[dict], *,
+                    work_step: str | Iterable[str] | None = None):
+    """Every (name, seconds, job) this series is allowed to measure.
+
+    ONE walk, because `job_durations` and `work_series` have to agree exactly:
+    two walks filtering separately would pair a duration with another run's
+    count and every rate would be wrong in a way nothing could see (L228). It is
+    also the only place these rules live, so there is no second copy to drift
+    (L41).
 
     A job that has not finished contributes NOTHING rather than a zero. A zero
     would pull the median down and read as the job having become fast, which is
@@ -205,16 +321,15 @@ def job_durations(runs: list[dict], *,
     case and every other inverted pair at once.
 
     A job that RAN and had nothing to do contributes nothing either, which is
-    a different case and needs its own rule (#989). Since the guard sweep moved
-    to a daily cadence its shards skip their own expensive STEPS rather than the
-    job, so a shard with nothing to prove still checks out, asks the gate and
-    exits successful in about forty seconds. That is a positive duration, so the
-    shape check below waves it through, and the series then holds two
-    populations: roughly 1,400s when there was something to prove and roughly
-    40s when there was not. Which half of the window each falls in is decided by
-    the week's merge pattern, so the comparison would report drift that is
-    nothing but that pattern (L36, and L102: a cost measured while the expensive
-    path is switched off measures the short circuit rather than the work).
+    a different case and needs its own rule (#989, #990). Since the guard sweep
+    moved to a daily cadence its shards skip their own expensive STEPS rather
+    than the job, and since #990 the post-merge jobs do the same, so such a job
+    still checks out, asks its gate and exits successful in well under a minute.
+    That is a positive duration, so the shape check waves it through, and the
+    series would then hold two populations decided by the week's merge pattern
+    rather than by anything about the job (L36, and L102: a cost measured while
+    the expensive path is switched off measures the short circuit rather than
+    the work).
 
     A second check on `conclusion == "skipped"` was written first and removed:
     `check_guards` reported it SURVIVED its mutation, because breaking it
@@ -223,7 +338,6 @@ def job_durations(runs: list[dict], *,
     branch nobody can maintain, and keeping it "to be safe" would have meant
     shipping an unproven one (L29).
     """
-    series: dict[str, list[float]] = {}
     for run in runs:
         for job in run.get("jobs", []):
             started, completed = job.get("started_at"), job.get("completed_at")
@@ -239,7 +353,16 @@ def job_durations(runs: list[dict], *,
             lasted = (end - begin).total_seconds()
             if lasted <= 0:
                 continue
-            series.setdefault(str(job.get("name", "?")), []).append(lasted)
+            yield str(job.get("name", "?")), lasted, job
+
+
+def job_durations(runs: list[dict], *,
+                  work_step: str | Iterable[str] | None = None,
+                  ) -> dict[str, list[float]]:
+    """Seconds each named job took, newest run first."""
+    series: dict[str, list[float]] = {}
+    for name, lasted, _job in measurable_jobs(runs, work_step=work_step):
+        series.setdefault(name, []).append(lasted)
     return series
 
 
@@ -266,6 +389,39 @@ def recent_runs(workflow: str, window: int) -> list[dict]:
     return carried
 
 
+def job_log(job_id: int, read=None) -> str:
+    """One job's raw log, or "" when it cannot be had.
+
+    Empty, not an exception. A log that will not download is a run whose work
+    count is unknown, and unknown is already a first class answer here: it lands
+    the job in NOT_NORMALISED rather than taking the whole check down (L73).
+    """
+    reader = read or (lambda path: subprocess.run(
+        ["gh", "api", path], capture_output=True, text=True,
+        check=False).stdout)
+    try:
+        return reader(f"repos/{{owner}}/{{repo}}/actions/jobs/{job_id}/logs")
+    except Exception:  # noqa: BLE001  a log is never worth failing the check for
+        return ""
+
+
+def work_series(runs: list[dict], *, work_step: str | Iterable[str] | None = None,
+                read_log=None) -> dict[str, list[int | None]]:
+    """How much work each named job did, run by run, aligned with `job_durations`.
+
+    Aligned by construction: it walks `measurable_jobs`, the same generator, so
+    the two cannot select different jobs however either changes.
+    """
+    series: dict[str, list[int | None]] = {}
+    for name, _lasted, job in measurable_jobs(runs, work_step=work_step):
+        identifier = job.get("id")
+        counted = None
+        if isinstance(identifier, int) and work_family(name) in WORK_PATTERNS:
+            counted = work_done(job_log(identifier, read=read_log), name)
+        series.setdefault(name, []).append(counted)
+    return series
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--workflow", default="swift.yml",
@@ -280,6 +436,9 @@ def main(argv: list[str] | None = None) -> int:
                              "skip, which is safe to pass for every workflow "
                              "because a job carrying none of them is left "
                              "alone (L96)")
+    parser.add_argument("--no-work-counts", action="store_true",
+                        help="skip reading each job's log for how much work it "
+                             "did, so every verdict is of totals and says so")
     args = parser.parse_args(argv)
 
     try:
@@ -291,11 +450,12 @@ def main(argv: list[str] | None = None) -> int:
               f"{args.workflow}, so no job's duration was judged: {unusable}")
         return 0
 
-    verdicts = [
-        drift_of(job, seconds)
-        for job, seconds in sorted(
-            job_durations(runs,
-                          work_step=args.work_step or WORK_STEPS).items())]
+    steps = args.work_step or WORK_STEPS
+    durations = job_durations(runs, work_step=steps)
+    work = ({} if args.no_work_counts
+            else work_series(runs, work_step=steps))
+    verdicts = [drift_of(job, seconds, work=work.get(job))
+                for job, seconds in sorted(durations.items())]
 
     lines = []
     for verdict in verdicts:

@@ -48,9 +48,15 @@ def _series(older: list[float], recent: list[float]) -> list[float]:
 
 
 def test_a_job_that_got_materially_slower_is_reported():
-    """The reading the issue was written from: 476s becoming 530s."""
+    """The reading the issue was written from: 476s becoming 530s.
+
+    Carrying a work count since #1041. The verdict SLOWER now means the job
+    costs more PER UNIT of work, so a fixture without one would be asserting
+    about a reading the tool no longer makes.
+    """
     verdict = drift_of("swift-unit", _series([470, 476, 480, 478],
-                                             [525, 530, 535, 532]))
+                                             [525, 530, 535, 532]),
+                       work=[2600] * 8)
 
     assert verdict.state is Drift.SLOWER
     assert "swift-unit" in verdict.message, (
@@ -90,7 +96,8 @@ def test_a_job_that_got_faster_is_named_as_that():
     purpose is to move this number (L11).
     """
     verdict = drift_of("swift-unit", _series([520, 530, 525, 528],
-                                             [410, 405, 415, 408]))
+                                             [410, 405, 415, 408]),
+                       work=[2600] * 8)
 
     assert verdict.state is Drift.FASTER
 
@@ -383,3 +390,221 @@ def test_a_single_step_name_still_works_as_a_bare_string():
         [_run(_job("full (1)", 40, (PROOF_STEP, "skipped")))],
         work_step=PROOF_STEP)
     assert series == {}
+
+
+# ── a rate, not a total (#1041, #1039) ───────────────────────────────────────
+#
+# `drift_of` compared the median of a job's recent half against its older half.
+# For a job whose workload is fixed that reading means what it says. For a job
+# whose cost depends on the CONTENT of the change it runs against it does not,
+# and the tool presented both with the same confidence.
+#
+# Measured on 2026-08-30, within an hour of the tool landing: it reported
+# `changed: faster, 227s to 50s (-78%)` for the per-pull-request guard job,
+# which proves only the entries a diff touches. Reading all 21 successful runs
+# instead gives median 181s against the 154s recorded in #997. The job had not
+# got faster at all; the recent window happened to hold small pull requests. That
+# reading was used to argue #997 was no longer worth doing, which was wrong.
+#
+# So the series is a RATE where a divisor can be had, and says so plainly where
+# it cannot, because a verdict nothing can normalise is not the same as a steady
+# one (L98).
+
+def test_a_job_given_more_work_for_proportionally_more_time_is_steady():
+    """The case that produced the false reading, in reverse."""
+    verdict = drift_of("python",
+                       seconds=[300, 300, 300, 100, 100, 100],
+                       work=[30, 30, 30, 10, 10, 10])
+    assert verdict.state is Drift.STEADY, verdict.message
+    assert "per" in verdict.message, verdict.message
+
+
+def test_a_job_doing_the_same_work_more_slowly_is_still_reported():
+    """Normalising must not blunt the thing this exists to catch."""
+    verdict = drift_of("swift-unit",
+                       seconds=[600, 600, 600, 400, 400, 400],
+                       work=[2600, 2600, 2600, 2600, 2600, 2600])
+    assert verdict.state is Drift.SLOWER, verdict.message
+
+
+def test_a_job_that_got_faster_at_the_same_work_is_reported_as_faster():
+    verdict = drift_of("swift-unit",
+                       seconds=[400, 400, 400, 600, 600, 600],
+                       work=[2600] * 6)
+    assert verdict.state is Drift.FASTER, verdict.message
+
+
+def test_the_normalised_message_names_the_unit_and_the_counts():
+    """A reader has to be able to see what it divided by (L11)."""
+    message = drift_of("swift-unit",
+                       seconds=[600] * 3 + [400] * 3,
+                       work=[2600] * 6).message
+    assert "2600" in message, message
+
+
+def test_a_material_move_with_no_divisor_is_not_called_slower():
+    """The exact defect: a bare comparison presented with the confidence of a
+    normalised one. It is reported, distinctly, and not as a regression."""
+    verdict = drift_of("mystery-job", seconds=[300, 300, 300, 100, 100, 100])
+    assert verdict.state is Drift.NOT_NORMALISED, verdict.message
+    assert not verdict.state.is_alarming
+    assert "workload" in verdict.message, verdict.message
+
+
+def test_a_partial_work_series_does_not_normalise_half_the_window():
+    """Some runs measured and some not is not a rate, and quietly dropping the
+    unmeasured ones would shift which runs fall in each half (L288)."""
+    verdict = drift_of("python",
+                       seconds=[300, 300, 300, 100, 100, 100],
+                       work=[30, 30, None, 10, 10, 10])
+    assert verdict.state is Drift.NOT_NORMALISED, verdict.message
+
+
+def test_a_zero_work_count_does_not_normalise():
+    """A job that did nothing has no rate, and dividing by it would report an
+    infinite one."""
+    verdict = drift_of("python",
+                       seconds=[300, 300, 300, 100, 100, 100],
+                       work=[30, 30, 30, 0, 10, 10])
+    assert verdict.state is Drift.NOT_NORMALISED, verdict.message
+
+
+def test_an_unnormalised_move_inside_the_band_is_still_steady():
+    """Only a MATERIAL move needs the caveat; a quiet one says nothing either
+    way and does not need a second sentence about workload."""
+    verdict = drift_of("mystery-job", seconds=[101, 100, 100, 100, 100, 100])
+    assert verdict.state is Drift.STEADY, verdict.message
+
+
+# ── how each job says how much work it did ───────────────────────────────────
+
+def test_each_job_family_has_its_count_read_from_its_own_log():
+    from tools.check_job_durations import work_done
+    assert work_done("Swift: 2622 tests", "swift-unit") == 2622
+    assert work_done("4410 passed, 106 skipped in 129.67s", "python") == 4410
+    assert work_done("40 passed in 12.0s", "reference-frames (goldens)") == 40
+
+
+def test_the_last_count_in_a_log_is_the_one_that_counts():
+    """A log holds every line the job printed, including earlier partial runs
+    and the pytest header. The final summary is the answer."""
+    from tools.check_job_durations import work_done
+    assert work_done("10 passed in 1s\nand later\n4410 passed in 129s",
+                     "python") == 4410
+
+
+def test_a_job_with_no_known_count_reads_as_None_rather_than_zero():
+    """Zero is a measurement of a job that did nothing, and this is not one."""
+    from tools.check_job_durations import work_done
+    assert work_done("nothing recognisable here", "python") is None
+    assert work_done("4410 passed", "some-job-nobody-taught-this-about") is None
+
+
+def test_the_guard_jobs_are_deliberately_not_normalised_by_entry_count():
+    """A count of items is not a measure of work when the items differ (L63).
+
+    Their logs do report `N guards checked` and it is deliberately not read.
+    Measured over ten runs on 2026-08-31, the rate ran from 1,174ms to
+    106,500ms per guard, a factor of 90, because a Swift entry rebuilds the app
+    at about 29s and a Python one is under a second. Normalising by that would
+    hand a bare comparison the confidence of a real one, which is the exact
+    defect #1041 exists to remove, so these say they could not be normalised
+    instead.
+    """
+    from tools.check_job_durations import WORK_PATTERNS, work_done
+
+    assert "changed" not in WORK_PATTERNS
+    assert "full" not in WORK_PATTERNS
+    assert work_done("29 guards checked, 29 killed", "changed") is None
+    assert work_done("29 guards checked, 29 killed", "full (2)") is None
+
+    assert drift_of("changed", seconds=[300, 300, 300, 100, 100, 100]).state \
+        is Drift.NOT_NORMALISED
+
+
+# ── fetching the counts, and what happens when a log will not come ───────────
+
+def _job_with(name: str, seconds: int, job_id: int, *steps: tuple[str, str]) -> dict:
+    return {**_job(name, seconds, *steps), "id": job_id}
+
+
+def test_each_job_is_paired_with_its_own_log_s_count():
+    from tools.check_job_durations import work_series
+
+    logs = {901: "Swift: 2600 tests", 902: "Swift: 2610 tests"}
+    series = work_series(
+        [_run(_job_with("swift-unit", 400, 901)),
+         _run(_job_with("swift-unit", 410, 902))],
+        read_log=lambda path: logs[int(path.split("/jobs/")[1].split("/")[0])])
+
+    assert series == {"swift-unit": [2600, 2610]}
+
+
+def test_the_counts_line_up_with_the_durations_run_for_run():
+    """The rate is a division of one series by the other, so a job dropped from
+    one and kept in the other would pair a duration with another run's count
+    and every rate would be wrong invisibly (L228)."""
+    from tools.check_job_durations import work_series
+
+    runs = [_run(_job_with("swift-unit", 400, 901)),
+            # skipped by shape: completed before it started
+            _run({"name": "swift-unit", "id": 902, "steps": [],
+                  "started_at": "2026-08-30T13:19:13Z",
+                  "completed_at": "2026-08-30T13:19:12Z"}),
+            _run(_job_with("swift-unit", 420, 903))]
+    logs = {901: "Swift: 2600 tests", 902: "Swift: 1 tests",
+            903: "Swift: 2610 tests"}
+
+    durations = job_durations(runs)
+    counts = work_series(runs, read_log=lambda p: logs[
+        int(p.split("/jobs/")[1].split("/")[0])])
+
+    assert len(durations["swift-unit"]) == len(counts["swift-unit"])
+    assert counts["swift-unit"] == [2600, 2610], (
+        "the skipped run contributed a count while contributing no duration, "
+        "so every pair after it is a duration matched to the wrong run's count")
+
+
+def test_a_log_that_will_not_download_leaves_the_job_unnormalised():
+    """Not an exception, and not a zero. A log that will not come is a run whose
+    work count is unknown, and unknown is already a first class answer here: it
+    lands the job in NOT_NORMALISED rather than taking the whole check down
+    (L73), and it is never scored as a measurement (L11)."""
+    from tools.check_job_durations import work_series
+
+    def refuses(path):
+        raise RuntimeError("gh fell over")
+
+    series = work_series([_run(_job_with("swift-unit", 400, 901))],
+                         read_log=refuses)
+
+    assert series == {"swift-unit": [None]}
+    assert drift_of("swift-unit", [300, 300, 300, 100, 100, 100],
+                    work=[None] * 6).state is Drift.NOT_NORMALISED
+
+
+def test_a_job_with_no_known_pattern_is_never_downloaded():
+    """A log is a megabyte. Fetching one for a job whose count could not be read
+    anyway is a megabyte spent to learn nothing."""
+    from tools.check_job_durations import work_series
+
+    asked: list[str] = []
+
+    def record(path):
+        asked.append(path)
+        return "4410 passed"
+
+    series = work_series([_run(_job_with("hand-check-reminder", 7, 901))],
+                         read_log=record)
+
+    assert series == {"hand-check-reminder": [None]}
+    assert asked == [], f"a log was downloaded for a job with no pattern: {asked}"
+
+
+def test_the_log_is_asked_for_by_the_job_s_own_id():
+    from tools.check_job_durations import job_log
+
+    asked: list[str] = []
+    job_log(4242, read=lambda path: asked.append(path) or "")
+
+    assert asked == ["repos/{owner}/{repo}/actions/jobs/4242/logs"]

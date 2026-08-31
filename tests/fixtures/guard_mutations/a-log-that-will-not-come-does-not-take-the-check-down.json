@@ -1,0 +1,8 @@
+{
+  "name": "a-log-that-will-not-come-does-not-take-the-check-down",
+  "file": "tools/check_job_durations.py",
+  "find": "    except Exception:  # noqa: BLE001  a log is never worth failing the check for\n        return \"\"",
+  "replace": "    except Exception:  # noqa: BLE001  a log is never worth failing the check for\n        raise",
+  "test": "tests/test_job_duration_drift.py::test_a_log_that_will_not_download_leaves_the_job_unnormalised",
+  "breaks": "one job's log failing to download takes the whole duration report down, so a transient API wobble costs every job's reading rather than one job's normalisation (#1039, L73)"
+}

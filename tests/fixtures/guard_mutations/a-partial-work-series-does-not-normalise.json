@@ -1,0 +1,8 @@
+{
+  "name": "a-partial-work-series-does-not-normalise",
+  "file": "tools/check_job_durations.py",
+  "find": "    if any(count is None or count <= 0 for count in work):\n        return None",
+  "replace": "    work = [count for count in work if count]\n    seconds = seconds[:len(work)]",
+  "test": "tests/test_job_duration_drift.py::test_a_partial_work_series_does_not_normalise_half_the_window",
+  "breaks": "runs whose count could not be read are dropped, which moves which runs fall in each half, so the comparison is between two populations chosen by whichever logs happened to parse (#1041, L288)"
+}

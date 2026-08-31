@@ -1,0 +1,8 @@
+{
+  "name": "a-count-of-items-is-not-a-measure-of-work",
+  "file": "tools/check_job_durations.py",
+  "find": "WORK_PATTERNS: dict[str, tuple[str, str]] = {\n    \"swift-unit\": (r\"Swift: (\\d+) tests\", \"tests executed\"),",
+  "replace": "WORK_PATTERNS: dict[str, tuple[str, str]] = {\n    \"changed\": (r\"(\\d+) guards? checked\", \"guards proved\"),\n    \"swift-unit\": (r\"Swift: (\\d+) tests\", \"tests executed\"),",
+  "test": "tests/test_job_duration_drift.py::test_the_guard_jobs_are_deliberately_not_normalised_by_entry_count",
+  "breaks": "the guard job is normalised by a count of entries whose real costs differ by a factor of 90, so a bare comparison is handed the confidence of a measured one, which is the defect #1041 exists to remove (L63, L296)"
+}
