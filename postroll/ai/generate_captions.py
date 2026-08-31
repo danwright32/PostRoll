@@ -58,7 +58,7 @@ from .ai_tells import (
 )
 from .claude_client import (run_json_prompt, run_prompt, run_review_pass,
                             load_brand_voice, ClaudeError, partition_uploadable)
-from .blog_quality import finding_entry
+from .blog_quality import Finding, finding_entry
 from .caption_credits import (
     HANDLE_RE,
     credit_findings,
@@ -76,14 +76,13 @@ PROMPT_TEMPLATE = """\
 
 ---
 
-Your task: write ONE social media caption + per-photo alt text for a
-post containing {photo_count} photo(s). The same caption is used
+Your task: write ONE social media caption + alt text for a
+post containing {post_size_line}. The same caption is used
 across Instagram, Facebook, TikTok, Pinterest, and Bluesky.
 
 If there are multiple photos (a carousel, or a reel built from many
 source frames), the caption stays GENERAL — it doesn't reference any
-individual frame. The alt text is per-photo, but the caption is one
-shared post-level caption.
+individual frame. {alt_shape_line}
 
 Event details:
 - Event name: {event}{org_line}
@@ -121,7 +120,7 @@ handles — appear as plain text in the caption, NOT as #-tags):
 {shooter_notes_section}**SCOPE RULE — read this before writing anything.**
 {scope_rule}
 
-{existing_captions_section}Photos in this post ({photo_count}):
+{existing_captions_section}{photo_list_heading}
 {photo_list}
 
 You will work in four explicit ordered stages. Do them IN ORDER.
@@ -609,6 +608,47 @@ ALT_TEXT_INSTRUCTION["morph_reel"]  = ALT_TEXT_INSTRUCTION["slider_reel"]
 ALT_TEXT_INSTRUCTION["screen_reel"] = ALT_TEXT_INSTRUCTION["slider_reel"]
 ALT_TEXT_INSTRUCTION["clip_reel"]   = ALT_TEXT_INSTRUCTION["scroll_reel"]
 
+def _post_size_line(post_type: str, attached: int, post_photo_count: int | None) -> str:
+    """What the post actually holds, said in the prompt's opening sentence.
+
+    Thursday's scroll reel is 50 to 200 photographs and the prompt is handed
+    four of them, because sending the reel's whole photo set would blow past
+    the request size for no benefit. The header then said "a post containing 4
+    photo(s)", and the photo list named four files, so the model was being
+    asked to summarise a reel it had been told was four pictures (#1067).
+
+    Half the Thursday alt texts in the live store describe a single moment as a
+    result, which reads as correct: it is a well written true sentence about one
+    photograph, and a screen reader user is told a 234 photo reel is a picture
+    of four dancers.
+    """
+    if post_photo_count and post_photo_count > attached:
+        return (f"{post_photo_count} photo(s), of which {attached} "
+                f"representative one(s) are attached below")
+    return f"{attached} photo(s)"
+
+
+def _photo_list_heading(attached: int, post_photo_count: int | None) -> str:
+    if post_photo_count and post_photo_count > attached:
+        return (f"A representative sample of the post's {post_photo_count} photos "
+                f"({attached} attached, NOT the whole post):")
+    return f"Photos in this post ({attached}):"
+
+
+def _alt_shape_line(post_type: str) -> str:
+    """Whether alt text is per photo, said per POST TYPE.
+
+    This sentence used to read "The alt text is per-photo" for every post type,
+    including the ones whose own instruction says the opposite three paragraphs
+    later. A rule stated once is outweighed by surrounding prose that breaks it,
+    and here the contradicting prose was in the same prompt (L270, #1067).
+    """
+    if post_type in SINGLE_ALT_POST_TYPES:
+        return ("This post takes ONE alt text describing the post as a whole, "
+                "and one shared post-level caption.")
+    return "The alt text is per-photo, but the caption is one shared post-level caption."
+
+
 DEFAULT_ALT_TEXT_INSTRUCTION = (
     "Write ONE alt text for the photo and put it as a SINGLE entry in "
     "the `alt_texts` list. 15-35 words. Describe what is actually "
@@ -664,6 +704,11 @@ def generate_caption(
     existing_captions: list[str] | None = None,
     event_url: str = "",
     venue_context: str = "",
+    #: How many photographs the POST holds, when that is more than the number
+    #: attached. Thursday's scroll reel is 50 to 200 photos and is handed four
+    #: of them; without this the prompt said "a post containing 4 photo(s)" and
+    #: the model summarised a reel it had been told was four pictures (#1067).
+    post_photo_count: int | None = None,
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
@@ -813,7 +858,9 @@ def generate_caption(
             name_mentions=_format_name_mentions(name_mentions),
             shooter_notes_section=shooter_notes_section,
             existing_captions_section=existing_section,
-            photo_count=photo_count,
+            post_size_line=_post_size_line(post_type, photo_count, post_photo_count),
+            photo_list_heading=_photo_list_heading(photo_count, post_photo_count),
+            alt_shape_line=_alt_shape_line(post_type),
             photo_list=photo_list,
         )
 
@@ -859,7 +906,8 @@ def generate_caption(
 
     # Normalize alt_texts and scene_labels. For single-alt post types,
     # collapse to the first entry defensively in case Claude wrote one
-    # per photo anyway.
+    # per photo anyway, and say so rather than swallowing it (#1067).
+    per_frame_findings: list[Finding] = []
     alt_texts = data.get("alt_texts") or []
     scene_labels = data.get("scene_labels") or []
     if not isinstance(alt_texts, list):
@@ -868,6 +916,25 @@ def generate_caption(
         scene_labels = [scene_labels]
 
     if post_type in SINGLE_ALT_POST_TYPES:
+        # The trim stays, because everything downstream takes entry 0 and a
+        # list of per-frame alts would ship whichever one happened to be first.
+        # What is new is that it is REPORTED (#1067, L340).
+        #
+        # This post type asks for one alt text describing the whole post. A
+        # model that wrote one per photograph has ignored that, and the entry
+        # that survives is a single frame's description: correctly formed, true
+        # of one picture, and indistinguishable from a compliant post level alt.
+        # Coercing it silently destroyed the only evidence the instruction was
+        # ignored, at the moment it was made, and it fails a bit over half the
+        # time on Thursday reels in the live store.
+        if len(alt_texts) > 1:
+            per_frame_findings.append(Finding(
+                code="alt_text_per_frame",
+                message=("This post takes one alt text for the whole post, and "
+                         "one per photo came back. The first is what shipped."),
+                detail=(f"{len(alt_texts)} alt texts for a {post_type}. "
+                        f"Kept: {alt_texts[0][:90]}"),
+            ))
         alt_texts = alt_texts[:1]
         scene_labels = scene_labels[:1]
     elif skipped_photos:
@@ -919,9 +986,10 @@ def generate_caption(
         # the right one by anything here, and Dan reads the caption before it
         # is posted.
         "findings": [
-            finding_entry(f) for f in credit_findings(
-                final_caption, tag_handles=tag_handles,
-                name_mentions=name_mentions)
+            finding_entry(f) for f in (
+                credit_findings(final_caption, tag_handles=tag_handles,
+                                name_mentions=name_mentions)
+                + per_frame_findings)
         ],
         # The exact text those findings were measured against, so an edited
         # caption stops showing findings about the text before the edit. Same

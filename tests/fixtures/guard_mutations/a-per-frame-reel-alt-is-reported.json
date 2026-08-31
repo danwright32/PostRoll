@@ -1,0 +1,8 @@
+{
+  "name": "a-per-frame-reel-alt-is-reported",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "        if len(alt_texts) > 1:\n            per_frame_findings.append(Finding(",
+  "replace": "        if False:\n            per_frame_findings.append(Finding(",
+  "test": "tests/test_reel_alt_text_describes_the_reel.py::test_per_frame_alt_text_on_a_reel_is_reported",
+  "breaks": "a model that wrote one alt per photograph for a post type asking for one alt about the whole post is trimmed silently again, so what ships is a single frame's description: correctly formed, true of one picture, and indistinguishable from a compliant reel level alt. It fails a bit over half the time on the Thursday reels in the live store, and the detection is thrown away at the moment it is made (#1067, L340)"
+}
