@@ -135,4 +135,33 @@ final class ModelDecodeToleranceTests: XCTestCase {
         XCTAssertEqual(pick.sourcePath, "")
         XCTAssertEqual(pick.rationale, "")
     }
+
+    // MARK: - What is written has to come back (#1022)
+
+    func testTheRenderedLayoutSurvivesASaveAndReload() throws {
+        // The instance the #1022 sweep found. `renderedPostingPreset` is
+        // stamped on every render by `recordRenderedLayout` and is what
+        // `PostingPresetStore.staleDays` judges an export by. The compiler
+        // encoded it and the hand written decoder never read it, so every day
+        // came back from disk carrying nil, and nil means "no evidence" rather
+        // than "mismatch", which is deliberate: it reads exactly like a library
+        // where nothing is stale. The whole #1010 gate was inert across a
+        // relaunch and nothing anywhere said so.
+        var day = PostingDay(day: .sunday)
+        day.renderedPostingPreset = .balanced
+
+        let reloaded = try JSONDecoder().decode(
+            PostingDay.self, from: try JSONEncoder().encode(day))
+
+        XCTAssertEqual(reloaded.renderedPostingPreset, .balanced)
+    }
+
+    func testADaySavedBeforeTheLayoutWasRecordedStillHasNoEvidence() throws {
+        // The other half. nil has to stay reachable: every day in the library
+        // predates the field, and reading its absence as a mismatch would
+        // accuse every export at once (L223).
+        let json = Data(#"{"day": "sunday"}"#.utf8)
+        let day = try JSONDecoder().decode(PostingDay.self, from: json)
+        XCTAssertNil(day.renderedPostingPreset)
+    }
 }

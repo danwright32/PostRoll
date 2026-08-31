@@ -22,6 +22,7 @@
     "test_blog_correction_fixtures.py": 0.02,
     "test_blog_draft_text.py": 0.01,
     "test_blog_filename_rules_on_every_path.py": 0.0,
+    "test_blog_findings_pin_their_body.py": 0.1,
     "test_blog_marker_filenames.py": 0.04,
     "test_blog_marker_near_miss_repair.py": 0.03,
     "test_blog_meta.py": 0.01,
@@ -166,6 +167,7 @@
     "test_source_text.py": 0.01,
     "test_source_tree_is_read_only.py": 0.0,
     "test_stitch_notes.py": 0.0,
+    "test_stored_types_round_trip.py": 1.06,
     "test_story_title_clamp.py": 5.21,
     "test_subscription_transport.py": 0.0,
     "test_suite_hygiene.py": 2.6899999999999995,
@@ -288,6 +290,10 @@
     "test_blog_filename_rules_on_every_path.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_blog_findings_pin_their_body.py": {
+      "run": "partial-2026-08-31T21:58Z",
+      "scale": 0.75
     },
     "test_blog_marker_filenames.py": {
       "run": "full-before-2026-08-30",
@@ -864,6 +870,10 @@
     "test_stitch_notes.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_stored_types_round_trip.py": {
+      "run": "partial-2026-08-31T21:58Z",
+      "scale": 0.75
     },
     "test_story_title_clamp.py": {
       "run": "full-before-2026-08-30",
