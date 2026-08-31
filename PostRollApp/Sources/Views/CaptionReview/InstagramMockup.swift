@@ -379,7 +379,9 @@ struct InstagramMockup: View {
             // Keep the previous image on screen while loading the next so
             // carousel swaps don't flash a placeholder (and don't reflow the
             // left column via a transient square frame).
-            if let loaded = await ImageLoad.read(url).image {
+            // The tallest thing this card draws is the 16:9 reel frame, so
+            // that is the longest edge to decode for (#966).
+            if let loaded = await ImageLoad.read(url, fitting: cardWidth * 16 / 9).image {
                 photo = loaded
             }
         }

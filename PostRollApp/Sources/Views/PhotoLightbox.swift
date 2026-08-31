@@ -17,7 +17,11 @@ struct PhotoLightbox: View {
 
     var body: some View {
         PhotoLightboxBody(url: url, load: load, onDismiss: onDismiss)
-            .task { load = await ImageLoad.read(url) }
+            // The one place in the app that genuinely wants the pixels: a
+            // photo opened at full size. Sized from the largest attached
+            // screen rather than a number written here, so a bigger display
+            // does not quietly start showing a soft image (#966).
+            .task { load = await ImageLoad.read(url, fitting: ImageLoad.largestScreenPoints) }
     }
 }
 

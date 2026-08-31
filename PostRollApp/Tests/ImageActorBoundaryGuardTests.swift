@@ -20,9 +20,20 @@ final class ImageActorBoundaryGuardTests: XCTestCase {
             .appendingPathComponent("Sources")
     }
 
-    /// `ImageLoad` is the one place allowed to do the loading, and it hands back
-    /// `Data`.
+    /// `ImageLoad` is the one place allowed to do the loading.
     private static let allowedFile = "ImageLoad.swift"
+
+    /// The image types that must not come back out of a detached task.
+    ///
+    /// `CGImage` joined `NSImage` with #966, which is when carrying a decoded
+    /// image across a boundary became a thing anybody would try: before that
+    /// the only image type in reach was `NSImage`. Neither is Sendable, and
+    /// `CGImage`'s crossing is the more tempting of the two because under
+    /// `targeted` concurrency it is a warning rather than an error, so it
+    /// compiles on both toolchains and reads as fine. The one deliberate
+    /// crossing is `ImageLoad.DecodedImage`, which is a box that says in
+    /// writing why it is safe; a bare one is not.
+    private static let imageTypes = ["NSImage", "CGImage"]
 
     private static func swiftFiles() throws -> [URL] {
         var found: [URL] = []
@@ -54,18 +65,21 @@ final class ImageActorBoundaryGuardTests: XCTestCase {
                 // building an image from bytes on this side, one line after an
                 // unrelated detached task, is the shape being asked for, and a
                 // guard that flags it is a guard nobody can satisfy.
-                if Self.detachedBody(lines, from: i).contains("NSImage") {
+                let body = Self.detachedBody(lines, from: i)
+                if Self.imageTypes.contains(where: body.contains) {
                     offenders.append("\(url.lastPathComponent):\(i + 1)  \(line)")
                 }
             }
         }
 
         XCTAssertTrue(offenders.isEmpty, """
-            A detached task hands back an NSImage, which is not Sendable, so this \
-            does not compile on the Xcode CI runs even though the local one accepts it.
+            A detached task hands back an image type, which is not Sendable. For \
+            NSImage that does not compile on the Xcode CI runs even though the local \
+            one accepts it; for CGImage it is a warning under targeted concurrency, \
+            so it compiles on both and reads as fine.
 
-            Load the bytes off the main thread and build the image on this side: \
-            `ImageLoad.read(url)` already does it.
+            Go through `ImageLoad.read(url, fitting:)`, which crosses the boundary in \
+            a box that says why that one is safe.
 
             \(offenders.joined(separator: "\n"))
             """)
@@ -85,20 +99,25 @@ final class ImageActorBoundaryGuardTests: XCTestCase {
 
     func testTheGuardActuallyFindsThisPattern() throws {
         // The scan is only worth anything if it matches the shape it forbids.
-        let sample = """
-            .task {
-                image = await Task.detached {
-                    NSImage(contentsOf: url)
-                }.value
+        // Every type it names, not just the first: a list checked through one
+        // of its entries says nothing about the others (L178).
+        for type in Self.imageTypes {
+            let sample = """
+                .task {
+                    image = await Task.detached {
+                        \(type)(contentsOf: url)
+                    }.value
+                }
+                """
+            let lines = sample.split(separator: "\n", omittingEmptySubsequences: false)
+            var matched = false
+            for (i, rawLine) in lines.enumerated()
+            where rawLine.trimmingCharacters(in: .whitespaces).contains("Task.detached") {
+                let body = Self.detachedBody(lines, from: i)
+                if Self.imageTypes.contains(where: body.contains) { matched = true }
             }
-            """
-        let lines = sample.split(separator: "\n", omittingEmptySubsequences: false)
-        var matched = false
-        for (i, rawLine) in lines.enumerated()
-        where rawLine.trimmingCharacters(in: .whitespaces).contains("Task.detached") {
-            if Self.detachedBody(lines, from: i).contains("NSImage") { matched = true }
+            XCTAssertTrue(matched, "the scan does not match \(type), which it forbids")
         }
-        XCTAssertTrue(matched, "the scan does not match the pattern it forbids")
     }
 
     func testTheGuardDoesNotFlagBuildingAnImageFromBytesAfterwards() throws {
@@ -115,7 +134,8 @@ final class ImageActorBoundaryGuardTests: XCTestCase {
         let lines = sample.split(separator: "\n", omittingEmptySubsequences: false)
         for (i, rawLine) in lines.enumerated()
         where rawLine.trimmingCharacters(in: .whitespaces).contains("Task.detached") {
-            XCTAssertFalse(Self.detachedBody(lines, from: i).contains("NSImage"),
+            let body = Self.detachedBody(lines, from: i)
+            XCTAssertFalse(Self.imageTypes.contains(where: body.contains),
                            "the scan flags an image built outside the detached closure")
         }
     }

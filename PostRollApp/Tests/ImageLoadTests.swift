@@ -39,14 +39,14 @@ final class ImageLoadTests: XCTestCase {
     @MainActor
     func testAFileThatIsThereLoads() async throws {
         let url = try writePNG(named: "photo.png")
-        let load = await ImageLoad.read(url)
+        let load = await ImageLoad.read(url, fitting: 80)
         XCTAssertNotNil(load.image, "a real PNG did not load")
         XCTAssertFalse(load.isMissing)
     }
 
     @MainActor
     func testAFileThatIsGoneIsMissingRatherThanStillLoading() async {
-        let load = await ImageLoad.read(dir.appendingPathComponent("reclaimed.jpg"))
+        let load = await ImageLoad.read(dir.appendingPathComponent("reclaimed.jpg"), fitting: 80)
 
         // The whole point. `.loading` here is what left a spinner running
         // forever over a photo ArchiveCleanup had reclaimed sixty days after
@@ -63,7 +63,7 @@ final class ImageLoadTests: XCTestCase {
         let url = dir.appendingPathComponent("not-a-photo.png")
         try Data("this is not a png".utf8).write(to: url)
 
-        let load = await ImageLoad.read(url)
+        let load = await ImageLoad.read(url, fitting: 80)
 
         XCTAssertEqual(load, .missing)
     }

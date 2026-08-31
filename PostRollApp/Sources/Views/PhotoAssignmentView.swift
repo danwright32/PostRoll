@@ -1174,7 +1174,7 @@ private struct CroppablePhotoThumb: View {
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .task {
-            let load = await ImageLoad.read(url)
+            let load = await ImageLoad.read(url, fitting: 80)
             image = load.image
             loadFailed = load.isMissing
         }
@@ -1613,7 +1613,9 @@ private struct PhotoTaggingSheet: View {
         // about work the person can no longer see.
         applyResult = nil
         tagUndo.clear()
-        let load = await ImageLoad.read(url)
+        // The tagging sheet is a fixed 800x560 panel and the photo in it
+        // is 460pt wide, so that is its longest edge (#966).
+        let load = await ImageLoad.read(url, fitting: 460)
         image = load.image
         loadFailed = load.isMissing
     }
@@ -2220,7 +2222,8 @@ private struct BeforeAfterThumb: View {
         }
         .buttonStyle(.plain)
         .help(isSelected ? "Tap to clear" : "Tap to assign")
-        .task { image = await ImageLoad.read(url).image }
+        // A 40pt strip thumbnail (#966).
+        .task { image = await ImageLoad.read(url, fitting: 40).image }
     }
 }
 
@@ -2366,7 +2369,7 @@ private struct PhotoThumb: View {
             .padding(3)
         }
         .task {
-            let load = await ImageLoad.read(url)
+            let load = await ImageLoad.read(url, fitting: 80)
             image = load.image
             loadFailed = load.isMissing
         }
