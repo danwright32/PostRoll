@@ -85,6 +85,7 @@
     "test_golden_recording_door.py": 0.05,
     "test_guard_mutation_registry.py": 29.370000000000072,
     "test_guard_sweep_due.py": 0.0,
+    "test_guard_sweep_fits_its_deadline.py": 0.04,
     "test_guard_sweep_freshness.py": 0.04,
     "test_gui_launch_budget.py": 0.0,
     "test_gui_tests_cannot_hang_silently.py": 0.0,

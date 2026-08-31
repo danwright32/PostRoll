@@ -235,7 +235,26 @@ jobs:
       # because it reads like the whole (L73).
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        # Six since #989's second half. Four shards ran at 98% and 99% of the
+        # 1800s deadline on the first sweep after the cadence changed, over 469
+        # entries, and the registry has grown to 495 since: the projection at
+        # four is 1,882s, past the deadline, so the next sweep would have
+        # reported entries UNPROVEN while going green (L98).
+        #
+        # More shards rather than better dealing, decided on the measurement.
+        # The four shards came in at 1,783s against a mean of 1,686s, an
+        # imbalance of 1.06, so dealing entries by measured time rather than by
+        # cost class is worth about a hundred seconds and the total is what
+        # grew. tests/test_guard_sweep_fits_its_deadline.py holds both halves of
+        # that and goes red if either stops being true.
+        #
+        # Six asks for one more macOS runner than GitHub runs at once, so one
+        # shard waits for a slot. That was the objection to sharding recorded
+        # above, and it is much weaker here than it was on the merge path: this
+        # is a daily 07:00 job nobody waits on, the deadline is measured inside
+        # the step rather than from when the job was queued, and the price is
+        # wall clock on a run whose result is read the next day.
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -302,7 +321,7 @@ jobs:
         # The deadline sits well under `timeout-minutes` on purpose. Whichever
         # fires first decides what is reported, and only this one can say which
         # entries went unproven.
-        run: python tools/check_guards.py --shard ${{ matrix.shard }}/4 --deadline-seconds 1800
+        run: python tools/check_guards.py --shard ${{ matrix.shard }}/6 --deadline-seconds 1800
 
       # Whether the SCHEDULED sweep is still happening at all (#554). The weekly
       # trigger's failure mode is silence: GitHub disables a repository's
