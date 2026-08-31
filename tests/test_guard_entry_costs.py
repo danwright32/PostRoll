@@ -231,3 +231,49 @@ def test_shards_that_all_cost_nothing_are_refused_not_called_perfect():
     """0/0 would report a perfect balance of a deal that measured nothing."""
     with pytest.raises(CostRecordError):
         imbalance([["a"], ["b"]], {"a": 0.0, "b": 0.0})
+
+
+# ── the fallback, and the condition on it being allowed to exist ─────────────
+
+def test_the_deal_falls_back_to_cost_class_when_there_is_no_record(tmp_path,
+                                                                   monkeypatch):
+    """The sweep is what WRITES the record, so refusing would leave the first
+    sweep unable to run and a deleted record able to stop every sweep after it
+    (L111)."""
+    from tools.check_guards import costs_or_fallback
+
+    monkeypatch.setattr("tools.guard_entry_costs.RECORD", tmp_path / "gone.json")
+    costs = costs_or_fallback({"s": True, "p": False})
+    assert costs.of("s") > costs.of("p") * 10, (
+        "the fallback prices a Swift entry and a Python one the same, so the "
+        "deal it makes is worse than the round robin it replaced"
+    )
+    assert costs.estimated == frozenset({"s", "p"}), (
+        "the fallback must count as estimated, or the suite's guard on the "
+        "measured share cannot see a sweep running on it"
+    )
+
+
+def test_the_fallback_says_so_rather_than_dealing_quietly(tmp_path, monkeypatch):
+    """A fallback that is merely worse rather than wrong fails silently, so the
+    saving stops happening while every shard stays green (L289)."""
+    from tools.check_guards import costs_or_fallback
+
+    monkeypatch.setattr("tools.guard_entry_costs.RECORD", tmp_path / "gone.json")
+    said: list[str] = []
+    costs_or_fallback({"s": True}, log=said.append)
+    assert any("cost CLASS rather than by measured time" in line for line in said), \
+        said
+
+
+def test_a_readable_record_is_used_rather_than_the_fallback(tmp_path, monkeypatch):
+    """The positive control, in the same fixture, so the fallback cannot be
+    what every run quietly takes (L159)."""
+    from tools.check_guards import costs_or_fallback
+
+    path = record_at(tmp_path / "costs.json", {"s": 11.0, "p": 0.3})
+    monkeypatch.setattr("tools.guard_entry_costs.RECORD", path)
+    said: list[str] = []
+    costs = costs_or_fallback({"s": True, "p": False}, log=said.append)
+    assert costs.of("s") == 11.0
+    assert said == []

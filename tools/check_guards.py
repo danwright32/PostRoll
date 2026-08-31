@@ -1074,6 +1074,10 @@ def guard_work_line(results: list[Result]) -> str:
     try:
         costs = guard_entry_costs.costs_for(kinds)
     except guard_entry_costs.CostRecordError as refusal:
+        # UNMEASURED rather than the cost-class fallback. The deal may guess,
+        # because a sweep that cannot run proves nothing; a rate may not,
+        # because a divisor nobody measured produces a series that looks like a
+        # measurement and is not (L11, L98).
         return (f"{GUARD_WORK_PREFIX}unmeasured, because the cost record could "
                 f"not answer: {refusal}")
     total = sum(costs.of(name) for name in kinds)
@@ -1083,6 +1087,30 @@ def guard_work_line(results: list[Result]) -> str:
     # is refused as unmeasurable rather than read as a very fast job (L11).
     return (f"{GUARD_WORK_PREFIX}{round(total * 1000)} recorded entry-ms over "
             f"{len(kinds)} entries, {costs.measured} of them measured")
+
+
+def costs_or_fallback(kinds: dict[str, bool],
+                      log=None) -> guard_entry_costs.Costs:
+    """The recorded costs, or the cost CLASSES when the record cannot answer.
+
+    A fallback rather than a refusal, because this is the tool that WRITES the
+    record: refusing would leave the first sweep unable to run and a deleted
+    record able to stop every sweep after it (L111).
+
+    It says so out loud, which is the condition on it being allowed to exist. A
+    fallback that is merely worse rather than wrong fails silently, so the
+    saving stops happening while every shard stays green (L289). The suite's own
+    guard on the measured share is the other half: it goes red whenever the
+    record covers less than most of the registry, so nobody has to be reading a
+    log for this to be reported.
+    """
+    try:
+        return guard_entry_costs.costs_for(kinds)
+    except guard_entry_costs.CostRecordError as refusal:
+        if log is not None:
+            log(f"dealing by cost CLASS rather than by measured time, because "
+                f"the cost record could not answer: {refusal}")
+        return guard_entry_costs.by_cost_class(kinds)
 
 
 def write_timings(path: Path, results: list[Result], repo_root: Path) -> int:
@@ -1181,7 +1209,7 @@ def shard_of(entries: list[Entry], index: int, total: int,
     # Injected by the tests that drive the deal directly, so they are not
     # measuring whatever the live record happens to hold today; None here means
     # the real record, which is what the sweep uses (L196).
-    costs = costs if costs is not None else guard_entry_costs.costs_for(kinds)
+    costs = costs if costs is not None else costs_or_fallback(kinds)
     dealt = guard_entry_costs.deal(list(kinds), total, costs.seconds)
     mine = set(dealt[index - 1])
     return [e for e in entries if e.name in mine]
@@ -1261,7 +1289,7 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
         # deal identically and a partition of guesses looks exactly like a
         # partition of readings (L11, L98).
         kinds = {e.name: e.test.startswith("PostRollTests/") for e in entries}
-        costs = guard_entry_costs.costs_for(kinds)
+        costs = costs_or_fallback(kinds, log=log)
         log(f"dealt by measured cost: {costs.measured} of {len(kinds)} entries "
             f"on this shard carry a reading, {len(costs.estimated)} are "
             "estimated from the median of their kind")

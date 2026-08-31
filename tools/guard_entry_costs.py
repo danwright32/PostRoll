@@ -205,6 +205,37 @@ def deal(names: Sequence[str], total: int, cost: Mapping[str, float]) -> list[li
     return shards
 
 
+def by_cost_class(names_by_kind: Mapping[str, bool]) -> Costs:
+    """A cost for every entry from its KIND alone, when there is no record.
+
+    The rule `shard_of` used before #1090: a Swift entry pays an app build and a
+    Python one is under a second. It is a proxy rather than a measure, and it is
+    what the deal falls back to when the record cannot be read at all.
+
+    A fallback rather than a refusal because the sweep is what WRITES the
+    record, so refusing would leave the first sweep unable to run and a deleted
+    record able to stop every sweep afterwards (L111: a remedy blocked by the
+    thing it exists to clear is no remedy).
+
+    It is not silent, which is the whole condition on it being allowed to exist
+    (L289). The caller says in the log that it fell back; and
+    tests/test_guard_sweep_fits_its_deadline.py goes red in the ordinary suite
+    whenever the record covers less than most of the registry, so a sweep
+    running on this permanently is reported by the suite rather than only by
+    somebody reading a log.
+
+    The two numbers are the measured medians from the first recorded sweep,
+    written here as the shape of the fallback rather than as a claim about
+    today: they only ever decide a RATIO, and the ratio between a build and a
+    pytest run is what the deal needs.
+    """
+    return Costs(
+        seconds={name: (29.0 if swift else 0.8)
+                 for name, swift in names_by_kind.items()},
+        estimated=frozenset(names_by_kind),
+    )
+
+
 def imbalance(shards: Iterable[Sequence[str]], cost: Mapping[str, float]) -> float:
     """The heaviest shard's cost divided by the mean, 1.0 being a perfect deal.
 
