@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
   "find": "guard PythonBridge.isRealHandle(raw) else { continue }",
   "replace": "guard !AccountBook.key(raw).isEmpty else { continue }",
-  "test": "PostRollTests/CollaboratorPickTests/testFiveRealTagsPlusASentinelRaiseNoPanel",
-  "breaks": "a stored value that is no account (the sentinel `unknown`, a display name with a space) is counted toward the five slot threshold, so a post with five real accounts and no editorial decision to make raises a collaborator panel, and the same value is then offered as one of five invites and written into the exported CAPTIONS.txt (#981)"
+  "test": "PostRollTests/CollaboratorPickTests/testFiveRealTagsPlusASentinelStillAllFit",
+  "breaks": "a stored value that is no account (the sentinel `unknown`, a display name with a space) is counted toward the five collaborator slots, so a post with five real accounts and nothing to decide is ranked as though somebody had to be cut, and the same value is then offered as one of five invites and written into the exported CAPTIONS.txt (#981, #964)"
 }

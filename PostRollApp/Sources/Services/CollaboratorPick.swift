@@ -63,8 +63,30 @@ enum CollaboratorPick {
         let reason: String
     }
 
+    /// What kind of answer this day has, which decides what every surface says
+    /// about it (#964).
+    ///
+    /// The three are genuinely different answers and must never render alike.
+    /// Before this existed the first two were both silence, so a day whose
+    /// every tagged account should be invited looked exactly like a day nobody
+    /// had considered (L11, L98).
+    enum Coverage: Equatable {
+        /// Nothing this post tags is an account that can be invited.
+        case nothingTagged
+        /// There are no more candidates than slots, so all of them go.
+        /// Nobody was cut, so nothing here may read as a ranking.
+        case allFit
+        /// More candidates than slots, so this is an editorial decision and
+        /// the list is ordered, with the fallbacks and the exclusion named.
+        case ranked
+    }
+
     struct Result: Equatable {
-        /// At most `maxPerPost`, best first.
+        /// Which of the three answers this is, and so what the surfaces say.
+        var coverage: Coverage
+        /// Everyone to invite. At most `maxPerPost`. Best first under
+        /// `.ranked`; in the post's own tag order under `.allFit`, because an
+        /// order nobody chose reads as a ranking that cut somebody.
         var suggested: [Candidate]
         /// Which of the suggested are NOT in the first photo, in order. Empty
         /// when no first-photo distinction applies. Named so Dan can see the
@@ -82,7 +104,12 @@ enum CollaboratorPick {
 
     // MARK: - The pick
 
-    /// The collaborators to suggest, or nil when there is no choice to make.
+    /// The collaborators to suggest for one post, always.
+    ///
+    /// Every posting day gets an answer (#964). Which of the three answers it
+    /// is comes back on `coverage`, because "invite all four of these", "here
+    /// are the five worth the slots" and "nobody is tagged yet" are different
+    /// things to tell somebody and used to be the same silence.
     ///
     /// - Parameters:
     ///   - handles: every account this post tags, in the order the post lists
@@ -96,7 +123,7 @@ enum CollaboratorPick {
     ///     than the book itself, so this stays a pure function.
     static func suggest(handles: [String], firstPhoto: Set<String>?,
                         stats: (String) -> AccountStats?, asOf now: Date,
-                        notes: [String] = []) -> Result? {
+                        notes: [String] = []) -> Result {
         // Deduplicated on the account book's key, so three spellings of one
         // person are one candidate rather than three slots.
         var seen = Set<String>()
@@ -119,10 +146,6 @@ enum CollaboratorPick {
             keys.append(key)
         }
 
-        // Fewer than six tags means there are no more candidates than slots, so
-        // there is no editorial decision to make and nothing worth showing.
-        guard keys.count > maxPerPost else { return nil }
-
         let firstPhotoKeys = firstPhoto.map { Set($0.map(AccountBook.key)) }
         let candidates = keys.map { key -> Candidate in
             let stats = stats(key)
@@ -132,6 +155,29 @@ enum CollaboratorPick {
                              reason: reasonText(stats: stats, inFirstPhoto: inFirstPhoto,
                                                 appliesFirstPhoto: firstPhotoKeys != nil,
                                                 asOf: now))
+        }
+
+        // Nothing this post tags can be invited. Said out loud, because an
+        // absent section reads as a day that was considered and needed no
+        // invites, which is the opposite of what it means (#964).
+        guard !candidates.isEmpty else {
+            return Result(coverage: .nothingTagged, suggested: [], fallbacks: [],
+                          strongestExcluded: nil, unranked: [], notes: notes)
+        }
+
+        // No more candidates than slots, so every one of them goes and there is
+        // no editorial decision to report. In the post's own tag order rather
+        // than a scored one: nobody was cut, and an order nobody chose reads as
+        // a ranking that cut somebody.
+        //
+        // An account with no numbers is an invite here like any other. The
+        // separate `unranked` list exists so an unmeasured account cannot take
+        // a slot off a measured one; with no slot to lose there is nothing to
+        // protect, and holding it back would be the same silence in a smaller
+        // form.
+        guard candidates.count > maxPerPost else {
+            return Result(coverage: .allFit, suggested: candidates, fallbacks: [],
+                          strongestExcluded: nil, unranked: [], notes: notes)
         }
 
         // Split by whether the account can be ranked at all, and carry the
@@ -151,7 +197,8 @@ enum CollaboratorPick {
             ? []
             : suggested.filter { !$0.inFirstPhoto }.map(\.handle)
 
-        return Result(suggested: suggested,
+        return Result(coverage: .ranked,
+                      suggested: suggested,
                       fallbacks: fallbacks,
                       strongestExcluded: excludedPurelyByFirstPhotoRule(
                         ranked: ranked, suggested: suggested, applies: firstPhotoKeys != nil),
@@ -263,7 +310,7 @@ enum CollaboratorPick {
     ///   reads identically to nobody having entered any numbers.
     static func suggest(event: Event, day: DayName, preset: PostingPreset,
                         stats: (String) -> AccountStats?, asOf now: Date,
-                        notes: [String] = []) -> Result? {
+                        notes: [String] = []) -> Result {
         let membership = firstPhotoHandles(event: event, day: day, preset: preset)
         return suggest(handles: CaptionBlocks.dayTagCandidates(event: event, day: day,
                                                                preset: preset),
@@ -276,6 +323,27 @@ enum CollaboratorPick {
     /// The section header, exactly as it appears in the file.
     static let captionHeader = "COLLABORATORS:"
 
+    /// Said when a post tags nobody who could be invited.
+    ///
+    /// Printed rather than left out, so a day with nobody tagged yet is
+    /// visibly different from a day this app never looked at (#964).
+    static let nobodyTaggedLine =
+        "Nobody on this day is tagged to an account yet, so there is nobody to invite."
+
+    /// Said when every candidate fits inside the slots.
+    ///
+    /// Deliberately carries no ranking language: nobody was cut, and telling
+    /// somebody a list is "the best five" when it is simply everyone invites a
+    /// decision that does not exist.
+    static func everyoneFitsLine(_ count: Int) -> String {
+        guard count > 1 else {
+            return "One account is tagged on this day and Instagram allows "
+                 + "\(maxPerPost) collaborators per post, so invite them."
+        }
+        return "All \(count) accounts tagged on this day fit Instagram's "
+             + "\(maxPerPost) collaborator slots, so invite every one of them."
+    }
+
     /// One day's collaborator section.
     ///
     /// Built from the same `Result` the review screen renders, so the names in
@@ -284,24 +352,38 @@ enum CollaboratorPick {
     /// through, who was left out only by the first-photo rule, and who has no
     /// numbers at all. An account silently dropped looks like one that was
     /// considered and rejected.
+    ///
+    /// Three shapes, one per `Coverage`, because the three are different
+    /// answers (#964). Under `.allFit` the names carry no position numbers:
+    /// a numbered list is a ranking however the sentence above it is worded.
     static func captionBlock(_ result: Result) -> String {
-        var lines = [captionHeader,
-                     "Instagram allows \(maxPerPost) collaborators per post. Invite these:"]
-        for (index, candidate) in result.suggested.enumerated() {
-            lines.append("\(index + 1). \(candidate.handle) (\(candidate.reason))")
-        }
-        if !result.fallbacks.isEmpty {
-            lines.append("Filling the remaining slots, not in the first photo: "
-                         + result.fallbacks.joined(separator: ", "))
-        }
-        if let excluded = result.strongestExcluded {
-            lines.append("Left out only for not being in the first photo, "
-                         + "swap in by hand if the reach is worth it: "
-                         + "\(excluded.handle) (\(excluded.reason))")
-        }
-        if !result.unranked.isEmpty {
-            lines.append("Not counted yet, so not ranked: "
-                         + result.unranked.map(\.handle).joined(separator: ", "))
+        var lines = [captionHeader]
+        switch result.coverage {
+        case .nothingTagged:
+            lines.append(nobodyTaggedLine)
+        case .allFit:
+            lines.append(everyoneFitsLine(result.suggested.count))
+            for candidate in result.suggested {
+                lines.append("\(candidate.handle) (\(candidate.reason))")
+            }
+        case .ranked:
+            lines.append("Instagram allows \(maxPerPost) collaborators per post. Invite these:")
+            for (index, candidate) in result.suggested.enumerated() {
+                lines.append("\(index + 1). \(candidate.handle) (\(candidate.reason))")
+            }
+            if !result.fallbacks.isEmpty {
+                lines.append("Filling the remaining slots, not in the first photo: "
+                             + result.fallbacks.joined(separator: ", "))
+            }
+            if let excluded = result.strongestExcluded {
+                lines.append("Left out only for not being in the first photo, "
+                             + "swap in by hand if the reach is worth it: "
+                             + "\(excluded.handle) (\(excluded.reason))")
+            }
+            if !result.unranked.isEmpty {
+                lines.append("Not counted yet, so not ranked: "
+                             + result.unranked.map(\.handle).joined(separator: ", "))
+            }
         }
         lines.append(contentsOf: result.notes)
         return lines.joined(separator: "\n")

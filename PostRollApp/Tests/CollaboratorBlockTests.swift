@@ -53,7 +53,7 @@ final class CollaboratorBlockTests: XCTestCase {
         ]
     }
 
-    private func suggestion() -> CollaboratorPick.Result? {
+    private func suggestion() -> CollaboratorPick.Result {
         CollaboratorPick.suggest(event: event(), day: .wednesday, preset: .balanced,
                                  stats: { table[AccountBook.key($0)] }, asOf: now)
     }
@@ -61,7 +61,7 @@ final class CollaboratorBlockTests: XCTestCase {
     // MARK: - The block
 
     func testTheBlockNamesTheFiveToInviteUnderItsOwnHeader() throws {
-        let result = try XCTUnwrap(suggestion())
+        let result = suggestion()
         let block = CollaboratorPick.captionBlock(result)
 
         XCTAssertTrue(block.hasPrefix(CollaboratorPick.captionHeader), block)
@@ -73,7 +73,7 @@ final class CollaboratorBlockTests: XCTestCase {
     func testTheBlockCarriesTheReasonsNotJustTheNames() throws {
         // An ordered list with no figures is not something anyone can disagree
         // with, and disagreeing is the point: the swap is Dan's call.
-        let block = CollaboratorPick.captionBlock(try XCTUnwrap(suggestion()))
+        let block = CollaboratorPick.captionBlock(suggestion())
         XCTAssertTrue(block.contains("followers"), block)
         XCTAssertTrue(block.contains("engagement"), block)
         XCTAssertTrue(block.lowercased().contains("first photo"), block)
@@ -82,27 +82,27 @@ final class CollaboratorBlockTests: XCTestCase {
     func testTheBlockNamesTheStrongestAccountTheRuleLeftOut() throws {
         // Without this the exclusion is invisible: an account with ten times
         // anyone's reach would silently never be offered.
-        let block = CollaboratorPick.captionBlock(try XCTUnwrap(suggestion()))
+        let block = CollaboratorPick.captionBlock(suggestion())
         XCTAssertTrue(block.contains("strong"), block)
         XCTAssertTrue(block.lowercased().contains("swap"), block)
     }
 
     func testTheBlockNamesTheAccountsWithNoNumbersRatherThanDroppingThem() throws {
         // Dropped, they look like accounts that were considered and rejected.
-        let block = CollaboratorPick.captionBlock(try XCTUnwrap(suggestion()))
+        let block = CollaboratorPick.captionBlock(suggestion())
         XCTAssertTrue(block.contains("uncounted"), block)
         XCTAssertTrue(block.lowercased().contains("not counted"), block)
     }
 
     func testTheBlockNamesInstagramsLimitSoTheNumberFiveIsNotAMystery() throws {
-        let block = CollaboratorPick.captionBlock(try XCTUnwrap(suggestion()))
+        let block = CollaboratorPick.captionBlock(suggestion())
         XCTAssertTrue(block.contains("\(CollaboratorPick.maxPerPost)"), block)
     }
 
     func testTheBlockCarriesNoBannedDash() throws {
         // The style hook reads source, never runtime output, and these lines
         // are assembled from handles Dan typed.
-        let block = CollaboratorPick.captionBlock(try XCTUnwrap(suggestion()))
+        let block = CollaboratorPick.captionBlock(suggestion())
         XCTAssertFalse(block.contains("\u{2014}"), block)
         XCTAssertFalse(block.contains("\u{2013}"), block)
     }
@@ -128,16 +128,17 @@ final class CollaboratorBlockTests: XCTestCase {
         XCTAssertTrue(wednesday.contains(CollaboratorPick.captionHeader))
     }
 
-    func testADayUnderTheThresholdGetsNoBlockAtAll() throws {
-        // Done-when 7. A header over "no suggestion" is noise on every post
-        // that did not need one.
+    /// #964. The old rule wrote nothing here, and nothing is what a day that
+    /// needed no invites looks like. Three tagged people all fit the five
+    /// slots, which is the clearest possible answer: invite all three.
+    func testADayWhoseTagsAllFitNamesEveryOneOfThemInTheFile() throws {
         var event = self.event()
         var wed = event.days[DayName.wednesday.rawValue]!
-        wed.photoTags = [wed.photoPaths[0].absoluteString: ["one", "two", "three"]]
+        wed.photoTags = [wed.photoPaths[0].absoluteString: ["strong", "mid1", "mid2"]]
         event.days[DayName.wednesday.rawValue] = wed
 
         let folder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("collab-none-\(UUID().uuidString)")
+            .appendingPathComponent("collab-allfit-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }
 
         let exported = try EventExporter.export(
@@ -145,7 +146,37 @@ final class CollaboratorBlockTests: XCTestCase {
             collaboratorStats: { self.table[AccountBook.key($0)] }, asOf: now)
         let captions = try String(
             contentsOf: exported.folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
-        XCTAssertFalse(captions.contains(CollaboratorPick.captionHeader), captions)
+
+        XCTAssertTrue(captions.contains(CollaboratorPick.captionHeader), captions)
+        XCTAssertTrue(captions.contains(CollaboratorPick.everyoneFitsLine(3)), captions)
+        for handle in ["strong", "mid1", "mid2"] {
+            XCTAssertTrue(captions.contains(handle), handle)
+        }
+        // Nobody was cut, so nothing may read as a ranking.
+        XCTAssertFalse(captions.contains("1. strong"), captions)
+        XCTAssertFalse(captions.lowercased().contains("swap"), captions)
+    }
+
+    /// The other half: a day tagging nobody says so, rather than printing an
+    /// absent section that reads exactly like a day nobody considered (L98).
+    func testADayThatTagsNobodySaysSoInTheFile() throws {
+        var event = self.event()
+        var wed = event.days[DayName.wednesday.rawValue]!
+        wed.photoTags = [:]
+        event.days[DayName.wednesday.rawValue] = wed
+
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("collab-nobody-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let exported = try EventExporter.export(
+            event: event, to: folder, preset: .balanced,
+            collaboratorStats: { self.table[AccountBook.key($0)] }, asOf: now)
+        let captions = try String(
+            contentsOf: exported.folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+
+        XCTAssertTrue(captions.contains(CollaboratorPick.captionHeader), captions)
+        XCTAssertTrue(captions.contains(CollaboratorPick.nobodyTaggedLine), captions)
     }
 
     func testTheExportAndTheScreenNameTheSameFive() throws {
@@ -162,7 +193,7 @@ final class CollaboratorBlockTests: XCTestCase {
         let captions = try String(
             contentsOf: exported.folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
 
-        let onScreen = try XCTUnwrap(suggestion())
+        let onScreen = suggestion()
         XCTAssertTrue(captions.contains(CollaboratorPick.captionBlock(onScreen)))
     }
 

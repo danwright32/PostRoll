@@ -261,11 +261,14 @@ struct EventExporter {
             // collaborator invite puts the post on their own grid. Built
             // from the same `suggest` the review screen renders, so the
             // file and the screen cannot name a different five.
-            if let picks = CollaboratorPick.suggest(event: event, day: day, preset: preset,
-                                                    stats: collaboratorStats, asOf: now,
-                                                    notes: collaboratorNotes) {
-                block += "\n\n" + CollaboratorPick.captionBlock(picks)
-            }
+            // On EVERY posting day since #964, not only when there are more
+            // candidates than slots. An absent section reads as a post that was
+            // considered and needed no invites, and the days carrying the best
+            // photos are the ones that used to go quiet.
+            block += "\n\n" + CollaboratorPick.captionBlock(
+                CollaboratorPick.suggest(event: event, day: day, preset: preset,
+                                         stats: collaboratorStats, asOf: now,
+                                         notes: collaboratorNotes))
             sections.append(block)
         }
         return sections.joined(separator: "\n\n") + "\n"
