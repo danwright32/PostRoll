@@ -925,7 +925,7 @@ def generate_caption(
         ],
         # The exact text those findings were measured against, so an edited
         # caption stops showing findings about the text before the edit. Same
-        # reason BlogOutput carries findings_body (#201).
+        # reason the blog paths emit findings_body (#201, #974).
         "findings_caption": final_caption,
         # Which photo each alt text describes (#1008).
         #

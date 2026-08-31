@@ -1,0 +1,8 @@
+{
+  "name": "the-blog-pin-comes-from-the-payload",
+  "file": "PostRollApp/Sources/Services/CaptionWorkManager.swift",
+  "find": "next.applyFindings(updated.findings, checkedBody: updated.findingsBody)",
+  "replace": "next.applyFindings(updated.findings, checkedBody: updated.body)",
+  "test": "PostRollTests/CaptionWorkManagerTests/testASwappedBlogKeepsThePinThePayloadSent",
+  "breaks": "the app recomputes which text the blog checks ran on instead of taking it from the half that ran them, so the answer lives in two places and the one that is wrong is the one nothing measures. Python rewrites the body after the checks (marker filenames repaired, em dashes stripped), so the two are not interchangeable in principle even where they agree today (#974, L41)"
+}

@@ -169,6 +169,13 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         "body":        final_body,
         "photo_count": len(photo_paths),
         "findings": [finding_entry(f) for f in findings],
+        # The exact text those findings were measured against, so an edited
+        # draft stops showing findings about the body before the edit. The
+        # caption paths have emitted their sibling `findings_caption` since
+        # #201; this one was named in the comment there and never sent, so
+        # the blog panel could not go stale on any post ever generated
+        # (#974).
+        "findings_body": final_body,
     }
 
 

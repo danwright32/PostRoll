@@ -137,3 +137,47 @@ def test_the_contract_is_valid_json_with_a_comment_that_says_why():
         "guard whose purpose is only in a commit message becomes a rule "
         "nobody dares delete and nobody understands."
     )
+
+
+# The text a payload's findings were measured against, per Swift model (#974).
+#
+# A findings list on its own can only say what was wrong with SOME text. The
+# panel's whole job is to say whether the text on screen still has those
+# problems, and it cannot answer that without the text they were measured
+# against. The caption paths have sent theirs since #201; the blog paths never
+# did, so a generated blog's panel went on asserting its findings however much
+# of the draft had been rewritten, on all 21 events in the live store.
+CHECKED_TEXT_KEY = {
+    "DayCaption": "findings_caption",
+    "BlogOutput": "findings_body",
+}
+
+
+def payloads_reporting_findings() -> list[str]:
+    return sorted(name for name, payload in PAYLOADS.items()
+                  if "findings" in payload["keys"])
+
+
+def test_the_sweep_can_see_the_payloads_that_report_findings():
+    # A parametrised list that came out empty passes every case below while
+    # checking nothing (L98).
+    found = payloads_reporting_findings()
+    assert len(found) >= 5, (
+        f"only {found} report findings, which is fewer than the caption and "
+        f"blog paths that exist, so this sweep is looking at the wrong field")
+
+
+@pytest.mark.parametrize("name", payloads_reporting_findings())
+def test_a_payload_reporting_findings_also_pins_the_text_they_describe(name):
+    payload = PAYLOADS[name]
+    swift_type = payload["swift"].get("type")
+    # A KeyError here rather than a skip: a new model carrying findings is
+    # exactly the case this rule exists for, and skipping it would exempt the
+    # one payload nobody has thought about yet (L129).
+    expected = CHECKED_TEXT_KEY[swift_type]
+    assert expected in payload["keys"], (
+        f"{name} sends `findings` but no `{expected}`, so nothing downstream "
+        f"can tell whether the text has been edited since they were measured. "
+        f"The panel then keeps asserting findings about text that no longer "
+        f"exists, which trains the reader to ignore it (#974, L11)."
+    )
