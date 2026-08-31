@@ -176,7 +176,7 @@ def ease_in_out(t: float) -> float:
 
 def build_collage_strip(
     photo_paths: list[str],
-    seed: int | None = None,
+    seed: int,
     crop_offsets: list[tuple[float, float, float]] | None = None,
     return_layout: bool = False,
     logo_path: str | None = DEFAULT_LOGO,
@@ -192,6 +192,19 @@ def build_collage_strip(
                None draws no mark. Defaults to the brand dark wordmark so the
                editor preview and the video render show the same thing.
     """
+    if seed is None:
+        # Refused rather than defaulted (#1062, L339). `random.Random(None)`
+        # seeds from system entropy, so the masonry layout was different on
+        # every run: adjusting one crop re-laid-out all 234 photographs, and
+        # two renders of identical inputs produced different reels, which is
+        # what made proving a render refactor a no-op read as a broken
+        # renderer. The app mints and stores a seed on a day's first render,
+        # so reaching here without one is a defect upstream, not a caller
+        # asking for variety.
+        raise ValueError(
+            "build_collage_strip needs a layout seed: without one the masonry "
+            "is reshuffled on every render and no two runs of the same inputs "
+            "produce the same reel")
     rng = random.Random(seed)
     photos = [Image.open(p) for p in photo_paths]
     n = len(photos)
@@ -420,7 +433,7 @@ from postroll.ai.audio_tags import THURSDAY_FALLBACK_TAGS as _DEFAULT_AUDIO_TAGS
 def build_reel_preview(
     photo_paths: list[str],
     output_path: str,
-    seed: int | None = None,
+    seed: int,
     crop_offsets: list[tuple[float, float, float]] | None = None,
 ) -> str:
     """Render the reel's photo strip as a standalone PNG + layout sidecar.
@@ -511,7 +524,10 @@ def generate_reel_scroll(
     closing_frame_path: str | None = None,
     logo_path: str | None = None,
     gap: int = ROW_GAP,
-    seed: int | None = None,
+    # Keyword only from here, so `seed` can be required without reordering the
+    # positional arguments every caller already passes (#1062).
+    *,
+    seed: int,
     scroll_duration: float = SCROLL_DURATION,
     audio_tags: str | None = None,  # override default Jamendo search tags
     pieces: list[dict] | None = None,  # OCR program pieces — for piece-match auto-fetch
@@ -686,7 +702,10 @@ def main():
     parser.add_argument("--closing-frame", default=None)
     parser.add_argument("--logo", default=None)
     parser.add_argument("--gap", type=int, default=ROW_GAP)
-    parser.add_argument("--seed", type=int, default=None)
+    # Required since #1062. Without one the masonry is reshuffled on every
+    # run, so two renders of identical inputs are different reels and nothing
+    # says so. The app mints and stores one on a day's first render.
+    parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--output", default="output/reel_scroll.mp4")
     args = parser.parse_args()
 

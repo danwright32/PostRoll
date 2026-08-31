@@ -391,6 +391,28 @@ extension PostingDay {
         renderedPostingPreset = try c.decodeIfPresent(PostingPreset.self,           forKey: .renderedPostingPreset)
     }
 
+    /// This day's reel layout seed, minting and storing one when there is none.
+    ///
+    /// The one place a reel seed is decided (#1062). The collage sibling
+    /// already worked this way, minting on the first render of a day with no
+    /// seed and again when a new layout is asked for; the reel minted ONLY on
+    /// a new layout, so a day that was never asked for one never got a seed at
+    /// all and re-shuffled on every render.
+    ///
+    /// `generate` is a parameter so a test can pin the value rather than assert
+    /// around a random one. The default is the same range the collage seed and
+    /// the "New layout" button already use.
+    @discardableResult
+    mutating func ensureReelSeed(
+        fresh: Bool = false,
+        using generate: () -> Int = { Int.random(in: 1...999_999_999) }
+    ) -> Int {
+        if fresh || reelSeed == nil { reelSeed = generate() }
+        // Force unwrapped deliberately: the line above is the only way to reach
+        // here with nil, and it cannot leave one.
+        return reelSeed!
+    }
+
     /// Returns a copy with the given photos removed from photoPaths and from
     /// every per-photo map (crop offsets and tags, keyed by URL absoluteString)
     /// and collage cells (keyed by POSIX path). Used to drop references to
@@ -838,7 +860,20 @@ struct PostingDay: Codable, Hashable {
     var reelAudioSource: URL? = nil
     var reelAudioTags: String = ""
     var scrollDuration: Double = 40.0  // Thursday: scroll animation duration (seconds, 15–60)
-    var reelSeed: Int? = nil           // Thursday: layout seed (nil = random each time)
+    /// Thursday: the reel's masonry layout seed.
+    ///
+    /// nil is a DEFECT rather than a default (#1062). It used to mean "random
+    /// each time", and `build_collage_strip` duly seeded from system entropy,
+    /// so every regenerate reshuffled all 234 photographs and adjusting one
+    /// crop re-laid-out the whole reel. It also made `SpeculativeReelRenderer`
+    /// wrong in a way its own comment denied: it calls the reel a pure function
+    /// of five inputs while one of them was absent, so a background pre-render
+    /// and the render it was adopted for could be two different collages.
+    ///
+    /// Measured in the live store on 2026-08-31: 19 of 21 Thursday days carry
+    /// no seed. They get one on their next render, which is what
+    /// `ensureReelSeed` is for.
+    var reelSeed: Int? = nil
     // Wednesday collage
     var collageSeed: Int? = nil        // nil = random each time
     var cropOffsets: [String: CropOffset] = [:]        // carousel crop — keyed by photo URL absoluteString

@@ -47,6 +47,17 @@ def _main() -> int:
         return 1
 
     seed = manifest.get("seed")
+    if seed is None:
+        # Its own message rather than the one build_collage_strip would give,
+        # because this is the only caller a person reaches by hand: they opened
+        # the Thursday crop editor on a day whose reel was rendered before
+        # seeds were stored, and what they need to know is which action fixes
+        # it (#1062, L11, L111).
+        print("error: this day has no stored reel layout seed, so the preview "
+              "would show a different masonry layout from the reel itself. "
+              "Regenerate the Thursday reel once and the seed is stored.",
+              file=sys.stderr)
+        return 1
     raw_offsets = manifest.get("crop_offsets")
     crop_offsets = None
     if raw_offsets:

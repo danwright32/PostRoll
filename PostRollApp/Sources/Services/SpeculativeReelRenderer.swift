@@ -10,6 +10,14 @@ import Foundation
 /// edit arrives we SIGTERM the stale encode (via Swift task cancellation, which
 /// `PythonBridge.runProcess` forwards to ffmpeg) and start a fresh one.
 ///
+/// That purity is a claim about all five, and it was false for one of them
+/// until #1062: with no stored layout seed the generator seeded from system
+/// entropy, so two renders of the identical fingerprint produced different
+/// collages and an adopted pre-render could be a reel Dan never saw. A day with
+/// no seed is therefore not fingerprinted at all rather than fingerprinted as
+/// "seed:nil": refusing to pre-render is slower, and adopting the wrong reel is
+/// wrong (L75).
+///
 /// Instagram-style: assume the user will apply, start the work early, and just
 /// restart if they change something.
 @MainActor
@@ -33,12 +41,16 @@ final class SpeculativeReelRenderer {
     /// with the same fingerprint produce equivalent output, so a pre-render for
     /// one can be adopted by the other.
     func fingerprint(for event: Event) -> String? {
-        guard let pd = event.days[day.rawValue], !pd.photoPaths.isEmpty else { return nil }
+        guard let pd = event.days[day.rawValue], !pd.photoPaths.isEmpty,
+              // No seed means no determined layout, so nothing here can say
+              // that two renders of these inputs are the same reel (#1062).
+              let seed = pd.reelSeed
+        else { return nil }
         var parts: [String] = []
         parts.append("photos:" + pd.photoPaths.map { $0.path }.joined(separator: "|"))
         parts.append("audio:" + (pd.audioPath?.path ?? "nil"))
         parts.append("dur:" + String(format: "%.3f", pd.scrollDuration))
-        parts.append("seed:" + (pd.reelSeed.map(String.init) ?? "nil"))
+        parts.append("seed:\(seed)")
         let offsets = pd.reelCropOffsets
             .sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value.x),\($0.value.y),\($0.value.scale)" }

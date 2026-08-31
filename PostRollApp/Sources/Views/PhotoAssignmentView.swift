@@ -815,6 +815,13 @@ struct PhotoAssignmentView: View {
                 pd.audioPath      = thursdayAudio
                 pd.scrollDuration = thursdayScrollDuration
                 pd.reelSeed       = thursdayReelSeed
+                // The reel's layout is decided the moment its photos are, not
+                // the first time somebody presses "New layout" (#1062). Every
+                // Thursday reel gets its photographs here, so this is the
+                // earliest point every one of them passes through, and a day
+                // that reaches a render with no seed reshuffles all of them on
+                // every run.
+                pd.ensureReelSeed()
             case .friday:
                 // Before/after story uses Tuesday's RAW and edited photos (and
                 // the optional B&W). Friday has no separate photo grid, so wipe

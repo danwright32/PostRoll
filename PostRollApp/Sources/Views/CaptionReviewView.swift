@@ -1413,9 +1413,14 @@ struct CaptionReviewView: View {
                 pd.collageCellOverride = nil
                 ev.days[day.rawValue] = pd
             }
-            if day == .thursday, newLayout {
+            // The same rule as the collage above: mint on the FIRST render of a
+            // day that has no seed, and again whenever a new layout is asked
+            // for. This used to mint only on `newLayout`, so a reel nobody had
+            // asked to reshuffle never got a seed and reshuffled on every
+            // render anyway (#1062).
+            if day == .thursday {
                 var pd = ev.days[DayName.thursday.rawValue] ?? PostingDay(day: .thursday)
-                pd.reelSeed = Int.random(in: 1...999_999_999)
+                pd.ensureReelSeed(fresh: newLayout)
                 ev.days[DayName.thursday.rawValue] = pd
             }
         }) else { return false }
