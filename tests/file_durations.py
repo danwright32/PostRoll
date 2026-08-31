@@ -187,15 +187,49 @@ def recorded() -> dict[str, float]:
     """
     if not RECORD.exists():
         raise AssertionError(
-            f"{RECORD.relative_to(REPO_ROOT)} is missing, so nothing can say "
+            f"{_where(RECORD)} is missing, so nothing can say "
             "which test files are expensive. Record it with "
             "`venv/bin/python tools/record_test_durations.py`.")
     seconds = json.loads(RECORD.read_text(encoding="utf-8")).get("seconds")
     if not seconds:
         raise AssertionError(
-            f"{RECORD.relative_to(REPO_ROOT)} records no files at all, so every "
+            f"{_where(RECORD)} records no files at all, so every "
             "check derived from it is measuring an empty set.")
     return {name: float(value) for name, value in seconds.items()}
+
+
+def _where(path: Path) -> str:
+    """The record's path, named for a person, from wherever it is.
+
+    `relative_to` RAISES when the path is outside the repository, which is what
+    every test that points these readers at a fixture does. A refusal message
+    that crashes while being built is worse than the refusal it was replacing
+    (L10), and it hid a real one behind a ValueError the first time it happened.
+    """
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def provenance() -> dict[str, dict]:
+    """How each recorded reading was taken (#1038).
+
+    The record used to be a bare map of file to seconds, and nothing in it said
+    which RUN each number came from. A full re-record takes every reading in one
+    run, so they are all comparable. A file added afterwards is a reading from a
+    different run under different load, scaled onto the record's by measuring it
+    beside references, and mixing the two SILENTLY is what #1038 was about
+    (L224). Recording it does not stop the mixing; it stops it being invisible.
+    """
+    stamped = json.loads(RECORD.read_text(encoding="utf-8")).get("measured")
+    if not stamped:
+        raise AssertionError(
+            f"{_where(RECORD)} records no provenance at all, so "
+            "nothing says which run any of its readings came from and a record "
+            "mixing several is indistinguishable from one taken in a single "
+            "run (#1038). Re-record with `make record-test-durations`.")
+    return stamped
 
 
 def shares() -> dict[str, float]:
@@ -210,7 +244,7 @@ def shares() -> dict[str, float]:
     total = sum(seconds.values())
     if total <= 0:
         raise AssertionError(
-            f"{RECORD.relative_to(REPO_ROOT)} sums to {total}s, so every share "
+            f"{_where(RECORD)} sums to {total}s, so every share "
             "derived from it is meaningless")
     return {name: value / total for name, value in seconds.items()}
 

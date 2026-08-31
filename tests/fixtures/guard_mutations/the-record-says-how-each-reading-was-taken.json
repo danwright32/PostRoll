@@ -1,0 +1,8 @@
+{
+  "name": "the-record-says-how-each-reading-was-taken",
+  "file": "tests/file_durations.py",
+  "find": "    stamped = json.loads(RECORD.read_text(encoding=\"utf-8\")).get(\"measured\")\n    if not stamped:",
+  "replace": "    stamped = json.loads(RECORD.read_text(encoding=\"utf-8\")).get(\"measured\")\n    if False:",
+  "test": "tests/test_fast_subset_stays_honest.py::test_a_record_with_no_provenance_refuses_rather_than_answering_empty",
+  "breaks": "a record with no provenance reads as one taken in a single run, so readings scaled from several machines are compared against a floor derived as if they shared one (#1038, L224)"
+}

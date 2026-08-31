@@ -34,12 +34,16 @@ derivation, off the marker in the file itself, in
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
+
+import pytest
 
 
 from file_durations import (
     EXPENSIVE_SHARE,
+    provenance,
     GAP_ABOVE,
     GAP_BELOW,
     expensive,
@@ -348,3 +352,85 @@ def test_the_readme_says_how_many_files_the_fast_run_skips():
         "whenever the floor or the record does, so it is the sentence that has "
         "to follow, not the reader who has to notice."
     )
+
+
+# ── the record says how each reading was taken (#1038) ───────────────────────
+#
+# `EXPENSIVE_SHARE` is a share of the whole recorded run, so every reading has
+# to be on the same scale for the comparison to mean anything. A full re-record
+# takes them all in one run; a file added later is a reading from a different
+# run under different load. Measured on 2026-08-31, the ratio between a run and
+# the record ran from 0.16 to 3.57 over seven reference files, which is machine
+# contention rather than anything about the tests.
+#
+# Mixing is not forbidden, because forbidding it would mean re-reading the whole
+# suite to add one file, and that re-derives every share and has already carried
+# a file across the floor and turned a guard red on a suite nobody changed. What
+# is forbidden is mixing SILENTLY. `make record-test-durations --add <file>`
+# measures the new file beside references and records the scale it used, so the
+# record can be asked what it is made of.
+
+def test_every_recorded_reading_says_which_run_it_came_from():
+    missing = sorted(set(recorded()) - set(provenance()))
+    assert not missing, (
+        f"these readings have no provenance: {missing}. A number nobody can say "
+        "which run it came from cannot be compared with the ones around it, and "
+        "the record would be silently mixing scales again (#1038). Add files "
+        "with `venv/bin/python tools/record_test_durations.py --add <path>`, or "
+        "re-take the whole record with `make record-test-durations`.")
+
+
+def test_the_provenance_names_no_reading_the_record_does_not_hold():
+    """The other direction. A record whose two halves disagree can claim a file
+    was measured while holding no reading for it (L225)."""
+    orphans = sorted(set(provenance()) - set(recorded()))
+    assert not orphans, (
+        f"the record says these were measured and holds no seconds for them: "
+        f"{orphans}")
+
+
+def test_every_recorded_scale_is_a_real_multiplier():
+    """A scale of zero or less would have produced a reading of zero or less,
+    and a file recorded as free is one the fast run pays for forever while
+    every share around it is wrong."""
+    bad = sorted(name for name, how in provenance().items()
+                 if not isinstance(how.get("scale"), (int, float))
+                 or how["scale"] <= 0)
+    assert not bad, f"these carry no usable scale: {bad}"
+
+
+def test_the_record_is_mostly_one_run_rather_than_a_pile_of_scaled_ones():
+    """Each scaled reading carries the error of its own reference run, so a
+    record made mostly of them is a distribution assembled from many machines
+    rather than measured on one. This is the point at which re-recording the
+    whole suite is worth its churn.
+    """
+    runs = [how["run"] for how in provenance().values()]
+    biggest = max(runs.count(run) for run in set(runs))
+    share = biggest / len(runs)
+
+    assert share >= 0.75, (
+        f"only {share:.0%} of the record comes from its largest single run, so "
+        "most of the readings have been scaled onto it from elsewhere and the "
+        "distribution EXPENSIVE_SHARE is chosen from is an assembly rather than "
+        "a measurement. Re-record the whole suite on an idle machine with "
+        "`make record-test-durations`.")
+
+
+def test_a_record_with_no_provenance_refuses_rather_than_answering_empty(
+        tmp_path, monkeypatch):
+    """The state every record was in before #1038, driven directly.
+
+    The guards above read the real record, which now carries provenance, so
+    none of them can reach the branch that refuses one without it. This is that
+    branch: absent has to be a refusal, because an empty answer would let every
+    check above pass over nothing (L98).
+    """
+    import file_durations
+
+    bare = tmp_path / "test_file_durations.json"
+    bare.write_text(json.dumps({"seconds": {"a.py": 1.0}}), encoding="utf-8")
+    monkeypatch.setattr(file_durations, "RECORD", bare)
+
+    with pytest.raises(AssertionError, match="no provenance"):
+        file_durations.provenance()

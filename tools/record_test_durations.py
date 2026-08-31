@@ -64,12 +64,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import statistics
 import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ElementTree
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -79,6 +81,119 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: exactly as slow to run, and counting only the call would report it as cheap.
 DURATION_LINE = re.compile(
     r"^\s*([\d.]+)s (?:call|setup|teardown)\s+(tests/test_[a-z0-9_]+\.py)::")
+
+#: Files already in the record that `--add` measures beside a new one (#1038).
+#:
+#: Cheap, so the run is quick, and ORDINARY rather than expensive, because the
+#: expensive files need ffmpeg and the macOS faces and a reference that skipped
+#: would measure as free and give an infinite scale.
+#:
+#: Seven of them because the spread is wide. Measured on 2026-08-31 the
+#: reference ratios ran 0.16 to 3.57, which is the same contention this whole
+#: issue is about, and a median over seven survives one reference having a bad
+#: run in a way a median over two does not.
+REFERENCE_FILES = (
+    "tests/test_build_cache_location.py",
+    "tests/test_manifest_contract.py",
+    "tests/test_wait_for_checks.py",
+    "tests/test_make_test_runs_both_suites.py",
+    "tests/test_swift_leg_meets_its_floor.py",
+    "tests/test_record_suite_count.py",
+    "tests/test_perturbation_lock.py",
+)
+
+
+class Provenance:
+    """How each recorded reading was taken, so a mixed record is visible.
+
+    The record used to be a bare map of file to seconds, and nothing in it said
+    which RUN each number came from. A full re-record takes every reading in one
+    run, so they are all comparable; a hand-merged file is a reading from a
+    different run under different load, and mixing the two silently is what
+    #1038 is about (L224).
+    """
+
+    @staticmethod
+    def full(run: str, names) -> dict[str, dict]:
+        """Every file measured in one run, so nothing needed scaling."""
+        return {name: {"run": run, "scale": 1.0} for name in sorted(names)}
+
+
+def scale_from(recorded: dict[str, float],
+               measured: dict[str, float]) -> float:
+    """How much to multiply this run's readings by to land in the record's run.
+
+    `recorded` is what the record holds for the REFERENCE files, and `measured`
+    is what this run made of the same ones. The answer is the MEDIAN of their
+    ratios, because the spread is wide: measured on 2026-08-31 over seven
+    references it ran 0.16 to 3.57, which is the contention this whole issue is
+    about, and a median survives one reference having a bad run.
+
+    Every disagreement below is a REFUSAL rather than a 1.0. A scale of 1.0 is
+    the positive claim that this run matched the record's run, and that is
+    precisely what a run with nothing to compare against cannot know (L11, L98).
+    """
+    if not measured:
+        raise SystemExit(
+            "this run measured no reference file, so there is no scale to put "
+            "its readings on and no way to tell a fast machine from a slow "
+            "one. Nothing was written.")
+
+    strangers = sorted(set(measured) - set(recorded))
+    if strangers:
+        raise SystemExit(
+            f"these were measured as references and are not in the record: "
+            f"{strangers}. A file the record has never seen cannot say how "
+            "this run compares to it. Nothing was written.")
+
+    absent = sorted(set(recorded) - set(measured))
+    if absent:
+        raise SystemExit(
+            f"these reference files did not run: {absent}. A reference that "
+            "skipped measures as free, and scaling against the ones that did "
+            "run would quietly narrow what the median is taken over. Nothing "
+            "was written.")
+
+    ratios = []
+    for name, seconds in sorted(measured.items()):
+        if seconds <= 0:
+            raise SystemExit(
+                f"the reference {name} measured 0s in this run, so its ratio "
+                "against the record is infinite and would be applied to "
+                "whatever is being added. Nothing was written.")
+        ratios.append(recorded[name] / seconds)
+    return statistics.median(ratios)
+
+
+def added(record: dict, measured: dict[str, float], run: str) -> dict:
+    """`record` with the newly measured files added, scaled into its own run.
+
+    `measured` holds both the new files and the reference files, as one run
+    produces them. The ones the record already knows are the references and are
+    what the scale comes from; the rest are what is being added.
+
+    The files already in the record KEEP the readings they had. Re-writing them
+    from this run is what a full re-record does, and doing it here would move
+    every share in the record for files nobody changed, which is the churn
+    #1038 exists to avoid.
+    """
+    seconds = dict(record.get("seconds") or {})
+    stamped = dict(record.get("measured") or {})
+
+    references = {name: value for name, value in measured.items()
+                  if name in seconds}
+    scale = scale_from({name: seconds[name] for name in references},
+                       references)
+
+    for name, reading in sorted(measured.items()):
+        if name in seconds:
+            continue
+        seconds[name] = round(reading * scale, 2)
+        stamped[name] = {"run": run, "scale": round(scale, 3)}
+
+    return {"seconds": dict(sorted(seconds.items())),
+            "measured": dict(sorted(stamped.items()))}
+
 
 #: The one file whose going red does not invalidate a measurement (#837).
 #:
@@ -167,7 +282,8 @@ def blocking_failures(report: Path) -> list[str]:
             if not case.is_the_records_own_guard]
 
 
-def measure(argv: list[str] | None = None) -> dict[str, float]:
+def measure(argv: list[str] | None = None,
+            paths: list[str] | None = None) -> dict[str, float]:
     """Run the suite and sum every phase's duration per test file.
 
     The externals are REQUIRED rather than hoped for. Without ffmpeg and the
@@ -188,9 +304,9 @@ def measure(argv: list[str] | None = None) -> dict[str, float]:
         # regex over pytest's prose answers "none" for a report it cannot parse
         # as readily as for a run that had none.
         report = Path(workspace) / "report.xml"
-        command = [sys.executable, "-m", "pytest", "tests/", "-q", "-n", "auto",
-                   "--durations=0", "--durations-min=0",
-                   f"--junit-xml={report}"] + (argv or [])
+        command = ([sys.executable, "-m", "pytest"] + list(paths or ["tests/"])
+                   + ["-q", "-n", "auto", "--durations=0", "--durations-min=0",
+                      f"--junit-xml={report}"] + (argv or []))
         finished = subprocess.run(command, cwd=REPO_ROOT, env=environment,
                                   capture_output=True, text=True)
 
@@ -243,18 +359,59 @@ def measure(argv: list[str] | None = None) -> dict[str, float]:
     return dict(totals)
 
 
-def main() -> int:
-    totals = measure(sys.argv[1:])
-    RECORD.parent.mkdir(parents=True, exist_ok=True)
-    RECORD.write_text(
-        json.dumps({"seconds": dict(sorted(totals.items()))}, indent=2) + "\n",
-        encoding="utf-8")
+def main(argv: list[str] | None = None) -> int:
+    words = list(sys.argv[1:] if argv is None else argv)
+
+    if "--add" in words:
+        return _add(words[words.index("--add") + 1:])
+
+    stamped_at = datetime.now(timezone.utc).strftime("full-%Y-%m-%dT%H:%MZ")
+    totals = measure(words)
+    _write({"seconds": dict(sorted(totals.items())),
+            "measured": Provenance.full(stamped_at, totals)})
 
     print(f"recorded {len(totals)} test files into "
-          f"{RECORD.relative_to(REPO_ROOT)}")
+          f"{RECORD.relative_to(REPO_ROOT)}, all from {stamped_at}")
     for name, seconds in sorted(totals.items(), key=lambda kv: -kv[1])[:10]:
         print(f"  {seconds:8.1f}s  {name}")
     return 0
+
+
+def _add(paths: list[str]) -> int:
+    """Measure new files beside the references, and merge them in (#1038).
+
+    The whole point is NOT re-reading the suite. A full re-record re-derives
+    every share from a run whose load has nothing to do with the tests, which is
+    what moved a file across the expensive floor and turned a guard red on a
+    suite nobody had changed.
+    """
+    if not paths:
+        raise SystemExit(
+            "--add needs the test files to add. Nothing was written.")
+
+    record = json.loads(RECORD.read_text(encoding="utf-8"))
+    stamped_at = datetime.now(timezone.utc).strftime("partial-%Y-%m-%dT%H:%MZ")
+    print(f"measuring {len(paths)} file(s) beside "
+          f"{len(REFERENCE_FILES)} reference files already in the record")
+
+    totals = measure(paths=list(paths) + list(REFERENCE_FILES))
+    grown = added(record, totals, run=stamped_at)
+    _write(grown)
+
+    for path in paths:
+        name = Path(path).name
+        entry = grown["measured"].get(name)
+        if entry is None:
+            print(f"  {name}: already in the record, left alone")
+            continue
+        print(f"  {name}: {grown['seconds'][name]}s "
+              f"(measured {totals.get(name, 0):.3f}s, scaled {entry['scale']}x)")
+    return 0
+
+
+def _write(record: dict) -> None:
+    RECORD.parent.mkdir(parents=True, exist_ok=True)
+    RECORD.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
