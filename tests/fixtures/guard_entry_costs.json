@@ -1,4 +1,36 @@
 {
+  "cold": [
+    {
+      "entry": "a-background-verdict-does-not-interrupt-the-form",
+      "seconds": 89.36,
+      "shard": "6/6"
+    },
+    {
+      "entry": "a-bad-saved-handle-is-still-listed",
+      "seconds": 118.99,
+      "shard": "5/6"
+    },
+    {
+      "entry": "a-banner-cannot-set-the-windows-minimum-height",
+      "seconds": 105.62,
+      "shard": "4/6"
+    },
+    {
+      "entry": "a-blank-organisation-is-not-a-handle-book-key",
+      "seconds": 130.01,
+      "shard": "1/6"
+    },
+    {
+      "entry": "a-checkout-notice-alone-shows-the-window-inset",
+      "seconds": 134.53,
+      "shard": "3/6"
+    },
+    {
+      "entry": "a-checkout-read-seconds-after-the-last-is-skipped",
+      "seconds": 147.25,
+      "shard": "2/6"
+    }
+  ],
   "kinds": {
     "a-border-is-a-named-surface": false,
     "a-branch-behind-main-is-not-merged": false,

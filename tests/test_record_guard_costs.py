@@ -16,11 +16,12 @@ import pytest
 from tools.record_guard_costs import readings_of, main
 
 
-def readings(tmp_path, name, run, seconds, kinds=None):
+def readings(tmp_path, name, run, seconds, kinds=None, cold=None):
     path = tmp_path / name
     path.write_text(json.dumps({
         "run": run, "seconds": seconds, "measured_on": "2026-08-31",
         "kinds": kinds if kinds is not None else {n: True for n in seconds},
+        "cold": cold, "shard": "1/6",
     }))
     return path
 
@@ -28,7 +29,7 @@ def readings(tmp_path, name, run, seconds, kinds=None):
 def test_the_shards_of_one_sweep_are_one_set(tmp_path):
     a = readings(tmp_path, "s1.json", "run-7", {"one": 29.0})
     b = readings(tmp_path, "s2.json", "run-7", {"two": 0.8})
-    seconds, kinds, run = readings_of([a, b])
+    seconds, kinds, _, run = readings_of([a, b])
     assert seconds == {"one": 29.0, "two": 0.8}
     assert kinds == {"one": True, "two": True}
     assert run == "run-7"
@@ -230,7 +231,7 @@ def test_a_shard_that_reached_everything_is_accepted(tmp_path):
         "run": "run-7", "seconds": {"one": 29.0}, "measured_on": "2026-08-31",
         "kinds": {"one": True}, "unproven": [],
     }))
-    seconds, kinds, run = readings_of([path])
+    seconds, kinds, _, run = readings_of([path])
     assert seconds == {"one": 29.0}
 
 
@@ -242,5 +243,36 @@ def test_a_file_written_before_the_field_existed_is_accepted(tmp_path):
     path.write_text(json.dumps({
         "run": "run-7", "seconds": {"one": 29.0}, "kinds": {"one": True},
     }))
-    seconds, _, _ = readings_of([path])
+    seconds, _, _, _ = readings_of([path])
     assert seconds == {"one": 29.0}
+
+
+def test_the_cold_build_reading_is_carried_into_the_record(tmp_path):
+    """`write_timings` sets the first Swift entry's reading aside so it is not
+    read as that entry's cost, and the reason given for keeping it at all is
+    that it is the only measurement anyone has of what the app build costs.
+
+    An artifact expires. A reading that stopped there would make that reason
+    false in the one place it matters (L46, L202).
+    """
+    a = readings(tmp_path, "s1.json", "run-7", {"one": 29.0},
+                 cold={"entry": "first-swift", "seconds": 121.4})
+    record = tmp_path / "costs.json"
+
+    assert main(["--from", str(a), "--record", str(record)]) == 0
+
+    written = json.loads(record.read_text())
+    assert written["cold"] == [
+        {"entry": "first-swift", "seconds": 121.4, "shard": "1/6"}]
+    assert "first-swift" not in written["seconds"], (
+        "the cold reading was carried through AND recorded as a cost, which is "
+        "the mispricing it exists to avoid")
+
+
+def test_a_sweep_with_no_cold_reading_records_an_empty_list(tmp_path):
+    """A shard of nothing but Python entries never built the app. Empty is the
+    right answer and must not read as a missing field."""
+    a = readings(tmp_path, "s1.json", "run-7", {"one": 0.5}, cold=None)
+    record = tmp_path / "costs.json"
+    main(["--from", str(a), "--record", str(record)])
+    assert json.loads(record.read_text())["cold"] == []

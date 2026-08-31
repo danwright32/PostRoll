@@ -59,7 +59,8 @@ from tools.guard_entry_costs import RECORD  # noqa: E402
 NOUN = "guard entry"
 
 
-def readings_of(paths: list[Path]) -> tuple[dict[str, float], dict[str, bool], str]:
+def readings_of(paths: list[Path]) -> tuple[dict[str, float], dict[str, bool],
+                                            list[dict], str]:
     """Every reading in `paths`, and the one run they all came from.
 
     A disagreement about the run is refused rather than resolved. Shards of one
@@ -69,6 +70,7 @@ def readings_of(paths: list[Path]) -> tuple[dict[str, float], dict[str, bool], s
     """
     seconds: dict[str, float] = {}
     kinds: dict[str, bool] = {}
+    cold: list[dict] = []
     runs: set[str] = set()
     for path in paths:
         if not path.exists():
@@ -90,6 +92,8 @@ def readings_of(paths: list[Path]) -> tuple[dict[str, float], dict[str, bool], s
                 "file's contents would say so. Re-run the sweep, or raise its "
                 "deadline, before recording. Nothing was written.")
         runs.add(str(payload.get("run") or "unknown"))
+        if payload.get("cold"):
+            cold.append({**payload["cold"], "shard": payload.get("shard", "")})
         recorded_kinds = payload.get("kinds") or {}
         for name, value in found.items():
             reading = float(value)
@@ -113,7 +117,7 @@ def readings_of(paths: list[Path]) -> tuple[dict[str, float], dict[str, bool], s
             f"({', '.join(sorted(runs))}). Readings taken under different load "
             "cannot be averaged into one record without saying so, which is "
             "the whole point of stamping them. Nothing was written.")
-    return seconds, kinds, runs.pop()
+    return seconds, kinds, sorted(cold, key=lambda c: c["entry"]), runs.pop()
 
 
 def fetch_run(run_id: str, into: Path) -> list[Path]:
@@ -163,7 +167,7 @@ def _whole(paths: list[Path], record_path: Path) -> int:
     entry it does not hold is one the registry no longer has, and keeping it
     would leave the deal pricing guards that were deleted.
     """
-    seconds, kinds, run = readings_of(paths)
+    seconds, kinds, cold, run = readings_of(paths)
     write({
         "seconds": {name: round(value, 2)
                     for name, value in sorted(seconds.items())},
@@ -173,6 +177,14 @@ def _whole(paths: list[Path], record_path: Path) -> int:
         # did, and a bare seconds map cannot tell that from an entry that got
         # faster (L133).
         "kinds": dict(sorted(kinds.items())),
+        # What the cold app build cost each shard, carried through rather than
+        # left in the CI artifact it arrived in. `write_timings` sets these
+        # aside so they are not read as the entries' own cost, and the reason
+        # given for keeping them at all is that they are the only measurement
+        # anyone has of the build. An artifact expires, so a reading that stops
+        # here would make that reason false in the one place it matters (L46,
+        # L202). #1096 is the issue that would remove the need for them.
+        "cold": cold,
         "measured": Provenance.full(run, sorted(seconds)),
         "measured_on": time.strftime("%Y-%m-%d"),
         "measured_from_run": run,
@@ -208,11 +220,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.whole:
         return _whole(args.whole, args.record)
 
-    seconds, kinds, run = readings_of(args.add)
+    seconds, kinds, cold, run = readings_of(args.add)
     existing = json.loads(args.record.read_text(encoding="utf-8")) \
         if args.record.exists() else {"seconds": {}, "measured": {}}
     record = added(existing, seconds, run, noun=NOUN)
     record["kinds"] = dict(sorted({**(existing.get("kinds") or {}), **kinds}.items()))
+    record["cold"] = (existing.get("cold") or []) + cold
     for key in ("measured_on", "measured_from_run", "re_measure_with"):
         if key in existing:
             record[key] = existing[key]
