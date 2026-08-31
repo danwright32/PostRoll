@@ -298,10 +298,15 @@ def did_its_work(job: dict, work_step: str | Iterable[str] | None) -> bool:
     return True
 
 
-def job_durations(runs: list[dict], *,
-                  work_step: str | Iterable[str] | None = None,
-                  ) -> dict[str, list[float]]:
-    """Seconds each named job took, newest run first.
+def measurable_jobs(runs: list[dict], *,
+                    work_step: str | Iterable[str] | None = None):
+    """Every (name, seconds, job) this series is allowed to measure.
+
+    ONE walk, because `job_durations` and `work_series` have to agree exactly:
+    two walks filtering separately would pair a duration with another run's
+    count and every rate would be wrong in a way nothing could see (L228). It is
+    also the only place these rules live, so there is no second copy to drift
+    (L41).
 
     A job that has not finished contributes NOTHING rather than a zero. A zero
     would pull the median down and read as the job having become fast, which is
@@ -316,16 +321,15 @@ def job_durations(runs: list[dict], *,
     case and every other inverted pair at once.
 
     A job that RAN and had nothing to do contributes nothing either, which is
-    a different case and needs its own rule (#989). Since the guard sweep moved
-    to a daily cadence its shards skip their own expensive STEPS rather than the
-    job, so a shard with nothing to prove still checks out, asks the gate and
-    exits successful in about forty seconds. That is a positive duration, so the
-    shape check below waves it through, and the series then holds two
-    populations: roughly 1,400s when there was something to prove and roughly
-    40s when there was not. Which half of the window each falls in is decided by
-    the week's merge pattern, so the comparison would report drift that is
-    nothing but that pattern (L36, and L102: a cost measured while the expensive
-    path is switched off measures the short circuit rather than the work).
+    a different case and needs its own rule (#989, #990). Since the guard sweep
+    moved to a daily cadence its shards skip their own expensive STEPS rather
+    than the job, and since #990 the post-merge jobs do the same, so such a job
+    still checks out, asks its gate and exits successful in well under a minute.
+    That is a positive duration, so the shape check waves it through, and the
+    series would then hold two populations decided by the week's merge pattern
+    rather than by anything about the job (L36, and L102: a cost measured while
+    the expensive path is switched off measures the short circuit rather than
+    the work).
 
     A second check on `conclusion == "skipped"` was written first and removed:
     `check_guards` reported it SURVIVED its mutation, because breaking it
@@ -334,7 +338,6 @@ def job_durations(runs: list[dict], *,
     branch nobody can maintain, and keeping it "to be safe" would have meant
     shipping an unproven one (L29).
     """
-    series: dict[str, list[float]] = {}
     for run in runs:
         for job in run.get("jobs", []):
             started, completed = job.get("started_at"), job.get("completed_at")
@@ -350,7 +353,16 @@ def job_durations(runs: list[dict], *,
             lasted = (end - begin).total_seconds()
             if lasted <= 0:
                 continue
-            series.setdefault(str(job.get("name", "?")), []).append(lasted)
+            yield str(job.get("name", "?")), lasted, job
+
+
+def job_durations(runs: list[dict], *,
+                  work_step: str | Iterable[str] | None = None,
+                  ) -> dict[str, list[float]]:
+    """Seconds each named job took, newest run first."""
+    series: dict[str, list[float]] = {}
+    for name, lasted, _job in measurable_jobs(runs, work_step=work_step):
+        series.setdefault(name, []).append(lasted)
     return series
 
 
@@ -397,32 +409,16 @@ def work_series(runs: list[dict], *, work_step: str | Iterable[str] | None = Non
                 read_log=None) -> dict[str, list[int | None]]:
     """How much work each named job did, run by run, aligned with `job_durations`.
 
-    Aligned by construction: it walks the same runs, in the same order, and
-    skips exactly the jobs `job_durations` skips. Two walks that filtered
-    differently would pair a duration with another run's count and every rate
-    would be wrong in a way nothing could see (L228).
+    Aligned by construction: it walks `measurable_jobs`, the same generator, so
+    the two cannot select different jobs however either changes.
     """
     series: dict[str, list[int | None]] = {}
-    for run in runs:
-        for job in run.get("jobs", []):
-            started, completed = job.get("started_at"), job.get("completed_at")
-            if not started or not completed:
-                continue
-            if not did_its_work(job, work_step):
-                continue
-            try:
-                begin = datetime.fromisoformat(started.replace("Z", "+00:00"))
-                end = datetime.fromisoformat(completed.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                continue
-            if (end - begin).total_seconds() <= 0:
-                continue
-            name = str(job.get("name", "?"))
-            identifier = job.get("id")
-            counted = None
-            if isinstance(identifier, int) and work_family(name) in WORK_PATTERNS:
-                counted = work_done(job_log(identifier, read=read_log), name)
-            series.setdefault(name, []).append(counted)
+    for name, _lasted, job in measurable_jobs(runs, work_step=work_step):
+        identifier = job.get("id")
+        counted = None
+        if isinstance(identifier, int) and work_family(name) in WORK_PATTERNS:
+            counted = work_done(job_log(identifier, read=read_log), name)
+        series.setdefault(name, []).append(counted)
     return series
 
 
