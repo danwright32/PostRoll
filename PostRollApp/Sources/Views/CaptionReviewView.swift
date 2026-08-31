@@ -431,8 +431,12 @@ struct CaptionReviewView: View {
                         // type-check limit, and two more arguments tip it over.
                         // Shown only while the day is open, so a week of
                         // collapsed days is not a wall of rankings (#278).
-                        if expanded == section, let picks = collaborators(for: day, in: live) {
-                            CollaboratorPanel(result: picks,
+                        // On every posting day since #964. The panel says
+                        // which of the three answers this day has, including
+                        // "nobody is tagged yet", which used to be the same
+                        // silence as "everyone tagged should be invited".
+                        if expanded == section {
+                            CollaboratorPanel(result: collaborators(for: day, in: live),
                                               eventCounts: taggedEventCounts,
                                               onEditNumbers: beginEditingNumbers)
                                 .padding(.horizontal, Spacing.xl)
@@ -1340,7 +1344,7 @@ struct CaptionReviewView: View {
     ///
     /// A named function rather than an inline call in the body: the view
     /// builder could not type-check the expression inside it.
-    private func collaborators(for day: DayName, in live: Event) -> CollaboratorPick.Result? {
+    private func collaborators(for day: DayName, in live: Event) -> CollaboratorPick.Result {
         CollaboratorPick.suggest(event: live, day: day,
                                  preset: live.effectivePostingPreset,
                                  stats: { accounts.stats(for: $0) },

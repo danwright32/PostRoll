@@ -23,20 +23,41 @@ struct CollaboratorPanel: View {
     /// Dan enters, so the way to enter them is beside the names being ranked.
     let onEditNumbers: (String) -> Void
 
+    /// What this day's answer is, in a sentence (#964).
+    ///
+    /// The three answers used to be two: a ranking, or nothing at all. Nothing
+    /// at all covered both "everyone tagged should be invited" and "nobody is
+    /// tagged yet", which are opposite things to tell somebody.
+    private var subtitle: String {
+        switch result.coverage {
+        case .nothingTagged:
+            return CollaboratorPick.nobodyTaggedLine
+        case .allFit:
+            return CollaboratorPick.everyoneFitsLine(result.suggested.count)
+                 + " A collaborator invite puts this post on their own grid."
+        case .ranked:
+            return "Instagram allows \(CollaboratorPick.maxPerPost) per post. "
+                 + "A collaborator invite puts this post on their own grid."
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("COLLABORATORS TO INVITE")
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
                 .foregroundStyle(PaintedSurfaces.secondaryText)
-            Text("Instagram allows \(CollaboratorPick.maxPerPost) per post. "
-                 + "A collaborator invite puts this post on their own grid.")
+            Text(subtitle)
                 .font(.system(size: 11))
                 .foregroundStyle(PaintedSurfaces.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             ForEach(Array(result.suggested.enumerated()), id: \.element.handle) { index, candidate in
-                row(rank: "\(index + 1).", candidate: candidate)
+                // Numbered only where the order was decided. A numbered list is
+                // a ranking however the sentence above it is worded, and under
+                // `.allFit` nobody was ranked and nobody was cut (#964).
+                row(rank: result.coverage == .ranked ? "\(index + 1)." : "",
+                    candidate: candidate)
             }
 
             if let excluded = result.strongestExcluded {

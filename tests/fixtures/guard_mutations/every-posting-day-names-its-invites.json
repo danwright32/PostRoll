@@ -1,0 +1,8 @@
+{
+  "name": "every-posting-day-names-its-invites",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "return Result(coverage: .allFit, suggested: candidates, fallbacks: [],",
+  "replace": "return Result(coverage: .allFit, suggested: [], fallbacks: [],",
+  "test": "PostRollTests/CollaboratorPickTests/testEveryCandidateIsNamedWhenTheyAllFitTheSlots",
+  "breaks": "a day whose tagged accounts all fit the five slots raises a block that names nobody, so the screen and CAPTIONS.txt say a decision was made and then invite no one, which is the silence #964 removed wearing a header"
+}

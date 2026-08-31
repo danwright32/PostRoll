@@ -31,42 +31,78 @@ final class CollaboratorPickTests: XCTestCase {
                      recordedOn: now.addingTimeInterval(-Double(ageDays) * 86_400))
     }
 
-    // MARK: - The threshold
+    // MARK: - Every posting day carries a block (#964)
 
-    func testFiveTagsProduceNoSuggestionAtAll() {
-        // At five there are exactly as many candidates as slots, so there is no
-        // choice to make and nothing worth putting on screen.
+    /// The old rule refused outright at five or fewer candidates, so the days
+    /// carrying the best photos said nothing at all. A silent block is
+    /// indistinguishable from a post that was considered and found to need no
+    /// invites (L11), and the reach a tag does not buy is the whole point.
+
+    func testEveryCandidateIsNamedWhenTheyAllFitTheSlots() {
+        // Five candidates for five slots is the clearest case there is: invite
+        // all of them. Nobody was cut, so nothing may read as a ranking.
         let handles = ["a", "b", "c", "d", "e"]
         let table = Dictionary(uniqueKeysWithValues: handles.map { ($0, stats(1_000, 50, 5)) })
-        XCTAssertNil(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
-                                              stats: lookup(table), asOf: now))
+        let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                              stats: lookup(table), asOf: now)
+        XCTAssertEqual(result.coverage, .allFit)
+        XCTAssertEqual(Set(result.suggested.map(\.handle)), Set(handles))
+        XCTAssertTrue(result.fallbacks.isEmpty, "nothing fell through, nothing was cut")
+        XCTAssertNil(result.strongestExcluded)
     }
 
-    func testSixTagsProduceASuggestion() {
+    func testADayThatTagsNobodySaysSoRatherThanPrintingNothing() {
+        // "Nobody is tagged yet" and "this day was not considered" are
+        // different answers and must not look the same (L98).
+        let result = CollaboratorPick.suggest(handles: [], firstPhoto: nil,
+                                              stats: lookup([:]), asOf: now)
+        XCTAssertEqual(result.coverage, .nothingTagged)
+        XCTAssertTrue(result.suggested.isEmpty)
+        XCTAssertTrue(result.unranked.isEmpty)
+    }
+
+    func testAnUncountedAccountIsStillOneOfTheInvitesWhenTheyAllFit() {
+        // In ranking mode an unmeasured account must not take a slot off a
+        // measured one, so it is listed apart. With no slot to lose there is
+        // nothing to protect, and leaving it out of the invite list would be
+        // the same silence in a smaller form.
+        let handles = ["a", "b", "nonumbers"]
+        let result = CollaboratorPick.suggest(
+            handles: handles, firstPhoto: nil,
+            stats: lookup(["a": stats(1_000, 50, 5), "b": stats(1_000, 40, 5)]), asOf: now)
+        XCTAssertEqual(result.coverage, .allFit)
+        XCTAssertTrue(result.suggested.map(\.handle).contains("nonumbers"))
+        XCTAssertTrue(result.unranked.isEmpty, "named once as an invite, not twice")
+    }
+
+    func testSixTagsStillRankAndStillCutToFive() {
         let handles = ["a", "b", "c", "d", "e", "f"]
         let table = Dictionary(uniqueKeysWithValues: handles.map { ($0, stats(1_000, 50, 5)) })
         let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
                                               stats: lookup(table), asOf: now)
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?.suggested.count, 5, "never more than Instagram allows")
+        XCTAssertEqual(result.coverage, .ranked)
+        XCTAssertEqual(result.suggested.count, 5, "never more than Instagram allows")
     }
 
-    func testTheThresholdCountsTagsIncludingOnesWithNoNumbers() {
-        // Six tags is six tags. Counting only the rankable ones would make the
-        // suggestion appear and disappear as numbers are entered.
+    func testTheModeCountsTagsIncludingOnesWithNoNumbers() {
+        // Six tags is six tags. Counting only the rankable ones would flip the
+        // day between naming everyone and ranking as numbers are entered.
         let handles = ["a", "b", "c", "d", "e", "f"]
         let table = ["a": stats(1_000, 50, 5)]
-        XCTAssertNotNil(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
-                                                 stats: lookup(table), asOf: now))
+        XCTAssertEqual(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                                stats: lookup(table), asOf: now).coverage,
+                       .ranked)
     }
 
     func testDuplicateSpellingsAreOnePersonAndDoNotInflateTheCount() {
-        // Six spellings of five people is five candidates, so no suggestion.
+        // Six spellings of five people is five candidates, so they all fit.
         let handles = ["@jane", "jane", "https://instagram.com/JANE/", "b", "c", "d", "e"]
         let table = Dictionary(uniqueKeysWithValues:
             ["jane", "b", "c", "d", "e"].map { ($0, stats(1_000, 50, 5)) })
-        XCTAssertNil(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
-                                              stats: lookup(table), asOf: now))
+        let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                              stats: lookup(table), asOf: now)
+        XCTAssertEqual(result.coverage, .allFit)
+        XCTAssertEqual(result.suggested.count, 5)
     }
 
     // MARK: - A value that is not an account is not a candidate (#981)
@@ -81,7 +117,7 @@ final class CollaboratorPickTests: XCTestCase {
             ["a", "b", "c", "d", "e", "f"].map { ($0, stats(1_000, 50, 5)) })
         let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
                                               stats: lookup(table), asOf: now)
-        let named = (result?.suggested.map(\.handle) ?? []) + (result?.unranked.map(\.handle) ?? [])
+        let named = result.suggested.map(\.handle) + result.unranked.map(\.handle)
         XCTAssertFalse(named.contains("unknown"),
                        "a person called unknown must not be offered as one of five invites")
     }
@@ -96,43 +132,47 @@ final class CollaboratorPickTests: XCTestCase {
             ["a", "b", "c", "d", "e", "f"].map { ($0, stats(1_000, 50, 5)) })
         let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
                                               stats: lookup(table), asOf: now)
-        let named = (result?.suggested.map(\.handle) ?? []) + (result?.unranked.map(\.handle) ?? [])
+        let named = result.suggested.map(\.handle) + result.unranked.map(\.handle)
         XCTAssertFalse(named.contains(where: { $0.contains(" ") }),
                        "a value with a space is no account and cannot be invited")
     }
 
-    /// The threshold effect, which is the half a ranking assertion misses. The
-    /// count of candidates is what decides whether the panel appears at all, so
-    /// junk that is merely excluded from the ranking still raises a panel over
-    /// a post with no editorial decision to make.
-    func testFiveRealTagsPlusASentinelRaiseNoPanel() {
+    /// The count effect, which is the half a ranking assertion misses. The
+    /// count of candidates is what decides whether the day is ranked or simply
+    /// named, so junk merely excluded from the ranking would still put a post
+    /// with no editorial decision to make into ranking mode.
+    func testFiveRealTagsPlusASentinelStillAllFit() {
         let handles = ["a", "b", "c", "d", "e", "unknown"]
         let table = Dictionary(uniqueKeysWithValues:
             ["a", "b", "c", "d", "e"].map { ($0, stats(1_000, 50, 5)) })
-        XCTAssertNil(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
-                                              stats: lookup(table), asOf: now),
-                     "five real accounts is five candidates, whatever junk is tagged beside them")
+        let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                              stats: lookup(table), asOf: now)
+        XCTAssertEqual(result.coverage, .allFit,
+                       "five real accounts is five candidates, whatever junk is tagged beside them")
+        XCTAssertEqual(result.suggested.count, 5)
     }
 
     /// The same for the shape half, so neither half is left resting on the
     /// other's test (L178).
-    func testFiveRealTagsPlusADisplayNameRaiseNoPanel() {
+    func testFiveRealTagsPlusADisplayNameStillAllFit() {
         let handles = ["a", "b", "c", "d", "e", "DPR Dance"]
         let table = Dictionary(uniqueKeysWithValues:
             ["a", "b", "c", "d", "e"].map { ($0, stats(1_000, 50, 5)) })
-        XCTAssertNil(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
-                                              stats: lookup(table), asOf: now))
+        let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                              stats: lookup(table), asOf: now)
+        XCTAssertEqual(result.coverage, .allFit)
+        XCTAssertEqual(result.suggested.count, 5)
     }
 
     /// The positive control for the four above: the same six real accounts,
-    /// with nothing junk among them, DO raise a panel. Without it every
-    /// assertion here is satisfied by a `suggest` that refuses everything
-    /// (L159).
-    func testSixRealTagsStillRaiseAPanel() {
+    /// with nothing junk among them, DO rank. Without it every assertion here
+    /// is satisfied by a `suggest` that refuses everything (L159).
+    func testSixRealTagsStillRank() {
         let handles = ["a", "b", "c", "d", "e", "f"]
         let table = Dictionary(uniqueKeysWithValues: handles.map { ($0, stats(1_000, 50, 5)) })
-        XCTAssertNotNil(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
-                                                 stats: lookup(table), asOf: now))
+        XCTAssertEqual(CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
+                                                stats: lookup(table), asOf: now).coverage,
+                       .ranked)
     }
 
     // MARK: - Engagement quality beats audience size
@@ -151,11 +191,11 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["bigdead", "smalllive", "c", "d", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
-        XCTAssertEqual(result?.suggested.first?.handle, "smalllive")
+        XCTAssertEqual(result.suggested.first?.handle, "smalllive")
         // The large dead audience does not merely rank lower, it does not make
         // the five at all: a 0.1% rate is beaten by every ordinary account
         // here, which is the whole point of ranking on rate rather than reach.
-        XCTAssertFalse(result?.suggested.map(\.handle).contains("bigdead") ?? true,
+        XCTAssertFalse(result.suggested.map(\.handle).contains("bigdead"),
                        "10,000 followers bought a slot it did not earn")
     }
 
@@ -171,7 +211,7 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["likers", "commenters", "c", "d", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
-        XCTAssertEqual(result?.suggested.first?.handle, "commenters")
+        XCTAssertEqual(result.suggested.first?.handle, "commenters")
     }
 
     func testATinyAccountDoesNotTopTheListOnAHandfulOfInteractions() {
@@ -187,7 +227,7 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["tiny", "real", "c", "d", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
-        XCTAssertEqual(result?.suggested.first?.handle, "real")
+        XCTAssertEqual(result.suggested.first?.handle, "real")
     }
 
     func testFollowersBreakATieOnEngagementRate() {
@@ -202,7 +242,7 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["small", "big", "c", "d", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
-        XCTAssertEqual(result?.suggested.first?.handle, "big")
+        XCTAssertEqual(result.suggested.first?.handle, "big")
     }
 
     // MARK: - The first photo bias is hard, not a tiebreak
@@ -217,7 +257,7 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["elsewhere", "inphoto", "c", "d", "e", "f"],
             firstPhoto: ["inphoto"], stats: lookup(table), asOf: now)
-        XCTAssertEqual(result?.suggested.first?.handle, "inphoto",
+        XCTAssertEqual(result.suggested.first?.handle, "inphoto",
                        "the first photo bias is a hard rule, not a tiebreak")
     }
 
@@ -235,9 +275,9 @@ final class CollaboratorPickTests: XCTestCase {
             handles: ["p1", "p2", "p3", "p4", "p5", "venue"],
             firstPhoto: ["p1", "p2", "p3", "p4", "p5"],
             stats: lookup(table), asOf: now)
-        XCTAssertEqual(result?.suggested.count, 5)
-        XCTAssertFalse(result?.suggested.map(\.handle).contains("venue") ?? true)
-        XCTAssertEqual(result?.strongestExcluded?.handle, "venue")
+        XCTAssertEqual(result.suggested.count, 5)
+        XCTAssertFalse(result.suggested.map(\.handle).contains("venue"))
+        XCTAssertEqual(result.strongestExcluded?.handle, "venue")
     }
 
     func testAnAccountLeftOutOnItsOwnMeritsIsNotReportedAsExcludedByTheRule() {
@@ -254,7 +294,7 @@ final class CollaboratorPickTests: XCTestCase {
             handles: ["p1", "p2", "p3", "p4", "p5", "weak"],
             firstPhoto: ["p1", "p2", "p3", "p4", "p5"],
             stats: lookup(table), asOf: now)
-        XCTAssertNil(result?.strongestExcluded)
+        XCTAssertNil(result.strongestExcluded)
     }
 
     func testWhenTheFirstPhotoHoldsFewerThanFiveTheRestAreNamedAsFallbacks() {
@@ -267,11 +307,11 @@ final class CollaboratorPickTests: XCTestCase {
             handles: ["p1", "p2", "x1", "x2", "x3", "x4"],
             firstPhoto: ["p1", "p2"], stats: lookup(table), asOf: now)
 
-        XCTAssertEqual(result?.suggested.prefix(2).map(\.handle), ["p1", "p2"])
-        XCTAssertEqual(result?.suggested.count, 5)
+        XCTAssertEqual(result.suggested.prefix(2).map(\.handle), ["p1", "p2"])
+        XCTAssertEqual(result.suggested.count, 5)
         // Named so Dan can see the difference between a first-photo pick and a
         // slot that fell through to whoever was strongest elsewhere.
-        XCTAssertEqual(result?.fallbacks, ["x1", "x2", "x3"])
+        XCTAssertEqual(result.fallbacks, ["x1", "x2", "x3"])
     }
 
     func testASingleImagePostRanksOnEngagementAloneWithNoFallbackLabelling() {
@@ -285,9 +325,9 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["a", "b", "c", "d", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
-        XCTAssertEqual(result?.suggested.first?.handle, "a")
-        XCTAssertTrue(result?.fallbacks.isEmpty ?? false)
-        XCTAssertNil(result?.strongestExcluded)
+        XCTAssertEqual(result.suggested.first?.handle, "a")
+        XCTAssertTrue(result.fallbacks.isEmpty)
+        XCTAssertNil(result.strongestExcluded)
     }
 
     func testAnEmptyFirstPhotoSetIsNotTheSameAsNoFirstPhotoAtAll() {
@@ -299,7 +339,7 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["a", "b", "c", "d", "e", "f"],
             firstPhoto: [], stats: lookup(table), asOf: now)
-        XCTAssertEqual(result?.fallbacks.count, 5)
+        XCTAssertEqual(result.fallbacks.count, 5)
     }
 
     // MARK: - Missing data is unranked, never zero
@@ -310,16 +350,16 @@ final class CollaboratorPickTests: XCTestCase {
             handles: ["a", "b", "nonumbers", "d", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
 
-        XCTAssertFalse(result?.suggested.map(\.handle).contains("nonumbers") ?? true)
-        XCTAssertTrue(result?.unranked.map(\.handle).contains("nonumbers") ?? false)
-        XCTAssertNil(result?.unranked.first(where: { $0.handle == "nonumbers" })?.rate)
+        XCTAssertFalse(result.suggested.map(\.handle).contains("nonumbers"))
+        XCTAssertTrue(result.unranked.map(\.handle).contains("nonumbers"))
+        XCTAssertNil(result.unranked.first(where: { $0.handle == "nonumbers" })?.rate)
     }
 
     func testAnUnrankedAccountSaysItHasNoNumbersRatherThanShowingAZero() {
         let result = CollaboratorPick.suggest(
             handles: ["a", "b", "c", "d", "e", "f"],
             firstPhoto: nil, stats: lookup([:]), asOf: now)
-        let reason = result?.unranked.first?.reason ?? ""
+        let reason = result.unranked.first?.reason ?? ""
         XCTAssertFalse(reason.contains("0%"), reason)
         XCTAssertTrue(reason.lowercased().contains("not counted"), reason)
     }
@@ -330,7 +370,7 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["a", "b", "c", "d", "e", "f"],
             firstPhoto: ["a"], stats: lookup([:]), asOf: now)
-        let a = result?.unranked.first(where: { $0.handle == "a" })
+        let a = result.unranked.first(where: { $0.handle == "a" })
         XCTAssertTrue(a?.inFirstPhoto ?? false)
         XCTAssertTrue(a?.reason.lowercased().contains("first photo") ?? false, a?.reason ?? "")
     }
@@ -345,7 +385,7 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["a", "b", "c", "d", "e", "f"],
             firstPhoto: ["a"], stats: lookup(table), asOf: now)
-        let reason = result?.suggested.first?.reason ?? ""
+        let reason = result.suggested.first?.reason ?? ""
         XCTAssertTrue(reason.contains("2,000"), reason)
         XCTAssertTrue(reason.contains("50"), reason)
         XCTAssertTrue(reason.contains("10"), reason)
@@ -364,9 +404,9 @@ final class CollaboratorPickTests: XCTestCase {
             handles: ["old", "b", "c", "d", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
 
-        XCTAssertEqual(result?.suggested.first?.handle, "old", "better than nothing")
-        XCTAssertTrue(result?.suggested.first?.reason.lowercased().contains("stale") ?? false,
-                      result?.suggested.first?.reason ?? "")
+        XCTAssertEqual(result.suggested.first?.handle, "old", "better than nothing")
+        XCTAssertTrue(result.suggested.first?.reason.lowercased().contains("stale") ?? false,
+                      result.suggested.first?.reason ?? "")
     }
 
     // MARK: - Failure paths
@@ -383,16 +423,19 @@ final class CollaboratorPickTests: XCTestCase {
             stats: lookup(table), asOf: now,
             notes: [CollaboratorPick.firstPhotoUnresolvedNote])
 
-        XCTAssertTrue(result?.notes.contains(CollaboratorPick.firstPhotoUnresolvedNote) ?? false)
-        XCTAssertTrue(result?.suggested.allSatisfy { !$0.inFirstPhoto } ?? false)
+        XCTAssertTrue(result.notes.contains(CollaboratorPick.firstPhotoUnresolvedNote))
+        XCTAssertTrue(result.suggested.allSatisfy { !$0.inFirstPhoto })
     }
 
     func testABlankHandleIsNotACandidate() {
         let table = Dictionary(uniqueKeysWithValues:
             ["a", "b", "c", "d", "e"].map { ($0, stats(1_000, 50, 5)) })
-        // Five real handles plus blanks is still five candidates.
-        XCTAssertNil(CollaboratorPick.suggest(handles: ["a", "b", "c", "d", "e", "", "  ", "@"],
-                                              firstPhoto: nil, stats: lookup(table), asOf: now))
+        // Five real handles plus blanks is still five candidates, so they fit
+        // the slots and none of the blanks is offered as somebody to invite.
+        let result = CollaboratorPick.suggest(handles: ["a", "b", "c", "d", "e", "", "  ", "@"],
+                                              firstPhoto: nil, stats: lookup(table), asOf: now)
+        XCTAssertEqual(result.coverage, .allFit)
+        XCTAssertEqual(result.suggested.map(\.handle).sorted(), ["a", "b", "c", "d", "e"])
     }
 
     func testAZeroFollowerAccountIsUnrankedRatherThanDividedBy() {
@@ -404,8 +447,8 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["zero", "b", "c", "d", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
-        XCTAssertFalse(result?.suggested.map(\.handle).contains("zero") ?? true)
-        XCTAssertTrue(result?.unranked.map(\.handle).contains("zero") ?? false)
+        XCTAssertFalse(result.suggested.map(\.handle).contains("zero"))
+        XCTAssertTrue(result.unranked.map(\.handle).contains("zero"))
     }
 
     func testTheOrderIsStableForAccountsThatScoreIdentically() {
@@ -417,7 +460,7 @@ final class CollaboratorPickTests: XCTestCase {
                                              stats: lookup(table), asOf: now)
         let again = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
                                              stats: lookup(table), asOf: now)
-        XCTAssertEqual(first?.suggested.map(\.handle), again?.suggested.map(\.handle))
+        XCTAssertEqual(first.suggested.map(\.handle), again.suggested.map(\.handle))
     }
 
     func testNoMoreThanInstagramsCollaboratorLimitIsEverSuggested() {
@@ -425,7 +468,7 @@ final class CollaboratorPickTests: XCTestCase {
         let table = Dictionary(uniqueKeysWithValues: handles.map { ($0, stats(1_000, 50, 5)) })
         let result = CollaboratorPick.suggest(handles: handles, firstPhoto: nil,
                                               stats: lookup(table), asOf: now)
-        XCTAssertEqual(result?.suggested.count, CollaboratorPick.maxPerPost)
+        XCTAssertEqual(result.suggested.count, CollaboratorPick.maxPerPost)
         XCTAssertEqual(CollaboratorPick.maxPerPost, 5, "Instagram, confirmed 2026-08-10")
     }
 
@@ -448,11 +491,11 @@ final class CollaboratorPickTests: XCTestCase {
             handles: ["counted", "nofollowers", "zerofollowers", "nointeractions", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
 
-        XCTAssertEqual(result?.suggested.map(\.handle), ["counted"])
-        XCTAssertEqual(result?.unranked.map(\.handle).sorted(),
+        XCTAssertEqual(result.suggested.map(\.handle), ["counted"])
+        XCTAssertEqual(result.unranked.map(\.handle).sorted(),
                        ["e", "f", "nofollowers", "nointeractions", "zerofollowers"])
         // None of them carries a score, not even a zero one.
-        for candidate in result?.unranked ?? [] { XCTAssertNil(candidate.rate) }
+        for candidate in result.unranked { XCTAssertNil(candidate.rate) }
     }
 
     // MARK: - A book that could not be read is not an empty book (L10)
@@ -464,7 +507,7 @@ final class CollaboratorPickTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             handles: ["a", "b", "c", "d", "e", "f"], firstPhoto: nil,
             stats: lookup([:]), asOf: now, notes: [AccountBook.unreadableNote(file: "accounts.json", folder: "~/Library/Application Support/PostRoll")])
-        XCTAssertTrue(result?.notes.contains(AccountBook.unreadableNote(file: "accounts.json", folder: "~/Library/Application Support/PostRoll")) ?? false)
+        XCTAssertTrue(result.notes.contains(AccountBook.unreadableNote(file: "accounts.json", folder: "~/Library/Application Support/PostRoll")))
     }
 
     func testTheUnreadableNoteSaysWhatIsWrongRatherThanThatSomethingIs() {

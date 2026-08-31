@@ -108,8 +108,8 @@ final class CollaboratorPickForDayTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             event: carouselEvent(), day: .wednesday, preset: .balanced,
             stats: lookup(everyone), asOf: now)
-        XCTAssertEqual(result?.suggested.prefix(2).map(\.handle), ["first1", "first2"])
-        XCTAssertEqual(result?.fallbacks.count, 3)
+        XCTAssertEqual(result.suggested.prefix(2).map(\.handle), ["first1", "first2"])
+        XCTAssertEqual(result.fallbacks.count, 3)
     }
 
     func testAReelDayAppliesNoFirstPhotoBias() {
@@ -121,9 +121,9 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
         let result = CollaboratorPick.suggest(event: event, day: .thursday, preset: .balanced,
                                               stats: lookup(everyone + ["reelonly"]), asOf: now)
-        XCTAssertTrue(result?.fallbacks.isEmpty ?? false, "nothing fell through anything")
-        XCTAssertNil(result?.strongestExcluded)
-        XCTAssertTrue(result?.suggested.allSatisfy { !$0.inFirstPhoto } ?? false)
+        XCTAssertTrue(result.fallbacks.isEmpty, "nothing fell through anything")
+        XCTAssertNil(result.strongestExcluded)
+        XCTAssertTrue(result.suggested.allSatisfy { !$0.inFirstPhoto })
     }
 
     // MARK: - Identity by filename, not by position
@@ -176,9 +176,9 @@ final class CollaboratorPickForDayTests: XCTestCase {
             event: event, day: .wednesday, preset: .balanced,
             stats: lookup(["other1", "other2", "other3", "other4", "other5", "other6"]),
             asOf: now)
-        XCTAssertEqual(result?.notes, [CollaboratorPick.firstPhotoUnresolvedNote])
-        XCTAssertTrue(result?.suggested.allSatisfy { !$0.inFirstPhoto } ?? false)
-        XCTAssertTrue(result?.fallbacks.isEmpty ?? false,
+        XCTAssertEqual(result.notes, [CollaboratorPick.firstPhotoUnresolvedNote])
+        XCTAssertTrue(result.suggested.allSatisfy { !$0.inFirstPhoto })
+        XCTAssertTrue(result.fallbacks.isEmpty,
                       "nothing fell through a rule that was not applied")
     }
 
@@ -208,9 +208,12 @@ final class CollaboratorPickForDayTests: XCTestCase {
         XCTAssertTrue(membership.notes.isEmpty, "no photos is not a resolution failure")
     }
 
-    // MARK: - The threshold, on a real day
+    // MARK: - Which answer a real day gets (#964)
 
-    func testFiveTaggedPeopleOnADayProduceNoSuggestion() {
+    func testFiveTaggedPeopleOnADayAreAllInvitedRatherThanRanked() {
+        // The case this was found on. Five people fit the five slots, so the
+        // answer is "invite all of them", and the app used to say nothing at
+        // all, which reads as a day that needed no invites.
         var event = carouselEvent()
         var wed = event.days[DayName.wednesday.rawValue]!
         wed.photoTags[wed.photoPaths[3].absoluteString] = []
@@ -218,8 +221,25 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
         XCTAssertEqual(CaptionBlocks.dayTagCandidates(event: event, day: .wednesday,
                                                       preset: .balanced).count, 5)
-        XCTAssertNil(CollaboratorPick.suggest(event: event, day: .wednesday, preset: .balanced,
-                                              stats: lookup(everyone), asOf: now))
+        let result = CollaboratorPick.suggest(event: event, day: .wednesday, preset: .balanced,
+                                              stats: lookup(everyone), asOf: now)
+        XCTAssertEqual(result.coverage, .allFit)
+        XCTAssertEqual(result.suggested.count, 5)
+    }
+
+    func testADayWhoseTagsAreAllUnusableSaysNobodyIsTaggedRatherThanNothing() {
+        // Friday today, and any day whose tags have not been filled in. The
+        // silence this replaces is indistinguishable from a considered day.
+        var event = carouselEvent()
+        var wed = event.days[DayName.wednesday.rawValue]!
+        wed.photoTags = [:]
+        event.days[DayName.wednesday.rawValue] = wed
+
+        let result = CollaboratorPick.suggest(event: event, day: .wednesday, preset: .balanced,
+                                              stats: lookup(everyone), asOf: now)
+        XCTAssertEqual(result.coverage, .nothingTagged)
+        XCTAssertTrue(CollaboratorPick.captionBlock(result)
+                        .contains(CollaboratorPick.nobodyTaggedLine))
     }
 
     // MARK: - One shared predicate with the export
