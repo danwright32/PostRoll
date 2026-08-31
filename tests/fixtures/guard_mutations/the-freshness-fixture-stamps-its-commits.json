@@ -1,0 +1,8 @@
+{
+  "name": "the-freshness-fixture-stamps-its-commits",
+  "file": "PostRollApp/Tests/BuildFreshnessScopeTests.swift",
+  "find": "                [\"GIT_AUTHOR_DATE\": git, \"GIT_COMMITTER_DATE\": git]) { _, new in new }",
+  "replace": "                [\"GIT_AUTHOR_DATE\": git]) { _, new in new }",
+  "test": "PostRollTests/BuildFreshnessScopeTests/testTheFixtureStampsItsCommitsRatherThanRacingTheClock",
+  "breaks": "git takes the COMMITTER date for %ct, so stamping only the author date leaves every commit at the current second, several land in the same second, and every ordering assertion in the file compares equal values and passes (#994, L98, L134)"
+}
