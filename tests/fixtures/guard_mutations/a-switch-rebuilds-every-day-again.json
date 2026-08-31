@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/PostingLayoutControl.swift",
   "find": "        let work = PostingLayoutSwitch.work(\n            PostingLayoutSwitch.plan(from: old, to: newValue, in: ev))",
   "replace": "        let work = PostingLayoutSwitch.Work(\n            rebuildDays: Set(DayName.allCases\n                .filter { newValue.format(for: $0) != nil\n                       && !(ev.days[$0.rawValue]?.photoPaths.isEmpty ?? true) }\n                .map(\\.rawValue)),\n            redrawDays: [])",
-  "test": "PostRollTests/PostingLayoutCopyTests/testTheControlAsksThePlanWhatToRebuild",
+  "test": "tests/test_the_layout_control_is_the_one_way_to_switch.py::test_the_control_asks_the_plan_what_to_rebuild",
   "breaks": "a layout switch goes back to sending every governed day with photos to the caption generator, so Balanced to Opening pays for Monday and Wednesday when neither changes and replaces any caption Dan typed on them (#1010)"
 }

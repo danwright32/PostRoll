@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/PostingLayoutControl.swift",
   "find": "                Text(PostingLayoutCopy.thisEvent(effectivePreset))",
   "replace": "                Text(effectivePreset == .balanced ? \"This event: Sunday, Monday, and Wednesday each post a 4 photo carousel with a collage story.\" : \"This event: Sunday and Monday post a single photo; Wednesday posts a 10 photo carousel with a collage story.\")",
-  "test": "PostRollTests/PostingLayoutCopyTests/testTheScreensReadTheDerivedSentenceAndNoneCarriesTheOldOne",
+  "test": "tests/test_the_layout_control_is_the_one_way_to_switch.py::test_the_screens_read_the_derived_sentence_and_none_carries_the_old_one",
   "breaks": "the sentence under the layout picker goes back to being maintained beside the presets, so a third layout is described by whichever of the two branches it is not. Follows the sentence into PostingLayoutControl, where #1007 moved it (#1007)"
 }
