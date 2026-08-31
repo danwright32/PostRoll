@@ -1145,6 +1145,16 @@ def write_timings(path: Path, results: list[Result], repo_root: Path,
     # Moved to `cold` rather than dropped, because the reading is the only
     # measurement anyone has of what the cold build costs, and shipping the fix
     # would destroy the evidence the diagnosis was made from (L277).
+    #
+    # What this leaves: those six entries are estimated from their kind's median
+    # for as long as the deal is stable, because a shard runs its entries in
+    # registry order and the same one is therefore first every time. Six of five
+    # hundred, at an estimate that is the right order of magnitude, and it is
+    # named here rather than left for somebody to rediscover as a gap in the
+    # record. The fix that would close it is to build the app ONCE before the
+    # loop, so no entry pays for it and every reading is the steady-state cost;
+    # that is a change to what the sweep does rather than to what it records,
+    # which is why it is not in #1090.
     cold = next((r for r in usable
                  if r.entry.test.startswith("PostRollTests/")), None)
     if cold is not None:
