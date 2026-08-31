@@ -1110,7 +1110,16 @@ actor PythonBridge {
                 // from a different photo set names files that may no longer exist,
                 // and Python opens every cell path (a missing one killed the whole
                 // collage). nil falls back to the automatic masonry layout.
-                if let cellOverride = CollageCell.usable(pd.collageCellOverride, forPhotos: pd.photoPaths) {
+                // Against the photos the day POSTS, which is the set the
+                // layout has one cell per (#1000). Checked against every
+                // ASSIGNED photo, a hand dragged layout on a day carrying more
+                // photos than its preset posts never matched, `usable` returned
+                // nil, and the override was silently discarded: the editor
+                // showed the arrangement Dan dragged and the export rendered a
+                // different one. A Sunday with seven photos under Balanced is
+                // exactly that state.
+                let posted = event.effectivePostingPreset.postedPhotos(pd.photoPaths, on: dayName)
+                if let cellOverride = CollageCell.usable(pd.collageCellOverride, forPhotos: posted) {
                     entry["cell_layout"] = cellOverride.map { [
                         "photo_path": $0.photoPath,
                         "x": $0.x, "y": $0.y,

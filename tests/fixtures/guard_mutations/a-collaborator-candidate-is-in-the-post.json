@@ -1,0 +1,8 @@
+{
+  "name": "a-collaborator-candidate-is-in-the-post",
+  "file": "PostRollApp/Sources/Services/CaptionBlocks.swift",
+  "find": "            for url in preset.postedPhotos(posting.photoPaths, on: day) {",
+  "replace": "            for url in posting.photoPaths {",
+  "test": "PostRollTests/PostedPhotoScopeTests/testACollaboratorCandidateHasToBeInThePost",
+  "breaks": "the collaborator suggestion draws candidates from every assigned photo again, so it offers one of five invites to somebody the post does not show. A declined invite is a wasted slot out of five, and the reason it would be declined is invisible from the panel (#999, #278)"
+}

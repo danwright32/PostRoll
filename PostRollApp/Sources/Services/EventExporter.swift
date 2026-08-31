@@ -122,10 +122,8 @@ struct EventExporter {
                 // `format(for:)?.count ?? 0`, one of four fallbacks across the
                 // app that each guessed differently (0 here, 10 in the picker,
                 // the assigned count in two more) for a day no preset governs.
-                let assigned = event.days[day.rawValue]?.photoPaths ?? []
-                let count = preset.effectiveCount(for: day, assigned: assigned.count)
-                    ?? assigned.count
-                let photos = Array(assigned.prefix(count))
+                let photos = preset.postedPhotos(
+                    event.days[day.rawValue]?.photoPaths ?? [], on: day)
                 if !photos.isEmpty {
                     let carouselDir = dayDir.appendingPathComponent("carousel")
                     try? FileManager.default.createDirectory(at: carouselDir, withIntermediateDirectories: true)
@@ -200,7 +198,15 @@ struct EventExporter {
         for day in DayName.allCases {
             guard let cap = result?[day] else { continue }
             var block = "=== \(day.displayName.uppercased()) ===\n\(cap.formatted)"
-            let photoPaths = event.days[day.rawValue]?.photoPaths ?? []
+            // The photos this day POSTS, not the photos assigned to it (#999).
+            // Labelled against the full list, the ALT TEXT and PHOTO TAGS
+            // blocks described photographs that are not in the post: a Sunday
+            // with seven photos under Balanced shipped seven alt texts for a
+            // four photo carousel. It is the one defect class nobody sighted
+            // catches in review, because every sentence in it is well written
+            // and true of some photograph.
+            let photoPaths = preset.postedPhotos(
+                event.days[day.rawValue]?.photoPaths ?? [], on: day)
             if !cap.altTexts.isEmpty {
                 let altBody: String
                 if preset.isCollageCarousel(day) {
