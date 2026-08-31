@@ -383,6 +383,12 @@ extension PostingDay {
         titleCardMuted       = try  c.decodeIfPresent(Bool.self,                      forKey: .titleCardMuted)      ?? false
         coverPick            = try  c.decodeIfPresent(CoverPick.self,                 forKey: .coverPick)
         coverOverride        = try  c.decodeIfPresent(String.self,                    forKey: .coverOverride)
+        // Encoded by the compiler and read back by nobody until #1022 found
+        // it. Every day loaded from disk carried nil, so the stale design
+        // sweep (#1010) saw no evidence on any day in the library and
+        // refused to report anything, which is exactly what a correct
+        // library looks like.
+        renderedPostingPreset = try c.decodeIfPresent(PostingPreset.self,           forKey: .renderedPostingPreset)
     }
 
     /// Returns a copy with the given photos removed from photoPaths and from

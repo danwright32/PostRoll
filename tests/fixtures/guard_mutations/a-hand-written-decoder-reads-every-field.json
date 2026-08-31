@@ -1,0 +1,8 @@
+{
+  "name": "a-hand-written-decoder-reads-every-field",
+  "file": "PostRollApp/Sources/Models/Event.swift",
+  "find": "        renderedPostingPreset = try c.decodeIfPresent(PostingPreset.self,           forKey: .renderedPostingPreset)\n",
+  "replace": "",
+  "test": "tests/test_stored_types_round_trip.py::test_a_hand_written_decoder_reads_every_field_the_encoder_writes",
+  "breaks": "a stored field is encoded by the compiler and read back by nobody, so it resets to its default on every load with nothing failing. This is the real one it was written for: renderedPostingPreset is what the stale design sweep judges an export by (#1010), and losing it on load makes the whole gate report a clean library rather than report an error (#1022, L317)"
+}
