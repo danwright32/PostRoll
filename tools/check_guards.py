@@ -1113,7 +1113,8 @@ def costs_or_fallback(kinds: dict[str, bool],
         return guard_entry_costs.by_cost_class(kinds)
 
 
-def write_timings(path: Path, results: list[Result], repo_root: Path) -> int:
+def write_timings(path: Path, results: list[Result], repo_root: Path,
+                  shard: tuple[int, int] | None = None) -> int:
     """Write one run's per-entry readings, for `tools/record_guard_costs.py`.
 
     Only entries that reached a VERDICT are written. An entry that errored
@@ -1134,7 +1135,12 @@ def write_timings(path: Path, results: list[Result], repo_root: Path) -> int:
         "run": run,
         "measured_on": time.strftime("%Y-%m-%d"),
         "commit": head_commit(repo_root),
-        "shard": os.environ.get("GUARD_SHARD", ""),
+        # Taken from the --shard argument rather than a second copy of the
+        # split in the workflow. It was an env var the workflow set beside the
+        # argument, which is two spellings of one number in one file, and the
+        # guard that holds the matrix and the argument together reads only one
+        # of them (L41).
+        "shard": f"{shard[0]}/{shard[1]}" if shard else "",
         "seconds": {r.entry.name: round(r.seconds, 2) for r in usable},
         "kinds": {r.entry.name: r.entry.test.startswith("PostRollTests/")
                   for r in usable},
@@ -1348,7 +1354,7 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
     # more expensive entries raises both halves and leaves it where it was.
     log(guard_work_line(results))
     if timings_path is not None:
-        written = write_timings(timings_path, results, repo_root)
+        written = write_timings(timings_path, results, repo_root, shard=shard)
         log(f"wrote {written} entry timing(s) to {timings_path}")
     for skipped in unproven:
         log(f"  {skipped.name}: never reached before the deadline, so nothing "
