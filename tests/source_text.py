@@ -8,9 +8,10 @@ containing the marker hijacks which text gets checked. A guard that is green on
 prose is indistinguishable from one that works (L103), and it can even be
 satisfied by a comment explaining that the thing it checks was removed.
 
-The repo already knew this: `VisibleRefusalGuardTests` and
+The repo already knew this: the visible-refusal guards and
 `DiscardedFileWriteGuardTests` strip comments for exactly this reason, and two
-guards carry not-satisfied-by-a-comment mutation entries. This family had never
+guards carry not-satisfied-by-a-comment mutation entries. Those refusal guards
+read this module directly since #1089 moved them off the app build. This family had never
 been swept, so the stripping lives here once rather than being copied into five
 files where it can drift (L41).
 
