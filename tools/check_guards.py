@@ -1114,7 +1114,8 @@ def costs_or_fallback(kinds: dict[str, bool],
 
 
 def write_timings(path: Path, results: list[Result], repo_root: Path,
-                  shard: tuple[int, int] | None = None) -> int:
+                  shard: tuple[int, int] | None = None,
+                  unproven: list[Entry] | None = None) -> int:
     """Write one run's per-entry readings, for `tools/record_guard_costs.py`.
 
     Only entries that reached a VERDICT are written. An entry that errored
@@ -1175,6 +1176,14 @@ def write_timings(path: Path, results: list[Result], repo_root: Path,
                   for r in usable},
         "cold": ({"entry": cold.entry.name, "seconds": round(cold.seconds, 2)}
                  if cold is not None else None),
+        # Whether this shard ran out of time. A shard that hit its deadline
+        # measured the entries it reached and NOTHING about the ones it did
+        # not, and its file is indistinguishable from a complete one by its
+        # contents alone: the readings it holds are all correct, there are
+        # simply fewer of them (L331). Recording a sweep like that would leave
+        # the missing entries estimated with nothing saying why, so the reader
+        # refuses it rather than guessing.
+        "unproven": sorted(e.name for e in (unproven or [])),
         "skipped": sorted(r.entry.name for r in results
                           if r not in usable and r is not cold),
     }
@@ -1386,7 +1395,8 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
     # more expensive entries raises both halves and leaves it where it was.
     log(guard_work_line(results))
     if timings_path is not None:
-        written = write_timings(timings_path, results, repo_root, shard=shard)
+        written = write_timings(timings_path, results, repo_root, shard=shard,
+                                unproven=unproven)
         log(f"wrote {written} entry timing(s) to {timings_path}")
     for skipped in unproven:
         log(f"  {skipped.name}: never reached before the deadline, so nothing "

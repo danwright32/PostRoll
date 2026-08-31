@@ -200,3 +200,47 @@ def test_a_record_with_no_kinds_at_all_keeps_every_reading(tmp_path):
     assert costs.of("a") == 29.0
     assert costs.of("b") == 0.6
     assert costs.estimated == frozenset()
+
+
+def test_a_shard_that_ran_out_of_time_is_refused(tmp_path):
+    """The one way a readings file can be WRONG while every number in it is right.
+
+    A shard that hit its deadline measured the entries it reached and nothing
+    about the ones it did not. Its file holds correct readings, there are simply
+    fewer of them, so nothing in the contents would say so and the missing
+    entries would be silently estimated (L331).
+    """
+    path = tmp_path / "short.json"
+    path.write_text(json.dumps({
+        "run": "run-7", "seconds": {"one": 29.0}, "measured_on": "2026-08-31",
+        "kinds": {"one": True}, "unproven": ["two", "three"],
+    }))
+    with pytest.raises(SystemExit) as refusal:
+        readings_of([path])
+    assert "ran out of time" in str(refusal.value)
+    assert "2 entries never reached" in str(refusal.value)
+    assert "Nothing was written" in str(refusal.value)
+
+
+def test_a_shard_that_reached_everything_is_accepted(tmp_path):
+    """The positive control, in the same fixture, so the refusal above cannot be
+    what every file gets (L159)."""
+    path = tmp_path / "whole.json"
+    path.write_text(json.dumps({
+        "run": "run-7", "seconds": {"one": 29.0}, "measured_on": "2026-08-31",
+        "kinds": {"one": True}, "unproven": [],
+    }))
+    seconds, kinds, run = readings_of([path])
+    assert seconds == {"one": 29.0}
+
+
+def test_a_file_written_before_the_field_existed_is_accepted(tmp_path):
+    """An absent `unproven` is not an empty one, but refusing on it would make
+    every older readings file unusable, and absent is what a complete sweep
+    looked like before this was recorded."""
+    path = tmp_path / "old.json"
+    path.write_text(json.dumps({
+        "run": "run-7", "seconds": {"one": 29.0}, "kinds": {"one": True},
+    }))
+    seconds, _, _ = readings_of([path])
+    assert seconds == {"one": 29.0}

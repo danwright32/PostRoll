@@ -80,6 +80,15 @@ def readings_of(paths: list[Path]) -> tuple[dict[str, float], dict[str, bool], s
                 f"{path} holds no readings. An empty record deals every entry "
                 "as free, which is a partition that looks balanced and is not. "
                 "Nothing was written.")
+        left = payload.get("unproven") or []
+        if left:
+            raise SystemExit(
+                f"{path} comes from a shard that ran out of time with "
+                f"{len(left)} entries never reached, so it measured part of its "
+                "share and nothing about the rest. Its readings are all correct "
+                "and there are simply fewer of them, which is why nothing in the "
+                "file's contents would say so. Re-run the sweep, or raise its "
+                "deadline, before recording. Nothing was written.")
         runs.add(str(payload.get("run") or "unknown"))
         recorded_kinds = payload.get("kinds") or {}
         for name, value in found.items():
