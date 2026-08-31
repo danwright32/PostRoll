@@ -1,0 +1,8 @@
+{
+  "name": "a-value-that-is-nobody-gets-no-link",
+  "file": "PostRollApp/Sources/Services/ProfileLink.swift",
+  "find": "guard PythonBridge.isRealHandle(handle) else { return nil }",
+  "replace": "guard !CaptionBlocks.bareUsername(handle).isEmpty else { return nil }",
+  "test": "PostRollTests/ProfileLinkTests/testASentinelIsNotLinkable",
+  "breaks": "a stored value that is nobody (the sentinel `unknown`, a display name) is drawn as a live link on the collaborator panel and on the Add numbers sheet, so pressing it is the only way to find out it lands on an Instagram error page (#973)"
+}

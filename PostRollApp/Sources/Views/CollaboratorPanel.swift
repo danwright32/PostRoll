@@ -97,10 +97,11 @@ struct CollaboratorPanel: View {
                     .frame(width: 16, alignment: .trailing)
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(candidate.handle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(PaintedSurfaces.bodyText)
-                    .textSelection(.enabled)
+                // A link to the profile, because the next thing Dan does with
+                // a name here is open it to read the numbers off (#973). The
+                // panel holds no checked URL for a candidate, only the handle,
+                // so the address is built from it.
+                ProfileHandleText(handle: candidate.handle)
                 Text(candidate.reason)
                     .font(.system(size: 10))
                     .foregroundStyle(PaintedSurfaces.secondaryText)
@@ -155,9 +156,10 @@ struct AccountNumbersSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            Text(handle)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(PaintedSurfaces.bodyText)
+            // The screen that TELLS him to open the profile is the one that
+            // most needs to be able to (#973).
+            ProfileHandleText(handle: handle,
+                              font: .system(size: 16, weight: .semibold))
 
             Text("Open their profile and read these off a few recent posts. "
                  + "Leave a field empty if you do not know it: empty means not counted, "
