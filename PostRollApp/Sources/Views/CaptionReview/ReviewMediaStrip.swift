@@ -74,12 +74,12 @@ struct ReviewMediaStrip: View {
     /// Taken from a preview path the run itself produced rather than rebuilt
     /// from the event and day, because the folder name is Python's to choose and
     /// a second derivation of it would break silently the first time it changed.
-    private var dayFolder: URL? {
-        guard let path = previewPaths?.values.first(where: {
-            FileManager.default.fileExists(atPath: $0)
-        }) else { return nil }
-        return URL(fileURLWithPath: path).deletingLastPathComponent()
-    }
+    ///
+    /// The derivation itself moved to `PreviewDayFolder` when the export
+    /// started writing its own record into the same folder (#925), so the badge
+    /// on this row and the record beside it cannot come to name different
+    /// folders for one day (L263).
+    private var dayFolder: URL? { PreviewDayFolder.url(paths: previewPaths) }
 
     /// Re-read the day's design stamp. Cheap, and only on the two events that
     /// can change the answer: arriving at the day, and finishing a regeneration

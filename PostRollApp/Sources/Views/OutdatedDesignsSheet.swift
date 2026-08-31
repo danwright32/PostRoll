@@ -16,6 +16,15 @@ struct OutdatedDesignsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var groups: [OutdatedDesignsGroup] = []
+    /// Days that are behind the design AND have already been exported (#925).
+    ///
+    /// Their own list rather than rows mixed into the one above, because the
+    /// list above exists to point at work worth doing and rebuilding a day
+    /// whose files have gone out changes nothing anyone will see. Kept on
+    /// screen rather than dropped: they are still behind the design, and a
+    /// surface that hid them would claim a cleaner machine than it measured
+    /// (L98).
+    @State private var exportedGroups: [OutdatedDesignsGroup] = []
     @State private var result = DesignScanResult(stale: [], daysWithAssets: 0, daysWithARecord: 0)
     @State private var hasPreviewRoot = true
     /// Three states, told apart: never scanned, scanning, and a finished scan.
@@ -38,7 +47,7 @@ struct OutdatedDesignsSheet: View {
                             .font(.light(12))
                             .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
-                } else if groups.isEmpty {
+                } else if groups.isEmpty && exportedGroups.isEmpty {
                     Text(OutdatedDesignsDisplay.summary(result,
                                                         hasPreviewRoot: hasPreviewRoot))
                         .font(.system(size: 13))
@@ -48,6 +57,9 @@ struct OutdatedDesignsSheet: View {
                         VStack(alignment: .leading, spacing: Spacing.lg) {
                             ForEach(groups) { group in
                                 eventSection(group)
+                            }
+                            if !exportedGroups.isEmpty {
+                                alreadyExported
                             }
                         }
                         .padding(.bottom, Spacing.md)
@@ -109,6 +121,26 @@ struct OutdatedDesignsSheet: View {
         }
     }
 
+    /// The days that have already gone out, below everything worth acting on
+    /// and introduced by a line saying why they are set apart.
+    private var alreadyExported: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            RoseGoldDivider()
+            Text("Already exported")
+                .font(.signPainter(20))
+                .foregroundStyle(PaintedSurfaces.bodyText)
+            Text("These are behind the current design too, but their files have "
+                 + "already gone out, so rebuilding them would not change anything "
+                 + "anyone has seen.")
+                .font(.light(12))
+                .foregroundStyle(PaintedSurfaces.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(exportedGroups) { group in
+                eventSection(group)
+            }
+        }
+    }
+
     private var footer: some View {
         HStack {
             if let scannedAt, !isScanning {
@@ -148,7 +180,10 @@ struct OutdatedDesignsSheet: View {
             (DesignStaleScan.scan(previewRoot: root),
              DesignStaleScan.hasPreviewRoot(root))
         }.value
-        groups = OutdatedDesignsDisplay.groups(found.0.stale, events: appState.events)
+        groups = OutdatedDesignsDisplay.groups(found.0.staleNotExported,
+                                               events: appState.events)
+        exportedGroups = OutdatedDesignsDisplay.groups(found.0.staleExported,
+                                                       events: appState.events)
         result = found.0
         hasPreviewRoot = found.1
         scannedAt = Date()

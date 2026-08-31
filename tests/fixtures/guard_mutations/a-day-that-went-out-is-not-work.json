@@ -1,0 +1,8 @@
+{
+  "name": "a-day-that-went-out-is-not-work",
+  "file": "PostRollApp/Sources/Services/DesignStaleScan.swift",
+  "find": "exportedAt: DayExportRecord.read(in: dayDir)))",
+  "replace": "exportedAt: Optional<Date>.none))",
+  "test": "PostRollTests/DesignStaleScanTests/testAStaleDayCarriesTheDateItWasExported",
+  "breaks": "the sweep goes back to having no idea which days are finished with, so every day that ever rendered a bumped template is listed as work worth doing however long ago its files went out, and the list gets more padded the more history there is (#925)"
+}
