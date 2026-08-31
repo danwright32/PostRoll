@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/NewEventSheet.swift",
   "find": "RefusalNote(message: refusal)",
   "replace": "EmptyView()",
-  "test": "PostRollTests/VisibleRefusalGuardTests/testTheNewEventSheetDrawsWhatIsMissing",
+  "test": "tests/test_a_refusal_and_a_failure_are_visible.py::test_the_new_event_sheet_draws_what_is_missing",
   "breaks": "the sheet computes which field is empty and never draws it (#402)"
 }

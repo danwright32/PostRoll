@@ -979,9 +979,9 @@ final class HostedControlLegibilityTests: XCTestCase {
     /// guarded automatically is that the view still declares it may wrap.
     func testTheArchiveNoteStillDeclaresThatItWraps() throws {
         // Comments stripped including trailing ones, the same cut as
-        // VisibleRefusalGuardTests.code: `.opacity(1) // .fixedSize(...)`
-        // satisfied this check until the mutation registry recorded exactly
-        // that break (#416, L103).
+        // tests/swift_visible_failure_rules.py's `code` (#1089):
+        // `.opacity(1) // .fixedSize(...)` satisfied this check until the
+        // mutation registry recorded exactly that break (#416, L103).
         let source = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent()

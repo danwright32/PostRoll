@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/NewEventSheet.swift",
   "find": "RefusalNote(message: refusal)",
   "replace": "EmptyView() // RefusalNote(message: refusal)",
-  "test": "PostRollTests/VisibleRefusalGuardTests/testTheNewEventSheetDrawsWhatIsMissing",
+  "test": "tests/test_a_refusal_and_a_failure_are_visible.py::test_the_new_event_sheet_draws_what_is_missing",
   "breaks": "the refusal is gone and a trailing comment still names it (L103)"
 }

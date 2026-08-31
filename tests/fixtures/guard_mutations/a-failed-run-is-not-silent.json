@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Services/ProgramNotesManager.swift",
   "find": "                NotificationService.shared.notifyWorkFailed(\n                    work: \"searching for programme notes\",\n                    eventName: appState.events.first { $0.id == eventID }?.name ?? \"An event\",\n                    reason: ProgramNotesMerge.failureMessage(error))",
   "replace": "                _ = eventID",
-  "test": "PostRollTests/WorkWithNoWindowTests/testEveryFailurePathAnnouncesItself",
+  "test": "tests/test_a_refusal_and_a_failure_are_visible.py::test_every_failure_path_announces_itself",
   "breaks": "a manager's failure path goes back to saying nothing, so with the window closed a dead run is indistinguishable from one still going and from one that finished (#863, L11)"
 }

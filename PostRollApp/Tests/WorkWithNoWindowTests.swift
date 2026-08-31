@@ -141,74 +141,17 @@ final class WorkWithNoWindowTests: XCTestCase {
                        "a failure with no reason produced an empty banner")
     }
 
-    // MARK: - No manager gets to fail quietly
-
-    /// Whether this line is a place a run BECOMES failed.
-    ///
-    /// The state, not one spelling of it. The first version of this sweep looked
-    /// for `markFailed`, which is how five of the managers record a failure, and
-    /// `ExportManager` is not one of them: it sets a failed phase and
-    /// deactivates instead. So the longest running work in the app was the one
-    /// kind that still failed in silence, and this sweep reported all clear
-    /// while checking five real sites (#872).
-    ///
-    /// A sweep that enumerates its subjects by one spelling of the thing it
-    /// cares about exempts everything reaching the same state another way, and
-    /// it reads as real coverage because the subjects it did find are real
-    /// (L247).
-    private static func putsARunIntoAFailedState(_ line: String) -> Bool {
-        line.contains(".markFailed(") || line.contains("phase: .failed(")
-            || line.contains("phase = .failed(")
-    }
-
-
-    /// Every place a run is marked failed says so out loud.
-    ///
-    /// The reason this is a sweep rather than five tests. Announcing a failure
-    /// is a thing each manager does in its own failure path, which is exactly
-    /// the shape of a list kept by hand: a sixth manager added later is silent,
-    /// nothing fails, and the gap is invisible because the other five still
-    /// announce (L96). The sweep is over what is REACHABLE in Sources, so
-    /// adding a failure path enrols it.
-    ///
-    /// It checks proximity rather than order or exact form, because the point is
-    /// that the two live together, not that they are written a particular way.
-    func testEveryFailurePathAnnouncesItself() throws {
-        let sources = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources")
-
-        guard let walk = FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil) else {
-            return XCTFail("could not read \(sources)")
-        }
-
-        var checked = 0
-        var silent: [String] = []
-        for case let url as URL in walk where url.pathExtension == "swift" {
-            // JobTracker DEFINES markFailed; it does not call it about any
-            // particular piece of work and has no event name to announce.
-            guard url.lastPathComponent != "JobTracker.swift" else { continue }
-            let lines = try String(contentsOf: url, encoding: .utf8)
-                .components(separatedBy: "\n")
-
-            for (index, line) in lines.enumerated() where Self.putsARunIntoAFailedState(line) {
-                checked += 1
-                let window = lines[index..<min(index + 9, lines.count)].joined(separator: "\n")
-                if !window.contains("notifyWorkFailed(") {
-                    silent.append("\(url.lastPathComponent):\(index + 1)")
-                }
-            }
-        }
-
-        XCTAssertGreaterThanOrEqual(checked, 5,
-                                    "the sweep found \(checked) failure paths and "
-                                    + "there have been five since #718, so it is "
-                                    + "reading the wrong thing rather than the app "
-                                    + "having fewer")
-        XCTAssertTrue(silent.isEmpty,
-                      "these runs are marked failed and say nothing, so with the "
-                      + "window closed a dead run is indistinguishable from one "
-                      + "still going: \(silent)")
-    }
+    // ── the failure-path sweep has moved off the app build (#1089) ──────
+    //
+    // `testEveryFailurePathAnnouncesItself` and the matcher behind it read
+    // nothing but Swift source, and every one of its two registry entries paid
+    // an app build of about 29 seconds to re-prove a rule a pytest run answers
+    // in under a second. It lives in
+    // tests/test_a_refusal_and_a_failure_are_visible.py now, with every
+    // spelling of becoming failed carried across as a fixture and both sides of
+    // the proximity window asserted, and both entries were re-proved KILLED
+    // against the Python rule before this was deleted.
+    //
+    // What stays here is what a text scan cannot do: the tests above drive
+    // WorkActivity and the notification itself.
 }
