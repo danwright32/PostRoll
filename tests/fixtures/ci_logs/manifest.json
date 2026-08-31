@@ -1,19 +1,20 @@
 {
   "logs": {
     "guard-full": {
-      "bytes": 107255,
+      "bytes": 103508,
       "conclusion": "success",
       "holds": {
-        "failed_tests": null,
-        "read_off": "FILL IN: quote the line each number was read from",
-        "work": null
+        "failed_tests": [],
+        "read_off": "guard work: 1151350 recorded entry-ms over 83 entries, 83 of them measured; and 83 guards checked, 83 killed their mutation, 0 did not",
+        "work": 1151350
       },
-      "job": 99544292505,
-      "job_name": "full (2)",
-      "lines": 794,
+      "job": 99563555672,
+      "job_name": "full (3)",
+      "lines": 782,
       "recorded_on": "2026-08-31",
-      "run": 33409212726,
-      "started_at": "2026-08-31T15:34:29Z"
+      "run": 33415040753,
+      "started_at": "2026-08-31T16:36:33Z",
+      "why_this_one": "The `changed` and `full` families share one work pattern over one producer, so one guard log is evidence for both. Their FAILURE pattern is pytest's and is held to python-red for the same reason. This log is from the first sweep run after #1090, which is the first one whose cost record existed: before it the work line said `unmeasured` and was no evidence at all."
     },
     "macos-red": {
       "bytes": 1259775,
