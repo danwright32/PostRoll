@@ -269,6 +269,10 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
             # depending on the posting preset), so reuse them as Claude's
             # context: same event, same shoot, no extra selection step, never
             # blows past Claude's request size limit.
+            # What the POST holds, taken before any sampling below replaces
+            # `photos` with a handful of them. Passed to the caption prompt so
+            # it is asked about the reel it is actually writing for (#1067).
+            post_photo_count = len(photos)
             if day_name == "thursday" and post_type == "scroll_reel":
                 # Look up Wednesday's photos from either the days dict (when
                 # Wednesday is included in this run) OR from the dedicated
@@ -327,6 +331,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
                     photo_tags=photo_tags,
                     existing_captions=existing_captions if existing_captions else None,
                     event_url=event_url,
+                    post_photo_count=post_photo_count,
                 )
                 results[day_name] = result
                 if result.get("skipped_photos"):

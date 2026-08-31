@@ -1,0 +1,8 @@
+{
+  "name": "a-reel-prompt-is-told-the-reels-size",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "            post_size_line=_post_size_line(post_type, photo_count, post_photo_count),\n            photo_list_heading=_photo_list_heading(photo_count, post_photo_count),",
+  "replace": "            post_size_line=_post_size_line(post_type, photo_count, None),\n            photo_list_heading=_photo_list_heading(photo_count, None),",
+  "test": "tests/test_reel_alt_text_describes_the_reel.py::test_the_prompt_says_how_many_photos_the_REEL_holds",
+  "breaks": "the prompt goes back to saying a 234 photo scroll reel is a post containing 4 photos, because that is how many were attached, so the model is asked to summarise a reel it has been told is four pictures and writes about one of them. Aimed at the call site rather than at either sentence, because the true size reaches the prompt through TWO of them and breaking one leaves the other still saying it, which is how this entry SURVIVED its first attempt (#1067, L178)"
+}
