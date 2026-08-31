@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/PostingLayoutControl.swift",
   "find": "                Text(\"Rebuilding, so the layout cannot change yet.\")",
   "replace": "                ProgressView(); Text(\"Rebuilding, so the layout cannot change yet.\")",
-  "test": "PostRollTests/PostingLayoutCopyTests/testTheControlDrawsNoProgressIndicatorOfItsOwn",
+  "test": "tests/test_the_layout_control_is_the_one_way_to_switch.py::test_the_control_draws_no_progress_indicator_of_its_own",
   "breaks": "the control stacks a second spinner directly above the screen's own progress line for the same rebuild, carrying less information than the one below it, which is the indistinct display #135 exists to prevent (#1007)"
 }

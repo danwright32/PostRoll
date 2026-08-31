@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/PostingLayoutControl.swift",
   "find": "            guard claimedRedraw else { return }",
   "replace": "            _ = claimedRedraw",
-  "test": "PostRollTests/PostingLayoutCopyTests/testARefusedRedrawClaimStopsTheSwitch",
+  "test": "tests/test_the_layout_control_is_the_one_way_to_switch.py::test_a_refused_redraw_claim_stops_the_switch",
   "breaks": "a refused claim no longer stops the switch, so a busy day ends with the layout changed and no run to redraw it (#1010, L197)"
 }

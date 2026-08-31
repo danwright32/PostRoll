@@ -18,6 +18,27 @@ import Foundation
 /// that shipped, because that is the defect this file exists to hold closed.
 final class PostingLayoutCopyTests: XCTestCase {
 
+    // ── the source-scanning half has moved off the app build (#1089) ────
+    //
+    // Six rules here read nothing but Swift source, five of them carrying a
+    // registry entry at about 29 seconds of rebuilding each: which screens
+    // carry the one control, whether they still read the derived sentence,
+    // whether the control draws a spinner of its own, whether it asks the plan
+    // what to rebuild, whether a refused redraw claim stops the switch, and
+    // whether the stale days are shown with a way to act on them. They live in
+    // tests/test_the_layout_control_is_the_one_way_to_switch.py now, and every
+    // registered one was re-proved KILLED against the Python rule before it was
+    // deleted.
+    //
+    // The sixth carried no entry and moved anyway, because it reads the same
+    // file the same way: leaving it would have kept this class and its helper
+    // paying a build to re-prove nothing.
+    //
+    // What stays is what a text scan cannot do: these tests call
+    // PostingLayoutCopy and PostingLayoutSwitch and check what they actually
+    // produce. Making no drawing call is not the same as being text-only,
+    // which is the correction #1089's own measurement needed.
+
     func testEveryPresetsSentenceCarriesItsOwnExplanation() {
         for preset in PostingPreset.allCases {
             let sentence = PostingLayoutCopy.thisEvent(preset)
@@ -61,103 +82,7 @@ final class PostingLayoutCopyTests: XCTestCase {
 
     // MARK: - The screen actually reads it
 
-    /// A derived sentence nothing calls leaves the hand written one on screen,
-    /// so the tests above would pass while the defect shipped unchanged.
-    ///
-    /// Checked in BOTH directions. The positive half alone is satisfied by a
-    /// call added beside the ternary rather than in place of it; the negative
-    /// half alone is satisfied by deleting the sentence altogether and showing
-    /// nothing (L178, L283). Together they say the old copy is gone and the
-    /// derived one took its place.
-    func testTheScreensReadTheDerivedSentenceAndNoneCarriesTheOldOne() throws {
-        // The control owns the sentence since #1007 moved the picker out of
-        // ExportView. The positive half is asserted against the control; the
-        // absence is asserted against EVERY screen that shows the layout,
-        // because the defect this holds closed is a hand written sentence
-        // anywhere near the picker, not in one file.
-        let control = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
-                                 encoding: .utf8)
-        XCTAssertTrue(control.contains("PostingLayoutCopy.thisEvent("),
-                      "the layout control does not call the derived sentence, so "
-                      + "whatever it draws under the picker is maintained beside "
-                      + "the presets")
-
-        // The exact words that shipped for Opening. Named rather than described,
-        // because this half exists to hold one specific defect closed.
-        for name in Self.layoutScreens + ["PostingLayoutControl.swift"] {
-            let source = try String(contentsOf: viewFile(name), encoding: .utf8)
-            XCTAssertFalse(source.contains("Wednesday posts a 10 photo carousel"),
-                           "\(name) carries Classic's hand written sentence, which is "
-                           + "what Opening was printing")
-            XCTAssertFalse(source.contains("each post a 4 photo carousel with a collage story"),
-                           "\(name) carries Balanced's hand written sentence")
-        }
-    }
-
-    /// Every screen that shows the layout's effect can change it (#1007).
-    ///
-    /// Asserted as a CONSTRUCTION, which a comment or an import cannot satisfy
-    /// (L135, L103), and paired with the absence of the inline picker it
-    /// replaced so a screen cannot end up carrying both.
-    func testEveryScreenThatShowsTheLayoutUsesTheOneControl() throws {
-        for name in Self.layoutScreens {
-            let source = try String(contentsOf: viewFile(name), encoding: .utf8)
-            XCTAssertTrue(source.contains("PostingLayoutControl("),
-                          "\(name) shows what the posting layout produced and offers "
-                          + "no way to change it")
-            XCTAssertFalse(source.contains("Picker(\"Posting layout\""),
-                           "\(name) builds its own layout picker beside the shared control")
-        }
-    }
-
-    /// The control draws no progress indicator of its own (#1007).
-    ///
-    /// Every screen it sits on already draws the rebuild's progress, with
-    /// elapsed time and an estimate. A spinner here stacks a second indicator
-    /// directly above that one, for the same piece of work, carrying less
-    /// information than the one below it. Two indistinguishable indicators for
-    /// one job is the display #135 exists to prevent.
-    ///
-    /// Checked in both directions: no spinner, AND the reason still shown, so
-    /// the fix cannot be satisfied by deleting the busy state altogether and
-    /// leaving a dead control with nothing saying why (L178, L148).
-    ///
-    /// A whole file scan is honest here in a way it usually is not: this file
-    /// is one control, and the rule is that it contains no progress indicator
-    /// anywhere, not that one region of it does not.
-    func testTheControlDrawsNoProgressIndicatorOfItsOwn() throws {
-        let source = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
-                                encoding: .utf8)
-        XCTAssertFalse(source.contains("ProgressView("),
-                       "the layout control draws its own spinner above the screen's "
-                       + "own progress line, which already carries elapsed time and "
-                       + "an estimate this one does not")
-        XCTAssertTrue(source.contains("cannot change yet"),
-                      "the control is disabled while a rebuild runs and has to say "
-                      + "why, or it is a dead control with no reason")
-    }
-
-    /// Named rather than derived, deliberately: what belongs here is a judgement
-    /// about which screens SHOW the layout's effect, which no scan can make. It
-    /// is three today, and a fourth is a decision somebody has to take.
-    private static let layoutScreens = [
-        "ExportView.swift", "CaptionReviewView.swift", "PhotoAssignmentView.swift",
-    ]
-
-    private func viewFile(_ name: String) -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/Views/\(name)")
-    }
-
     // MARK: - What a switch will replace (#1007)
-
-    private func scratchDefaults(_ preset: PostingPreset) -> UserDefaults {
-        let d = UserDefaults(suiteName: "layout-control-\(UUID().uuidString)")!
-        d.set(preset.rawValue, forKey: PostingPreset.storageKey)
-        return d
-    }
 
     private func eventWithPhotos(on days: [DayName], each: Int = 1) -> Event {
         var event = Event(name: "Show", org: "Org", venue: "Hall",
@@ -174,55 +99,6 @@ final class PostingLayoutCopyTests: XCTestCase {
     }
 
     // MARK: - The control actually applies the plan (#1010)
-
-    /// A plan nothing calls changes nothing.
-    ///
-    /// The pure tests over `plan` and `work` pass whether or not the control
-    /// uses them, so they would have gone on passing while the switch kept
-    /// rebuilding every day. `check_guards` caught exactly that: the first
-    /// version of this guard stayed GREEN on a control rewired to the old
-    /// behaviour, which means it was protecting nothing.
-    ///
-    /// Checked in both directions. The positive alone is satisfied by a call
-    /// added beside the old rule; the negative alone by deleting the rebuild
-    /// entirely (L178).
-    func testTheControlAsksThePlanWhatToRebuild() throws {
-        let source = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
-                                encoding: .utf8)
-
-        XCTAssertTrue(source.contains("PostingLayoutSwitch.work("),
-                      "the control does not split the switch into paid and free work, "
-                      + "so whatever it rebuilds is decided somewhere else")
-        XCTAssertTrue(source.contains("PostingLayoutSwitch.plan("),
-                      "the control does not ask which days actually change")
-        XCTAssertFalse(source.contains("affectedDays"),
-                       "the control still reaches for the old rule, which names every "
-                       + "governed day with photos whether or not the switch moves it")
-    }
-
-    /// A refused claim has to STOP the switch, not just be noticed.
-    ///
-    /// The claim is taken before the event is touched precisely so a refusal
-    /// costs nothing. Reading the answer and carrying on regardless leaves the
-    /// layout changed with no run to redraw it, which is worse than refusing
-    /// the switch outright (L197, L5).
-    func testARefusedRedrawClaimStopsTheSwitch() throws {
-        let source = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
-                                encoding: .utf8)
-        XCTAssertTrue(source.contains("guard claimedRedraw"),
-                      "the control reads whether the redraw was claimed and does not "
-                      + "act on the answer, so a busy day still gets its layout changed")
-
-        // Order matters as much as presence: claiming after the write is the
-        // same defect wearing a guard.
-        guard let claim = source.range(of: "startRedraw("),
-              let write = source.range(of: "ev.postingPresetOverride = newValue") else {
-            return XCTFail("the control no longer claims or no longer writes the override")
-        }
-        XCTAssertTrue(claim.lowerBound < write.lowerBound,
-                      "the redraw is claimed AFTER the event is changed, so a refusal "
-                      + "leaves the layout switched with nothing rebuilding it")
-    }
 
     /// A switch that changes nothing is not a confirmation.
     ///
@@ -338,24 +214,4 @@ final class PostingLayoutCopyTests: XCTestCase {
                        "Redraw Sunday and Monday")
     }
 
-    /// The control has to actually offer it, not merely be able to phrase it.
-    ///
-    /// Checked in both directions, like the rebuild scan above: the positive
-    /// alone is satisfied by a sentence rendered with no way to act on it
-    /// (L178).
-    func testTheControlShowsTheStaleDaysAndOffersTheRedraw() throws {
-        let source = try String(contentsOf: viewFile("PostingLayoutControl.swift"),
-                                encoding: .utf8)
-
-        XCTAssertTrue(source.contains("PostingLayoutCopy.stale("),
-                      "the control never says a day was left on the previous "
-                      + "layout, so the export refuses with the reason on another "
-                      + "screen")
-        XCTAssertTrue(source.contains("PostingLayoutCopy.redrawAction("),
-                      "the reason is stated with no way to act on it, and picking "
-                      + "the layout already selected fires nothing")
-        XCTAssertTrue(source.contains("PostingLayoutSwitch.staleDays("),
-                      "the control decides staleness some other way than the "
-                      + "predicate the export gate uses, so the two can disagree")
-    }
 }
