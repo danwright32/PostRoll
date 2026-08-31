@@ -500,26 +500,55 @@ def test_a_job_with_no_known_count_reads_as_None_rather_than_zero():
     assert work_done("4410 passed", "some-job-nobody-taught-this-about") is None
 
 
-def test_the_guard_jobs_are_deliberately_not_normalised_by_entry_count():
+def test_the_guard_jobs_are_still_never_normalised_by_entry_count():
     """A count of items is not a measure of work when the items differ (L63).
 
-    Their logs do report `N guards checked` and it is deliberately not read.
-    Measured over ten runs on 2026-08-31, the rate ran from 1,174ms to
-    106,500ms per guard, a factor of 90, because a Swift entry rebuilds the app
-    at about 29s and a Python one is under a second. Normalising by that would
-    hand a bare comparison the confidence of a real one, which is the exact
-    defect #1041 exists to remove, so these say they could not be normalised
-    instead.
+    This is the half of the old rule that survives #1090. Their logs do report
+    `N guards checked` and it is still deliberately not read: measured over the
+    whole registry on 2026-08-31, the per-entry cost ran from 0.32s to 137.8s,
+    a factor of 431, because a Swift entry rebuilds the app at about 24s and a
+    Python one is usually under a second. Normalising by a count would hand a
+    bare comparison the confidence of a real one, which is the exact defect
+    #1041 exists to remove.
     """
-    from tools.check_job_durations import WORK_PATTERNS, work_done
+    from tools.check_job_durations import work_done
 
-    assert "changed" not in WORK_PATTERNS
-    assert "full" not in WORK_PATTERNS
     assert work_done("29 guards checked, 29 killed", "changed") is None
     assert work_done("29 guards checked, 29 killed", "full (2)") is None
 
-    assert drift_of("changed", seconds=[300, 300, 300, 100, 100, 100]).state \
-        is Drift.NOT_NORMALISED
+
+def test_the_guard_jobs_are_normalised_by_recorded_entry_cost():
+    """What replaced NOT_NORMALISED (#1090).
+
+    The guard jobs now print the RECORDED cost of the entries they proved, so a
+    diff selecting more expensive entries raises both halves of the rate and
+    leaves it where it was, while a slower runner raises only the duration.
+    """
+    from tools.check_job_durations import WORK_PATTERNS, work_done
+
+    assert "changed" in WORK_PATTERNS
+    assert "full" in WORK_PATTERNS
+    line = "guard work: 12345 recorded entry-ms over 44 entries, 44 of them measured"
+    assert work_done(line, "changed") == 12345
+    assert work_done(line, "full (2)") == 12345
+
+
+def test_a_guard_job_that_could_not_price_its_work_is_not_normalised():
+    """The record can be unreadable, and then there is no divisor.
+
+    NOT_NORMALISED is still the honest answer there. A zero divisor is not a
+    measurement of a job that did nothing, it is the absence of one, and the two
+    must not read alike (L11).
+    """
+    from tools.check_job_durations import work_done
+
+    unmeasured = ("guard work: unmeasured, because the cost record could not "
+                  "answer: no such file")
+    # Through the real reader, so this asserts about the line the tool prints
+    # rather than about a None written here (L52).
+    work = [work_done(unmeasured, "changed")] * 6
+    assert drift_of("changed", seconds=[300, 300, 300, 100, 100, 100],
+                    work=work).state is Drift.NOT_NORMALISED
 
 
 # ── fetching the counts, and what happens when a log will not come ───────────

@@ -54,6 +54,7 @@ import ast
 import enum
 import json
 import os
+import platform
 import re
 import signal
 import fcntl
@@ -66,7 +67,7 @@ from pathlib import Path
 # As a module, deliberately: this file has its own `Verdict` and importing the
 # other one by name would shadow it silently.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from tools import perturbation_lock  # noqa: E402  after the path is set
+from tools import guard_entry_costs, perturbation_lock  # noqa: E402
 
 REQUIRED_FIELDS = ("name", "file", "find", "replace", "test", "breaks")
 DEFAULT_REGISTRY = Path("tests/fixtures/guard_mutations")
@@ -110,6 +111,11 @@ class Result:
     entry: Entry
     outcome: Outcome
     detail: str = ""
+    #: How long this ONE entry took, which is the reading #1090 exists for.
+    #: The run printed elapsed-since-start and stored nothing, so the only
+    #: number anyone could derive was an average over a whole sweep, and an
+    #: average across costs that differ by 90x hides everything (L296).
+    seconds: float = 0.0
 
 
 def entry_files(registry_dir: Path) -> list[Path]:
@@ -1020,6 +1026,7 @@ def run_entry(entry: Entry, repo_root: Path, runner, log=say) -> Result:
     # through" from "this entry is stale" (#920). Those two look identical from
     # the outside and the second is what the suite used to report, four times
     # in two days, every one of them green on a re-run.
+    began = time.monotonic()
     with perturbation_lock.held_for(entry.name, repo_root):
         _PENDING[target] = original
         target.write_bytes(text.replace(entry.find, entry.replace).encode("utf-8"))
@@ -1041,10 +1048,167 @@ def run_entry(entry: Entry, repo_root: Path, runner, log=say) -> Result:
                 raise RuntimeError(
                     f"{entry.file} could not be restored. Recover it with: "
                     f"git checkout -- {entry.file}")
-    return Result(entry, verdict.outcome, verdict.detail)
+    return Result(entry, verdict.outcome, verdict.detail,
+                  seconds=time.monotonic() - began)
 
 
-def shard_of(entries: list[Entry], index: int, total: int) -> list[Entry]:
+#: The exact wording tools/check_job_durations.py matches. Named here rather
+#: than only in the pattern, because a line and the regex reading it are two
+#: halves of one contract and the pattern is the half that fails silently: it
+#: returns None on a miss, which both readers treat as "could not measure"
+#: (#1085). tests/test_guard_work_line.py holds the two together.
+GUARD_WORK_PREFIX = "guard work: "
+
+
+def guard_work_line(results: list[Result]) -> str:
+    """How much RECORDED work this run proved, as one line for the log.
+
+    Falls back to naming the reason when the record cannot answer, rather than
+    printing a zero: a zero divisor is not a measurement of a job that did
+    nothing, it is the absence of one, and the two must not read alike (L11).
+    """
+    kinds = {r.entry.name: r.entry.test.startswith("PostRollTests/")
+             for r in results}
+    if not kinds:
+        return f"{GUARD_WORK_PREFIX}no entries were proved, so there is no work to report"
+    try:
+        costs = guard_entry_costs.costs_for(kinds)
+    except guard_entry_costs.CostRecordError as refusal:
+        # UNMEASURED rather than the cost-class fallback. The deal may guess,
+        # because a sweep that cannot run proves nothing; a rate may not,
+        # because a divisor nobody measured produces a series that looks like a
+        # measurement and is not (L11, L98).
+        return (f"{GUARD_WORK_PREFIX}unmeasured, because the cost record could "
+                f"not answer: {refusal}")
+    total = sum(costs.of(name) for name in kinds)
+    # Milliseconds, as a whole number, because the reader on the other side
+    # parses an integer and a `changed` run proving one Python entry is under a
+    # second: rounded to seconds that run reports ZERO work, and a zero divisor
+    # is refused as unmeasurable rather than read as a very fast job (L11).
+    return (f"{GUARD_WORK_PREFIX}{round(total * 1000)} recorded entry-ms over "
+            f"{len(kinds)} entries, {costs.measured} of them measured")
+
+
+def costs_or_fallback(kinds: dict[str, bool],
+                      log=None) -> guard_entry_costs.Costs:
+    """The recorded costs, or the cost CLASSES when the record cannot answer.
+
+    A fallback rather than a refusal, because this is the tool that WRITES the
+    record: refusing would leave the first sweep unable to run and a deleted
+    record able to stop every sweep after it (L111).
+
+    It says so out loud, which is the condition on it being allowed to exist. A
+    fallback that is merely worse rather than wrong fails silently, so the
+    saving stops happening while every shard stays green (L289). The suite's own
+    guard on the measured share is the other half: it goes red whenever the
+    record covers less than most of the registry, so nobody has to be reading a
+    log for this to be reported.
+    """
+    try:
+        return guard_entry_costs.costs_for(kinds)
+    except guard_entry_costs.CostRecordError as refusal:
+        if log is not None:
+            log(f"dealing by cost CLASS rather than by measured time, because "
+                f"the cost record could not answer: {refusal}")
+        return guard_entry_costs.by_cost_class(kinds)
+
+
+def write_timings(path: Path, results: list[Result], repo_root: Path,
+                  shard: tuple[int, int] | None = None,
+                  unproven: list[Entry] | None = None) -> int:
+    """Write one run's per-entry readings, for `tools/record_guard_costs.py`.
+
+    Only entries that reached a VERDICT are written. An entry that errored
+    because the build broke finished in whatever time a broken build takes, and
+    a run that never reached an entry has no reading at all: recording either as
+    the entry's cost would put a very small number where a real one belongs,
+    and nothing downstream could tell it from a genuinely fast entry (L331).
+
+    The first Swift entry is written under `cold` rather than as a cost, because
+    it paid for the app build every entry after it reuses.
+
+    The run this came from is written beside the readings, because a record that
+    mixes runners or dates without saying so cannot be re-measured or corrected
+    (L224, #1038). `GITHUB_RUN_ID` when there is one, the machine's name when
+    there is not, so a local sweep is never mistaken for a runner's.
+    """
+    usable = [r for r in results
+              if r.outcome in (Outcome.KILLED, Outcome.SURVIVED) and r.seconds > 0]
+    # The first SWIFT entry of a run pays for the cold app build, and the rest
+    # reuse it. Measured on run 33409212726, one reading per shard and always
+    # that one: 85.0, 90.4, 120.2, 126.6, 127.9 and 137.8 seconds against a
+    # Swift median of 24.0. Recording those as the entries' cost prices six
+    # ordinary guards at five times what they cost, and `deal` then spreads the
+    # six phantoms one per shard while the entry that actually pays the build
+    # next time is priced as if it did not (L102: a cost measured with the
+    # expensive path switched off, in reverse).
+    #
+    # Moved to `cold` rather than dropped, because the reading is the only
+    # measurement anyone has of what the cold build costs, and shipping the fix
+    # would destroy the evidence the diagnosis was made from (L277).
+    #
+    # What this leaves: those six entries are estimated from their kind's median
+    # for as long as the deal is stable, because a shard runs its entries in
+    # registry order and the same one is therefore first every time. Six of five
+    # hundred, at an estimate that is the right order of magnitude, and it is
+    # named here rather than left for somebody to rediscover as a gap in the
+    # record. The fix that would close it is to build the app ONCE before the
+    # loop, so no entry pays for it and every reading is the steady-state cost;
+    # that is a change to what the sweep does rather than to what it records,
+    # which is why it is not in #1090.
+    cold = next((r for r in usable
+                 if r.entry.test.startswith("PostRollTests/")), None)
+    if cold is not None:
+        usable = [r for r in usable if r is not cold]
+    run = os.environ.get("GITHUB_RUN_ID") or f"local-{platform.node()}"
+    payload = {
+        "run": run,
+        "measured_on": time.strftime("%Y-%m-%d"),
+        "commit": head_commit(repo_root),
+        # Taken from the --shard argument rather than a second copy of the
+        # split in the workflow. It was an env var the workflow set beside the
+        # argument, which is two spellings of one number in one file, and the
+        # guard that holds the matrix and the argument together reads only one
+        # of them (L41).
+        "shard": f"{shard[0]}/{shard[1]}" if shard else "",
+        "seconds": {r.entry.name: round(r.seconds, 2) for r in usable},
+        "kinds": {r.entry.name: r.entry.test.startswith("PostRollTests/")
+                  for r in usable},
+        "cold": ({"entry": cold.entry.name, "seconds": round(cold.seconds, 2)}
+                 if cold is not None else None),
+        # Whether this shard ran out of time. A shard that hit its deadline
+        # measured the entries it reached and NOTHING about the ones it did
+        # not, and its file is indistinguishable from a complete one by its
+        # contents alone: the readings it holds are all correct, there are
+        # simply fewer of them (L331). Recording a sweep like that would leave
+        # the missing entries estimated with nothing saying why, so the reader
+        # refuses it rather than guessing.
+        "unproven": sorted(e.name for e in (unproven or [])),
+        "skipped": sorted(r.entry.name for r in results
+                          if r not in usable and r is not cold),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8")
+    return len(usable)
+
+
+def head_commit(repo_root: Path) -> str:
+    """The commit these readings were taken at, or a word saying it is unknown.
+
+    Never an empty string. A blank field reads as a record with no provenance
+    rather than as one whose provenance could not be taken (L11).
+    """
+    try:
+        out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_root,
+                             capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return out.stdout.strip() or "unknown"
+
+
+def shard_of(entries: list[Entry], index: int, total: int,
+             costs: guard_entry_costs.Costs | None = None) -> list[Entry]:
     """The `index` of `total` slice of `entries`, one runner's share (#719 follow-up).
 
     The post-merge sweep stopped finishing: it hit the workflow's 60 minute cap,
@@ -1052,10 +1216,25 @@ def shard_of(entries: list[Entry], index: int, total: int) -> list[Entry]:
     too, so the sweep dying looked exactly like one somebody replaced (L11).
     Splitting it across runners is what makes it fit.
 
-    Round robin WITHIN each cost class rather than contiguous slices. A Swift
-    entry pays an app build and a Python one is under a second, and they are
-    interleaved alphabetically only by accident, so a contiguous split can hand
-    one runner most of the builds and leave the sweep as slow as it was.
+    Dealt by MEASURED cost since #1090, largest first, each entry going to
+    whichever shard is currently cheapest. Until then it was round robin within
+    two cost classes, Swift and Python, which balanced the COUNT of expensive
+    entries rather than the work: measured over ten runs the real per-entry cost
+    ran from 1,174ms to 106,500ms, a factor of 90, so two Swift entries are not
+    the same amount of work and a count is a proxy rather than a measure of it
+    (L63, L296).
+
+    The cost record is `tests/fixtures/guard_entry_costs.json`. An entry it has
+    never seen takes the median of the measured entries of its own KIND, never
+    zero: an entry priced at nothing is dealt as free and the shard receiving it
+    silently carries more than the deal intended (L98).
+
+    A record that cannot be read at all is a REFUSAL, not a quiet fall back to
+    the old class-wise deal. A fallback that is merely worse rather than wrong
+    fails silently, so the saving stops happening while every shard stays green
+    (L289); and the deadline projection in
+    tests/test_guard_sweep_fits_its_deadline.py is derived from the same record,
+    so a sweep running on an unreadable one is a sweep nobody has sized.
 
     Every entry lands in exactly one shard, which is the property the whole
     split rests on: a partition that drops one leaves every shard green and that
@@ -1073,18 +1252,21 @@ def shard_of(entries: list[Entry], index: int, total: int) -> list[Entry]:
             "one runner with nothing to prove, and a green run that checked "
             "nothing reads exactly like a clean sweep")
 
-    expensive = [e for e in entries if e.test.startswith("PostRollTests/")]
-    cheap = [e for e in entries if not e.test.startswith("PostRollTests/")]
-    picked: list[Entry] = []
-    for group in (expensive, cheap):
-        picked += [e for n, e in enumerate(group) if n % total == index - 1]
-    return picked
+    kinds = {e.name: e.test.startswith("PostRollTests/") for e in entries}
+    # Injected by the tests that drive the deal directly, so they are not
+    # measuring whatever the live record happens to hold today; None here means
+    # the real record, which is what the sweep uses (L196).
+    costs = costs if costs is not None else costs_or_fallback(kinds)
+    dealt = guard_entry_costs.deal(list(kinds), total, costs.seconds)
+    mine = set(dealt[index - 1])
+    return [e for e in entries if e.name in mine]
 
 
 def check_guards(repo_root: Path, registry_path: Path, runner,
                  only: str | None = None, changed_only: bool = False,
                  shard: tuple[int, int] | None = None,
                  deadline_seconds: float | None = None,
+                 timings_path: Path | None = None,
                  log=say) -> int:
     # Installed here rather than in main() so every caller that can perturb the
     # tree is covered, including the tests that drive this directly (#547).
@@ -1150,6 +1332,14 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
         log(f"shard {index} of {total}: {len(entries)} of {whole} entries on "
             f"this runner; the other {whole - len(entries)} are proven by the "
             "other shards and by nothing here")
+        # How much of the deal was MEASURED, because an estimate and a reading
+        # deal identically and a partition of guesses looks exactly like a
+        # partition of readings (L11, L98).
+        kinds = {e.name: e.test.startswith("PostRollTests/") for e in entries}
+        costs = costs_or_fallback(kinds, log=log)
+        log(f"dealt by measured cost: {costs.measured} of {len(kinds)} entries "
+            f"on this shard carry a reading, {len(costs.estimated)} are "
+            "estimated from the median of their kind")
 
     # Said out loud, because a sweep paying a whole build for every entry looks
     # exactly like one reusing a cache until somebody times it (#621). It is not
@@ -1183,12 +1373,31 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
             f"({entry.breaks}), expecting {entry.test} to go red")
         result = run_entry(entry, repo_root, runner, log=log)
         results.append(result)
-        log(f"{where} {entry.name}: {result.outcome.value}"
+        log(f"{where} {entry.name}: {result.outcome.value} in "
+            f"{result.seconds:.1f}s"
             + (f", {result.detail}" if result.detail else ""))
 
     bad = [r for r in results if r.outcome is not Outcome.KILLED]
     log(f"{len(results)} guard{'s' if len(results) != 1 else ''} checked, "
         f"{len(results) - len(bad)} killed their mutation, {len(bad)} did not")
+    # The unit this job's duration has to be divided by (#1041, #1090).
+    #
+    # A count of entries is the wrong divisor: a Swift entry rebuilds the app at
+    # about 29s and a Python one is under a second, so two runs proving the same
+    # NUMBER of entries can differ by 90x and a bare comparison of totals would
+    # call that a regression.
+    #
+    # The RECORDED cost, not this run's own measurement. Dividing the duration
+    # by the seconds this very run spent gives a ratio near one whatever
+    # happens, which is dividing the reading by itself: it can never move and
+    # would read as a stable rate for a job that had doubled (L63). Against the
+    # record it is a real rate: a slower runner raises it, and a diff selecting
+    # more expensive entries raises both halves and leaves it where it was.
+    log(guard_work_line(results))
+    if timings_path is not None:
+        written = write_timings(timings_path, results, repo_root, shard=shard,
+                                unproven=unproven)
+        log(f"wrote {written} entry timing(s) to {timings_path}")
     for skipped in unproven:
         log(f"  {skipped.name}: never reached before the deadline, so nothing "
             "here says whether it still protects "
@@ -1215,6 +1424,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--shard", default=None, metavar="I/N",
                         help="prove only this runner's share of the registry, "
                              "as I/N; every entry lands in exactly one shard")
+    parser.add_argument("--timings", type=Path, default=None,
+                        help="write this run's per-entry readings to PATH, for "
+                             "tools/record_guard_costs.py to fold into "
+                             "tests/fixtures/guard_entry_costs.json")
     parser.add_argument("--deadline-seconds", type=float, default=None,
                         help="stop and FAIL once this long has passed, naming "
                              "the entries never reached, rather than letting "
@@ -1234,7 +1447,8 @@ def main(argv: list[str] | None = None) -> int:
     registry = args.registry or repo_root / DEFAULT_REGISTRY
     return check_guards(repo_root, registry, real_runner, only=args.only,
                         changed_only=args.changed, shard=shard,
-                        deadline_seconds=args.deadline_seconds)
+                        deadline_seconds=args.deadline_seconds,
+                        timings_path=args.timings)
 
 
 if __name__ == "__main__":

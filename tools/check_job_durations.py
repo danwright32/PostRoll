@@ -158,6 +158,16 @@ WORK_PATTERNS: dict[str, tuple[str, str]] = {
     "python": (r"(\d+) passed", "tests passed"),
     "macos": (r"(\d+) passed", "tests passed"),
     "reference-frames": (r"(\d+) passed", "tests passed"),
+    # The guard jobs, since #1090 gave them a real divisor. They were the two
+    # families left NOT_NORMALISED, because their logs report `N guards
+    # checked` and dividing by a count of items whose costs differ by 90x hands
+    # a bare comparison the confidence of a measured one, which is the defect
+    # #1041 exists to remove. What they print now is the RECORDED cost of the
+    # entries they proved, so a diff selecting more expensive entries raises
+    # both halves and leaves the rate where it was, while a slower runner
+    # raises only the duration.
+    "changed": (r"guard work: (\d+) recorded entry-ms", "recorded entry-ms"),
+    "full": (r"guard work: (\d+) recorded entry-ms", "recorded entry-ms"),
 }
 
 

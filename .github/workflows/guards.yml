@@ -321,7 +321,34 @@ jobs:
         # The deadline sits well under `timeout-minutes` on purpose. Whichever
         # fires first decides what is reported, and only this one can say which
         # entries went unproven.
-        run: python tools/check_guards.py --shard ${{ matrix.shard }}/6 --deadline-seconds 1800
+        #
+        # `--timings` writes what each entry cost (#1090). That record is what
+        # `shard_of` deals by and what
+        # tests/test_guard_sweep_fits_its_deadline.py projects the largest shard
+        # from, and until #1090 nothing measured it: the number that sized the
+        # deadline had to be reversed out of one sweep as 14.4s averaged over
+        # 469 entries, which hides a spread of 90x.
+        run: |
+          python tools/check_guards.py --shard ${{ matrix.shard }}/6 --deadline-seconds 1800 \
+            --timings guard-timings-${{ matrix.shard }}.json
+
+      # Uploaded rather than committed, because a scheduled job pushing to main
+      # is a write nobody reviewed, and because the readings are only worth
+      # folding in when a sweep completed: a shard that hit its deadline
+      # measured the entries it reached and nothing about the ones it did not,
+      # and recording that as the sweep's cost would price the registry from
+      # its cheap half (L331).
+      #
+      # `always()` so a shard that went red still surrenders what it measured.
+      # A red guard is a real verdict about one entry, not a reason to throw
+      # away the timings of the other eighty.
+      - name: Keep this shard's timings
+        if: always() && steps.due.outputs.due == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: guard-timings-${{ matrix.shard }}
+          path: guard-timings-${{ matrix.shard }}.json
+          if-no-files-found: warn
 
       # Whether the SCHEDULED sweep is still happening at all (#554). The weekly
       # trigger's failure mode is silence: GitHub disables a repository's
