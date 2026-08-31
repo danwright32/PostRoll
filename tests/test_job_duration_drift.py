@@ -520,3 +520,91 @@ def test_the_guard_jobs_are_deliberately_not_normalised_by_entry_count():
 
     assert drift_of("changed", seconds=[300, 300, 300, 100, 100, 100]).state \
         is Drift.NOT_NORMALISED
+
+
+# ── fetching the counts, and what happens when a log will not come ───────────
+
+def _job_with(name: str, seconds: int, job_id: int, *steps: tuple[str, str]) -> dict:
+    return {**_job(name, seconds, *steps), "id": job_id}
+
+
+def test_each_job_is_paired_with_its_own_log_s_count():
+    from tools.check_job_durations import work_series
+
+    logs = {901: "Swift: 2600 tests", 902: "Swift: 2610 tests"}
+    series = work_series(
+        [_run(_job_with("swift-unit", 400, 901)),
+         _run(_job_with("swift-unit", 410, 902))],
+        read_log=lambda path: logs[int(path.split("/jobs/")[1].split("/")[0])])
+
+    assert series == {"swift-unit": [2600, 2610]}
+
+
+def test_the_counts_line_up_with_the_durations_run_for_run():
+    """The rate is a division of one series by the other, so a job dropped from
+    one and kept in the other would pair a duration with another run's count
+    and every rate would be wrong invisibly (L228)."""
+    from tools.check_job_durations import work_series
+
+    runs = [_run(_job_with("swift-unit", 400, 901)),
+            # skipped by shape: completed before it started
+            _run({"name": "swift-unit", "id": 902, "steps": [],
+                  "started_at": "2026-08-30T13:19:13Z",
+                  "completed_at": "2026-08-30T13:19:12Z"}),
+            _run(_job_with("swift-unit", 420, 903))]
+    logs = {901: "Swift: 2600 tests", 902: "Swift: 1 tests",
+            903: "Swift: 2610 tests"}
+
+    durations = job_durations(runs)
+    counts = work_series(runs, read_log=lambda p: logs[
+        int(p.split("/jobs/")[1].split("/")[0])])
+
+    assert len(durations["swift-unit"]) == len(counts["swift-unit"])
+    assert counts["swift-unit"] == [2600, 2610], (
+        "the skipped run contributed a count while contributing no duration, "
+        "so every pair after it is a duration matched to the wrong run's count")
+
+
+def test_a_log_that_will_not_download_leaves_the_job_unnormalised():
+    """Not an exception, and not a zero. A log that will not come is a run whose
+    work count is unknown, and unknown is already a first class answer here: it
+    lands the job in NOT_NORMALISED rather than taking the whole check down
+    (L73), and it is never scored as a measurement (L11)."""
+    from tools.check_job_durations import work_series
+
+    def refuses(path):
+        raise RuntimeError("gh fell over")
+
+    series = work_series([_run(_job_with("swift-unit", 400, 901))],
+                         read_log=refuses)
+
+    assert series == {"swift-unit": [None]}
+    assert drift_of("swift-unit", [300, 300, 300, 100, 100, 100],
+                    work=[None] * 6).state is Drift.NOT_NORMALISED
+
+
+def test_a_job_with_no_known_pattern_is_never_downloaded():
+    """A log is a megabyte. Fetching one for a job whose count could not be read
+    anyway is a megabyte spent to learn nothing."""
+    from tools.check_job_durations import work_series
+
+    asked: list[str] = []
+
+    def record(path):
+        asked.append(path)
+        return "4410 passed"
+
+    series = work_series([_run(_job_with("hand-check-reminder", 7, 901))],
+                         read_log=record)
+
+    assert series == {"hand-check-reminder": [None]}
+    assert asked == [], f"a log was downloaded for a job with no pattern: {asked}"
+
+
+def test_the_log_is_asked_for_by_the_job_s_own_id():
+    from tools.check_job_durations import job_log
+
+    asked: list[str] = []
+    job_log(4242, read=lambda path: asked.append(path) or "")
+
+    assert asked == ["repos/{owner}/{repo}/actions/jobs/4242/logs"]
