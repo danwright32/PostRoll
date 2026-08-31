@@ -66,7 +66,6 @@ from .caption_credits import (
     rewrite_lost_a_credit,
 )
 from .caption_quality import problems_in, REWRITE_PROMPT
-from ..caption_blocks import HANDLE_SENTINELS
 from . import org_prompt
 from .performer_hashtags import ensure_brand_hashtag, strip_performer_hashtags
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
@@ -328,18 +327,6 @@ ABSOLUTELY NEVER:
 
 Lowercase or sentence case is fine — match Dan's natural register.
 """
-
-
-def _is_real_handle(handle: str) -> bool:
-    """Not a sentinel. Deliberately NOT the same question as
-    `caption_blocks.is_real_handle`, which also requires the value to be SHAPED
-    like a username: this one admits 'DPR Dance' and always has. Kept as it was
-    because tightening it changes what reaches the caption prompt, which is its
-    own change with its own tests (#917).
-
-    The list itself now comes from `caption_blocks` so Python holds one copy.
-    """
-    return bool(handle) and handle.strip().lower() not in HANDLE_SENTINELS
 
 
 def _format_performers(performers: list[dict[str, Any]]) -> str:

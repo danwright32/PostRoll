@@ -1,0 +1,8 @@
+{
+  "name": "a-sentinel-behind-a-link-is-not-an-account",
+  "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+  "find": "        let name = CaptionBlocks.bareUsername(handle).lowercased()",
+  "replace": "        let name = handle.trimmingCharacters(in: .whitespaces).lowercased()",
+  "test": "PostRollTests/RealHandleTests/testEverySharedCase",
+  "breaks": "the sentinel is read off the raw value again instead of the bare username, so a sentinel arriving as a pasted profile link or behind a second sigil is accepted as an account here and refused by Python. TypedCredit then reads it as a mention and weekTags strips it down, so 'unknown' lands in the TAG LIST Dan pastes into Instagram (#917, #926)"
+}

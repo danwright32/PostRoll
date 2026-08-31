@@ -1,0 +1,8 @@
+{
+  "name": "pythons-real-account-check-reads-both-halves",
+  "file": "postroll/caption_blocks.py",
+  "find": "    return is_handle_shaped(raw) and bare_username(raw).lower() not in HANDLE_SENTINELS",
+  "replace": "    return is_handle_shaped(raw)",
+  "test": "tests/test_real_handle.py::test_every_shared_sentinel_is_refused_by_the_predicate",
+  "breaks": "the sentinel half of the real-account check goes away, and every sentinel is perfectly well shaped, so 'unknown' passes week_tags and is written into the TAG LIST as somebody to tag (#917, #926)"
+}

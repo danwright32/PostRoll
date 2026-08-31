@@ -1,0 +1,8 @@
+{
+  "name": "python-answers-the-real-account-question-once",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "def _format_performers(performers: list[dict[str, Any]]) -> str:",
+  "replace": "def _is_real_handle(handle: str) -> bool:\n    return bool(handle)\n\n\ndef _format_performers(performers: list[dict[str, Any]]) -> str:",
+  "test": "tests/test_real_handle.py::test_python_defines_the_real_account_predicate_once",
+  "breaks": "a second Python answer to the real-account question appears beside the one in caption_blocks, named for the same thing and deciding differently. That is the state this repository was actually in: generate_captions._is_real_handle checked the sentinel half only, so 'DPR Dance' passed it, and a shared name is read as evidence of shared behaviour, so nobody compared them (L263, #926)"
+}
