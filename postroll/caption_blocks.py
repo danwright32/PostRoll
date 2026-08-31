@@ -85,11 +85,10 @@ def is_handle_shaped(raw: str) -> bool:
 #: has an account by that name. Well shaped, every one of them, which is why
 #: shape alone cannot answer the question (#917).
 #:
-#: Defined here rather than beside the caption prompt so Python has ONE list:
-#: `postroll.ai.generate_captions` imports it. Swift keeps its own in
-#: `PythonBridge.handleSentinels`, and the two are held together by
-#: `tests/fixtures/caption_blocks.json`, which states the sentinel case once for
-#: both sides.
+#: The one list in Python, and `tests/test_real_handle.py` holds it to that.
+#: Swift keeps its own in `PythonBridge.handleSentinels`, because neither side
+#: can read the other's at build time, and `tests/fixtures/real_handle.json`
+#: states the list once so the two cannot drift apart by hand (L41, #926).
 #:
 #: A blacklist admits every placeholder nobody thought to list (L257). It is
 #: what ships today on both sides of the bridge, and widening it to a real
@@ -106,9 +105,18 @@ def is_real_handle(raw: str) -> bool:
     'unknown' is perfectly well shaped and nobody at all.
 
     Mirrors `PythonBridge.isRealHandle` in Swift, which `TypedCredit` reads
-    through. Note that `generate_captions._is_real_handle` historically checked
-    the sentinel half ONLY, so a badly shaped value passed it; this is the
-    predicate to reach for.
+    through, and the two are held together by `tests/fixtures/real_handle.json`
+    (#926). They are the pair that spans the bridge on the deliverable: this is
+    what `week_tags` below calls and that is what `CaptionBlocks.weekTags`
+    reaches, so between them they decide the TAG LIST Dan pastes into Instagram.
+
+    The one answer in Python, and `tests/test_real_handle.py` holds it to that.
+    `generate_captions._is_real_handle` used to sit beside it checking the
+    sentinel half only, so 'DPR Dance' passed it while this refused it. Nothing
+    had called it since 2026-05-24, when handles were dropped from the
+    performers block, so it was dead rather than divergent, and the reason #917
+    recorded for leaving it alone (that tightening it would change what reaches
+    the model) could not have been true. It is gone.
     """
     return is_handle_shaped(raw) and bare_username(raw).lower() not in HANDLE_SENTINELS
 

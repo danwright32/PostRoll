@@ -1,0 +1,8 @@
+{
+  "name": "swifts-sentinel-list-is-the-shared-one",
+  "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+  "find": "        \"unknown\", \"n/a\", \"na\", \"none\", \"-\", \"no\", \"skip\",",
+  "replace": "        \"unknown\", \"n/a\", \"na\", \"none\", \"-\", \"no\",",
+  "test": "PostRollTests/RealHandleTests/testThisSidesSentinelListIsTheSharedOne",
+  "breaks": "Swift's hand-maintained sentinel list drifts from Python's and nothing says so, which is how the two sides of the bridge came to answer one question differently. A word dropped here is a recorded 'there is no Instagram' offered to a caption as an account (#926)"
+}

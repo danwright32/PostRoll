@@ -8,7 +8,14 @@ actor PythonBridge {
 
     /// Sentinel values that mark "I looked this up and there's no Instagram."
     /// Stored in the handle book so we don't re-search, but not passed to captions.
-    private static let handleSentinels: Set<String> = [
+    ///
+    /// Python holds its own copy in `caption_blocks.HANDLE_SENTINELS`, because
+    /// neither side can read the other's at build time. Visible rather than
+    /// private so `RealHandleTests` can hold this set to
+    /// `tests/fixtures/real_handle.json`, which Python's suite holds its copy
+    /// to as well: two lists maintained by hand beside each other drift, and
+    /// the drift shows up in a caption rather than in a suite (L41, #926).
+    static let handleSentinels: Set<String> = [
         "unknown", "n/a", "na", "none", "-", "no", "skip",
     ]
 
@@ -41,10 +48,24 @@ actor PythonBridge {
     /// tag suggestions, the caption credits, the duplicate marks and the
     /// handle book. A row failing it is credited by NAME instead, which is
     /// what should have happened for that company from the start.
+    /// Mirrors `caption_blocks.is_real_handle`, and
+    /// `tests/fixtures/real_handle.json` states the sentinel list and every
+    /// case once for both sides (#926). The two are the pair that spans the
+    /// bridge on the deliverable: Python's `week_tags` calls that one, and
+    /// `CaptionBlocks.weekTags` reaches this one through `TypedCredit.read`,
+    /// so between them they decide the TAG LIST Dan pastes into Instagram.
+    ///
+    /// The sentinel is read off the BARE USERNAME, not off the raw value.
+    /// Until #926 this stripped a single leading "@" and compared that, while
+    /// Python compared `bare_username(raw)`, which also unwraps a pasted
+    /// profile URL and every repeated sigil. So `https://instagram.com/unknown/`
+    /// and `@@unknown` were refused by Python and accepted here, `TypedCredit`
+    /// read them as mentions, and `weekTags` then stripped them down and
+    /// offered `unknown` to the tag list as an account. That is exactly what
+    /// #917 was filed to stop, arriving by the one route it did not cover.
     nonisolated static func isRealHandle(_ handle: String) -> Bool {
-        var h = handle.trimmingCharacters(in: .whitespaces).lowercased()
-        if h.hasPrefix("@") { h = String(h.dropFirst()) }
-        guard !h.isEmpty, !handleSentinels.contains(h) else { return false }
+        let name = CaptionBlocks.bareUsername(handle).lowercased()
+        guard !name.isEmpty, !handleSentinels.contains(name) else { return false }
         return CaptionBlocks.isHandleShaped(handle)
     }
 

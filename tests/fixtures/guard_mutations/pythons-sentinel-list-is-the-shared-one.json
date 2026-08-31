@@ -1,0 +1,8 @@
+{
+  "name": "pythons-sentinel-list-is-the-shared-one",
+  "file": "postroll/caption_blocks.py",
+  "find": "HANDLE_SENTINELS = frozenset({\"unknown\", \"n/a\", \"na\", \"none\", \"-\", \"no\", \"skip\"})",
+  "replace": "HANDLE_SENTINELS = frozenset({\"unknown\", \"n/a\", \"na\", \"none\", \"-\", \"no\"})",
+  "test": "tests/test_real_handle.py::test_pythons_sentinel_list_is_the_shared_one",
+  "breaks": "Python's sentinel list drifts from the one Swift keeps by hand, and the word dropped from it is then offered to a caption as an account by one side and refused by the other (#926)"
+}
