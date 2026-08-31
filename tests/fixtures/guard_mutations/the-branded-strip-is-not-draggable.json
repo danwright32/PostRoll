@@ -1,0 +1,8 @@
+{
+  "name": "the-branded-strip-is-not-draggable",
+  "file": "PostRollApp/Sources/Views/CaptionReview/CollageDividers.swift",
+  "find": "    guard divider.isDraggable else { return cells }\n",
+  "replace": "",
+  "test": "PostRollTests/CollageDividerClampTests/testADragOnTheStripBoundaryChangesNothing",
+  "breaks": "the boundary above the branded centre strip moves again, so the top row grows down over the title and the wordmark, the row below is pushed onto the band, and the stale base PNG shows through the part nothing repaints, which is the same photograph appearing twice. It is not preview only: CollageRenderer composites the same cells at export (#965)"
+}

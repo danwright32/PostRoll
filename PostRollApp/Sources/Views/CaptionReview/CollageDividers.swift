@@ -14,8 +14,35 @@ struct CollageDivider {
     let maxPos: Int         // drag clamp — boundary cannot go above this
     let rowCanvasY: Int     // top of the row (vertical dividers only)
     let rowCanvasH: Int     // height of the row (vertical dividers only)
-    let actualGapPx: Int    // true pixel gap to the trailing row — ~8 for normal rows,
-                            // ~90 for the strip divider (which should not be dragged or filled)
+    let actualGapPx: Int    // true pixel gap to the trailing row: about 8 for
+                            // normal rows, about 90 for the branded strip
+}
+
+extension CollageDivider {
+    /// The widest gap an ordinary row boundary has.
+    ///
+    /// Above it is the branded centre strip, which is not a gap at all: it is
+    /// the 90px band Python draws the event title and the wordmark into
+    /// (`generate_collage.STRIP_H`).
+    static let maxOrdinaryGapPx = 16
+
+    /// Whether this boundary is the branded strip rather than a gap between
+    /// two rows.
+    ///
+    /// A comment on `actualGapPx` already said this divider must not be dragged
+    /// or filled, and only the fill honoured it, by testing `<= 16` inline. The
+    /// handle loop iterated every divider, so the one boundary that must not
+    /// move was the one carrying a full drag handle: dragging it grew the top
+    /// row down over the title band, squeezed the row below past its floor, and
+    /// left the stale base PNG showing through the uncovered strip, which is
+    /// the same photograph appearing twice (#965).
+    ///
+    /// A property rather than the number written at each call site, so the two
+    /// consumers cannot end up disagreeing about which divider this is (L263).
+    var isBrandedStrip: Bool { actualGapPx > Self.maxOrdinaryGapPx }
+
+    /// Whether a person may move this boundary.
+    var isDraggable: Bool { !isBrandedStrip }
 }
 /// Infer all row/column boundaries from a flat list of canvas cells.
 func computeCollageDividers(_ cells: [CollageCell]) -> [CollageDivider] {
@@ -38,7 +65,16 @@ func computeCollageDividers(_ cells: [CollageCell]) -> [CollageDivider] {
         let leadIdx  = above.compactMap { c in cells.firstIndex { $0.photoPath == c.photoPath } }
         let trailIdx = below.compactMap { c in cells.firstIndex { $0.photoPath == c.photoPath } }
         let minPos   = above.map { $0.y }.min()! + minCellPx
-        let maxPos   = belowTop + (below.map { $0.h }.min()! - minCellPx) - gap
+        // From the BOUNDARY, and with no gap term (#965).
+        //
+        // Dragging down by `delta` moves the boundary to `boundary + delta` and
+        // sets every below cell to `h - delta`, so the shortest of them reaches
+        // its floor at `delta == minCellH - minCellPx`. The old form measured
+        // from `belowTop` and then subtracted the LOCAL `gap` of 8 rather than
+        // this divider's own gap, which overshoots by `actualGapH - 8`. On the
+        // branded strip that is 82px of a 90px band, and it put the shortest
+        // cell below at a height of -2.
+        let maxPos   = boundary + (below.map { $0.h }.min()! - minCellPx)
         result.append(CollageDivider(
             kind: .horizontal, canvasPos: boundary,
             leading: leadIdx, trailing: trailIdx,
@@ -76,6 +112,12 @@ func computeCollageDividers(_ cells: [CollageCell]) -> [CollageDivider] {
 func applyCollageDividerDelta(
     to cells: [CollageCell], divider: CollageDivider, delta: Int
 ) -> [CollageCell] {
+    // Refused here as well as hidden in the view (#965). Hiding the handle is
+    // what stops a person reaching this boundary; refusing the effect is what
+    // makes the drag unable to corrupt the layout whatever draws a handle, and
+    // a control that exists only where it is drawn is a control the next screen
+    // to render one of these gets for free (L196).
+    guard divider.isDraggable else { return cells }
     let clamped = min(max(delta, divider.minPos - divider.canvasPos),
                       divider.maxPos - divider.canvasPos)
     var result = cells
