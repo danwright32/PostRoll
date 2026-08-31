@@ -1,6 +1,6 @@
 {
   "name": "adding-a-file-does-not-rewrite-the-record",
-  "file": "tools/record_test_durations.py",
+  "file": "tools/measured_record.py",
   "find": "    for name, reading in sorted(measured.items()):\n        if name in seconds:\n            continue",
   "replace": "    for name, reading in sorted(measured.items()):\n        if False:\n            continue",
   "test": "tests/test_record_test_durations.py::test_an_added_file_is_scaled_and_says_so",
