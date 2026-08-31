@@ -1123,6 +1123,9 @@ def write_timings(path: Path, results: list[Result], repo_root: Path,
     the entry's cost would put a very small number where a real one belongs,
     and nothing downstream could tell it from a genuinely fast entry (L331).
 
+    The first Swift entry is written under `cold` rather than as a cost, because
+    it paid for the app build every entry after it reuses.
+
     The run this came from is written beside the readings, because a record that
     mixes runners or dates without saying so cannot be re-measured or corrected
     (L224, #1038). `GITHUB_RUN_ID` when there is one, the machine's name when
@@ -1130,6 +1133,22 @@ def write_timings(path: Path, results: list[Result], repo_root: Path,
     """
     usable = [r for r in results
               if r.outcome in (Outcome.KILLED, Outcome.SURVIVED) and r.seconds > 0]
+    # The first SWIFT entry of a run pays for the cold app build, and the rest
+    # reuse it. Measured on run 33409212726, one reading per shard and always
+    # that one: 85.0, 90.4, 120.2, 126.6, 127.9 and 137.8 seconds against a
+    # Swift median of 24.0. Recording those as the entries' cost prices six
+    # ordinary guards at five times what they cost, and `deal` then spreads the
+    # six phantoms one per shard while the entry that actually pays the build
+    # next time is priced as if it did not (L102: a cost measured with the
+    # expensive path switched off, in reverse).
+    #
+    # Moved to `cold` rather than dropped, because the reading is the only
+    # measurement anyone has of what the cold build costs, and shipping the fix
+    # would destroy the evidence the diagnosis was made from (L277).
+    cold = next((r for r in usable
+                 if r.entry.test.startswith("PostRollTests/")), None)
+    if cold is not None:
+        usable = [r for r in usable if r is not cold]
     run = os.environ.get("GITHUB_RUN_ID") or f"local-{platform.node()}"
     payload = {
         "run": run,
@@ -1144,7 +1163,10 @@ def write_timings(path: Path, results: list[Result], repo_root: Path,
         "seconds": {r.entry.name: round(r.seconds, 2) for r in usable},
         "kinds": {r.entry.name: r.entry.test.startswith("PostRollTests/")
                   for r in usable},
-        "skipped": sorted(r.entry.name for r in results if r not in usable),
+        "cold": ({"entry": cold.entry.name, "seconds": round(cold.seconds, 2)}
+                 if cold is not None else None),
+        "skipped": sorted(r.entry.name for r in results
+                          if r not in usable and r is not cold),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n",
