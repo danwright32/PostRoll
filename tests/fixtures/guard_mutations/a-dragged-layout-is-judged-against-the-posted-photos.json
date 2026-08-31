@@ -1,0 +1,8 @@
+{
+  "name": "a-dragged-layout-is-judged-against-the-posted-photos",
+  "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+  "find": "                if let cellOverride = CollageCell.usable(pd.collageCellOverride, forPhotos: posted) {",
+  "replace": "                if let cellOverride = CollageCell.usable(pd.collageCellOverride, forPhotos: pd.photoPaths) {",
+  "test": "PostRollTests/PostedPhotoScopeTests/testADraggedLayoutOnAnOverfilledDayReachesTheManifest",
+  "breaks": "a hand dragged collage layout, which has one cell per POSTED photo, is compared against every ASSIGNED photo again. On any day carrying more photos than its preset posts the counts never match, the override is silently discarded, and the editor shows the arrangement Dan dragged while the export renders a different one (#1000)"
+}

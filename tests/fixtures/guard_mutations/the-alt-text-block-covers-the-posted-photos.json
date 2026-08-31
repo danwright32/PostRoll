@@ -1,0 +1,8 @@
+{
+  "name": "the-alt-text-block-covers-the-posted-photos",
+  "file": "PostRollApp/Sources/Services/EventExporter.swift",
+  "find": "            let photoPaths = preset.postedPhotos(\n                event.days[day.rawValue]?.photoPaths ?? [], on: day)",
+  "replace": "            let photoPaths = event.days[day.rawValue]?.photoPaths ?? []",
+  "test": "PostRollTests/PostedPhotoScopeTests/testTheAltTextBlockCarriesOneEntryPerPOSTEDPhoto",
+  "breaks": "the exported ALT TEXT and PHOTO TAGS blocks are labelled against every ASSIGNED photo again, so a Sunday with seven photos under Balanced ships seven alt texts for a four photo carousel and names people who are not in it. Alt text is the whole content of the post for a screen reader user, and nobody sighted catches this in review because each sentence is well written and true of some photograph (#999)"
+}

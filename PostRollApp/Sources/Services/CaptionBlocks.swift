@@ -188,7 +188,11 @@ enum CaptionBlocks {
             guard let posting = event.days[day.rawValue] else { return [] }
             var seen = Set<String>()
             var handles: [String] = []
-            for url in posting.photoPaths {
+            // The photos the day POSTS (#999). A person tagged only in an
+            // assigned photo the carousel does not carry is not in the post,
+            // so they cannot be tagged in it and must not be offered as a
+            // collaborator on it either.
+            for url in preset.postedPhotos(posting.photoPaths, on: day) {
                 for tag in photoTags(posting, for: url) {
                     let name = bareUsername(tag)
                     guard !name.isEmpty, seen.insert(name.lowercased()).inserted else { continue }

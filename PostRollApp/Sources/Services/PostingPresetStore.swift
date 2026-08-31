@@ -94,6 +94,29 @@ enum PostingPreset: String, CaseIterable, Identifiable, Codable, Sendable {
         return min(assigned, count)
     }
 
+    /// The photos of `day` this preset actually posts.
+    ///
+    /// A day can carry more photos than its preset posts: `generate_media`
+    /// renders `photos[:count]` and the export copies that same slice into
+    /// `carousel/`. Everything that DESCRIBES the post has to be about those
+    /// photographs and no others (#999). It was not: the exported ALT TEXT and
+    /// PHOTO TAGS blocks were labelled against the full assigned list, so a
+    /// Sunday with seven photos under Balanced, which posts four, shipped seven
+    /// alt texts. Alt text is the whole content of the post for a screen reader
+    /// user, and three of those entries describe photographs that are not in
+    /// it.
+    ///
+    /// The `?? photoPaths` is the ungoverned case, said once here rather than
+    /// guessed at each call site: `effectiveCount` returns nil for a day no
+    /// preset governs, meaning "this day's own handling decides", and the app
+    /// had four different fallbacks for it (0, 10, and the assigned count
+    /// twice).
+    func postedPhotos(_ photoPaths: [URL], on day: DayName) -> [URL] {
+        guard let count = effectiveCount(for: day, assigned: photoPaths.count)
+        else { return photoPaths }
+        return Array(photoPaths.prefix(count))
+    }
+
     /// What kind of post `day` is, given how many photos are assigned to it.
     ///
     /// The question that decides whether a layout switch needs a PAID caption
