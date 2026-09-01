@@ -109,9 +109,23 @@ class RepairLog:
     """An append-only journal of what one repair pass did."""
 
     def __init__(self, path: str | Path | None = None, *,
-                 event: str = "", script: str = "") -> None:
+                 event: str = "", event_id: str = "",
+                 script: str = "") -> None:
         self.path = Path(path) if path is not None else default_log_path()
         self.event = event
+        #: WHICH post this record belongs to, as opposed to what it is called.
+        #:
+        #: `event` was never an answer to that question (#1162). Four scripts
+        #: wrote it and they disagreed: `generate_blog` wrote the event name,
+        #: while `swap_blog_photos`, `revise_blog` and `retry_blog_repair` each
+        #: wrote `venue or ""`. Dan shoots the same rooms over and over, so
+        #: selecting on either one collects other posts' records, and a record
+        #: shown against the wrong post is worse than no record at all.
+        #:
+        #: Empty means the writer did not say. `records_for_event` then matches
+        #: it to NO post rather than guessing from the venue, which is the
+        #: guess this replaces (L15, L214).
+        self.event_id = event_id
         self.script = script
 
     def attempt(self, *, target: str, marker: str, codes: list[str],
@@ -199,6 +213,7 @@ class RepairLog:
             "at": datetime.now(timezone.utc).isoformat(),
             "script": self.script,
             "event": self.event,
+            "event_id": self.event_id,
             **record,
         }
         try:
@@ -254,3 +269,27 @@ def read_records(path: str | Path | None = None) -> list[dict]:
         if isinstance(record, dict):
             out.append(record)
     return out
+
+
+def records_for_event(event_id: str,
+                      path: str | Path | None = None) -> list[dict]:
+    """Every record belonging to ONE post, oldest first.
+
+    Selects on `event_id` and on nothing else. There is deliberately no
+    fallback to the event name or the venue: those are what the id replaced,
+    and a fallback would put another post's repairs on this post's panel in
+    exactly the cases the id was added for (L214).
+
+    An empty `event_id` matches nothing, rather than matching every record that
+    also lacks one. Those are records whose writer did not say which post they
+    belong to, and collecting them under a post that also has no id would
+    attribute a pile of orphans to whichever post was opened first (L223).
+
+    A journal that exists and cannot be read still RAISES, through
+    `read_records`. An empty answer here would tell Dan the app changed nothing
+    in a post where it may have changed a great deal, and this is the only
+    record that it changed anything at all (L10, L11).
+    """
+    if not event_id:
+        return []
+    return [r for r in read_records(path) if r.get("event_id") == event_id]

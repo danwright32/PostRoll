@@ -57,6 +57,7 @@ def retry_blog_repair(
         markers: list[str],
         program: dict[str, Any] | None = None,
         venue: str = "",
+        event_id: str = "",
         runner: Callable[..., Any] = run_json_prompt,
         now: Callable[[], float] | None = None,
         deadline: float | None = None,
@@ -98,7 +99,8 @@ def retry_blog_repair(
     outcome = repair_alt_text(
         body, program=program, venue=venue, photo_paths=paths,
         runner=runner, now=now, deadline=deadline, say=say, only=list(markers),
-        log=RepairLog(event=venue or "", script="retry_blog_repair"))
+        log=RepairLog(event=venue or "", event_id=event_id,
+                      script="retry_blog_repair"))
 
     targeted = check_blog_targeted(outcome.body, program=program, venue=venue)
     repaired = sum(1 for state in outcome.states.values()
@@ -133,6 +135,7 @@ def main() -> int:
             markers=m.get("markers") or [],
             program=m.get("program"),
             venue=m.get("venue", "") or "",
+            event_id=m.get("event_id", "") or "",
             say=ProgressWriter(args.progress),
         )
     except (ClaudeError, FileNotFoundError, ValueError) as e:

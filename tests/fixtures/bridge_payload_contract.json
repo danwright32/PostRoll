@@ -802,20 +802,21 @@
         }
       ],
       "keys": {
-        "event": "always",
-        "org": "always",
-        "venue": "always",
-        "date": "always",
-        "program": "always",
-        "days": "always",
-        "shoot_type": "always",
-        "preset": "always",
-        "venue_context": "always",
-        "event_url": "always",
         "blog_photos": "always",
         "caption_context_photos": {
           "conditional": "Sent whenever Wednesday has photos. Thursday's caption falls back to representative selection without it, which costs a Claude call and picks differently."
-        }
+        },
+        "date": "always",
+        "days": "always",
+        "event": "always",
+        "event_id": "always",
+        "event_url": "always",
+        "org": "always",
+        "preset": "always",
+        "program": "always",
+        "shoot_type": "always",
+        "venue": "always",
+        "venue_context": "always"
       }
     },
     "week_day": {
@@ -1077,16 +1078,17 @@
         }
       ],
       "keys": {
-        "event": "always",
-        "org": "always",
-        "venue": "always",
         "date": "always",
-        "program": "always",
+        "event": "always",
+        "event_id": "always",
         "existing": "always",
         "feedback": "always",
+        "org": "always",
+        "photo_filenames": "always",
+        "program": "always",
         "shoot_type": "always",
-        "venue_context": "always",
-        "photo_filenames": "always"
+        "venue": "always",
+        "venue_context": "always"
       }
     },
     "blog_photo_swap": {
@@ -1101,21 +1103,22 @@
       ],
       "keys": {
         "body": "always",
+        "event_id": "always",
+        "org": {
+          "conditional": "Sent only when the swap knows its event. The damage gate refuses a rewrite that drops the organisation name from the post."
+        },
         "photo_paths": "always",
-        "venue": {
-          "conditional": "Sent only when the swap knows its event, which the caption review screen always does; the standalone path passes no event and Python defaults the venue to an empty string."
+        "photo_stamps": {
+          "conditional": "Sent only when the swap knows its event, and empty for every post written before #1130. What the alt text in the incoming body was written against: without it the swap has no record to compare each photograph against, every one reads as new, and it re-uploads and re-describes six good alt texts to change one picture."
         },
         "program": {
           "conditional": "Sent when the swap knows its event AND that event has OCR data, so a blog written for an event whose programme was never scanned still swaps photos."
         },
+        "venue": {
+          "conditional": "Sent only when the swap knows its event, which the caption review screen always does; the standalone path passes no event and Python defaults the venue to an empty string."
+        },
         "venue_context": {
           "conditional": "Sent only when the swap knows its event. The damage gate needs it: measured on the stored events, the Battery Dance Festival event carries an EMPTY venue with its real one, Robert F. Wagner Jr. Park, only here, so a known set built from venue alone refuses Dan correcting the venue to its own name (#1137)."
-        },
-        "org": {
-          "conditional": "Sent only when the swap knows its event. The damage gate refuses a rewrite that drops the organisation name from the post."
-        },
-        "photo_stamps": {
-          "conditional": "Sent only when the swap knows its event, and empty for every post written before #1130. What the alt text in the incoming body was written against: without it the swap has no record to compare each photograph against, every one reads as new, and it re-uploads and re-describes six good alt texts to change one picture."
         }
       }
     },

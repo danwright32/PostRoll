@@ -180,6 +180,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
                   progress_path: Path | None = None) -> None:
     """Run caption + blog generation for one event week."""
     event         = manifest["event"]
+    event_id      = manifest.get("event_id", "") or ""
     org           = manifest["org"]
     venue         = manifest["venue"]
     venue_context = manifest.get("venue_context", "") or ""
@@ -397,6 +398,7 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
         try:
             blog_result = generate_blog(
                 event=event,
+                event_id=event_id,
                 org=org,
                 venue=venue,
                 venue_context=venue_context,

@@ -135,6 +135,7 @@ def _ask(*, say, body: str, naming_rules: str,
 def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
                      program: dict | None = None, venue: str = "",
                      venue_context: str = "", org: str = "",
+                     event_id: str = "",
                      photo_stamps_in: dict[str, list[int]] | None = None,
                      progress: ProgressWriter | None = None) -> dict:
     """Replace [PHOTO: ...] markers in body with markers for new photos.
@@ -355,7 +356,8 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         # Dan published without saying so, and a REFUSAL is reported only on a
         # panel that clears while the condition stays, so neither survives to
         # answer the question afterwards unless it is written here.
-        _placement_log = RepairLog(event=venue or "", script="swap_blog_photos")
+        _placement_log = RepairLog(event=venue or "", event_id=event_id,
+                                   script="swap_blog_photos")
         for marker, why in placement.moved:
             print(f"[swap_blog_photos] MOVED marker {marker!r} ({why})",
                   flush=True, file=sys.stderr)
@@ -383,7 +385,8 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             # destroyed. Derived from this call because the swap is its own
             # process and has spent nothing else of the ceiling.
             deadline=deadline_from(started_at=time.time(), now=time.time),
-            log=RepairLog(event=venue or "", script="swap_blog_photos"))
+            log=RepairLog(event=venue or "", event_id=event_id,
+                          script="swap_blog_photos"))
         final_body = repair.body
         for attempt in repair.attempts:
             print(f"[swap_blog_photos] REPAIR {attempt['outcome']}: "
@@ -451,6 +454,7 @@ def main() -> int:
             venue=m.get("venue", ""),
             venue_context=m.get("venue_context", "") or "",
             org=m.get("org", "") or "",
+            event_id=m.get("event_id", "") or "",
             # What the alt text in the incoming body was written against
             # (#1131). Absent on every post written before #1130, which is a
             # first run: nothing is retained and the swap costs what it always

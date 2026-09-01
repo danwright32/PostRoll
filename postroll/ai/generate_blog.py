@@ -1612,6 +1612,7 @@ def generate_blog(
     program: dict[str, Any],
     photo_paths: list[str | Path],
     shoot_type: str = "performance",
+    event_id: str = "",
     event_url: str = "",
     venue_context: str = "",
     humanizer_path: str | Path | None = None,
@@ -1824,7 +1825,8 @@ def generate_blog(
         # Dan published without saying so, and a REFUSAL is reported only on a
         # panel that clears while the condition stays, so neither survives to
         # answer the question afterwards unless it is written here.
-        _placement_log = RepairLog(event=event, script="generate_blog")
+        _placement_log = RepairLog(event=event, event_id=event_id,
+                                   script="generate_blog")
         for marker, why in placement.moved:
             print(f"[generate_blog] MOVED marker {marker!r} ({why})",
                   flush=True, file=sys.stderr)
@@ -1867,7 +1869,8 @@ def generate_blog(
             # What the app changed in this post, after publication (#1135).
             # The panel says which findings survived; only this says what the
             # alt text USED to be, and the question always arrives later.
-            log=RepairLog(event=event, script="generate_blog"))
+            log=RepairLog(event=event, event_id=event_id,
+                          script="generate_blog"))
         final_body = repair.body
         for attempt in repair.attempts:
             print(f"[generate_blog] REPAIR {attempt['outcome']}: "
@@ -1962,6 +1965,10 @@ def _build_blog_title(event: str, venue: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate a blog post draft")
     parser.add_argument("--event", required=True, help="Event name")
+    parser.add_argument("--event-id", default="",
+                        help="The event's stable id, recorded on every repair "
+                             "record so the app can show them against this "
+                             "post and no other (#1162)")
     parser.add_argument("--org", required=True, help="Organization")
     parser.add_argument("--venue", required=True, help="Venue")
     parser.add_argument("--date", required=True, help="Event date (YYYY-MM-DD)")
@@ -2005,6 +2012,7 @@ def main() -> int:
     try:
         result = generate_blog(
             event=args.event,
+            event_id=args.event_id,
             org=args.org,
             venue=args.venue,
             date=args.date,
