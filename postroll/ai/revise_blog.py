@@ -53,6 +53,7 @@ from .ai_tells import (
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
+from .blog_findings import RepairState
 from .blog_marker_splice import splice_retained_markers
 from .blog_quality import _PHOTO_MARKER, _fold_filename
 from .progress import ProgressWriter
@@ -340,7 +341,17 @@ def revise_blog(
         "title":       data.get("title", title).strip(),
         "body":        final_body,
         "photo_count": photo_count,
-        "findings": [finding_entry(f) for f in findings],
+        # A revision has NO PHOTOGRAPH (#1132). Its manifest carries
+        # photo_filenames and never paths, so alt text cannot be rewritten
+        # here, and reporting those findings as never attempted would assert
+        # something untrue about a path that structurally cannot do the work.
+        # The other codes are left alone: only the alt text rules need a
+        # photograph.
+        "findings": [
+            finding_entry(f, repair=(RepairState.UNAVAILABLE
+                                     if f.code.startswith("alt_text_")
+                                     else RepairState.NEVER))
+            for f in findings],
         # The exact text those findings were measured against, so an edited
         # draft stops showing findings about the body before the edit. The
         # caption paths have emitted their sibling `findings_caption` since
@@ -358,6 +369,10 @@ def revise_blog(
         # "absent" from "nothing recorded" (L214). Every post written before
         # this shipped arrives here with nothing, and that is a first run.
         "photo_stamps": dict(existing.get("photo_stamps") or {}),
+        # Honest: no pass ran here, and none ever can. The panel's own line
+        # says so rather than claiming the post was checked (#1138).
+        "repair_pass": {"ran": False, "selected": 0, "attempted": 0,
+                        "ended_early": False},
     }
 
 

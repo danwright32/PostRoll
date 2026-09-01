@@ -199,7 +199,8 @@
       "photo_count": "swift",
       "findings": "swift",
       "findings_body": "swift",
-      "photo_stamps": "swift"
+      "photo_stamps": "swift",
+      "repair_pass": "swift"
     }
   },
   "swapped_blog": {
@@ -219,7 +220,8 @@
       "photo_count": "swift",
       "findings": "swift",
       "findings_body": "swift",
-      "photo_stamps": "swift"
+      "photo_stamps": "swift",
+      "repair_pass": "swift"
     }
   },
   "ocr_result": {
