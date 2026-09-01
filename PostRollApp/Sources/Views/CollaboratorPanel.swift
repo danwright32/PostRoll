@@ -23,23 +23,18 @@ struct CollaboratorPanel: View {
     /// Dan enters, so the way to enter them is beside the names being ranked.
     let onEditNumbers: (String) -> Void
 
-    /// What this day's answer is, in a sentence (#964).
+    /// What this day's answer is, in a sentence (#964, #1115).
     ///
-    /// The three answers used to be two: a ranking, or nothing at all. Nothing
+    /// The four answers used to be two: a ranking, or nothing at all. Nothing
     /// at all covered both "everyone tagged should be invited" and "nobody is
     /// tagged yet", which are opposite things to tell somebody.
-    private var subtitle: String {
-        switch result.coverage {
-        case .nothingTagged:
-            return CollaboratorPick.nobodyTaggedLine
-        case .allFit:
-            return CollaboratorPick.everyoneFitsLine(result.suggested.count)
-                 + " A collaborator invite puts this post on their own grid."
-        case .ranked:
-            return "Instagram allows \(CollaboratorPick.maxPerPost) per post. "
-                 + "A collaborator invite puts this post on their own grid."
-        }
-    }
+    ///
+    /// Every word of it comes from `CollaboratorPick`, so this screen and
+    /// CAPTIONS.txt cannot come to describe one day differently. Two of the
+    /// four were typed in here until #1115, which is the drift a shared
+    /// wording exists to prevent, and `CollaboratorPickTests` holds this file
+    /// to it rather than trusting the habit.
+    private var subtitle: String { CollaboratorPick.panelSubtitle(for: result) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {

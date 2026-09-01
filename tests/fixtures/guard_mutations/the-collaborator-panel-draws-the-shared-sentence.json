@@ -1,0 +1,8 @@
+{
+  "name": "the-collaborator-panel-draws-the-shared-sentence",
+  "file": "PostRollApp/Sources/Views/CollaboratorPanel.swift",
+  "find": "    private var subtitle: String { CollaboratorPick.panelSubtitle(for: result) }",
+  "replace": "    private var subtitle: String { \"Instagram allows 5 per post.\" }",
+  "test": "PostRollTests/CollaboratorPickTests/testThePanelDrawsItsSentenceFromTheSharedWording",
+  "breaks": "the review screen goes back to wording a day itself, so the sentence Dan reads on screen and the one in CAPTIONS.txt can describe the same day differently, and the shared wording stays correct, unread and passing (#1115, L46)"
+}
