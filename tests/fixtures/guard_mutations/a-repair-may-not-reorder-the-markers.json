@@ -1,0 +1,8 @@
+{
+  "name": "a-repair-may-not-reorder-the-markers",
+  "file": "postroll/ai/blog_repair_damage.py",
+  "find": "    kept_before = [k for k in _marker_keys(prior) if k not in touched.markers]\n    kept_after = [k for k in _marker_keys(revised) if k not in touched.markers]",
+  "replace": "    kept_before = sorted(k for k in _marker_keys(prior) if k not in touched.markers)\n    kept_after = sorted(k for k in _marker_keys(revised) if k not in touched.markers)",
+  "test": "tests/test_blog_repair_damage.py::test_reordering_two_untouched_markers_is_refused",
+  "breaks": "the marker comparison sorts, so a reorder is invisible. That is the state the repo was already in: ai_tells.markers_preserved_validator sorts, so nothing anywhere could see a photograph move to a different point in the post, and the prose written about it then sits beside a different picture (#1129)"
+}

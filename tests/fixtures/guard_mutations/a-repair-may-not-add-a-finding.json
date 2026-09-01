@@ -1,0 +1,8 @@
+{
+  "name": "a-repair-may-not-add-a-finding",
+  "file": "postroll/ai/blog_repair_damage.py",
+  "find": "            key = (finding.code, target.kind, target.key, target.index)\n            out[key] = out.get(key, 0) + 1",
+  "replace": "            key = (finding.code, \"\", \"\", -1)\n            out[key] = 1",
+  "test": "tests/test_blog_repair_damage.py::test_a_second_finding_of_a_code_already_present_is_refused",
+  "breaks": "the damage gate compares findings as a SET of codes rather than a multiset of (code, target). alt_text_length and alt_text_missing_venue fire once per marker, so a second instance of a code already present is the commonest way a whole body repair gets worse, and a set cannot see it: a repair that pushes another marker over the word band reads as having changed nothing (#1129, L228)"
+}

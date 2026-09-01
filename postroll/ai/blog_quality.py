@@ -30,11 +30,13 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import Any
 
 # Re-exported so the eight test files and three scripts importing the pair out
 # of here are untouched by the move (#1128). The definitions live in a leaf
 # module; this file is the checker, not the vocabulary.
+from .ai_tells import strip_em_dashes
 from .blog_findings import Finding, finding_entry
 
 __all__ = ["Finding", "finding_entry", "check_blog", "filenames_used_by",
@@ -115,12 +117,40 @@ _TITLE_LABEL = re.compile(
 _CONSTRUCTION = re.compile(r"something between .+? and ", re.IGNORECASE)
 
 
+@dataclass(frozen=True)
+class Target:
+    """What a finding is ABOUT, in a form that survives rewriting it (#1129).
+
+    `Finding` is three strings and `detail` embeds the offending text, so a
+    finding's identity moves the moment that text is rewritten. The damage gate
+    compares the findings before a repair against the findings after it, and the
+    repair pass caps attempts per target. Both need a key that does not move
+    when the text does, and a round counter keyed on finding identity would
+    restart at zero on every attempt and never reach its cap while reading as a
+    cap (L344).
+
+    `detail` cannot be parsed back into one: `alt[:90]` truncates, and
+    `stacked_photos` gives `f"{earlier[:48]} then {later[:48]}"` with no block
+    index at all. So it is recorded where the finding is built.
+
+    kind is "marker" (key is the FOLDED filename, which survives a rewrite of
+    the alt text and folds a near miss onto the file it names), "prose" (index
+    into the prose-only paragraph list, so adding or removing a marker does not
+    renumber what a repair was licensed to touch), or "body" (the whole post:
+    a rule about arrangement rather than about one span).
+    """
+    kind: str
+    key: str = ""
+    index: int = -1
+
+
 def _markers(body: str) -> list[tuple[str, str]]:
     return [(m.group(1).strip(), m.group(2).strip()) for m in _PHOTO_MARKER.finditer(body)]
 
 
-def _marker_filename_findings(markers: list[tuple[str, str]],
-                              photo_filenames: list[str] | None) -> list[Finding]:
+def _marker_filename_findings(
+        markers: list[tuple[str, str]],
+        photo_filenames: list[str] | None) -> list[tuple[Finding, Target]]:
     """Markers naming a photo that was never sent, and photos never placed (#477).
 
     The prompt's hardest photo rule is the filename one, and it had no check at
@@ -144,25 +174,25 @@ def _marker_filename_findings(markers: list[tuple[str, str]],
     if not sent:
         return []
 
-    findings: list[Finding] = []
+    findings: list[tuple[Finding, Target]] = []
     placed: set[str] = set()
     for name, _alt in markers:
         key = name.casefold()
         if key in sent:
             placed.add(key)
             continue
-        findings.append(Finding(
+        findings.append((Finding(
             "blog_marker_unknown_photo",
             "A photo marker names a file that was not one of the photos sent, "
             "so no image will appear there.",
-            name))
+            name), Target("marker", _fold_filename(name))))
 
     for key, name in sent.items():
         if key not in placed:
-            findings.append(Finding(
+            findings.append((Finding(
                 "blog_marker_missing_photo",
                 "A photo chosen for this post was never placed in it.",
-                name))
+                name), Target("marker", _fold_filename(name))))
     return findings
 
 
@@ -274,6 +304,32 @@ def repair_marker_filenames(
         return match.group(0).replace(written, correct, 1)
 
     return _PHOTO_MARKER.sub(_repair, body), corrections
+
+
+def _prose_index_of(paragraphs: list[str], needle: str) -> int:
+    """Which prose paragraph a prose-level finding is about (#1129).
+
+    Indexed into the PROSE-only list, never into `body.split("\n\n")`, so
+    adding or removing a photo marker does not renumber the paragraphs a repair
+    was licensed to touch.
+
+    -1 when no paragraph holds it, which happens when the match spans a
+    paragraph boundary: the prose these rules search is the paragraphs joined
+    by a space. Answered as "no paragraph" rather than as paragraph 0, because
+    a wrong index would licence a repair to rewrite a paragraph the finding is
+    not about (L215).
+    """
+    low = str(needle).casefold()
+    for i, paragraph in enumerate(paragraphs):
+        if low in paragraph.casefold():
+            return i
+    return -1
+
+
+def _marker_name(block: str) -> str:
+    """The filename in a block that starts with a marker, or the block itself."""
+    match = _PHOTO_MARKER.search(block)
+    return match.group(1).strip() if match else block
 
 
 def _prose_paragraphs(body: str) -> list[str]:
@@ -396,38 +452,85 @@ def check_blog(body: str, *, program: dict[str, Any] | None = None,
     rules below are skipped rather than guessed at: a caller with no list
     (a revision re-checking an existing body) must not have every marker
     reported as naming an unknown photo.
+
+    Delegates to `check_blog_targeted` and drops the targets, so the frozen
+    `Finding`, `finding_entry`, the bridge payload contract, the Swift side and
+    every test file importing this are untouched by #1129 adding them.
     """
-    findings: list[Finding] = []
+    return [finding for finding, _target in check_blog_targeted(
+        body, program=program, venue=venue, photo_filenames=photo_filenames)]
+
+
+def check_blog_targeted(
+        body: str, *, program: dict[str, Any] | None = None,
+        venue: str = "",
+        photo_filenames: list[str] | None = None,
+) -> list[tuple[Finding, Target]]:
+    """`check_blog`, plus what each finding is ABOUT (#1129).
+
+    Same findings, same order. See `Target` for why a finding cannot answer
+    that question about itself.
+    """
+    findings: list[tuple[Finding, Target]] = []
     markers = _markers(body)
     findings += _marker_filename_findings(markers, photo_filenames)
     performers = [str(p.get("name", "")).strip()
                   for p in (program or {}).get("performers") or []
                   if str(p.get("name", "")).strip()]
 
-    # 18. length band
+    # 18. length band, and the marker with nothing in it at all
+    #
+    # The empty case is its own code (#1129). This rule used to read `if words
+    # and not (MIN <= words <= MAX)`, and that leading `words and` exempted a
+    # zero-word alt text from the band. Every other alt rule searches the text
+    # for something, so an empty one matched nothing and fired nothing: a
+    # marker whose description had been deleted produced no finding at all.
+    #
+    # Harmless while nothing rewrote alt text. The repair pass does, and its
+    # acceptance check is "re-run these rules and refuse if any finding
+    # remains", so the shortest path to an accepted repair was deleting the
+    # words. Closed here, in the phase before the first repairer exists.
+    #
+    # Its own code rather than folded into the length one, because an alt text
+    # that is GONE and one that is eleven words long invite different actions,
+    # and two outcomes with one message are one outcome in practice (L11, L260).
+    #
+    # Counted AFTER `strip_em_dashes`, which is the arithmetic every acceptance
+    # check downstream depends on. That substitutes ", " for any dash not
+    # between digits, so a dash joined token becomes two tokens; all three blog
+    # paths strip before they check, so a count taken before the strip has the
+    # repairer and the checker measuring different numbers on the same body,
+    # which turns the round cap into a silent give up rather than a refusal.
     for name, alt in markers:
-        words = len(alt.split())
-        if words and not (ALT_MIN_WORDS <= words <= ALT_MAX_WORDS):
-            findings.append(Finding(
+        words = len(strip_em_dashes(alt).split())
+        if not words:
+            findings.append((Finding(
+                "alt_text_empty",
+                "This photo has no alt text, so the picture is described to "
+                "nobody who cannot see it.",
+                name), Target("marker", _fold_filename(name))))
+        elif not (ALT_MIN_WORDS <= words <= ALT_MAX_WORDS):
+            findings.append((Finding(
                 "alt_text_length",
                 f"Alt text must be {ALT_MIN_WORDS} to {ALT_MAX_WORDS} words.",
-                f"{name}: {words} words. {alt[:90]}"))
+                f"{name}: {words} words. {alt[:90]}"),
+                Target("marker", _fold_filename(name))))
 
     # 17. name the venue and a performer in every marker
     for name, alt in markers:
         low = alt.lower()
         if venue and venue.lower() not in low:
-            findings.append(Finding(
+            findings.append((Finding(
                 "alt_text_missing_venue",
                 "Every alt text names the venue.",
-                f"{name}: {alt[:90]}"))
+                f"{name}: {alt[:90]}"), Target("marker", _fold_filename(name))))
         named = any(p.lower() in low for p in performers)
         if performers and not named and not names_a_group(alt):
-            findings.append(Finding(
+            findings.append((Finding(
                 "alt_text_missing_performer",
                 "Every alt text names the performer, or credits the group by "
                 "count and ensemble name when there are too many to name.",
-                f"{name}: {alt[:90]}"))
+                f"{name}: {alt[:90]}"), Target("marker", _fold_filename(name))))
 
     # 20. vary the opening
     openings: dict[str, list[str]] = {}
@@ -437,10 +540,16 @@ def check_blog(body: str, *, program: dict[str, Any] | None = None,
             openings.setdefault(key, []).append(name)
     for key, names in openings.items():
         if len(names) > MAX_SHARED_OPENINGS:
-            findings.append(Finding(
+            # Names several markers in one finding, which is why the repair
+            # pass groups markers into connected components: rewriting one of
+            # them changes another's finding set. Targeted on the FIRST, so the
+            # finding has a stable key; the component is what actually gets
+            # attempted (#1129).
+            findings.append((Finding(
                 "alt_text_repeated_opening",
                 "Vary how the alt text opens; more than two markers share a start.",
-                f"{len(names)} markers open '{key}': {', '.join(names)}"))
+                f"{len(names)} markers open '{key}': {', '.join(names)}"),
+                Target("marker", _fold_filename(names[0]))))
 
     # 19. no inferred inner states
     for name, alt in markers:
@@ -449,10 +558,11 @@ def check_blog(body: str, *, program: dict[str, Any] | None = None,
         hits += [m.group(0) for pat in DIRECTED_INTENT
                  for m in [re.search(pat, low)] if m]
         if hits:
-            findings.append(Finding(
+            findings.append((Finding(
                 "alt_text_inferred_state",
                 "Alt text describes what the camera recorded, not what someone felt.",
-                f"{name}: {', '.join(hits)} in '{alt[:80]}'"))
+                f"{name}: {', '.join(hits)} in '{alt[:80]}'"),
+                Target("marker", _fold_filename(name))))
 
     # 29. alt text names the person, never their appearance or gender
     for name, alt in markers:
@@ -460,10 +570,11 @@ def check_blog(body: str, *, program: dict[str, Any] | None = None,
         hits = [m.group(0) for pat in APPEARANCE_DESCRIPTOR
                 for m in [re.search(pat, low)] if m]
         if hits:
-            findings.append(Finding(
+            findings.append((Finding(
                 "alt_text_appearance_descriptor",
                 "Alt text names the person, never their appearance or gender.",
-                f"{name}: {', '.join(hits)} in '{alt[:80]}'"))
+                f"{name}: {', '.join(hits)} in '{alt[:80]}'"),
+                Target("marker", _fold_filename(name))))
 
     # 8. never invent numbers
     known = _program_numbers(program, venue)
@@ -477,55 +588,63 @@ def check_blog(body: str, *, program: dict[str, Any] | None = None,
     for token in re.findall(r"\b\d+\b", prose):
         if token not in known and token not in seen:
             seen.add(token)
-            findings.append(Finding(
+            findings.append((Finding(
                 "invented_number",
                 "No count in the source data means no number in the post.",
-                f"'{token}' does not appear in the program data"))
+                f"'{token}' does not appear in the program data"),
+                Target("prose", token, _prose_index_of(paragraphs, token))))
     for word in _NUMBER_WORDS:
         if word in _NUMBER_ALLOWED or word in known or word in seen:
             continue
         if re.search(rf"\b{word}\b", prose, re.IGNORECASE):
             seen.add(word)
-            findings.append(Finding(
+            findings.append((Finding(
                 "invented_number",
                 "No count in the source data means no number in the post.",
-                f"'{word}' does not appear in the program data"))
+                f"'{word}' does not appear in the program data"),
+                Target("prose", word, _prose_index_of(paragraphs, word))))
 
     # 24. no demographic grouping of performers
     for pat in DEMOGRAPHIC_GROUPING:
         m = re.search(pat, prose, re.IGNORECASE)
         if m:
-            findings.append(Finding(
+            findings.append((Finding(
                 "demographic_grouping",
                 "Name every performer or name none; do not group them by "
                 "gender or trail off into 'and the others'.",
-                f"'{m.group(0)}' in '{prose[max(0, m.start() - 30):m.end() + 30]}'"))
+                f"'{m.group(0)}' in '{prose[max(0, m.start() - 30):m.end() + 30]}'"),
+                Target("prose", m.group(0), _prose_index_of(paragraphs, m.group(0)))))
 
     # 16. use a construction once
     uses = _CONSTRUCTION.findall(prose)
     if len(uses) > 1:
-        findings.append(Finding(
+        # The whole post: the rule is that the construction appears MORE THAN
+        # ONCE, which is a fact about the body and not about either paragraph.
+        findings.append((Finding(
             "repeated_construction",
             "Use a construction once; 'something between X and Y' appears more than once.",
-            f"{len(uses)} uses: {'; '.join(u.strip() for u in uses)}"))
+            f"{len(uses)} uses: {'; '.join(u.strip() for u in uses)}"),
+            Target("body")))
 
     # 4. photo placement
     blocks = [b.strip() for b in body.split("\n\n") if b.strip()]
     for earlier, later in zip(blocks, blocks[1:]):
         if earlier.startswith("[PHOTO:") and later.startswith("[PHOTO:"):
-            findings.append(Finding(
+            findings.append((Finding(
                 "stacked_photos",
                 "Two photos with no prose between them.",
-                f"{earlier[:48]} then {later[:48]}"))
+                f"{earlier[:48]} then {later[:48]}"),
+                Target("marker", _fold_filename(_marker_name(later)))))
     prose_before_first = 0
     for block in blocks:
         if block.startswith("[PHOTO:"):
             break
         prose_before_first += 1
     if markers and prose_before_first > 2:
-        findings.append(Finding(
+        findings.append((Finding(
             "late_first_photo",
             "The first photo comes after more than two paragraphs.",
-            f"{prose_before_first} paragraphs before the first marker"))
+            f"{prose_before_first} paragraphs before the first marker"),
+            Target("marker", _fold_filename(markers[0][0]))))
 
     return findings

@@ -1,0 +1,8 @@
+{
+  "name": "a-rewrite-may-not-gut-the-description",
+  "file": "postroll/ai/blog_repair_damage.py",
+  "find": "        gutted = total >= _RETENTION_MIN_WORDS and (\n            share < _RETENTION_FLOOR\n            or (total >= _RETENTION_LONG_ENOUGH and kept < _RETENTION_MIN_KEPT))",
+  "replace": "        gutted = total >= _RETENTION_MIN_WORDS and share < _RETENTION_FLOOR",
+  "test": "tests/test_blog_repair_damage.py::test_the_husk_control_the_gate_may_not_gate_without",
+  "breaks": "check 5 falls back to the share floor alone, which measurement showed cannot separate a husk from a real rewrite at ANY threshold: a husk keeping two content words of a nine word original scores above the lowest share among Dan's own corrections. An alt text gutted to a rule satisfying husk then clears every check the gate has, which is rule 9 reachable straight through the design (#1129, L283, L172)"
+}
