@@ -1,0 +1,77 @@
+name: Record test durations
+
+# DISPATCH ONLY, deliberately. Two reasons, and both matter.
+#
+# It must never become a check a pull request waits on. `wait_for_checks.py`
+# derives the bar from the workflow files, and a new check name can only go
+# green once its recorded reply already holds it, so adding one costs a
+# knowingly red merge (#1074, L48). A workflow with no `pull_request` trigger is
+# excluded from that derivation by construction rather than by remembering to
+# exclude it.
+#
+# And it costs nothing until it is asked for. A job that ran on every push would
+# pay a full suite of runner minutes to answer a question nobody asked (L307).
+on:
+  workflow_dispatch:
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    # A job without a deadline cannot fail, it can only hang, and a hang looks
+    # exactly like a slow queue (#832, L110). The suite it runs takes about
+    # four minutes; this is several times that and will not fail a slow runner.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      # The whole point of recording HERE rather than on Dan's Mac.
+      #
+      # `test_file_durations.json` decides which files `make test-python-fast`
+      # skips, and the floor it is read against was chosen to sit in a gap so
+      # that no small change in cost moves a file across it. A reading taken on
+      # a machine doing other work measures that work as well as the tests
+      # (L224, L356): measured 2026-09-01, two recordings of the identical suite
+      # two hours apart differed by 17% in total and moved
+      # test_frame_legibility.py from 10.7% to 8.4%, onto the floor, while
+      # Lightroom was using 430% of the CPU. Nothing about the tests had
+      # changed.
+      #
+      # A runner is quiet by construction and is also the machine the threshold
+      # actually has to describe.
+      - name: Record
+        env:
+          POSTROLL_REQUIRE_FFMPEG: "1"
+        run: python tools/record_test_durations.py
+
+      # The record is the artefact, not the log. It is uploaded rather than
+      # committed from CI: what goes into the repo stays a decision somebody
+      # makes, after reading what was measured.
+      - name: Upload the record
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-file-durations
+          path: tests/fixtures/test_file_durations.json
+          if-no-files-found: error
+
+      - name: Say what was measured
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "### Recorded on $(uname -s) $(uname -m)"
+            echo '```'
+            uptime
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
