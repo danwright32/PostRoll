@@ -643,7 +643,7 @@
     "_what": "One deterministic blog check result inside blog_output.findings.",
     "python": [
       {
-        "module": "postroll/ai/blog_quality.py",
+        "module": "postroll/ai/blog_findings.py",
         "function": "finding_entry"
       }
     ],

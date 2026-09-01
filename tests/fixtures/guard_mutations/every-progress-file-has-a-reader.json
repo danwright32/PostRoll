@@ -1,0 +1,8 @@
+{
+  "name": "every-progress-file-has-a-reader",
+  "file": "PostRollApp/Sources/Services/AppPaths.swift",
+  "find": "    static let progressRunSuffixes = [\"\", \"-media\", \"-ocr\", \"-blog\", \"-blog-photos\"]",
+  "replace": "    static let progressRunSuffixes = [\"\", \"-media\", \"-ocr\", \"-blog\", \"-blog-photos\", \"-unread\"]",
+  "test": "PostRollTests/ProgressFileNamingTests/testEveryProgressFileHasARunThatCanReadIt",
+  "breaks": "a run writes a progress file that no LongRunIndicator.Run reads, so it reports its step into a file nothing on screen ever opens and presents as a bare indefinite spinner however much it says. That is exactly the shape #1128 found on the two blog paths, and a file with a writer and no reader is not evidence (L46)"
+}

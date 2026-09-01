@@ -1,0 +1,8 @@
+{
+  "name": "the-sweep-knows-every-progress-file",
+  "file": "PostRollApp/Sources/Services/ProgressFileCleanup.swift",
+  "find": "        for suffix in AppPaths.progressRunSuffixes where !suffix.isEmpty {\n            guard stem.hasSuffix(suffix) else { continue }\n            if let id = UUID(uuidString: String(stem.dropLast(suffix.count))) { return id }\n        }\n        return UUID(uuidString: stem)",
+  "replace": "        return UUID(uuidString: stem)\n            ?? (stem.hasSuffix(\"-media\") ? UUID(uuidString: String(stem.dropLast(6))) : nil)",
+  "test": "PostRollTests/ProgressFileNamingTests/testTheSweepRecognisesEveryFileTheAppItselfWrites",
+  "breaks": "the sweep goes back to a hand written suffix list, which is the form that had already drifted: it knew the caption and media names while ocrProgressFile had been writing <uuid>-ocr.json since #467, so every OCR progress file of every deleted event stayed on disk forever. A reader listing what it recognises exempts whatever it forgot from the check meant to catch it (#1128, L96, L41)"
+}

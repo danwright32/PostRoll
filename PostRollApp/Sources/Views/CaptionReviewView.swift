@@ -468,6 +468,9 @@ struct CaptionReviewView: View {
                             brandVoiceError: blogRevision?.noteFailure,
                             isSwappingPhotos: captionWork.isRunning(event.id, .swapBlogPhotos),
                             photoSwapError: photoSwap?.failure,
+                            eventID: event.id,
+                            revisionStartedAt: captionWork.startedAt(event.id, .reviseBlog),
+                            photoSwapStartedAt: captionWork.startedAt(event.id, .swapBlogPhotos),
                             undoBlog: blogRevision?.previousBlog ?? photoSwap?.previousBlog,
                             onUndoBlogChange: { undoBlogChange() }
                         )

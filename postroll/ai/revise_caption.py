@@ -51,7 +51,7 @@ from .ai_tells import (
     load_humanizer_rules,
     strip_em_dashes,
 )
-from .blog_quality import finding_entry
+from .blog_findings import finding_entry
 from .caption_credits import credit_findings
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .performer_hashtags import strip_performer_hashtags

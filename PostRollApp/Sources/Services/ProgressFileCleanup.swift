@@ -49,12 +49,21 @@ enum ProgressFileCleanup {
 
     /// The event a progress file belongs to, or nil when the name is not ours.
     ///
-    /// Two names, because the caption run and the media run report separately
-    /// (#234): `<uuid>.json` and `<uuid>-media.json`. A sweep that knew only
-    /// the first would leave every media file behind forever, which is the
-    /// defect this whole file exists to fix.
+    /// One name per run, because the runs report separately and overlap in
+    /// time. The suffixes are DERIVED from `AppPaths.progressRunSuffixes`, the
+    /// same list the writers build their paths from, rather than spelled out
+    /// here as well (#1128, L41).
+    ///
+    /// They were spelled out here, and had already drifted: this knew
+    /// `<uuid>.json` and `<uuid>-media.json`, while `ocrProgressFile` has
+    /// written `<uuid>-ocr.json` since #467. Every OCR progress file of every
+    /// deleted event was left behind forever, which is the exact defect this
+    /// file exists to fix, reintroduced by the one mechanism it could not see.
     static func eventID(fromFileNamed stem: String) -> UUID? {
-        UUID(uuidString: stem)
-            ?? (stem.hasSuffix("-media") ? UUID(uuidString: String(stem.dropLast(6))) : nil)
+        for suffix in AppPaths.progressRunSuffixes where !suffix.isEmpty {
+            guard stem.hasSuffix(suffix) else { continue }
+            if let id = UUID(uuidString: String(stem.dropLast(suffix.count))) { return id }
+        }
+        return UUID(uuidString: stem)
     }
 }

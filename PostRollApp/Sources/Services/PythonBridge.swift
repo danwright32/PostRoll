@@ -1248,10 +1248,22 @@ actor PythonBridge {
         )
         try manifestData.write(to: manifestFile)
 
+        // Where this run says what it is doing (#1128). A revision is three
+        // sequential Claude calls at a 600 second timeout each and said nothing
+        // on any channel the app reads, so a run that was working, one that was
+        // hung and one whose process had died all drew the same spinner.
+        // Cleared first so a previous run's last step cannot be shown as this
+        // one's, exactly as the week run does.
+        let progressFile = AppPaths.blogProgressFile(forEventID: event.id)
+        try? FileManager.default.createDirectory(
+            at: AppPaths.progressDir, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: progressFile)
+
         let args = [
             "-m", "postroll.ai.revise_blog",
             "--manifest", manifestFile.path,
             "--output",   outputFile.path,
+            "--progress", progressFile.path,
         ]
         try await runProcess(args: args)
 
@@ -1298,11 +1310,28 @@ actor PythonBridge {
         )
         try manifestData.write(to: manifestFile)
 
-        let args = [
+        // Where this run says what it is doing (#1128). Its own file, not the
+        // revision's: see AppPaths for why the two are not shared. An event is
+        // needed to key it, and a caller that passes none gets the discarding
+        // writer plus the elapsed-time half of the indicator, which is still
+        // three states better than a bare spinner.
+        var progressFile: URL? = nil
+        if let id = event?.id {
+            let file = AppPaths.blogPhotoSwapProgressFile(forEventID: id)
+            try? FileManager.default.createDirectory(
+                at: AppPaths.progressDir, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: file)
+            progressFile = file
+        }
+
+        var args = [
             "-m", "postroll.ai.swap_blog_photos",
             "--manifest", manifestFile.path,
             "--output",   outputFile.path,
         ]
+        if let progressFile {
+            args += ["--progress", progressFile.path]
+        }
         try await runProcess(args: args)
 
         guard FileManager.default.fileExists(atPath: outputFile.path) else {
