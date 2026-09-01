@@ -51,7 +51,8 @@ def codes(body: str) -> list[str]:
 
 def test_the_second_of_two_stacked_markers_moves_below_the_next_prose():
     before = body_of(P[0], M1, M2, P[1], P[2])
-    after, moves = repair_marker_placement(before)
+    result = repair_marker_placement(before)
+    after, moves = result.body, result.moved
     assert after == body_of(P[0], M1, P[1], M2, P[2])
     assert [name for name, _why in moves] == ["two.jpg"]
 
@@ -59,13 +60,14 @@ def test_the_second_of_two_stacked_markers_moves_below_the_next_prose():
 def test_a_stack_the_repair_fixes_stops_being_reported():
     before = body_of(P[0], M1, M2, P[1], P[2])
     assert "stacked_photos" in codes(before)
-    after, _moves = repair_marker_placement(before)
+    after = repair_marker_placement(before).body
     assert "stacked_photos" not in codes(after)
 
 
 def test_three_stacked_markers_spread_across_the_prose_that_follows():
     before = body_of(P[0], M1, M2, M3, P[1], P[2], P[3])
-    after, moves = repair_marker_placement(before)
+    result = repair_marker_placement(before)
+    after, moves = result.body, result.moved
     assert after == body_of(P[0], M1, P[1], M2, P[2], M3, P[3])
     assert [name for name, _why in moves] == ["two.jpg", "three.jpg"]
 
@@ -75,7 +77,8 @@ def test_a_stack_with_no_prose_after_it_is_refused_not_guessed():
     below the stack has no destination, and inventing one is the failure #998
     records. It stays put and `check_blog` goes on reporting it (L98)."""
     before = body_of(P[0], P[1], M1, M2)
-    after, moves = repair_marker_placement(before)
+    result = repair_marker_placement(before)
+    after, moves = result.body, result.moved
     assert after == before
     assert moves == []
     assert "stacked_photos" in codes(after)
@@ -86,7 +89,8 @@ def test_a_stack_is_only_partly_repaired_when_the_prose_runs_out():
     move happens, the second is refused, and the refusal is still reported
     rather than silently dropped."""
     before = body_of(P[0], M1, M2, M3, P[1])
-    after, moves = repair_marker_placement(before)
+    result = repair_marker_placement(before)
+    after, moves = result.body, result.moved
     assert after == body_of(P[0], M1, P[1], M2, M3)
     assert [name for name, _why in moves] == ["two.jpg"]
     assert "stacked_photos" in codes(after)
@@ -96,7 +100,8 @@ def test_a_stack_is_only_partly_repaired_when_the_prose_runs_out():
 
 def test_a_late_first_photo_moves_up_to_the_threshold_the_rule_states():
     before = body_of(P[0], P[1], P[2], P[3], M1, P[4])
-    after, moves = repair_marker_placement(before)
+    result = repair_marker_placement(before)
+    after, moves = result.body, result.moved
     assert after == body_of(P[0], P[1], M1, P[2], P[3], P[4])
     assert [name for name, _why in moves] == ["one.jpg"]
 
@@ -104,13 +109,14 @@ def test_a_late_first_photo_moves_up_to_the_threshold_the_rule_states():
 def test_a_late_first_photo_the_repair_fixes_stops_being_reported():
     before = body_of(P[0], P[1], P[2], P[3], M1, P[4])
     assert "late_first_photo" in codes(before)
-    after, _moves = repair_marker_placement(before)
+    after = repair_marker_placement(before).body
     assert "late_first_photo" not in codes(after)
 
 
 def test_a_first_photo_already_inside_the_threshold_is_left_alone():
     before = body_of(P[0], P[1], M1, P[2])
-    after, moves = repair_marker_placement(before)
+    result = repair_marker_placement(before)
+    after, moves = result.body, result.moved
     assert after == before
     assert moves == []
 
@@ -127,7 +133,7 @@ def test_photographs_keep_their_order_relative_to_each_other(before):
     """The property the damage gate's ordered marker check exists to protect.
     A repair that reorders photographs has rewritten the post's sequence, which
     is the judgement this deliberately does not make."""
-    after, _moves = repair_marker_placement(before)
+    after = repair_marker_placement(before).body
     assert markers_in(after) == markers_in(before)
 
 
@@ -140,7 +146,7 @@ def test_photographs_keep_their_order_relative_to_each_other(before):
 def test_no_prose_is_written_lost_or_reordered(before):
     """Rule 3: the app adds only a fact it already holds, and this adds none at
     all. The prose blocks come out in the same order with the same words."""
-    after, _moves = repair_marker_placement(before)
+    after = repair_marker_placement(before).body
     prose = lambda b: [x for x in b.split("\n\n") if not x.startswith("[PHOTO:")]
     assert prose(after) == prose(before)
 
@@ -151,22 +157,24 @@ def test_no_prose_is_written_lost_or_reordered(before):
     body_of(P[0], P[1], P[2], P[3], M1, P[4]),
 ])
 def test_running_it_twice_changes_nothing_the_second_time(before):
-    once, first_moves = repair_marker_placement(before)
-    twice, second_moves = repair_marker_placement(once)
-    assert twice == once
-    assert first_moves and second_moves == []
+    first = repair_marker_placement(before)
+    second = repair_marker_placement(first.body)
+    assert second.body == first.body
+    assert first.moved and second.moved == []
 
 
 def test_a_clean_body_is_returned_untouched_and_reports_no_move():
     before = body_of(P[0], M1, P[1], M2, P[2])
-    after, moves = repair_marker_placement(before)
+    result = repair_marker_placement(before)
+    after, moves = result.body, result.moved
     assert after == before
     assert moves == []
 
 
 def test_a_body_with_no_markers_at_all_is_untouched():
     before = body_of(P[0], P[1], P[2], P[3])
-    after, moves = repair_marker_placement(before)
+    result = repair_marker_placement(before)
+    after, moves = result.body, result.moved
     assert after == before
     assert moves == []
 
@@ -250,7 +258,8 @@ def test_a_refused_move_is_reported_as_well_as_a_made_one():
     afterwards.
     """
     before = body_of(P[0], P[1], M1, M2)      # a stack with no prose beneath
-    after, moves = repair_marker_placement(before)
+    result = repair_marker_placement(before)
+    after, moves = result.body, result.moved
 
     assert after == before and moves == []
     refused = repair_marker_placement(before).refused
@@ -334,3 +343,24 @@ def test_every_blog_path_journals_what_it_refused(module):
     assert ".refused" in (AI / module).read_text(encoding="utf-8"), (
         f"{module} writes a refusal record without reading the pass's own "
         f"refusals, so it is recording something it did not measure")
+
+
+def test_the_result_cannot_be_unpacked_into_two_and_lose_the_refusals():
+    """The shim this replaced was a foot-gun in the code that exists to stop a
+    refusal going unnoticed.
+
+    `Placement` briefly carried an `__iter__` so `body, moved = ...` still read,
+    which kept three call sites unchanged during the change that ADDED
+    `refused`. Every real caller reads the fields by name now, so all the shim
+    could still do was let a future one write the two-part form, get no error,
+    and silently never see the half that has no other record (#1172).
+
+    A default that quietly drops information is the same shape as the deadline
+    defaulting to unlimited, one file over (L168).
+    """
+    result = repair_marker_placement(body_of(P[0], M1, M2, P[1], P[2]))
+
+    with pytest.raises(TypeError):
+        _body, _moved = result           # noqa: F841
+
+    assert result.body and result.moved is not None and result.refused is not None

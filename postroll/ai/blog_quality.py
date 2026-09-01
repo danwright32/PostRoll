@@ -351,10 +351,6 @@ class Placement:
     moved: list[tuple[str, str]] = field(default_factory=list)
     refused: list[tuple[str, str]] = field(default_factory=list)
 
-    def __iter__(self):
-        """So `body, moved = repair_marker_placement(...)` still reads."""
-        return iter((self.body, self.moved))
-
 
 def repair_marker_placement(body: str) -> Placement:
     """Move a misplaced photo marker to a position derived from the post.
