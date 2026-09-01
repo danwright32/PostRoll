@@ -1067,6 +1067,17 @@ struct RevisionPanel: View {
     /// own field rather than a second meaning for `error`, which would say the
     /// revision failed when it did not.
     var brandVoiceError: String? = nil
+    /// What this panel needs to draw a real progress indicator instead of an
+    /// indefinite spinner (#1128). Optional and absent by default, because the
+    /// caption revision path it was written for has no progress file: only the
+    /// blog revision writes one, so only that caller supplies this.
+    struct Progress {
+        let eventID: UUID
+        let startedAt: Date?
+        let run: LongRunIndicator.Run
+        var estimate: String? = nil
+    }
+    var progress: Progress? = nil
     let onApply: () -> Void
     let onCancel: () -> Void
     @FocusState private var focused: Bool
@@ -1124,7 +1135,13 @@ struct RevisionPanel: View {
             }
 
             HStack(spacing: Spacing.sm) {
-                if isRevising {
+                if isRevising, let progress {
+                    LongRunIndicator(label: "Revising…",
+                                     startedAt: progress.startedAt,
+                                     eventID: progress.eventID,
+                                     run: progress.run,
+                                     estimate: progress.estimate)
+                } else if isRevising {
                     ProgressView()
                         .controlSize(.small)
                         .tint(PaintedSurfaces.iconAccent)

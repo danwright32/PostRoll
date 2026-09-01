@@ -182,8 +182,32 @@ enum AppPaths {
     /// without the path being handed down to it.
     static var progressDir: URL { layout.progressDir }
 
+    /// The suffix each run appends to the event id, one entry per run (#1128).
+    ///
+    /// One list rather than a name spelled at each writer and again in the
+    /// sweep that has to recognise them. It had already drifted: `-ocr` was
+    /// added in #467 and `ProgressFileCleanup` never learned it, so every OCR
+    /// progress file of every deleted event is still on disk. A hand-written
+    /// list in the reader exempts whatever it forgot from the check meant to
+    /// catch it (L96), so both halves read this (L41).
+    ///
+    /// The empty string is the caption run's, which predates the others and
+    /// writes `<uuid>.json` with no suffix at all.
+    static let progressRunSuffixes = ["", "-media", "-ocr", "-blog", "-blog-photos"]
+
+    private static func progressFile(forEventID id: UUID, suffix: String) -> URL {
+        progressDir.appendingPathComponent("\(id.uuidString)\(suffix).json")
+    }
+
+    /// Every progress file this app can write for one event.
+    ///
+    /// What the sweep is held to, and what proves no two runs share a path.
+    static func everyProgressFile(forEventID id: UUID) -> [URL] {
+        progressRunSuffixes.map { progressFile(forEventID: id, suffix: $0) }
+    }
+
     static func progressFile(forEventID id: UUID) -> URL {
-        progressDir.appendingPathComponent("\(id.uuidString).json")
+        progressFile(forEventID: id, suffix: "")
     }
 
     /// Where the MEDIA run reports its step, separate from the caption run's
@@ -195,7 +219,7 @@ enum AppPaths {
     /// between "Writing the Sunday caption" and "Wednesday: collage" and
     /// neither surface could trust what it read (L8).
     static func mediaProgressFile(forEventID id: UUID) -> URL {
-        progressDir.appendingPathComponent("\(id.uuidString)-media.json")
+        progressFile(forEventID: id, suffix: "-media")
     }
 
     /// Where the program OCR run reports its step (#467).
@@ -204,7 +228,31 @@ enum AppPaths {
     /// run with a different lifetime, and sharing a path would have each
     /// overwrite the other's label.
     static func ocrProgressFile(forEventID id: UUID) -> URL {
-        progressDir.appendingPathComponent("\(id.uuidString)-ocr.json")
+        progressFile(forEventID: id, suffix: "-ocr")
+    }
+
+    /// Where a blog revision or photo swap reports its step (#1128).
+    ///
+    /// Its own file for the same reason as the media one. Neither of those two
+    /// runs had a progress file at all: each is several sequential Claude
+    /// calls, one of them image-carrying, and the app drew a bare indefinite
+    /// spinner for the whole of it. The repair pass adds up to seven more calls
+    /// to each path.
+    static func blogProgressFile(forEventID id: UUID) -> URL {
+        progressFile(forEventID: id, suffix: "-blog")
+    }
+
+    /// Where a blog PHOTO SWAP reports its step, separate from the revision's
+    /// file above (#1128).
+    ///
+    /// Its own file rather than shared with the revision. The two cannot
+    /// currently run at once, but only because of where the controls sit on
+    /// one screen: `CaptionWorkManager` tracks them under different keys and
+    /// would happily run both. An invariant that lives in a view's layout is
+    /// one a later layout change removes silently (L204), and the cost of not
+    /// relying on it is one more entry in the list above.
+    static func blogPhotoSwapProgressFile(forEventID id: UUID) -> URL {
+        progressFile(forEventID: id, suffix: "-blog-photos")
     }
     static var logFile: URL { logsDir.appendingPathComponent("postroll.log") }
 

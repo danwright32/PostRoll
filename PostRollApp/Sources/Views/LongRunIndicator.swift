@@ -35,14 +35,19 @@ struct LongRunIndicator: View {
     /// separate files because they run at the same time (#234).
     var run: Run = .captions
 
-    enum Run {
-        case captions, media, ocr
+    /// CaseIterable so the tests can hold this to the set of progress files
+    /// `AppPaths` can write: a run whose file nothing here reads shows as a
+    /// bare spinner however much it writes (#1128, L46).
+    enum Run: CaseIterable {
+        case captions, media, ocr, blog, blogPhotos
 
         func file(forEventID id: UUID) -> URL {
             switch self {
-            case .captions: return AppPaths.progressFile(forEventID: id)
-            case .media:    return AppPaths.mediaProgressFile(forEventID: id)
-            case .ocr:      return AppPaths.ocrProgressFile(forEventID: id)
+            case .captions:   return AppPaths.progressFile(forEventID: id)
+            case .media:      return AppPaths.mediaProgressFile(forEventID: id)
+            case .ocr:        return AppPaths.ocrProgressFile(forEventID: id)
+            case .blog:       return AppPaths.blogProgressFile(forEventID: id)
+            case .blogPhotos: return AppPaths.blogPhotoSwapProgressFile(forEventID: id)
             }
         }
     }

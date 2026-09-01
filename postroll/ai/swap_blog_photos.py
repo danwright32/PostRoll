@@ -34,6 +34,7 @@ from .ai_tells import strip_em_dashes
 from .blog_quality import check_blog, finding_entry, repair_marker_filenames
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
+from .progress import ProgressWriter
 
 
 PROMPT = """\
@@ -75,7 +76,8 @@ Return JSON ONLY (no markdown fences, no commentary):
 
 
 def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
-                     program: dict | None = None, venue: str = "") -> dict:
+                     program: dict | None = None, venue: str = "",
+                     progress: ProgressWriter | None = None) -> dict:
     """Replace [PHOTO: ...] markers in body with markers for new photos.
 
     All prose is preserved verbatim. Only the marker lines change.
@@ -84,7 +86,15 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
     let the deterministic checks run on the way out. This path REWRITES every
     alt text in the post, so it is the one most likely to break the alt text
     rules, and it was the only one of the three carrying neither (#201).
+
+    `progress` is where this run says what it is doing (#1128). This is an
+    image-carrying call at a 300 second timeout and the app drew a bare
+    "Updating photos..." spinner for the whole of it, which looks identical
+    whether the call is running, hung or dead. The standing rule is that no
+    such action ships without working / still alive / failed being told apart,
+    and this milestone adds up to seven more calls to this path.
     """
+    say = (progress or ProgressWriter(None))
     if not photo_paths:
         raise ValueError("No photo paths provided")
     if not body.strip():
@@ -132,6 +142,7 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             naming_rules=naming_rules,
         )
 
+        say.step("Blog: rewriting the photo markers")
         data = run_json_prompt(
             prompt,
             timeout=300,
@@ -146,6 +157,8 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         # the reason generate_blog.py states at the same point: the alt text
         # repair is a rewrite with the photograph attached, and the block's
         # exit used to delete every staged copy before the checks ran.
+
+        say.step("Blog: running the checks")
 
         # Same deterministic dash strip its two sibling paths apply on the way out
         # (generate_blog.py, revise_blog.py). Without it a post whose photos were
@@ -170,6 +183,7 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             print(f"[swap_blog_photos] CHECK {f.code}: {f.message} ({f.detail})",
                   flush=True, file=sys.stderr)
 
+        say.finish()
         return {
             "body":        final_body,
             "photo_count": len(photo_paths),
@@ -188,6 +202,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Replace blog photo markers")
     parser.add_argument("--manifest", required=True, help="JSON manifest with body + photo_paths")
     parser.add_argument("--output",   required=True, help="Where to write result JSON")
+    parser.add_argument("--progress", help="Path to write step progress JSON")
     args = parser.parse_args()
 
     m = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
@@ -197,6 +212,7 @@ def main() -> int:
             photo_paths=m["photo_paths"],
             program=m.get("program"),
             venue=m.get("venue", ""),
+            progress=ProgressWriter(args.progress),
         )
     except (ClaudeError, FileNotFoundError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)

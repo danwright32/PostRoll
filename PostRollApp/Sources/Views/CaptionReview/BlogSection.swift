@@ -24,6 +24,16 @@ struct BlogSection: View {
     var brandVoiceError: String? = nil
     var isSwappingPhotos: Bool = false
     var photoSwapError: String? = nil
+    /// What the two runs need to show working / still alive / failed rather
+    /// than a bare spinner (#1128). Both are several sequential Claude calls,
+    /// one of them image-carrying, and both drew an indefinite spinner that
+    /// looked identical whether the call was progressing, hung or dead.
+    /// Optional so a preview or a test can render the section without them,
+    /// which falls back to the spinner rather than drawing an indicator with
+    /// no start time to measure from.
+    var eventID: UUID? = nil
+    var revisionStartedAt: Date? = nil
+    var photoSwapStartedAt: Date? = nil
     /// The blog as it stood before the last revision or swap, so Restore is
     /// offered after this section has been rebuilt (L97).
     var undoBlog: BlogOutput? = nil
@@ -246,6 +256,11 @@ struct BlogSection: View {
                             isRevising: isRevising,
                             error: revisionError,
                             brandVoiceError: brandVoiceError,
+                            progress: (eventID.map {
+                                RevisionPanel.Progress(
+                                    eventID: $0, startedAt: revisionStartedAt,
+                                    run: .blog, estimate: "~2 to 5 min")
+                            }),
                             onApply: { applyRevision() },
                             onCancel: {
                                 showingRevision = false
@@ -261,11 +276,26 @@ struct BlogSection: View {
                                 .foregroundStyle(PaintedSurfaces.pageAccentText)
                             if onSwapPhotos != nil {
                                 if isSwappingPhotos {
-                                    HStack(spacing: 4) {
-                                        ProgressView().controlSize(.mini).tint(PaintedSurfaces.secondaryText)
-                                        Text("Updating photos…")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(PaintedSurfaces.secondaryText)
+                                    // Not a bare spinner (#1128). This is an
+                                    // image-carrying Claude call at a 300
+                                    // second timeout, and after this milestone
+                                    // up to seven more behind it, so Dan has to
+                                    // be able to tell a run that is working
+                                    // from one that has stalled.
+                                    if let eventID {
+                                        LongRunIndicator(
+                                            label: "Updating photos…",
+                                            startedAt: photoSwapStartedAt,
+                                            eventID: eventID,
+                                            run: .blogPhotos,
+                                            estimate: "~1 to 3 min")
+                                    } else {
+                                        HStack(spacing: 4) {
+                                            ProgressView().controlSize(.mini).tint(PaintedSurfaces.secondaryText)
+                                            Text("Updating photos…")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(PaintedSurfaces.secondaryText)
+                                        }
                                     }
                                 } else {
                                     Button("Change photos (\(photoCount))…") { pickAndSwapPhotos() }

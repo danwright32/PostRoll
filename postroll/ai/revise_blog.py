@@ -54,6 +54,7 @@ from .ai_tells import (
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
+from .progress import ProgressWriter
 from .blog_quality import (check_blog, filenames_used_by, finding_entry,
                            repair_marker_filenames)
 from .generate_blog import (
@@ -137,6 +138,7 @@ def revise_blog(
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
+    progress: ProgressWriter | None = None,
 ) -> dict[str, Any]:
     """Revise an existing blog post based on plain-English feedback.
 
@@ -148,7 +150,15 @@ def revise_blog(
     visible at all; without them those two rules stay off, exactly as
     `check_blog` documents, so an event whose photo paths are gone does not
     have every marker reported as unknown (#962).
+
+    `progress` is where this run says what it is doing (#1128). Three
+    sequential Claude calls at a 600 second timeout each said nothing on any
+    channel the app reads, so a revision that was working, one that was hung
+    and one whose process had died all presented as the same spinner. The
+    standing rule is that no such action shows a bare indefinite one, and this
+    milestone adds up to seven more calls to this path.
     """
+    say = (progress or ProgressWriter(None))
     brand_voice_text = load_brand_voice()
 
     title = existing.get("title", "")
@@ -177,6 +187,7 @@ def revise_blog(
         pieces=_format_pieces(program.get("pieces", [])),
     )
 
+    say.step("Blog: making the revision")
     data = run_json_prompt(prompt, timeout=600, step="revise_blog")
     if not isinstance(data, dict):
         raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
@@ -187,6 +198,7 @@ def revise_blog(
     )
 
     if not skip_voice_pass:
+        say.step("Blog: checking it sounds like you")
         voice_prompt = build_voice_review_prompt(
             draft_json=json.dumps(data, ensure_ascii=False, indent=2),
             brand_voice=brand_voice_text,
@@ -199,6 +211,7 @@ def revise_blog(
         )
 
     if not skip_humanizer and is_humanizer_available(humanizer_path):
+        say.step("Blog: removing AI tells")
         humanizer_rules = load_humanizer_rules(humanizer_path)
         review_prompt = build_review_prompt(
             draft_json=json.dumps(data, ensure_ascii=False, indent=2),
@@ -212,6 +225,7 @@ def revise_blog(
             runner=run_json_prompt, validate=markers_preserved_validator,
         )
 
+    say.step("Blog: running the checks")
     final_body = strip_em_dashes(data.get("body", body).strip())
     final_body = _fix_wrong_names(final_body, program)
     final_body = _fix_second_person(final_body)
@@ -250,6 +264,7 @@ def revise_blog(
         print(f"[revise_blog] CHECK {f.code}: {f.message} ({f.detail})",
               flush=True, file=sys.stderr)
 
+    say.finish()
     return {
         "title":       data.get("title", title).strip(),
         "body":        final_body,
@@ -269,6 +284,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Revise a PostRoll blog draft based on feedback")
     parser.add_argument("--manifest", required=True, help="Path to revision manifest JSON")
     parser.add_argument("--output",   required=True, help="Path to write revised output JSON")
+    parser.add_argument("--progress", help="Path to write step progress JSON")
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -291,6 +307,7 @@ def main() -> int:
         # revision must not fail on one. Absent means the filename rules stay
         # off, which is what shipped before.
         photo_filenames=m.get("photo_filenames"),
+        progress=ProgressWriter(args.progress),
     )
     Path(args.output).write_text(
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
