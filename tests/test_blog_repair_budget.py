@@ -262,3 +262,105 @@ def test_a_seven_marker_repair_never_reports_as_stalled(photos):
     assert max(gaps) < threshold, (
         f"the longest gap between heartbeats was {max(gaps)}s against a "
         f"{threshold}s threshold, so a healthy repair reads as stalled")
+
+
+# --- every path bounds the pass, not just the week run (#1166) --------------
+
+import ast
+from pathlib import Path as _Path
+from unittest.mock import patch
+
+from PIL import Image as _Image
+
+from postroll.ai import generate_blog as _gb
+from postroll.ai import swap_blog_photos as _swap
+from postroll.ai.blog_repair import CEILING_HEADROOM, PROCESS_CEILING
+
+_AI = _Path(__file__).resolve().parent.parent / "postroll" / "ai"
+_PROSE = "It's a night that started late and ran long, and the room stayed full."
+
+
+@pytest.fixture
+def _photo(tmp_path):
+    path = tmp_path / "DSC0001.jpg"
+    _Image.new("RGB", (40, 30), (10, 20, 30)).save(path)
+    return str(path)
+
+
+class _Spy:
+    """Stands in for the pass and records the deadline it was handed."""
+
+    def __init__(self):
+        self.deadline = "never called"
+
+    def __call__(self, body, **kwargs):
+        self.deadline = kwargs.get("deadline")
+        from postroll.ai.blog_repair import RepairOutcome
+        return RepairOutcome(body=body, ran=True)
+
+
+def test_generation_bounds_the_pass_when_no_caller_hands_it_a_deadline(_photo):
+    """`repair_deadline` defaults to None and only `generate_week` passes one.
+
+    None used to reach `repair_alt_text` unchanged, where it becomes
+    `float("inf")`, so the budget check could never fire. A parameter a function
+    needs in order to be CORRECT must not carry a default standing for absent
+    (L168): the caller that forgets gets silence, not a refusal.
+    """
+    spy = _Spy()
+    body = f"{_PROSE}\n\n[PHOTO: DSC0001.jpg | A male performer sings]\n\n{_PROSE}"
+
+    def drafted(prompt, timeout=600, image_paths=None, image_labels=None, **k):
+        return {"body": body, "photo_count": 1}
+
+    with patch.object(_gb, "run_json_prompt", side_effect=drafted), \
+         patch.object(_gb, "repair_alt_text", spy):
+        _gb.generate_blog(event="E", org="O", venue=VENUE, date="2026-04-05",
+                          program=PROGRAM, photo_paths=[_photo],
+                          skip_humanizer=True, skip_voice_pass=True)
+
+    assert spy.deadline not in (None, float("inf")), (
+        f"generation handed the pass {spy.deadline!r}, so nothing stops it "
+        f"carrying the process past its own ceiling")
+
+
+def test_the_swap_bounds_the_pass_too(_photo):
+    spy = _Spy()
+
+    def drafted(prompt, timeout=300, image_paths=None, image_labels=None, **k):
+        return {"body": f"{_PROSE}\n\n[PHOTO: DSC0001.jpg | A male performer sings]",
+                "photo_count": 1}
+
+    with patch.object(_swap, "run_json_prompt", side_effect=drafted), \
+         patch.object(_swap, "repair_alt_text", spy):
+        _swap.swap_blog_photos(
+            body=f"{_PROSE}\n\n[PHOTO: old.jpg | old alt]",
+            photo_paths=[_photo], program=PROGRAM, venue=VENUE)
+
+    assert spy.deadline not in (None, float("inf")), (
+        f"the swap handed the pass {spy.deadline!r}, so a swap of several "
+        f"photographs is the route able to outlive its own process")
+
+
+@pytest.mark.parametrize("path", ["generate_blog.py", "swap_blog_photos.py",
+                                  "retry_blog_repair.py"])
+def test_no_path_calls_the_pass_without_a_deadline(path):
+    """The structural half. The two tests above prove the derivation works on
+    the paths they drive; this one refuses a FOURTH caller added later that
+    forgets, which is how both of these got here (L96)."""
+    tree = ast.parse((_AI / path).read_text(encoding="utf-8"))
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and getattr(n.func, "id", None) == "repair_alt_text"]
+    assert calls, f"{path} never calls repair_alt_text"
+    for call in calls:
+        assert any(kw.arg == "deadline" for kw in call.keywords), (
+            f"{path} line {call.lineno} runs the repair pass with no deadline, "
+            f"so its budget check can never fire")
+
+
+def test_a_derived_deadline_sits_inside_the_ceiling_rather_than_on_it():
+    """A deadline EQUAL to the ceiling races it, and whichever fires first
+    decides what Dan is told."""
+    deadline = deadline_from(started_at=0.0, now=lambda: 0.0)
+    assert deadline == PROCESS_CEILING - CEILING_HEADROOM
+    assert deadline < PROCESS_CEILING

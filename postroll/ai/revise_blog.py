@@ -55,6 +55,7 @@ from .ai_tells import (
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .blog_findings import RepairState
 from .blog_marker_splice import splice_retained_markers
+from .repair_log import RepairLog
 from .blog_quality import _PHOTO_MARKER, _fold_filename
 from .progress import ProgressWriter
 from .blog_quality import (check_blog_targeted, filenames_used_by, finding_entry,
@@ -341,10 +342,23 @@ def revise_blog(
     #
     # Runs after the filename repair, because it reads marker names, and before
     # the checks, so the panel reports where a marker IS rather than where it was.
-    final_body, moved = repair_marker_placement(final_body)
-    for name, why in moved:
-        print(f"[revise_blog] MOVED marker {name!r} ({why})",
+    placement = repair_marker_placement(final_body)
+    final_body = placement.body
+    # Recorded where it outlives publication (#1172). A move changes what
+    # Dan published without saying so, and a REFUSAL is reported only on a
+    # panel that clears while the condition stays, so neither survives to
+    # answer the question afterwards unless it is written here.
+    _placement_log = RepairLog(event=venue or "", script="revise_blog")
+    for marker, why in placement.moved:
+        print(f"[revise_blog] MOVED marker {marker!r} ({why})",
               flush=True, file=sys.stderr)
+        _placement_log.moved(marker=marker, rule=why, placed=True, reason="")
+    for marker, why in placement.refused:
+        print(f"[revise_blog] REFUSED to move marker {marker!r} ({why}): "
+              f"no derived destination", flush=True, file=sys.stderr)
+        _placement_log.moved(
+            marker=marker, rule=why, placed=False,
+            reason="no prose below the stack to move it into")
 
     # Targeted, so the payload can say which marker each finding is about
     # (#1160). Same findings, same order, targets kept.

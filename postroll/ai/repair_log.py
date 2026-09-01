@@ -93,6 +93,30 @@ class RepairLog:
             "reason": reason,
         })
 
+    def moved(self, *, marker: str, rule: str, placed: bool,
+              reason: str) -> bool:
+        """One photo marker the placement repair moved, or declined to move.
+
+        Both outcomes, and `placed` is what separates them (#1172). A MOVE
+        changes what Dan published, silently, and nothing else records it. A
+        REFUSAL is reported by `check_blog` on the panel, but the panel is
+        transient while the condition persists, so this is the only record that
+        the app looked at a stack and found nowhere derived to put it (L98,
+        L126).
+
+        Kept apart from `attempt`, which is about rewriting alt text with the
+        photograph attached. These share no fields worth sharing: a move has no
+        before and after text, and folding them would make one record answer
+        two different questions.
+        """
+        return self._write({
+            "kind": "moved",
+            "marker": marker,
+            "rule": rule,
+            "placed": placed,
+            "reason": reason,
+        })
+
     def declined(self, *, code: str, count: int, reason: str,
                  issue: str) -> bool:
         """One code the pass did not attempt, and how often it fired.

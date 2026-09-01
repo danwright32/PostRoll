@@ -236,3 +236,101 @@ def test_placement_runs_after_the_filename_repair_and_before_the_checks(module):
     assert max(placement) < max(checks), (
         f"{module}: placement at {placement} runs after check_blog at "
         f"{checks}, so the panel reports where a marker USED to be")
+
+
+# --- a move is recorded where it outlives publication (#1172) --------------
+
+def test_a_refused_move_is_reported_as_well_as_a_made_one():
+    """The pass has to SAY what it declined, not only what it did.
+
+    A refusal is reported by `check_blog` on the panel, and the panel is
+    transient while the condition persists. So without this the only record
+    that the app looked at a stack and declined vanishes when the post ships
+    (L98, L126), and the two outcomes are indistinguishable to anything reading
+    afterwards.
+    """
+    before = body_of(P[0], P[1], M1, M2)      # a stack with no prose beneath
+    after, moves = repair_marker_placement(before)
+
+    assert after == before and moves == []
+    refused = repair_marker_placement(before).refused
+    assert [name for name, _why in refused] == ["two.jpg"]
+
+
+def test_a_move_that_happened_is_reported_with_the_rule_that_fired():
+    before = body_of(P[0], M1, M2, P[1], P[2])
+    result = repair_marker_placement(before)
+    moved, refused = result.moved, result.refused
+
+    assert moved == [("two.jpg", "stacked_photos")]
+    assert refused == []
+
+
+def test_a_partly_repaired_stack_reports_both_halves():
+    """One marker placed, one with nowhere to go. Reporting only the move would
+    say the stack was handled."""
+    before = body_of(P[0], M1, M2, M3, P[1])
+    result = repair_marker_placement(before)
+    moved, refused = result.moved, result.refused
+
+    assert [n for n, _ in moved] == ["two.jpg"]
+    assert [n for n, _ in refused] == ["three.jpg"]
+
+
+def test_a_clean_body_reports_neither():
+    result = repair_marker_placement(body_of(P[0], M1, P[1], M2, P[2]))
+    assert result.moved == [] and result.refused == []
+
+
+def test_the_two_lists_never_name_the_same_marker():
+    """Moved and refused are opposite outcomes, and a marker in both would make
+    the record say the app did and did not place it (L517)."""
+    for before in (body_of(P[0], M1, M2, M3, P[1]),
+                   body_of(P[0], M1, M2, M3, P[1], P[2], P[3]),
+                   body_of(P[0], P[1], M1, M2)):
+        result = repair_marker_placement(before)
+        assert not ({n for n, _ in result.moved}
+                    & {n for n, _ in result.refused})
+
+
+def _journalled_outcomes(module: str) -> set[bool]:
+    """The `placed` values each path actually writes to the journal.
+
+    Read as a SET of both outcomes rather than as "a `.moved` call exists".
+    The first version asked only whether the module called `.moved` anywhere,
+    and deleting the placed branch left the refused branch to answer for it:
+    the mutation survived and the guard reported green (L178).
+    """
+    tree = ast.parse((AI / module).read_text(encoding="utf-8"))
+    out: set[bool] = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call)
+                and getattr(node.func, "attr", None) == "moved"):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg == "placed" and isinstance(keyword.value, ast.Constant):
+                out.add(bool(keyword.value.value))
+    return out
+
+
+@pytest.mark.parametrize("module", PATHS)
+def test_every_blog_path_journals_what_it_moved(module):
+    """Built is not wired, and a journal only one path writes to is worse than
+    none: the record would be complete for one route and silently empty for the
+    others, with nothing saying which (L3, L98)."""
+    assert True in _journalled_outcomes(module), (
+        f"{module} moves markers and records none of it, so what it changed "
+        f"about the post does not survive publication")
+
+
+@pytest.mark.parametrize("module", PATHS)
+def test_every_blog_path_journals_what_it_refused(module):
+    """The half that is easy to forget, and the only one with no other record.
+    A move at least changed the post; a refusal leaves the post as it was and
+    the panel clears while the condition stays."""
+    assert False in _journalled_outcomes(module), (
+        f"{module} never records a refusal, so a stack the app looked at and "
+        f"declined to move is recorded nowhere")
+    assert ".refused" in (AI / module).read_text(encoding="utf-8"), (
+        f"{module} writes a refusal record without reading the pass's own "
+        f"refusals, so it is recording something it did not measure")
