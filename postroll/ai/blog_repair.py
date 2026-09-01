@@ -37,8 +37,12 @@ from .ai_tells import strip_em_dashes
 from .blog_findings import Finding, RepairState
 from .blog_photo_stamps import decode_photo_path
 from .blog_quality import (ALT_MAX_WORDS, ALT_MIN_WORDS, _PHOTO_MARKER,
-                           _fold_filename, _markers, check_alt_text)
-from .blog_repair_damage import Touched, blog_repair_damage
+                           _fold_filename, _markers, check_alt_text,
+                           check_blog_targeted, repair_marker_placement,
+                           shared_opening_groups)
+from .blog_repair_examples import EXAMPLES
+from .blog_repair_damage import (CROSS_MARKER_CODES, Touched,
+                                 blog_repair_damage)
 from .repair_log import RepairLog
 from .claude_client import ClaudeError, run_json_prompt
 
@@ -94,6 +98,7 @@ class NoRepairReason:
     reason: str
     issue: str
     gate: str = ""
+    settled: str = ""
 
 
 PROCESS_CEILING = 1800.0
@@ -145,8 +150,35 @@ Rules for the replacement:
   satisfy a rule: a description that names the venue and the performer and says
   nothing about the picture is worse than the one it replaces.
 
+{examples}
 Return JSON ONLY, no markdown fences:
 {{"alt": "<the replacement>"}}"""
+
+
+def render_examples() -> str:
+    """The worked examples, as before and after pairs (#1161).
+
+    Both halves, because a worked example is the CHANGE: showing only the good
+    version teaches what good looks like and nothing about what to do with a
+    bad one.
+
+    The warning about names is not decoration. Every example names a real venue
+    and real people from a different post, and a demonstration outweighs an
+    instruction (L270), so the risk of a name bleeding into this rewrite is
+    real. It is not the only guard: the acceptance check re-runs
+    `alt_text_missing_venue` against THIS post's venue, so a rewrite naming
+    Greenwich House Theater on a Carnegie Hall post is refused and retried.
+    """
+    if not EXAMPLES:
+        return ""
+    out = ["Worked examples, from corrections a person made by hand. Follow "
+           "their SHAPE only: their venue and their names belong to other "
+           "posts and must not appear in your answer.", ""]
+    for i, example in enumerate(EXAMPLES, start=1):
+        out.append(f"Example {i} before: {example.before}")
+        out.append(f"Example {i} after:  {example.after}")
+        out.append("")
+    return "\n".join(out)
 
 
 @dataclass
@@ -206,8 +238,20 @@ def repair_alt_text(
         journal: Callable[[dict], None] | None = None,
         log: RepairLog | None = None,
         say: Any = None,
+        only: list[str] | None = None,
 ) -> RepairOutcome:
     """Rewrite every alt text a check refused, one call per marker.
+
+    `only`, when given, restricts the pass to those markers, which is what a
+    retry of the ones it could not finish needs (#1160). `None` means every
+    failing marker; an EMPTY LIST means none were named, and the two are
+    deliberately different: a retry handed no markers must do nothing rather
+    than repair the whole post.
+
+    It restricts SELECTION rather than `photo_paths`, and that is not a detail.
+    Handing in fewer paths looks equivalent and is not: a marker with no path
+    is `blocked`, so every marker the retry was not about would come back
+    reported as carrying a failure it never had.
 
     `photo_paths` maps a marker's filename to the file on disk. `deadline` is an
     ABSOLUTE value on `now()`'s scale, derived by the caller from its own process
@@ -229,7 +273,7 @@ def repair_alt_text(
                          photo_paths=photo_paths, runner=runner, now=now,
                          deadline=deadline, max_rounds=max_rounds,
                          timeout=timeout, journal=journal, log=log, say=say,
-                         performers=performers)
+                         performers=performers, only=only)
     finally:
         # On EVERY exit path, including the ones that threw above the loop
         # (L514, L515). Rule 1 removed every other signal, so without this a
@@ -244,7 +288,8 @@ def repair_alt_text(
 
 
 def _run_pass(body, outcome, *, program, venue, photo_paths, runner, now,
-              deadline, max_rounds, timeout, journal, log, say, performers):
+              deadline, max_rounds, timeout, journal, log, say, performers,
+              only=None):
     """The loop. Separated so the PASS record's `finally` cannot be skipped."""
     # `ran` is set on the way OUT, never on the way in. It means the pass ran to
     # COMPLETION, which is the question the panel asks: a pass that threw
@@ -255,15 +300,68 @@ def _run_pass(body, outcome, *, program, venue, photo_paths, runner, now,
     # Which markers a check refused. Selected from `check_alt_text`, which is
     # literally the call the acceptance check re-runs, so a marker cannot be
     # selected by one rule and accepted by a different reading of it (L263).
+    def components(current: str) -> dict[str, frozenset[str]]:
+        """Every marker to the set of markers it is repaired WITH (#1159).
+
+        A marker alone is its own component. Markers the opening rule names
+        together are one, because rewriting any of them changes what the others
+        break: the rule is a fact about the relationship between them.
+        """
+        out: dict[str, frozenset[str]] = {}
+        for group in shared_opening_groups(current):
+            keys = frozenset(_fold_filename(n) for n in group)
+            for key in keys:
+                out[key] = keys
+        return out
+
+    def cross_marker(current: str) -> dict[str, list[Finding]]:
+        """The cross-marker findings, attributed to every marker they NAME.
+
+        Read from `check_blog_targeted` rather than rebuilt, so the finding the
+        pass acts on is the checker's own (L263). It is TARGETED on the first
+        marker of the group, because a finding needs one stable key, but it is
+        ABOUT all of them, and selection has to see it on each.
+        """
+        by_target: dict[str, Finding] = {}
+        for finding, target in check_blog_targeted(current, program=program,
+                                                   venue=venue):
+            if finding.code in CROSS_MARKER_CODES and target.kind == "marker":
+                by_target[target.key] = finding
+        out: dict[str, list[Finding]] = {}
+        for key, group in components(current).items():
+            for target_key, finding in by_target.items():
+                if target_key in group:
+                    out.setdefault(key, []).append(finding)
+        return out
+
+    # Which markers a check refused. The per-marker rules come from
+    # `check_alt_text`, which is literally the call the acceptance check
+    # re-runs, so a marker cannot be selected by one rule and accepted by a
+    # different reading of it (L263). The cross-marker rule is added here
+    # because `check_alt_text` is the six rules about ONE marker and cannot
+    # produce it at all: before this, the repairer table claimed
+    # `alt_text_repeated_opening` was repaired and no marker was ever selected
+    # for it (#1159).
     def failing(current: str) -> dict[str, list[Finding]]:
         out: dict[str, list[Finding]] = {}
+        cross = cross_marker(current)
         for name, alt in _markers(current):
-            found = check_alt_text(name, alt, venue=venue, performers=performers)
+            key = _fold_filename(name)
+            found = list(check_alt_text(name, alt, venue=venue,
+                                        performers=performers))
+            found += cross.get(key, [])
             if found:
-                out[_fold_filename(name)] = found
+                out[key] = found
         return out
 
     selected = failing(body)
+    if only is not None:
+        # Folded, because every other comparison in the pass is: a marker
+        # differing from a real filename only in which quote or dash was typed
+        # names that file, and a retry keyed on the raw spelling would silently
+        # match nothing and report a successful pass that did nothing (L98).
+        wanted = {_fold_filename(n) for n in only}
+        selected = {k: v for k, v in selected.items() if k in wanted}
     outcome.selected = sorted(selected)
     _record_declined(log, body, program=program, venue=venue)
     if not selected:
@@ -289,7 +387,8 @@ def _run_pass(body, outcome, *, program, venue, photo_paths, runner, now,
             timeout=timeout, max_rounds=max_rounds, rounds=rounds,
             now=now, deadline=deadline, journal=journal, say=say,
             index=outcome.selected.index(key) + 1,
-            total=len(outcome.selected))
+            total=len(outcome.selected),
+            failing=failing, components=components)
         outcome.states[key] = state
 
     outcome.remaining = deadline - now()
@@ -335,7 +434,7 @@ def _record_declined(log, body, *, program, venue) -> None:
 
 def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
                 runner, timeout, max_rounds, rounds, now, deadline, journal,
-                say, index, total) -> RepairState:
+                say, index, total, failing, components) -> RepairState:
     """Up to `max_rounds` attempts at one marker. Returns its final state."""
     state = RepairState.TRIED
 
@@ -346,7 +445,7 @@ def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
             return RepairState.BLOCKED
         name, alt = current[key]
 
-        found = check_alt_text(name, alt, venue=venue, performers=performers)
+        found = failing(outcome.body).get(key, [])
         if not found:
             # Nothing left to fix on this marker. Reached on the second round
             # after a first that landed, and on the first when an earlier
@@ -385,7 +484,8 @@ def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
         prompt = PROMPT.format(
             alt=alt,
             findings="".join(f"- {f.code}: {f.message}\n" for f in found),
-            min_words=ALT_MIN_WORDS, max_words=ALT_MAX_WORDS, naming=naming)
+            min_words=ALT_MIN_WORDS, max_words=ALT_MAX_WORDS, naming=naming,
+            examples=render_examples())
 
         try:
             answer = runner(prompt, timeout=timeout, image_paths=[resolved],
@@ -403,10 +503,15 @@ def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
 
         candidate = strip_em_dashes(str((answer or {}).get("alt", "")).strip())
 
-        # Acceptance, in this order: strip, re-run literally the rules that
-        # selected it, then the gate over the whole body.
-        remaining = check_alt_text(name, candidate, venue=venue,
-                                   performers=performers)
+        # Acceptance, in this order: strip, splice, re-run literally the rules
+        # that selected it, then the gate over the whole body.
+        #
+        # Spliced FIRST because one of those rules is about the relationship
+        # between markers, and a rule of that shape cannot be evaluated against
+        # a candidate string on its own: whether this opening repeats depends on
+        # what the other markers say (#1159).
+        spliced = _splice_one(outcome.body, name, candidate)
+        remaining = failing(spliced).get(key, [])
         if remaining:
             _record(journal, outcome, key=key, name=name, before=alt,
                     after=candidate, codes=[f.code for f in found],
@@ -415,11 +520,15 @@ def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
             state = RepairState.TRIED
             continue
 
-        spliced = _splice_one(outcome.body, name, candidate)
+        # Licensed as a component, not as one marker. A repair that clears the
+        # opening rule here can leave the remaining members still sharing with
+        # each other, which per marker reads as a finding introduced on someone
+        # the repair never touched.
+        component = components(outcome.body).get(key, frozenset({key}))
         reasons = blog_repair_damage(
             outcome.body, spliced, program=program, venue=venue,
             photo_filenames=list(photo_paths),
-            touched=Touched.marker(name))
+            touched=Touched.marker(name, component=sorted(component)))
         if reasons:
             _record(journal, outcome, key=key, name=name, before=alt,
                     after=candidate, codes=[f.code for f in found],
@@ -494,8 +603,16 @@ REPAIRERS: dict[str, "object"] = {
     "alt_text_missing_performer": repair_alt_text,
     "alt_text_inferred_state": repair_alt_text,
     "alt_text_appearance_descriptor": repair_alt_text,
-    # Repaired as part of a component: it names several markers in one finding,
-    # so rewriting one changes another's finding set.
+    # Repaired as part of a COMPONENT, and since #1159 the loop actually does
+    # this. It was a claim nothing honoured: the pass picks its targets from
+    # `check_alt_text`, which is the six rules about one marker and cannot
+    # produce this code, so no marker was ever selected for it. Selection now
+    # reads the cross-marker rule from `check_blog_targeted` and attributes it
+    # to every marker the group names, the acceptance check runs on the SPLICED
+    # body because whether an opening repeats depends on what the other markers
+    # say, and the damage gate judges the code across the licensed component
+    # rather than per marker, so relocating it while the group shrinks is not
+    # read as a finding introduced on somebody the repair never touched.
     "alt_text_repeated_opening": repair_alt_text,
 
     # --- repaired already, deterministically, before this pass --------------
@@ -506,7 +623,11 @@ REPAIRERS: dict[str, "object"] = {
                "that is a name the model genuinely invented, and snapping it to "
                "the nearest file would put the wrong photograph under prose "
                "written about a different one.",
-        issue="#1149"),
+        issue="#1149",
+        settled="Decided 2026-09-01 and closed. The deterministic half already "
+                "runs, and what survives it is an invented name; snapping it "
+                "to the nearest of the 0 candidate files that would be a real "
+                "match is the failure, not the fix."),
 
     # --- no repairer in v1, each with the issue that would change that ------
     "blog_marker_missing_photo": NoRepairReason(
@@ -515,7 +636,12 @@ REPAIRERS: dict[str, "object"] = {
                "exceeds rule 3 and rule 4 and sits on rule 9's drops a photo "
                "inverted. The evidence this finding was incidentally providing "
                "now has a deliberate home in photo_stamps (#1130, L277).",
-        issue="#1149"),
+        issue="#1149",
+        settled="Decided 2026-09-01 and closed, not deferred. It fires 0 times "
+                "on the 21 stored final bodies, because check_blog only runs "
+                "the filename rules where a photo list is available, and the "
+                "repair it would need writes new prose about a photograph's "
+                "content, which no rule here permits."),
     "invented_number": NoRepairReason(
         reason="The only proposed repair that DELETES a claim from prose Dan "
                "publishes, and it already carries three suppression mechanisms "
@@ -523,34 +649,46 @@ REPAIRERS: dict[str, "object"] = {
                "stored posts he considered finished, which says its rate is "
                "high and nothing about its accuracy.",
         issue="#1150",
-        gate="a hand review of a stated number of real posts, recorded on the "
-             "issue with the count and the date, OR a control that lets Dan "
-             "mark a finding as wrong. Not a rate read off the journal: a "
-             "DECLINED record says the check fired, never that it fired "
-             "wrongly."),
+        settled="The first of the two gates was taken: a hand review of all 32 "
+                "firings across the 21 stored final bodies, 2026-09-01. 8 "
+                "fired on photo filenames and alt text leaking into the prose "
+                "rule's input, 3 on numerals carrying no count (the years 1969 "
+                "and 2009, and the festival name in 'America at 250'), and 21 "
+                "on real counts in prose, many of them counting what is "
+                "visible in the photograph directly above. None was a number a "
+                "reader would call wrong. A silent deleter would have removed "
+                "32 true or harmless claims from 15 of 21 published posts and "
+                "0 false ones, which is the named failure this milestone "
+                "exists to prevent."),
     "demographic_grouping": NoRepairReason(
         reason="The same shape as invented_number: a claim deleted from prose "
                "Dan publishes. It fires 0 times on the 21 stored posts, which "
                "is a weaker case for a repairer rather than a stronger one.",
         issue="#1151",
-        gate="the same gate as invented_number: a hand review with a count and "
-             "a date, or a control to mark a finding wrong."),
+        settled="Settled with invented_number by the same hand review, "
+                "2026-09-01: 0 firings across the 21 stored final bodies. A "
+                "claim-deleting repair with no observed firing has no evidence "
+                "it would delete the right claim, so 0 firings is a weaker "
+                "case for building one than a high rate would be, not a "
+                "stronger one."),
     "repeated_construction": NoRepairReason(
         reason="Rewriting it means choosing which of two uses of a construction "
                "to keep and what to put in place of the other, which is a "
                "judgement about the prose rather than a fact the app holds "
                "(rule 3). It fires 0 times on the 21 stored posts.",
-        issue="#1152"),
-    "stacked_photos": NoRepairReason(
-        reason="Repairing it MOVES a marker, and where it should go is a "
-               "judgement about the flow of the post; #998 records what happens "
-               "when a rewriter guesses a marker's position. Until #1129 "
-               "nothing here could see a marker reorder at all, so this is "
-               "buildable in a way it was not.",
-        issue="#1153"),
-    "late_first_photo": NoRepairReason(
-        reason="The same as stacked_photos: repairing it moves a marker, and "
-               "where it belongs is a judgement about the flow of the post "
-               "rather than a fact the app already holds.",
-        issue="#1154"),
+        issue="#1152",
+        settled="Decided 2026-09-01 and closed. 0 firings across the 21 stored "
+                "final bodies, and the repair needs a judgement about which "
+                "use of a construction to keep and what replaces the other, "
+                "which is prose the app would be writing rather than a fact it "
+                "already holds."),
+
+    # --- repaired deterministically, by MOVING a marker (#1153, #1154) ------
+    # Not a model call and not a rewrite. The destination is read off the rule
+    # that fired rather than judged, no prose is written or lost, and
+    # photographs keep their order relative to each other. Where no destination
+    # can be derived it refuses and the check reports, which is why these two
+    # codes can still appear on the panel after a pass (L98).
+    "stacked_photos": repair_marker_placement,
+    "late_first_photo": repair_marker_placement,
 }

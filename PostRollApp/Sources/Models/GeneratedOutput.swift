@@ -120,25 +120,48 @@ struct QualityFinding: Codable, Hashable, Identifiable {
     /// broken, instead of failing to decode the whole post.
     var repair: String = ""
 
+    /// The marker this finding is ABOUT, folded, or empty when it is not about
+    /// one (#1160).
+    ///
+    /// Carried rather than parsed back out of `detail`. `detail` embeds the
+    /// offending text, it truncates at 90 characters, and `stacked_photos`
+    /// formats it with no filename in it at all, so a control reading a
+    /// filename out of prose silently matches nothing the day a message is
+    /// reworded. Empty on every post written before this field existed, which
+    /// offers no retry: correct rather than broken.
+    var target: String = ""
+
+    /// `repair` as the enum, so a caller asking what state this is in does not
+    /// re-derive the mapping. Unknown strings become never-attempted, which is
+    /// what `RepairState.init(raw:)` already promises.
+    var repairState: RepairState { RepairState(raw: repair) }
+
     /// Includes `repair` because two findings of one code in DIFFERENT repair
     /// states are two rows, and SwiftUI silently renders one of any pair
     /// sharing an id.
     var id: String { "\(code)|\(repair)|\(detail)" }
 
     init(code: String = "", message: String = "", detail: String = "",
-         repair: String = "") {
+         repair: String = "", target: String = "") {
         self.code = code
         self.message = message
         self.detail = detail
         self.repair = repair
+        self.target = target
     }
 
+    /// Hand written, so every field added after it has to be added HERE too
+    /// (#1022, L317). A field left out is not a compile error: it silently
+    /// decodes as its default forever, and the failure surfaces far away as a
+    /// blank rather than as a refusal. `target` was exactly that on the first
+    /// attempt, and the control that reads it simply never appeared.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         code    = try c.decodeIfPresent(String.self, forKey: .code)    ?? ""
         message = try c.decodeIfPresent(String.self, forKey: .message) ?? ""
         detail  = try c.decodeIfPresent(String.self, forKey: .detail)  ?? ""
         repair  = try c.decodeIfPresent(String.self, forKey: .repair)  ?? ""
+        target  = try c.decodeIfPresent(String.self, forKey: .target)  ?? ""
     }
 }
 
@@ -245,6 +268,24 @@ enum RepairState: String, CaseIterable {
         }
     }
 
+    /// Whether this state invites trying again.
+    ///
+    /// Only `blocked` and `not_reached`. The other three must not: `tried`
+    /// says the app will not get it next time either, `unavailable` says this
+    /// path has no photograph to check against, and never-attempted is every
+    /// finding on every post written before the pass existed. Offering a retry
+    /// on any of those spends a paid call to reproduce the same answer.
+    ///
+    /// `note` says "Worth trying again" for exactly these two, and a test ties
+    /// the two together: a state whose words invite a retry while no control
+    /// appears is the dead control this exists to remove (L109).
+    var invitesRetry: Bool {
+        switch self {
+        case .blocked, .notReached: return true
+        case .never, .tried, .unavailable: return false
+        }
+    }
+
     var icon: String {
         switch self {
         case .never:       return "exclamationmark.triangle"
@@ -253,6 +294,41 @@ enum RepairState: String, CaseIterable {
         case .unavailable: return "minus.circle"
         case .notReached:  return "clock.badge.exclamationmark"
         }
+    }
+}
+
+/// What a retry of the repairs did (#1160).
+///
+/// `retry` is not decoration. Repairs are silent, so a retry that repaired
+/// nothing and a retry that never ran would otherwise read identically on the
+/// only surface that reports either (L98), and the panel has to be able to say
+/// which happened.
+struct BlogRepairRetryResult: Codable, Hashable {
+    var body: String = ""
+    var findings: [QualityFinding] = []
+    var retry: Summary = Summary()
+
+    struct Summary: Codable, Hashable {
+        var ran: Bool = false
+        var selected: Int = 0
+        var repaired: Int = 0
+    }
+
+    /// What to tell Dan when it finishes, in his terms rather than in states.
+    ///
+    /// A retry that repaired none of what it tried is not a failure and must
+    /// not be reported as one: the app tried and its own checks refused the
+    /// result, which is `tried`, and saying so is the difference between an
+    /// honest outcome and a message that invites him to press it again
+    /// forever (L11, L109).
+    var note: String {
+        if !retry.ran { return "The retry did not finish." }
+        if retry.selected == 0 { return "Nothing left to retry." }
+        if retry.repaired == 0 {
+            return "Tried \(retry.selected) again and the checks still refused "
+                 + "them, so pressing again will not help."
+        }
+        return "Rewrote \(retry.repaired) of \(retry.selected)."
     }
 }
 

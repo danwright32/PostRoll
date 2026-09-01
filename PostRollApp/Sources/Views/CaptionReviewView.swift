@@ -471,6 +471,15 @@ struct CaptionReviewView: View {
                             eventID: event.id,
                             revisionStartedAt: captionWork.startedAt(event.id, .reviseBlog),
                             photoSwapStartedAt: captionWork.startedAt(event.id, .swapBlogPhotos),
+                            onRetryRepairs: { markers in
+                                captionWork.startRetryingBlogRepairs(
+                                    eventID: event.id, markers: markers,
+                                    appState: appState)
+                            },
+                            isRetryingRepairs: captionWork.isRunning(event.id, .retryBlogRepairs),
+                            retryError: blogRetry?.failure,
+                            retryNote: blogRetry?.retryNote,
+                            retryStartedAt: captionWork.startedAt(event.id, .retryBlogRepairs),
                             undoBlog: blogRevision?.previousBlog ?? photoSwap?.previousBlog,
                             onUndoBlogChange: { undoBlogChange() }
                         )
@@ -480,6 +489,11 @@ struct CaptionReviewView: View {
                             adoptStoredBlog()
                         }
                         .onChange(of: captionWork.isRunning(event.id, .swapBlogPhotos)) {
+                            adoptStoredBlog()
+                        }
+                        // A retry rewrites the body underneath this screen too,
+                        // so it needs the same pick-up as the other two (#718).
+                        .onChange(of: captionWork.isRunning(event.id, .retryBlogRepairs)) {
                             adoptStoredBlog()
                         }
                         .disabled(isRegenerating)
@@ -814,13 +828,16 @@ struct CaptionReviewView: View {
         captionWork.clearOutcome(for: event.id, .reviseCaption(day))
     }
 
-    // MARK: - The blog's two runs
+    // MARK: - The blog's three runs
 
     private var blogRevision: CaptionWorkManager.Outcome? {
         captionWork.outcome(for: event.id, .reviseBlog)
     }
     private var photoSwap: CaptionWorkManager.Outcome? {
         captionWork.outcome(for: event.id, .swapBlogPhotos)
+    }
+    private var blogRetry: CaptionWorkManager.Outcome? {
+        captionWork.outcome(for: event.id, .retryBlogRepairs)
     }
 
     private func adoptStoredBlog() {

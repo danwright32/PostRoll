@@ -41,10 +41,11 @@ from .blog_photo_stamps import Retention, photo_stamps, retention_for
 from .blog_repair import repair_alt_text
 from .blog_repair_damage import Touched, blog_repair_damage
 from .repair_log import RepairLog
-from .blog_quality import (_PHOTO_MARKER, _fold_filename, check_blog,
+from .blog_quality import (_PHOTO_MARKER, _fold_filename, check_blog_targeted,
                            filenames_used_by, finding_entry,
                            refuse_colliding_filenames,
-                           repair_marker_filenames)
+                           repair_marker_filenames,
+                           repair_marker_placement)
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 from .progress import ProgressWriter
@@ -337,6 +338,21 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             print(f"[swap_blog_photos] REPAIRED marker filename: {was!r} -> {now!r}",
                   flush=True, file=sys.stderr)
 
+        # Move a marker the placement rules refused, deterministically (#1153, #1154).
+        #
+        # The second exception to the report-only rule, and it is narrow for the same
+        # reason the first one is: nothing is invented. No prose is written or lost,
+        # and photographs keep their order relative to each other. Both destinations
+        # are read off the rules rather than judged, and a move with no derived
+        # destination is refused and left for the checks to report (L98).
+        #
+        # Runs after the filename repair, because it reads marker names, and before
+        # the checks, so the panel reports where a marker IS rather than where it was.
+        final_body, moved = repair_marker_placement(final_body)
+        for name, why in moved:
+            print(f"[swap_blog_photos] MOVED marker {name!r} ({why})",
+                  flush=True, file=sys.stderr)
+
         # The swap stages every photograph, so rule 4 licenses the same repair
         # generation gets (#1133). Without this the swap emitted a bad alt text
         # and every finding read as NEVER ATTEMPTED, which renders exactly like
@@ -355,8 +371,12 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         # The same deterministic checks the generate and revise paths run (#201).
         # The rest are reported, never rewritten: alt text cannot be corrected
         # without seeing the photograph.
-        findings = check_blog(final_body, program=program, venue=venue,
-                              photo_filenames=photo_filenames)
+        # Targeted, so the payload can say which marker each finding is
+        # about (#1160). Same findings, same order, targets kept.
+        targeted = check_blog_targeted(final_body, program=program,
+                                       venue=venue,
+                                       photo_filenames=photo_filenames)
+        findings = [f for f, _t in targeted]
         for f in findings:
             print(f"[swap_blog_photos] CHECK {f.code}: {f.message} ({f.detail})",
                   flush=True, file=sys.stderr)
@@ -373,8 +393,9 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         return {
             "body":        final_body,
             "photo_count": len(photo_paths),
-            "findings": [finding_entry(f, repair=repair.repair_for(f))
-                         for f in findings],
+            "findings": [finding_entry(f, repair=repair.repair_for(f),
+                                       target=t.key)
+                         for f, t in targeted],
             # The exact text those findings were measured against, so an edited
             # draft stops showing findings about the body before the edit. The
             # caption paths have emitted their sibling `findings_caption` since

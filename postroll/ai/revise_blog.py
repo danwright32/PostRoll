@@ -57,8 +57,9 @@ from .blog_findings import RepairState
 from .blog_marker_splice import splice_retained_markers
 from .blog_quality import _PHOTO_MARKER, _fold_filename
 from .progress import ProgressWriter
-from .blog_quality import (check_blog, filenames_used_by, finding_entry,
-                           repair_marker_filenames)
+from .blog_quality import (check_blog_targeted, filenames_used_by, finding_entry,
+                           repair_marker_filenames,
+                           repair_marker_placement)
 from .generate_blog import (
     _fix_missing_contractions,
     _fix_second_person,
@@ -330,8 +331,26 @@ def revise_blog(
     for was, now in repairs:
         print(f"[revise_blog] REPAIRED marker filename: {was!r} -> {now!r}",
               flush=True, file=sys.stderr)
-    findings = check_blog(final_body, program=program, venue=venue,
-                          photo_filenames=in_the_post or None)
+    # Move a marker the placement rules refused, deterministically (#1153, #1154).
+    #
+    # The second exception to the report-only rule, and it is narrow for the same
+    # reason the first one is: nothing is invented. No prose is written or lost,
+    # and photographs keep their order relative to each other. Both destinations
+    # are read off the rules rather than judged, and a move with no derived
+    # destination is refused and left for the checks to report (L98).
+    #
+    # Runs after the filename repair, because it reads marker names, and before
+    # the checks, so the panel reports where a marker IS rather than where it was.
+    final_body, moved = repair_marker_placement(final_body)
+    for name, why in moved:
+        print(f"[revise_blog] MOVED marker {name!r} ({why})",
+              flush=True, file=sys.stderr)
+
+    # Targeted, so the payload can say which marker each finding is about
+    # (#1160). Same findings, same order, targets kept.
+    targeted = check_blog_targeted(final_body, program=program, venue=venue,
+                                   photo_filenames=in_the_post or None)
+    findings = [f for f, _t in targeted]
     for f in findings:
         print(f"[revise_blog] CHECK {f.code}: {f.message} ({f.detail})",
               flush=True, file=sys.stderr)
@@ -350,8 +369,9 @@ def revise_blog(
         "findings": [
             finding_entry(f, repair=(RepairState.UNAVAILABLE
                                      if f.code.startswith("alt_text_")
-                                     else RepairState.NEVER))
-            for f in findings],
+                                     else RepairState.NEVER),
+                          target=t.key)
+            for f, t in targeted],
         # The exact text those findings were measured against, so an edited
         # draft stops showing findings about the body before the edit. The
         # caption paths have emitted their sibling `findings_caption` since

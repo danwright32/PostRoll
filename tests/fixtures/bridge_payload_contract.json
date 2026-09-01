@@ -224,6 +224,24 @@
       "repair_pass": "swift"
     }
   },
+  "retried_blog_repair": {
+    "_what": "What a retry of the alt text repairs did, and the body it ended with (#1160). `retry` is not decoration: repairs are silent, so a retry that repaired nothing and one that never ran would otherwise read identically on the only surface reporting either.",
+    "python": [
+      {
+        "module": "postroll/ai/retry_blog_repair.py",
+        "function": "retry_blog_repair"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "BlogRepairRetryResult"
+    },
+    "keys": {
+      "body": "swift",
+      "findings": "swift",
+      "retry": "swift"
+    }
+  },
   "ocr_result": {
     "_what": "Structured program data read off the scanned pages.",
     "python": [
@@ -661,7 +679,8 @@
       "code": "swift",
       "message": "swift",
       "detail": "swift",
-      "repair": "swift"
+      "repair": "swift",
+      "target": "swift"
     }
   },
   "cover_result": {

@@ -39,7 +39,7 @@ struct LongRunIndicator: View {
     /// `AppPaths` can write: a run whose file nothing here reads shows as a
     /// bare spinner however much it writes (#1128, L46).
     enum Run: CaseIterable {
-        case captions, media, ocr, blog, blogPhotos
+        case captions, media, ocr, blog, blogPhotos, blogRetry
 
         func file(forEventID id: UUID) -> URL {
             switch self {
@@ -48,6 +48,7 @@ struct LongRunIndicator: View {
             case .ocr:        return AppPaths.ocrProgressFile(forEventID: id)
             case .blog:       return AppPaths.blogProgressFile(forEventID: id)
             case .blogPhotos: return AppPaths.blogPhotoSwapProgressFile(forEventID: id)
+            case .blogRetry:  return AppPaths.blogRepairRetryProgressFile(forEventID: id)
             }
         }
     }

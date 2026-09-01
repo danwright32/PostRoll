@@ -94,14 +94,22 @@ class RepairState(enum.Enum):
 
 
 def finding_entry(finding: Finding, *,
-                  repair: "RepairState | str" = "") -> dict[str, str]:
+                  repair: "RepairState | str" = "",
+                  target: str = "") -> dict[str, str]:
     """One finding, in exactly the fields the app decodes (#274).
 
     Three modules built this dict by hand, so a field added to Finding reached
     the app from whichever of them was remembered. One derivation, and the
     payload contract has one place to read.
 
-    `repair` is UNCONDITIONAL in the returned literal (#1132).
+    `target` is the folded filename the finding is ABOUT, when it is about a
+    marker, and empty otherwise (#1160). It is carried rather than parsed back
+    out of `detail`, because `detail` embeds the offending text, truncates at
+    90 characters, and for `stacked_photos` contains no filename at all. A
+    retry control reading a filename out of prose silently matches nothing the
+    day a message is reworded.
+
+    `repair` and `target` are UNCONDITIONAL in the returned literal (#1132).
     `tests/bridge_payload_keys.py` reads this dict literal and refuses a
     computed or conditional key, so a field added only when set would take the
     payload out of the contract's reach entirely. `Finding` stays a frozen
@@ -109,4 +117,5 @@ def finding_entry(finding: Finding, *,
     """
     state = repair.value if isinstance(repair, RepairState) else str(repair or "")
     return {"code": finding.code, "message": finding.message,
-            "detail": finding.detail, "repair": state}
+            "detail": finding.detail, "repair": state,
+            "target": str(target or "")}

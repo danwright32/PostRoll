@@ -172,6 +172,14 @@ def test_the_contract_is_valid_json_with_a_comment_that_says_why():
 CHECKED_TEXT_KEY = {
     "DayCaption": "findings_caption",
     "BlogOutput": "findings_body",
+    # The retry returns the body it ENDED with and measures its findings on
+    # exactly that, so the checked text is the body itself rather than a second
+    # field beside it (#1160). `findings_body` exists on BlogOutput because a
+    # stored draft goes on being edited while its findings persist; a retry's
+    # payload is consumed once, and the caller copies this straight into
+    # `findingsBody`, so a separate key here would be two names for one string
+    # and the pair could disagree.
+    "BlogRepairRetryResult": "body",
 }
 
 

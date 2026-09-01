@@ -36,6 +36,10 @@ final class CaptionWorkManager {
         case reviseCaption(DayName)
         case reviseBlog
         case swapBlogPhotos
+        /// Re-running the alt text repairs the pass could not finish (#1160).
+        /// Its own job rather than a second meaning for `reviseBlog`: they can
+        /// fail for different reasons and each needs its own message (L53).
+        case retryBlogRepairs
         /// The paid pass that reads Dan's hand edits before the week is
         /// exported (#526).
         case learnFromEdits
@@ -76,6 +80,15 @@ final class CaptionWorkManager {
         var previousCaption: DayCaption?
         /// The same, for the blog: a revision and a photo swap both replace it.
         var previousBlog: BlogOutput?
+        /// What a RETRY did, in a sentence (#1160).
+        ///
+        /// Its own field rather than `failure`, because a retry that rewrote
+        /// nothing is not a failure: the app tried and its own checks refused
+        /// the result, and reporting that as an error invites pressing the
+        /// button again forever (L11, L109). Repairs are silent, so without
+        /// this a retry that fixed everything and one that fixed nothing both
+        /// just update the panel and say nothing (L98).
+        var retryNote: String?
     }
 
     private let tracker = JobTracker<Key, Run>(elapsed: \.elapsedSeconds)
@@ -141,6 +154,11 @@ final class CaptionWorkManager {
         try await PythonBridge.shared.runBlogPhotoSwap(
             currentBody: $0, photoPaths: $1, event: $2, currentBlog: $3)
     }
+    var retryBlogRepairs: @Sendable (String, [String], [URL], Event) async throws
+        -> BlogRepairRetryResult = {
+        try await PythonBridge.shared.runBlogRepairRetry(
+            currentBody: $0, markers: $1, photoPaths: $2, event: $3)
+    }
     var learnFromEdits: @Sendable (WeekGenerationResult) async throws -> String? = {
         try await PythonBridge.shared.runLearnFromEdits(result: $0)
     }
@@ -164,6 +182,11 @@ final class CaptionWorkManager {
         -> BlogOutput = {
         try await PythonBridge.shared.runBlogPhotoSwap(
             currentBody: $0, photoPaths: $1, event: $2, currentBlog: $3)
+    }
+    let retryBlogRepairs: @Sendable (String, [String], [URL], Event) async throws
+        -> BlogRepairRetryResult = {
+        try await PythonBridge.shared.runBlogRepairRetry(
+            currentBody: $0, markers: $1, photoPaths: $2, event: $3)
     }
     let learnFromEdits: @Sendable (WeekGenerationResult) async throws -> String? = {
         try await PythonBridge.shared.runLearnFromEdits(result: $0)
@@ -339,6 +362,38 @@ final class CaptionWorkManager {
             stored.blogPhotoPaths = urls
             state.updateEvent(stored)
             return Outcome(previousBlog: current)
+        }
+    }
+
+    // MARK: - Retrying the repairs the pass could not finish (#1160)
+
+    /// Re-run the alt text repair over `markers` only.
+    ///
+    /// A FRESH pass over just those, not a resumed one: the round cap is per
+    /// pass and the pass is already re-entrant. Refused when it names nothing,
+    /// because this control exists to redo a few markers and a bug that redid
+    /// all of them would pay for the whole post again without being asked.
+    func startRetryingBlogRepairs(eventID: Event.ID, markers: [String],
+                                  appState: AppState) {
+        let key = Key(eventID: eventID, job: .retryBlogRepairs)
+        // Assume it runs twice (L33): two retries of one event write the same
+        // blog, and the second would land on top of the first's result.
+        guard !tracker.isActive(key) else { return }
+        guard !markers.isEmpty else { return }
+        guard let live = appState.events.first(where: { $0.id == eventID }),
+              let current = live.weekResult?.blog else { return }
+        let photos = live.blogPhotoPaths
+
+        run(key, brandVoiceNote: nil, appState: appState) { [retryBlogRepairs] in
+            try await retryBlogRepairs(current.body, markers, photos, live)
+        } write: { [weak self] updated, state in
+            var next = current
+            next.body = updated.body
+            // From the payload rather than from `updated.body`, so the text the
+            // checks ran on is stated once, by the half that ran them (#974).
+            next.applyFindings(updated.findings, checkedBody: updated.body)
+            self?.writeWeek(to: eventID, in: state) { $0.blog = next }
+            return Outcome(previousBlog: current, retryNote: updated.note)
         }
     }
 

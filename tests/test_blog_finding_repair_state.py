@@ -37,7 +37,7 @@ def test_a_finding_with_no_repair_state_still_says_so_explicitly():
     entry = finding_entry(Finding("alt_text_length", "m", "d"))
 
     assert entry["repair"] == "", entry
-    assert set(entry) == {"code", "message", "detail", "repair"}
+    assert set(entry) == {"code", "message", "detail", "repair", "target"}
 
 
 @pytest.mark.parametrize("state", list(RepairState))

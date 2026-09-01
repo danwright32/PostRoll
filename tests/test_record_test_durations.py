@@ -553,3 +553,57 @@ def test_a_full_record_says_every_file_came_from_the_same_run():
 
     assert stamped == {"a.py": {"run": "full-2026-08-31", "scale": 1.0},
                        "b.py": {"run": "full-2026-08-31", "scale": 1.0}}
+
+
+def test_the_other_guard_that_reads_the_record_is_tolerated_too(run):
+    """#837's exemption covered one of the TWO guards that read this record.
+
+    `test_a_new_test_file_is_measured` goes red for exactly the same reason
+    `test_fast_subset_stays_honest` does, at exactly the same moment: a test
+    file exists that the record has never seen. Its message names this tool as
+    the remedy, like the other one's does.
+
+    Exempting only one of them left the remedy unreachable in the commonest
+    case there is, which is adding a test file: the tool refused, naming a
+    failure that nothing but the tool could clear (L111). Measured on
+    2026-09-01, when three new test files deadlocked it through two full suite
+    runs.
+
+    A guard whose stand down condition is narrower than the reason for standing
+    down disables the remedy in cases nobody meant to exempt (L324).
+    """
+    run(1, report(
+        failed("tests.test_a_new_test_file_is_measured",
+               "test_this_branch_measures_every_test_file_it_adds"),
+        passed("tests.test_something", "test_a")))
+
+    assert measure() == {"test_something.py": 0.75, "test_other.py": 2.0}
+
+
+def test_both_record_guards_failing_together_still_records(run):
+    """The real shape of adding a test file: both go red at once."""
+    run(1, report(
+        failed(OWN_GUARD_CLASSNAME, "test_the_record_still_covers_the_suite"),
+        failed("tests.test_a_new_test_file_is_measured",
+               "test_this_branch_measures_every_test_file_it_adds"),
+        passed("tests.test_something", "test_a")))
+
+    assert measure() == {"test_something.py": 0.75, "test_other.py": 2.0}
+
+
+def test_the_exemption_names_every_guard_that_reads_the_record():
+    """The list and the guards it exempts must not drift apart (L96).
+
+    A guard added later that reads this record, and goes red when it is stale,
+    has to be added here too, or it silently reintroduces the deadlock.
+    """
+    from tools.record_test_durations import RECORD_GUARD_CLASSNAMES
+    assert "tests.test_fast_subset_stays_honest" in RECORD_GUARD_CLASSNAMES
+    assert "tests.test_a_new_test_file_is_measured" in RECORD_GUARD_CLASSNAMES
+    for name in RECORD_GUARD_CLASSNAMES:
+        path = Path(__file__).resolve().parent.parent / (
+            name.replace("tests.", "tests/") + ".py")
+        assert path.is_file(), (
+            f"{name} is exempted from the refusal and no such test file "
+            f"exists, so the exemption covers nothing and a real failure in a "
+            f"file of that name would be recorded past")
