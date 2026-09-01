@@ -39,6 +39,7 @@ from .design_tokens import (
     TEXT_DARK,
 )
 from .brand_text import detail_lines
+from .collage_layout import layout_problems
 from .layout_sidecar import layout_sidecar_path
 # Aliased: `write_layout_sidecar` is already the name of this module's
 # boolean parameter for whether to write one at all.
@@ -760,27 +761,15 @@ def draw_branded_strip(
     return canvas_rgba
 
 
-def render_cell_layout_override(
-    canvas: Image.Image,
-    cell_layout: list[dict],
-    offsets_by_path: dict[str, tuple[float, float, float]],
-) -> int:
-    """Render cells at exact (x,y,w,h) positions from cell_layout.
+def _strip_y_of(cell_layout: list[dict]) -> int:
+    """Where the branded strip sits in a saved layout.
 
-    Returns the inferred strip_y — the bottom of the last cell before the
-    largest inter-row gap (where the original strip was placed).
+    The bottom of the last cell before the largest inter-row gap, which is
+    where the original layout placed it. Its own function since #967, because
+    the validator has to ask before a single photo is opened while the renderer
+    asks on the way out, and a second implementation of "where is the strip"
+    is a second answer to one question (L263).
     """
-    for cell in cell_layout:
-        path = cell["photo_path"]
-        x, y, w, h = cell["x"], cell["y"], cell["w"], cell["h"]
-        ox, oy, oz = offsets_by_path.get(path, DEFAULT_CROP_OFFSET)
-        photo = Image.open(path)
-        cropped = crop_to_fill(photo, w, h, ox, oy, oz)
-        canvas.paste(cropped, (x, y))
-
-    draw_hairlines(canvas, cell_layout)
-
-    # Group cells into rows by y-overlap
     sorted_cells = sorted(cell_layout, key=lambda c: c["y"])
     rows: list[list[dict]] = []
     current: list[dict] = [sorted_cells[0]]
@@ -798,10 +787,51 @@ def render_cell_layout_override(
 
     row_bottoms = [max(c["y"] + c["h"] for c in row) for row in rows]
     row_tops = [min(c["y"] for c in row) for row in rows]
-    # The strip sits in the largest inter-row gap
     gaps = [(row_tops[i + 1] - row_bottoms[i], row_bottoms[i]) for i in range(len(rows) - 1)]
     _, strip_y = max(gaps, key=lambda g: g[0])
     return strip_y
+
+
+def render_cell_layout_override(
+    canvas: Image.Image,
+    cell_layout: list[dict],
+    offsets_by_path: dict[str, tuple[float, float, float]],
+) -> int:
+    """Render cells at exact (x,y,w,h) positions from cell_layout.
+
+    Returns the inferred strip_y: the bottom of the last cell before the
+    largest inter-row gap (where the original strip was placed).
+    """
+    # Refused before a single photo is opened (#967, #970). The app refuses to
+    # SAVE one of these now, but a layout stored before that shipped is still on
+    # disk, and this is the other side of the bridge: rendering it would draw a
+    # photograph over the branded strip, off the canvas, or on top of another
+    # photograph, and the export is what Dan posts.
+    #
+    # No strip band is passed, deliberately. Where the strip sits is INFERRED
+    # from these same cells (`_strip_y_of` takes the largest inter-row gap), so
+    # a `covers_strip` verdict computed here could only ever confirm that the
+    # inference agrees with itself (L70): grow a row down over the strip and
+    # the inference moves the strip down with it. Checking it needs the
+    # position the layout was BUILT with, which nothing records. #970 stays
+    # open for that, and the predicate is written and tested against an
+    # explicit band so it is ready when there is one to give it.
+    problems = layout_problems(cell_layout)
+    if problems:
+        raise ValueError(
+            f"this saved collage layout cannot be rendered ({', '.join(problems)}). "
+            f"Regenerate the day's collage to replace it with an automatic layout.")
+
+    for cell in cell_layout:
+        path = cell["photo_path"]
+        x, y, w, h = cell["x"], cell["y"], cell["w"], cell["h"]
+        ox, oy, oz = offsets_by_path.get(path, DEFAULT_CROP_OFFSET)
+        photo = Image.open(path)
+        cropped = crop_to_fill(photo, w, h, ox, oy, oz)
+        canvas.paste(cropped, (x, y))
+
+    draw_hairlines(canvas, cell_layout)
+    return _strip_y_of(cell_layout)
 
 
 def usable_cell_layout(

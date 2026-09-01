@@ -228,9 +228,15 @@ struct CollagePreviewThumbnail: View {
                                     // The setter saves it, and CollageRenderer composites
                                     // it at export — no Python regen, which would re-roll
                                     // the whole layout. Use the ↺ button to regenerate.
-                                    cellOverride.wrappedValue = applyCollageDividerDelta(
-                                        to: baseCells, divider: div,
-                                        delta: Int(finalDeltaPx / sy))
+                                    // Only a layout that can actually be drawn
+                                    // (#967, #970). A refused drag keeps the
+                                    // previous layout rather than storing one
+                                    // the export would draw over the branding.
+                                    if let saved = CollageCell.saving(applyCollageDividerDelta(
+                                            to: baseCells, divider: div,
+                                            delta: Int(finalDeltaPx / sy))) {
+                                        cellOverride.wrappedValue = saved
+                                    }
                                 }
                                 .position(
                                     x: geo.size.width / 2,
@@ -243,10 +249,14 @@ struct CollagePreviewThumbnail: View {
                                     minDelta: minDelta,
                                     maxDelta: maxDelta
                                 ) { finalDeltaPx in
-                                    // See the horizontal handle above: persist only, no regen.
-                                    cellOverride.wrappedValue = applyCollageDividerDelta(
-                                        to: baseCells, divider: div,
-                                        delta: Int(finalDeltaPx / sx))
+                                    // See the horizontal handle above: persist
+                                    // only, no regen, and only a layout that
+                                    // can be drawn (#967, #970).
+                                    if let saved = CollageCell.saving(applyCollageDividerDelta(
+                                            to: baseCells, divider: div,
+                                            delta: Int(finalDeltaPx / sx))) {
+                                        cellOverride.wrappedValue = saved
+                                    }
                                 }
                                 .position(
                                     x: CGFloat(div.canvasPos) * sx,

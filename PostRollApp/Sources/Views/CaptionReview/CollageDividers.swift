@@ -45,10 +45,17 @@ extension CollageDivider {
     var isDraggable: Bool { !isBrandedStrip }
 }
 /// Infer all row/column boundaries from a flat list of canvas cells.
+/// The smallest a collage cell may be on either axis, in canvas pixels.
+///
+/// Read by the drag clamps below AND by `CollageCell.layoutProblems`, so the
+/// floor a drag stops at and the floor a save is refused under cannot drift
+/// apart (#967, L41).
+let minCollageCellPx = 80
+
 func computeCollageDividers(_ cells: [CollageCell]) -> [CollageDivider] {
     guard cells.count > 1 else { return [] }
     let gap = 8
-    let minCellPx = 80  // minimum cell dimension in canvas pixels
+    let minCellPx = minCollageCellPx
 
     // Group cells into horizontal rows by y-overlap (shared with the export
     // renderer's gap-fill rects so the two agree on row boundaries).

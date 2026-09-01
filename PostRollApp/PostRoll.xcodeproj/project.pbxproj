@@ -199,6 +199,7 @@
 		4239678C18A1CEDB36F7DE05 /* TagFieldNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F71FA6295BCF8BEEA59180 /* TagFieldNote.swift */; };
 		424403E52C3B68CCF2649AAA /* FieldText.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA74B1B778CD2521C9AF7A61 /* FieldText.swift */; };
 		428ABA22B2C169310189B612 /* WindowModals.swift in Sources */ = {isa = PBXBuildFile; fileRef = F183EA3529CA76E03408290E /* WindowModals.swift */; };
+		42B0F316AD5BB7D0D993BCFA /* CollageLayoutValidityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 685B01D451EAA8E50D350A0C /* CollageLayoutValidityTests.swift */; };
 		43121B60DD79336C9029C137 /* ProcessRunnerKillEscalationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0795C7DF2E00B5BD0D7EC6BF /* ProcessRunnerKillEscalationTests.swift */; };
 		4324647B9D78988C0E859D14 /* CheckoutNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = D256729FADADDE9319DB96D6 /* CheckoutNotice.swift */; };
 		43456798E65C58FEEBAA15E7 /* AppStateRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 969F691577653294EC543DB7 /* AppStateRestoreTests.swift */; };
@@ -982,6 +983,7 @@
 		67DBCC41F23BCD37CD1B842C /* ExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportView.swift; sourceTree = "<group>"; };
 		6825A7A4070096F0224E5C23 /* UntitledReelReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UntitledReelReportTests.swift; sourceTree = "<group>"; };
 		6837F113B3F60592CED0241D /* ExportReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportReadinessTests.swift; sourceTree = "<group>"; };
+		685B01D451EAA8E50D350A0C /* CollageLayoutValidityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollageLayoutValidityTests.swift; sourceTree = "<group>"; };
 		6A25B6DDECB854C3D1F062F3 /* InstagramMockup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramMockup.swift; sourceTree = "<group>"; };
 		6A9DD50A5DC97072A7B03307 /* DeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLink.swift; sourceTree = "<group>"; };
 		6AB15062F8652863FCDED407 /* CheckoutNoticeDismissalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckoutNoticeDismissalTests.swift; sourceTree = "<group>"; };
@@ -1648,6 +1650,7 @@
 				F2F34389E107785E5C8CAD12 /* CollageLayoutLoaderTests.swift */,
 				A9BA78E55B0B80D7AF9387BC /* CollageLayoutResetTests.swift */,
 				535E5C5DA5253BE6C1CF792B /* CollageLayoutSectionTests.swift */,
+				685B01D451EAA8E50D350A0C /* CollageLayoutValidityTests.swift */,
 				1F7CE7C8D51C500B94CAAB6E /* CollageOverrideStalePathsTests.swift */,
 				716DB949EC522F26C5BC2412 /* CollageRendererTests.swift */,
 				B15DB512014B7FC822E46D3D /* CollapsedGroupLabelTests.swift */,
@@ -2381,6 +2384,7 @@
 				11AB862294CDA780C05FC499 /* CollageLayoutReset.swift in Sources */,
 				0F68406DB6889846196E4FC4 /* CollageLayoutResetTests.swift in Sources */,
 				1EB3625456270E0935692633 /* CollageLayoutSectionTests.swift in Sources */,
+				42B0F316AD5BB7D0D993BCFA /* CollageLayoutValidityTests.swift in Sources */,
 				6CCEFB3272D94684EB052616 /* CollageOverrideStalePathsTests.swift in Sources */,
 				E4AB9F88D627623DD96A58E4 /* CollagePreviewThumbnail.swift in Sources */,
 				1CEAADC9C3ADDBCE0C49CF98 /* CollageRenderer.swift in Sources */,

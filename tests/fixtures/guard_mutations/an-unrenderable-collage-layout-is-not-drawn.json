@@ -1,0 +1,8 @@
+{
+  "name": "an-unrenderable-collage-layout-is-not-drawn",
+  "file": "postroll/media/generate_collage.py",
+  "find": "    if problems:\n        raise ValueError(",
+  "replace": "    if False:\n        raise ValueError(",
+  "test": "tests/test_collage_layout_override_is_refused.py::test_a_cell_under_the_floor_is_refused",
+  "breaks": "the renderer draws a saved layout with a cell under the floor, off the canvas, or overlapping another photograph. A layout stored before the app refused to save one is still on disk, so the write side alone cannot cover this (#967)"
+}

@@ -599,7 +599,103 @@ extension CollageCell {
         else { return nil }
         let rebased = rebasing(cells, toCurrentPhotos: photoURLs)
         guard Set(rebased.map(\.photoPath)) == Set(photoURLs.map(\.path)) else { return nil }
+        // And it has to be renderable (#967, #970). A layout saved before the
+        // save path refused one, or by an editor that skipped the check, is
+        // still on disk, and this is the last thing between it and an export
+        // that draws a photograph over the branding or off the canvas. nil
+        // falls back to the automatic masonry, which is the same answer this
+        // already gives a layout that no longer describes the day's photos.
+        // No strip band, for the reason `saving` gives below.
+        guard layoutProblems(rebased).isEmpty else { return nil }
         return rebased
+    }
+
+    /// The cells to STORE, or nil when this layout must not be saved.
+    ///
+    /// The write side of the same rule (#967). Every divider drag wrote its
+    /// geometry straight into the override with nothing checking it, so an
+    /// editing path that produced an impossible layout persisted it and the
+    /// export drew it. Refusing here keeps the previous layout, which is a
+    /// state the editor already handles, rather than storing one that cannot
+    /// be drawn.
+    /// No strip band is passed, deliberately. `brandedStripBand` INFERS where
+    /// the strip is from these same cells, so a `covers_strip` verdict here
+    /// could only confirm that the inference agrees with itself (L70): grow a
+    /// row down over the strip and the inferred band moves down with it.
+    /// Checking it needs the position the layout was BUILT with, which nothing
+    /// records; #970 stays open for that. The predicate is written and tested
+    /// against an explicit band so it is ready when there is one to give it.
+    static func saving(_ cells: [CollageCell]) -> [CollageCell]? {
+        layoutProblems(cells).isEmpty ? cells : nil
+    }
+
+    /// Every reason this set of cells cannot be rendered, or an empty list.
+    ///
+    /// Every divider drag writes cell geometry straight into the saved
+    /// override, and `CollageRenderer.render` composites those exact cells over
+    /// the base PNG, so an impossible layout is not a preview problem: it is
+    /// what gets exported and what is written back to events.json (#967, #970).
+    /// #965 fixed the one drag known to produce one; this is the rule the SAVE
+    /// has to satisfy whatever produced it, so a future editor inherits the
+    /// refusal rather than having to remember it.
+    ///
+    /// Codes rather than sentences, and the rule with its cases lives in
+    /// `tests/fixtures/collage_layout_validity.json`, asserted from here and
+    /// from Python, because the geometry is implemented twice and nothing else
+    /// forces the two to agree (L26).
+    ///
+    /// The strip band is passed in rather than found here: where it sits
+    /// depends on how many rows are above it, and a validator that inferred it
+    /// its own way would be a second answer to the same question (L263).
+    /// `brandedStripBand(in:)` is the one place that answers it.
+    static func layoutProblems(_ cells: [CollageCell],
+                               stripBand: (top: Int, height: Int)? = nil,
+                               canvas: CGSize = CollageGeometry.canvasSize) -> [String] {
+        guard !cells.isEmpty else { return ["empty"] }
+        var problems: Set<String> = []
+        let width = Int(canvas.width), height = Int(canvas.height)
+
+        for cell in cells {
+            if cell.w < minCollageCellPx || cell.h < minCollageCellPx {
+                problems.insert("under_floor")
+            }
+            if cell.x < 0 || cell.y < 0 || cell.x + cell.w > width || cell.y + cell.h > height {
+                problems.insert("off_canvas")
+            }
+        }
+
+        for (i, a) in cells.enumerated() {
+            for b in cells.dropFirst(i + 1) {
+                // Touching edge to edge is not overlapping: a gap of zero is
+                // how two cells in a row sit beside each other.
+                if a.x < b.x + b.w, b.x < a.x + a.w, a.y < b.y + b.h, b.y < a.y + a.h {
+                    problems.insert("overlapping")
+                }
+            }
+        }
+
+        if let band = stripBand, band.height > 0 {
+            let bottom = band.top + band.height
+            for cell in cells where cell.y < bottom && band.top < cell.y + cell.h {
+                problems.insert("covers_strip")
+            }
+        }
+        return problems.sorted()
+    }
+
+    /// Where the branded centre strip sits in this layout, or nil when it has
+    /// none.
+    ///
+    /// The band is the largest gap between two rows, and only when it is wider
+    /// than an ordinary row gap: a single row layout has no strip, and reading
+    /// its absence as a band at zero would refuse every one of them (L214).
+    /// Derived from the dividers rather than from a written offset, because how
+    /// far down the strip sits depends on how many rows are above it.
+    static func brandedStripBand(in cells: [CollageCell]) -> (top: Int, height: Int)? {
+        computeCollageDividers(cells)
+            .filter { $0.kind == .horizontal && $0.isBrandedStrip }
+            .max { $0.actualGapPx < $1.actualGapPx }
+            .map { (top: $0.canvasPos, height: $0.actualGapPx) }
     }
 
     /// Drops `droppedPath` onto the cell at `idx`, swapping it with whichever
