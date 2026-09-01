@@ -72,6 +72,29 @@ MAX_ROUNDS = 2
 #: `PythonBridge.processTimeout` (1800). Named here rather than written as a
 #: literal, because a number spelled in two places is a number the two can
 #: disagree about (L41); `tests/test_blog_repair_budget.py` pins the pair.
+@dataclass(frozen=True)
+class NoRepairReason:
+    """Why a check code has no repairer, and where the decision is tracked.
+
+    The issue number is not decoration (L65, L346). A component shipped
+    deliberately inactive needs the issue that activates it filed in the same
+    change; without one the reason is read forever after as a settled decision
+    and the next reader argues with the reason instead of reopening the work.
+    That is exactly what happened to `_is_real_handle` in this repo (#926,
+    #1105).
+
+    `gate` is what would have to be true to build it, and it exists because the
+    two claim-deleting codes needed a gate that can actually be WRITTEN (L90):
+    conditioning them on a false positive rate measured through the journal
+    fails, because a DECLINED record says the check FIRED and never that it
+    fired WRONGLY, so the rate reads as zero indistinguishably from a real
+    reading and the deferral becomes permanent while looking scheduled.
+    """
+    reason: str
+    issue: str
+    gate: str = ""
+
+
 PROCESS_CEILING = 1800.0
 
 #: How much of the ceiling the pass leaves alone.
@@ -385,3 +408,85 @@ def _record(journal, outcome, *, key, name, before, after, codes,
     outcome.attempts.append(entry)
     if journal is not None:
         journal(entry)
+
+
+#: Every code `check_blog` can produce, and what the repair pass does about it.
+#:
+#: No default branch and no third state. A default renders the next finding code
+#: somebody adds as a deliberate decision nobody made, and a table driven by a
+#: hand written list checks only what the list names, so anything missing from
+#: it is exempt from the very check meant to catch it (L96, L113, L233).
+#: `tests/test_blog_repairer_table.py` derives the vocabulary from the
+#: `Finding(` literals in `blog_quality.py` and holds this table to it.
+#:
+#: The firing rates below were measured on the 21 stored final bodies on
+#: 2026-09-01, which are posts Dan considered finished. A rate says how often a
+#: check fires and nothing at all about whether it was right to.
+REPAIRERS: dict[str, "object"] = {
+    # --- repaired, with the photograph attached (rule 4) --------------------
+    "alt_text_empty": repair_alt_text,
+    "alt_text_length": repair_alt_text,
+    "alt_text_missing_venue": repair_alt_text,
+    "alt_text_missing_performer": repair_alt_text,
+    "alt_text_inferred_state": repair_alt_text,
+    "alt_text_appearance_descriptor": repair_alt_text,
+    # Repaired as part of a component: it names several markers in one finding,
+    # so rewriting one changes another's finding set.
+    "alt_text_repeated_opening": repair_alt_text,
+
+    # --- repaired already, deterministically, before this pass --------------
+    "blog_marker_unknown_photo": NoRepairReason(
+        reason="A near miss of a real filename is already corrected by "
+               "repair_marker_filenames, deterministically and with no model "
+               "call, because the true spelling is in hand. What is left after "
+               "that is a name the model genuinely invented, and snapping it to "
+               "the nearest file would put the wrong photograph under prose "
+               "written about a different one.",
+        issue="#1149"),
+
+    # --- no repairer in v1, each with the issue that would change that ------
+    "blog_marker_missing_photo": NoRepairReason(
+        reason="Placing a photograph means writing new descriptive prose about "
+               "its content and choosing where in the flow it belongs, which "
+               "exceeds rule 3 and rule 4 and sits on rule 9's drops a photo "
+               "inverted. The evidence this finding was incidentally providing "
+               "now has a deliberate home in photo_stamps (#1130, L277).",
+        issue="#1149"),
+    "invented_number": NoRepairReason(
+        reason="The only proposed repair that DELETES a claim from prose Dan "
+               "publishes, and it already carries three suppression mechanisms "
+               "added after false alarms. It fires 32 times across 15 of 21 "
+               "stored posts he considered finished, which says its rate is "
+               "high and nothing about its accuracy.",
+        issue="#1150",
+        gate="a hand review of a stated number of real posts, recorded on the "
+             "issue with the count and the date, OR a control that lets Dan "
+             "mark a finding as wrong. Not a rate read off the journal: a "
+             "DECLINED record says the check fired, never that it fired "
+             "wrongly."),
+    "demographic_grouping": NoRepairReason(
+        reason="The same shape as invented_number: a claim deleted from prose "
+               "Dan publishes. It fires 0 times on the 21 stored posts, which "
+               "is a weaker case for a repairer rather than a stronger one.",
+        issue="#1151",
+        gate="the same gate as invented_number: a hand review with a count and "
+             "a date, or a control to mark a finding wrong."),
+    "repeated_construction": NoRepairReason(
+        reason="Rewriting it means choosing which of two uses of a construction "
+               "to keep and what to put in place of the other, which is a "
+               "judgement about the prose rather than a fact the app holds "
+               "(rule 3). It fires 0 times on the 21 stored posts.",
+        issue="#1152"),
+    "stacked_photos": NoRepairReason(
+        reason="Repairing it MOVES a marker, and where it should go is a "
+               "judgement about the flow of the post; #998 records what happens "
+               "when a rewriter guesses a marker's position. Until #1129 "
+               "nothing here could see a marker reorder at all, so this is "
+               "buildable in a way it was not.",
+        issue="#1153"),
+    "late_first_photo": NoRepairReason(
+        reason="The same as stacked_photos: repairing it moves a marker, and "
+               "where it belongs is a judgement about the flow of the post "
+               "rather than a fact the app already holds.",
+        issue="#1154"),
+}

@@ -1,0 +1,8 @@
+{
+  "name": "every-check-code-resolves-to-something",
+  "file": "postroll/ai/blog_quality.py",
+  "find": "def check_alt_text(name: str, alt: str, *, venue: str = \"\",",
+  "replace": "def _a_fifteenth_code() -> Finding:\n    return Finding(\"a_code_nobody_decided_about\", \"m\", \"d\")\n\n\ndef check_alt_text(name: str, alt: str, *, venue: str = \"\",",
+  "test": "tests/test_blog_repairer_table.py::test_every_code_the_checker_can_produce_has_an_entry",
+  "breaks": "a new check code can be added with no repairer and no written reason it has none, and the repair pass renders it as a decision nobody made. There is deliberately no default branch and no third state, because a table driven by a hand written list checks only what the list names and anything missing from it is exempt from the very check meant to catch it (#1134, L96, L113, L233)"
+}
