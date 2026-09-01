@@ -44,7 +44,7 @@ from typing import Any, Callable
 
 from .blog_findings import RepairState
 from .blog_quality import check_blog_targeted, finding_entry
-from .blog_repair import repair_alt_text
+from .blog_repair import deadline_from, repair_alt_text
 from .claude_client import ClaudeError, run_json_prompt
 from .progress import ProgressWriter
 from .repair_log import RepairLog
@@ -58,9 +58,20 @@ def retry_blog_repair(
         program: dict[str, Any] | None = None,
         venue: str = "",
         runner: Callable[..., Any] = run_json_prompt,
+        now: Callable[[], float] | None = None,
+        deadline: float | None = None,
         say: Any = None,
 ) -> dict[str, Any]:
     """Re-run the alt text repair over `markers` only.
+
+    Runs under a DEADLINE, like every other path that reaches the repair pass.
+    Without one the pass gets `float("inf")`, its budget check can never fire,
+    and this becomes the one route able to carry the process past the 1,800
+    second ceiling, where the run is SIGTERM\'d, `outputMissing` is thrown and
+    every paid call is destroyed (L110). `deadline` is absolute on `now()`\'s
+    scale; left unset it is derived from this call, which is right for the
+    dedicated process the bridge starts and wrong for a caller that has already
+    spent part of the ceiling, so such a caller passes its own (L227, L522).
 
     Returns the body it ended with, the findings ON THAT BODY, and what it
     actually did. The last part is not decoration: repairs are silent, so a
@@ -76,11 +87,17 @@ def retry_blog_repair(
             "could not finish, and repairing everything would pay for the "
             "whole post again without being asked.")
 
+    import time
+
+    now = now or time.monotonic
+    if deadline is None:
+        deadline = deadline_from(started_at=now(), now=now)
+
     paths = {Path(p).name: p for p in photo_paths}
 
     outcome = repair_alt_text(
         body, program=program, venue=venue, photo_paths=paths,
-        runner=runner, say=say, only=list(markers),
+        runner=runner, now=now, deadline=deadline, say=say, only=list(markers),
         log=RepairLog(event=venue or "", script="retry_blog_repair"))
 
     targeted = check_blog_targeted(outcome.body, program=program, venue=venue)

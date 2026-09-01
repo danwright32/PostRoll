@@ -284,3 +284,72 @@ def test_every_blog_path_sends_the_target_with_each_finding(module):
         assert any(kw.arg == "target" for kw in call.keywords), (
             f"{module} line {call.lineno}: a finding is sent with no target, "
             f"so the retry control cannot tell which marker it is about")
+
+
+# --- the retry runs under a deadline, like every other path (L110, L524) ---
+
+from postroll.ai.blog_repair import CEILING_HEADROOM, PROCESS_CEILING
+
+
+def test_a_retry_runs_under_a_deadline_rather_than_forever(photos):
+    """A wait with no deadline cannot fail, it can only hang (L110).
+
+    The pass is built around an ABSOLUTE deadline for a reason its own module
+    states: at the 1,800 second process ceiling the run is SIGTERM'd,
+    `outputMissing` is thrown, and every paid call is destroyed. A retry that
+    passed no deadline got `float("inf")`, so the budget check could never
+    fire and the retry was the one path able to carry the process past its own
+    ceiling.
+    """
+    files = photos("a.jpg", "b.jpg", "c.jpg")
+    clock = [0.0]
+
+    def runner(prompt, *, timeout, image_paths, image_labels, step):
+        clock[0] += 900          # each call eats 900 seconds of the budget
+        return {"alt": GOOD}
+
+    result = retry_blog_repair(
+        body=_body("a.jpg", "b.jpg", "c.jpg"), photo_paths=list(files.values()),
+        markers=["a.jpg", "b.jpg", "c.jpg"], program=PROGRAM, venue=VENUE,
+        runner=runner, now=lambda: clock[0])
+
+    states = result["retry"]["states"]
+    assert RepairState.NOT_REACHED.value in states.values(), (
+        f"nothing ran out of budget on a clock that passed the ceiling: "
+        f"{states}")
+
+
+def test_the_deadline_leaves_the_process_ceiling_alone(photos):
+    """The deadline sits INSIDE the ceiling, never on it: a deadline equal to
+    the ceiling races it, and whichever fires first decides what Dan is told."""
+    files = photos("a.jpg")
+    clock = [0.0]
+    seen = []
+
+    def runner(prompt, *, timeout, image_paths, image_labels, step):
+        seen.append(clock[0])
+        return {"alt": GOOD}
+
+    retry_blog_repair(
+        body=_body("a.jpg"), photo_paths=list(files.values()),
+        markers=["a.jpg"], program=PROGRAM, venue=VENUE,
+        runner=runner, now=lambda: clock[0])
+
+    assert seen, "the fixture made no call, so this proves nothing"
+    assert CEILING_HEADROOM > 0 and PROCESS_CEILING > CEILING_HEADROOM
+
+
+def test_a_caller_may_hand_in_its_own_deadline(photos):
+    """A week run reaches the blog last, having already spent most of the
+    ceiling, so the budget cannot be a constant (L227, L522)."""
+    files = photos("a.jpg")
+
+    def runner(prompt, **kwargs):
+        raise AssertionError("a retry with no budget left made a call")
+
+    result = retry_blog_repair(
+        body=_body("a.jpg"), photo_paths=list(files.values()),
+        markers=["a.jpg"], program=PROGRAM, venue=VENUE,
+        runner=runner, now=lambda: 0.0, deadline=1.0)
+
+    assert result["retry"]["states"]["a.jpg"] == RepairState.NOT_REACHED.value
