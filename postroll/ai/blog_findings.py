@@ -20,6 +20,7 @@ which findings these are.
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass
 
 
@@ -30,11 +31,72 @@ class Finding:
     detail: str
 
 
-def finding_entry(finding: Finding) -> dict[str, str]:
+class RepairState(enum.Enum):
+    """What the repair pass did about one finding, or why it did nothing (#1132).
+
+    Rule 2 says a repair that was tried and failed still SHOWS, marked as tried.
+    It names two states. The wall clock budget, the structural gap on the revise
+    path, and the difference between a refusal and an unreachable model create
+    three more, and collapsing any of them back into "never attempted" is rule 2
+    defeated: never-attempted renders exactly like today's findings, which is
+    the one thing rule 2 forbids.
+
+    `TRIED` and `BLOCKED` are two states, not one (L11, L260, L112). Folding a
+    ClaudeError, a timeout, an unreadable photograph and a genuine refusal into
+    `TRIED` makes a claim that is FALSE for a network blip, because `TRIED`
+    exists to tell Dan the app will not get it next time either. The test for
+    whether two states are one is whether they invite different actions, and
+    these do: one says stop expecting the app to fix it, the other says try
+    again. Rule 1 removed every other signal, so this panel is the only surface
+    carrying the difference.
+
+    `UNAVAILABLE` exists because of `revise_blog`. Its manifest carries
+    `photo_filenames` only, never photo paths, so there is no photograph on that
+    path and alt text cannot be rewritten there. Rendering those findings as
+    never attempted would assert something untrue.
+
+    The wording is what Dan reads, so it says what to DO rather than naming an
+    internal status (L112).
+    """
+    NEVER = ""
+    TRIED = "tried"
+    BLOCKED = "blocked"
+    UNAVAILABLE = "unavailable"
+    NOT_REACHED = "not_reached"
+
+    @property
+    def wording(self) -> str:
+        return {
+            RepairState.NEVER: "",
+            RepairState.TRIED:
+                "the app rewrote this and its own checks refused the result, so "
+                "re-running will not help",
+            RepairState.BLOCKED:
+                "the app could not reach the model or could not read the "
+                "photograph, so this is worth trying again",
+            RepairState.UNAVAILABLE:
+                "this path has no photograph to check against; regenerate or "
+                "swap photos to have these rewritten",
+            RepairState.NOT_REACHED:
+                "the pass ran out of time before reaching this one, so it is "
+                "worth trying again",
+        }[self]
+
+
+def finding_entry(finding: Finding, *,
+                  repair: "RepairState | str" = "") -> dict[str, str]:
     """One finding, in exactly the fields the app decodes (#274).
 
     Three modules built this dict by hand, so a field added to Finding reached
     the app from whichever of them was remembered. One derivation, and the
     payload contract has one place to read.
+
+    `repair` is UNCONDITIONAL in the returned literal (#1132).
+    `tests/bridge_payload_keys.py` reads this dict literal and refuses a
+    computed or conditional key, so a field added only when set would take the
+    payload out of the contract's reach entirely. `Finding` stays a frozen
+    dataclass of three strings, so its construction sites are untouched.
     """
-    return {"code": finding.code, "message": finding.message, "detail": finding.detail}
+    state = repair.value if isinstance(repair, RepairState) else str(repair or "")
+    return {"code": finding.code, "message": finding.message,
+            "detail": finding.detail, "repair": state}

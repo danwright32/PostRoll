@@ -20,10 +20,22 @@ import Foundation
 /// stale would go on naming a handle Dan had already removed.
 enum FindingsDisplay {
 
-    struct Group: Equatable {
+    struct Group: Equatable, Hashable, Identifiable {
         let code: String
+        /// What the repair pass did about the findings under this heading
+        /// (#1132). Part of the key, not decoration: a tried finding and a
+        /// never-attempted finding of the SAME code are two different things
+        /// to tell Dan, and merging them under one heading is rule 2 defeated.
+        let repair: String
         let message: String
         let details: [String]
+
+        /// Composite, because `code` alone is no longer unique and SwiftUI
+        /// silently renders ONE of any pair sharing an id. That is the render
+        /// step one line past where the grouping was fixed.
+        var id: String { "\(code)|\(repair)" }
+
+        var state: RepairState { RepairState(raw: repair) }
     }
 
     /// True once the text no longer matches what the checks actually ran on.
@@ -67,23 +79,31 @@ enum FindingsDisplay {
     /// quote under it. Seven over-long alt texts are one problem to work
     /// through, not seven separate alarms.
     static func grouped(findings: [QualityFinding]) -> [Group] {
-        var order: [String] = []
-        var messages: [String: String] = [:]
-        var details: [String: [String]] = [:]
+        // Keyed on (code, repair) rather than code alone (#1132). Without the
+        // repair state in the key, a rule the app TRIED and failed to fix and
+        // the same rule it never attempted merge under one heading, and Dan is
+        // told nothing about which is which.
+        struct Key: Hashable { let code: String; let repair: String }
+
+        var order: [Key] = []
+        var messages: [Key: String] = [:]
+        var details: [Key: [String]] = [:]
 
         for finding in findings {
-            if messages[finding.code] == nil {
-                order.append(finding.code)
-                messages[finding.code] = finding.message
-                details[finding.code] = []
+            let key = Key(code: finding.code, repair: finding.repair)
+            if messages[key] == nil {
+                order.append(key)
+                messages[key] = finding.message
+                details[key] = []
             }
             if !finding.detail.isEmpty {
-                details[finding.code]?.append(finding.detail)
+                details[key]?.append(finding.detail)
             }
         }
 
         return order.map {
-            Group(code: $0, message: messages[$0] ?? "", details: details[$0] ?? [])
+            Group(code: $0.code, repair: $0.repair,
+                  message: messages[$0] ?? "", details: details[$0] ?? [])
         }
     }
 }

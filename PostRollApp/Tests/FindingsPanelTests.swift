@@ -43,9 +43,19 @@ final class FindingsPanelTests: XCTestCase {
             The findings panel no longer collapses into one element, so VoiceOver \
             reads its heading, its stale note and every finding as separate stops.
             """)
-        XCTAssertTrue(code.contains("accessibilityLabel"), """
-            The findings panel no longer carries a label, so a person hearing it has \
-            no idea whether these checks are about the caption or the draft.
+        // The PANEL's own label, named exactly, not any `accessibilityLabel`
+        // anywhere in the file (#1132, L135). A whole-file `contains` is
+        // satisfied by a second legitimate use of the same construct, and one
+        // arrived: each repair-state group carries its own label so its note is
+        // heard with the heading it belongs to. That answered this check while
+        // the panel-level label it was written about could be deleted freely,
+        // and the registered mutation SURVIVED in CI.
+        XCTAssertTrue(
+            code.contains("FindingsDisplay.spokenLabel(subject: subject,"), """
+            The findings panel no longer carries its OWN label, so a person \
+            hearing it has no idea whether these checks are about the caption or \
+            the draft. A label on an individual finding is not this: it says what \
+            one rule found, never what the panel is.
             """)
     }
 

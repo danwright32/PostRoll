@@ -652,12 +652,13 @@
     ],
     "swift": {
       "kind": "model",
-      "type": "BlogFinding"
+      "type": "QualityFinding"
     },
     "keys": {
       "code": "swift",
       "message": "swift",
-      "detail": "swift"
+      "detail": "swift",
+      "repair": "swift"
     }
   },
   "cover_result": {
