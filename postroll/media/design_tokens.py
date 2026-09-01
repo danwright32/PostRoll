@@ -228,7 +228,7 @@ MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
     "reel_screen": DesignChange(version=2, day="2026-08-21"),
     "reel_morph": DesignChange(version=3, day="2026-08-21"),
     "reel_slider": DesignChange(version=3, day="2026-08-21"),
-    "reel_scroll": DesignChange(version=4, day="2026-08-30"),
+    "reel_scroll": DesignChange(version=4, day="2026-08-31"),
     "reel_preview": DesignChange(version=3, day="2026-08-27"),
     "reel_clip": DesignChange(version=2, day="2026-08-22"),
 }
