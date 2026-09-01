@@ -1,0 +1,8 @@
+{
+  "name": "the-meta-doc-pins-the-codes-api-version",
+  "file": "postroll/ai/meta_app.py",
+  "find": "GRAPH_API_VERSION = \"v25.0\"",
+  "replace": "GRAPH_API_VERSION = \"v26.0\"",
+  "test": "tests/test_meta_app_doc.py::test_the_document_pins_the_same_api_version_as_the_code",
+  "breaks": "docs/META-APP.md names a Graph API version PostRoll no longer speaks, so the setup somebody follows and the requests the code sends are pinned to different versions, and the mismatch surfaces as an answer of the wrong shape rather than as a refusal (#988)"
+}

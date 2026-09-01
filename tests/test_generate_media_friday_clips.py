@@ -23,20 +23,21 @@ import postroll.media.generate_title_card as card_mod
 # a loud failure, which is what CI needs.
 from conftest import HAVE_FFMPEG, needs_ffmpeg  # noqa: F401
 
-# Marked slow again, as it was until #840. Every check here runs the whole Friday
-# gate, which renders a real reel and, since #824, really composites a title card
-# onto it, so it is one of the more expensive files in the suite.
+# Marked slow. Every check here runs the whole Friday gate, which renders a real
+# reel and, since #824, really composites a title card onto it, so it is one of
+# the more expensive files in the suite.
 #
-# Whether it is expensive ENOUGH has now gone back and forth four times, and this
-# file has decided where the floor sits every one of them: readings of 5.0%, 5.8%,
-# 4.5%, 4.99% and, on 2026-08-29, 6.18%. Nothing about the file changed; the
-# suite around it did, and a share is a ratio. At 6.18% it sits above the 4.6%
-# floor, so `make test-python-fast` no longer pays for it. CI and
-# `make test-python` were running it either way throughout (#826, #840, #932).
+# Whether it is expensive ENOUGH has now gone back and forth six times, and this
+# file has decided where the floor sits every one of them: readings of 5.0%,
+# 5.8%, 4.5%, 4.99%, 6.18%, 4.37% and, on 2026-09-01, 5.97%. Nothing about the
+# file changed; the suite around it did, and a share is a ratio. At 5.97% it
+# sits above the 4.6% floor, so `make test-python-fast` does not pay for it. CI
+# and `make test-python` run it either way throughout (#826, #840, #932).
 #
 # The marker is not a judgement kept here. It is derived from the recorded
 # distribution in tests/file_durations.py, and tests/test_fast_subset_stays_honest.py
 # fails if this line and that record disagree.
+pytestmark = pytest.mark.slow
 
 
 def _make_gradient(path, seconds=3.0):
