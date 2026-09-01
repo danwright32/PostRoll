@@ -23,10 +23,13 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from ..data_root import running_under_test
 
 # Re-exported rather than defined: this was `base_model`'s home before #361
 # moved it somewhere `page_regions` can share it. `usage_log.base_model` stays
@@ -186,11 +189,27 @@ def default_log_path() -> Path:
 
     POSTROLL_DATA_DIR is exported by the Swift app from `AppPaths.root`, so the
     log always sits beside the rest of the app's data. The fallback is the
-    post-migration data root, for CLI and test runs launched by hand.
+    post-migration data root, for CLI runs launched by hand.
+
+    Under a test run this answers somewhere harmless instead (#1180), the same
+    guard `repair_log.default_log_path` carries. Swept rather than waited for:
+    the journal leaked 2,775 fixture records into Dan's real file before anybody
+    read the artefact, and this is the same shape one module over (L30, L195).
+
+    Dormant rather than absent when it was found. Tests stub the model runner,
+    so they never reach the line that records, but the write is append-only and
+    best effort, so the first test that does reach it would leak silently into
+    the record of what the app has actually spent.
+
+    Only when nobody has CHOSEN a directory: a caller setting POSTROLL_DATA_DIR
+    has already pointed the app somewhere of its own, and overriding that would
+    break the very seam this protects (L324).
     """
     override = (os.environ.get("POSTROLL_DATA_DIR") or "").strip()
     if override:
         return Path(override) / "usage.jsonl"
+    if running_under_test():
+        return Path(tempfile.gettempdir()) / "postroll-test-usage.jsonl"
     return (
         Path.home() / "Library" / "Application Support" / "PostRoll" / "usage.jsonl"
     )

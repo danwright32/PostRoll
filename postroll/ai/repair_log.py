@@ -37,11 +37,13 @@ already been paid for, exactly as `usage_log.record` documents.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime, timezone
+import tempfile
 from pathlib import Path
 
-from ..data_root import data_root
+from ..data_root import data_root, running_under_test
 
 #: What a PASS record says, per outcome. Distinct wordings, because these are
 #: the states the record exists to tell apart and two of them sharing a sentence
@@ -66,7 +68,40 @@ class RepairLogUnreadable(OSError):
 
 
 def default_log_path() -> Path:
-    """Beside everything else the app owns, through the one shared answer."""
+    """Beside everything else the app owns, through the one shared answer.
+
+    Under a test run this answers somewhere harmless instead (#1179). The
+    refusal has to live HERE, in the resource, because `generate_blog`,
+    `swap_blog_photos` and `retry_blog_repair` each CONSTRUCT their own
+    `RepairLog` with no path: a construction site inside the code under test is
+    beyond any seam the caller could offer, so nothing a test does could reach
+    it (L2, L196).
+
+    It leaked silently for exactly as long as it existed. The write is
+    append-only and best effort, so a record landing in the wrong file fails
+    nothing and no test goes red. Measured 2026-09-01: 2,775 records in Dan's
+    live journal, every one written that day by a test run, and none belonging
+    to any of the 21 real stored events.
+
+    A redirect rather than a refusal, because the tests driving those three
+    scripts are testing the repair pass and not the journal, and raising here
+    would fail dozens of them for a reason none of them is about.
+
+    Only when nobody has CHOSEN a data directory. A test that sets
+    `POSTROLL_DATA_DIR` has already pointed the app somewhere of its own, and
+    overriding that would break the seam this is protecting: the first version
+    redirected unconditionally and broke
+    `test_the_log_honours_the_apps_own_data_directory`, which is that seam being
+    asserted. A guard whose stand down condition is narrower than the reason for
+    standing down disables it in cases nobody meant to exempt (L324), and this
+    is the same mistake pointing the other way.
+    """
+    chosen = (os.environ.get("POSTROLL_DATA_DIR") or "").strip()
+    if running_under_test() and not chosen:
+        # One file per run, under the system temp directory, so a suite that
+        # wants to read back what it wrote still can, and nothing accumulates
+        # in a place anybody looks.
+        return Path(tempfile.gettempdir()) / "postroll-test-blog-repairs.jsonl"
     return data_root() / "blog-repairs.jsonl"
 
 
