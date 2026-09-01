@@ -68,6 +68,40 @@ CALL_TIMEOUT = 120
 #: budget is 43 seconds, so it does not.
 MAX_ROUNDS = 2
 
+#: The process ceiling every blog path runs under, mirrored from
+#: `PythonBridge.processTimeout` (1800). Named here rather than written as a
+#: literal, because a number spelled in two places is a number the two can
+#: disagree about (L41); `tests/test_blog_repair_budget.py` pins the pair.
+PROCESS_CEILING = 1800.0
+
+#: How much of the ceiling the pass leaves alone.
+#:
+#: A deadline EQUAL to the ceiling races it, and whichever fires first decides
+#: what Dan is told. PythonBridge says exactly this about its own timeout: a
+#: caller's deadline has to sit OUTSIDE the thing it is waiting on. When 1,800
+#: fires the process is SIGTERM'd, `outputMissing` is thrown, and every paid
+#: call in the whole week is destroyed, which is worse than any finding this
+#: pass exists to fix.
+CEILING_HEADROOM = 120.0
+
+
+def deadline_from(*, started_at: float, now: Callable[[], float],
+                  ceiling: float = PROCESS_CEILING) -> float:
+    """An ABSOLUTE deadline on `now()`'s scale, from the caller's process start.
+
+    Never a constant number of seconds (L227, L522). The 1,800 second ceiling is
+    shared differently on each path: a revision spends 600 + 600 + 600 of model
+    timeouts against it, while a week run reaches the blog as its LAST step,
+    after seven days of caption generation have already spent most of it. A
+    budget expressed as a constant is safe only for whichever path calibrated
+    it.
+
+    A process already past its ceiling gets no budget rather than a negative
+    one, which a comparison written the other way round would read as infinite.
+    """
+    return max(now(), started_at + ceiling - CEILING_HEADROOM)
+
+
 PROMPT = """\
 Rewrite the alt text for ONE photograph, attached. Return JSON only.
 

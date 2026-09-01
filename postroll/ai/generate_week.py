@@ -60,6 +60,7 @@ from typing import Any
 
 from . import cap_signals
 from .generate_captions import generate_caption
+from .blog_repair import deadline_from
 from .generate_blog import generate_blog
 from .progress import ProgressWriter
 from .select_reel_photos import select_reel_photos, DEFAULT_MAX_REEL_PHOTOS
@@ -405,6 +406,12 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
                 shoot_type=shoot_type,
                 event_url=event_url,
                 progress=say,
+                # The blog is the LAST step, after seven days of captions have
+                # already spent most of the 1,800 second process ceiling, so
+                # the repair pass gets what is left of it and not a constant
+                # (#1133, L227, L522). t_start is this process's own start.
+                repair_deadline=deadline_from(started_at=t_start,
+                                              now=time.time),
             )
             results["blog"] = blog_result
             t_blog_end = time.time()

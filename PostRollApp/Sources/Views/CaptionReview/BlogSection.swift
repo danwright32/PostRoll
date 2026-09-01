@@ -126,11 +126,38 @@ struct BlogSection: View {
     /// panel says so instead of continuing to assert stale findings.
     @ViewBuilder
     private var blogFindingsPanel: some View {
-        if let summary = blog.findingsSummary {
-            FindingsPanel(summary: summary,
-                          findings: blog.findings,
-                          isStale: blog.findingsAreStale,
-                          subject: "draft")
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            // Whether anything CHECKED this post, always, findings or not
+            // (#1138).
+            //
+            // With repairs silent, an empty panel is the normal state, and it
+            // was produced identically by five different things: a genuinely
+            // clean post, a pass that threw before its loop, a pass whose tail
+            // never ran, check_blog itself breaking, and the process being
+            // killed at its deadline mid-pass. Without this line the surface
+            // Dan actually reads cannot tell him which (L98, L152, L319).
+            if let note = blog.repairPass.note {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: blog.repairPass.ran
+                          ? (blog.repairPass.endedEarly
+                             ? "clock.badge.exclamationmark" : "checkmark.circle")
+                          : "questionmark.circle")
+                        .font(.system(size: 11))
+                    Text(note)
+                        .font(.system(size: 11))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(PaintedSurfaces.secondaryText)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Draft checks: \(note)")
+            }
+
+            if let summary = blog.findingsSummary {
+                FindingsPanel(summary: summary,
+                              findings: blog.findings,
+                              isStale: blog.findingsAreStale,
+                              subject: "draft")
+            }
         }
     }
 
