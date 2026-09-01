@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 # Re-exported so the eight test files and three scripts importing the pair out
@@ -334,8 +334,29 @@ def shared_opening_groups(body: str) -> list[list[str]]:
             if len(names) > MAX_SHARED_OPENINGS]
 
 
-def repair_marker_placement(
-        body: str) -> tuple[str, list[tuple[str, str]]]:
+@dataclass(frozen=True)
+class Placement:
+    """What the placement repair did to a body, and what it declined to do.
+
+    Both halves, because they are opposite outcomes and only one of them is
+    visible afterwards. A MOVE changes what Dan published, silently. A REFUSAL
+    is reported by `check_blog` on the panel, but the panel is transient while
+    the condition persists, so without recording it the fact that the app
+    looked at a stack and declined vanishes when the post ships (L98, L126).
+
+    `moved` and `refused` each hold (filename, the rule that fired) and can
+    never name the same marker: a marker is placed or it is not.
+    """
+    body: str
+    moved: list[tuple[str, str]] = field(default_factory=list)
+    refused: list[tuple[str, str]] = field(default_factory=list)
+
+    def __iter__(self):
+        """So `body, moved = repair_marker_placement(...)` still reads."""
+        return iter((self.body, self.moved))
+
+
+def repair_marker_placement(body: str) -> Placement:
     """Move a misplaced photo marker to a position derived from the post.
 
     The second exception to this module's report-only rule, and it is an
@@ -357,13 +378,14 @@ def repair_marker_placement(
     below it to move into, so it stays put and `check_blog` goes on reporting it
     (L98). A partly repaired stack is reported too, for the same reason.
 
-    Returns the repaired body and every (filename, which rule moved it) pair. An
-    empty list means nothing moved, which is a different outcome from a move
-    that was refused, and the refusals are exactly what `check_blog` still says
-    afterwards.
+    Returns a `Placement`: the repaired body, every marker it MOVED, and every
+    marker it REFUSED to move. The refusals are reported rather than dropped
+    (#1172), because `check_blog` saying the stack is still there and the app
+    recording that it looked and declined are different facts, and only the
+    second one survives publication.
     """
     if not body:
-        return body, []
+        return Placement(body)
 
     blocks = [b.strip() for b in body.split("\n\n") if b.strip()]
 
@@ -371,7 +393,7 @@ def repair_marker_placement(
         return block.startswith("[PHOTO:")
 
     if not any(is_marker(b) for b in blocks):
-        return body, []
+        return Placement(body)
 
     moves: list[tuple[str, str]] = []
 
@@ -412,13 +434,16 @@ def repair_marker_placement(
     # Whatever is still waiting ran out of prose to move into. It goes back
     # where it was, in order, and is reported rather than placed somewhere
     # nobody derived.
+    # Whatever is still waiting had nowhere derived to go. It is REPORTED, not
+    # silently dropped: that is the half nothing else records (#1172).
+    refused = [(_marker_name(m), "stacked_photos") for m in waiting]
     placed.extend(waiting)
 
     if not moves:
         # Untouched means untouched: rebuilding would normalise whitespace on a
         # body this had no reason to rewrite.
-        return body, []
-    return "\n\n".join(placed), moves
+        return Placement(body, [], refused)
+    return Placement("\n\n".join(placed), moves, refused)
 
 
 def repair_marker_filenames(

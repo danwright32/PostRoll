@@ -1,0 +1,8 @@
+{
+  "name": "the-swap-runs-the-repair-under-a-deadline",
+  "file": "postroll/ai/swap_blog_photos.py",
+  "find": "            deadline=deadline_from(started_at=time.time(), now=time.time),",
+  "replace": "",
+  "test": "tests/test_blog_repair_budget.py::test_the_swap_bounds_the_pass_too",
+  "breaks": "the swap runs the repair pass with no deadline, so a swap of several photographs whose repairs run long is the route able to outlive its own process (#1166)"
+}

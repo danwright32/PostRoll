@@ -36,6 +36,7 @@ import json
 import re
 import shutil
 import sys
+import time
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -68,7 +69,7 @@ from .blog_prose import (
     prose_indices_without_contractions as _prose_indices_without_contractions,
 )
 from .blog_photo_stamps import photo_stamps
-from .blog_repair import repair_alt_text
+from .blog_repair import deadline_from, repair_alt_text
 from .repair_log import RepairLog
 from .blog_quality import (check_blog_targeted, filenames_used_by, finding_entry,
                            refuse_colliding_filenames,
@@ -1817,10 +1818,23 @@ def generate_blog(
         #
         # Runs after the filename repair, because it reads marker names, and before
         # the checks, so the panel reports where a marker IS rather than where it was.
-        final_body, moved = repair_marker_placement(final_body)
-        for name, why in moved:
-            print(f"[generate_blog] MOVED marker {name!r} ({why})",
+        placement = repair_marker_placement(final_body)
+        final_body = placement.body
+        # Recorded where it outlives publication (#1172). A move changes what
+        # Dan published without saying so, and a REFUSAL is reported only on a
+        # panel that clears while the condition stays, so neither survives to
+        # answer the question afterwards unless it is written here.
+        _placement_log = RepairLog(event=event, script="generate_blog")
+        for marker, why in placement.moved:
+            print(f"[generate_blog] MOVED marker {marker!r} ({why})",
                   flush=True, file=sys.stderr)
+            _placement_log.moved(marker=marker, rule=why, placed=True, reason="")
+        for marker, why in placement.refused:
+            print(f"[generate_blog] REFUSED to move marker {marker!r} ({why}): "
+                  f"no derived destination", flush=True, file=sys.stderr)
+            _placement_log.moved(
+                marker=marker, rule=why, placed=False,
+                reason="no prose below the stack to move it into")
 
         # The one finding class the app can do better than report (#1133).
         #
@@ -1839,7 +1853,17 @@ def generate_blog(
         repair = repair_alt_text(
             final_body, program=program, venue=venue,
             photo_paths=dict(zip(photo_filenames, resolved)),
-            runner=run_json_prompt, deadline=repair_deadline, say=say,
+            runner=run_json_prompt, say=say,
+            # Derived here when the caller handed none, rather than passed on
+            # as None (#1166). None reaches the pass as `float("inf")`, so its
+            # budget check can never fire, and generation on its own was the
+            # route able to carry the process past its ceiling. `generate_week`
+            # is the only caller that supplies one, and a default standing for
+            # absent gives the caller that forgets silence rather than a
+            # refusal (L168). A full budget from now is right for a process
+            # that starts to do this and nothing else.
+            deadline=(repair_deadline if repair_deadline is not None
+                      else deadline_from(started_at=time.time(), now=time.time)),
             # What the app changed in this post, after publication (#1135).
             # The panel says which findings survived; only this says what the
             # alt text USED to be, and the question always arrives later.

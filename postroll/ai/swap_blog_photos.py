@@ -33,12 +33,13 @@ import json
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from .ai_tells import strip_em_dashes
 from .blog_marker_splice import splice_retained_markers
 from .blog_photo_stamps import Retention, photo_stamps, retention_for
-from .blog_repair import repair_alt_text
+from .blog_repair import deadline_from, repair_alt_text
 from .blog_repair_damage import Touched, blog_repair_damage
 from .repair_log import RepairLog
 from .blog_quality import (_PHOTO_MARKER, _fold_filename, check_blog_targeted,
@@ -348,10 +349,23 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         #
         # Runs after the filename repair, because it reads marker names, and before
         # the checks, so the panel reports where a marker IS rather than where it was.
-        final_body, moved = repair_marker_placement(final_body)
-        for name, why in moved:
-            print(f"[swap_blog_photos] MOVED marker {name!r} ({why})",
+        placement = repair_marker_placement(final_body)
+        final_body = placement.body
+        # Recorded where it outlives publication (#1172). A move changes what
+        # Dan published without saying so, and a REFUSAL is reported only on a
+        # panel that clears while the condition stays, so neither survives to
+        # answer the question afterwards unless it is written here.
+        _placement_log = RepairLog(event=venue or "", script="swap_blog_photos")
+        for marker, why in placement.moved:
+            print(f"[swap_blog_photos] MOVED marker {marker!r} ({why})",
                   flush=True, file=sys.stderr)
+            _placement_log.moved(marker=marker, rule=why, placed=True, reason="")
+        for marker, why in placement.refused:
+            print(f"[swap_blog_photos] REFUSED to move marker {marker!r} ({why}): "
+                  f"no derived destination", flush=True, file=sys.stderr)
+            _placement_log.moved(
+                marker=marker, rule=why, placed=False,
+                reason="no prose below the stack to move it into")
 
         # The swap stages every photograph, so rule 4 licenses the same repair
         # generation gets (#1133). Without this the swap emitted a bad alt text
@@ -361,6 +375,14 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             final_body, program=program, venue=venue,
             photo_paths=dict(zip(photo_filenames, resolved)),
             runner=run_json_prompt, say=say,
+            # An ABSOLUTE deadline, so the pass cannot outlive the process it
+            # runs in (#1166). Without one it gets `float("inf")` and the
+            # budget check never fires, which made a swap of several
+            # photographs the route able to reach the 1,800 second ceiling,
+            # where the run is SIGTERM'd and every paid call in it is
+            # destroyed. Derived from this call because the swap is its own
+            # process and has spent nothing else of the ceiling.
+            deadline=deadline_from(started_at=time.time(), now=time.time),
             log=RepairLog(event=venue or "", script="swap_blog_photos"))
         final_body = repair.body
         for attempt in repair.attempts:

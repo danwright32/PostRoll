@@ -325,3 +325,70 @@ def test_the_reader_says_the_journal_was_unreadable_rather_than_empty(tmp_path,
     printed = capsys.readouterr().err
     assert "could not be read" in printed
     assert "No repair records" not in printed
+
+
+# --- a marker move reaches the journal (#1172) ------------------------------
+
+def test_a_move_is_recorded_with_the_marker_and_the_rule(tmp_path):
+    """The journal exists because repairs are SILENT and the panel does not
+    survive publication. Photo placement changes what Dan published without
+    saying so, and until this it left no durable trace at all."""
+    log = RepairLog(tmp_path / "j.jsonl", event="Spring Gala",
+                    script="generate_blog")
+
+    assert log.moved(marker="two.jpg", rule="stacked_photos",
+                     placed=True, reason="")
+
+    record = read_records(tmp_path / "j.jsonl")[0]
+    assert record["kind"] == "moved"
+    assert record["marker"] == "two.jpg"
+    assert record["rule"] == "stacked_photos"
+    assert record["placed"] is True
+
+
+def test_a_refused_move_is_recorded_as_its_own_outcome(tmp_path):
+    """Placed and refused must not read the same. `check_blog` still reports
+    the refusal on the panel, but the panel clears while the condition stays,
+    so this is the only record that the app looked and declined (L98, L126)."""
+    log = RepairLog(tmp_path / "j.jsonl", event="Spring Gala",
+                    script="generate_blog")
+
+    log.moved(marker="three.jpg", rule="stacked_photos", placed=False,
+              reason="no prose below the stack to move into")
+
+    record = read_records(tmp_path / "j.jsonl")[0]
+    assert record["placed"] is False
+    assert "no prose" in record["reason"]
+
+
+def test_the_two_outcomes_are_distinguishable_in_the_record(tmp_path):
+    """The control. If both wrote the same thing, the tests above would pass
+    while the record answered neither question (L11)."""
+    log = RepairLog(tmp_path / "j.jsonl", event="E", script="s")
+    log.moved(marker="a.jpg", rule="stacked_photos", placed=True, reason="")
+    log.moved(marker="b.jpg", rule="stacked_photos", placed=False, reason="why")
+
+    placed = [r["placed"] for r in read_records(tmp_path / "j.jsonl")]
+    assert placed == [True, False]
+
+
+def test_the_reader_renders_a_move_and_a_refusal_differently(tmp_path, capsys):
+    """A field with a writer and no reader is not evidence (L46), and the two
+    outcomes must not print the same, or the record answers neither question."""
+    from tools.read_repair_log import report
+
+    log = RepairLog(tmp_path / "j.jsonl", event="Spring Gala", script="s")
+    log.moved(marker="two.jpg", rule="stacked_photos", placed=True, reason="")
+    log.moved(marker="three.jpg", rule="stacked_photos", placed=False,
+              reason="no prose below the stack to move it into")
+
+    report(tmp_path / "j.jsonl")
+    said = capsys.readouterr().out
+
+    assert "two.jpg" in said and "three.jpg" in said
+    assert "no prose below" in said, "the refusal's reason was not rendered"
+    moved_line = [l for l in said.splitlines() if "two.jpg" in l][0]
+    refused_line = [l for l in said.splitlines() if "three.jpg" in l][0]
+    assert moved_line != refused_line.replace("three", "two"), (
+        "a move and a refusal print the same sentence, so the record cannot "
+        "say which happened")

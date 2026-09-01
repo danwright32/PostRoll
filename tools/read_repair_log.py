@@ -62,6 +62,23 @@ def report(path: str | Path | None = None, *, event: str | None = None) -> int:
             print(f"  now:  {after if after is not None else after_refused}")
             if record.get("reason"):
                 print(f"  why:  {record['reason']}")
+        elif kind == "moved":
+            # Two sentences, never one with a flag in it. A photograph the app
+            # MOVED and one it looked at and left alone are different facts,
+            # and the second is the one with no other record (#1172).
+            if record.get("placed"):
+                print(f"\n[{when}] {who}: moved {record.get('marker')}")
+                print(f"  the {record.get('rule')} rule fired, so it was "
+                      f"placed after the following paragraph")
+            else:
+                print(f"\n[{when}] {who}: LEFT {record.get('marker')} "
+                      f"where it was")
+                print(f"  the {record.get('rule')} rule fired and the app "
+                      f"declined to guess a position")
+                if record.get("reason"):
+                    print(f"  why:  {record['reason']}")
+                print("  the checks still report this, so it is on the panel "
+                      "until the post is published.")
         elif kind == "declined":
             print(f"\n[{when}] {who}: declined to repair "
                   f"{record.get('code')}, which fired {record.get('fired')} "

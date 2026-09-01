@@ -1,0 +1,8 @@
+{
+  "name": "generation-runs-the-repair-under-a-deadline",
+  "file": "postroll/ai/generate_blog.py",
+  "find": "            deadline=(repair_deadline if repair_deadline is not None\n                      else deadline_from(started_at=time.time(), now=time.time)),",
+  "replace": "            deadline=repair_deadline,",
+  "test": "tests/test_blog_repair_budget.py::test_generation_bounds_the_pass_when_no_caller_hands_it_a_deadline",
+  "breaks": "generation passes the caller's None straight through, where the pass reads it as float(\"inf\"), so the budget check can never fire and a generation run on its own is free to carry the process past the 1,800 second ceiling, at which point it is SIGTERM'd and every paid call in it is destroyed. generate_week is the only caller that supplies a deadline, so this is every other generation (#1166)"
+}
