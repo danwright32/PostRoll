@@ -392,3 +392,139 @@ def test_the_reader_renders_a_move_and_a_refusal_differently(tmp_path, capsys):
     assert moved_line != refused_line.replace("three", "two"), (
         "a move and a refusal print the same sentence, so the record cannot "
         "say which happened")
+
+
+# ── no test may reach Dan's live data (#1179, #1180) ─────────────────────────
+#
+# Kept in this file rather than one of its own, deliberately. A new test file is
+# unmeasured, and the duration record decides which files the fast run skips, so
+# adding one forces a re-measurement; every reading available today was taken on
+# a machine running Lightroom at 500% CPU and is not worth writing down (L224,
+# L356). These tests are about this journal, so this is their home anyway.
+#
+# `RepairLog` defaulted its path to the live file, and `generate_blog`,
+# `swap_blog_photos` and `retry_blog_repair` each construct one with no path, so
+# every test driving those paths appended to Dan's real record. Measured before
+# the fix, 2026-09-01: 2,775 records, all written that day, NONE belonging to
+# any of the 21 real stored events.
+#
+# It leaked silently for its whole life because the write is append-only and
+# best effort: a record landing in the wrong file fails nothing and no test goes
+# red. The only way to see it was to read the artefact (L2, L196).
+
+from postroll.data_root import data_root, running_under_test
+from postroll.ai import usage_log
+
+
+def test_the_suite_knows_it_is_a_test_run():
+    """Everything below rests on this, so it is asserted rather than assumed.
+    If pytest stopped setting the variable, every guard here would pass by
+    being unable to tell a test from the app (L98)."""
+    assert running_under_test()
+
+
+def test_the_default_journal_path_is_not_the_live_one_under_test():
+    """The refusal lives in the resource, because the three scripts CONSTRUCT
+    their own log rather than receiving one, and a construction site inside the
+    code under test is beyond any seam the caller could offer (L196)."""
+    live = data_root() / "blog-repairs.jsonl"
+    assert default_log_path() != live, (
+        "a test run resolves the journal to the live file, so anything driving "
+        "generate_blog, swap_blog_photos or retry_blog_repair appends to Dan's "
+        "real record")
+
+
+def test_a_log_built_the_way_the_scripts_build_it_writes_somewhere_harmless():
+    """Measured by where the write LANDS, not by what the path says (L322)."""
+    log = RepairLog(event="E", script="generate_blog")
+    assert log.attempt(target="a.jpg", marker="a.jpg", codes=["alt_text_length"],
+                       before="was", after="now", outcome="repaired", reason="")
+
+    assert log.path.exists()
+    assert log.path != data_root() / "blog-repairs.jsonl"
+    written = [json.loads(line) for line in log.path.read_text().splitlines()]
+    assert written[-1]["marker"] == "a.jpg"
+
+
+def test_the_live_journal_is_never_the_target_of_a_write_under_test(tmp_path):
+    """The control: a path handed in explicitly is still honoured, so the
+    redirect above has not simply broken the seam it was protecting."""
+    log = RepairLog(tmp_path / "mine.jsonl", event="E", script="s")
+    log.attempt(target="a.jpg", marker="a.jpg", codes=[], before=None,
+                after=None, outcome="blocked", reason="")
+
+    assert (tmp_path / "mine.jsonl").exists()
+    assert read_records(tmp_path / "mine.jsonl")
+
+
+def test_the_redirect_is_per_run_rather_than_one_shared_file():
+    """Two logs in one run may share a file; what matters is that the file is
+    not the live one. Asserted so a future change to a fixed temp path is a
+    deliberate choice rather than a surprise."""
+    first = RepairLog(event="A", script="generate_blog").path
+    second = RepairLog(event="B", script="swap_blog_photos").path
+    live = data_root() / "blog-repairs.jsonl"
+
+    assert first != live and second != live
+
+
+def test_a_chosen_data_directory_is_still_honoured(tmp_path, monkeypatch):
+    """The redirect must be no wider than its reason (L324).
+
+    A test that sets POSTROLL_DATA_DIR has already pointed the app somewhere of
+    its own, and that IS the seam this is protecting. The first version
+    redirected unconditionally and broke
+    `test_blog_repair_log.py::test_the_log_honours_the_apps_own_data_directory`,
+    which asserts exactly that behaviour.
+    """
+    monkeypatch.setenv("POSTROLL_DATA_DIR", str(tmp_path))
+
+    assert default_log_path().parent == tmp_path
+
+
+# --- the same guard on the usage log (#1180) -------------------------------
+#
+# Swept rather than fixed one at a time: the defect is the class, not the
+# instance (L30, L195). The journal is where it bit; the usage log is the same
+# shape, dormant only because tests stub the model runner and so never reach
+# the line that records. Its two neighbours, the audio cache and the failure
+# signals, already guard.
+
+from postroll.ai import usage_log
+
+
+def test_the_usage_log_path_still_tells_the_truth_about_where_it_lives():
+    """The guard is on the WRITE, not on the resolver, and that matters.
+
+    Redirecting `default_log_path` was tried first and moved a file nobody was
+    looking at: `cap_signals.default_record_path` derives its own file from this
+    one's PARENT, so `unrecognised-failures.jsonl` moved into the temp directory
+    too, and the test asserting the live path is right went red. A resolver that
+    stops telling the truth breaks every derivation from it (L204).
+    """
+    live = Path.home() / "Library" / "Application Support" / "PostRoll" / "usage.jsonl"
+    assert usage_log.default_log_path() == live
+
+    from postroll.ai import cap_signals
+    assert cap_signals.default_record_path().parent == live.parent, (
+        "the derived failure-signals file moved with it")
+
+
+def test_a_usage_record_written_under_test_lands_somewhere_harmless():
+    """Measured by where the write LANDS, not by what the path says (L322)."""
+    live = Path.home() / "Library" / "Application Support" / "PostRoll" / "usage.jsonl"
+    before = live.read_text() if live.exists() else None
+
+    usage_log.record(usage_log.Usage(model="claude-sonnet-5", input_tokens=1,
+                                     output_tokens=1),
+                     step="a-test-that-should-not-reach-the-live-log")
+
+    after = live.read_text() if live.exists() else None
+    assert after == before, "the usage log write reached the live file"
+
+
+def test_a_chosen_data_directory_is_still_honoured_by_the_usage_log(
+        tmp_path, monkeypatch):
+    """The redirect stays no wider than its reason (L324)."""
+    monkeypatch.setenv("POSTROLL_DATA_DIR", str(tmp_path))
+    assert usage_log.default_log_path().parent == tmp_path
