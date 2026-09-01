@@ -931,6 +931,11 @@ actor PythonBridge {
     ) -> [String: Any] {
         [
             "event":         event.name,
+            // WHICH post this is, so the repair journal's records can be shown
+            // against it and no other (#1162). The name and the venue cannot
+            // answer that: Dan shoots the same rooms repeatedly, so both
+            // collect other posts' records.
+            "event_id":      event.id.uuidString,
             "org":           event.org,
             "venue":         event.venue,
             "venue_context": event.venueContext,
@@ -969,6 +974,7 @@ actor PythonBridge {
             "photo_paths": photoPaths.map { $0.path },
         ]
         guard let event else { return manifest }
+        manifest["event_id"] = event.id.uuidString
         manifest["venue"] = event.venue
         manifest["venue_context"] = event.venueContext
         manifest["org"] = event.org
@@ -1393,6 +1399,7 @@ actor PythonBridge {
             "photo_paths": photoPaths.map(\.path),
         ]
         if let event {
+            manifest["event_id"] = event.id.uuidString
             manifest["venue"] = event.venue
             if let ocr = event.ocrResult,
                let program = try? JSONSerialization.jsonObject(
@@ -1598,6 +1605,11 @@ actor PythonBridge {
 
         var manifest: [String: Any] = [
             "event":         event.name,
+            // WHICH post this is, so the repair journal's records can be shown
+            // against it and no other (#1162). The name and the venue cannot
+            // answer that: Dan shoots the same rooms repeatedly, so both
+            // collect other posts' records.
+            "event_id":      event.id.uuidString,
             "org":           event.org,
             "venue":         event.venue,
             "venue_context": event.venueContext,

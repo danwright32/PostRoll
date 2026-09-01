@@ -181,6 +181,21 @@ struct BlogSection: View {
     ///
     /// Derived rather than stored, so the control disappears the moment the
     /// findings it was offered for do (L14).
+    /// Whether any run that can write to the repair journal is going, so the
+    /// record re-reads when one finishes.
+    ///
+    /// Computed here rather than inline in the body, and as a Bool rather than
+    /// an interpolated string, to keep the body's expressions cheap to
+    /// type-check. The neighbouring `CaptionReviewView` body genuinely hit
+    /// "unable to type-check this expression in reasonable time" on 2026-09-01
+    /// while this panel was being wired up, so the ceiling is real in this call
+    /// chain even though this body has not reached it.
+    private var anyBlogRunIsGoing: Bool {
+        if isRevising { return true }
+        if isSwappingPhotos { return true }
+        return isRetryingRepairs
+    }
+
     private var retryableMarkers: [String] {
         FindingsDisplay.retryableTargets(findings: blog.findings)
     }
@@ -430,6 +445,16 @@ struct BlogSection: View {
                             Text(note)
                                 .font(.system(size: 11))
                                 .foregroundStyle(PaintedSurfaces.secondaryText)
+                        }
+                        // The record of what the app rewrote, which was
+                        // readable only from a terminal until #1162. It reads
+                        // the journal itself, keyed on the event and on whether
+                        // any of the three runs that can write to it is going,
+                        // so it refreshes when one finishes.
+                        if let eventID {
+                            RepairRecordView(eventID: eventID,
+                                             runsActive: anyBlogRunIsGoing)
+                                .padding(.top, Spacing.xs)
                         }
                     }
                 }

@@ -162,6 +162,7 @@ def revise_blog(
     existing: dict[str, Any],
     feedback: str,
     venue_context: str = "",
+    event_id: str = "",
     photo_filenames: list[str] | None = None,
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
@@ -348,7 +349,8 @@ def revise_blog(
     # Dan published without saying so, and a REFUSAL is reported only on a
     # panel that clears while the condition stays, so neither survives to
     # answer the question afterwards unless it is written here.
-    _placement_log = RepairLog(event=venue or "", script="revise_blog")
+    _placement_log = RepairLog(event=venue or "", event_id=event_id,
+                               script="revise_blog")
     for marker, why in placement.moved:
         print(f"[revise_blog] MOVED marker {marker!r} ({why})",
               flush=True, file=sys.stderr)
@@ -428,6 +430,7 @@ def main() -> int:
         org=m["org"],
         venue=m["venue"],
         venue_context=m.get("venue_context", "") or "",
+        event_id=m.get("event_id", "") or "",
         date=m["date"],
         shoot_type=m.get("shoot_type", "performance"),
         program=m["program"],

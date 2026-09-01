@@ -1,0 +1,8 @@
+{
+  "name": "an-unreadable-repair-record-is-not-an-empty-one",
+  "file": "PostRollApp/Sources/Services/RepairRecordPanelText.swift",
+  "find": "            return \"The record could not be read, so this says nothing about \"",
+  "replace": "            return \"Nothing recorded for this post. \" + String(why.prefix(0)) + \"So this says nothing about \"",
+  "test": "PostRollTests/RepairRecordPanelTextTests/testAnUnreadableJournalSaysTheEvidenceIsMissing",
+  "breaks": "a journal that is there and cannot be read is shown as an empty one, so missing evidence reads as proof the app changed nothing in this post (L10, L11)"
+}

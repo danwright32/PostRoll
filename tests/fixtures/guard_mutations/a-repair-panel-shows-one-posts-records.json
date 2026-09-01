@@ -1,0 +1,8 @@
+{
+  "name": "a-repair-panel-shows-one-posts-records",
+  "file": "PostRollApp/Sources/Services/RepairJournal.swift",
+  "find": "                  id.lowercased() == wanted else { continue }",
+  "replace": "                  !id.isEmpty else { continue }",
+  "test": "PostRollTests/RepairJournalReadingTests/testOnlyThisPostsRepairsAreShown",
+  "breaks": "the panel stops selecting on the event id, so every post's repairs are shown against whichever post is open, which is the venue-shaped guess #1162 replaced"
+}
