@@ -1,0 +1,8 @@
+{
+  "name": "the-photographs-outlive-the-checks",
+  "file": "postroll/ai/generate_blog.py",
+  "find": "        final_body = strip_em_dashes(data.get(\"body\", \"\").strip())\n        final_body = _fix_wrong_names(final_body, program)",
+  "replace": "        shutil.rmtree(tmp_path, ignore_errors=True)\n        final_body = strip_em_dashes(data.get(\"body\", \"\").strip())\n        final_body = _fix_wrong_names(final_body, program)",
+  "test": "tests/test_blog_photographs_outlive_the_checks.py::test_generate_still_has_every_photograph_when_check_blog_runs",
+  "breaks": "the staged photographs are gone by the time the finalisation tail runs, which is exactly the state the tail was in before #1128 moved it inside the TemporaryDirectory block. Perturbed by deleting the staging directory at that point rather than by re-outdenting fifty lines, because it produces the identical runtime state and an anchor that size cannot be kept matching. The alt text repairer is a rewrite with the photograph ATTACHED, so with the files gone it has nothing to send and every marker would be answered as unrepairable (#1128, L3)"
+}

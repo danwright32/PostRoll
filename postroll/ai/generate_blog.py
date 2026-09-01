@@ -1853,55 +1853,64 @@ def generate_blog(
                 runner=run_json_prompt, validate=markers_preserved_validator,
             )
 
-    # Title is deterministic — "{event} at {venue}" — so Claude doesn't need
-    # to spend tokens (or risk drifting tone) on it. Falls back to whatever
-    # Claude returned only if either piece of metadata is missing.
-    # Backstops: deterministic em dash strip, deterministic name correction
-    # (pure regex), then per-paragraph second-person and contraction fixes
-    # (one focused call per offending paragraph, which the model reliably
-    # edits, unlike a full-body rewrite).
-    final_body = strip_em_dashes(data.get("body", "").strip())
-    final_body = _fix_wrong_names(final_body, program)
-    final_body = _fix_second_person(final_body)
-    final_body = _fix_missing_contractions(final_body)
+        # The finalisation tail runs INSIDE the staging block (#1128).
+        # Everything below opens no photograph today, so it read as safe
+        # outside it, and the block's exit deleted every staged copy before
+        # the checks ran. The alt text repair added by this milestone is a
+        # rewrite with the photograph ATTACHED, so it needs one file per
+        # marker on disk at exactly this point.
+        # tests/test_blog_photographs_outlive_the_checks.py asserts it by
+        # re-stat'ing the staged paths when check_blog is called.
 
-    # One check IS repairable in code, so it is repaired rather than reported
-    # (#962). A marker whose filename differs from a sent one only in which
-    # quote, dash or space character was typed, or in how an accent is encoded,
-    # names that file: the true spelling is in hand, so correcting it invents
-    # nothing. Measured on the DiGangi post, where this alone was fourteen of
-    # the twenty three checks Dan was handed. Runs after the last rewriter and
-    # before the checks, so what is reported is what the body actually says.
-    final_body, repairs = repair_marker_filenames(final_body, photo_filenames)
-    for was, now in repairs:
-        print(f"[generate_blog] REPAIRED marker filename: {was!r} -> {now!r}",
-              flush=True, file=sys.stderr)
+        # Title is deterministic ("{event} at {venue}") so Claude doesn't need
+        # to spend tokens (or risk drifting tone) on it. Falls back to whatever
+        # Claude returned only if either piece of metadata is missing.
+        # Backstops: deterministic em dash strip, deterministic name correction
+        # (pure regex), then per-paragraph second-person and contraction fixes
+        # (one focused call per offending paragraph, which the model reliably
+        # edits, unlike a full-body rewrite).
+        final_body = strip_em_dashes(data.get("body", "").strip())
+        final_body = _fix_wrong_names(final_body, program)
+        final_body = _fix_second_person(final_body)
+        final_body = _fix_missing_contractions(final_body)
 
-    # Deterministic backstops for the rules a prompt cannot hold (#201).
-    # The rest still REPORT rather than rewrite: nobody can supply the true
-    # number that replaces an invented one, and alt text cannot be rewritten
-    # without seeing the photograph. Reported loudly so a draft is never quietly
-    # shipped with them, and returned so the review screen can show what to fix.
-    findings = check_blog(final_body, program=program, venue=venue,
-                          photo_filenames=photo_filenames)
-    for f in findings:
-        print(f"[generate_blog] CHECK {f.code}: {f.message} ({f.detail})",
-              flush=True, file=sys.stderr)
+        # One check IS repairable in code, so it is repaired rather than reported
+        # (#962). A marker whose filename differs from a sent one only in which
+        # quote, dash or space character was typed, or in how an accent is encoded,
+        # names that file: the true spelling is in hand, so correcting it invents
+        # nothing. Measured on the DiGangi post, where this alone was fourteen of
+        # the twenty three checks Dan was handed. Runs after the last rewriter and
+        # before the checks, so what is reported is what the body actually says.
+        final_body, repairs = repair_marker_filenames(final_body, photo_filenames)
+        for was, now in repairs:
+            print(f"[generate_blog] REPAIRED marker filename: {was!r} -> {now!r}",
+                  flush=True, file=sys.stderr)
 
-    deterministic_title = _build_blog_title(event=event, venue=venue)
-    return {
-        "title": deterministic_title or data.get("title", "").strip(),
-        "body": final_body,
-        "photo_count": len(resolved),
-        "findings": [finding_entry(f) for f in findings],
-        # The exact text those findings were measured against, so an edited
-        # draft stops showing findings about the body before the edit. The
-        # caption paths have emitted their sibling `findings_caption` since
-        # #201; this one was named in the comment there and never sent, so
-        # the blog panel could not go stale on any post ever generated
-        # (#974).
-        "findings_body": final_body,
-    }
+        # Deterministic backstops for the rules a prompt cannot hold (#201).
+        # The rest still REPORT rather than rewrite: nobody can supply the true
+        # number that replaces an invented one, and alt text cannot be rewritten
+        # without seeing the photograph. Reported loudly so a draft is never quietly
+        # shipped with them, and returned so the review screen can show what to fix.
+        findings = check_blog(final_body, program=program, venue=venue,
+                              photo_filenames=photo_filenames)
+        for f in findings:
+            print(f"[generate_blog] CHECK {f.code}: {f.message} ({f.detail})",
+                  flush=True, file=sys.stderr)
+
+        deterministic_title = _build_blog_title(event=event, venue=venue)
+        return {
+            "title": deterministic_title or data.get("title", "").strip(),
+            "body": final_body,
+            "photo_count": len(resolved),
+            "findings": [finding_entry(f) for f in findings],
+            # The exact text those findings were measured against, so an edited
+            # draft stops showing findings about the body before the edit. The
+            # caption paths have emitted their sibling `findings_caption` since
+            # #201; this one was named in the comment there and never sent, so
+            # the blog panel could not go stale on any post ever generated
+            # (#974).
+            "findings_body": final_body,
+        }
 
 
 def _build_blog_title(event: str, venue: str) -> str:

@@ -142,41 +142,46 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         if not isinstance(data, dict):
             raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 
-    # Same deterministic dash strip its two sibling paths apply on the way out
-    # (generate_blog.py, revise_blog.py). Without it a post whose photos were
-    # swapped could ship an em dash into published copy (#203).
-    final_body = strip_em_dashes(data.get("body", body).strip())
+        # The finalisation tail runs INSIDE the staging block (#1128), for
+        # the reason generate_blog.py states at the same point: the alt text
+        # repair is a rewrite with the photograph attached, and the block's
+        # exit used to delete every staged copy before the checks ran.
 
-    # A near-miss filename is repaired rather than reported (#962). This path
-    # rewrites EVERY marker in the post, so it is the one most able to break
-    # the filename rule, and it was the one that could not see it: the real
-    # names were resolved a few lines above and none of them reached the check.
-    final_body, repairs = repair_marker_filenames(final_body, photo_filenames)
-    for was, now in repairs:
-        print(f"[swap_blog_photos] REPAIRED marker filename: {was!r} -> {now!r}",
-              flush=True, file=sys.stderr)
+        # Same deterministic dash strip its two sibling paths apply on the way out
+        # (generate_blog.py, revise_blog.py). Without it a post whose photos were
+        # swapped could ship an em dash into published copy (#203).
+        final_body = strip_em_dashes(data.get("body", body).strip())
 
-    # The same deterministic checks the generate and revise paths run (#201).
-    # The rest are reported, never rewritten: alt text cannot be corrected
-    # without seeing the photograph.
-    findings = check_blog(final_body, program=program, venue=venue,
-                          photo_filenames=photo_filenames)
-    for f in findings:
-        print(f"[swap_blog_photos] CHECK {f.code}: {f.message} ({f.detail})",
-              flush=True, file=sys.stderr)
+        # A near-miss filename is repaired rather than reported (#962). This path
+        # rewrites EVERY marker in the post, so it is the one most able to break
+        # the filename rule, and it was the one that could not see it: the real
+        # names were resolved a few lines above and none of them reached the check.
+        final_body, repairs = repair_marker_filenames(final_body, photo_filenames)
+        for was, now in repairs:
+            print(f"[swap_blog_photos] REPAIRED marker filename: {was!r} -> {now!r}",
+                  flush=True, file=sys.stderr)
 
-    return {
-        "body":        final_body,
-        "photo_count": len(photo_paths),
-        "findings": [finding_entry(f) for f in findings],
-        # The exact text those findings were measured against, so an edited
-        # draft stops showing findings about the body before the edit. The
-        # caption paths have emitted their sibling `findings_caption` since
-        # #201; this one was named in the comment there and never sent, so
-        # the blog panel could not go stale on any post ever generated
-        # (#974).
-        "findings_body": final_body,
-    }
+        # The same deterministic checks the generate and revise paths run (#201).
+        # The rest are reported, never rewritten: alt text cannot be corrected
+        # without seeing the photograph.
+        findings = check_blog(final_body, program=program, venue=venue,
+                              photo_filenames=photo_filenames)
+        for f in findings:
+            print(f"[swap_blog_photos] CHECK {f.code}: {f.message} ({f.detail})",
+                  flush=True, file=sys.stderr)
+
+        return {
+            "body":        final_body,
+            "photo_count": len(photo_paths),
+            "findings": [finding_entry(f) for f in findings],
+            # The exact text those findings were measured against, so an edited
+            # draft stops showing findings about the body before the edit. The
+            # caption paths have emitted their sibling `findings_caption` since
+            # #201; this one was named in the comment there and never sent, so
+            # the blog panel could not go stale on any post ever generated
+            # (#974).
+            "findings_body": final_body,
+        }
 
 
 def main() -> int:
