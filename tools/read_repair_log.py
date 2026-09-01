@@ -22,11 +22,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from postroll.ai.repair_log import default_log_path, read_records  # noqa: E402
+from postroll.ai.repair_log import (  # noqa: E402
+    RepairLogUnreadable, default_log_path, read_records)
 
 
 def report(path: str | Path | None = None, *, event: str | None = None) -> int:
-    records = read_records(path)
+    try:
+        records = read_records(path)
+    except RepairLogUnreadable as e:
+        # Said as what it is. "No repair records" here would be a claim that
+        # nothing happened, about a file that is sitting right there (L10).
+        print(f"The journal could not be read, so this says nothing about "
+              f"whether the app changed anything.\n{e}", file=sys.stderr)
+        return 2
     if event:
         records = [r for r in records if r.get("event") == event]
 

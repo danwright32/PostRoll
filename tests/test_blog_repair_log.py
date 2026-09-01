@@ -289,3 +289,39 @@ def test_the_six_ways_out_do_not_all_read_the_same(tmp_path):
         wordings.add(_pass_records(log.path)[0]["wording"])
 
     assert len(wordings) == 4, f"two exits say the same thing: {wordings}"
+
+
+def test_a_journal_that_is_THERE_and_unreadable_is_not_reported_as_empty(tmp_path):
+    """An absent journal means no pass has run. An unreadable one means the
+    evidence of every pass that DID is unavailable, and answering both with an
+    empty list tells Dan no repair happened on a post where one did (L10, L11).
+    """
+    from postroll.ai.repair_log import RepairLogUnreadable
+
+    # A directory where a file should be: present, and unreadable as text.
+    there_but_not = tmp_path / "blog-repairs.jsonl"
+    there_but_not.mkdir()
+
+    with pytest.raises(RepairLogUnreadable) as caught:
+        read_records(there_but_not)
+
+    assert "could not be read" in str(caught.value)
+    assert "no repairs" in str(caught.value)
+
+
+def test_an_absent_journal_is_simply_empty(tmp_path):
+    """The control: the distinction above must not make a first run an error."""
+    assert read_records(tmp_path / "never-written.jsonl") == []
+
+
+def test_the_reader_says_the_journal_was_unreadable_rather_than_empty(tmp_path,
+                                                                     capsys):
+    from tools.read_repair_log import report
+
+    there_but_not = tmp_path / "blog-repairs.jsonl"
+    there_but_not.mkdir()
+
+    assert report(there_but_not, event="E") == 2
+    printed = capsys.readouterr().err
+    assert "could not be read" in printed
+    assert "No repair records" not in printed

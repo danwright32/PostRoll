@@ -55,6 +55,16 @@ _PASS_WORDING = {
 }
 
 
+class RepairLogUnreadable(OSError):
+    """The journal is there and cannot be read.
+
+    Its own type because it must never be confused with an absent journal: one
+    means no pass has run, the other means the evidence of every pass that did
+    is unavailable, and answering both with an empty list tells Dan no repair
+    happened on a post where one did (L10, L11).
+    """
+
+
 def default_log_path() -> Path:
     """Beside everything else the app owns, through the one shared answer."""
     return data_root() / "blog-repairs.jsonl"
@@ -158,8 +168,20 @@ def read_records(path: str | Path | None = None) -> list[dict]:
     target = Path(path) if path is not None else default_log_path()
     try:
         raw = target.read_text(encoding="utf-8")
-    except OSError:
+    except FileNotFoundError:
+        # Genuinely nothing recorded: no pass has run against this data
+        # directory yet. An empty list is the honest answer.
         return []
+    except OSError as e:
+        # The file is THERE and could not be read. That is not "nothing was
+        # recorded", and answering with an empty list would have the reader
+        # tell Dan no repair happened on a post where one did (L10, L11). This
+        # is the only evidence a silent repair leaves, so the failure is said
+        # out loud and raised rather than flattened into an empty answer.
+        raise RepairLogUnreadable(
+            f"the repair journal at {target} exists and could not be read: "
+            f"{e}. This is the only record of what the app changed in a post, "
+            f"so treat this as evidence missing rather than as no repairs.") from e
     out: list[dict] = []
     for number, line in enumerate(raw.splitlines(), start=1):
         if not line.strip():
