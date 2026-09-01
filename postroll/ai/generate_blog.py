@@ -67,7 +67,10 @@ from .blog_prose import (
     prose_indices_with_second_person as _prose_indices_with_second_person,
     prose_indices_without_contractions as _prose_indices_without_contractions,
 )
-from .blog_quality import check_blog, finding_entry, repair_marker_filenames
+from .blog_photo_stamps import photo_stamps
+from .blog_quality import (check_blog, filenames_used_by, finding_entry,
+                           refuse_colliding_filenames,
+                           repair_marker_filenames)
 from ..blog_draft import blog_draft_text
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -1660,6 +1663,10 @@ def generate_blog(
             Path(p).name.split('_', 1)[1] if '_' in Path(p).name else Path(p).name
             for p in resolved
         ]
+        # Refused here, before a single paid call, because a collision makes the
+        # repairer attach the wrong photograph (#1130).
+        refuse_colliding_filenames(photo_filenames, [str(p) for p in photo_paths])
+
         photo_list = "\n".join(f"- {n}" for n in photo_filenames)
 
         brand_voice_text = load_brand_voice()
@@ -1807,6 +1814,24 @@ def generate_blog(
             print(f"[generate_blog] CHECK {f.code}: {f.message} ({f.detail})",
                   flush=True, file=sys.stderr)
 
+        # Which photographs this post actually PLACED, and the stamp each
+        # carried when its alt text was written (#1130).
+        #
+        # Two jobs in one key. It is the retention key a later swap compares
+        # against, so a photograph nobody has touched keeps its alt text and
+        # costs no model call; and it is the durable record of which seven of
+        # twelve photographs the prose was written around, which is what
+        # `blog_marker_missing_photo` was providing incidentally and stops
+        # providing the moment the repair pass acts on it (L277).
+        #
+        # Keyed on what the body PLACES, not on what the event offered, and a
+        # file that cannot be stat'ed is left out rather than stamped with
+        # zeros: a stamp nobody could verify answers every later comparison as
+        # retained, which is the failure this exists to prevent (L215).
+        placed = filenames_used_by(final_body, photo_filenames)
+        stamps = photo_stamps(placed, [
+            str(photo_paths[photo_filenames.index(name)]) for name in placed])
+
         deterministic_title = _build_blog_title(event=event, venue=venue)
         return {
             "title": deterministic_title or data.get("title", "").strip(),
@@ -1820,6 +1845,7 @@ def generate_blog(
             # the blog panel could not go stale on any post ever generated
             # (#974).
             "findings_body": final_body,
+            "photo_stamps": stamps,
         }
 
 

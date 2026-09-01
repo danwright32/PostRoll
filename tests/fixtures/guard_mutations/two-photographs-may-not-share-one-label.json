@@ -1,0 +1,8 @@
+{
+  "name": "two-photographs-may-not-share-one-label",
+  "file": "postroll/ai/blog_quality.py",
+  "find": "        key = _fold_filename(name)\n        # The SAME file listed twice is not this defect and is not refused",
+  "replace": "        key = name\n        # The SAME file listed twice is not this defect and is not refused",
+  "test": "tests/test_blog_photo_filename_collision.py::test_a_name_differing_only_in_punctuation_still_collides",
+  "breaks": "the collision refusal compares raw filenames rather than folded ones, so it lets through exactly the pair the fold creates: two files whose names differ only in which quote or dash was typed resolve to the same marker, the refusal stays silent, and the repairer attaches whichever photograph it reaches first (#1130, L75)"
+}

@@ -137,12 +137,36 @@ struct BlogOutput: Codable, Hashable {
     /// photo swap regenerates the markers and re-runs the checks without being
     /// an edit, so inferring one from the other reports fresh findings as stale.
     var findingsBody: String = ""
+    /// Which photographs this post PLACED, and what each one looked like when
+    /// its alt text was written (#1130).
+    ///
+    /// One entry per folded filename, holding the file's modification time in
+    /// nanoseconds and its size. Two jobs in one field.
+    ///
+    /// It is the retention key: a later photo swap compares each photograph
+    /// against its stamp and keeps the alt text of any that has not moved,
+    /// which is what stops six good descriptions being rewritten to change one
+    /// picture. Both numbers are in it because photos here are EDITED IN
+    /// PLACE, exactly as ThumbnailStore records: a crop or a re-export rewrites
+    /// the file and leaves the path alone, so a key built from the path would
+    /// keep alt text describing the picture that used to be there.
+    ///
+    /// And it is the durable record of WHICH photographs the prose was written
+    /// around. An event's photo list is what was AVAILABLE to the post, not
+    /// what is in it, and `blog_marker_missing_photo` was the only thing saying
+    /// so, incidentally, in a report the repair pass is about to act on.
+    ///
+    /// Empty on every post written before this shipped, which is a first run
+    /// and not an error: that post's next swap retains nothing and costs
+    /// exactly what it costs today.
+    var photoStamps: [String: [Int]] = [:]
 
     enum CodingKeys: String, CodingKey {
         case title, body, findings
         case photoCount    = "photo_count"
         case generatedBody = "generated_body"
         case findingsBody  = "findings_body"
+        case photoStamps   = "photo_stamps"
     }
 
     /// Attach findings from a Python run, pinning the body they describe.
@@ -321,6 +345,10 @@ extension BlogOutput {
         generatedBody = try c.decodeIfPresent(String.self, forKey: .generatedBody) ?? ""
         findings      = try c.decodeIfPresent([QualityFinding].self, forKey: .findings) ?? []
         findingsBody  = try c.decodeIfPresent(String.self, forKey: .findingsBody) ?? ""
+        // Empty on every post written before #1130, which is a first run: that
+        // post's next photo swap retains nothing and costs what it costs today.
+        photoStamps   = try c.decodeIfPresent([String: [Int]].self,
+                                              forKey: .photoStamps) ?? [:]
     }
 }
 

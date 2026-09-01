@@ -31,7 +31,10 @@ import tempfile
 from pathlib import Path
 
 from .ai_tells import strip_em_dashes
-from .blog_quality import check_blog, finding_entry, repair_marker_filenames
+from .blog_photo_stamps import photo_stamps
+from .blog_quality import (check_blog, filenames_used_by, finding_entry,
+                           refuse_colliding_filenames,
+                           repair_marker_filenames)
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 from .progress import ProgressWriter
@@ -123,6 +126,10 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             Path(p).name.split('_', 1)[1] if '_' in Path(p).name else Path(p).name
             for p in resolved
         ]
+        # Refused here, before a single paid call, because a collision makes the
+        # repairer attach the wrong photograph (#1130).
+        refuse_colliding_filenames(photo_filenames, [str(p) for p in photo_paths])
+
         photo_list = "\n".join(f"- {n}" for n in photo_filenames)
 
         names = [str(p.get("name", "")).strip()
@@ -183,6 +190,14 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             print(f"[swap_blog_photos] CHECK {f.code}: {f.message} ({f.detail})",
                   flush=True, file=sys.stderr)
 
+        # Which photographs this post actually PLACED, and the stamp each
+        # carried when its alt text was written (#1130). See generate_blog for
+        # what the key is for; the swap is the path that READS it, so it has to
+        # write a fresh one or the next swap has no record to compare against.
+        placed = filenames_used_by(final_body, photo_filenames)
+        stamps = photo_stamps(placed, [
+            str(photo_paths[photo_filenames.index(name)]) for name in placed])
+
         say.finish()
         return {
             "body":        final_body,
@@ -195,6 +210,7 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             # the blog panel could not go stale on any post ever generated
             # (#974).
             "findings_body": final_body,
+            "photo_stamps": stamps,
         }
 
 

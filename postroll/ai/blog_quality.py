@@ -226,6 +226,47 @@ def _fold_filename(name: str) -> str:
     return " ".join(text.translate(_PUNCTUATION_FOLD).split()).casefold()
 
 
+def refuse_colliding_filenames(photo_filenames: list[str],
+                               source_paths: list[str]) -> None:
+    """Refuse two photographs that would be shown under one label (#1130).
+
+    Both blog scripts build `photo_filenames` by stripping the `NNN_` staging
+    prefix off each staged basename, so two source photos from different
+    folders sharing a basename produce two identical labels, which is an
+    ordinary way to shoot: `day 1/DSC4821.jpg` and `day 2/DSC4821.jpg`.
+
+    `_marker_filename_findings` folds them into one dict key and the pair
+    silently collapses, so one photograph becomes unreportable as never placed.
+    That is a quiet hole in a report today. For the repairer it is fatal:
+    attaching the photograph means resolving a marker filename back to ONE file
+    on disk, and under a collision it attaches the wrong one, which reads as
+    correct and is not.
+
+    Folded rather than compared raw, for the reason `repair_marker_filenames`
+    folds: two names differing only in which quote was typed resolve to the same
+    marker, so comparing raw would let through exactly the pair the fold makes.
+
+    Raised BEFORE any paid call, and naming both full source paths, because
+    "two photos share a name" is not actionable without knowing which two (L75).
+    """
+    seen: dict[str, str] = {}
+    for name, source in zip(photo_filenames, source_paths):
+        key = _fold_filename(name)
+        # The SAME file listed twice is not this defect and is not refused
+        # here. It is one photograph placed twice, so resolving a marker back
+        # to a file attaches the right picture either way; what this exists to
+        # stop is one label standing for two DIFFERENT photographs, where the
+        # resolution is a coin toss and the wrong one reads as correct.
+        if key in seen and seen[key] != source:
+            raise ValueError(
+                f"Two photographs would be shown to the model under the same "
+                f"name, {name!r}, so a marker naming it cannot be resolved back "
+                f"to one file and the wrong photograph would be attached:\n"
+                f"  {seen[key]}\n  {source}\n"
+                f"Rename one of them, or pick a different frame.")
+        seen.setdefault(key, source)
+
+
 def filenames_used_by(body: str,
                       photo_filenames: list[str] | None) -> list[str]:
     """Which of the available photos this body actually places (#962).
