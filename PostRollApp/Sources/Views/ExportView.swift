@@ -167,8 +167,20 @@ struct ExportView: View {
     /// expensive on every redraw.
     private func refreshRecurringAccounts() {
         let book = accounts
+        // Scoped to THIS event (#1012, #1013). Recurrence is still counted
+        // across the library; only the answer is narrowed to what this event
+        // tags, so a church export stops naming a concert hall it has never
+        // tagged.
+        //
+        // Read live from the store rather than from the captured prop, which is
+        // a snapshot from when the screen was built and would miss a tag added
+        // since. Falling back to the prop when the id is not in the store is
+        // the same event either way, just possibly a tag behind, which is a far
+        // smaller wrong than reverting to the whole library.
+        let live = appState.events.first { $0.id == event.id } ?? event
         recurringAccounts = RecurringAccounts.needingAttention(
             events: appState.events,
+            taggedOn: live,
             stats: { book.stats(for: $0) },
             asOf: Date())
     }

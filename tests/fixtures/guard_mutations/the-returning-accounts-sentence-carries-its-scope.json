@@ -1,0 +1,8 @@
+{
+  "name": "the-returning-accounts-sentence-carries-its-scope",
+  "file": "PostRollApp/Sources/Services/RecurringAccounts.swift",
+  "find": "    static let scopeLine = \"Tagged on this event and coming up on your others: \"",
+  "replace": "    static let scopeLine = \"\"",
+  "test": "PostRollTests/RecurringAccountsTests/testTheSummarySaysTheseAccountsAreOnThisEvent",
+  "breaks": "the sentence loses its scope and is read as belonging to whatever surrounds it, which is two banners about the event being exported, so a correctly scoped list still reads as a claim nobody made (#1012, L287)"
+}

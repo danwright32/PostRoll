@@ -1,0 +1,8 @@
+{
+  "name": "the-returning-accounts-banner-is-about-this-event",
+  "file": "PostRollApp/Sources/Services/RecurringAccounts.swift",
+  "find": "        where count >= minimumEvents && onThisEvent.contains(key) {",
+  "replace": "        where count >= minimumEvents {",
+  "test": "PostRollTests/RecurringAccountsTests/testAnAccountThatRecursElsewhereIsNotNamedOnAnEventItIsNotOn",
+  "breaks": "the banner goes back to naming accounts from across the whole library on one event's export screen, so a church export names a concert hall that event has never tagged, which is what Dan asked about on 2026-09-01 (#1012)"
+}
