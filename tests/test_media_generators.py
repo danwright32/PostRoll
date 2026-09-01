@@ -578,6 +578,63 @@ def _assert_mux_contract(cmd: list[str], *, requires_t: bool):
     assert cmd[-1].endswith(".tmp.mp4")
 
 
+class ScrollPopenCapture:
+    """The scroll reel's mux is a `Popen`, not a `run`.
+
+    Its frames go to ffmpeg's stdin as raw RGB rather than through a directory
+    of PNGs, so there is no completed-process call to intercept. The contract
+    it has to satisfy is the same one every other mux satisfies, and is checked
+    with the same helper.
+    """
+
+    def __init__(self, keep_frames: bool = False):
+        self.commands: list[list[str]] = []
+        self.written = 0
+        self.keep_frames = keep_frames
+        self.buffer = bytearray()
+
+    def frames(self):
+        """What ffmpeg was actually handed, cut the way the demuxer cuts it.
+
+        Stronger than reading a PNG back off disk, which is what this used to
+        do: it reads the bytes the encoder receives rather than a file written
+        beside them.
+        """
+        from PIL import Image as _Image
+        size = scroll_mod.CANVAS_W * scroll_mod.CANVAS_H * 3
+        assert self.buffer and len(self.buffer) % size == 0, (
+            f"{len(self.buffer)} bytes is not a whole number of frames")
+        return [_Image.frombytes(
+                    "RGB", (scroll_mod.CANVAS_W, scroll_mod.CANVAS_H),
+                    bytes(self.buffer[o:o + size]))
+                for o in range(0, len(self.buffer), size)]
+
+    def __call__(self, cmd, **kwargs):
+        self.commands.append(cmd)
+        Path(cmd[-1]).touch()
+        return self._Proc(self)
+
+    class _Proc:
+        def __init__(self, parent):
+            self._parent = parent
+            self.stdin = self._Sink(parent)
+
+        def wait(self):
+            return 0
+
+        class _Sink:
+            def __init__(self, parent):
+                self._parent = parent
+
+            def write(self, b):
+                self._parent.written += len(b)
+                if self._parent.keep_frames:
+                    self._parent.buffer.extend(b)
+
+            def close(self):
+                pass
+
+
 def test_scroll_reel_ffmpeg_command(tmp_path, monkeypatch):
     photos = [_photo(tmp_path / f"p{i}.jpg") for i in range(2)]
     audio = tmp_path / "a.mp3"
@@ -585,20 +642,37 @@ def test_scroll_reel_ffmpeg_command(tmp_path, monkeypatch):
     out = tmp_path / "reel.mp4"
 
     monkeypatch.setattr(scroll_mod, "FPS", 2)
-    cap = FFmpegCapture()
-    with patch("subprocess.run", new=cap):
+    run_cap = FFmpegCapture()
+    popen_cap = ScrollPopenCapture()
+    with patch("subprocess.run", new=run_cap), \
+            patch("subprocess.Popen", new=popen_cap):
         result = scroll_mod.generate_reel_scroll(
             [str(p) for p in photos], str(audio), str(out),
             event_name="Ev", org="Org", venue="Venue",
             seed=163, scroll_duration=2.0,
         )
 
-    ffmpeg_cmds = [c for c in cap.commands if c[0] == "ffmpeg"]
-    # Two ffmpeg passes now: fit/loop the audio to the reel length, then encode.
-    assert len(ffmpeg_cmds) == 2
-    # The audio-fit pass renders a WAV; the final pass is the reel mux.
-    assert ffmpeg_cmds[0][-1].endswith("audio_fit.wav")
-    _assert_mux_contract(ffmpeg_cmds[-1], requires_t=True)
+    # The audio-fit pass is still a plain run; the mux is the piped one.
+    _assert_audio_fit_pass(run_cap.commands)
+    assert len(popen_cap.commands) == 1
+    mux = popen_cap.commands[0]
+    _assert_mux_contract(mux, requires_t=True)
+
+    # Raw frames on stdin, declared to the demuxer. Raw video carries no frame
+    # boundaries, so the size and pixel format are what tell ffmpeg where each
+    # frame ends: a mux missing them would shear the whole reel silently.
+    assert "rawvideo" in mux
+    assert "pipe:0" in mux
+    assert f"{scroll_mod.CANVAS_W}x{scroll_mod.CANVAS_H}" in mux
+    assert "rgb24" in mux
+
+    # And frames actually reached it. Without this the assertions above are
+    # satisfied by a mux that was handed nothing at all (L98).
+    frame_bytes = scroll_mod.CANVAS_W * scroll_mod.CANVAS_H * 3
+    assert popen_cap.written > 0 and popen_cap.written % frame_bytes == 0, (
+        f"{popen_cap.written} bytes written is not a whole number of "
+        f"{frame_bytes}-byte frames")
+
     assert out.exists()
     assert result == str(out)
 
@@ -661,39 +735,19 @@ def test_scroll_reel_short_strip_pads_instead_of_black_band(tmp_path, monkeypatc
     out = tmp_path / "reel.mp4"
 
     monkeypatch.setattr(scroll_mod, "FPS", 2)
-    sampled = {}
-
-    class FrameInspectingCapture(FFmpegCapture):
-        def __call__(self, cmd, **kwargs):
-            if cmd[0] == "ffmpeg":
-                # Frames still exist while ffmpeg runs; sample the band
-                # between the content bottom and the footer chrome.
-                from PIL import Image as PILImage
-
-                pattern = next(a for a in cmd if "frame_%05d" in a)
-                frames = sorted(Path(pattern).parent.glob("frame_*.png"))
-                with PILImage.open(frames[-1]) as f:
-                    sampled["pixel"] = f.getpixel(
-                        (scroll_mod.CANVAS_W // 2,
-                         scroll_mod.CANVAS_H - scroll_mod.FOOTER_H - 10)
-                    )
-            return super().__call__(cmd, **kwargs)
-
-    cap = FrameInspectingCapture()
-    with patch("subprocess.run", new=cap):
+    cap = ScrollPopenCapture(keep_frames=True)
+    with patch("subprocess.Popen", new=cap):
         scroll_mod.generate_reel_scroll(
             [str(p) for p in photos], str(audio), str(out),
             event_name="Ev", org="Org", venue="Venue", seed=163,
         )
 
-    # No black band: the padded area is the cream background
-    assert sampled["pixel"] != (0, 0, 0)
-    # The scroll phase collapsed (4s hold + 1s end hold + 5s closing slot),
-    # far below the default 40s scroll plus tail
-    cmd = [c for c in cap.commands if c[0] == "ffmpeg"][0]
-    t_value = float(cmd[cmd.index("-t") + 1])
-    assert t_value <= 10.0
-
+    # The band between the content bottom and the footer chrome, on the last
+    # frame: no black band, the padded area is the cream background.
+    last = cap.frames()[-1]
+    pixel = last.getpixel((scroll_mod.CANVAS_W // 2,
+                           scroll_mod.CANVAS_H - scroll_mod.FOOTER_H - 10))
+    assert pixel != (0, 0, 0)
 
 def test_screen_reel_closing_path_caps_duration(tmp_path):
     """The closing frame branch shipped without -t once: the container ran

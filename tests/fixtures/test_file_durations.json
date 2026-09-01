@@ -151,6 +151,8 @@
     "test_reel_audio_fallback.py": 0.0,
     "test_reel_layout_seed_is_required.py": 6.66,
     "test_reel_photo_selection_batching.py": 0.6700000000000002,
+    "test_reel_scroll_motion.py": 0.98,
+    "test_reel_scroll_render_path.py": 1.3,
     "test_reel_scroll_viewport.py": 14.04,
     "test_reel_style_default.py": 0.0,
     "test_reference_frame_shards_are_balanced.py": 0.0,
@@ -809,6 +811,14 @@
     "test_reel_photo_selection_batching.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_reel_scroll_motion.py": {
+      "run": "partial-2026-09-01T00:13Z",
+      "scale": 1.103
+    },
+    "test_reel_scroll_render_path.py": {
+      "run": "partial-2026-09-01T00:13Z",
+      "scale": 1.103
     },
     "test_reel_scroll_viewport.py": {
       "run": "full-before-2026-08-30",

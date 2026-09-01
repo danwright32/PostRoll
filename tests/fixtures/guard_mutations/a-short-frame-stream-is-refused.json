@@ -1,0 +1,8 @@
+{
+  "name": "a-short-frame-stream-is-refused",
+  "file": "postroll/media/generate_reel_scroll.py",
+  "find": "    if not ended_early and written < wanted:",
+  "replace": "    if False:",
+  "test": "tests/test_reel_scroll_render_path.py::test_a_generator_that_runs_out_early_is_refused",
+  "breaks": "a frame generator that runs out early encodes a short reel and reports success. ffmpeg is handed a raw stream, encodes whatever it is given and exits zero, so the video is quietly seconds shorter than the music it was cut to and nothing anywhere says so (L98, L11)"
+}
