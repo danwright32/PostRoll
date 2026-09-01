@@ -58,6 +58,14 @@ class RepairState(enum.Enum):
     The wording is what Dan reads, so it says what to DO rather than naming an
     internal status (L112).
     """
+    #: The pass's own outcome for a finding it FIXED. It never travels in a
+    #: payload, because the finding it describes no longer exists: a repaired
+    #: alt text stops failing the check that selected it, so `check_blog` does
+    #: not report it at all. It is here so the pass's partition can be asserted
+    #: TOTAL over everything it selected (L47, L517): a target that ended in no
+    #: state would carry the never-attempted default, and that renders exactly
+    #: like today's findings, which is the one thing rule 2 forbids.
+    REPAIRED = "repaired"
     NEVER = ""
     TRIED = "tried"
     BLOCKED = "blocked"
@@ -67,6 +75,8 @@ class RepairState(enum.Enum):
     @property
     def wording(self) -> str:
         return {
+            RepairState.REPAIRED:
+                "the app rewrote this and its own checks accepted the result",
             RepairState.NEVER: "",
             RepairState.TRIED:
                 "the app rewrote this and its own checks refused the result, so "
