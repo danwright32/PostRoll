@@ -49,6 +49,7 @@
     "test_blog_repair_on_every_path.py": 0.02,
     "test_blog_repair_pass.py": 0.1,
     "test_blog_repair_reaches_the_paths.py": 0.09,
+    "test_blog_repair_shrinks_toward_the_correction.py": 0.48,
     "test_blog_repairer_table.py": 0.04,
     "test_blog_revision_keeps_its_alt_text.py": 0.0,
     "test_blog_rewrite_keeps_inline_markers.py": 0.01,
@@ -429,6 +430,10 @@
     "test_blog_repair_reaches_the_paths.py": {
       "run": "partial-2026-09-01T05:17Z",
       "scale": 1.455
+    },
+    "test_blog_repair_shrinks_toward_the_correction.py": {
+      "run": "partial-2026-09-01T13:15Z",
+      "scale": 1.0
     },
     "test_blog_repairer_table.py": {
       "run": "partial-2026-09-01T05:33Z",
