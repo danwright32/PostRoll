@@ -54,6 +54,19 @@ from .ai_tells import (
 )
 from .claude_client import run_json_prompt, run_prompt, run_review_pass, load_brand_voice, ClaudeError
 from .progress import ProgressWriter
+# One definition of each, shared with the damage gate, which may not import a
+# module that can reach a model runner (#1129, L263). Aliased to the private
+# names this file has always used, so its call sites and the guard mutation
+# entries anchored on them are untouched.
+from .blog_prose import (
+    CONTRACTION_RE as _CONTRACTION_RE,
+    SECOND_PERSON_RE as _SECOND_PERSON_RE,
+    block_holds_marker as _block_holds_marker,
+    paragraphs_with_second_person as _paragraphs_with_second_person,
+    paragraphs_without_contractions as _paragraphs_without_contractions,
+    prose_indices_with_second_person as _prose_indices_with_second_person,
+    prose_indices_without_contractions as _prose_indices_without_contractions,
+)
 from .blog_quality import check_blog, finding_entry, repair_marker_filenames
 from ..blog_draft import blog_draft_text
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
@@ -1454,14 +1467,6 @@ def _fix_wrong_names(body: str, program: dict[str, Any]) -> str:
 # in code (regex, possessives excluded) and rewords ONLY those, one short call
 # each, then splices the result back. Small focused calls the model actually
 # applies. Falls back to the original paragraph on any failure.
-_CONTRACTION_RE = re.compile(
-    r"\b\w+n['’]t\b"                          # didn't, wasn't, isn't, don't
-    r"|\b\w+['’](?:m|re|ve|ll|d)\b"           # I'm, they're, I've, we'll, I'd
-    r"|\b(?:it|that|there|here|what|he|she|who|let|where|how|"
-    r"nothing|something)['’]s\b",             # it's, that's, there's (not poss.)
-    re.IGNORECASE,
-)
-
 _CONTRACTION_PARAGRAPH_PROMPT = """\
 Reword this single paragraph from a blog post by Dan Wright, a photographer,
 so it contains at least one natural contraction (I'm, I've, didn't, wasn't,
@@ -1474,48 +1479,12 @@ PARAGRAPH:
 {paragraph}"""
 
 
-def _prose_indices_without_contractions(body: str) -> list[int]:
-    """Positions in ``body.split("\n\n")`` of prose paragraphs with no
-    contraction.
-
-    Positions rather than text, because the caller has to put a rewrite back
-    and a text search covers the whole body including the ``[PHOTO:]`` markers
-    (#109). A marker whose alt text repeats a sentence from the prose then
-    takes the rewrite, which damages the alt text and leaves the prose exactly
-    as it was.
-    """
-    out: list[int] = []
-    for i, part in enumerate(body.split("\n\n")):
-        s = part.strip()
-        if not s or s.startswith("[PHOTO:"):
-            continue
-        if not _CONTRACTION_RE.search(s):
-            out.append(i)
-    return out
-
-
-def _paragraphs_without_contractions(body: str) -> list[str]:
-    """Prose paragraphs (not [PHOTO:] markers) that contain no contraction.
-    Possessive 's does not count as a contraction."""
-    offenders: list[str] = []
-    for p in body.split("\n\n"):
-        s = p.strip()
-        if not s or s.startswith("[PHOTO:"):
-            continue
-        if not _CONTRACTION_RE.search(s):
-            offenders.append(s)
-    return offenders
-
-
 # --- Per-paragraph second-person backstop -----------------------------------
 # The BLOG_SECOND_PERSON_SCAN prompt rule keeps leaking generic "you" into
 # final drafts. Like contractions, this is checkable in code: detect the
 # offending paragraphs deterministically and reword only those, one focused
 # call each. The CTA (final prose paragraph) and quoted speech are allowed
 # to address the reader.
-_SECOND_PERSON_RE = re.compile(r"\b(?:you|your|you're|yours)\b", re.IGNORECASE)
-_QUOTED_SPAN_RE = re.compile(r'["“][^"”]*["”]')
-
 _SECOND_PERSON_PARAGRAPH_PROMPT = """\
 Reword this single paragraph from a blog post by Dan Wright, a photographer,
 so it contains no second person ("you", "your"): recast it in Dan's first
@@ -1525,65 +1494,6 @@ paragraph, nothing else.
 
 PARAGRAPH:
 {paragraph}"""
-
-
-def _prose_indices_with_second_person(body: str) -> list[int]:
-    """Positions in ``body.split("\n\n")`` of prose paragraphs that address
-    the reader, excluding the closing call to action. See
-    `_prose_indices_without_contractions` for why positions and not text.
-    """
-    parts = body.split("\n\n")
-    prose = [i for i, part in enumerate(parts)
-             if part.strip() and not part.strip().startswith("[PHOTO:")]
-    if not prose:
-        return []
-    cta = prose[-1]
-    out: list[int] = []
-    for i in prose:
-        if i == cta:
-            continue
-        unquoted = _QUOTED_SPAN_RE.sub("", parts[i].strip())
-        if _SECOND_PERSON_RE.search(unquoted):
-            out.append(i)
-    return out
-
-
-def _paragraphs_with_second_person(body: str) -> list[str]:
-    """Prose paragraphs (not markers, not the closing CTA) that address the
-    reader outside of quoted speech."""
-    paras = [p.strip() for p in body.split("\n\n") if p.strip()]
-    prose = [p for p in paras if not p.startswith("[PHOTO:")]
-    if not prose:
-        return []
-    cta = prose[-1]
-    offenders: list[str] = []
-    for p in prose:
-        if p is cta:
-            continue
-        unquoted = _QUOTED_SPAN_RE.sub("", p)
-        if _SECOND_PERSON_RE.search(unquoted):
-            offenders.append(p)
-    return offenders
-
-
-def _block_holds_marker(block: str) -> bool:
-    """Whether a paragraph carries a photo marker ANYWHERE in it (#998).
-
-    CONTAINS, not starts with. Every index builder in this module already
-    excludes a block that STARTS with a marker, so a refusal keyed on the start
-    can never fire, and the case that actually reaches the rewriters below is
-    the inline one: a marker part way through a paragraph, which is prose to
-    the index builders and a marker to everything else.
-
-    The bare opening rather than the full `[PHOTO: name | alt]` pattern,
-    because a marker missing its pipe is not something these rewriters may hand
-    to a model either. It still names a photograph, and losing it loses the
-    picture just the same.
-
-    One predicate for both rewriters, so there is one definition of this
-    question rather than two that read the same and can drift (L263).
-    """
-    return "[PHOTO:" in block
 
 
 def _marker_refusal(pass_name: str, index: int, block: str) -> str:

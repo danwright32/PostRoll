@@ -1,0 +1,8 @@
+{
+  "name": "a-deleted-alt-text-is-still-a-finding",
+  "file": "postroll/ai/blog_quality.py",
+  "find": "        words = len(strip_em_dashes(alt).split())\n        if not words:",
+  "replace": "        words = len(strip_em_dashes(alt).split())\n        if False:",
+  "test": "tests/test_blog_empty_alt_text.py::test_a_deleted_alt_text_is_reported",
+  "breaks": "the `words and` exemption is back in everything but name: a marker whose alt text has been deleted produces no finding at all, because every other alt rule searches the text for something and an empty one matches nothing. The repair pass accepts a rewrite by re-running these rules, so the shortest path to an accepted repair becomes deleting the words (#1129, L283)"
+}

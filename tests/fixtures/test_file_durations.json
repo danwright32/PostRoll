@@ -21,7 +21,9 @@
     "test_blog_backstop_splice.py": 0.0,
     "test_blog_correction_fixtures.py": 0.02,
     "test_blog_draft_text.py": 0.01,
+    "test_blog_empty_alt_text.py": 0.0,
     "test_blog_filename_rules_on_every_path.py": 0.0,
+    "test_blog_finding_targets.py": 0.02,
     "test_blog_findings_module_is_a_leaf.py": 0.02,
     "test_blog_findings_pin_their_body.py": 0.1,
     "test_blog_marker_drift_measurement.py": 0.01,
@@ -31,7 +33,9 @@
     "test_blog_number_false_positives.py": 0.07,
     "test_blog_photo_subsampling.py": 0.4000000000000001,
     "test_blog_photographs_outlive_the_checks.py": 0.01,
+    "test_blog_prose_predicates_are_a_leaf.py": 0.58,
     "test_blog_quality_checks.py": 0.16000000000000003,
+    "test_blog_repair_damage.py": 0.08,
     "test_blog_rewrite_keeps_inline_markers.py": 0.01,
     "test_blog_side_paths_report_progress.py": 1.41,
     "test_both_swift_runners_agree.py": 0.01,
@@ -298,9 +302,17 @@
       "run": "full-before-2026-08-30",
       "scale": 1.0
     },
+    "test_blog_empty_alt_text.py": {
+      "run": "partial-2026-09-01T03:14Z",
+      "scale": 1.56
+    },
     "test_blog_filename_rules_on_every_path.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_blog_finding_targets.py": {
+      "run": "partial-2026-09-01T03:14Z",
+      "scale": 1.56
     },
     "test_blog_findings_module_is_a_leaf.py": {
       "run": "partial-2026-09-01T02:14Z",
@@ -338,9 +350,17 @@
       "run": "partial-2026-09-01T02:14Z",
       "scale": 0.696
     },
+    "test_blog_prose_predicates_are_a_leaf.py": {
+      "run": "partial-2026-09-01T03:14Z",
+      "scale": 1.56
+    },
     "test_blog_quality_checks.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_blog_repair_damage.py": {
+      "run": "partial-2026-09-01T03:14Z",
+      "scale": 1.56
     },
     "test_blog_rewrite_keeps_inline_markers.py": {
       "run": "partial-2026-08-31T22:03Z",

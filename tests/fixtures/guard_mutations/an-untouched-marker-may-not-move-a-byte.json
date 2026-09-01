@@ -1,0 +1,8 @@
+{
+  "name": "an-untouched-marker-may-not-move-a-byte",
+  "file": "postroll/ai/blog_repair_damage.py",
+  "find": "        if after != (name, alt):\n            reasons.append(\n                f\"the repair altered the marker for {name}, which it was not \"\n                \"allowed to touch\")",
+  "replace": "        if [x.split() for x in after] != [x.split() for x in (name, alt)]:\n            reasons.append(\n                f\"the repair altered the marker for {name}, which it was not \"\n                \"allowed to touch\")",
+  "test": "tests/test_blog_repair_damage.py::test_a_retained_marker_differing_by_one_byte_is_refused",
+  "breaks": "the untouched-span comparison ignores whitespace and punctuation, so a repair may rewrite the punctuation of a marker it was not allowed to touch and the gate reports nothing. The whole point of the verbatim splice is that a retained marker is returned byte for byte (#1129)"
+}
