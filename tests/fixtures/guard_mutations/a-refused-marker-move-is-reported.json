@@ -1,0 +1,8 @@
+{
+  "name": "a-refused-marker-move-is-reported",
+  "file": "postroll/ai/blog_quality.py",
+  "find": "    refused = [(_marker_name(m), \"stacked_photos\") for m in waiting]",
+  "replace": "    refused = []",
+  "test": "tests/test_blog_marker_placement.py::test_a_refused_move_is_reported_as_well_as_a_made_one",
+  "breaks": "a stack the repair looked at and declined to move is reported as nothing at all, so the only trace is check_blog on the panel, which clears when the post is published while the condition stays (#1172, L98, L126)"
+}

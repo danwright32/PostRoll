@@ -1,0 +1,8 @@
+{
+  "name": "generation-journals-the-markers-it-moved",
+  "file": "postroll/ai/generate_blog.py",
+  "find": "            _placement_log.moved(marker=marker, rule=why, placed=True, reason=\"\")",
+  "replace": "            pass",
+  "test": "tests/test_blog_marker_placement.py::test_every_blog_path_journals_what_it_moved",
+  "breaks": "generation moves photo markers and records none of it, so what the app changed about a published post cannot be answered afterwards. The first version of this guard SURVIVED this mutation, because it asked only whether a .moved call existed anywhere in the module and the refused branch answered for it (#1172, L178)"
+}
