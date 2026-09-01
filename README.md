@@ -100,6 +100,12 @@ It is stored in the login Keychain and handed to the Python subprocess through
 its environment. This is a metered API and a week's generation is a real
 recurring cost (see section 12 of the PRD).
 
+**The Meta system user token**, once the automatic account numbers feature
+ships, is what lets PostRoll read follower, like and comment figures for the
+accounts an event tags. The developer app behind it, the permissions it needs,
+how the token is minted and how to delete the whole thing are in
+[docs/META-APP.md](docs/META-APP.md).
+
 **Everything else** is read from your login shell, because the app runs Python
 through `zsh -l`. Put these in `~/.zshrc`:
 
