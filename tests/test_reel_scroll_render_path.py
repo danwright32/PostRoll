@@ -129,7 +129,7 @@ def test_a_render_writes_no_frame_images_to_disk(tmp_path, monkeypatch):
     out = tmp_path / "reel.mp4"
     scroll_mod.generate_reel_scroll(
         photos, str(audio), str(out), event_name=EVENT[0], org=EVENT[1],
-        venue=EVENT[2], scroll_duration=1.0)
+        venue=EVENT[2], seed=163, scroll_duration=1.0)
 
     # The positive half first. An empty `written` proves nothing on its own:
     # a render that failed before the frame loop writes no frames either, and
