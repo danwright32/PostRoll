@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import random
+import math
 import subprocess
 import sys
 import tempfile
@@ -652,9 +653,16 @@ def encode_frames(frames, audio_in: str, audio_af: str, total_duration: float,
     # stderr to a file rather than a pipe: a pipe nobody drains fills its buffer
     # and deadlocks against our own writes, which is a hang rather than a
     # failure and therefore the worse outcome (L110).
+    # What `-t` will actually take. ffmpeg stops reading once it has this many,
+    # so a broken pipe AFTER this point is the ordinary end of a render rather
+    # than a failure, and short of it is a reel that ends early.
+    wanted = math.ceil(total_duration * fps)
+
     with tempfile.TemporaryFile("w+") as err:
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
                                 stdout=subprocess.DEVNULL, stderr=err)
+        written = 0
+        ended_early = False
         try:
             for i, frame in enumerate(frames):
                 if frame.size != expected or frame.mode != "RGB":
@@ -663,13 +671,17 @@ def encode_frames(frames, audio_in: str, audio_af: str, total_duration: float,
                         f"stream is cut on RGB {expected}: every later frame "
                         f"would be sheared rather than rejected")
                 proc.stdin.write(frame.tobytes())
+                written += 1
         except BrokenPipeError:
-            pass  # ffmpeg is gone; its stderr below says why
+            # ffmpeg is gone. Either it has taken its `-t` worth and stopped
+            # reading, which is routine, or it died, which its stderr and its
+            # return code below say.
+            ended_early = True
         finally:
             try:
                 proc.stdin.close()
             except BrokenPipeError:
-                pass
+                ended_early = True
             returncode = proc.wait()
         err.seek(0)
         stderr = err.read()
@@ -677,6 +689,19 @@ def encode_frames(frames, audio_in: str, audio_af: str, total_duration: float,
     if returncode != 0:
         Path(encode_tmp).unlink(missing_ok=True)
         raise RuntimeError(f"ffmpeg failed: {stderr[-500:]}")
+
+    # A generator that ran out early is the one way this ends with a SHORT reel
+    # and a clean exit code. ffmpeg encodes whatever it was given and reports
+    # success, so the video is quietly seconds shorter than the music it was cut
+    # to and nothing says so (L98, L11). Only when the pipe did NOT break: a
+    # broken pipe means ffmpeg stopped reading because it already had enough.
+    if not ended_early and written < wanted:
+        Path(encode_tmp).unlink(missing_ok=True)
+        raise RuntimeError(
+            f"the frame generator produced {written} frames and {total_duration:.2f}s "
+            f"at {fps}fps needs {wanted}: the reel would be "
+            f"{(wanted - written) / fps:.2f}s short of its own music, and ffmpeg "
+            f"encodes what it is given and exits cleanly")
 
 
 from postroll.ai.audio_tags import THURSDAY_FALLBACK_TAGS as _DEFAULT_AUDIO_TAGS  # noqa: E402

@@ -142,3 +142,46 @@ def test_a_render_writes_no_frame_images_to_disk(tmp_path, monkeypatch):
         f"{len(frame_files)} frame images were written to disk, first "
         f"{frame_files[:1]}; frames go to ffmpeg's stdin"
     )
+
+
+# -- a generator that runs out early must not encode a short reel -------------
+
+def _silence(tmp_path):
+    audio = tmp_path / "silence.m4a"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+         "-t", "4", "-c:a", "aac", str(audio)],
+        check=True, capture_output=True)
+    return audio
+
+
+def _blank_frames(n: int):
+    for _ in range(n):
+        yield Image.new("RGB", (scroll_mod.CANVAS_W, scroll_mod.CANVAS_H), (250, 248, 244))
+
+
+def test_a_generator_that_runs_out_early_is_refused(tmp_path):
+    """The one way this ends with a SHORT reel and a clean exit code.
+
+    ffmpeg is handed a raw stream and encodes whatever it is given. If the
+    frame generator yields fewer frames than the duration asks for, ffmpeg
+    reports success and the video is quietly seconds shorter than the music it
+    was cut to, with nothing saying so (L98, L11). It is the frame COUNT and
+    the duration disagreeing, which are computed separately, so a bug in either
+    produces it.
+    """
+    audio = _silence(tmp_path)
+    out = tmp_path / "short.mp4"
+    with pytest.raises(RuntimeError, match="short of its own music"):
+        scroll_mod.encode_frames(_blank_frames(4), str(audio), "anull",
+                                 total_duration=2.0, encode_tmp=str(out), fps=10)
+
+
+def test_a_full_stream_encodes_without_complaint(tmp_path):
+    """The positive control. Without it the refusal above is satisfied by an
+    encoder that rejects every render (L159)."""
+    audio = _silence(tmp_path)
+    out = tmp_path / "full.mp4"
+    scroll_mod.encode_frames(_blank_frames(20), str(audio), "anull",
+                             total_duration=2.0, encode_tmp=str(out), fps=10)
+    assert out.exists() and out.stat().st_size > 0
