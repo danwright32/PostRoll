@@ -41,7 +41,7 @@ from .blog_findings import Finding, finding_entry
 
 __all__ = ["Finding", "finding_entry", "check_blog", "filenames_used_by",
            "repair_marker_filenames", "repair_marker_placement",
-           "names_a_group", "ALT_MIN_WORDS", "ALT_MAX_WORDS",
+           "shared_opening_groups", "names_a_group", "ALT_MIN_WORDS", "ALT_MAX_WORDS",
            "MAX_SHARED_OPENINGS", "MAX_PROSE_BEFORE_FIRST_PHOTO"]
 
 #: How many prose blocks may precede the first photograph.
@@ -296,6 +296,42 @@ def filenames_used_by(body: str,
     written = {_fold_filename(name) for name, _alt in _markers(body)}
     return [str(name).strip() for name in photo_filenames
             if str(name).strip() and _fold_filename(name) in written]
+
+
+#: How many leading words of an alt text count as its OPENING.
+#:
+#: Named because the repair pass has to group markers by exactly what the rule
+#: groups them by. A second literal here is a number the check and the repair
+#: can disagree about, and they would disagree by licensing a component the
+#: check does not believe in (L41).
+_OPENING_WORDS = 3
+
+
+def _openings(body: str) -> dict[str, list[str]]:
+    """Every distinct opening in the body, to the markers that use it."""
+    out: dict[str, list[str]] = {}
+    for name, alt in _markers(body):
+        key = " ".join(alt.lower().split()[:_OPENING_WORDS])
+        if key:
+            out.setdefault(key, []).append(name)
+    return out
+
+
+def shared_opening_groups(body: str) -> list[list[str]]:
+    """Markers the opening rule names TOGETHER, as groups (#1159).
+
+    `alt_text_repeated_opening` is the only alt text rule that is a fact about
+    the relationship between markers rather than about one marker's text, so it
+    is the only one where rewriting a marker changes another marker's findings.
+    The repair pass needs the group in order to select it as one target and to
+    licence it as one in the damage gate.
+
+    Read from the same `_openings` the check reads, so a group the pass acts on
+    is exactly a group the check would report. Two readings of one rule drift,
+    and drift here means licensing a component the checker does not believe in.
+    """
+    return [names for names in _openings(body).values()
+            if len(names) > MAX_SHARED_OPENINGS]
 
 
 def repair_marker_placement(
@@ -737,12 +773,7 @@ def check_blog_targeted(
     emit("alt_text_missing_venue", "alt_text_missing_performer")
 
     # 20. vary the opening
-    openings: dict[str, list[str]] = {}
-    for name, alt in markers:
-        key = " ".join(alt.lower().split()[:3])
-        if key:
-            openings.setdefault(key, []).append(name)
-    for key, names in openings.items():
+    for key, names in _openings(body).items():
         if len(names) > MAX_SHARED_OPENINGS:
             # Names several markers in one finding, which is why the repair
             # pass groups markers into connected components: rewriting one of

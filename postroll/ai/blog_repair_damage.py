@@ -57,11 +57,29 @@ class Touched:
     """
     markers: frozenset[str] = field(default_factory=frozenset)
     paragraphs: frozenset[int] = field(default_factory=frozenset)
+    #: Markers a CROSS-MARKER finding may move among (#1159).
+    #:
+    #: Deliberately separate from `markers`, because they answer two different
+    #: questions and merging them breaks the gate in a way that reads as
+    #: working. `markers` is what the repair may CHANGE, and every rewritten
+    #: alt text is held to the length, retention and identity checks. The
+    #: component is only what a finding about the RELATIONSHIP between markers
+    #: may be attributed to. Listing the whole component as `markers` was tried
+    #: first: it puts the other members' untouched alt text through the checks
+    #: for a rewrite, so a component containing any marker that is short or
+    #: unrepaired is refused for damage this repair never did.
+    component: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
-    def marker(cls, *names: str) -> "Touched":
-        """The commonest case: one alt text rewrite, licensed by filename."""
-        return cls(markers=frozenset(_fold_filename(n) for n in names))
+    def marker(cls, *names: str, component: "tuple[str, ...] | list[str]" = ()
+               ) -> "Touched":
+        """The commonest case: one alt text rewrite, licensed by filename.
+
+        `component` names the markers a cross-marker finding may move among,
+        and it never widens what may be CHANGED.
+        """
+        return cls(markers=frozenset(_fold_filename(n) for n in names),
+                   component=frozenset(_fold_filename(n) for n in component))
 
 
 #: Words carrying no identity, stripped from both sides before the retention
@@ -159,6 +177,17 @@ def _flatten(value: Any) -> str:
     if isinstance(value, (list, tuple, set, frozenset)):
         return " ".join(_flatten(v) for v in value)
     return str(value)
+
+
+#: Codes that state a fact about the RELATIONSHIP between markers rather than
+#: about one marker's text (#1159).
+#:
+#: These are the only ones a repair can move from one marker to another without
+#: touching the second marker's text, so they are the only ones judged as a
+#: component total rather than per target. Kept as a set rather than a literal
+#: comparison because a second such rule is a change in one place, and because
+#: a reader has to be able to see the whole list of what is treated this way.
+CROSS_MARKER_CODES = frozenset({"alt_text_repeated_opening"})
 
 
 def _marker_map(body: str) -> dict[str, tuple[str, str]]:
@@ -279,10 +308,54 @@ def blog_repair_damage(
 
     was, now = counted(prior), counted(revised)
     prior_keys = set(_marker_keys(prior))
+
+    # A cross-marker code inside the licensed component is judged on the
+    # component's TOTAL, not per target (#1159).
+    #
+    # `alt_text_repeated_opening` is a fact about the RELATIONSHIP between
+    # markers, and it is targeted on the FIRST marker of the group so that it
+    # has a stable key. Repair one member and the group's first marker becomes
+    # a DIFFERENT marker, so the count on the old key falls to 0 and the count
+    # on the new key rises to 1. Per target that reads as a finding introduced
+    # on an untouched marker; across the component it is one finding that has
+    # not gone away yet.
+    #
+    # The comment above reasoned that movement here is always downward. That
+    # holds only while repairing one member drops the group under
+    # MAX_SHARED_OPENINGS. With four markers sharing, fixing one leaves three,
+    # the finding relocates rather than clearing, and the gate refused a repair
+    # for making partial progress: the marker ended `tried` and a fixable post
+    # made none at all.
+    #
+    # Narrow deliberately. Only these codes, only targets INSIDE `touched`, and
+    # only the total: a component whose total RISES is still refused, and every
+    # other code on every other target is judged exactly as before.
+    # The component when one was licensed, otherwise the single touched
+    # marker, which reproduces the per-target behaviour exactly.
+    licensed = touched.component or touched.markers
+
+    def component_total(counts: dict, code: str) -> int:
+        return sum(n for (c, kind, target_key, _i), n in counts.items()
+                   if c == code and kind == "marker" and target_key in licensed)
+
+    for code in sorted(CROSS_MARKER_CODES):
+        before_total = component_total(was, code)
+        after_total = component_total(now, code)
+        if after_total > before_total:
+            reasons.append(
+                f"the repair introduced a {code} finding inside the component "
+                f"it was repairing: it went from {before_total} to "
+                f"{after_total} across {len(licensed)} marker(s)")
+
     for key, count in sorted(now.items()):
         if count <= was.get(key, 0):
             continue
         code, kind, target_key, _index = key
+        # Already judged as a component total just above, and judging it twice
+        # would report the same movement as both allowed and refused.
+        if (code in CROSS_MARKER_CODES and kind == "marker"
+                and target_key in licensed):
+            continue
         # A finding on a marker that was NOT IN THE POST BEFORE is not a
         # regression, because there is nothing it could be worse than (#1131).
         #

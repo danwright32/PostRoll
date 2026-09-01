@@ -38,8 +38,10 @@ from .blog_findings import Finding, RepairState
 from .blog_photo_stamps import decode_photo_path
 from .blog_quality import (ALT_MAX_WORDS, ALT_MIN_WORDS, _PHOTO_MARKER,
                            _fold_filename, _markers, check_alt_text,
-                           repair_marker_placement)
-from .blog_repair_damage import Touched, blog_repair_damage
+                           check_blog_targeted, repair_marker_placement,
+                           shared_opening_groups)
+from .blog_repair_damage import (CROSS_MARKER_CODES, Touched,
+                                 blog_repair_damage)
 from .repair_log import RepairLog
 from .claude_client import ClaudeError, run_json_prompt
 
@@ -257,12 +259,58 @@ def _run_pass(body, outcome, *, program, venue, photo_paths, runner, now,
     # Which markers a check refused. Selected from `check_alt_text`, which is
     # literally the call the acceptance check re-runs, so a marker cannot be
     # selected by one rule and accepted by a different reading of it (L263).
+    def components(current: str) -> dict[str, frozenset[str]]:
+        """Every marker to the set of markers it is repaired WITH (#1159).
+
+        A marker alone is its own component. Markers the opening rule names
+        together are one, because rewriting any of them changes what the others
+        break: the rule is a fact about the relationship between them.
+        """
+        out: dict[str, frozenset[str]] = {}
+        for group in shared_opening_groups(current):
+            keys = frozenset(_fold_filename(n) for n in group)
+            for key in keys:
+                out[key] = keys
+        return out
+
+    def cross_marker(current: str) -> dict[str, list[Finding]]:
+        """The cross-marker findings, attributed to every marker they NAME.
+
+        Read from `check_blog_targeted` rather than rebuilt, so the finding the
+        pass acts on is the checker's own (L263). It is TARGETED on the first
+        marker of the group, because a finding needs one stable key, but it is
+        ABOUT all of them, and selection has to see it on each.
+        """
+        by_target: dict[str, Finding] = {}
+        for finding, target in check_blog_targeted(current, program=program,
+                                                   venue=venue):
+            if finding.code in CROSS_MARKER_CODES and target.kind == "marker":
+                by_target[target.key] = finding
+        out: dict[str, list[Finding]] = {}
+        for key, group in components(current).items():
+            for target_key, finding in by_target.items():
+                if target_key in group:
+                    out.setdefault(key, []).append(finding)
+        return out
+
+    # Which markers a check refused. The per-marker rules come from
+    # `check_alt_text`, which is literally the call the acceptance check
+    # re-runs, so a marker cannot be selected by one rule and accepted by a
+    # different reading of it (L263). The cross-marker rule is added here
+    # because `check_alt_text` is the six rules about ONE marker and cannot
+    # produce it at all: before this, the repairer table claimed
+    # `alt_text_repeated_opening` was repaired and no marker was ever selected
+    # for it (#1159).
     def failing(current: str) -> dict[str, list[Finding]]:
         out: dict[str, list[Finding]] = {}
+        cross = cross_marker(current)
         for name, alt in _markers(current):
-            found = check_alt_text(name, alt, venue=venue, performers=performers)
+            key = _fold_filename(name)
+            found = list(check_alt_text(name, alt, venue=venue,
+                                        performers=performers))
+            found += cross.get(key, [])
             if found:
-                out[_fold_filename(name)] = found
+                out[key] = found
         return out
 
     selected = failing(body)
@@ -291,7 +339,8 @@ def _run_pass(body, outcome, *, program, venue, photo_paths, runner, now,
             timeout=timeout, max_rounds=max_rounds, rounds=rounds,
             now=now, deadline=deadline, journal=journal, say=say,
             index=outcome.selected.index(key) + 1,
-            total=len(outcome.selected))
+            total=len(outcome.selected),
+            failing=failing, components=components)
         outcome.states[key] = state
 
     outcome.remaining = deadline - now()
@@ -337,7 +386,7 @@ def _record_declined(log, body, *, program, venue) -> None:
 
 def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
                 runner, timeout, max_rounds, rounds, now, deadline, journal,
-                say, index, total) -> RepairState:
+                say, index, total, failing, components) -> RepairState:
     """Up to `max_rounds` attempts at one marker. Returns its final state."""
     state = RepairState.TRIED
 
@@ -348,7 +397,7 @@ def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
             return RepairState.BLOCKED
         name, alt = current[key]
 
-        found = check_alt_text(name, alt, venue=venue, performers=performers)
+        found = failing(outcome.body).get(key, [])
         if not found:
             # Nothing left to fix on this marker. Reached on the second round
             # after a first that landed, and on the first when an earlier
@@ -405,10 +454,15 @@ def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
 
         candidate = strip_em_dashes(str((answer or {}).get("alt", "")).strip())
 
-        # Acceptance, in this order: strip, re-run literally the rules that
-        # selected it, then the gate over the whole body.
-        remaining = check_alt_text(name, candidate, venue=venue,
-                                   performers=performers)
+        # Acceptance, in this order: strip, splice, re-run literally the rules
+        # that selected it, then the gate over the whole body.
+        #
+        # Spliced FIRST because one of those rules is about the relationship
+        # between markers, and a rule of that shape cannot be evaluated against
+        # a candidate string on its own: whether this opening repeats depends on
+        # what the other markers say (#1159).
+        spliced = _splice_one(outcome.body, name, candidate)
+        remaining = failing(spliced).get(key, [])
         if remaining:
             _record(journal, outcome, key=key, name=name, before=alt,
                     after=candidate, codes=[f.code for f in found],
@@ -417,11 +471,15 @@ def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
             state = RepairState.TRIED
             continue
 
-        spliced = _splice_one(outcome.body, name, candidate)
+        # Licensed as a component, not as one marker. A repair that clears the
+        # opening rule here can leave the remaining members still sharing with
+        # each other, which per marker reads as a finding introduced on someone
+        # the repair never touched.
+        component = components(outcome.body).get(key, frozenset({key}))
         reasons = blog_repair_damage(
             outcome.body, spliced, program=program, venue=venue,
             photo_filenames=list(photo_paths),
-            touched=Touched.marker(name))
+            touched=Touched.marker(name, component=sorted(component)))
         if reasons:
             _record(journal, outcome, key=key, name=name, before=alt,
                     after=candidate, codes=[f.code for f in found],
@@ -496,8 +554,16 @@ REPAIRERS: dict[str, "object"] = {
     "alt_text_missing_performer": repair_alt_text,
     "alt_text_inferred_state": repair_alt_text,
     "alt_text_appearance_descriptor": repair_alt_text,
-    # Repaired as part of a component: it names several markers in one finding,
-    # so rewriting one changes another's finding set.
+    # Repaired as part of a COMPONENT, and since #1159 the loop actually does
+    # this. It was a claim nothing honoured: the pass picks its targets from
+    # `check_alt_text`, which is the six rules about one marker and cannot
+    # produce this code, so no marker was ever selected for it. Selection now
+    # reads the cross-marker rule from `check_blog_targeted` and attributes it
+    # to every marker the group names, the acceptance check runs on the SPLICED
+    # body because whether an opening repeats depends on what the other markers
+    # say, and the damage gate judges the code across the licensed component
+    # rather than per marker, so relocating it while the group shrinks is not
+    # read as a finding introduced on somebody the repair never touched.
     "alt_text_repeated_opening": repair_alt_text,
 
     # --- repaired already, deterministically, before this pass --------------
