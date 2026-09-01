@@ -605,8 +605,8 @@ extension CollageCell {
         // that draws a photograph over the branding or off the canvas. nil
         // falls back to the automatic masonry, which is the same answer this
         // already gives a layout that no longer describes the day's photos.
-        guard layoutProblems(rebased, stripBand: brandedStripBand(in: rebased)).isEmpty
-        else { return nil }
+        // No strip band, for the reason `saving` gives below.
+        guard layoutProblems(rebased).isEmpty else { return nil }
         return rebased
     }
 
@@ -618,8 +618,15 @@ extension CollageCell {
     /// export drew it. Refusing here keeps the previous layout, which is a
     /// state the editor already handles, rather than storing one that cannot
     /// be drawn.
+    /// No strip band is passed, deliberately. `brandedStripBand` INFERS where
+    /// the strip is from these same cells, so a `covers_strip` verdict here
+    /// could only confirm that the inference agrees with itself (L70): grow a
+    /// row down over the strip and the inferred band moves down with it.
+    /// Checking it needs the position the layout was BUILT with, which nothing
+    /// records; #970 stays open for that. The predicate is written and tested
+    /// against an explicit band so it is ready when there is one to give it.
     static func saving(_ cells: [CollageCell]) -> [CollageCell]? {
-        layoutProblems(cells, stripBand: brandedStripBand(in: cells)).isEmpty ? cells : nil
+        layoutProblems(cells).isEmpty ? cells : nil
     }
 
     /// Every reason this set of cells cannot be rendered, or an empty list.

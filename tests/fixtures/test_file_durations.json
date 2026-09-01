@@ -59,6 +59,7 @@
     "test_collage_arrangements.py": 0.0,
     "test_collage_crop_budget_warning.py": 0.0,
     "test_collage_design_version.py": 0.97,
+    "test_collage_layout_override_is_refused.py": 0.36,
     "test_collage_layout_validity.py": 0.02,
     "test_collage_survives_the_phone_chrome.py": 0.01,
     "test_compare_transports.py": 0.0,
@@ -444,6 +445,10 @@
     "test_collage_design_version.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_collage_layout_override_is_refused.py": {
+      "run": "partial-2026-09-01T00:56Z",
+      "scale": 1.156
     },
     "test_collage_layout_validity.py": {
       "run": "partial-2026-09-01T00:48Z",

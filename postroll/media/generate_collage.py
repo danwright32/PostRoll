@@ -799,7 +799,7 @@ def render_cell_layout_override(
 ) -> int:
     """Render cells at exact (x,y,w,h) positions from cell_layout.
 
-    Returns the inferred strip_y — the bottom of the last cell before the
+    Returns the inferred strip_y: the bottom of the last cell before the
     largest inter-row gap (where the original strip was placed).
     """
     # Refused before a single photo is opened (#967, #970). The app refuses to
@@ -807,8 +807,16 @@ def render_cell_layout_override(
     # disk, and this is the other side of the bridge: rendering it would draw a
     # photograph over the branded strip, off the canvas, or on top of another
     # photograph, and the export is what Dan posts.
-    problems = layout_problems(cell_layout, strip_y=_strip_y_of(cell_layout),
-                               strip_h=STRIP_H)
+    #
+    # No strip band is passed, deliberately. Where the strip sits is INFERRED
+    # from these same cells (`_strip_y_of` takes the largest inter-row gap), so
+    # a `covers_strip` verdict computed here could only ever confirm that the
+    # inference agrees with itself (L70): grow a row down over the strip and
+    # the inference moves the strip down with it. Checking it needs the
+    # position the layout was BUILT with, which nothing records. #970 stays
+    # open for that, and the predicate is written and tested against an
+    # explicit band so it is ready when there is one to give it.
+    problems = layout_problems(cell_layout)
     if problems:
         raise ValueError(
             f"this saved collage layout cannot be rendered ({', '.join(problems)}). "
