@@ -1,0 +1,8 @@
+{
+  "name": "a-fold-matching-two-files-repairs-neither",
+  "file": "postroll/ai/blog_quality.py",
+  "find": "        if len(candidates) != 1:\n            return match.group(0)",
+  "replace": "        if len(candidates) < 1:\n            return match.group(0)",
+  "test": "tests/test_blog_marker_near_miss_repair.py::test_two_sent_files_that_fold_to_one_key_repair_neither",
+  "breaks": "the near-miss repair snaps a marker to an ARBITRARY one of two files that fold alike, so the wrong photograph is put under prose written about a different one, silently and with nothing reported. A fold matching two sent files names a family, not a member (L521). blog_quality.py is the only thing in this repo that rewrites a blog body and it shipped as tier 1 with zero guard entries, so this refusal had never been seen to fail on broken code (#1130, L1)"
+}

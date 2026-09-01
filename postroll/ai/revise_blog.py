@@ -277,6 +277,16 @@ def revise_blog(
         # the blog panel could not go stale on any post ever generated
         # (#974).
         "findings_body": final_body,
+        # Passed through, never recomputed (#1130). A revision has no
+        # photographs at all: its manifest names filenames only, so it cannot
+        # stat anything. Dropping the key would make the next swap treat a post
+        # written yesterday as having no record and re-describe every
+        # photograph in it.
+        #
+        # Always present, even when empty, so a reader never has to tell
+        # "absent" from "nothing recorded" (L214). Every post written before
+        # this shipped arrives here with nothing, and that is a first run.
+        "photo_stamps": dict(existing.get("photo_stamps") or {}),
     }
 
 
