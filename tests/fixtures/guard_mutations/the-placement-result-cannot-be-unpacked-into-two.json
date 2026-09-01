@@ -1,0 +1,8 @@
+{
+  "name": "the-placement-result-cannot-be-unpacked-into-two",
+  "file": "postroll/ai/blog_quality.py",
+  "find": "    refused: list[tuple[str, str]] = field(default_factory=list)",
+  "replace": "    refused: list[tuple[str, str]] = field(default_factory=list)\n\n    def __iter__(self):\n        return iter((self.body, self.moved))",
+  "test": "tests/test_blog_marker_placement.py::test_the_result_cannot_be_unpacked_into_two_and_lose_the_refusals",
+  "breaks": "the two-part unpacking shim comes back, so a caller can write `body, moved = repair_marker_placement(...)`, get no error, and never see the refusals: the half that has no other record once the post is published. A foot-gun inside the code that exists to stop a refused photo move going unnoticed, and the same shape as a default that quietly drops what the caller needed (#1172, L168)"
+}
