@@ -278,10 +278,28 @@ def blog_repair_damage(
         return out
 
     was, now = counted(prior), counted(revised)
+    prior_keys = set(_marker_keys(prior))
     for key, count in sorted(now.items()):
         if count <= was.get(key, 0):
             continue
         code, kind, target_key, _index = key
+        # A finding on a marker that was NOT IN THE POST BEFORE is not a
+        # regression, because there is nothing it could be worse than (#1131).
+        #
+        # A photo swap replaces markers, so its new ones have no counterpart in
+        # `prior` and EVERY finding they carry counts as introduced. Left in,
+        # this refused a swap whenever the model wrote a slightly short alt
+        # text, and the fallback it triggered is a whole rewrite that produces
+        # the same finding again: a refusal nothing can satisfy, which is worse
+        # than no refusal (L109).
+        #
+        # The new marker is not unguarded. Check 2 refuses any change to a
+        # marker outside `touched`, `expected_marker_keys` refuses placing
+        # photographs nobody asked for, and `check_blog` still REPORTS the
+        # finding on the panel, which is its job. What the gate exists to stop
+        # is a repair making the post worse than it was.
+        if kind == "marker" and target_key not in prior_keys:
+            continue
         where = target_key or "the post"
         reasons.append(
             f"the repair introduced a {code} finding on {where}: it went from "

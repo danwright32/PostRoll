@@ -557,3 +557,42 @@ def test_an_empty_venue_field_does_not_make_the_name_check_blind_or_deaf():
         venue="", venue_context=venue_context, org="Battery Dance",
         photo_filenames=[marker], touched=Touched.marker(marker))
     assert any("Ailey" in r for r in reasons), reasons
+
+
+# --- a marker that was not there before cannot be a regression ---------------
+
+def test_a_finding_on_a_newly_placed_marker_is_not_treated_as_damage():
+    """A photo swap replaces markers, so its new ones have no counterpart in
+    the input and EVERY finding they carry reads as introduced.
+
+    Left in, that refused a swap whenever the model wrote a slightly short alt
+    text, and the fallback it triggered is a whole rewrite producing the same
+    finding again: a refusal nothing can satisfy is worse than no refusal
+    (L109). Found by the swap path's own test, not by reasoning about it.
+    """
+    prior = _post()
+    revised = _body(P1, f"[PHOTO: c.jpg | {GOOD_A}]", P2,
+                    f"[PHOTO: b.jpg | {GOOD_B}]", P3)
+    # Too short, which check_blog reports and the panel shows, but it still
+    # names the performer: dropping her name is a DIFFERENT reason and would
+    # make this test pass or fail for something other than what it is about.
+    revised = revised.replace(GOOD_A, "Kate DiGangi at The Green Room 42")
+
+    reasons = blog_repair_damage(
+        prior, revised, program=PROGRAM, venue=VENUE, org=ORG,
+        photo_filenames=["c.jpg", "b.jpg"],
+        touched=Touched.marker("a.jpg", "c.jpg"),
+        expected_marker_keys=["c.jpg", "b.jpg"])
+
+    assert reasons == [], (
+        f"the gate refused a swap over a finding on a photograph that was not "
+        f"in the post before: {reasons}")
+
+
+def test_a_finding_added_to_a_marker_that_WAS_there_is_still_damage():
+    """The control. The exemption above must not switch check 1 off (L159)."""
+    prior = _post()
+    revised = _post(alt_b="Ryan Cavanagh at The Green Room 42")
+
+    reasons = _damage(prior, revised, Touched.marker("a.jpg", "b.jpg"))
+    assert any("alt_text_length" in r and "b.jpg" in r for r in reasons), reasons

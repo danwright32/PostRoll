@@ -961,7 +961,8 @@ actor PythonBridge {
     /// tolerates both absences, so this is a real conditional rather than a
     /// forgotten key, and the contract records the condition.
     nonisolated static func buildBlogPhotoSwapManifest(
-        currentBody: String, photoPaths: [URL], event: Event?
+        currentBody: String, photoPaths: [URL], event: Event?,
+        currentBlog: BlogOutput? = nil
     ) -> [String: Any] {
         var manifest: [String: Any] = [
             "body":        currentBody,
@@ -969,6 +970,18 @@ actor PythonBridge {
         ]
         guard let event else { return manifest }
         manifest["venue"] = event.venue
+        manifest["venue_context"] = event.venueContext
+        manifest["org"] = event.org
+        // What the alt text in the incoming body was written against (#1131).
+        //
+        // Without this the swap has no record to compare each photograph
+        // against, every one of them reads as new, and it re-uploads and
+        // re-describes six good alt texts to change one picture. The failure is
+        // silent and cheap-looking: the run succeeds, it just costs what it
+        // always did (L289).
+        //
+        // Empty on every post written before #1130, which is a first run.
+        manifest["photo_stamps"] = currentBlog?.photoStamps ?? [:]
         if let ocr = event.ocrResult,
            let program = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(ocr)) {
             manifest["program"] = program
@@ -1293,7 +1306,8 @@ actor PythonBridge {
     /// held to the same naming rules and the same deterministic checks as the
     /// generate and revise paths (#201).
     func runBlogPhotoSwap(currentBody: String, photoPaths: [URL],
-                          event: Event? = nil) async throws -> BlogOutput {
+                          event: Event? = nil,
+                          currentBlog: BlogOutput? = nil) async throws -> BlogOutput {
         let tmp = FileManager.default.temporaryDirectory
         let manifestFile = tmp.appendingPathComponent("postroll_swap_photos_\(UUID().uuidString).json")
         let outputFile   = tmp.appendingPathComponent("postroll_swapped_\(UUID().uuidString).json")
@@ -1304,7 +1318,8 @@ actor PythonBridge {
         }
 
         let manifest = Self.buildBlogPhotoSwapManifest(
-            currentBody: currentBody, photoPaths: photoPaths, event: event)
+            currentBody: currentBody, photoPaths: photoPaths, event: event,
+            currentBlog: currentBlog)
         let manifestData = try JSONSerialization.data(
             withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]
         )

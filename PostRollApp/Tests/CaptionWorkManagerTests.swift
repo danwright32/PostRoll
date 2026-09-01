@@ -475,7 +475,7 @@ final class CaptionWorkManagerTests: XCTestCase {
         let event = eventWithBlog()
         let state = state([event])
         let manager = CaptionWorkManager()
-        manager.swapBlogPhotos = { _, _, _ in BlogOutput(title: "t", body: "body with new photos") }
+        manager.swapBlogPhotos = { _, _, _, _ in BlogOutput(title: "t", body: "body with new photos") }
         let urls = [URL(fileURLWithPath: "/tmp/a.jpg"), URL(fileURLWithPath: "/tmp/b.jpg")]
 
         manager.startSwappingBlogPhotos(eventID: event.id, urls: urls, appState: state)
@@ -525,7 +525,7 @@ final class CaptionWorkManagerTests: XCTestCase {
         let event = eventWithBlog()
         let state = state([event])
         let manager = CaptionWorkManager()
-        manager.swapBlogPhotos = { _, _, _ in
+        manager.swapBlogPhotos = { _, _, _, _ in
             var out = BlogOutput(title: "t", body: "body with new photos")
             out.applyFindings([QualityFinding(code: "invented_number", message: "m", detail: "d")],
                               checkedBody: Self.separatePin)
@@ -550,7 +550,7 @@ final class CaptionWorkManagerTests: XCTestCase {
         event.blogPhotoPaths = [URL(fileURLWithPath: "/tmp/old.jpg")]
         let state = state([event])
         let manager = CaptionWorkManager()
-        manager.swapBlogPhotos = { _, _, _ in throw Refused() }
+        manager.swapBlogPhotos = { _, _, _, _ in throw Refused() }
 
         manager.startSwappingBlogPhotos(
             eventID: event.id, urls: [URL(fileURLWithPath: "/tmp/a.jpg")], appState: state)

@@ -329,6 +329,35 @@ final class ManifestContractTests: XCTestCase {
         XCTAssertNil(manifest["program"])
     }
 
+    func testTheSwapManifestCarriesWhatTheAltTextWasWrittenAgainst() {
+        // #1131: without this the swap has no record to compare each
+        // photograph against, every one reads as new, and it re-uploads and
+        // re-describes six good alt texts to change one picture. The failure is
+        // silent and cheap looking: the run succeeds, it just costs what it
+        // always did (L289).
+        var blog = BlogOutput(title: "t", body: "a post")
+        blog.photoStamps = ["a.jpg": [111, 222]]
+
+        let manifest = PythonBridge.buildBlogPhotoSwapManifest(
+            currentBody: "a post", photoPaths: [URL(fileURLWithPath: "/p/a.jpg")],
+            event: fullEvent(), currentBlog: blog)
+
+        XCTAssertEqual(manifest["photo_stamps"] as? [String: [Int]],
+                       ["a.jpg": [111, 222]])
+    }
+
+    func testASwapForAPostWrittenBeforeStampsExistedSendsAnEmptyRecord() {
+        // Every post written before #1130. A first run, not an error: it
+        // retains nothing and costs what it always did. The key is present
+        // rather than absent so Python never has to tell one from the other
+        // (L214).
+        let manifest = PythonBridge.buildBlogPhotoSwapManifest(
+            currentBody: "a post", photoPaths: [URL(fileURLWithPath: "/p/a.jpg")],
+            event: fullEvent(), currentBlog: BlogOutput(title: "t", body: "a post"))
+
+        XCTAssertEqual(manifest["photo_stamps"] as? [String: [Int]], [:])
+    }
+
     func testTheAnalyticsManifestSendsEveryRequiredKey() throws {
         try assertSends(
             PythonBridge.buildAnalyticsManifest(
