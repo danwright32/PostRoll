@@ -1,0 +1,328 @@
+{
+  "_what": "The FULL ORDERED list of (code, message, detail) each correction fixture produces, recorded from the code BEFORE check_alt_text was extracted (#1133, Phase 5a). check_blog emits findings RULE major, not marker major, and calling a per-marker function once per marker produces marker-major order, so the extraction has to bucket by code and re-emit in the original rule order. This is what proves it, rather than the assertion that it does.",
+  "_why_not_the_existing_suite": "tests/test_blog_correction_fixtures.py asserts through a SET of codes plus one length ratio. Order, message, detail and how many findings of one code fire are all invisible to it, and those are exactly what the rest of this milestone is load bearing on: QualityFinding.id embeds detail, the panel renders one detail line per finding, and the repairer's whole argument is that detail embeds the offender (L228).",
+  "goldens": {
+    "bludline.draft": [
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-50.jpg: 33 words. Four performers at mic stands on a warmly lit stage, arms raised and mouths open mid-perfo"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-118.jpg: 30 words. Two performers at mic stands, one gesturing toward the other with a hand extended, both sm"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-125.jpg: 26 words. A guitarist in a blue striped jacket bent forward over a pale green electric guitar, eyes "
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-154.jpg: 35 words. Five performers on a darkly lit stage in a wide shot, arms raised and gesturing expressive"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-120.jpg: 34 words. A woman in a striped top and wide-leg jeans stands at a mic stand, eyes closed, singing, w"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-96.jpg: 30 words. A bearded performer in a white shirt and orange head covering, arms raised with hands spre"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-55.jpg: 30 words. A guitarist in a blue striped jacket sings into a mic with mouth open wide, eyes closed, h"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-50.jpg: Four performers at mic stands on a warmly lit stage, arms raised and mouths open mid-perfo"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-50.jpg: Four performers at mic stands on a warmly lit stage, arms raised and mouths open mid-perfo"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-118.jpg: Two performers at mic stands, one gesturing toward the other with a hand extended, both sm"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-118.jpg: Two performers at mic stands, one gesturing toward the other with a hand extended, both sm"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-125.jpg: A guitarist in a blue striped jacket bent forward over a pale green electric guitar, eyes "
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-125.jpg: A guitarist in a blue striped jacket bent forward over a pale green electric guitar, eyes "
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-154.jpg: Five performers on a darkly lit stage in a wide shot, arms raised and gesturing expressive"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-154.jpg: Five performers on a darkly lit stage in a wide shot, arms raised and gesturing expressive"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-120.jpg: A woman in a striped top and wide-leg jeans stands at a mic stand, eyes closed, singing, w"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-120.jpg: A woman in a striped top and wide-leg jeans stands at a mic stand, eyes closed, singing, w"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-96.jpg: A bearded performer in a white shirt and orange head covering, arms raised with hands spre"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-96.jpg: A bearded performer in a white shirt and orange head covering, arms raised with hands spre"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-55.jpg: A guitarist in a blue striped jacket sings into a mic with mouth open wide, eyes closed, h"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-55.jpg: A guitarist in a blue striped jacket sings into a mic with mouth open wide, eyes closed, h"
+      ],
+      [
+        "alt_text_inferred_state",
+        "Alt text describes what the camera recorded, not what someone felt.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-125.jpg: focused in 'A guitarist in a blue striped jacket bent forward over a pale green electric gui'"
+      ],
+      [
+        "alt_text_appearance_descriptor",
+        "Alt text names the person, never their appearance or gender.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-50.jpg: a woman in 'Four performers at mic stands on a warmly lit stage, arms raised and mouths open'"
+      ],
+      [
+        "alt_text_appearance_descriptor",
+        "Alt text names the person, never their appearance or gender.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-120.jpg: a woman in 'A woman in a striped top and wide-leg jeans stands at a mic stand, eyes closed, '"
+      ],
+      [
+        "alt_text_appearance_descriptor",
+        "Alt text names the person, never their appearance or gender.",
+        "BLUDLINE- A Hip-Hop Odyssey (Greenwich House Theater) @dwphotony-96.jpg: a bearded in 'A bearded performer in a white shirt and orange head covering, arms raised with '"
+      ],
+      [
+        "demographic_grouping",
+        "Name every performer or name none; do not group them by gender or trail off into 'and the others'.",
+        "'and the others' in ' in the cast, Ladibree, Safa, and the others, were working in a different '"
+      ],
+      [
+        "demographic_grouping",
+        "Name every performer or name none; do not group them by gender or trail off into 'and the others'.",
+        "'The female performers' in 'text travels with the images. The female performers in the cast, Ladibree, Safa, '"
+      ]
+    ],
+    "bludline.corrected": [],
+    "one_man_odyssey.draft": [
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-78.jpg: 38 words. A male performer in a dark t-shirt reading \"ODYSSEUS\" grips a long wooden staff horizontal"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-167.jpg: 39 words. A male performer wearing a sparkly \"ATHENA\" headband and a red jersey throws one arm up an"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-175.jpg: 32 words. Wide shot of a small theater, performer in a tank top and red sash mid-stride on a brightl"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-148.jpg: 32 words. A male performer kneeling on stage, shirt soaked and marked, squeezes a piece of watermelo"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-111.jpg: 40 words. A male performer in a grey t-shirt and blue shorts stands on a raised platform with one ar"
+      ],
+      [
+        "alt_text_length",
+        "Alt text must be 15 to 25 words.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-113.jpg: 31 words. A male performer in a white tank top holds a black case labeled \"ODYSSEUS\" in both hands, "
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-78.jpg: A male performer in a dark t-shirt reading \"ODYSSEUS\" grips a long wooden staff horizontal"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-78.jpg: A male performer in a dark t-shirt reading \"ODYSSEUS\" grips a long wooden staff horizontal"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-92.jpg: A male performer in a black t-shirt crouches over a wooden chest on stage, grinning toward"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-92.jpg: A male performer in a black t-shirt crouches over a wooden chest on stage, grinning toward"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-167.jpg: A male performer wearing a sparkly \"ATHENA\" headband and a red jersey throws one arm up an"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-167.jpg: A male performer wearing a sparkly \"ATHENA\" headband and a red jersey throws one arm up an"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-175.jpg: Wide shot of a small theater, performer in a tank top and red sash mid-stride on a brightl"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-175.jpg: Wide shot of a small theater, performer in a tank top and red sash mid-stride on a brightl"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-148.jpg: A male performer kneeling on stage, shirt soaked and marked, squeezes a piece of watermelo"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-148.jpg: A male performer kneeling on stage, shirt soaked and marked, squeezes a piece of watermelo"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-111.jpg: A male performer in a grey t-shirt and blue shorts stands on a raised platform with one ar"
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-111.jpg: A male performer in a grey t-shirt and blue shorts stands on a raised platform with one ar"
+      ],
+      [
+        "alt_text_missing_venue",
+        "Every alt text names the venue.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-113.jpg: A male performer in a white tank top holds a black case labeled \"ODYSSEUS\" in both hands, "
+      ],
+      [
+        "alt_text_missing_performer",
+        "Every alt text names the performer, or credits the group by count and ensemble name when there are too many to name.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-113.jpg: A male performer in a white tank top holds a black case labeled \"ODYSSEUS\" in both hands, "
+      ],
+      [
+        "alt_text_repeated_opening",
+        "Vary how the alt text opens; more than two markers share a start.",
+        "6 markers open 'a male performer': The One-Man Odyssey (Greenwich House Theater) @dwphotony-78.jpg, The One-Man Odyssey (Greenwich House Theater) @dwphotony-92.jpg, The One-Man Odyssey (Greenwich House Theater) @dwphotony-167.jpg, The One-Man Odyssey (Greenwich House Theater) @dwphotony-148.jpg, The One-Man Odyssey (Greenwich House Theater) @dwphotony-111.jpg, The One-Man Odyssey (Greenwich House Theater) @dwphotony-113.jpg"
+      ],
+      [
+        "alt_text_inferred_state",
+        "Alt text describes what the camera recorded, not what someone felt.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-92.jpg: grinning toward in 'A male performer in a black t-shirt crouches over a wooden chest on stage, grinn'"
+      ],
+      [
+        "alt_text_inferred_state",
+        "Alt text describes what the camera recorded, not what someone felt.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-148.jpg: concentration, intense in 'A male performer kneeling on stage, shirt soaked and marked, squeezes a piece of'"
+      ],
+      [
+        "alt_text_inferred_state",
+        "Alt text describes what the camera recorded, not what someone felt.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-113.jpg: focused in 'A male performer in a white tank top holds a black case labeled \"ODYSSEUS\" in bo'"
+      ],
+      [
+        "alt_text_appearance_descriptor",
+        "Alt text names the person, never their appearance or gender.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-78.jpg: male performer in 'A male performer in a dark t-shirt reading \"ODYSSEUS\" grips a long wooden staff '"
+      ],
+      [
+        "alt_text_appearance_descriptor",
+        "Alt text names the person, never their appearance or gender.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-92.jpg: male performer in 'A male performer in a black t-shirt crouches over a wooden chest on stage, grinn'"
+      ],
+      [
+        "alt_text_appearance_descriptor",
+        "Alt text names the person, never their appearance or gender.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-167.jpg: male performer in 'A male performer wearing a sparkly \"ATHENA\" headband and a red jersey throws one'"
+      ],
+      [
+        "alt_text_appearance_descriptor",
+        "Alt text names the person, never their appearance or gender.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-148.jpg: male performer in 'A male performer kneeling on stage, shirt soaked and marked, squeezes a piece of'"
+      ],
+      [
+        "alt_text_appearance_descriptor",
+        "Alt text names the person, never their appearance or gender.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-111.jpg: male performer in 'A male performer in a grey t-shirt and blue shorts stands on a raised platform w'"
+      ],
+      [
+        "alt_text_appearance_descriptor",
+        "Alt text names the person, never their appearance or gender.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-113.jpg: male performer in 'A male performer in a white tank top holds a black case labeled \"ODYSSEUS\" in bo'"
+      ],
+      [
+        "invented_number",
+        "No count in the source data means no number in the post.",
+        "'24' does not appear in the program data"
+      ],
+      [
+        "invented_number",
+        "No count in the source data means no number in the post.",
+        "'thirty' does not appear in the program data"
+      ],
+      [
+        "repeated_construction",
+        "Use a construction once; 'something between X and Y' appears more than once.",
+        "2 uses: something between a game show host and; something between a stadium and"
+      ],
+      [
+        "stacked_photos",
+        "Two photos with no prose between them.",
+        "[PHOTO: The One-Man Odyssey (Greenwich House The then [PHOTO: The One-Man Odyssey (Greenwich House The"
+      ],
+      [
+        "late_first_photo",
+        "The first photo comes after more than two paragraphs.",
+        "3 paragraphs before the first marker"
+      ]
+    ],
+    "one_man_odyssey.corrected": [
+      [
+        "alt_text_inferred_state",
+        "Alt text describes what the camera recorded, not what someone felt.",
+        "The One-Man Odyssey (Greenwich House Theater) @dwphotony-92.jpg: grinning toward in 'Joseph Medeiros crouches over a wooden chest, grinning toward the audience, drum'"
+      ]
+    ]
+  }
+}
