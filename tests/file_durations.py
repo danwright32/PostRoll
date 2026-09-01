@@ -147,11 +147,36 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: this is the second reading in two days to say so, so the next person to move
 #: this number should suspect the READING rather than the file.
 #:
+#: 4.6% since 2026-09-01, re-chosen against a sixth recording forced by #988
+#: adding a test file (and by two files from #1162 that had never been
+#: measured either). `test_generate_media_friday_clips` came back at 5.97%,
+#: sitting inside the 7.1% floor's band, which turned the gap guard red. That
+#: is the sixth time this one file has decided where the floor goes.
+#:
+#: The widest gap in the distribution is now 3.56%
+#: (`test_render_clip_reel`) to 5.97% (`test_generate_media_friday_clips`), a
+#: factor of 1.68, and 4.61% is its geometric middle, rounded down to 4.6%. The
+#: band a floor there asks to be clear is 3.68% to 5.75%, and its neighbours
+#: sit at 0.97x and 1.04x of those edges.
+#:
+#: Say plainly what those margins mean: this is the tightest placement the
+#: floor has ever had. The band asks for 1.5625x of clear air and the widest
+#: gap in the suite now offers 1.68x, so a 3% move in either neighbour turns
+#: this guard red again. Every earlier placement had a gap of 2.6x or more.
+#: The band is NOT widened to buy room, for the reason recorded under
+#: GAP_BELOW: that answers a measurement with a looser rule.
+#:
+#: `test_generate_media_friday_clips` therefore moves back INTO the expensive
+#: set, as it was before 2026-08-29, and the set is five files. If a seventh
+#: recording moves it again, the thing to change is not this number: a single
+#: global floor over a distribution with no wide gap left is the wrong shape,
+#: and the file's own history is the evidence.
+#:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.071
+EXPENSIVE_SHARE = 0.046
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:
