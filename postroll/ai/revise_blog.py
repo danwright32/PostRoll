@@ -50,10 +50,11 @@ from .ai_tells import (
     build_voice_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
-    markers_preserved_validator,
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
+from .blog_marker_splice import splice_retained_markers
+from .blog_quality import _PHOTO_MARKER, _fold_filename
 from .progress import ProgressWriter
 from .blog_quality import (check_blog, filenames_used_by, finding_entry,
                            repair_marker_filenames)
@@ -66,6 +67,30 @@ from .generate_blog import (
     BLOG_STRUCTURE,
     BLOG_WRITING_RULES,
 )
+
+
+def ordered_markers_validator(prior_body: str, revised: dict) -> str | None:
+    """A review pass may not add, drop, rename OR REORDER a photo marker (#1131).
+
+    `markers_preserved_validator` SORTS the filenames it compares
+    (`ai_tells.photo_marker_filenames` is a `sorted(...)`), so it cannot see a
+    marker moving to a different point in the post. A photograph that swaps
+    places with another, while the prose written about each stays put, passes it
+    every time, and this is the repo's only marker guard.
+
+    Takes the prior BODY rather than a prior dict, because the pass 1 call has
+    no prior dict to compare against: it is the first thing that runs, and what
+    it must preserve is the body Dan is revising.
+    """
+    def markers(body: str) -> list[str]:
+        return [_fold_filename(name)
+                for name, _alt in _PHOTO_MARKER.findall(body or "")]
+
+    expected = markers(prior_body)
+    got = markers(revised.get("body", ""))
+    if expected != got:
+        return f"changed or reordered the [PHOTO:] markers ({expected} -> {got})"
+    return None
 
 
 REVISE_PROMPT = """\
@@ -192,6 +217,15 @@ def revise_blog(
     if not isinstance(data, dict):
         raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 
+    # This call had NO validator at all (#1131), so a marker it dropped,
+    # renamed or moved was pinned in place by the two review passes that follow
+    # and reached the review screen preserved faithfully. Reported rather than
+    # raised: the revision is still usable, and losing a paid pass over it would
+    # be worse than saying so.
+    problem = ordered_markers_validator(body, data)
+    if problem:
+        print(f"[revise_blog] the revision {problem}", flush=True, file=sys.stderr)
+
     blog_shape = (
         "{title: string, body: string with [PHOTO: filename.jpg | alt text]"
         " markers preserved exactly as-is}"
@@ -207,7 +241,11 @@ def revise_blog(
         )
         data = run_review_pass(
             voice_prompt, data, label="voice", timeout=600,
-            runner=run_json_prompt, validate=markers_preserved_validator,
+            runner=run_json_prompt,
+            # The ordered comparison, not the sorted one: a reorder is
+            # invisible to `markers_preserved_validator` (#1131).
+            validate=lambda prior, revised: ordered_markers_validator(
+                prior.get("body", ""), revised),
         )
 
     if not skip_humanizer and is_humanizer_available(humanizer_path):
@@ -222,8 +260,41 @@ def revise_blog(
         )
         data = run_review_pass(
             review_prompt, data, label="humanizer", timeout=600,
-            runner=run_json_prompt, validate=markers_preserved_validator,
+            runner=run_json_prompt,
+            validate=lambda prior, revised: ordered_markers_validator(
+                prior.get("body", ""), revised),
         )
+
+    # Every marker restored from the body being revised (#1131).
+    #
+    # A revision is under orders to keep each `[PHOTO: filename | alt text]`
+    # verbatim and nothing checked it: the repo's only marker guard sorts the
+    # filenames and never reads the alt text. The splice makes the instruction
+    # unnecessary rather than better worded, needs no photograph, and costs
+    # nothing.
+    #
+    # Applied after the review passes and before the dash strip, so what ships
+    # is what Dan already had, dash stripped once like everything else.
+    #
+    # The count is reported because the splice DESTROYS the evidence it was
+    # needed: a model that rewrote every marker and one that reproduced them all
+    # produce a byte identical body afterwards (L340).
+    revised_body = data.get("body", body)
+    try:
+        revised_body, drift = splice_retained_markers(
+            body, revised_body,
+            {name for name, _alt in _PHOTO_MARKER.findall(body)})
+    except ValueError as e:
+        # Not fatal, and not silent: the revision is still a usable draft and
+        # a dropped marker cannot be put back without inventing a position for
+        # it (#998). check_blog reports the loss below.
+        print(f"[revise_blog] {e}", flush=True, file=sys.stderr)
+    else:
+        if drift:
+            print(f"[revise_blog] RESTORED {drift} photo marker(s) the revision "
+                  f"rewrote despite being told to preserve them verbatim",
+                  flush=True, file=sys.stderr)
+        data = dict(data, body=revised_body)
 
     say.step("Blog: running the checks")
     final_body = strip_em_dashes(data.get("body", body).strip())

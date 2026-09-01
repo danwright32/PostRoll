@@ -1084,6 +1084,15 @@
         },
         "program": {
           "conditional": "Sent when the swap knows its event AND that event has OCR data, so a blog written for an event whose programme was never scanned still swaps photos."
+        },
+        "venue_context": {
+          "conditional": "Sent only when the swap knows its event. The damage gate needs it: measured on the stored events, the Battery Dance Festival event carries an EMPTY venue with its real one, Robert F. Wagner Jr. Park, only here, so a known set built from venue alone refuses Dan correcting the venue to its own name (#1137)."
+        },
+        "org": {
+          "conditional": "Sent only when the swap knows its event. The damage gate refuses a rewrite that drops the organisation name from the post."
+        },
+        "photo_stamps": {
+          "conditional": "Sent only when the swap knows its event, and empty for every post written before #1130. What the alt text in the incoming body was written against: without it the swap has no record to compare each photograph against, every one reads as new, and it re-uploads and re-describes six good alt texts to change one picture."
         }
       }
     },

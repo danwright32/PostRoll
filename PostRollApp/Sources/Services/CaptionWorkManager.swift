@@ -136,9 +136,10 @@ final class CaptionWorkManager {
         try await PythonBridge.shared.runBlogRevision(
             event: $0, feedback: $1, currentBlog: $2)
     }
-    var swapBlogPhotos: @Sendable (String, [URL], Event) async throws -> BlogOutput = {
+    var swapBlogPhotos: @Sendable (String, [URL], Event, BlogOutput) async throws
+        -> BlogOutput = {
         try await PythonBridge.shared.runBlogPhotoSwap(
-            currentBody: $0, photoPaths: $1, event: $2)
+            currentBody: $0, photoPaths: $1, event: $2, currentBlog: $3)
     }
     var learnFromEdits: @Sendable (WeekGenerationResult) async throws -> String? = {
         try await PythonBridge.shared.runLearnFromEdits(result: $0)
@@ -159,9 +160,10 @@ final class CaptionWorkManager {
         try await PythonBridge.shared.runBlogRevision(
             event: $0, feedback: $1, currentBlog: $2)
     }
-    let swapBlogPhotos: @Sendable (String, [URL], Event) async throws -> BlogOutput = {
+    let swapBlogPhotos: @Sendable (String, [URL], Event, BlogOutput) async throws
+        -> BlogOutput = {
         try await PythonBridge.shared.runBlogPhotoSwap(
-            currentBody: $0, photoPaths: $1, event: $2)
+            currentBody: $0, photoPaths: $1, event: $2, currentBlog: $3)
     }
     let learnFromEdits: @Sendable (WeekGenerationResult) async throws -> String? = {
         try await PythonBridge.shared.runLearnFromEdits(result: $0)
@@ -308,7 +310,13 @@ final class CaptionWorkManager {
               let current = live.weekResult?.blog else { return }
 
         run(key, brandVoiceNote: nil, appState: appState) { [swapBlogPhotos] in
-            try await swapBlogPhotos(current.body, urls, live)
+            // `current` carries the stamps the incoming alt text was written
+            // against (#1131). Without them the swap has no record to compare
+            // each photograph against, every one reads as new, and it
+            // re-uploads and re-describes six good alt texts to change one
+            // picture. The failure is silent: the run succeeds, it just costs
+            // what it always did.
+            try await swapBlogPhotos(current.body, urls, live, current)
         } write: { [weak self] updated, state in
             var next = current
             next.body = updated.body
@@ -319,6 +327,10 @@ final class CaptionWorkManager {
             // the two are not interchangeable in principle even where they
             // agree in practice.
             next.applyFindings(updated.findings, checkedBody: updated.findingsBody)
+            // The swap places a different set of photographs, so what the post
+            // holds and what each one looked like are BOTH new (#1130). Kept
+            // from `current` this would have described the old set forever.
+            next.photoStamps = updated.photoStamps
             self?.writeWeek(to: eventID, in: state) { $0.blog = next }
             // Re-read after the week write so this lands on top of it rather
             // than on the copy taken before.
