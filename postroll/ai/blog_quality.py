@@ -40,8 +40,18 @@ from .ai_tells import strip_em_dashes
 from .blog_findings import Finding, finding_entry
 
 __all__ = ["Finding", "finding_entry", "check_blog", "filenames_used_by",
-           "repair_marker_filenames", "names_a_group",
-           "ALT_MIN_WORDS", "ALT_MAX_WORDS", "MAX_SHARED_OPENINGS"]
+           "repair_marker_filenames", "repair_marker_placement",
+           "names_a_group", "ALT_MIN_WORDS", "ALT_MAX_WORDS",
+           "MAX_SHARED_OPENINGS", "MAX_PROSE_BEFORE_FIRST_PHOTO"]
+
+#: How many prose blocks may precede the first photograph.
+#:
+#: Read by the `late_first_photo` check AND by the repair that moves the marker
+#: (#1154). Written once because the repair's destination IS this threshold: a
+#: second literal here is a number the two halves can disagree about, and they
+#: would disagree by moving a marker to a position the check still refuses
+#: (L41).
+MAX_PROSE_BEFORE_FIRST_PHOTO = 2
 
 #: Alt text length band. Was 15 to 35 in the prompt, which ran long on every
 #: marker of the corrected draft.
@@ -286,6 +296,93 @@ def filenames_used_by(body: str,
     written = {_fold_filename(name) for name, _alt in _markers(body)}
     return [str(name).strip() for name in photo_filenames
             if str(name).strip() and _fold_filename(name) in written]
+
+
+def repair_marker_placement(
+        body: str) -> tuple[str, list[tuple[str, str]]]:
+    """Move a misplaced photo marker to a position derived from the post.
+
+    The second exception to this module's report-only rule, and it is an
+    exception for the same narrow reason `repair_marker_filenames` is: nothing
+    is invented. No prose is written, no prose is removed, and no photograph
+    changes its position relative to another photograph. All that moves is
+    which paragraph a marker sits beside, and both destinations are read off
+    the rules themselves rather than judged:
+
+    - `stacked_photos` is two markers with no prose between them, so the second
+      belongs after the next prose block. That is the only position that clears
+      the finding without disturbing any other marker.
+    - `late_first_photo` is more than `MAX_PROSE_BEFORE_FIRST_PHOTO` prose
+      blocks before the first photograph, so the marker belongs immediately
+      after that many. The destination is the threshold the rule states.
+
+    Where there is no derived destination it REFUSES rather than guessing, which
+    is the failure #998 records: a stack at the very end of a post has no prose
+    below it to move into, so it stays put and `check_blog` goes on reporting it
+    (L98). A partly repaired stack is reported too, for the same reason.
+
+    Returns the repaired body and every (filename, which rule moved it) pair. An
+    empty list means nothing moved, which is a different outcome from a move
+    that was refused, and the refusals are exactly what `check_blog` still says
+    afterwards.
+    """
+    if not body:
+        return body, []
+
+    blocks = [b.strip() for b in body.split("\n\n") if b.strip()]
+
+    def is_marker(block: str) -> bool:
+        return block.startswith("[PHOTO:")
+
+    if not any(is_marker(b) for b in blocks):
+        return body, []
+
+    moves: list[tuple[str, str]] = []
+
+    # `late_first_photo` runs FIRST, because it moves a marker EARLIER and can
+    # therefore create a stack. Running it second would leave that stack behind
+    # with nothing to clear it, and the pass would report a finding it had just
+    # introduced.
+    prose_before_first = 0
+    for block in blocks:
+        if is_marker(block):
+            break
+        prose_before_first += 1
+    if prose_before_first > MAX_PROSE_BEFORE_FIRST_PHOTO:
+        marker = blocks.pop(prose_before_first)
+        blocks.insert(MAX_PROSE_BEFORE_FIRST_PHOTO, marker)
+        moves.append((_marker_name(marker), "late_first_photo"))
+
+    # Then the stacks, in one forward pass. A marker that would land on top of
+    # another is held back and released after the next prose block, so a run of
+    # N stacked markers is dealt out across the next N-1 paragraphs in order.
+    # Holding them in a queue rather than moving one at a time is what keeps
+    # photographs in their original order: swapping the pair repeatedly walks a
+    # later photograph in front of an earlier one.
+    placed: list[str] = []
+    waiting: list[str] = []
+    for block in blocks:
+        if is_marker(block):
+            if waiting or (placed and is_marker(placed[-1])):
+                waiting.append(block)
+            else:
+                placed.append(block)
+            continue
+        placed.append(block)
+        if waiting:
+            marker = waiting.pop(0)
+            placed.append(marker)
+            moves.append((_marker_name(marker), "stacked_photos"))
+    # Whatever is still waiting ran out of prose to move into. It goes back
+    # where it was, in order, and is reported rather than placed somewhere
+    # nobody derived.
+    placed.extend(waiting)
+
+    if not moves:
+        # Untouched means untouched: rebuilding would normalise whitespace on a
+        # body this had no reason to rewrite.
+        return body, []
+    return "\n\n".join(placed), moves
 
 
 def repair_marker_filenames(
@@ -726,7 +823,7 @@ def check_blog_targeted(
         if block.startswith("[PHOTO:"):
             break
         prose_before_first += 1
-    if markers and prose_before_first > 2:
+    if markers and prose_before_first > MAX_PROSE_BEFORE_FIRST_PHOTO:
         findings.append((Finding(
             "late_first_photo",
             "The first photo comes after more than two paragraphs.",

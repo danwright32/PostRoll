@@ -58,7 +58,8 @@ from .blog_marker_splice import splice_retained_markers
 from .blog_quality import _PHOTO_MARKER, _fold_filename
 from .progress import ProgressWriter
 from .blog_quality import (check_blog, filenames_used_by, finding_entry,
-                           repair_marker_filenames)
+                           repair_marker_filenames,
+                           repair_marker_placement)
 from .generate_blog import (
     _fix_missing_contractions,
     _fix_second_person,
@@ -330,6 +331,21 @@ def revise_blog(
     for was, now in repairs:
         print(f"[revise_blog] REPAIRED marker filename: {was!r} -> {now!r}",
               flush=True, file=sys.stderr)
+    # Move a marker the placement rules refused, deterministically (#1153, #1154).
+    #
+    # The second exception to the report-only rule, and it is narrow for the same
+    # reason the first one is: nothing is invented. No prose is written or lost,
+    # and photographs keep their order relative to each other. Both destinations
+    # are read off the rules rather than judged, and a move with no derived
+    # destination is refused and left for the checks to report (L98).
+    #
+    # Runs after the filename repair, because it reads marker names, and before
+    # the checks, so the panel reports where a marker IS rather than where it was.
+    final_body, moved = repair_marker_placement(final_body)
+    for name, why in moved:
+        print(f"[revise_blog] MOVED marker {name!r} ({why})",
+              flush=True, file=sys.stderr)
+
     findings = check_blog(final_body, program=program, venue=venue,
                           photo_filenames=in_the_post or None)
     for f in findings:

@@ -37,7 +37,8 @@ from .ai_tells import strip_em_dashes
 from .blog_findings import Finding, RepairState
 from .blog_photo_stamps import decode_photo_path
 from .blog_quality import (ALT_MAX_WORDS, ALT_MIN_WORDS, _PHOTO_MARKER,
-                           _fold_filename, _markers, check_alt_text)
+                           _fold_filename, _markers, check_alt_text,
+                           repair_marker_placement)
 from .blog_repair_damage import Touched, blog_repair_damage
 from .repair_log import RepairLog
 from .claude_client import ClaudeError, run_json_prompt
@@ -94,6 +95,7 @@ class NoRepairReason:
     reason: str
     issue: str
     gate: str = ""
+    settled: str = ""
 
 
 PROCESS_CEILING = 1800.0
@@ -506,7 +508,11 @@ REPAIRERS: dict[str, "object"] = {
                "that is a name the model genuinely invented, and snapping it to "
                "the nearest file would put the wrong photograph under prose "
                "written about a different one.",
-        issue="#1149"),
+        issue="#1149",
+        settled="Decided 2026-09-01 and closed. The deterministic half already "
+                "runs, and what survives it is an invented name; snapping it "
+                "to the nearest of the 0 candidate files that would be a real "
+                "match is the failure, not the fix."),
 
     # --- no repairer in v1, each with the issue that would change that ------
     "blog_marker_missing_photo": NoRepairReason(
@@ -515,7 +521,12 @@ REPAIRERS: dict[str, "object"] = {
                "exceeds rule 3 and rule 4 and sits on rule 9's drops a photo "
                "inverted. The evidence this finding was incidentally providing "
                "now has a deliberate home in photo_stamps (#1130, L277).",
-        issue="#1149"),
+        issue="#1149",
+        settled="Decided 2026-09-01 and closed, not deferred. It fires 0 times "
+                "on the 21 stored final bodies, because check_blog only runs "
+                "the filename rules where a photo list is available, and the "
+                "repair it would need writes new prose about a photograph's "
+                "content, which no rule here permits."),
     "invented_number": NoRepairReason(
         reason="The only proposed repair that DELETES a claim from prose Dan "
                "publishes, and it already carries three suppression mechanisms "
@@ -523,34 +534,46 @@ REPAIRERS: dict[str, "object"] = {
                "stored posts he considered finished, which says its rate is "
                "high and nothing about its accuracy.",
         issue="#1150",
-        gate="a hand review of a stated number of real posts, recorded on the "
-             "issue with the count and the date, OR a control that lets Dan "
-             "mark a finding as wrong. Not a rate read off the journal: a "
-             "DECLINED record says the check fired, never that it fired "
-             "wrongly."),
+        settled="The first of the two gates was taken: a hand review of all 32 "
+                "firings across the 21 stored final bodies, 2026-09-01. 8 "
+                "fired on photo filenames and alt text leaking into the prose "
+                "rule's input, 3 on numerals carrying no count (the years 1969 "
+                "and 2009, and the festival name in 'America at 250'), and 21 "
+                "on real counts in prose, many of them counting what is "
+                "visible in the photograph directly above. None was a number a "
+                "reader would call wrong. A silent deleter would have removed "
+                "32 true or harmless claims from 15 of 21 published posts and "
+                "0 false ones, which is the named failure this milestone "
+                "exists to prevent."),
     "demographic_grouping": NoRepairReason(
         reason="The same shape as invented_number: a claim deleted from prose "
                "Dan publishes. It fires 0 times on the 21 stored posts, which "
                "is a weaker case for a repairer rather than a stronger one.",
         issue="#1151",
-        gate="the same gate as invented_number: a hand review with a count and "
-             "a date, or a control to mark a finding wrong."),
+        settled="Settled with invented_number by the same hand review, "
+                "2026-09-01: 0 firings across the 21 stored final bodies. A "
+                "claim-deleting repair with no observed firing has no evidence "
+                "it would delete the right claim, so 0 firings is a weaker "
+                "case for building one than a high rate would be, not a "
+                "stronger one."),
     "repeated_construction": NoRepairReason(
         reason="Rewriting it means choosing which of two uses of a construction "
                "to keep and what to put in place of the other, which is a "
                "judgement about the prose rather than a fact the app holds "
                "(rule 3). It fires 0 times on the 21 stored posts.",
-        issue="#1152"),
-    "stacked_photos": NoRepairReason(
-        reason="Repairing it MOVES a marker, and where it should go is a "
-               "judgement about the flow of the post; #998 records what happens "
-               "when a rewriter guesses a marker's position. Until #1129 "
-               "nothing here could see a marker reorder at all, so this is "
-               "buildable in a way it was not.",
-        issue="#1153"),
-    "late_first_photo": NoRepairReason(
-        reason="The same as stacked_photos: repairing it moves a marker, and "
-               "where it belongs is a judgement about the flow of the post "
-               "rather than a fact the app already holds.",
-        issue="#1154"),
+        issue="#1152",
+        settled="Decided 2026-09-01 and closed. 0 firings across the 21 stored "
+                "final bodies, and the repair needs a judgement about which "
+                "use of a construction to keep and what replaces the other, "
+                "which is prose the app would be writing rather than a fact it "
+                "already holds."),
+
+    # --- repaired deterministically, by MOVING a marker (#1153, #1154) ------
+    # Not a model call and not a rewrite. The destination is read off the rule
+    # that fired rather than judged, no prose is written or lost, and
+    # photographs keep their order relative to each other. Where no destination
+    # can be derived it refuses and the check reports, which is why these two
+    # codes can still appear on the panel after a pass (L98).
+    "stacked_photos": repair_marker_placement,
+    "late_first_photo": repair_marker_placement,
 }

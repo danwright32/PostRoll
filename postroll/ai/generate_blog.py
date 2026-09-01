@@ -72,7 +72,8 @@ from .blog_repair import repair_alt_text
 from .repair_log import RepairLog
 from .blog_quality import (check_blog, filenames_used_by, finding_entry,
                            refuse_colliding_filenames,
-                           repair_marker_filenames)
+                           repair_marker_filenames,
+                           repair_marker_placement)
 from ..blog_draft import blog_draft_text
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -1804,6 +1805,21 @@ def generate_blog(
         final_body, repairs = repair_marker_filenames(final_body, photo_filenames)
         for was, now in repairs:
             print(f"[generate_blog] REPAIRED marker filename: {was!r} -> {now!r}",
+                  flush=True, file=sys.stderr)
+
+        # Move a marker the placement rules refused, deterministically (#1153, #1154).
+        #
+        # The second exception to the report-only rule, and it is narrow for the same
+        # reason the first one is: nothing is invented. No prose is written or lost,
+        # and photographs keep their order relative to each other. Both destinations
+        # are read off the rules rather than judged, and a move with no derived
+        # destination is refused and left for the checks to report (L98).
+        #
+        # Runs after the filename repair, because it reads marker names, and before
+        # the checks, so the panel reports where a marker IS rather than where it was.
+        final_body, moved = repair_marker_placement(final_body)
+        for name, why in moved:
+            print(f"[generate_blog] MOVED marker {name!r} ({why})",
                   flush=True, file=sys.stderr)
 
         # The one finding class the app can do better than report (#1133).
