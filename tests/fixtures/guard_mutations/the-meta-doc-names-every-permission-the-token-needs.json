@@ -1,7 +1,7 @@
 {
   "name": "the-meta-doc-names-every-permission-the-token-needs",
   "file": "postroll/ai/meta_app.py",
-  "find": "    \"ads_read\",\n)",
+  "find": "    \"pages_read_engagement\",\n)",
   "replace": ")",
   "test": "tests/test_meta_app_doc.py::test_the_document_names_exactly_the_permissions_the_code_requires",
   "breaks": "docs/META-APP.md and the code disagree about which permissions the Meta token has to carry, so the console steps grant a set the code does not ask for, or omit one it does, and the token then fails as an empty business_discovery result rather than as a named missing permission (#988)"

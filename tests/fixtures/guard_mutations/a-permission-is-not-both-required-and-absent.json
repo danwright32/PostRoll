@@ -1,0 +1,8 @@
+{
+  "name": "a-permission-is-not-both-required-and-absent",
+  "file": "postroll/ai/meta_app.py",
+  "find": "    \"pages_read_engagement\",\n)",
+  "replace": "    \"pages_read_engagement\",\n    \"ads_read\",\n)",
+  "test": "tests/test_meta_app_doc.py::test_a_permission_is_never_both_required_and_deliberately_absent",
+  "breaks": "a permission is listed as both required and deliberately absent, so the document guard subtracts it out of what the document names and then passes over a document that never tells anybody to grant a permission the code requires (#988)"
+}

@@ -34,9 +34,9 @@ has moved changes both.
 
 ## The permissions, and what each one is for
 
-The token needs five permissions. Four were enough for the hand made Explorer
-token used to run the probe. The fifth is required only for the kind of token
-that actually ships, which is the trap described in the next section.
+Four. Measured on 2026-09-01, not read off the reference: a system user token
+carrying exactly these four answered `business_discovery` for two separate
+target accounts.
 
 | Permission | Why it is needed |
 | --- | --- |
@@ -44,14 +44,30 @@ that actually ships, which is the trap described in the next section.
 | `instagram_manage_insights` | Required by the `business_discovery` edge itself. Without it the edge returns nothing, whatever else is granted. |
 | `pages_show_list` | Lets the token see the Facebook Page list. The Instagram account is reached through its Page, so without this there is nothing to reach it by. |
 | `pages_read_engagement` | Reads the Page the Instagram account is attached to. Also named as required by the `business_discovery` reference. |
-| `ads_read` | Required when the token's Page role was granted through a business portfolio, which is exactly what a system user token is. A personal Explorer token does not need it, so it is easy to leave out and then find the edge refusing a token that looks correctly scoped. |
 
-Source: the `business_discovery` reference at
-<https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/business_discovery>,
-which lists `instagram_basic`, `instagram_manage_insights` and
-`pages_read_engagement`, and adds that a token whose Page role came through
-Business Manager also needs `ads_management` or `ads_read`. `ads_read` is the
-narrower of the two, so it is the one used.
+### The fifth permission the reference asks for, and why it is not here
+
+The `business_discovery` reference at
+<https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/business_discovery>
+names `instagram_basic`, `instagram_manage_insights` and
+`pages_read_engagement`, and adds that a token whose Page role was granted
+through Business Manager also needs `ads_management` or `ads_read`. A system
+user token is exactly such a token, so on 2026-09-01 this document said to tick
+`ads_read`.
+
+That instruction was wrong twice over, and it is recorded rather than quietly
+deleted, because the reference still says otherwise and the next person to read
+it will reach for the same permission.
+
+* It cannot be ticked. The token picker does not offer `ads_read` at all unless
+  the app carries the Marketing API product, which PostRoll does not.
+* It is not needed. A token with the four above returned follower count, media
+  count, per post like and comment counts and `media_product_type` for two
+  different target accounts on the first attempt.
+
+If the edge ever starts refusing a correctly scoped token, adding the Marketing
+API product to the app and regenerating with `ads_read` is the thing to try,
+and this paragraph is why.
 
 ## The two forks that are easy to get wrong
 
@@ -83,11 +99,18 @@ probe, which lasted about two hours.
    turn on **Manage app**, save.
 5. **Assign assets** again, choose **Pages**, tick the Dan Wright Photography
    Page, turn on **Manage Page**, save.
-6. **Generate new token**, choose the **PostRoll** app, and tick all five
+6. Under **Instagram accounts**, the Dan Wright Photography account is worth
+   assigning too. An account listed there reading "Nothing assigned yet" is
+   attached with no access granted, which is a half finished state rather than
+   a working one.
+7. **Generate new token**, choose the **PostRoll** app, and tick all four
    permissions from the table above.
-7. Copy the token immediately. Meta shows it once and never again.
+8. Copy the token immediately. Meta shows it once and never again.
 
-A correct token is about 300 characters and starts `EAA`.
+A correct token starts `EAA`. The one minted on 2026-09-01 measured 199
+characters. The 302 characters recorded during the 2026-08-29 probe was an
+Explorer token, which is a different kind, so treat 199 as the shape of the
+thing that ships and neither number as a rule.
 
 ### Finding the Instagram account id
 
@@ -95,15 +118,13 @@ A correct token is about 300 characters and starts `EAA`.
 so it needs Dan's own Instagram user id as well as the token. It is not the
 handle and not the numeric id shown anywhere in the Instagram app.
 
-Once the token exists, find the id in the Graph API Explorer at
-<https://developers.facebook.com/tools/explorer>: select the PostRoll app,
-paste the token, and request
-`me/accounts?fields=name,instagram_business_account`. The id is the
-`instagram_business_account.id` on the Dan Wright Photography Page. An empty
-`data` array here is fork 2 above, not an account with no Pages.
+It is recorded as `QUERYING_ACCOUNT_ID` in `postroll/ai/meta_app.py`, read
+from `/me/accounts` on 2026-09-01, so the fetch does not spend a call
+rediscovering it every run.
 
-The fetch module (#1002) is what will turn this into a command rather than a
-console visit. It does not exist yet.
+To re-derive it, request `me/accounts?fields=name,instagram_business_account`
+and take `instagram_business_account.id` from the Dan Wright Photography Page.
+An empty `data` array there is fork 2 above, not an account with no Pages.
 
 ## Where the token lives
 

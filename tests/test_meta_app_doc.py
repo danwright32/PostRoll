@@ -26,6 +26,7 @@ from pathlib import Path
 from postroll.ai.meta_app import (
     GRAPH_API_VERSION,
     GRAPH_API_VERSION_AVAILABLE_UNTIL,
+    NOT_REQUIRED_DESPITE_THE_REFERENCE,
     REQUIRED_PERMISSIONS,
 )
 
@@ -57,11 +58,27 @@ def permissions_named_in_doc(text: str) -> set[str]:
     return found
 
 
+def test_a_permission_is_never_both_required_and_deliberately_absent():
+    """The two tuples are the whole vocabulary, so they may not overlap.
+
+    Asserted before the document is read, because the subtraction below is only
+    meaningful while the sets are disjoint: a permission in both would be
+    subtracted out of the document's list and the guard would then pass over a
+    document that never mentions a permission the code requires.
+    """
+    both = set(REQUIRED_PERMISSIONS) & set(NOT_REQUIRED_DESPITE_THE_REFERENCE)
+    assert not both, (
+        f"{sorted(both)} is listed as both required and deliberately absent, "
+        "so the document cannot say anything true about it.")
+
+
 def test_the_document_names_exactly_the_permissions_the_code_requires():
     named = permissions_named_in_doc(doc_text())
-    # `ads_management` is named only as the wider alternative that is
-    # deliberately NOT used, so it is expected in the prose and not in the set.
-    named.discard("ads_management")
+    # The permissions the reference names and this token does not carry are
+    # expected in the prose, which explains why they are absent, and must not
+    # read as things to grant. Subtracted from what the CODE says rather than
+    # from a list kept here, so the exemption cannot drift away from it (L41).
+    named -= set(NOT_REQUIRED_DESPITE_THE_REFERENCE)
     assert named == set(REQUIRED_PERMISSIONS), (
         "the Meta app document and postroll/ai/meta_app.py disagree about "
         f"which permissions the token needs. Document: {sorted(named)}. "
