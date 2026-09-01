@@ -58,7 +58,7 @@ from .ai_tells import (
 )
 from .claude_client import (run_json_prompt, run_prompt, run_review_pass,
                             load_brand_voice, ClaudeError, partition_uploadable)
-from .blog_quality import Finding, finding_entry
+from .blog_findings import Finding, finding_entry
 from .caption_credits import (
     HANDLE_RE,
     credit_findings,

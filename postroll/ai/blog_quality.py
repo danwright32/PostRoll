@@ -30,8 +30,16 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
 from typing import Any
+
+# Re-exported so the eight test files and three scripts importing the pair out
+# of here are untouched by the move (#1128). The definitions live in a leaf
+# module; this file is the checker, not the vocabulary.
+from .blog_findings import Finding, finding_entry
+
+__all__ = ["Finding", "finding_entry", "check_blog", "filenames_used_by",
+           "repair_marker_filenames", "names_a_group",
+           "ALT_MIN_WORDS", "ALT_MAX_WORDS", "MAX_SHARED_OPENINGS"]
 
 #: Alt text length band. Was 15 to 35 in the prompt, which ran long on every
 #: marker of the corrected draft.
@@ -105,23 +113,6 @@ _TITLE_LABEL = re.compile(
 )
 
 _CONSTRUCTION = re.compile(r"something between .+? and ", re.IGNORECASE)
-
-
-@dataclass(frozen=True)
-class Finding:
-    code: str
-    message: str
-    detail: str
-
-
-def finding_entry(finding: Finding) -> dict[str, str]:
-    """One finding, in exactly the fields the app decodes (#274).
-
-    Three modules built this dict by hand, so a field added to Finding reached
-    the app from whichever of them was remembered. One derivation, and the
-    payload contract has one place to read.
-    """
-    return {"code": finding.code, "message": finding.message, "detail": finding.detail}
 
 
 def _markers(body: str) -> list[tuple[str, str]]:

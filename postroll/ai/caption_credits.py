@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 
 from ..caption_blocks import is_handle_shaped
-from .blog_quality import Finding
+from .blog_findings import Finding
 
 #: An @ handle as it appears in caption text. A dot is legal inside a handle
 #: (@safa.wav) but never ends one, so the trailing punctuation of the sentence
