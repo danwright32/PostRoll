@@ -1,0 +1,26 @@
+{
+  "_what": "How long one alt text repair call takes with a photograph attached (#1127). Written by tools/measure_alt_text_call.py; the repair pass derives its per-call timeout from the summary.",
+  "readings": [
+    {
+      "measured_on": "2026-09-01",
+      "seconds": 3.1,
+      "photo_bytes": 2080017,
+      "answered": true,
+      "words": 23
+    },
+    {
+      "measured_on": "2026-09-01",
+      "seconds": 3.1,
+      "photo_bytes": 1495211,
+      "answered": true,
+      "words": 19
+    },
+    {
+      "measured_on": "2026-09-01",
+      "seconds": 2.8,
+      "photo_bytes": 3647303,
+      "answered": true,
+      "words": 25
+    }
+  ]
+}
