@@ -1,0 +1,133 @@
+{
+  "_comment": [
+    "What makes a saved collage layout renderable, stated once and asserted by",
+    "BOTH implementations (#967, #970).",
+    "",
+    "Every divider drag writes cell geometry straight into the saved override.",
+    "CollageRenderer.render then composites those exact cells over the base PNG,",
+    "so an impossible layout is not a preview problem: it is what gets exported",
+    "and what is written back to events.json. #965 fixed the one drag known to",
+    "produce one; this is the rule the SAVE has to satisfy, whatever produced it.",
+    "",
+    "The five ways a layout is not renderable:",
+    "",
+    "  under_floor   a cell smaller than MIN_CELL_PX on either axis. The drag",
+    "                clamps already claim to enforce this, so a saved layout",
+    "                breaking it means a clamp was wrong or a path skipped one.",
+    "  off_canvas    a cell that starts before the canvas or ends past it. The",
+    "                renderer draws it anyway and the photo is cut by the frame.",
+    "  overlapping   two cells sharing pixels. One photograph is drawn over",
+    "                another and which one survives depends on cell order.",
+    "  covers_strip  a cell intersecting the branded centre strip. That band",
+    "                carries the event title, the org, the venue and the",
+    "                wordmark, and generate_collage.py:8 says the point of it is",
+    "                being impossible to crop out when shared. A photo over it",
+    "                takes the branding off the post.",
+    "  empty         no cells at all, which is not a layout.",
+    "",
+    "MIN_CELL_PX is 80, the same floor computeCollageDividers clamps drags to.",
+    "Stated here rather than restated in the validator so the clamp and the",
+    "validator cannot disagree about the floor (L41).",
+    "",
+    "The strip band is given as strip_y and strip_h rather than assumed at a",
+    "fixed offset: where it sits depends on how many rows are above it, which",
+    "is why generate_collage.infer_strip_y exists. A case with strip_y null has",
+    "no strip and only the other four rules apply.",
+    "",
+    "Cells are [photo, x, y, w, h]. Order does not matter to any rule here."
+  ],
+  "min_cell_px": 80,
+  "canvas": {"w": 1080, "h": 1920},
+  "cases": [
+    {
+      "name": "an ordinary two row layout with a strip between",
+      "strip_y": 400, "strip_h": 90,
+      "cells": [["a", 0, 0, 1080, 400], ["b", 0, 490, 536, 300], ["c", 544, 490, 536, 300]],
+      "problems": []
+    },
+    {
+      "name": "a layout with no strip at all",
+      "strip_y": null, "strip_h": 0,
+      "cells": [["a", 0, 0, 536, 400], ["b", 544, 0, 536, 400]],
+      "problems": []
+    },
+    {
+      "name": "a cell one pixel under the floor",
+      "strip_y": null, "strip_h": 0,
+      "cells": [["a", 0, 0, 1080, 79]],
+      "problems": ["under_floor"]
+    },
+    {
+      "name": "a cell exactly on the floor is fine",
+      "strip_y": null, "strip_h": 0,
+      "cells": [["a", 0, 0, 80, 80]],
+      "problems": []
+    },
+    {
+      "name": "a negative height, which is what the strip drag produced",
+      "strip_y": null, "strip_h": 0,
+      "cells": [["a", 0, 0, 1080, -2]],
+      "problems": ["under_floor"]
+    },
+    {
+      "name": "a cell starting before the canvas",
+      "strip_y": null, "strip_h": 0,
+      "cells": [["a", -10, 0, 1080, 400]],
+      "problems": ["off_canvas"]
+    },
+    {
+      "name": "a cell ending past the bottom of the canvas",
+      "strip_y": null, "strip_h": 0,
+      "cells": [["a", 0, 1800, 1080, 200]],
+      "problems": ["off_canvas"]
+    },
+    {
+      "name": "a cell ending exactly at the canvas edge is fine",
+      "strip_y": null, "strip_h": 0,
+      "cells": [["a", 0, 1520, 1080, 400]],
+      "problems": []
+    },
+    {
+      "name": "two cells sharing pixels",
+      "strip_y": null, "strip_h": 0,
+      "cells": [["a", 0, 0, 600, 400], ["b", 500, 0, 580, 400]],
+      "problems": ["overlapping"]
+    },
+    {
+      "name": "two cells touching edge to edge do not overlap",
+      "strip_y": null, "strip_h": 0,
+      "cells": [["a", 0, 0, 540, 400], ["b", 540, 0, 540, 400]],
+      "problems": []
+    },
+    {
+      "name": "the top row grown down over the branded strip",
+      "strip_y": 400, "strip_h": 90,
+      "cells": [["a", 0, 0, 1080, 600], ["b", 0, 690, 536, 100], ["c", 544, 690, 536, 100]],
+      "problems": ["covers_strip"]
+    },
+    {
+      "name": "a cell touching the top of the strip but not entering it",
+      "strip_y": 400, "strip_h": 90,
+      "cells": [["a", 0, 0, 1080, 400], ["b", 0, 490, 1080, 300]],
+      "problems": []
+    },
+    {
+      "name": "a cell overlapping the strip by one pixel",
+      "strip_y": 400, "strip_h": 90,
+      "cells": [["a", 0, 0, 1080, 401], ["b", 0, 490, 1080, 300]],
+      "problems": ["covers_strip"]
+    },
+    {
+      "name": "the strip drag at its old ceiling, which produced both faults",
+      "strip_y": 400, "strip_h": 90,
+      "cells": [["a", 0, 0, 1080, 692], ["b", 0, 782, 536, -2], ["c", 544, 782, 536, -2]],
+      "problems": ["covers_strip", "under_floor"]
+    },
+    {
+      "name": "no cells is not a layout",
+      "strip_y": null, "strip_h": 0,
+      "cells": [],
+      "problems": ["empty"]
+    }
+  ]
+}
