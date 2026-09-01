@@ -40,6 +40,7 @@ from .blog_quality import (ALT_MAX_WORDS, ALT_MIN_WORDS, _PHOTO_MARKER,
                            _fold_filename, _markers, check_alt_text,
                            check_blog_targeted, repair_marker_placement,
                            shared_opening_groups)
+from .blog_repair_examples import EXAMPLES
 from .blog_repair_damage import (CROSS_MARKER_CODES, Touched,
                                  blog_repair_damage)
 from .repair_log import RepairLog
@@ -149,8 +150,35 @@ Rules for the replacement:
   satisfy a rule: a description that names the venue and the performer and says
   nothing about the picture is worse than the one it replaces.
 
+{examples}
 Return JSON ONLY, no markdown fences:
 {{"alt": "<the replacement>"}}"""
+
+
+def render_examples() -> str:
+    """The worked examples, as before and after pairs (#1161).
+
+    Both halves, because a worked example is the CHANGE: showing only the good
+    version teaches what good looks like and nothing about what to do with a
+    bad one.
+
+    The warning about names is not decoration. Every example names a real venue
+    and real people from a different post, and a demonstration outweighs an
+    instruction (L270), so the risk of a name bleeding into this rewrite is
+    real. It is not the only guard: the acceptance check re-runs
+    `alt_text_missing_venue` against THIS post's venue, so a rewrite naming
+    Greenwich House Theater on a Carnegie Hall post is refused and retried.
+    """
+    if not EXAMPLES:
+        return ""
+    out = ["Worked examples, from corrections a person made by hand. Follow "
+           "their SHAPE only: their venue and their names belong to other "
+           "posts and must not appear in your answer.", ""]
+    for i, example in enumerate(EXAMPLES, start=1):
+        out.append(f"Example {i} before: {example.before}")
+        out.append(f"Example {i} after:  {example.after}")
+        out.append("")
+    return "\n".join(out)
 
 
 @dataclass
@@ -436,7 +464,8 @@ def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
         prompt = PROMPT.format(
             alt=alt,
             findings="".join(f"- {f.code}: {f.message}\n" for f in found),
-            min_words=ALT_MIN_WORDS, max_words=ALT_MAX_WORDS, naming=naming)
+            min_words=ALT_MIN_WORDS, max_words=ALT_MAX_WORDS, naming=naming,
+            examples=render_examples())
 
         try:
             answer = runner(prompt, timeout=timeout, image_paths=[resolved],
