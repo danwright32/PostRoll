@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 
 import pytest
 
@@ -128,6 +129,27 @@ def test_every_payload_names_a_swift_side_that_exists(name):
             f"{name}: {swift['file']} has no `{swift['function']}`, so the Swift "
             f"guard is pointed at nothing and passes for the wrong reason."
         )
+        return
+
+    # A `model` kind was exempt from the check that appears to cover it (#1132).
+    #
+    # Only the `reader` branch above resolved anything, so a model entry's
+    # `type` was never looked for anywhere. `blog_finding` had pointed at
+    # `BlogFinding` since it was written, and there is no such type in this app:
+    # the real one is `QualityFinding`. Nothing caught it because nothing ever
+    # looked, which is a check that reads as covering a thing it never touches
+    # (L96).
+    sources = list((CONTRACT_PATH.parent.parent.parent / "PostRollApp" / "Sources")
+                   .rglob("*.swift"))
+    assert sources, "no Swift sources found, so this would pass by finding nothing"
+    declared = re.compile(
+        rf"\b(?:struct|final class|class|enum)\s+{re.escape(swift['type'])}\b")
+    assert any(declared.search(path.read_text(encoding="utf-8")) for path in sources), (
+        f"{name}: the contract says Swift decodes this into `{swift['type']}`, and "
+        f"no such type is declared anywhere in PostRollApp/Sources. Either the "
+        f"type was renamed and the contract was not, or it never existed, and "
+        f"either way every key this entry declares is proved against nothing."
+    )
 
 
 def test_the_contract_is_valid_json_with_a_comment_that_says_why():

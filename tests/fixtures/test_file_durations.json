@@ -23,6 +23,7 @@
     "test_blog_draft_text.py": 0.01,
     "test_blog_empty_alt_text.py": 0.0,
     "test_blog_filename_rules_on_every_path.py": 0.0,
+    "test_blog_finding_repair_state.py": 0.66,
     "test_blog_finding_targets.py": 0.02,
     "test_blog_findings_module_is_a_leaf.py": 0.02,
     "test_blog_findings_pin_their_body.py": 0.1,
@@ -315,6 +316,10 @@
     "test_blog_filename_rules_on_every_path.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
+    },
+    "test_blog_finding_repair_state.py": {
+      "run": "partial-2026-09-01T04:39Z",
+      "scale": 1.103
     },
     "test_blog_finding_targets.py": {
       "run": "partial-2026-09-01T03:14Z",

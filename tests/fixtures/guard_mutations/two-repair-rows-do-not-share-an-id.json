@@ -1,0 +1,8 @@
+{
+  "name": "two-repair-rows-do-not-share-an-id",
+  "file": "PostRollApp/Sources/Services/FindingsDisplay.swift",
+  "find": "        var id: String { \"\\(code)|\\(repair)\" }",
+  "replace": "        var id: String { code }",
+  "test": "PostRollTests/RepairStateDisplayTests/testTwoRowsOfOneCodeDoNotShareAnIdentity",
+  "breaks": "two groups of the same rule in different repair states share an id, and SwiftUI silently renders ONE of any such pair. The grouping is still correct and the screen still shows one row, so rule 2 is defeated at the RENDER step, one line past where the fix was made and invisible to any test of the grouping alone (#1132)"
+}

@@ -104,13 +104,33 @@ struct QualityFinding: Codable, Hashable, Identifiable {
     var code: String = ""
     var message: String = ""
     var detail: String = ""
+    /// What the repair pass did about this, or why it did nothing (#1132).
+    ///
+    /// Empty means never attempted, which is every finding on every post
+    /// written before the pass existed, and it renders exactly as it does
+    /// today. The other four are `tried`, `blocked`, `unavailable` and
+    /// `not_reached`, and they are four rather than one because they invite
+    /// different actions: `tried` says the app will not get it next time
+    /// either, `blocked` says try again. Repairs are SILENT, so this panel is
+    /// the only surface carrying the difference.
+    ///
+    /// The raw strings are Python's `RepairState`. They are matched here rather
+    /// than modelled as an enum so a state added on that side arrives as an
+    /// unknown string and renders as never-attempted, which is wrong but not
+    /// broken, instead of failing to decode the whole post.
+    var repair: String = ""
 
-    var id: String { "\(code)|\(detail)" }
+    /// Includes `repair` because two findings of one code in DIFFERENT repair
+    /// states are two rows, and SwiftUI silently renders one of any pair
+    /// sharing an id.
+    var id: String { "\(code)|\(repair)|\(detail)" }
 
-    init(code: String = "", message: String = "", detail: String = "") {
+    init(code: String = "", message: String = "", detail: String = "",
+         repair: String = "") {
         self.code = code
         self.message = message
         self.detail = detail
+        self.repair = repair
     }
 
     init(from decoder: Decoder) throws {
@@ -118,6 +138,64 @@ struct QualityFinding: Codable, Hashable, Identifiable {
         code    = try c.decodeIfPresent(String.self, forKey: .code)    ?? ""
         message = try c.decodeIfPresent(String.self, forKey: .message) ?? ""
         detail  = try c.decodeIfPresent(String.self, forKey: .detail)  ?? ""
+        repair  = try c.decodeIfPresent(String.self, forKey: .repair)  ?? ""
+    }
+}
+
+/// What the repair pass did about a finding, and what Dan should do about that.
+///
+/// The wording lives here rather than in the panel because it is the same
+/// sentence a person reads and a screen reader speaks, and two copies is how
+/// they come to disagree (L263). Matched on the raw string Python sends.
+enum RepairState: String, CaseIterable {
+    case never = ""
+    case tried = "tried"
+    case blocked = "blocked"
+    case unavailable = "unavailable"
+    case notReached = "not_reached"
+
+    /// An unknown value from a newer Python renders as never-attempted, which
+    /// is wrong but not broken, rather than crashing the panel.
+    init(raw: String) { self = RepairState(rawValue: raw) ?? .never }
+
+    /// Appended to the rule's heading, so the state is in the text and not only
+    /// in a colour: a colour difference alone is not a distinct state.
+    var headingSuffix: String {
+        switch self {
+        case .never:       return ""
+        case .tried:       return " (the app tried and could not)"
+        case .blocked:     return " (the app could not try)"
+        case .unavailable: return " (not repairable here)"
+        case .notReached:  return " (the app ran out of time)"
+        }
+    }
+
+    var note: String {
+        switch self {
+        case .never:       return ""
+        case .tried:
+            return "The app rewrote these and its own checks refused the result, "
+                 + "so re-running will not help."
+        case .blocked:
+            return "The app could not reach the model or could not read the "
+                 + "photograph. Worth trying again."
+        case .unavailable:
+            return "This path has no photograph to check against. Regenerate or "
+                 + "swap photos to have these rewritten."
+        case .notReached:
+            return "The pass ran out of time before reaching these. Worth trying "
+                 + "again."
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .never:       return "exclamationmark.triangle"
+        case .tried:       return "xmark.circle"
+        case .blocked:     return "arrow.clockwise.circle"
+        case .unavailable: return "minus.circle"
+        case .notReached:  return "clock.badge.exclamationmark"
+        }
     }
 }
 

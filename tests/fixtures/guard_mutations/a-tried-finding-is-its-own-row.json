@@ -1,0 +1,8 @@
+{
+  "name": "a-tried-finding-is-its-own-row",
+  "file": "PostRollApp/Sources/Services/FindingsDisplay.swift",
+  "find": "            let key = Key(code: finding.code, repair: finding.repair)",
+  "replace": "            let key = Key(code: finding.code, repair: \"\")",
+  "test": "PostRollTests/RepairStateDisplayTests/testATriedFindingAndAnUntriedOneOfTheSameCodeAreTwoRows",
+  "breaks": "the panel groups on the rule alone again, so a finding the app TRIED and failed to fix merges under one heading with the same rule it never attempted, and Dan is told nothing about which is which. Repairs are silent, so this panel is the only surface carrying the difference, and collapsing the states back into one is rule 2 defeated (#1132, L11, L260)"
+}

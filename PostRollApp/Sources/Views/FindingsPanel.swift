@@ -47,12 +47,34 @@ struct FindingsPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            ForEach(FindingsDisplay.grouped(findings: findings), id: \.code) { group in
+            // `id: \.self` over the whole group, not `\.code` (#1132). Once
+            // `grouped` keys on (code, repair), two groups can share a code,
+            // and SwiftUI silently renders ONE of any pair sharing an id: rule
+            // 2 defeated at the render step, one line past where the grouping
+            // was fixed.
+            ForEach(FindingsDisplay.grouped(findings: findings)) { group in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(group.message)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(PaintedSurfaces.bodyText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        if group.state != .never {
+                            // The state gets its own icon as well as its own
+                            // words. A colour difference alone is not a
+                            // distinct state, and the words are what VoiceOver
+                            // reads.
+                            Image(systemName: group.state.icon)
+                                .font(.system(size: 10))
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
+                        }
+                        Text(group.message + group.state.headingSuffix)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(PaintedSurfaces.bodyText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if group.state != .never {
+                        Text(group.state.note)
+                            .font(.system(size: 10))
+                            .foregroundStyle(PaintedSurfaces.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     ForEach(group.details, id: \.self) { detail in
                         Text(detail)
                             .font(.system(size: 11))
@@ -62,6 +84,11 @@ struct FindingsPanel: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(
+                    group.state == .never
+                        ? group.message
+                        : "\(group.message). \(group.state.note)")
             }
         }
         .padding(Spacing.md)
