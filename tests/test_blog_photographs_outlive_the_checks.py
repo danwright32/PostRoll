@@ -73,7 +73,8 @@ def test_generate_still_has_every_photograph_when_check_blog_runs(photos):
 
     with patch.object(gb, "run_json_prompt", side_effect=fake_run_json), \
          patch.object(gb, "run_prompt", side_effect=refuse), \
-         patch.object(gb, "check_blog", side_effect=watch_check(gb.check_blog)):
+         patch.object(gb, "check_blog_targeted",
+                      side_effect=watch_check(gb.check_blog_targeted)):
         gb.generate_blog(
             event="E", org="O", venue="V", date="2026-04-05",
             program={"performers": [], "pieces": []},
@@ -99,7 +100,8 @@ def test_the_swap_still_has_every_photograph_when_check_blog_runs(photos):
         return {"body": PROSE, "photo_count": len(image_paths or [])}
 
     with patch.object(swap, "run_json_prompt", side_effect=fake_run_json), \
-         patch.object(swap, "check_blog", side_effect=watch_check(swap.check_blog)):
+         patch.object(swap, "check_blog_targeted",
+                      side_effect=watch_check(swap.check_blog_targeted)):
         swap.swap_blog_photos(body=f"{PROSE}\n\n[PHOTO: old.jpg | old alt]",
                               photo_paths=photos)
 

@@ -238,8 +238,20 @@ def repair_alt_text(
         journal: Callable[[dict], None] | None = None,
         log: RepairLog | None = None,
         say: Any = None,
+        only: list[str] | None = None,
 ) -> RepairOutcome:
     """Rewrite every alt text a check refused, one call per marker.
+
+    `only`, when given, restricts the pass to those markers, which is what a
+    retry of the ones it could not finish needs (#1160). `None` means every
+    failing marker; an EMPTY LIST means none were named, and the two are
+    deliberately different: a retry handed no markers must do nothing rather
+    than repair the whole post.
+
+    It restricts SELECTION rather than `photo_paths`, and that is not a detail.
+    Handing in fewer paths looks equivalent and is not: a marker with no path
+    is `blocked`, so every marker the retry was not about would come back
+    reported as carrying a failure it never had.
 
     `photo_paths` maps a marker's filename to the file on disk. `deadline` is an
     ABSOLUTE value on `now()`'s scale, derived by the caller from its own process
@@ -261,7 +273,7 @@ def repair_alt_text(
                          photo_paths=photo_paths, runner=runner, now=now,
                          deadline=deadline, max_rounds=max_rounds,
                          timeout=timeout, journal=journal, log=log, say=say,
-                         performers=performers)
+                         performers=performers, only=only)
     finally:
         # On EVERY exit path, including the ones that threw above the loop
         # (L514, L515). Rule 1 removed every other signal, so without this a
@@ -276,7 +288,8 @@ def repair_alt_text(
 
 
 def _run_pass(body, outcome, *, program, venue, photo_paths, runner, now,
-              deadline, max_rounds, timeout, journal, log, say, performers):
+              deadline, max_rounds, timeout, journal, log, say, performers,
+              only=None):
     """The loop. Separated so the PASS record's `finally` cannot be skipped."""
     # `ran` is set on the way OUT, never on the way in. It means the pass ran to
     # COMPLETION, which is the question the panel asks: a pass that threw
@@ -342,6 +355,13 @@ def _run_pass(body, outcome, *, program, venue, photo_paths, runner, now,
         return out
 
     selected = failing(body)
+    if only is not None:
+        # Folded, because every other comparison in the pass is: a marker
+        # differing from a real filename only in which quote or dash was typed
+        # names that file, and a retry keyed on the raw spelling would silently
+        # match nothing and report a successful pass that did nothing (L98).
+        wanted = {_fold_filename(n) for n in only}
+        selected = {k: v for k, v in selected.items() if k in wanted}
     outcome.selected = sorted(selected)
     _record_declined(log, body, program=program, venue=venue)
     if not selected:

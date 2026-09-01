@@ -57,7 +57,7 @@ from .blog_findings import RepairState
 from .blog_marker_splice import splice_retained_markers
 from .blog_quality import _PHOTO_MARKER, _fold_filename
 from .progress import ProgressWriter
-from .blog_quality import (check_blog, filenames_used_by, finding_entry,
+from .blog_quality import (check_blog_targeted, filenames_used_by, finding_entry,
                            repair_marker_filenames,
                            repair_marker_placement)
 from .generate_blog import (
@@ -346,8 +346,11 @@ def revise_blog(
         print(f"[revise_blog] MOVED marker {name!r} ({why})",
               flush=True, file=sys.stderr)
 
-    findings = check_blog(final_body, program=program, venue=venue,
-                          photo_filenames=in_the_post or None)
+    # Targeted, so the payload can say which marker each finding is about
+    # (#1160). Same findings, same order, targets kept.
+    targeted = check_blog_targeted(final_body, program=program, venue=venue,
+                                   photo_filenames=in_the_post or None)
+    findings = [f for f, _t in targeted]
     for f in findings:
         print(f"[revise_blog] CHECK {f.code}: {f.message} ({f.detail})",
               flush=True, file=sys.stderr)
@@ -366,8 +369,9 @@ def revise_blog(
         "findings": [
             finding_entry(f, repair=(RepairState.UNAVAILABLE
                                      if f.code.startswith("alt_text_")
-                                     else RepairState.NEVER))
-            for f in findings],
+                                     else RepairState.NEVER),
+                          target=t.key)
+            for f, t in targeted],
         # The exact text those findings were measured against, so an edited
         # draft stops showing findings about the body before the edit. The
         # caption paths have emitted their sibling `findings_caption` since

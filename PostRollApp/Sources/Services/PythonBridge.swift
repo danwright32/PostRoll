@@ -1361,6 +1361,82 @@ actor PythonBridge {
         }
     }
 
+    // MARK: - Retrying the repairs a pass could not finish
+
+    /// Re-run the alt text repair over `markers` only (#1160).
+    ///
+    /// A fresh pass, not a resumed one: the round cap is per pass and the pass
+    /// is already re-entrant. `markers` is what makes it cheap, and it is
+    /// carried through as a restriction on SELECTION rather than on the photo
+    /// paths, because a marker with no path is `blocked`, so trimming the paths
+    /// instead would bring every other marker back reported as a failure it
+    /// never had.
+    func runBlogRepairRetry(currentBody: String, markers: [String],
+                            photoPaths: [URL], event: Event? = nil)
+        async throws -> BlogRepairRetryResult {
+        guard !markers.isEmpty else { throw PythonBridgeError.invalidOutput(
+            "a retry names no markers") }
+
+        let tmp = FileManager.default.temporaryDirectory
+        let manifestFile = tmp.appendingPathComponent(
+            "postroll_retry_repair_\(UUID().uuidString).json")
+        let outputFile = tmp.appendingPathComponent(
+            "postroll_retried_\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: manifestFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        var manifest: [String: Any] = [
+            "body": currentBody,
+            "markers": markers,
+            "photo_paths": photoPaths.map(\.path),
+        ]
+        if let event {
+            manifest["venue"] = event.venue
+            if let ocr = event.ocrResult,
+               let program = try? JSONSerialization.jsonObject(
+                   with: JSONEncoder().encode(ocr)) {
+                manifest["program"] = program
+            }
+        }
+        try JSONSerialization.data(withJSONObject: manifest,
+                                   options: [.prettyPrinted, .sortedKeys])
+            .write(to: manifestFile)
+
+        // Three states, never a bare spinner: started, still alive, or failed.
+        // The pass is up to two paid image-carrying calls per marker.
+        var progressFile: URL? = nil
+        if let id = event?.id {
+            let file = AppPaths.blogRepairRetryProgressFile(forEventID: id)
+            try? FileManager.default.createDirectory(
+                at: AppPaths.progressDir, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: file)
+            progressFile = file
+        }
+
+        var args = [
+            "-m", "postroll.ai.retry_blog_repair",
+            "--manifest", manifestFile.path,
+            "--output", outputFile.path,
+        ]
+        if let progressFile {
+            args += ["--progress", progressFile.path]
+        }
+        try await runProcess(args: args)
+
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+        do {
+            return try JSONDecoder().decode(
+                BlogRepairRetryResult.self,
+                from: try Data(contentsOf: outputFile))
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
     // MARK: - Cover image regeneration
 
     struct CoverRegenerationResult {

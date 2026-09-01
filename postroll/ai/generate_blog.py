@@ -70,7 +70,7 @@ from .blog_prose import (
 from .blog_photo_stamps import photo_stamps
 from .blog_repair import repair_alt_text
 from .repair_log import RepairLog
-from .blog_quality import (check_blog, filenames_used_by, finding_entry,
+from .blog_quality import (check_blog_targeted, filenames_used_by, finding_entry,
                            refuse_colliding_filenames,
                            repair_marker_filenames,
                            repair_marker_placement)
@@ -1856,8 +1856,13 @@ def generate_blog(
         # number that replaces an invented one, and alt text cannot be rewritten
         # without seeing the photograph. Reported loudly so a draft is never quietly
         # shipped with them, and returned so the review screen can show what to fix.
-        findings = check_blog(final_body, program=program, venue=venue,
-                              photo_filenames=photo_filenames)
+        # Targeted, because the payload carries WHICH marker each finding is
+        # about (#1160). Same findings in the same order; `check_blog` is this
+        # call with the targets dropped.
+        targeted = check_blog_targeted(final_body, program=program,
+                                       venue=venue,
+                                       photo_filenames=photo_filenames)
+        findings = [f for f, _t in targeted]
         for f in findings:
             print(f"[generate_blog] CHECK {f.code}: {f.message} ({f.detail})",
                   flush=True, file=sys.stderr)
@@ -1889,8 +1894,9 @@ def generate_blog(
             # nothing when the pass never touched it (#1132). A repair that
             # was TRIED and failed still shows, marked as tried: rule 1 removed
             # every other signal, so this panel is the only surface saying so.
-            "findings": [finding_entry(f, repair=repair.repair_for(f))
-                         for f in findings],
+            "findings": [finding_entry(f, repair=repair.repair_for(f),
+                                       target=t.key)
+                         for f, t in targeted],
             # The exact text those findings were measured against, so an edited
             # draft stops showing findings about the body before the edit. The
             # caption paths have emitted their sibling `findings_caption` since

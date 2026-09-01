@@ -221,7 +221,12 @@ def test_placement_runs_after_the_filename_repair_and_before_the_checks(module):
     """
     placement = _call_lines(module, "repair_marker_placement")
     filenames = _call_lines(module, "repair_marker_filenames")
-    checks = _call_lines(module, "check_blog")
+    # Either spelling. `check_blog` is `check_blog_targeted` with the targets
+    # dropped, and these paths call the targeted one so the payload can say
+    # which marker each finding is about (#1160). A guard naming only one
+    # spelling reports a real reordering and a rename identically (L11).
+    checks = (_call_lines(module, "check_blog")
+              + _call_lines(module, "check_blog_targeted"))
     assert filenames and checks, (
         f"{module}: this test cannot judge order without both neighbours; "
         f"repair_marker_filenames={filenames} check_blog={checks}")

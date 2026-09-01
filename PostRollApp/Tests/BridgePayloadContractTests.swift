@@ -128,6 +128,7 @@ final class BridgePayloadContractTests: XCTestCase {
         // looks broken.
         "ocr_performer", "program_piece", "program_scene", "ig_post",
         "insight_findings", "insight_finding", "blog_finding",
+        "retried_blog_repair",
     ]
 
     // MARK: - Model payloads
@@ -210,6 +211,23 @@ final class BridgePayloadContractTests: XCTestCase {
         let sent = try encodedKeys(blog)
             .subtracting(["generated_body", "title"])
         try assertCovers("swapped_blog", sent)
+    }
+
+    func testRetriedBlogRepairReadsEveryDeclaredKey() throws {
+        // #1160. The retry sends the body it ended with, the findings measured
+        // on exactly that body, and what it actually did. The last part is not
+        // decoration: repairs are silent, so a retry that repaired nothing and
+        // one that never ran would otherwise read identically here.
+        var result = BlogRepairRetryResult()
+        result.body = "b"
+        result.findings = [QualityFinding(code: "c", message: "m", detail: "d",
+                                          repair: "blocked", target: "a.jpg")]
+        result.retry = .init(ran: true, selected: 1, repaired: 1)
+
+        try assertCovers("retried_blog_repair", try encodedKeys(result))
+        XCTAssertEqual(try JSONDecoder().decode(
+            BlogRepairRetryResult.self,
+            from: try JSONEncoder().encode(result)), result)
     }
 
     func testOCRResultReadsEveryDeclaredKey() throws {

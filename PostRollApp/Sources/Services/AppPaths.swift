@@ -254,6 +254,16 @@ enum AppPaths {
     static func blogPhotoSwapProgressFile(forEventID id: UUID) -> URL {
         progressFile(forEventID: id, suffix: "-blog-photos")
     }
+    /// Where a RETRY of the repairs reports its step (#1160).
+    ///
+    /// Its own file, for the reason the swap's is its own: the runs are tracked
+    /// under different keys and nothing but the current layout stops two
+    /// starting, and an invariant that lives in a view's layout is one a later
+    /// layout change removes silently (L204).
+    static func blogRepairRetryProgressFile(forEventID id: UUID) -> URL {
+        progressFile(forEventID: id, suffix: "-blog-retry")
+    }
+
     static var logFile: URL { logsDir.appendingPathComponent("postroll.log") }
 
     /// The logs folder as it should appear in a message to Dan.

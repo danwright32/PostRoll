@@ -130,6 +130,26 @@ from tools.measured_record import Provenance, added, scale_from  # noqa: E402,F4
 #: still the spelling, rather than trusting it (L52).
 OWN_GUARD_CLASSNAME = "tests.test_fast_subset_stays_honest"
 
+#: EVERY guard that reads this record, not just the one #837 happened to name.
+#:
+#: `test_a_new_test_file_is_measured` goes red for the same reason and at the
+#: same moment as the one above: a test file exists that the record has never
+#: seen. Its message names this tool as the remedy too. Exempting only one of
+#: them left the remedy unreachable in the commonest case there is, which is
+#: adding a test file, and the tool then refused while naming a failure nothing
+#: but the tool could clear (L111). Measured 2026-09-01, when three new test
+#: files deadlocked it through two full suite runs.
+#:
+#: A stand down condition narrower than the reason for standing down disables
+#: the remedy in cases nobody meant to exempt (L324). A guard added later that
+#: reads this record belongs in this set, and
+#: `tests/test_record_test_durations.py` holds the set to naming real files so
+#: a stale entry cannot quietly excuse a real failure.
+RECORD_GUARD_CLASSNAMES = frozenset({
+    OWN_GUARD_CLASSNAME,
+    "tests.test_a_new_test_file_is_measured",
+})
+
 
 @dataclass(frozen=True)
 class FailedCase:
@@ -162,7 +182,8 @@ class FailedCase:
         timings at all, so recording past it would drop it from the record while
         reporting a successful write.
         """
-        return self.kind == "failure" and self.classname == OWN_GUARD_CLASSNAME
+        return (self.kind == "failure"
+                and self.classname in RECORD_GUARD_CLASSNAMES)
 
 
 def failed_cases(report: Path) -> list[FailedCase]:

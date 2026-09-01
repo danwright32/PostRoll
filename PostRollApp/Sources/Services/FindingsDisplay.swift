@@ -78,6 +78,31 @@ enum FindingsDisplay {
     /// One heading per rule, in first-appearance order, with every offending
     /// quote under it. Seven over-long alt texts are one problem to work
     /// through, not seven separate alarms.
+    /// The markers a retry would name, in the order they appear (#1160).
+    ///
+    /// De-duplicated, because a marker routinely breaks three rules at once and
+    /// the retry is a pass over MARKERS: naming one three times would pay for
+    /// it three times.
+    ///
+    /// A finding with no target names nothing. `stacked_photos` and the prose
+    /// rules carry none, and sending an empty string would ask Python to
+    /// repair a marker that is not in the post.
+    ///
+    /// An empty result is what the control reads to decide whether to appear
+    /// at all: a retry offered when nothing can be retried is the same dead
+    /// control pointing the other way.
+    static func retryableTargets(findings: [QualityFinding]) -> [String] {
+        var seen: Set<String> = []
+        var out: [String] = []
+        for finding in findings where finding.repairState.invitesRetry {
+            let target = finding.target.trimmingCharacters(in: .whitespaces)
+            guard !target.isEmpty, !seen.contains(target) else { continue }
+            seen.insert(target)
+            out.append(target)
+        }
+        return out
+    }
+
     static func grouped(findings: [QualityFinding]) -> [Group] {
         // Keyed on (code, repair) rather than code alone (#1132). Without the
         // repair state in the key, a rule the app TRIED and failed to fix and

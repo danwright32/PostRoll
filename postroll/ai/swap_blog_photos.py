@@ -41,7 +41,7 @@ from .blog_photo_stamps import Retention, photo_stamps, retention_for
 from .blog_repair import repair_alt_text
 from .blog_repair_damage import Touched, blog_repair_damage
 from .repair_log import RepairLog
-from .blog_quality import (_PHOTO_MARKER, _fold_filename, check_blog,
+from .blog_quality import (_PHOTO_MARKER, _fold_filename, check_blog_targeted,
                            filenames_used_by, finding_entry,
                            refuse_colliding_filenames,
                            repair_marker_filenames,
@@ -371,8 +371,12 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         # The same deterministic checks the generate and revise paths run (#201).
         # The rest are reported, never rewritten: alt text cannot be corrected
         # without seeing the photograph.
-        findings = check_blog(final_body, program=program, venue=venue,
-                              photo_filenames=photo_filenames)
+        # Targeted, so the payload can say which marker each finding is
+        # about (#1160). Same findings, same order, targets kept.
+        targeted = check_blog_targeted(final_body, program=program,
+                                       venue=venue,
+                                       photo_filenames=photo_filenames)
+        findings = [f for f, _t in targeted]
         for f in findings:
             print(f"[swap_blog_photos] CHECK {f.code}: {f.message} ({f.detail})",
                   flush=True, file=sys.stderr)
@@ -389,8 +393,9 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         return {
             "body":        final_body,
             "photo_count": len(photo_paths),
-            "findings": [finding_entry(f, repair=repair.repair_for(f))
-                         for f in findings],
+            "findings": [finding_entry(f, repair=repair.repair_for(f),
+                                       target=t.key)
+                         for f, t in targeted],
             # The exact text those findings were measured against, so an edited
             # draft stops showing findings about the body before the edit. The
             # caption paths have emitted their sibling `findings_caption` since

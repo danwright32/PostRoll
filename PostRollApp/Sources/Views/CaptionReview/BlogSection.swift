@@ -34,6 +34,22 @@ struct BlogSection: View {
     var eventID: UUID? = nil
     var revisionStartedAt: Date? = nil
     var photoSwapStartedAt: Date? = nil
+    /// Retry the repairs the pass could not finish (#1160).
+    ///
+    /// Optional like the others, so a preview renders without it. When it is
+    /// nil the control is absent, which is the same as having nothing to
+    /// retry: the panel must never draw a button that does nothing (L109).
+    var onRetryRepairs: (([String]) -> Void)? = nil
+    var isRetryingRepairs: Bool = false
+    var retryError: String? = nil
+    /// What the last retry actually did, in a sentence.
+    ///
+    /// Separate from `retryError`, because a retry that rewrote nothing is not
+    /// an error: the app tried and its own checks refused the result. Without
+    /// this the control acts and reports nothing, which is the complaint this
+    /// issue was raised about one step further on (L98).
+    var retryNote: String? = nil
+    var retryStartedAt: Date? = nil
     /// The blog as it stood before the last revision or swap, so Restore is
     /// offered after this section has been rebuilt (L97).
     var undoBlog: BlogOutput? = nil
@@ -159,6 +175,14 @@ struct BlogSection: View {
                               subject: "draft")
             }
         }
+    }
+
+    /// The markers a retry would name, from the findings already on screen.
+    ///
+    /// Derived rather than stored, so the control disappears the moment the
+    /// findings it was offered for do (L14).
+    private var retryableMarkers: [String] {
+        FindingsDisplay.retryableTargets(findings: blog.findings)
     }
 
     var body: some View {
@@ -331,6 +355,40 @@ struct BlogSection: View {
                                         .foregroundStyle(PaintedSurfaces.secondaryText)
                                 }
                             }
+                            // Shown only when something can actually be
+                            // retried (#1160). Two of the five outcomes say
+                            // "Worth trying again" in as many words, and until
+                            // this existed nothing did: the panel named a
+                            // recovery step nothing could perform (L109).
+                            if let onRetryRepairs, !retryableMarkers.isEmpty {
+                                if isRetryingRepairs {
+                                    if let eventID {
+                                        LongRunIndicator(
+                                            label: "Retrying \(retryableMarkers.count)…",
+                                            startedAt: retryStartedAt,
+                                            eventID: eventID,
+                                            run: .blogRetry,
+                                            estimate: "~1 min")
+                                    } else {
+                                        HStack(spacing: 4) {
+                                            ProgressView().controlSize(.mini).tint(PaintedSurfaces.secondaryText)
+                                            Text("Retrying…")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(PaintedSurfaces.secondaryText)
+                                        }
+                                    }
+                                } else {
+                                    // The count is in the label because the
+                                    // retry is paid: Dan should know what he
+                                    // is about to spend before he spends it.
+                                    Button("Try \(retryableMarkers.count) again") {
+                                        onRetryRepairs(retryableMarkers)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                                }
+                            }
                             if undoBlog != nil {
                                 Button("Restore previous") {
                                     onUndoBlogChange?()
@@ -354,6 +412,23 @@ struct BlogSection: View {
                             Text(err)
                                 .font(.system(size: 11))
                                 .foregroundStyle(PaintedSurfaces.stateErrorText)
+                        }
+                        // Its own row, for the reason the two above have their
+                        // own: a retry that could not run and a swap the model
+                        // refused are different problems (L11, L53).
+                        if let err = retryError {
+                            Text(err)
+                                .font(.system(size: 11))
+                                .foregroundStyle(PaintedSurfaces.stateErrorText)
+                        }
+                        // What the retry DID, in ordinary type rather than the
+                        // error colour: rewriting none of what it tried is an
+                        // honest outcome, not a fault.
+                        if let note = retryNote, retryError == nil,
+                           !isRetryingRepairs {
+                            Text(note)
+                                .font(.system(size: 11))
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
                         }
                     }
                 }
