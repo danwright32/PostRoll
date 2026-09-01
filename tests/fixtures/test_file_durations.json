@@ -10,6 +10,7 @@
     "test_ai_learn_from_edits.py": 0.0,
     "test_ai_review_loop.py": 0.24000000000000005,
     "test_ai_tells.py": 0.66,
+    "test_alt_text_call_timing.py": 0.0,
     "test_alt_text_group_shots.py": 0.0,
     "test_alt_text_photo_anchor.py": 0.9700000000000001,
     "test_analyze_posts.py": 0.02,
@@ -25,6 +26,7 @@
     "test_blog_filename_rules_on_every_path.py": 0.0,
     "test_blog_finding_repair_state.py": 0.66,
     "test_blog_finding_targets.py": 0.02,
+    "test_blog_findings_golden.py": 0.0,
     "test_blog_findings_module_is_a_leaf.py": 0.02,
     "test_blog_findings_pin_their_body.py": 0.1,
     "test_blog_marker_drift_measurement.py": 0.01,
@@ -40,7 +42,11 @@
     "test_blog_photographs_outlive_the_checks.py": 0.01,
     "test_blog_prose_predicates_are_a_leaf.py": 0.58,
     "test_blog_quality_checks.py": 0.16000000000000003,
+    "test_blog_repair_budget.py": 0.04,
     "test_blog_repair_damage.py": 0.08,
+    "test_blog_repair_is_a_leaf_of_the_checker.py": 0.07,
+    "test_blog_repair_pass.py": 0.1,
+    "test_blog_repair_reaches_the_paths.py": 0.09,
     "test_blog_revision_keeps_its_alt_text.py": 0.0,
     "test_blog_rewrite_keeps_inline_markers.py": 0.01,
     "test_blog_side_paths_report_progress.py": 1.41,
@@ -265,6 +271,10 @@
       "run": "full-before-2026-08-30",
       "scale": 1.0
     },
+    "test_alt_text_call_timing.py": {
+      "run": "partial-2026-09-01T05:24Z",
+      "scale": 1.391
+    },
     "test_alt_text_group_shots.py": {
       "run": "full-before-2026-08-30",
       "scale": 1.0
@@ -324,6 +334,10 @@
     "test_blog_finding_targets.py": {
       "run": "partial-2026-09-01T03:14Z",
       "scale": 1.56
+    },
+    "test_blog_findings_golden.py": {
+      "run": "partial-2026-09-01T05:17Z",
+      "scale": 1.455
     },
     "test_blog_findings_module_is_a_leaf.py": {
       "run": "partial-2026-09-01T02:14Z",
@@ -385,9 +399,25 @@
       "run": "full-before-2026-08-30",
       "scale": 1.0
     },
+    "test_blog_repair_budget.py": {
+      "run": "partial-2026-09-01T05:17Z",
+      "scale": 1.455
+    },
     "test_blog_repair_damage.py": {
       "run": "partial-2026-09-01T03:14Z",
       "scale": 1.56
+    },
+    "test_blog_repair_is_a_leaf_of_the_checker.py": {
+      "run": "partial-2026-09-01T05:17Z",
+      "scale": 1.455
+    },
+    "test_blog_repair_pass.py": {
+      "run": "partial-2026-09-01T05:17Z",
+      "scale": 1.455
+    },
+    "test_blog_repair_reaches_the_paths.py": {
+      "run": "partial-2026-09-01T05:17Z",
+      "scale": 1.455
     },
     "test_blog_revision_keeps_its_alt_text.py": {
       "run": "partial-2026-09-01T04:13Z",
