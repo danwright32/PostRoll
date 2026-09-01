@@ -1,0 +1,8 @@
+{
+  "name": "a-retry-estimate-grows-with-its-markers",
+  "file": "PostRollApp/Sources/Services/RepairRetryEstimate.swift",
+  "find": "        let worst = startupSeconds + slowestCallSeconds * markers * Double(roundsPerMarker)",
+  "replace": "        let worst = startupSeconds + slowestCallSeconds * Double(roundsPerMarker)",
+  "test": "PostRollTests/RepairRetryEstimateTests/testFiveMarkersAreNotEstimatedTheSameAsOne",
+  "breaks": "the retry estimate stops counting the markers, so five markers advertise the same duration as one and a healthy retry reads as stalled, which is the constant #1164 removed coming back"
+}

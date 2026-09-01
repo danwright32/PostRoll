@@ -368,7 +368,8 @@ struct BlogSection: View {
                                             startedAt: retryStartedAt,
                                             eventID: eventID,
                                             run: .blogRetry,
-                                            estimate: "~1 min")
+                                            estimate: RepairRetryEstimate.text(
+                                                markerCount: retryableMarkers.count))
                                     } else {
                                         HStack(spacing: 4) {
                                             ProgressView().controlSize(.mini).tint(PaintedSurfaces.secondaryText)
