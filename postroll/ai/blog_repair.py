@@ -39,6 +39,7 @@ from .blog_photo_stamps import decode_photo_path
 from .blog_quality import (ALT_MAX_WORDS, ALT_MIN_WORDS, _PHOTO_MARKER,
                            _fold_filename, _markers, check_alt_text)
 from .blog_repair_damage import Touched, blog_repair_damage
+from .repair_log import RepairLog
 from .claude_client import ClaudeError, run_json_prompt
 
 #: How long one call may take before it is cut, and how much of the budget an
@@ -164,6 +165,9 @@ class RepairOutcome:
     ran: bool = False
     #: How much of the deadline was left when it finished.
     remaining: float = 0.0
+    #: The journal, held here so `_record` reaches it without being threaded
+    #: through every frame. Private because it is plumbing, not an outcome.
+    _log: Any = None
 
     #: Every state the pass can end a target in. No default branch: a state
     #: nothing can produce is a state nothing tests (L113).
@@ -200,6 +204,7 @@ def repair_alt_text(
         max_rounds: int = MAX_ROUNDS,
         timeout: int = CALL_TIMEOUT,
         journal: Callable[[dict], None] | None = None,
+        log: RepairLog | None = None,
         say: Any = None,
 ) -> RepairOutcome:
     """Rewrite every alt text a check refused, one call per marker.
@@ -218,7 +223,34 @@ def repair_alt_text(
                   for p in (program or {}).get("performers") or []
                   if str(p.get("name", "")).strip()]
 
-    outcome = RepairOutcome(body=body, ran=True)
+    outcome = RepairOutcome(body=body, ran=False)
+    try:
+        return _run_pass(body, outcome, program=program, venue=venue,
+                         photo_paths=photo_paths, runner=runner, now=now,
+                         deadline=deadline, max_rounds=max_rounds,
+                         timeout=timeout, journal=journal, log=log, say=say,
+                         performers=performers)
+    finally:
+        # On EVERY exit path, including the ones that threw above the loop
+        # (L514, L515). Rule 1 removed every other signal, so without this a
+        # pass that made no attempt, a post with nothing to repair, a pass that
+        # threw before its loop, and a run killed at the process ceiling all
+        # read identically (L98).
+        if log is not None:
+            log.finish(ran=outcome.ran, selected=len(outcome.selected),
+                       attempted=len(outcome.attempts),
+                       remaining=outcome.remaining,
+                       placed=[n for n, _a in _markers(outcome.body)])
+
+
+def _run_pass(body, outcome, *, program, venue, photo_paths, runner, now,
+              deadline, max_rounds, timeout, journal, log, say, performers):
+    """The loop. Separated so the PASS record's `finally` cannot be skipped."""
+    # `ran` is set on the way OUT, never on the way in. It means the pass ran to
+    # COMPLETION, which is the question the panel asks: a pass that threw
+    # partway checked nothing Dan can rely on, and claiming otherwise would put
+    # "checked, nothing outstanding" on a post nothing finished checking.
+    outcome._log = log
 
     # Which markers a check refused. Selected from `check_alt_text`, which is
     # literally the call the acceptance check re-runs, so a marker cannot be
@@ -233,8 +265,10 @@ def repair_alt_text(
 
     selected = failing(body)
     outcome.selected = sorted(selected)
+    _record_declined(log, body, program=program, venue=venue)
     if not selected:
         outcome.remaining = deadline - now()
+        outcome.ran = True
         return outcome
 
     rounds: dict[str, int] = {key: 0 for key in selected}
@@ -270,7 +304,33 @@ def repair_alt_text(
             f"the repair pass selected {len(outcome.selected)} target(s) and "
             f"resolved {len(outcome.states)}; these ended in no state at all "
             f"and would have rendered as never attempted: {missing}")
+
+    outcome.ran = True
     return outcome
+
+
+def _record_declined(log, body, *, program, venue) -> None:
+    """One record per code the pass will not attempt, with its written reason.
+
+    This is what produces the per-code FIRING rate the deferral gates in
+    REPAIRERS are stated against. It counts how often the check fired and says
+    nothing about whether it was right to, which the record's own field name
+    carries (L90).
+    """
+    if log is None:
+        return
+    from collections import Counter
+
+    from .blog_quality import check_blog
+
+    counts = Counter(f.code for f in check_blog(body, program=program,
+                                                venue=venue))
+    for code, count in sorted(counts.items()):
+        entry = REPAIRERS.get(code)
+        if not isinstance(entry, NoRepairReason):
+            continue
+        log.declined(code=code, count=count, reason=entry.reason,
+                     issue=entry.issue)
 
 
 def _repair_one(key, outcome, *, photo_paths, venue, performers, program,
@@ -408,6 +468,10 @@ def _record(journal, outcome, *, key, name, before, after, codes,
     outcome.attempts.append(entry)
     if journal is not None:
         journal(entry)
+    if getattr(outcome, "_log", None) is not None:
+        outcome._log.attempt(target=key, marker=name, codes=list(codes),
+                             before=before, after=after,
+                             outcome=outcome_state.value, reason=reason)
 
 
 #: Every code `check_blog` can produce, and what the repair pass does about it.

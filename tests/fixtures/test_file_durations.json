@@ -45,8 +45,10 @@
     "test_blog_repair_budget.py": 0.04,
     "test_blog_repair_damage.py": 0.08,
     "test_blog_repair_is_a_leaf_of_the_checker.py": 0.07,
+    "test_blog_repair_log.py": 0.17,
     "test_blog_repair_pass.py": 0.1,
     "test_blog_repair_reaches_the_paths.py": 0.09,
+    "test_blog_repairer_table.py": 0.04,
     "test_blog_revision_keeps_its_alt_text.py": 0.0,
     "test_blog_rewrite_keeps_inline_markers.py": 0.01,
     "test_blog_side_paths_report_progress.py": 1.41,
@@ -411,6 +413,10 @@
       "run": "partial-2026-09-01T05:17Z",
       "scale": 1.455
     },
+    "test_blog_repair_log.py": {
+      "run": "partial-2026-09-01T05:33Z",
+      "scale": 1.391
+    },
     "test_blog_repair_pass.py": {
       "run": "partial-2026-09-01T05:17Z",
       "scale": 1.455
@@ -418,6 +424,10 @@
     "test_blog_repair_reaches_the_paths.py": {
       "run": "partial-2026-09-01T05:17Z",
       "scale": 1.455
+    },
+    "test_blog_repairer_table.py": {
+      "run": "partial-2026-09-01T05:33Z",
+      "scale": 1.391
     },
     "test_blog_revision_keeps_its_alt_text.py": {
       "run": "partial-2026-09-01T04:13Z",

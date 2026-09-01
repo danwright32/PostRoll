@@ -69,6 +69,7 @@ from .blog_prose import (
 )
 from .blog_photo_stamps import photo_stamps
 from .blog_repair import repair_alt_text
+from .repair_log import RepairLog
 from .blog_quality import (check_blog, filenames_used_by, finding_entry,
                            refuse_colliding_filenames,
                            repair_marker_filenames)
@@ -1822,7 +1823,11 @@ def generate_blog(
         repair = repair_alt_text(
             final_body, program=program, venue=venue,
             photo_paths=dict(zip(photo_filenames, resolved)),
-            runner=run_json_prompt, deadline=repair_deadline, say=say)
+            runner=run_json_prompt, deadline=repair_deadline, say=say,
+            # What the app changed in this post, after publication (#1135).
+            # The panel says which findings survived; only this says what the
+            # alt text USED to be, and the question always arrives later.
+            log=RepairLog(event=event, script="generate_blog"))
         final_body = repair.body
         for attempt in repair.attempts:
             print(f"[generate_blog] REPAIR {attempt['outcome']}: "
