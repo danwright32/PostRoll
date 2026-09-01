@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from postroll.ai.repair_log import default_log_path as repair_log_path
 from postroll.ai.usage_log import default_log_path
 from postroll.audio import default_cache_dir
 
@@ -51,6 +52,7 @@ def test_the_doc_has_a_table_at_all():
     [
         (default_cache_dir(), "the audio cache"),
         (default_log_path(), "the usage log"),
+        (repair_log_path(), "the blog repair journal"),
     ],
 )
 def test_python_owned_items_are_in_the_inventory(path: Path, label: str):
@@ -68,3 +70,5 @@ def test_the_doc_lists_nothing_python_stopped_writing(monkeypatch, tmp_path):
     monkeypatch.setenv("POSTROLL_DATA_DIR", str(tmp_path))
     assert default_log_path() == tmp_path / "usage.jsonl"
     assert default_log_path().name in _names()
+    assert repair_log_path() == tmp_path / "blog-repairs.jsonl"
+    assert repair_log_path().name in _names()

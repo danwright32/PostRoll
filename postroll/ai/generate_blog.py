@@ -68,6 +68,8 @@ from .blog_prose import (
     prose_indices_without_contractions as _prose_indices_without_contractions,
 )
 from .blog_photo_stamps import photo_stamps
+from .blog_repair import repair_alt_text
+from .repair_log import RepairLog
 from .blog_quality import (check_blog, filenames_used_by, finding_entry,
                            refuse_colliding_filenames,
                            repair_marker_filenames)
@@ -1614,6 +1616,7 @@ def generate_blog(
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
     progress: ProgressWriter | None = None,
+    repair_deadline: float | None = None,
 ) -> dict[str, Any]:
     """Generate a blog post draft for one event.
 
@@ -1803,6 +1806,35 @@ def generate_blog(
             print(f"[generate_blog] REPAIRED marker filename: {was!r} -> {now!r}",
                   flush=True, file=sys.stderr)
 
+        # The one finding class the app can do better than report (#1133).
+        #
+        # Rule 4 licenses rewriting alt text, with the photograph attached,
+        # because the picture is in hand so nothing is invented. Everything else
+        # in the checker still reports, for the reason blog_quality states.
+        #
+        # Runs BEFORE the findings are built, so what the panel shows is what
+        # the post says. The photographs are still on disk here only because
+        # #1128 moved this whole tail inside the staging block.
+        #
+        # The deadline is ABSOLUTE and derived from the caller's own process
+        # start, never a constant number of seconds: the 1,800 second process
+        # ceiling is shared differently on each path, and a week run has already
+        # spent most of it on captions before the blog begins (L227, L522).
+        repair = repair_alt_text(
+            final_body, program=program, venue=venue,
+            photo_paths=dict(zip(photo_filenames, resolved)),
+            runner=run_json_prompt, deadline=repair_deadline, say=say,
+            # What the app changed in this post, after publication (#1135).
+            # The panel says which findings survived; only this says what the
+            # alt text USED to be, and the question always arrives later.
+            log=RepairLog(event=event, script="generate_blog"))
+        final_body = repair.body
+        for attempt in repair.attempts:
+            print(f"[generate_blog] REPAIR {attempt['outcome']}: "
+                  f"{attempt['marker']} ({', '.join(attempt['codes'])})"
+                  + (f" {attempt['reason']}" if attempt["reason"] else ""),
+                  flush=True, file=sys.stderr)
+
         # Deterministic backstops for the rules a prompt cannot hold (#201).
         # The rest still REPORT rather than rewrite: nobody can supply the true
         # number that replaces an invented one, and alt text cannot be rewritten
@@ -1837,7 +1869,12 @@ def generate_blog(
             "title": deterministic_title or data.get("title", "").strip(),
             "body": final_body,
             "photo_count": len(resolved),
-            "findings": [finding_entry(f) for f in findings],
+            # Each finding carries what the repair pass did about it, or
+            # nothing when the pass never touched it (#1132). A repair that
+            # was TRIED and failed still shows, marked as tried: rule 1 removed
+            # every other signal, so this panel is the only surface saying so.
+            "findings": [finding_entry(f, repair=repair.repair_for(f))
+                         for f in findings],
             # The exact text those findings were measured against, so an edited
             # draft stops showing findings about the body before the edit. The
             # caption paths have emitted their sibling `findings_caption` since
@@ -1846,6 +1883,18 @@ def generate_blog(
             # (#974).
             "findings_body": final_body,
             "photo_stamps": stamps,
+            # That the pass RAN, and what it did, on the panel rather than only
+            # in a journal behind a manual reader (#1138). With repairs silent,
+            # an empty findings panel becomes the normal state, and it would
+            # otherwise be produced identically by a genuinely clean post, a
+            # pass that threw before its loop, a pass whose tail never ran, and
+            # a process killed at its deadline mid-pass.
+            "repair_pass": {
+                "ran": repair.ran,
+                "selected": len(repair.selected),
+                "attempted": len(repair.attempts),
+                "ended_early": bool(repair.remaining <= 0),
+            },
         }
 
 

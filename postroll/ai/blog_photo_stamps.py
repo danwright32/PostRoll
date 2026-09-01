@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import enum
 import os
+import sys
 from urllib.parse import unquote, urlparse
 
 # The checker's own fold, not a copy of it (L263). `blog_quality` reaches
@@ -85,7 +86,15 @@ def photo_stamps(filenames: list[str], paths: list[str]) -> dict[str, list[int]]
     for name, path in zip(filenames, paths):
         try:
             info = os.stat(decode_photo_path(path))
-        except OSError:
+        except OSError as e:
+            # Left out, and SAID. Every caller has already checked these files
+            # exist, so a failure here means one vanished mid run, and the only
+            # consequence downstream is that the next swap re-describes that
+            # photograph for no reason. Silent, it is a saving that quietly
+            # stops happening while every test stays green (L289).
+            print(f"warning: could not stamp {name}: {e}. The next photo swap "
+                  f"will re-describe it rather than keeping its alt text.",
+                  file=sys.stderr, flush=True)
             continue
         stamps[fold_filename(name)] = [info.st_mtime_ns, info.st_size]
     return stamps

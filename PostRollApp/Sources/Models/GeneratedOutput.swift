@@ -147,6 +147,63 @@ struct QualityFinding: Codable, Hashable, Identifiable {
 /// The wording lives here rather than in the panel because it is the same
 /// sentence a person reads and a screen reader speaks, and two copies is how
 /// they come to disagree (L263). Matched on the raw string Python sends.
+/// What the repair pass did on one post, as a whole (#1138).
+///
+/// Not per finding: that is `QualityFinding.repair`. This answers the question
+/// an EMPTY panel cannot otherwise answer, which is whether anything checked at
+/// all.
+struct RepairPassSummary: Codable, Hashable {
+    /// False on every post written before the pass existed, and on any run
+    /// where it did not reach the loop. Never assumed true.
+    var ran: Bool = false
+    var selected: Int = 0
+    var attempted: Int = 0
+    /// The pass hit its wall clock deadline, so some findings were never
+    /// reached. Distinct from "did not run" and from "ran and finished".
+    var endedEarly: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case ran, selected, attempted
+        case endedEarly = "ended_early"
+    }
+
+    init(ran: Bool = false, selected: Int = 0, attempted: Int = 0,
+         endedEarly: Bool = false) {
+        self.ran = ran
+        self.selected = selected
+        self.attempted = attempted
+        self.endedEarly = endedEarly
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ran        = try c.decodeIfPresent(Bool.self, forKey: .ran) ?? false
+        selected   = try c.decodeIfPresent(Int.self, forKey: .selected) ?? 0
+        attempted  = try c.decodeIfPresent(Int.self, forKey: .attempted) ?? 0
+        endedEarly = try c.decodeIfPresent(Bool.self, forKey: .endedEarly) ?? false
+    }
+
+    /// The durable line on the panel. Three outcomes, never two: a post the app
+    /// checked and found clean, a post nothing has checked, and a pass that ran
+    /// out of time partway. nil means say nothing, which is right only when
+    /// there ARE findings to show, because then the panel is not empty.
+    var note: String? {
+        if !ran {
+            return "Nothing has checked this post's alt text yet. Regenerate or "
+                 + "swap photos to have it checked."
+        }
+        if endedEarly {
+            return "The app ran out of time partway through checking this post, "
+                 + "so some of it was never looked at. Worth running again."
+        }
+        if attempted > 0 {
+            return "Checked, and the app rewrote what it could."
+        }
+        return "Checked, nothing outstanding."
+    }
+}
+
+
 enum RepairState: String, CaseIterable {
     case never = ""
     case tried = "tried"
@@ -238,6 +295,20 @@ struct BlogOutput: Codable, Hashable {
     /// and not an error: that post's next swap retains nothing and costs
     /// exactly what it costs today.
     var photoStamps: [String: [Int]] = [:]
+    /// Whether the repair pass ran on this post, and what it did (#1138).
+    ///
+    /// With repairs SILENT, an empty findings panel becomes the normal state,
+    /// and it would otherwise be produced identically by five different things:
+    /// a genuinely clean post, a pass that threw before its loop, a pass whose
+    /// tail never ran, `check_blog` itself breaking, and the process being
+    /// killed at its deadline mid-pass. The panel is the surface Dan actually
+    /// reads, and a journal behind a manual reader is not one anybody opens per
+    /// post.
+    ///
+    /// Absent on every post written before the pass existed, which is why
+    /// `ran` defaults to false and the panel says nothing rather than claiming
+    /// a pass happened.
+    var repairPass: RepairPassSummary = RepairPassSummary()
 
     enum CodingKeys: String, CodingKey {
         case title, body, findings
@@ -245,6 +316,7 @@ struct BlogOutput: Codable, Hashable {
         case generatedBody = "generated_body"
         case findingsBody  = "findings_body"
         case photoStamps   = "photo_stamps"
+        case repairPass    = "repair_pass"
     }
 
     /// Attach findings from a Python run, pinning the body they describe.
@@ -427,6 +499,9 @@ extension BlogOutput {
         // post's next photo swap retains nothing and costs what it costs today.
         photoStamps   = try c.decodeIfPresent([String: [Int]].self,
                                               forKey: .photoStamps) ?? [:]
+        repairPass    = try c.decodeIfPresent(RepairPassSummary.self,
+                                              forKey: .repairPass)
+            ?? RepairPassSummary()
     }
 }
 

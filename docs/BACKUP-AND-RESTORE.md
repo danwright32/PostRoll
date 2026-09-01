@@ -30,6 +30,7 @@ Inside it:
 | `preview/` | Generated collages, reels and story graphics | Yes, regenerated on demand |
 | `progress/` | Which step a running generation is on | Yes, scratch files |
 | `logs/` | Diagnostic logs | Yes |
+| `blog-repairs.jsonl` | What the app changed in each blog post: the alt text before and after every silent repair | No. Repairs are silent, so this is the only record that a rewrite happened at all |
 | `usage.jsonl` | What each paid AI call cost, for the spend figures in the app | No, but it is a record rather than something the app needs |
 
 The project folder (this checkout, wherever you keep it) is **code only**. It

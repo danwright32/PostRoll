@@ -32,6 +32,12 @@ def test_passes_image_labels_matching_prompt_filenames(photo):
     captured = {}
 
     def fake_run(prompt, timeout=300, image_paths=None, image_labels=None, **kwargs):
+        # The SWAP call, not whichever came last. Since #1133 this path also
+        # makes repair calls, each carrying one photograph, and a single slot
+        # would report the repair's attachment as the swap's and assert
+        # nothing about the thing this test is named for (L135).
+        if "Rewrite the alt text" in prompt:
+            return {"alt": "an unrelated rewrite this test is not about"}
         captured["prompt"] = prompt
         captured["image_paths"] = image_paths
         captured["image_labels"] = image_labels
@@ -48,6 +54,7 @@ def test_passes_image_labels_matching_prompt_filenames(photo):
     assert captured["image_labels"] == ["DSC4821.jpg"]
     assert len(captured["image_paths"]) == 1
     # The same clean name appears in the prompt photo list
+    assert captured.get("prompt"), "the swap call was never made"
     assert "- DSC4821.jpg" in captured["prompt"]
     assert result["photo_count"] == 1
     assert "DSC4821.jpg" in result["body"]

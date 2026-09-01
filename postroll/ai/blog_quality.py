@@ -483,6 +483,95 @@ def names_a_group(alt: str) -> bool:
     return GROUP_CREDIT.search(alt) is not None
 
 
+def check_alt_text(name: str, alt: str, *, venue: str = "",
+                   performers: list[str] | None = None) -> list[Finding]:
+    """The six rules about ONE marker's alt text (#1133).
+
+    Extracted so the repair pass can re-run exactly the rules that selected a
+    marker, rather than a second copy of them that reads the same and drifts
+    (L263). Its acceptance check is literally this call: rewrite, re-run, refuse
+    if any finding remains or any new code appears.
+
+    Returns findings in MARKER major order (all of one marker's, in rule order).
+    `check_blog` buckets and re-emits them rule major, which is the order it has
+    always used and which `tests/test_blog_findings_golden.py` pins.
+
+    Deliberately NOT covering `alt_text_repeated_opening`: that is a fact about
+    the RELATIONSHIP between markers, not about one of them, and it stays in
+    `check_blog` where it can see them all.
+    """
+    performers = performers or []
+    found: list[Finding] = []
+
+    # 18. length band, and the marker with nothing in it at all.
+    #
+    # The empty case is its own code (#1129). This rule used to read
+    # `if words and not (MIN <= words <= MAX)`, and that leading `words and`
+    # exempted a zero-word alt text from the band. Every other alt rule searches
+    # the text for something, so an empty one matched nothing and fired nothing:
+    # a marker whose description had been deleted produced no finding at all.
+    #
+    # Harmless while nothing rewrote alt text. The repair pass does, and its
+    # acceptance check is "re-run these rules and refuse if any finding
+    # remains", so the shortest path to an accepted repair was deleting the
+    # words.
+    #
+    # Counted AFTER `strip_em_dashes`, which is the arithmetic every acceptance
+    # check downstream depends on. That substitutes ", " for any dash not
+    # between digits, so a dash joined token becomes two tokens; all three blog
+    # paths strip before they check, so a count taken before the strip has the
+    # repairer and the checker measuring different numbers on the same body,
+    # which turns the round cap into a silent give up rather than a refusal.
+    words = len(strip_em_dashes(alt).split())
+    if not words:
+        found.append(Finding(
+            "alt_text_empty",
+            "This photo has no alt text, so the picture is described to "
+            "nobody who cannot see it.",
+            name))
+    elif not (ALT_MIN_WORDS <= words <= ALT_MAX_WORDS):
+        found.append(Finding(
+            "alt_text_length",
+            f"Alt text must be {ALT_MIN_WORDS} to {ALT_MAX_WORDS} words.",
+            f"{name}: {words} words. {alt[:90]}"))
+
+    # 17. name the venue and a performer in every marker
+    low = alt.lower()
+    if venue and venue.lower() not in low:
+        found.append(Finding(
+            "alt_text_missing_venue",
+            "Every alt text names the venue.",
+            f"{name}: {alt[:90]}"))
+    named = any(p.lower() in low for p in performers)
+    if performers and not named and not names_a_group(alt):
+        found.append(Finding(
+            "alt_text_missing_performer",
+            "Every alt text names the performer, or credits the group by "
+            "count and ensemble name when there are too many to name.",
+            f"{name}: {alt[:90]}"))
+
+    # 19. no inferred inner states
+    hits = [w for w in INFERRED_STATE if re.search(rf"\b{re.escape(w)}\b", low)]
+    hits += [m.group(0) for pat in DIRECTED_INTENT
+             for m in [re.search(pat, low)] if m]
+    if hits:
+        found.append(Finding(
+            "alt_text_inferred_state",
+            "Alt text describes what the camera recorded, not what someone felt.",
+            f"{name}: {', '.join(hits)} in '{alt[:80]}'"))
+
+    # 29. alt text names the person, never their appearance or gender
+    hits = [m.group(0) for pat in APPEARANCE_DESCRIPTOR
+            for m in [re.search(pat, low)] if m]
+    if hits:
+        found.append(Finding(
+            "alt_text_appearance_descriptor",
+            "Alt text names the person, never their appearance or gender.",
+            f"{name}: {', '.join(hits)} in '{alt[:80]}'"))
+
+    return found
+
+
 def check_blog(body: str, *, program: dict[str, Any] | None = None,
                venue: str = "",
                photo_filenames: list[str] | None = None) -> list[Finding]:
@@ -519,59 +608,36 @@ def check_blog_targeted(
                   for p in (program or {}).get("performers") or []
                   if str(p.get("name", "")).strip()]
 
-    # 18. length band, and the marker with nothing in it at all
+    # The six per-marker alt text rules, extracted so the repairer can re-run
+    # EXACTLY the rules that selected a marker rather than a second copy of
+    # them (#1133, L263). See `check_alt_text`.
     #
-    # The empty case is its own code (#1129). This rule used to read `if words
-    # and not (MIN <= words <= MAX)`, and that leading `words and` exempted a
-    # zero-word alt text from the band. Every other alt rule searches the text
-    # for something, so an empty one matched nothing and fired nothing: a
-    # marker whose description had been deleted produced no finding at all.
-    #
-    # Harmless while nothing rewrote alt text. The repair pass does, and its
-    # acceptance check is "re-run these rules and refuse if any finding
-    # remains", so the shortest path to an accepted repair was deleting the
-    # words. Closed here, in the phase before the first repairer exists.
-    #
-    # Its own code rather than folded into the length one, because an alt text
-    # that is GONE and one that is eleven words long invite different actions,
-    # and two outcomes with one message are one outcome in practice (L11, L260).
-    #
-    # Counted AFTER `strip_em_dashes`, which is the arithmetic every acceptance
-    # check downstream depends on. That substitutes ", " for any dash not
-    # between digits, so a dash joined token becomes two tokens; all three blog
-    # paths strip before they check, so a count taken before the strip has the
-    # repairer and the checker measuring different numbers on the same body,
-    # which turns the round cap into a silent give up rather than a refusal.
-    for name, alt in markers:
-        words = len(strip_em_dashes(alt).split())
-        if not words:
-            findings.append((Finding(
-                "alt_text_empty",
-                "This photo has no alt text, so the picture is described to "
-                "nobody who cannot see it.",
-                name), Target("marker", _fold_filename(name))))
-        elif not (ALT_MIN_WORDS <= words <= ALT_MAX_WORDS):
-            findings.append((Finding(
-                "alt_text_length",
-                f"Alt text must be {ALT_MIN_WORDS} to {ALT_MAX_WORDS} words.",
-                f"{name}: {words} words. {alt[:90]}"),
-                Target("marker", _fold_filename(name))))
+    # Re-emitted RULE major, which is the order `check_blog` has always used: a
+    # length loop over every marker, then venue and performer, then the openings
+    # pass, then inferred state, then appearance. Calling a per-marker function
+    # once per marker produces MARKER major order and changes the ordered list,
+    # so the output is bucketed by code and re-emitted in the original order.
+    # `tests/test_blog_findings_golden.py` is what proves this, against a golden
+    # recorded from the code before the extraction.
+    by_marker: list[tuple[str, list[Finding]]] = [
+        (name, check_alt_text(name, alt, venue=venue, performers=performers))
+        for name, alt in markers
+    ]
 
-    # 17. name the venue and a performer in every marker
-    for name, alt in markers:
-        low = alt.lower()
-        if venue and venue.lower() not in low:
-            findings.append((Finding(
-                "alt_text_missing_venue",
-                "Every alt text names the venue.",
-                f"{name}: {alt[:90]}"), Target("marker", _fold_filename(name))))
-        named = any(p.lower() in low for p in performers)
-        if performers and not named and not names_a_group(alt):
-            findings.append((Finding(
-                "alt_text_missing_performer",
-                "Every alt text names the performer, or credits the group by "
-                "count and ensemble name when there are too many to name.",
-                f"{name}: {alt[:90]}"), Target("marker", _fold_filename(name))))
+    def emit(*codes: str) -> None:
+        for name, found in by_marker:
+            for finding in found:
+                if finding.code in codes:
+                    findings.append(
+                        (finding, Target("marker", _fold_filename(name))))
+
+    # The length rule was a loop of its own over every marker, so both its codes
+    # come first, all of them, before anything else.
+    emit("alt_text_empty", "alt_text_length")
+    # Venue and performer were ONE loop, so they interleave PER MARKER: venue,
+    # performer, venue, performer. Emitting them as two buckets is a different
+    # order, and the golden caught exactly that on the first attempt.
+    emit("alt_text_missing_venue", "alt_text_missing_performer")
 
     # 20. vary the opening
     openings: dict[str, list[str]] = {}
@@ -592,30 +658,9 @@ def check_blog_targeted(
                 f"{len(names)} markers open '{key}': {', '.join(names)}"),
                 Target("marker", _fold_filename(names[0]))))
 
-    # 19. no inferred inner states
-    for name, alt in markers:
-        low = alt.lower()
-        hits = [w for w in INFERRED_STATE if re.search(rf"\b{re.escape(w)}\b", low)]
-        hits += [m.group(0) for pat in DIRECTED_INTENT
-                 for m in [re.search(pat, low)] if m]
-        if hits:
-            findings.append((Finding(
-                "alt_text_inferred_state",
-                "Alt text describes what the camera recorded, not what someone felt.",
-                f"{name}: {', '.join(hits)} in '{alt[:80]}'"),
-                Target("marker", _fold_filename(name))))
-
-    # 29. alt text names the person, never their appearance or gender
-    for name, alt in markers:
-        low = alt.lower()
-        hits = [m.group(0) for pat in APPEARANCE_DESCRIPTOR
-                for m in [re.search(pat, low)] if m]
-        if hits:
-            findings.append((Finding(
-                "alt_text_appearance_descriptor",
-                "Alt text names the person, never their appearance or gender.",
-                f"{name}: {', '.join(hits)} in '{alt[:80]}'"),
-                Target("marker", _fold_filename(name))))
+    # Two separate loops in the original, so two separate passes here.
+    emit("alt_text_inferred_state")
+    emit("alt_text_appearance_descriptor")
 
     # 8. never invent numbers
     known = _program_numbers(program, venue)

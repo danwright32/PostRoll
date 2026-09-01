@@ -48,9 +48,18 @@ def test_every_state_travels_as_its_own_string(state):
     assert isinstance(entry["repair"], str), "the payload must be plain JSON"
 
 
-def test_the_five_states_are_distinct():
+def test_every_state_is_distinct():
     values = [s.value for s in RepairState]
-    assert len(set(values)) == len(values) == 5, values
+    assert len(set(values)) == len(values), values
+
+
+def test_exactly_five_states_can_reach_a_payload():
+    """REPAIRED is the pass's own outcome and never travels: the finding it
+    describes no longer exists, because a repaired alt text stops failing the
+    check that selected it. It is in the enum so the pass's partition can be
+    asserted TOTAL over everything it selected (L47, L517)."""
+    travelling = {s for s in RepairState if s is not RepairState.REPAIRED}
+    assert len(travelling) == 5, sorted(s.value for s in travelling)
 
 
 def test_never_attempted_is_the_empty_string():

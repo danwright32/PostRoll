@@ -1,0 +1,8 @@
+{
+  "name": "the-findings-keep-their-rule-major-order",
+  "file": "postroll/ai/blog_quality.py",
+  "find": "    emit(\"alt_text_missing_venue\", \"alt_text_missing_performer\")",
+  "replace": "    emit(\"alt_text_missing_venue\")\n    emit(\"alt_text_missing_performer\")",
+  "test": "tests/test_blog_findings_golden.py::test_the_findings_match_the_recorded_golden_exactly",
+  "breaks": "the venue and performer findings stop interleaving per marker and come out as two buckets. check_blog has always emitted them from ONE loop, so this is a different ordered list from the one it produced before check_alt_text was extracted, and the panel renders them in payload order. Caught by the golden on the first attempt at the extraction, which is what the golden was recorded for: the existing suite asserts through a SET of codes and cannot see order at all (#1133, L228)"
+}

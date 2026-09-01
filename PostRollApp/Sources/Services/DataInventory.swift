@@ -70,6 +70,11 @@ enum DataInventory {
         Item(name: folder(layout.logsDir),
              holds: "Diagnostic logs",
              replaceable: "Yes"),
+        Item(name: repairLogFileName,
+             holds: "What the app changed in each blog post: the alt text "
+                  + "before and after every silent repair",
+             replaceable: "No. Repairs are silent, so this is the only record "
+                        + "that a rewrite happened at all"),
         Item(name: usageLogFileName,
              holds: "What each paid AI call cost, for the spend figures in the app",
              replaceable: "No, but it is a record rather than something the app needs"),
@@ -81,6 +86,10 @@ enum DataInventory {
 
     /// Written by Python (`postroll/ai/usage_log.py`), under the same data root.
     static let usageLogFileName = "usage.jsonl"
+
+    /// Written by the Python side, so this can only declare the name; the
+    /// Python guard pins it to what that code actually computes.
+    static let repairLogFileName = "blog-repairs.jsonl"
 
     /// The inventory as the Markdown table rows the doc carries, so the doc can
     /// be checked against this rather than read and believed.

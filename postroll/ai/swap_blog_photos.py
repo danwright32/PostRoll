@@ -38,7 +38,9 @@ from pathlib import Path
 from .ai_tells import strip_em_dashes
 from .blog_marker_splice import splice_retained_markers
 from .blog_photo_stamps import Retention, photo_stamps, retention_for
+from .blog_repair import repair_alt_text
 from .blog_repair_damage import Touched, blog_repair_damage
+from .repair_log import RepairLog
 from .blog_quality import (_PHOTO_MARKER, _fold_filename, check_blog,
                            filenames_used_by, finding_entry,
                            refuse_colliding_filenames,
@@ -335,6 +337,21 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             print(f"[swap_blog_photos] REPAIRED marker filename: {was!r} -> {now!r}",
                   flush=True, file=sys.stderr)
 
+        # The swap stages every photograph, so rule 4 licenses the same repair
+        # generation gets (#1133). Without this the swap emitted a bad alt text
+        # and every finding read as NEVER ATTEMPTED, which renders exactly like
+        # today's findings and is the one thing rule 2 forbids.
+        repair = repair_alt_text(
+            final_body, program=program, venue=venue,
+            photo_paths=dict(zip(photo_filenames, resolved)),
+            runner=run_json_prompt, say=say,
+            log=RepairLog(event=venue or "", script="swap_blog_photos"))
+        final_body = repair.body
+        for attempt in repair.attempts:
+            print(f"[swap_blog_photos] REPAIR {attempt['outcome']}: "
+                  f"{attempt['marker']} ({', '.join(attempt['codes'])})",
+                  flush=True, file=sys.stderr)
+
         # The same deterministic checks the generate and revise paths run (#201).
         # The rest are reported, never rewritten: alt text cannot be corrected
         # without seeing the photograph.
@@ -356,7 +373,8 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
         return {
             "body":        final_body,
             "photo_count": len(photo_paths),
-            "findings": [finding_entry(f) for f in findings],
+            "findings": [finding_entry(f, repair=repair.repair_for(f))
+                         for f in findings],
             # The exact text those findings were measured against, so an edited
             # draft stops showing findings about the body before the edit. The
             # caption paths have emitted their sibling `findings_caption` since
@@ -365,6 +383,12 @@ def swap_blog_photos(*, body: str, photo_paths: list[str | Path],
             # (#974).
             "findings_body": final_body,
             "photo_stamps": stamps,
+            "repair_pass": {
+                "ran": repair.ran,
+                "selected": len(repair.selected),
+                "attempted": len(repair.attempts),
+                "ended_early": bool(repair.remaining <= 0),
+            },
         }
 
 

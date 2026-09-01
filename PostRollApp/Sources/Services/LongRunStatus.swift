@@ -72,6 +72,20 @@ enum LongRunState {
     /// one Claude call with a 600 second timeout, and captions for one day run
     /// to a few minutes. A threshold under that would flag every ordinary run
     /// and train Dan to ignore it, which is the failure #36 describes.
+    ///
+    /// Re-derived for the alt text repair pass (#1133). That pass makes up to
+    /// fourteen more calls on a blog run, which breaks the premise above: a
+    /// blog pass is no longer one call. The number does not move, and the
+    /// reason it still holds is stronger than the reason it was chosen: the
+    /// pass reports a step PER MARKER, and one marker measured 2.8 to 3.1
+    /// seconds (#1127), so the gap between heartbeats during a repair is a few
+    /// seconds rather than the ten minutes this allows for. The longest silence
+    /// it can produce is one attempt at its 120 second ceiling, still well
+    /// under this.
+    ///
+    /// `tests/test_blog_repair_budget.py` holds both halves of that: it reads
+    /// this number and asserts a seven marker repair never goes quiet for
+    /// longer than it.
     static let defaultSilenceThreshold: TimeInterval = 660
 
     /// For work that runs entirely on this Mac: a CSV parse, a Vision OCR pass

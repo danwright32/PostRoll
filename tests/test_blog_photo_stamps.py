@@ -192,3 +192,24 @@ def test_the_stamp_module_cannot_reach_a_model_runner():
     assert "claude_client" not in seen, (
         f"blog_photo_stamps reaches claude_client through {sorted(seen)}; "
         "importing it would put a model runner one import away from the gate")
+
+
+def test_a_photograph_that_cannot_be_stamped_says_so(tmp_path, capsys):
+    """Left out of the record, and not silently.
+
+    Every caller has already checked these files exist, so a failure here means
+    one vanished mid run. The only consequence downstream is that the next swap
+    re-describes that photograph for nothing, which is a saving that quietly
+    stops happening while every test stays green (L289).
+    """
+    assert photo_stamps(["gone.jpg"], [str(tmp_path / "gone.jpg")]) == {}
+
+    printed = capsys.readouterr().err
+    assert "gone.jpg" in printed and "re-describe" in printed, printed
+
+
+def test_stamping_a_readable_photograph_says_nothing(photo, capsys):
+    """The control: a warning on every run is a warning nobody reads (L36)."""
+    photo_stamps(["a.jpg"], [str(photo)])
+
+    assert capsys.readouterr().err == ""
