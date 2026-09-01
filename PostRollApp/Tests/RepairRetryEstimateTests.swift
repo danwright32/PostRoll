@@ -150,6 +150,24 @@ final class RepairRetryEstimateTests: XCTestCase {
             + "estimate is built on \(RepairRetryEstimate.roundsPerMarker)")
     }
 
+    func testTheBoundsNeverCrossHoweverTheReadingsMove() {
+        // A closed range whose ends cross does not return a wrong answer, it
+        // TRAPS, and this is built inside a view, so the app would disappear
+        // rather than show a bad estimate. Caught by the guard prover: its
+        // mutation crossed the ends and crashed the test process, which
+        // xcodebuild reports as 0 tests executed rather than as a red test, so
+        // the crash was invisible as a failure (L11, L98).
+        for markers in [1, 2, 3, 5, 7, 10, 25, 100] {
+            guard let bounds = RepairRetryEstimate.bounds(markerCount: markers) else {
+                return XCTFail("no estimate for \(markers) markers")
+            }
+            XCTAssertLessThanOrEqual(
+                bounds.lowerBound, bounds.upperBound,
+                "the estimate's ends crossed at \(markers) markers, which traps "
+                + "rather than reading wrong")
+        }
+    }
+
     // --- nothing to retry has no estimate, rather than a wrong one ---------
 
     func testThereIsNoEstimateWhenThereIsNothingToRetry() {

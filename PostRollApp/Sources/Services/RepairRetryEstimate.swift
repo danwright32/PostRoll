@@ -68,11 +68,17 @@ enum RepairRetryEstimate {
     static func bounds(markerCount: Int) -> ClosedRange<TimeInterval>? {
         guard markerCount > 0 else { return nil }
         let markers = Double(markerCount)
-        // Best case: every marker fixed on its first round.
-        let low = startupSeconds + fastestCallSeconds * markers
         // Worst case: every marker needing the full round budget.
-        let high = startupSeconds + slowestCallSeconds * markers * Double(roundsPerMarker)
-        return low...high
+        let worst = startupSeconds + slowestCallSeconds * markers * Double(roundsPerMarker)
+        // Best case: every marker fixed on its first round, and never above the
+        // worst case. Held there rather than trusted to be there, because a
+        // closed range TRAPS when the ends cross, and this is built inside a
+        // view: a pair of readings that disagreed would take the whole app down
+        // rather than show a wrong number. Found by the guard prover, whose
+        // mutation crossed them and crashed the test process instead of failing
+        // it (a crash reports as 0 tests executed, not as a red test).
+        let best = min(startupSeconds + fastestCallSeconds * markers, worst)
+        return best...worst
     }
 
     /// The range as the indicator shows it, or nil when there is nothing to
