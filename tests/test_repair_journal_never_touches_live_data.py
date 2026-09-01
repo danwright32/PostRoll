@@ -109,11 +109,21 @@ def test_a_chosen_data_directory_is_still_honoured(tmp_path, monkeypatch):
 from postroll.ai import usage_log
 
 
-def test_the_usage_log_does_not_resolve_the_live_file_under_test():
+def test_the_usage_log_path_still_tells_the_truth_about_where_it_lives():
+    """The guard is on the WRITE, not on the resolver, and that matters.
+
+    Redirecting `default_log_path` was tried first and moved a file nobody was
+    looking at: `cap_signals.default_record_path` derives its own file from this
+    one's PARENT, so `unrecognised-failures.jsonl` moved into the temp directory
+    too, and the test asserting the live path is right went red. A resolver that
+    stops telling the truth breaks every derivation from it (L204).
+    """
     live = Path.home() / "Library" / "Application Support" / "PostRoll" / "usage.jsonl"
-    assert usage_log.default_log_path() != live, (
-        "a test run resolves the usage log to Dan's real record of what the "
-        "app has spent")
+    assert usage_log.default_log_path() == live
+
+    from postroll.ai import cap_signals
+    assert cap_signals.default_record_path().parent == live.parent, (
+        "the derived failure-signals file moved with it")
 
 
 def test_a_usage_record_written_under_test_lands_somewhere_harmless():

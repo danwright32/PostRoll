@@ -191,28 +191,45 @@ def default_log_path() -> Path:
     log always sits beside the rest of the app's data. The fallback is the
     post-migration data root, for CLI runs launched by hand.
 
-    Under a test run this answers somewhere harmless instead (#1180), the same
-    guard `repair_log.default_log_path` carries. Swept rather than waited for:
-    the journal leaked 2,775 fixture records into Dan's real file before anybody
-    read the artefact, and this is the same shape one module over (L30, L195).
-
-    Dormant rather than absent when it was found. Tests stub the model runner,
-    so they never reach the line that records, but the write is append-only and
-    best effort, so the first test that does reach it would leak silently into
-    the record of what the app has actually spent.
-
-    Only when nobody has CHOSEN a directory: a caller setting POSTROLL_DATA_DIR
-    has already pointed the app somewhere of its own, and overriding that would
-    break the very seam this protects (L324).
+    Answers where the log LIVES, under test as well as in the app, and the
+    refusal to write there lives in `record` instead (#1180). Redirecting this
+    function was tried first and moved a file nobody was looking at:
+    `cap_signals.default_record_path` derives its own file from this one's
+    PARENT, so the redirect silently relocated `unrecognised-failures.jsonl` too
+    and broke the test asserting the live path is right. A resolver that stops
+    telling the truth breaks every derivation from it (L204).
     """
     override = (os.environ.get("POSTROLL_DATA_DIR") or "").strip()
     if override:
         return Path(override) / "usage.jsonl"
-    if running_under_test():
-        return Path(tempfile.gettempdir()) / "postroll-test-usage.jsonl"
     return (
         Path.home() / "Library" / "Application Support" / "PostRoll" / "usage.jsonl"
     )
+
+
+def _write_target() -> Path:
+    """Where a record actually goes when the caller named no path (#1180).
+
+    The guard is on the WRITE rather than on `default_log_path`, because that
+    function is a resolver others derive from: `cap_signals.default_record_path`
+    takes its parent, so redirecting it moved a second file nobody had
+    considered (L204). Refusing at the write keeps the path honest and still
+    makes the live file unreachable from a test.
+
+    Swept rather than waited for. The blog repair journal had the same shape and
+    leaked 2,775 fixture records into Dan's real file before anybody read the
+    artefact (#1179). This one is dormant only because tests stub the model
+    runner and never reach here, and the write is append-only and best effort,
+    so the first one that did would leak in silence (L30, L195).
+
+    A caller that set POSTROLL_DATA_DIR has already chosen an isolated location,
+    so it is honoured: a stand down condition wider than its reason disables the
+    guard where nobody meant to (L324).
+    """
+    chosen = (os.environ.get("POSTROLL_DATA_DIR") or "").strip()
+    if running_under_test() and not chosen:
+        return Path(tempfile.gettempdir()) / "postroll-test-usage.jsonl"
+    return default_log_path()
 
 
 def record(
@@ -228,7 +245,7 @@ def record(
     because its bookkeeping failed. The failure is still reported, both to the
     caller and on stderr, so the resulting total is known to be short.
     """
-    target = Path(path) if path is not None else default_log_path()
+    target = Path(path) if path is not None else _write_target()
     if event is None:
         # One Python process handles one event, so the app exports it once
         # rather than every call site threading it through.
