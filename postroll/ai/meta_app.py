@@ -39,19 +39,52 @@ GRAPH_API_HOST = "https://graph.facebook.com"
 
 #: Every permission the token has to carry.
 #:
-#: The first three are what the `business_discovery` reference requires.
-#: `pages_show_list` is how the Instagram account is reached at all, through
-#: its Page. `ads_read` is required only because the token's Page role comes
-#: through a business portfolio, which is exactly what a system user token is,
-#: so the set that worked for the hand made Explorer token during the 2026-08-29
-#: probe is one short of the set that ships.
+#: Four, MEASURED on 2026-09-01 rather than read off the reference. A system
+#: user token carrying exactly these answered `business_discovery` for two
+#: separate target accounts, returning follower count, media count, per post
+#: like and comment counts and `media_product_type`.
+#:
+#: `instagram_basic`, `instagram_manage_insights` and `pages_read_engagement`
+#: are what the `business_discovery` reference requires. `pages_show_list` is
+#: how the Instagram account is reached at all, through its Page.
+#:
+#: The reference ALSO says a token whose Page role was granted through Business
+#: Manager needs `ads_management` or `ads_read`, and a system user token is
+#: exactly that, so `ads_read` was documented here first. It is wrong twice
+#: over: the permission is not offered in the token picker at all unless the app
+#: carries the Marketing API product, and the edge answers without it. Recorded
+#: rather than quietly dropped, because the reference still says otherwise and
+#: the next person to read it will reach for the same fifth permission.
 REQUIRED_PERMISSIONS = (
     "instagram_basic",
     "instagram_manage_insights",
     "pages_show_list",
     "pages_read_engagement",
+)
+
+#: Permissions the reference names that this token does NOT carry.
+#:
+#: Named here rather than left as prose, so `docs/META-APP.md` may explain why
+#: they are absent without the document guard reading them as a fifth and sixth
+#: thing to grant. A permission moved into REQUIRED_PERMISSIONS must leave this
+#: tuple, and the guard asserts the two never overlap: a permission listed as
+#: both required and deliberately absent is a contradiction the document would
+#: then faithfully reproduce.
+NOT_REQUIRED_DESPITE_THE_REFERENCE = (
+    "ads_management",
     "ads_read",
 )
+
+#: The Instagram Professional account every query is made AS.
+#:
+#: `business_discovery` is not a lookup, it is a field on YOUR OWN account, so
+#: every request needs this id as well as the token. It is the Dan Wright
+#: Photography account, read from `/me/accounts` on 2026-09-01 and recorded so
+#: the fetch does not spend a call rediscovering it on every run.
+#:
+#: Re-derivable rather than magic: it is `instagram_business_account.id` on the
+#: Page that `/me/accounts?fields=name,instagram_business_account` returns.
+QUERYING_ACCOUNT_ID = "17841403653163673"
 
 #: The environment variable the system user token arrives in.
 #:
