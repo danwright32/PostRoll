@@ -598,6 +598,14 @@ def _decide_by_page(key: str, refusal: Response,
         # The one place a figure is taken off the page (#1006), and only from a
         # definite yes. Read from the page ALREADY fetched to classify the
         # account rather than fetching it a second time.
+        #
+        # This adds a CONSEQUENCE to a classification that previously only
+        # reported, so the classification is worth re-reading against it (L95).
+        # `FOUND` requires `og:title` to name THIS handle, so a redirect to
+        # somebody else cannot land their follower count on this record; that
+        # is `test_a_page_titled_for_a_different_account_is_not_that_account`,
+        # and it is now load bearing for a stored figure rather than only for a
+        # label.
         followers = followers_in_description(page.body)
         return Figures(handle=key, outcome=outcome, quota=quota,
                        followers=followers,
