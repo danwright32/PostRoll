@@ -205,6 +205,7 @@
     "test_safe_area_tokens.py": 0.0,
     "test_screen_reel_logo_contrast.py": 0.01,
     "test_screens_draw_from_named_colours.py": 2.3600000000000003,
+    "test_scroll_reel_timing_parity.py": 0.0,
     "test_select_cover_photo.py": 0.0,
     "test_select_reel_clips.py": 0.27,
     "test_side_crop_readings.py": 0.0,
@@ -1068,6 +1069,10 @@
     "test_screens_draw_from_named_colours.py": {
       "run": "full-2026-09-02T04:01Z",
       "scale": 1.0
+    },
+    "test_scroll_reel_timing_parity.py": {
+      "run": "partial-2026-09-02T23:24Z",
+      "scale": 1.038
     },
     "test_select_cover_photo.py": {
       "run": "full-2026-09-02T04:01Z",
