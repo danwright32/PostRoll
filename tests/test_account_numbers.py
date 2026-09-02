@@ -288,6 +288,43 @@ def over_allowance(percent=275):
     )
 
 
+def test_a_quota_header_that_will_not_parse_is_no_reading_rather_than_a_low_one():
+    # The safe direction, and the one worth pinning: a header Meta sent that
+    # cannot be read must not come out as a small number, which would look like
+    # plenty of allowance left and let the fetch retry into a wall. Two causes
+    # share this None on purpose, an absent header and an unreadable one,
+    # because the only question asked of the value is whether the allowance is
+    # known to be spent, and neither can answer it.
+    unreadable = Response(
+        status=429, headers={"x-app-usage": "not json at all"},
+        body=json.dumps({"error": {"message": "limit", "type": "OAuthException",
+                                   "code": 4, "fbtrace_id": "x"}}))
+
+    figures, calls, sleeps = run("natgeo", [unreadable] * ATTEMPTS)
+
+    assert figures.quota is None, "an unreadable reading is not a reading"
+    assert figures.outcome is Outcome.RATE_LIMITED
+    assert len(calls.urls) == ATTEMPTS, (
+        "with no reading saying the allowance is spent, the transient case is "
+        "still retried rather than given up on")
+    assert sleeps.seconds == [1.0, 2.0]
+
+
+def test_an_unrecognised_code_is_retryable_and_that_is_a_decision():
+    # Stated as its own assertion rather than left implied by is_terminal's
+    # table. Writing an account off permanently on a code nobody has read is
+    # the alternative, and a terminal outcome has no way back (L248), so this
+    # is the deliberate half of a choice with two bad sides. The bound that
+    # stops it retrying forever belongs to the caller and is named in #1004.
+    figures, _, _ = run("natgeo", [graph_error(2_635, kind="GraphMethodException")])
+
+    assert figures.outcome is Outcome.COULD_NOT_CLASSIFY
+    assert not is_terminal(figures.outcome)
+    assert "2635" in figures.detail, (
+        "the code nobody classified is named, or the next person cannot find "
+        "out what it was")
+
+
 def test_being_over_the_hourly_allowance_is_not_retried_at_all():
     # The allowance is a rolling hour. Three attempts two seconds apart cannot
     # outlast it, and every one of them spends more of the thing that is

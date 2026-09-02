@@ -89,7 +89,23 @@ _TERMINAL = frozenset({Outcome.MEASURED, Outcome.NOT_PROFESSIONAL,
 
 
 def is_terminal(outcome: Outcome) -> bool:
-    """Whether anything is served by asking about this account again."""
+    """Whether anything is served by asking about this account again.
+
+    NOT terminal does not mean retry forever, and one case deserves saying out
+    loud: an unrecognised Meta code becomes `COULD_NOT_CLASSIFY`, which is
+    retryable, so an error nobody understood is retried by default. That is the
+    deliberate choice of the two available, because the alternative writes an
+    account off permanently on the strength of a code nobody has read, and a
+    terminal outcome has no way back (L248).
+
+    The cost is real: a handle that always produces an unknown code is asked
+    about forever unless something bounds it. Nothing here can bound it, because
+    this module answers about one account and holds no history. The bound
+    belongs to the caller that schedules the fetches, and it is named in #1004
+    along with the rate that `RATE_LIMITED` has to be counted against, since an
+    expected failure with no notion of volume makes one blip and a total outage
+    arrive on the same path (L35, L77, L110).
+    """
     return outcome in _TERMINAL
 
 
@@ -310,11 +326,18 @@ def _over_allowance(quota: dict[str, Any] | None) -> bool:
 
 
 def _quota(headers: Mapping[str, str]) -> dict[str, Any] | None:
-    """Meta's usage header, parsed, or None when it did not send one.
+    """Meta's usage header, parsed, or None when there is no reading.
 
     None rather than an empty dict: a call that reported no usage and one that
     reported none used are different facts, and the second is what a fresh hour
     looks like.
+
+    Two different causes DO share that None: a header Meta did not send, and one
+    it sent that will not parse. They are collapsed deliberately, because the
+    only question asked of this value is whether the allowance is known to be
+    spent, and the answer for both is "no reading", which is the same fact and
+    takes the same safe branch. If anything ever REPORTS the quota to a person,
+    that reader needs the two told apart (L11), and this is the note saying so.
     """
     for name, value in headers.items():
         if name.lower() != "x-app-usage":
