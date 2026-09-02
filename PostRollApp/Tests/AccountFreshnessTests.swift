@@ -243,11 +243,31 @@ final class AccountFreshnessTests: XCTestCase {
     }
 
     func testAnAccountWithHiddenLikesIsNotCalledFollowersOnlyEither() {
+        // Deliberately with NO comment figure either. An account that hid its
+        // likes and did report comments is already counted a branch earlier,
+        // through `hasEngagementData`, so a fixture carrying comments does not
+        // reach the rule this is about and passed with that rule removed: the
+        // mutation sweep reported SURVIVED (L159, L165).
+        //
+        // It is the narrow case, and it is the one that would otherwise be
+        // told to add likes the account is refusing to show.
+        let hidden = AccountStats(followers: 5_244, likes: nil, comments: nil,
+                                  recordedOn: Date(), followersSource: .measured,
+                                  likesSource: .hidden, outcome: .measured)
+
+        XCTAssertNotEqual(hidden.countedness, .followersOnly)
+        XCTAssertEqual(hidden.countedness, .counted)
+    }
+
+    func testAnAccountWithHiddenLikesAndRealCommentsIsCountedToo() {
+        // The commoner shape, and the positive control for the narrow one
+        // above: both of the real accounts that withhold likes do report
+        // comments.
         let hidden = AccountStats(followers: 5_244, comments: 8, recordedOn: Date(),
                                   followersSource: .measured, likesSource: .hidden,
                                   outcome: .measured)
 
-        XCTAssertNotEqual(hidden.countedness, .followersOnly)
+        XCTAssertEqual(hidden.countedness, .counted)
     }
 
     func testTheDialogSaysTheRequirementBeforeTheFieldsRatherThanAfterTheSave() {
