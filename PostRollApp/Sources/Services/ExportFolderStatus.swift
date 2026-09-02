@@ -17,9 +17,26 @@ enum ExportFolderStatus: Equatable {
     /// The event has never been exported. Not a problem, just nothing to say.
     case neverExported
 
-    /// The event records an export folder that is no longer on disk (moved,
-    /// renamed, or on a drive that is not attached).
-    case folderGone(URL)
+    /// The recorded export folder is not at the recorded path, so the app no
+    /// longer knows where that export is (#1110).
+    ///
+    /// Deliberately NOT called `folderGone`, and deliberately not a warning.
+    /// An absent path is evidence the APP has lost the thread, never evidence
+    /// the export was lost (L11), and here the two are almost never the same
+    /// thing: measured against the live store on 2026-09-02, 9 of 21 events
+    /// record an export path and 0 of those 9 folders are at it, because Dan
+    /// files every finished export into one of his own Finder buckets when he
+    /// is done with it. The warning this used to raise was therefore wrong on
+    /// 9 of 9, and the step it named (export again) would have had him redo
+    /// work already sitting finished in one of those buckets (L36, L111).
+    ///
+    /// Automatically re-finding the folder was measured and rejected (L248):
+    /// searching down from the nearest ancestor that still exists found 0 of
+    /// the 9, because the buckets are siblings and the surviving ancestor is
+    /// always the wrong one. Widening the search to the bucket root found 5 of
+    /// 9, which is a guess about where a finished export lives that is wrong 4
+    /// times in 9, so the app says what it knows and asks instead.
+    case lostTrack(URL)
 
     /// The folder holds a finished export.
     ///
@@ -55,7 +72,7 @@ enum ExportFolderStatus: Equatable {
     static func of(folder: URL, fileManager: FileManager = .default) -> ExportFolderStatus {
         var isDir: ObjCBool = false
         guard fileManager.fileExists(atPath: folder.path, isDirectory: &isDir), isDir.boolValue
-        else { return .folderGone(folder) }
+        else { return .lostTrack(folder) }
 
         if let contents = ExportManifest.read(folder: folder) {
             return .finished(exportedAt: contents.exportedAt,
@@ -100,19 +117,33 @@ enum ExportFolderStatus: Equatable {
                            unreadableDayFolders: unreadableDays.sorted())
     }
 
-    /// Whether this is worth showing at all. A finished export is the expected
-    /// state and does not need a banner on every visit.
-    var needsAttention: Bool {
+    /// How loudly this wants to be said, if at all.
+    enum Attention { case none, informational, warning }
+
+    /// The screen takes both the banner style and whether to draw one from
+    /// here, so "is this worth saying" and "is this a fault" cannot drift into
+    /// two answers (L53).
+    var attention: Attention {
         switch self {
-        case .neverExported:                         return false
+        case .neverExported:
+            return .none
         // A finished export is the expected state and does not need a banner on
         // every visit. One whose own record admits it could not read a day is a
         // different thing: the count Dan would otherwise trust is missing that
         // day, and nothing else on the screen would ever say so.
-        case .finished(_, _, let unreadable):        return !unreadable.isEmpty
-        case .folderGone, .unfinished, .unreadable:  return true
+        case .finished(_, _, let unreadable):
+            return unreadable.isEmpty ? .none : .warning
+        // Said, because the app knowing where an export went is worth being
+        // able to restore, but not as a fault: see `lostTrack`.
+        case .lostTrack:
+            return .informational
+        case .unfinished, .unreadable:
+            return .warning
         }
     }
+
+    /// Whether this is worth showing at all.
+    var needsAttention: Bool { attention != .none }
 
     /// One sentence for the screen, or nil when there is nothing to say.
     ///
@@ -125,10 +156,18 @@ enum ExportFolderStatus: Equatable {
         case .neverExported:
             return nil
 
-        case .folderGone(let folder):
-            return "The export folder \(folder.lastPathComponent) is no longer where it was. "
-                 + "It may have been moved or renamed, or be on a drive that is not connected. "
-                 + "Export again to make a fresh one."
+        case .lostTrack(let folder):
+            // Names the folder, because a message about something Dan has to go
+            // and find is worth nothing without the thing to search for (L80).
+            // Claims only what was measured: that it is not at the recorded
+            // path. Whether it was filed away, renamed or deleted is not
+            // something a failed `fileExists` can tell apart, so it is offered
+            // as the likely reason rather than asserted.
+            return "PostRoll has lost track of the export folder "
+                 + "\(folder.lastPathComponent). It is not where it was written any "
+                 + "more, which is what happens when a finished export is moved, "
+                 + "renamed or filed away. Point PostRoll at it again to say where "
+                 + "it went."
 
         case .finished(let at, let count, let unreadable):
             let when = DateFormatter.exportStamp.string(from: at)
