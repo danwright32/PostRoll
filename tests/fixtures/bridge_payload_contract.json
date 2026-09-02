@@ -799,7 +799,8 @@
       "instagram_id": "swift",
       "reels": "swift",
       "feed": "swift",
-      "detail": "swift"
+      "detail": "swift",
+      "allowance_spent": "swift"
     }
   },
   "_manifests_comment": [

@@ -1721,12 +1721,16 @@ actor PythonBridge {
         let reels: Int?
         let feed: Int?
         let detail: String
+        /// How much of Meta's hourly allowance was gone when this call ran, as
+        /// a percentage, or nil when there was no reading (#1207).
+        let allowanceSpent: Double?
 
         enum CodingKeys: String, CodingKey {
             case handle, outcome, followers, likes, comments, detail, reels, feed
             case likesHidden = "likes_hidden"
             case followersFromPage = "followers_from_page"
             case instagramID = "instagram_id"
+            case allowanceSpent = "allowance_spent"
         }
 
         /// What to merge into the account book.

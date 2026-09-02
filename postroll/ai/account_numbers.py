@@ -654,6 +654,16 @@ def as_row(figures: Figures) -> dict[str, Any]:
         "reels": figures.reels,
         "feed": figures.feed,
         "detail": figures.detail,
+        # Meta's own reading of how much of the hourly allowance is gone, as a
+        # percentage (#1207). Carried per row so the app can tell one account
+        # hitting a limit from the allowance being spent: without it, fifty
+        # refused accounts look like fifty independent failures rather than a
+        # fetch that has stopped working (L77).
+        #
+        # None when there was no reading at all. Zero is what the start of a
+        # fresh hour looks like, and a header Meta did not send is a different
+        # fact (L11).
+        "allowance_spent": (figures.quota or {}).get("call_count"),
     }
     return row
 

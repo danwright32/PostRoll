@@ -338,7 +338,7 @@ final class BridgePayloadContractTests: XCTestCase {
           "followers": 1000, "likes": 50, "comments": 5,
           "likes_hidden": false, "followers_from_page": false,
           "instagram_id": "17841400000000000", "reels": 2, "feed": 4,
-          "detail": "Read from 12 recent posts."}]}
+          "detail": "Read from 12 recent posts.", "allowance_spent": 3}]}
         """
         struct Answer: Codable { let accounts: [PythonBridge.AccountFigures] }
         let out = try JSONDecoder().decode(Answer.self, from: Data(json.utf8))
@@ -372,7 +372,8 @@ final class BridgePayloadContractTests: XCTestCase {
         {"accounts": [{"handle": "someone", "outcome": "measured",
           "followers": 5244, "likes": null, "comments": 8,
           "likes_hidden": true, "followers_from_page": false,
-          "instagram_id": null, "reels": null, "feed": null, "detail": ""}]}
+          "instagram_id": null, "reels": null, "feed": null, "detail": "",
+          "allowance_spent": null}]}
         """
         struct Answer: Codable { let accounts: [PythonBridge.AccountFigures] }
         let out = try JSONDecoder().decode(Answer.self, from: Data(json.utf8))
@@ -393,7 +394,8 @@ final class BridgePayloadContractTests: XCTestCase {
         {"accounts": [{"handle": "someone", "outcome": "invented_later",
           "followers": null, "likes": null, "comments": null,
           "likes_hidden": false, "followers_from_page": false,
-          "instagram_id": null, "reels": null, "feed": null, "detail": ""}]}
+          "instagram_id": null, "reels": null, "feed": null, "detail": "",
+          "allowance_spent": null}]}
         """
         struct Answer: Codable { let accounts: [PythonBridge.AccountFigures] }
         let out = try JSONDecoder().decode(Answer.self, from: Data(json.utf8))

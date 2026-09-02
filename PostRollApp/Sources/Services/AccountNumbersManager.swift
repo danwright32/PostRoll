@@ -128,13 +128,50 @@ final class AccountNumbersManager {
             for answer in answers {
                 book.merge(answer.stats(recordedOn: now), for: answer.handle, on: now)
             }
-            failureNote = nil
+            // A rate limit is an EXPECTED failure, so nothing above it has any
+            // notion of volume: one account hitting a limit and the whole
+            // allowance being gone arrive on exactly the same path and are
+            // indistinguishable (L77, #1207). Classified by frequency here:
+            // normal below the threshold, said out loud above it.
+            failureNote = Self.allowanceNote(answers)
         } catch {
             // Said out loud rather than swallowed. A background fetch that
             // failed silently is indistinguishable from one that never ran, and
             // the ranking then quietly goes on using whatever it had (L12).
             failureNote = Self.note(for: error)
         }
+    }
+
+    /// What share of a run has to come back refused before it is an outage
+    /// rather than contention.
+    ///
+    /// Half. Measured on 2026-09-01: sweeping the 122 real handles twice put
+    /// the app 275% over its hourly allowance and 82 of the 122, two thirds,
+    /// came back limited. One or two refusals in a run of twenty is ordinary
+    /// and a note on those would be noise, and noise is how a real one stops
+    /// being read (L36).
+    static let outageShare = 0.5
+
+    /// Said when most of a run came back rate limited.
+    ///
+    /// Nil when it did not, which is the important half: a note on every rate
+    /// limit is noise on an ordinary run.
+    static func allowanceNote(_ answers: [PythonBridge.AccountFigures]) -> String? {
+        guard !answers.isEmpty else { return nil }
+        let limited = answers.filter { $0.outcome == "rate_limited" }
+        guard Double(limited.count) / Double(answers.count) >= outageShare else { return nil }
+
+        // Meta's own reading, when it sent one. A percentage nobody measured
+        // must not be reported, so the sentence is built either way and only
+        // carries the number when there is one (L530, L11).
+        let spent = limited.compactMap(\.allowanceSpent).max()
+        let reading = spent.map { " Meta says \(Int($0.rounded()))% of the hourly "
+                                + "allowance is used." } ?? ""
+        return "Audience figures were not fetched for \(limited.count) of "
+             + "\(answers.count) accounts because Meta is rate limiting."
+             + reading
+             + " The allowance is a rolling hour, so this clears on its own; the "
+             + "ranking is running on the numbers it already had until it does."
     }
 
     /// What a failed fetch says, as a second element of the notes arrays the

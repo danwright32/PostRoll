@@ -34,7 +34,8 @@ final class AccountNumbersManagerTests: XCTestCase {
         PythonBridge.AccountFigures(
             handle: handle, outcome: outcome, followers: followers, likes: likes,
             comments: comments, likesHidden: false, followersFromPage: false,
-            instagramID: "17841400000000000", reels: 2, feed: 4, detail: "")
+            instagramID: "17841400000000000", reels: 2, feed: 4, detail: "",
+            allowanceSpent: 3)
     }
 
     /// A manager with the subprocess replaced, so nothing here spends Dan's
@@ -223,6 +224,78 @@ final class AccountNumbersManagerTests: XCTestCase {
         private var batches: [[String]] = []
         func record(_ handles: [String]) { lock.withLock { batches.append(handles) } }
         var all: [[String]] { lock.withLock { batches } }
+    }
+
+    // MARK: - A spent allowance is said out loud (#1207)
+
+    /// `RATE_LIMITED` is an expected failure, so the code waving it through has
+    /// no notion of volume: one blip and a systemic limit arrive on exactly the
+    /// same path (L77). Measured on 2026-09-01, sweeping the 122 real handles
+    /// twice put the app 275% over its hourly allowance and 82 of the 122 came
+    /// back limited, and none of that reached a surface Dan passes.
+    ///
+    /// Classified by FREQUENCY, not only by kind: normal below a threshold,
+    /// worth saying above it.
+
+    nonisolated private static func limited(_ handle: String,
+                                            spent: Double? = 275) -> PythonBridge.AccountFigures {
+        PythonBridge.AccountFigures(
+            handle: handle, outcome: "rate_limited", followers: nil, likes: nil,
+            comments: nil, likesHidden: false, followersFromPage: false,
+            instagramID: nil, reels: nil, feed: nil, detail: "", allowanceSpent: spent)
+    }
+
+    func testARunThatWasMostlyRefusedSaysTheAllowanceIsGone() async {
+        let m = manager { handles in handles.map { Self.limited($0) } }
+
+        m.handlesSettled(["a", "b", "c", "d"], asOf: now)
+        await settle()
+
+        let note = try! XCTUnwrap(m.failureNote)
+        XCTAssertTrue(note.lowercased().contains("allowance")
+                      || note.lowercased().contains("limit"), note)
+        XCTAssertTrue(note.lowercased().contains("hour"),
+                      "the note has to say roughly how long, or it names no way out "
+                      + "of the state it reports (L111): \(note)")
+    }
+
+    func testOneRefusedAccountAmongManyIsNotReportedAsAnOutage() async {
+        // The positive control (L159), and the more important direction: a note
+        // on every rate limit is noise on an ordinary run, and noise is how a
+        // real one stops being read (L36).
+        let m = manager { handles in
+            handles.map { $0 == "a" ? Self.limited($0) : Self.figures($0) }
+        }
+
+        m.handlesSettled(["a", "b", "c", "d"], asOf: now)
+        await settle()
+
+        XCTAssertNil(m.failureNote)
+    }
+
+    func testTheNoteNamesHowMuchOfTheAllowanceIsGoneWhenMetaSaidSo() async {
+        let m = manager { handles in handles.map { Self.limited($0, spent: 275) } }
+
+        m.handlesSettled(["a", "b"], asOf: now)
+        await settle()
+
+        XCTAssertTrue((m.failureNote ?? "").contains("275"),
+                      "Meta gave a reading and it is not shown: \(m.failureNote ?? "")")
+    }
+
+    func testARunRefusedWithNoReadingStillSaysSo() async {
+        // The reading is Meta's and it may not come. The refusal happened
+        // either way, and reporting nothing because one field was missing is
+        // how a real outage stays invisible (L530).
+        let m = manager { handles in handles.map { Self.limited($0, spent: nil) } }
+
+        m.handlesSettled(["a", "b"], asOf: now)
+        await settle()
+
+        XCTAssertNotNil(m.failureNote)
+        XCTAssertFalse((m.failureNote ?? "").contains("%"),
+                       "a percentage was reported that nobody measured: "
+                       + (m.failureNote ?? ""))
     }
 
     // MARK: - The trigger is actually connected (#1004, L3)
