@@ -1,0 +1,8 @@
+{
+  "name": "a-refused-lookup-names-the-one-holding-the-list",
+  "file": "PostRollApp/Sources/Services/PerformerLookupManager.swift",
+  "find": "        return \"Still \\(running.workDescription), so the performer list cannot be \"",
+  "replace": "        return \"Still busy, so the performer list cannot be \"",
+  "test": "PostRollTests/PerformerLookupManagerTests/testARefusedLookupSaysWhichOneIsHoldingTheList",
+  "breaks": "the reason stops naming which lookup is holding the list, so it cannot be acted on: Dan is told to wait without being told for what or for how long (#1049, L11, L80)"
+}

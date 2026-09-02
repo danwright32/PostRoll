@@ -47,6 +47,38 @@ final class PerformerLookupManager {
             case .fromWeb: return "reading the event page"
             }
         }
+
+        /// Whether this kind WRITES the performer list, and so must not run
+        /// beside another that does (#1049).
+        ///
+        /// Answered per kind, in an exhaustive switch, so a kind added later
+        /// cannot compile until somebody has decided. It used to be answered
+        /// for every kind at once by `Kind.allCases`, which is the wrong
+        /// default in the expensive direction: two review agents reading the
+        /// account numbers plan independently found that an automatic figures
+        /// fetch added as a third kind would take out both buttons Dan did not
+        /// press, for up to the 300 second deadline, with nothing on screen
+        /// connecting the two.
+        ///
+        /// Fetching audience figures is the case this is written for. It reads
+        /// accounts and writes nothing to the performer list, so it will answer
+        /// false and will not be part of this lock at all.
+        var contendsForThePerformerList: Bool {
+            switch self {
+            // Fills handles into the list.
+            case .handles: return true
+            // REPLACES the list outright, which is why the pair cannot overlap.
+            case .fromWeb: return true
+            }
+        }
+    }
+
+    /// The kinds that actually contend, derived from their own answers.
+    ///
+    /// Derived rather than listed here, so a kind's answer and the lock cannot
+    /// drift apart (L41).
+    static var contendingKinds: [Kind] {
+        Kind.allCases.filter(\.contendsForThePerformerList)
     }
 
     struct Run {
@@ -91,11 +123,34 @@ final class PerformerLookupManager {
         tracker(kind).isActive(id)
     }
 
-    /// Whether ANY lookup is going for this event. The two write to the same
-    /// list, so the second must not start while the first is in flight: a web
-    /// fetch REPLACES the list a handle lookup is filling in.
+    /// Whether a lookup that WRITES the performer list is going for this event.
+    ///
+    /// Over `contendingKinds` rather than every case of the enum (#1049). The
+    /// two that contend today write to the same list, so the second must not
+    /// start while the first is in flight: a web fetch REPLACES the list a
+    /// handle lookup is filling in. A kind that reads and writes nothing has no
+    /// business in that exclusion and now has to say so rather than be enrolled
+    /// by default.
     func isBusy(_ id: Event.ID) -> Bool {
-        Kind.allCases.contains { isRunning($0, for: id) }
+        Self.contendingKinds.contains { isRunning($0, for: id) }
+    }
+
+    /// Why the performer list cannot be changed right now, or nil when it can.
+    ///
+    /// The refusal used to be a bare `return` inside both entry points, and
+    /// neither button is disabled while the OTHER lookup runs, so pressing one
+    /// during the other did nothing and said nothing. A control that does
+    /// nothing and gives no reason leaves pressing it again as the only
+    /// diagnosis available (L148).
+    ///
+    /// Names the lookup that is actually running rather than saying something
+    /// general, because "wait for the other one" is only actionable if it says
+    /// which one and therefore how long (L11, L80).
+    func blockedReason(for id: Event.ID) -> String? {
+        guard let running = Self.contendingKinds.first(where: { isRunning($0, for: id) })
+        else { return nil }
+        return "Still \(running.workDescription), so the performer list cannot be "
+             + "changed yet."
     }
 
     func run(_ kind: Kind, for id: Event.ID) -> Run? { tracker(kind).job(for: id) }

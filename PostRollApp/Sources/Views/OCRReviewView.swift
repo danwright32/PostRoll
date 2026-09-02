@@ -346,6 +346,7 @@ struct OCRReviewView: View {
                 isFetchingFromWeb: lookupManager.isRunning(.fromWeb, for: event.id),
                 fetchFromWebStartedAt: lookupManager.run(.fromWeb, for: event.id)?.startedAt,
                 fetchError: lookupManager.failure(.fromWeb, for: event.id),
+                lookupBlockedReason: lookupManager.blockedReason(for: event.id),
                 onLookUpHandles: {
                     lookupManager.clearFailure(.handles, for: event.id)
                     lookupManager.startHandleLookup(
@@ -636,6 +637,14 @@ private struct PerformersEditor: View {
     let isFetchingFromWeb: Bool
     let fetchFromWebStartedAt: Date?
     let fetchError: String?
+    /// Why neither lookup can be started right now, or nil when both can
+    /// (#1049).
+    ///
+    /// Both entry points refuse while the other kind is running, and the
+    /// refusal used to be a bare `return`, so a press did nothing and said
+    /// nothing. The control is unavailable rather than dead, and says which
+    /// lookup it is waiting for.
+    let lookupBlockedReason: String?
     let onLookUpHandles: () -> Void
     let onFetchFromWeb: (String) -> Void
     let onAcceptSuggestion: (PythonBridge.HandleSuggestion) -> Void
@@ -717,11 +726,22 @@ private struct PerformersEditor: View {
                             .foregroundStyle(PaintedSurfaces.pageAccentText)
                     }
                     .buttonStyle(.plain)
+                    .disabled(lookupBlockedReason != nil)
 
                     Text("Searches the web for Instagram accounts matching your performers. You'll verify each one before it's applied.")
                         .font(.light(10))
                         .foregroundStyle(PaintedSurfaces.tertiaryText)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    // Why the control above is unavailable. A disabled control
+                    // with no reason beside it is the same silence in a
+                    // different shape (L54, L109).
+                    if let blocked = lookupBlockedReason {
+                        Text(blocked)
+                            .font(.light(10))
+                            .foregroundStyle(PaintedSurfaces.tertiaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     if let err = handleLookupError {
                         Text(err)
@@ -747,11 +767,19 @@ private struct PerformersEditor: View {
                                 .foregroundStyle(PaintedSurfaces.pageAccentText)
                         }
                         .buttonStyle(.plain)
+                        .disabled(lookupBlockedReason != nil)
 
                         Text("Replaces the performer list with conductors and named groups from the event page. Use for DCINY-style concerts where the website is more useful than the program.")
                             .font(.light(10))
                             .foregroundStyle(PaintedSurfaces.tertiaryText)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        if let blocked = lookupBlockedReason {
+                            Text(blocked)
+                                .font(.light(10))
+                                .foregroundStyle(PaintedSurfaces.tertiaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
 
                         if let err = fetchError {
                             Text(err)

@@ -1,0 +1,8 @@
+{
+  "name": "the-performers-editor-is-told-why-it-cannot-look-up",
+  "file": "PostRollApp/Sources/Views/OCRReviewView.swift",
+  "find": "                lookupBlockedReason: lookupManager.blockedReason(for: event.id),",
+  "replace": "                lookupBlockedReason: nil,",
+  "test": "PostRollTests/PerformerLookupManagerTests/testTheButtonsAreUnavailableWithTheirReasonRatherThanSilent",
+  "breaks": "the two lookup buttons go back to being live while the other lookup runs, so pressing one does nothing at all and says nothing at all, and pressing it again is the only diagnosis available (#1049, L148)"
+}
