@@ -349,6 +349,40 @@ final class AccountBookTests: XCTestCase {
         XCTAssertEqual(book.stats(for: "janecellist")?.instagramID, "17841400000000000")
     }
 
+    func testAnOutcomeThisBuildDoesNotKnowDoesNotDestroyTheWholeBook() throws {
+        // `decodeIfPresent` on an enum THROWS on a raw value it has no case
+        // for, and AccountRecord's decoder lets that propagate, so one record
+        // carrying an outcome a newer build wrote would fail the whole file
+        // and take every account's figures with it.
+        //
+        // The file's decoder is written field by field precisely so an old
+        // record survives a new build. This is the other direction, and it was
+        // fatal rather than lossy.
+        let file = root.appendingPathComponent("accounts.json")
+        let json = """
+            {"records":[{"handle":"janecellist","stats":{"followers":2000,            "likes":50,"outcome":"invented_in_a_later_build"}}]}
+            """
+        try json.write(to: file, atomically: true, encoding: .utf8)
+
+        let reopened = AccountBook(fileURL: file)
+
+        XCTAssertEqual(reopened.stats(for: "janecellist")?.followers, 2_000,
+                       "an unknown outcome took the figures with it")
+        XCTAssertNil(reopened.stats(for: "janecellist")?.outcome,
+                     "and an outcome nothing here understands must read as no "
+                     + "outcome rather than as one of the ones it does")
+    }
+
+    func testAKnownOutcomeStillDecodes() {
+        // The positive control (L159): a decoder that answered nil for every
+        // outcome would satisfy the assertion above.
+        book.write(AccountStats(followers: 2_000, outcome: .rateLimited),
+                   for: "janecellist")
+        let reopened = AccountBook(fileURL: root.appendingPathComponent("accounts.json"))
+
+        XCTAssertEqual(reopened.stats(for: "janecellist")?.outcome, .rateLimited)
+    }
+
     func testANegativeNumberIsRefusedRatherThanStored() {
         // A negative follower count can only be a typo, and it would produce a
         // negative engagement rate that sorts above every real account.

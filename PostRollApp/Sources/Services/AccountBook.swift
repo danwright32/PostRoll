@@ -125,10 +125,30 @@ struct AccountStats: Codable, Equatable, Sendable {
         likes           = try c.decodeIfPresent(Int.self,  forKey: .likes)
         comments        = try c.decodeIfPresent(Int.self,  forKey: .comments)
         recordedOn      = try c.decodeIfPresent(Date.self, forKey: .recordedOn)
-        followersSource = try c.decodeIfPresent(FigureSource.self, forKey: .followersSource)
-        likesSource     = try c.decodeIfPresent(FigureSource.self, forKey: .likesSource)
-        commentsSource  = try c.decodeIfPresent(FigureSource.self, forKey: .commentsSource)
-        outcome         = try c.decodeIfPresent(FetchOutcome.self, forKey: .outcome)
+        // Through the raw value, for the reason spelled out under `outcome`
+        // below: an enum this build has no case for would otherwise throw and
+        // take every account's figures with it. The rule is the same for all
+        // four of these, so it is applied to all four rather than to the one a
+        // test happened to be written about (L30).
+        followersSource = FigureSource(rawValue:
+            try c.decodeIfPresent(String.self, forKey: .followersSource) ?? "")
+        likesSource     = FigureSource(rawValue:
+            try c.decodeIfPresent(String.self, forKey: .likesSource) ?? "")
+        commentsSource  = FigureSource(rawValue:
+            try c.decodeIfPresent(String.self, forKey: .commentsSource) ?? "")
+        // Decoded through its RAW value, not as the enum. `decodeIfPresent` on
+        // an enum throws on a raw value it has no case for, and AccountRecord
+        // lets that propagate, so one record carrying an outcome a newer build
+        // wrote would fail the whole file and take every account's figures with
+        // it. The rest of this decoder exists so an old record survives a new
+        // build; this is the other direction, and it was fatal rather than
+        // lossy (L337).
+        //
+        // An outcome nothing here understands reads as NO outcome, which is
+        // the honest answer and the retryable one: the alternative is guessing
+        // at a state and possibly never asking about that account again.
+        outcome         = FetchOutcome(rawValue:
+            try c.decodeIfPresent(String.self, forKey: .outcome) ?? "")
         instagramID     = try c.decodeIfPresent(String.self, forKey: .instagramID)
         reels           = try c.decodeIfPresent(Int.self, forKey: .reels)
         feed            = try c.decodeIfPresent(Int.self, forKey: .feed)
