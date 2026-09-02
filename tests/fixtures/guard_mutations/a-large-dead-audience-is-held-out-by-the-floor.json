@@ -1,0 +1,8 @@
+{
+  "name": "a-large-dead-audience-is-held-out-by-the-floor",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "        if a.isLively != b.isLively { return a.isLively }",
+  "replace": "        if false, a.isLively != b.isLively { return a.isLively }",
+  "test": "PostRollTests/CollaboratorPickTests/testALargeDeadAudienceIsHeldOutByTheFloor",
+  "breaks": "the liveliness floor stops being an outer key, so an account with 433,555 followers and a 0.08% engagement rate takes a collaborator slot off an account whose audience actually turns up, which is the case the whole design refuses (#1005)"
+}

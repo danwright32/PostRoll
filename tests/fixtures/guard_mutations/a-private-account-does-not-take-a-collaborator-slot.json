@@ -1,0 +1,8 @@
+{
+  "name": "a-private-account-does-not-take-a-collaborator-slot",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "        if a.isPrivate != b.isPrivate { return !a.isPrivate }",
+  "replace": "        if a.isPrivate != b.isPrivate, false { return !a.isPrivate }",
+  "test": "PostRollTests/CollaboratorPickTests/testAnAccountMarkedPrivateRanksLastHoweverStrongItIs",
+  "breaks": "an account Dan marked private takes one of the five collaborator slots on its figures alone, and an invite to a private account cannot put the post on a grid anybody can see, so the slot is simply wasted (#982, #1005)"
+}

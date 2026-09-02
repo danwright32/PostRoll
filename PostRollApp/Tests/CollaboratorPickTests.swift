@@ -182,19 +182,28 @@ final class CollaboratorPickTests: XCTestCase {
         // 2,000 followers, ~50 likes, ~10 comments. B is the better
         // collaborator despite one fifth the audience, because A's audience is
         // either bought, dead, or not being shown the posts.
+        //
+        // The four filler accounts are LIVE ones (2% to 5%), which they were
+        // not before #1005. They sat at 0.2% to 0.5%, so five of the six
+        // candidates were below the liveliness floor and the fixture could not
+        // show what it claimed: with only three live accounts and five slots,
+        // the best of the dead ones legitimately fills one. Now every slot is
+        // contested by an account whose audience is actually there, which is
+        // the case the assertion is about (L165).
         let table = [
             "bigdead":  stats(10_000, 10, 0),
             "smalllive": stats(2_000, 50, 10),
-            "c": stats(1_000, 5, 0), "d": stats(1_000, 4, 0),
-            "e": stats(1_000, 3, 0), "f": stats(1_000, 2, 0),
+            "c": stats(1_000, 50, 0), "d": stats(1_000, 40, 0),
+            "e": stats(1_000, 30, 0), "f": stats(1_000, 20, 0),
         ]
         let result = CollaboratorPick.suggest(
             handles: ["bigdead", "smalllive", "c", "d", "e", "f"],
             firstPhoto: nil, stats: lookup(table), asOf: now)
         XCTAssertEqual(result.suggested.first?.handle, "smalllive")
         // The large dead audience does not merely rank lower, it does not make
-        // the five at all: a 0.1% rate is beaten by every ordinary account
-        // here, which is the whole point of ranking on rate rather than reach.
+        // the five at all: a 0.1% rate is under the liveliness floor, so every
+        // account above the floor comes first however few interactions it has,
+        // which is the whole point of the floor sitting over the score.
         XCTAssertFalse(result.suggested.map(\.handle).contains("bigdead"),
                        "10,000 followers bought a slot it did not earn")
     }
@@ -215,9 +224,11 @@ final class CollaboratorPickTests: XCTestCase {
     }
 
     func testATinyAccountDoesNotTopTheListOnAHandfulOfInteractions() {
-        // 5 likes on 20 followers is a 25% rate off almost no data. The floor
-        // exists so a rate computed from a handful of interactions cannot
-        // outrank a real audience.
+        // 5 likes on 20 followers is a 25% rate off almost no data. Under the
+        // rate metric a 200 follower floor was needed to stop it topping the
+        // list. Under total interactions nothing special is needed: 11
+        // interactions is simply fewer than 320, which is why that floor could
+        // be removed rather than replaced (#1005).
         let table = [
             "tiny": stats(20, 5, 2),
             "real": stats(4_000, 200, 40),
@@ -230,9 +241,11 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertEqual(result.suggested.first?.handle, "real")
     }
 
-    func testFollowersBreakATieOnEngagementRate() {
-        // Rate is the primary sort, but between two identical rates the larger
-        // audience reaches more people.
+    func testTheAccountWithMoreInteractionsWins() {
+        // Both are well over the liveliness floor, so the score decides, and
+        // the score is what actually lands on a post: 320 interactions against
+        // 80. Under the old rate metric these two tied at 6% and the follower
+        // count broke it; now the interactions say it directly.
         let table = [
             "big":   stats(4_000, 200, 40),
             "small": stats(1_000, 50, 10),
@@ -340,6 +353,256 @@ final class CollaboratorPickTests: XCTestCase {
             handles: ["a", "b", "c", "d", "e", "f"],
             firstPhoto: [], stats: lookup(table), asOf: now)
         XCTAssertEqual(result.fallbacks.count, 5)
+    }
+
+    // MARK: - Total interactions, with a liveliness floor over it (#1005)
+
+    /// The score is TOTAL WEIGHTED INTERACTIONS, `likes + 3 * comments`.
+    ///
+    /// Deliberately not "followers times the engagement rate": that is the same
+    /// expression, because the rate is interactions over followers and the
+    /// followers cancel, and naming it the other way reads as if it combined
+    /// two signals when it combines one.
+    ///
+    /// A liveliness floor sits ABOVE it as an outer key. Measured on the 122
+    /// account population committed in #1114: an engagement rate below 0.37%
+    /// demotes 7 accounts, with only 4 within 20% of the line, so it does not
+    /// cut through a crowded region.
+
+    /// An account with a large audience that nothing engages with.
+    ///
+    /// carnegiehall as measured on 2026-08-29: 433,555 followers, a 0.08% rate,
+    /// 356 likes a post. On raw interactions it is 8th of 78; the floor is what
+    /// holds it out, and without one it would take a slot from an account whose
+    /// audience actually turns up.
+    private func largeDeadAudience() -> AccountStats {
+        stats(433_555, 356, 0)
+    }
+
+    func testTheScoreIsTotalInteractionsRatherThanARate() {
+        // 4,000 followers with 200 likes is a 5% rate; 40,000 with 1,200 is 3%.
+        // The rate says the smaller account wins and reach says the larger
+        // does. Interactions is what actually lands on a post, and both are
+        // well over the floor, so the larger one wins.
+        let table = [
+            "reaches": stats(40_000, 1_200, 0),
+            "engaged": stats(4_000, 200, 0),
+            "c": stats(1_000, 10, 0), "d": stats(1_000, 9, 0),
+            "e": stats(1_000, 8, 0), "f": stats(1_000, 7, 0),
+        ]
+        let result = CollaboratorPick.suggest(
+            handles: ["engaged", "reaches", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.first?.handle, "reaches")
+    }
+
+    func testALargeDeadAudienceIsHeldOutByTheFloor() {
+        // The case the design exists to refuse, and the reason the floor is an
+        // OUTER key rather than a tiebreak: on interactions alone this account
+        // beats every ordinary one here.
+        var table = ["carnegiehall": largeDeadAudience()]
+        for name in ["a", "b", "c", "d", "e", "f"] {
+            table[name] = stats(1_000, 50, 5)
+        }
+        let result = CollaboratorPick.suggest(
+            handles: Array(table.keys).sorted(), firstPhoto: nil,
+            stats: lookup(table), asOf: now)
+
+        XCTAssertFalse(result.suggested.map(\.handle).contains("carnegiehall"),
+                       "356 likes a post bought a slot off an audience that is not "
+                       + "there: \(result.suggested.map(\.handle))")
+        XCTAssertEqual(result.suggested.count, 5)
+    }
+
+    func testAnAccountOverTheFloorNeverLosesToOneBelowIt() {
+        // Stated as its own rule, because the assertion above is also satisfied
+        // by an implementation that merely ranks the dead account sixth.
+        let table = [
+            "dead":  largeDeadAudience(),
+            "alive": stats(1_000, 5, 0),
+            "c": stats(1_000, 4, 0), "d": stats(1_000, 3, 0),
+            "e": stats(1_000, 2, 0), "f": stats(1_000, 1, 0),
+        ]
+        let result = CollaboratorPick.suggest(
+            handles: ["dead", "alive", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.first?.handle, "alive",
+                       "an account with 71 times the interactions and a dead audience "
+                       + "outranked a live one")
+    }
+
+    func testAnAccountJustOverTheFloorIsNotDemoted() {
+        // The positive control for the floor (L159). A floor that demoted
+        // everything would satisfy both assertions above.
+        let table = [
+            "justover": stats(100_000, 400, 0),  // 0.40%, over the 0.37% line
+            "small": stats(1_000, 5, 0),
+            "c": stats(1_000, 4, 0), "d": stats(1_000, 3, 0),
+            "e": stats(1_000, 2, 0), "f": stats(1_000, 1, 0),
+        ]
+        let result = CollaboratorPick.suggest(
+            handles: ["justover", "small", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.first?.handle, "justover")
+    }
+
+    func testTheTwoHundredFollowerFloorIsGone() {
+        // Its written reason was rate specific and dies with the rate metric.
+        // Today it demotes a 9 interaction account below two accounts scoring
+        // less, which is the wrong answer under the new score.
+        let table = [
+            "tiny": stats(150, 100, 0),        // 100 interactions, 66% rate
+            "c": stats(1_000, 5, 0), "d": stats(1_000, 4, 0),
+            "e": stats(1_000, 3, 0), "f": stats(1_000, 2, 0),
+            "g": stats(1_000, 1, 0),
+        ]
+        let result = CollaboratorPick.suggest(
+            handles: ["tiny", "c", "d", "e", "f", "g"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.first?.handle, "tiny",
+                       "a small account with real interactions is still demoted by a "
+                       + "follower floor whose reason no longer exists")
+    }
+
+    // MARK: - An account the API refuses is scored on an assumption (#1005)
+
+    /// What #1006 leaves behind: a follower count off the profile page, no
+    /// engagement figures at all, and an outcome saying Meta refused.
+    private func refusedByTheAPI(_ followers: Int) -> AccountStats {
+        AccountStats(followers: followers, recordedOn: now,
+                     followersSource: .measured, outcome: .notProfessional)
+    }
+
+    func testAnAccountTheApiRefusedIsScoredOnTheAssumedRate() {
+        // 2.73%, the 25th percentile of the measured accounts in its follower
+        // band, computed from the committed population in #1114. Deliberately
+        // pessimistic: what is measured is that the account is unmeasurable.
+        let table = [
+            "refused": refusedByTheAPI(3_000),   // assumed 3,000 x 2.73% = 81.9
+            "measured": stats(1_000, 50, 5),     // 65 interactions
+            "c": stats(1_000, 5, 0), "d": stats(1_000, 4, 0),
+            "e": stats(1_000, 3, 0), "f": stats(1_000, 2, 0),
+        ]
+        let result = CollaboratorPick.suggest(
+            handles: ["measured", "refused", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.first?.handle, "refused")
+    }
+
+    func testAnAssumedScoreSaysItIsAssumedWhereverItRenders() {
+        // What is measured is that the account is unmeasurable. The rate is an
+        // assumption and must be labelled as one everywhere, or the reason line
+        // reports a figure nobody took.
+        let table = ["refused": refusedByTheAPI(3_000)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 1, 0)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["refused", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        let reason = result.suggested.first(where: { $0.handle == "refused" })?.reason ?? ""
+        XCTAssertTrue(reason.lowercased().contains("assum"), reason)
+        XCTAssertFalse(reason.lowercased().contains("not counted yet"),
+                       "an account that IS being scored must not also say nobody has "
+                       + "counted it: \(reason)")
+
+        let block = CollaboratorPick.captionBlock(result)
+        XCTAssertTrue(block.lowercased().contains("assum"),
+                      "the file says nothing about the assumption the ranking made:\n"
+                      + block)
+    }
+
+    func testAnAccountWithNoRecordAtAllIsStillNotScored() {
+        // The decision was NARROWED, not reversed. A refusal Meta actually made
+        // is a fact about the account; nobody having looked is not.
+        let table = ["b": stats(1_000, 50, 5)]
+        let result = CollaboratorPick.suggest(
+            handles: ["neverlookedat", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertFalse(result.suggested.map(\.handle).contains("neverlookedat"))
+        XCTAssertTrue(result.unranked.map(\.handle).contains("neverlookedat"))
+    }
+
+    func testARefusedAccountWithNoFollowerCountIsNotScoredEither() {
+        // The assumption is a RATE, so it needs a follower count to apply to.
+        // Without one there is nothing to assume against, and inventing a
+        // number is the thing this whole design refuses.
+        let table = ["refused": AccountStats(recordedOn: now, outcome: .notProfessional)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 1, 0)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["refused", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertTrue(result.unranked.map(\.handle).contains("refused"))
+    }
+
+    func testAnAccountMarkedPrivateRanksLastHoweverStrongItIs() {
+        // #982's mark, as the outermost key. An invite to a private account
+        // cannot put the post on a grid anybody can see, so the slot is wasted
+        // however good the figures are.
+        var strong = stats(50_000, 5_000, 1_000)
+        strong.isPrivate = true
+        let table = ["private": strong]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 1, 0)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["private", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertFalse(result.suggested.map(\.handle).contains("private"),
+                       "a private account took a slot from five that can accept")
+    }
+
+    func testAPrivateAccountIsNotSilentlyDropped() {
+        // Ranked last is not the same as gone. Dan marked it himself, so he has
+        // to be able to see the app has honoured the mark rather than lost the
+        // account (L152).
+        var strong = stats(50_000, 5_000, 1_000)
+        strong.isPrivate = true
+        let table = ["private": strong, "b": stats(1_000, 1, 0)]
+        let result = CollaboratorPick.suggest(
+            handles: ["private", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        let named = result.suggested.map(\.handle) + result.unranked.map(\.handle)
+        XCTAssertTrue(named.contains("private"), "the account vanished entirely")
+    }
+
+    // MARK: - The reason line describes the metric that exists (#1005)
+
+    func testTheReasonLineNoLongerClaimsAPercentageIsTheScore() {
+        let table = ["a": stats(2_000, 50, 10)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 10, 1)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["a", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        let reason = result.suggested.first?.reason ?? ""
+        XCTAssertTrue(reason.contains("80 interactions"),
+                      "the score itself is not shown, so the order cannot be "
+                      + "disagreed with: \(reason)")
+    }
+
+    func testAnAccountBelowTheFloorSaysWhyItWasDemoted() {
+        let table = ["dead": largeDeadAudience(), "b": stats(1_000, 50, 5)]
+        let result = CollaboratorPick.suggest(
+            handles: ["dead", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        let reason = (result.suggested + result.unranked)
+            .first(where: { $0.handle == "dead" })?.reason ?? ""
+        XCTAssertTrue(reason.lowercased().contains("audience"), reason)
+        XCTAssertTrue(reason.contains("0.1%"),
+                      "the rate is what put it below the line, so it is what the "
+                      + "line has to show: \(reason)")
     }
 
     // MARK: - Missing data is unranked, never zero

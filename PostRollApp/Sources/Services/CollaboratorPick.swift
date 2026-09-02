@@ -32,11 +32,37 @@ enum CollaboratorPick {
     /// weight); it only separates two accounts with similar interaction totals.
     static let commentWeight = 3
 
-    /// Below this, an engagement rate comes from too few interactions to mean
-    /// anything: 5 likes on 20 followers is a 25% rate off almost no data.
-    /// Accounts under the floor still rank, but always below accounts over it,
-    /// so a handful of interactions cannot top the list.
-    static let followerFloor = 200
+    /// The engagement rate below which an account is demoted however large it
+    /// is (#1005).
+    ///
+    /// 0.37%, the 10th percentile of the measured engagement rates in the
+    /// account population committed in #1114. Not a chosen number: run
+    /// `venv/bin/python -m postroll.ai.collaborator_metric` and it is printed
+    /// from the data, so a population that moves shows up as a changed number
+    /// rather than as a decision nobody revisits (L316).
+    ///
+    /// It demotes 7 of the 122, with only 4 within 20% of the line, so it is
+    /// not cutting through a crowded region where a small move would carry
+    /// several accounts across at once (L172).
+    ///
+    /// Why it has to exist: carnegiehall measured 433,555 followers, a 0.08%
+    /// rate and 356 likes a post. On total interactions alone that is 8th of
+    /// 78, which is the "large dead audience reaches nobody" case the design
+    /// refuses. Without the floor it takes a slot off an account whose audience
+    /// actually turns up.
+    static let livelinessFloor = 0.0037
+
+    /// The engagement rate assumed for an account Meta will not report on.
+    ///
+    /// 2.73%, the 25th percentile of the measured accounts in the 104 to 3,422
+    /// follower band, which is the band those accounts fall in. Also computed
+    /// from the committed population rather than chosen.
+    ///
+    /// Deliberately the 25th rather than the median: what is MEASURED about
+    /// these accounts is that they are unmeasurable, so the number errs low
+    /// rather than flattering an account nobody has counted. It is an
+    /// assumption and is labelled as one wherever it renders.
+    static let assumedRate = 0.0273
 
     /// Said out loud when first-photo membership could not be established.
     ///
@@ -56,7 +82,16 @@ enum CollaboratorPick {
         /// has no numbers: an unmeasured account must never be scored as zero,
         /// which would sort it to the bottom as though it had been measured and
         /// found wanting.
+        ///
+        /// Still here under the interactions metric because it is what the
+        /// liveliness floor judges. It is no longer the score.
         let rate: Double?
+        /// Whether that rate was ASSUMED rather than measured (#1005).
+        ///
+        /// Carried on the candidate rather than recomputed at each surface,
+        /// because a rate bypassed at one site leaves the reason line claiming
+        /// a measurement nobody took.
+        let rateIsAssumed: Bool
         /// What to show beside the name. The figures used and whether the
         /// account is in the first photo, because an ordered list with no
         /// reasons is not something anyone can disagree with.
@@ -163,9 +198,12 @@ enum CollaboratorPick {
         let candidates = keys.map { key -> Candidate in
             let stats = stats(key)
             let inFirstPhoto = firstPhotoKeys?.contains(key) ?? false
+            let scored = score(stats)
             return Candidate(handle: key, stats: stats, inFirstPhoto: inFirstPhoto,
-                             rate: engagementRate(stats),
-                             reason: reasonText(stats: stats, inFirstPhoto: inFirstPhoto,
+                             rate: scored?.rate,
+                             rateIsAssumed: scored?.assumed ?? false,
+                             reason: reasonText(stats: stats, scored: scored,
+                                                inFirstPhoto: inFirstPhoto,
                                                 appliesFirstPhoto: firstPhotoKeys != nil,
                                                 asOf: now))
         }
@@ -259,17 +297,27 @@ enum CollaboratorPick {
     /// turn "nobody counted this" into "this scored zero".
     private struct Rankable {
         let candidate: Candidate
+        /// The score: total weighted interactions.
+        let interactions: Double
+        /// What the liveliness floor judges. Not the score.
         let rate: Double
         let followers: Int
+        let isPrivate: Bool
 
         init?(_ candidate: Candidate) {
-            guard let rate = candidate.rate,
+            guard let scored = score(candidate.stats),
                   let followers = candidate.stats?.followers, followers > 0
             else { return nil }
             self.candidate = candidate
-            self.rate = rate
+            self.interactions = scored.interactions
+            self.rate = scored.rate
             self.followers = followers
+            self.isPrivate = candidate.stats?.isPrivate ?? false
         }
+
+        /// Whether this account's audience is alive enough to be ranked on its
+        /// size at all (#1005).
+        var isLively: Bool { rate >= livelinessFloor }
     }
 
     // MARK: - Reading one day of the event
@@ -457,23 +505,67 @@ enum CollaboratorPick {
 
     // MARK: - Scoring
 
+    /// What one account scores, and whether any of it was assumed (#1005).
+    ///
+    /// `interactions` is the score: `likes + 3 * comments`, which is what
+    /// actually lands on a post. Deliberately not written as "followers times
+    /// the engagement rate", which is the SAME expression with the followers
+    /// cancelling, and which reads as if it combined two signals.
+    ///
+    /// `rate` is not the score. It is what the liveliness floor judges, and it
+    /// is the only thing followers are needed for.
+    struct Score: Equatable {
+        let interactions: Double
+        let rate: Double
+        /// True when the rate, and therefore the interactions derived from it,
+        /// are an assumption rather than a measurement.
+        let assumed: Bool
+    }
+
+    /// One account's score, or nil when there is nothing to score it on.
+    ///
+    /// Two ways in, and the second is narrow on purpose. A measured account is
+    /// scored on its own figures. An account Meta REFUSED to report on, which
+    /// is a fact about the account rather than an absence of effort, is scored
+    /// on the assumed rate against the follower count the profile page gave
+    /// (#1006). An account nobody has looked at is scored on neither: the
+    /// decision that an unmeasured account is never scored was narrowed here,
+    /// not reversed.
+    static func score(_ stats: AccountStats?) -> Score? {
+        guard let stats, !stats.isPrivate || true else { return nil }
+        guard let followers = stats.followers, followers > 0 else { return nil }
+
+        if stats.hasEngagementData {
+            // These two defaults are additive terms in a sum, not values
+            // reaching a comparison: a half nobody counted contributes none of
+            // that half. The account is known to have at least one of them, the
+            // bias is downward rather than up, so partial data can never
+            // promote an account over a fully counted one, and the reason line
+            // names exactly which figures were used.
+            let interactions = Double(stats.likes ?? 0)
+                             + Double(stats.comments ?? 0) * Double(commentWeight)
+            return Score(interactions: interactions,
+                         rate: interactions / Double(followers),
+                         assumed: false)
+        }
+
+        // Only a refusal Meta actually made. `couldNotClassify` is NOT enough:
+        // it means nothing established what this account is, and assuming a
+        // rate on the strength of a failure would score an account on a
+        // measurement nobody took (L67).
+        guard stats.outcome == .notProfessional || stats.outcome == .noSuchAccount
+        else { return nil }
+        return Score(interactions: Double(followers) * assumedRate,
+                     rate: assumedRate,
+                     assumed: true)
+    }
+
     /// Interactions per follower, comments weighted, or nil when unrankable.
     ///
-    /// Nil rather than zero for a missing or zero follower count: a rate is
-    /// interactions over followers, so zero followers cannot produce one, and
-    /// must not produce an infinity that sorts first.
+    /// Kept because several surfaces ask this question directly. It is the
+    /// floor's input, not the ranking's score.
     static func engagementRate(_ stats: AccountStats?) -> Double? {
-        guard let stats, stats.hasEngagementData, let followers = stats.followers,
-              followers > 0 else { return nil }
-        // These two defaults are additive terms in a sum, not values reaching a
-        // comparison: a half nobody counted contributes none of that half. The
-        // account is already known to have at least one of them
-        // (`hasEngagementData`), the bias is downward rather than up, so partial
-        // data can never promote an account over a fully counted one, and the
-        // reason line names exactly which figures were used, so the score never
-        // claims more than was measured.
-        let interactions = Double(stats.likes ?? 0) + Double(stats.comments ?? 0) * Double(commentWeight)
-        return interactions / Double(followers)
+        score(stats).map(\.rate)
     }
 
     /// The whole ranking, in one place.
@@ -490,30 +582,54 @@ enum CollaboratorPick {
     /// changes with no input changing cannot be trusted.
     private static func better(_ a: Rankable, than b: Rankable,
                                respectingFirstPhoto: Bool) -> Bool {
+        // Private is the OUTERMOST key (#982). An invite to a private account
+        // cannot put the post on a grid anybody can see, so the slot is wasted
+        // however good the figures are.
+        if a.isPrivate != b.isPrivate { return !a.isPrivate }
         if respectingFirstPhoto, a.candidate.inFirstPhoto != b.candidate.inFirstPhoto {
             return a.candidate.inFirstPhoto
         }
-        let aOverFloor = a.followers >= followerFloor
-        let bOverFloor = b.followers >= followerFloor
-        if aOverFloor != bOverFloor { return aOverFloor }
-        if a.rate != b.rate { return a.rate > b.rate }
+        // The liveliness floor, as an outer key over the score rather than a
+        // tiebreak (#1005). A large audience that nothing engages with beats
+        // every ordinary account on raw interactions, and reaches nobody.
+        if a.isLively != b.isLively { return a.isLively }
+        if a.interactions != b.interactions { return a.interactions > b.interactions }
         if a.followers != b.followers { return a.followers > b.followers }
         return a.candidate.handle < b.candidate.handle
     }
 
     // MARK: - Saying why
 
-    private static func reasonText(stats: AccountStats?, inFirstPhoto: Bool,
+    /// Said when the API refused to report on an account and the score is
+    /// therefore an assumption (#1005).
+    static let assumedRateLabel =
+        "no engagement figures, so scored on an assumed \(percentText(assumedRate)) rate"
+
+    /// Said when an account is demoted for having an audience that is not there.
+    static let belowFloorLabel = "audience barely engages, so it is ranked last"
+
+    private static func reasonText(stats: AccountStats?, scored: Score?,
+                                   inFirstPhoto: Bool,
                                    appliesFirstPhoto: Bool, asOf now: Date) -> String {
         var parts: [String] = []
-        if let stats, stats.hasEngagementData, let followers = stats.followers,
-           let rate = engagementRate(stats) {
+        if let stats, let scored, let followers = stats.followers {
             parts.append("\(number(followers)) followers")
-            if let likes = stats.likes { parts.append("\(number(likes)) likes") }
-            if let comments = stats.comments { parts.append("\(number(comments)) comments") }
-            parts.append("\(percent(rate)) engagement")
-            if followers < followerFloor {
-                parts.append("small audience, so the rate is off few interactions")
+            if scored.assumed {
+                // Labelled wherever it renders. What is measured about this
+                // account is that it is unmeasurable, and a reason line that
+                // reported the assumed figures as measurements would claim
+                // something nobody took.
+                parts.append(assumedRateLabel)
+            } else {
+                if let likes = stats.likes { parts.append("\(number(likes)) likes") }
+                if let comments = stats.comments { parts.append("\(number(comments)) comments") }
+            }
+            // The SCORE itself, so the order can be disagreed with. This used
+            // to render "X% engagement", which described a metric that no
+            // longer exists.
+            parts.append("\(number(Int(scored.interactions.rounded()))) interactions a post")
+            if scored.rate < livelinessFloor {
+                parts.append("\(percent(scored.rate)) engagement, \(belowFloorLabel)")
             }
         } else {
             // Never a zero: an unmeasured account said to have 0% engagement is
@@ -533,7 +649,11 @@ enum CollaboratorPick {
         Self.grouping.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
-    private static func percent(_ rate: Double) -> String {
+    private static func percent(_ rate: Double) -> String { percentText(rate) }
+
+    /// One rendering of a rate, so the label above and the reason line below
+    /// cannot come to spell the same number differently.
+    static func percentText(_ rate: Double) -> String {
         String(format: "%.1f%%", rate * 100)
     }
 
