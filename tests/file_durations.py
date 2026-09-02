@@ -39,184 +39,52 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = REPO_ROOT / "tests"
 RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 
-#: What SHARE of the whole run a file has to be before the fast loop may skip it.
+#: How many of the dearest files the fast local loop may skip (#1196).
 #:
-#: A share rather than a number of seconds, and that is a correction rather than
-#: a preference (#766). What `tools/record_test_durations.py` reads out of pytest
-#: is summed per-test WALL time under `-n auto`, not CPU, so it moves with how
-#: much contention there was. Measured on this Mac on 2026-08-21, the same suite
-#: on the same machine an hour apart:
+#: A COUNT, not a share, and that is the second correction this number has had.
 #:
-#:     test_frame_legibility.py      206.9s then 334.8s    26.9% then 31.7%
-#:     test_golden_frames.py         145.8s then 223.7s    18.9% then 21.2%
-#:     test_slider_program_plate.py   25.7s then  37.3s     3.3% then  3.5%
+#: It was a share of the whole recorded run, chosen to sit in a gap so that no
+#: small change in cost could carry a file across it. The reading is summed
+#: per-test WALL time under `-n auto`, so it moves with contention, and a share
+#: moves for two reasons: the file's own cost, and everything else's. The suite
+#: growing therefore re-aimed the threshold on every unrelated branch.
 #:
-#: The seconds moved by 60%, because the second run was under `--dist worksteal`
-#: and therefore kept more cores busy at once (#783). The shares barely moved at
-#: all. A floor in seconds would have been crossed by four files without one line
-#: of test code changing.
+#: `test_generate_media_friday_clips` decided where that threshold sat NINE
+#: times: 5.0%, 5.8%, 4.5%, 4.99%, 6.18%, 4.37%, and then 5.97%, 5.17% and
+#: 5.96% in three recordings within a few hours of each other on 2026-09-01,
+#: with nothing about the file changing. Each move cost a re-record, a marker
+#: edit and a README count on a branch that had nothing to do with it, and by
+#: the third the only placement that satisfied the old band sat in a window
+#: 0.3% wide, which the next recording would have broken.
 #:
-#: The floor is chosen from where the distribution actually is, not picked round
-#: (L172), and it has now been re-chosen three times: for #810, for #826, and
-#: for #840. Sorted by share the suite reads, measured on 2026-08-22:
+#: The RANK is stable where the share is not. Measured across the eight
+#: recorded versions of the duration record: ranks 3 and 4 have swapped
+#: repeatedly, ranks 6 and 7 have swapped, and the file at rank 5 has been the
+#: same file in every single one. So membership of the skipped set is decided
+#: by order, which changes only when two files really do swap, rather than by a
+#: line that moves under everything.
 #:
-#:     test_golden_frames.py                    18.3%
-#:     test_closing_crossfade_legibility.py     14.9%
-#:     test_thursday_reel_legibility.py         12.8%
-#:     test_frame_legibility.py                  9.1%
-#:     test_slider_program_plate.py              4.7%
-#:     test_generate_media_friday_clips.py       4.5%
-#:     test_record_design_fingerprints.py        4.0%
-#:     test_render_clip_reel.py                  3.7%
-#:     test_phone_safe_area.py                   3.4%
-#:     test_record_codec_change.py               2.6%    and a tail of 148 more
+#: Five, which is the set the share threshold produced whenever it happened to
+#: land above that file. Those five are 918s of a roughly 1,400s run, and the
+#: sixth is 64s, so this is where the saving is.
 #:
-#: so the only gap left is between 9.1% and 4.7%, and 6.5% is near its geometric
-#: middle: 1.38x of clear air below and 1.40x above. Every candidate lower down
-#: is inside the run of files from 4.7% to 2.6%, where each step is under 1.2x
-#: and no floor could be placed without something sitting on it.
-#:
-#: What moved. Nothing about these files changed for #840; the record was
-#: re-taken because two new test files made it stop covering the suite, and a
-#: re-take measures every file again. Four files that were within 1.2x of the
-#: old 3.7% floor came out on the other side of it, which is precisely the drift
-#: the gap rule exists to notice rather than absorb.
-#:
-#: The cost of moving the floor up, said plainly: the fast local run now pays
-#: for `test_generate_media_friday_clips.py`, about 4.5% of the run, which it
-#: used to skip. That file has been on the line every time this was re-chosen
-#: (5.05% and 5.76% in two readings against a 5.4% floor for #826, 4.5% now),
-#: and a marker that flips with the noise is worse than either answer.
-#:
-#: It was 8% before #810, 5.4% after it, 3.7% after #826, and 6.5% after #840.
-#: Each time the shape of the run changed, not the rule.
-#:
-#: 7.5% on 2026-08-23, re-chosen for the same reason as every entry above it and
-#: with the same file on the line. Two new test files for #866 made the record
-#: stop covering the suite, so it was re-taken, and a re-take measures every
-#: file again. `test_generate_media_friday_clips.py` came out at 5.4% against
-#: 4.5%, which put it inside the 5.2% to 8.1% band the old floor asked to be
-#: clear, and the guard said so.
-#:
-#: The gap it now sits in is 5.4% below (that same file) and 10.5% above
-#: (`test_frame_legibility.py`), a factor of 1.94, and 7.5% was its geometric
-#: middle.
-#:
-#: 7% since 2026-08-28, re-chosen against a third recording. This floor moves
-#: whenever the suite grows enough to change what share a file is, which is the
-#: guard working rather than churn: it goes red the moment a file lands near the
-#: line, and the answer is always to re-measure and re-choose rather than to
-#: widen the band.
-#:
-#: `test_generate_media_friday_clips` was 6.1% and is 4.99% now, not because it
-#: got faster but because the suite around it grew. It falls back OUT of the
-#: expensive set, so the fast run pays for it again, and the set is four files
-#: as it was before 2026-08-27.
-#:
-#: The widest gap in the distribution is now 4.99%
-#: (`test_generate_media_friday_clips`) to 9.67% (`test_frame_legibility`), a
-#: factor of 1.94, and 7% is its geometric middle. Its neighbours sit at 0.71x
-#: and 1.38x of it against a band of 0.8 to 1.25.
-#:
-#: 4.6% earlier on 2026-08-29, re-chosen against a fourth recording, which had
-#: `test_generate_media_friday_clips` at 6.18% and put it back IN the expensive
-#: set as a fifth file.
-#:
-#: 7.1% since 2026-08-29, re-chosen against a fifth recording forced by #962
-#: adding two test files. Adding any file makes the
-#: record incomplete, and re-recording re-reads the WHOLE suite, so the floor is
-#: re-chosen against the distribution as it then is rather than against the one
-#: it was chosen from. This reading came in at 1737s against the previous 1071s,
-#: the same suite on the same Mac under a different load, which is why the
-#: shares moved without any test changing.
-#:
-#: `test_generate_media_friday_clips` came out at 4.37%, down from 6.18%, and
-#: it is the fifth time that same file has decided where the floor goes, which
-#: is what a file sitting near the knee of a distribution does.
-#:
-#: The widest gap in the distribution is now 4.37%
-#: (`test_generate_media_friday_clips`) to 11.54% (`test_frame_legibility`), a
-#: factor of 2.64, and 7.10% is its geometric middle. The band a floor there
-#: asks to be clear is 5.68% to 8.88%, and its neighbours sit at 0.62x and
-#: 1.63x of it against a band of 0.8 to 1.25, so it has more clear air either
-#: side than any floor placed here has had.
-#:
-#: `test_generate_media_friday_clips` therefore moves back OUT of the expensive
-#: set and the fast run pays for it again, as it did before 2026-08-29. The set
-#: is four files. Nothing about that file changed; the suite around it did, and
-#: this is the second reading in two days to say so, so the next person to move
-#: this number should suspect the READING rather than the file.
-#:
-#: 4.6% since 2026-09-01, re-chosen against a sixth recording forced by #988
-#: adding a test file (and by two files from #1162 that had never been
-#: measured either). `test_generate_media_friday_clips` came back at 5.97%,
-#: sitting inside the 7.1% floor's band, which turned the gap guard red. That
-#: is the sixth time this one file has decided where the floor goes.
-#:
-#: The widest gap in the distribution is now 3.56%
-#: (`test_render_clip_reel`) to 5.97% (`test_generate_media_friday_clips`), a
-#: factor of 1.68, and 4.61% is its geometric middle, rounded down to 4.6%. The
-#: band a floor there asks to be clear is 3.68% to 5.75%, and its neighbours
-#: sit at 0.97x and 1.04x of those edges.
-#:
-#: Say plainly what those margins mean: this is the tightest placement the
-#: floor has ever had. The band asks for 1.5625x of clear air and the widest
-#: gap in the suite now offers 1.68x, so a 3% move in either neighbour turns
-#: this guard red again. Every earlier placement had a gap of 2.6x or more.
-#: The band is NOT widened to buy room, for the reason recorded under
-#: GAP_BELOW: that answers a measurement with a looser rule.
-#:
-#: `test_generate_media_friday_clips` therefore moves back INTO the expensive
-#: set, as it was before 2026-08-29, and the set is five files. If a seventh
-#: recording moves it again, the thing to change is not this number: a single
-#: global floor over a distribution with no wide gap left is the wrong shape,
-#: and the file's own history is the evidence.
-#:
-#: 6.9% later the SAME DAY, on a seventh recording forced by #1002 adding a
-#: test file. `test_generate_media_friday_clips` came back at 5.17%, down from
-#: 5.97% an hour earlier on the same machine with nothing about it changed,
-#: and that was enough to close the gap the 4.6% floor sat in.
-#:
-#: The widest gap that now fits the band is 5.17% to 9.24%
-#: (`test_frame_legibility`), a factor of 1.79, and 6.91% is its geometric
-#: middle, rounded to 6.9%. The set is four files again and that file is out of
-#: it again, for the eighth time.
-#:
-#: This is the change the note above said should not be made, and it is made
-#: anyway, deliberately and once: the alternative was to hold an unrelated
-#: feature behind a redesign of the test runner. The redesign is #1196, this
-#: note is its provenance, and the next person to arrive here should read that
-#: issue rather than reach for a ninth number.
-#:
-#: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
-#: to this turns it red and asks for the floor to be re-chosen against the
-#: distribution as it is then, rather than letting it silently drift into the
-#: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.069
+#: `test_fast_subset_stays_honest.py` holds the boundary open: the fifth file
+#: has to stay clearly dearer than the sixth, or two files a hair apart would
+#: swap on ordinary noise and the fast run's contents would change with nobody
+#: choosing it.
+EXPENSIVE_COUNT = 5
 
-#: How much clear air the floor needs either side of it, as a multiplier.
+#: How much dearer the last skipped file has to be than the first kept one.
 #:
-#: 0.8 to 1.25 of the floor, so no file may sit between 6.0% and 9.4% of the run.
-#: The real margins on the record as it stands are 5.4% below and 10.5% above.
+#: 1.35x, which is what that boundary measures today. Deliberately not derived
+#: from the run to run noise the way the old band was: this is not a threshold
+#: anything sits near, it is a question about two specific files swapping
+#: places, and the eight recordings say that pair has never swapped.
 #:
-#: Deliberately left alone when the floor moved to 7.5% on 2026-08-23. The band
-#: says how much noise a reading carries and the floor says where the gap is;
-#: widening the band to absorb a file that has moved would answer a measurement
-#: with a looser rule, which is the one response this guard exists to prevent.
-#:
-#: These were 0.6 and 1.6, chosen when the gap was a factor of 3.5. That band
-#: asks for 2.67x of clear air and this gap is 1.84x, so no placement in it
-#: could satisfy the old numbers: keeping them would leave the guard permanently
-#: red, or push the floor above a file that really does cost 5% of the run.
-#:
-#: So they are re-derived from what they exist to tolerate, which is how much a
-#: share moves between two readings of the SAME tree. Measured on this Mac on
-#: 2026-08-22, over the files at or above 2% of the run, the worst swing was
-#: 1.19x (test_frame_legibility and test_thursday_reel_legibility), and the file
-#: this floor sits beside swung 1.14x. A 1.25x band clears the noise this suite
-#: really has. It is a loosening, said plainly, and it is a loosening onto a
-#: measurement rather than onto a round number.
-GAP_BELOW, GAP_ABOVE = 0.8, 1.25
+#: Ranks 6 and 7 HAVE swapped at 1.45x, which looks like a counterexample and
+#: is not: those two are 44s and 64s, so a few seconds of contention reorders
+#: them, while 86s against 64s is a real difference in what the files do.
+MINIMUM_SEPARATION = 1.35
 
 
 def recorded() -> dict[str, float]:
@@ -291,8 +159,14 @@ def shares() -> dict[str, float]:
 
 
 def expensive() -> set[str]:
-    """Files the fast local run is allowed to skip."""
-    return {name for name, share in shares().items() if share >= EXPENSIVE_SHARE}
+    """Files the fast local run is allowed to skip: the dearest few (#1196).
+
+    By ORDER rather than by a threshold, because the order is what has held
+    still. A share of the whole run moves when anything else in the suite does,
+    and it re-aimed the old threshold on nine separate occasions.
+    """
+    ordered = sorted(recorded().items(), key=lambda pair: -pair[1])
+    return {name for name, _ in ordered[:EXPENSIVE_COUNT]}
 
 
 def unmeasured() -> set[str]:
@@ -304,7 +178,7 @@ def unmeasured() -> set[str]:
     simply absent, and absent is read as cheap by everything downstream.
 
     That is the safe direction for the fast run, which pays for a file it might
-    have skipped. It is not safe for the reasoning: `EXPENSIVE_SHARE` and the
+    have skipped. It is not safe for the reasoning: `EXPENSIVE_COUNT` and the
     gap it sits in are computed over the RECORDED files alone, so a record
     covering half the suite reports a healthy gap while describing a suite that
     no longer exists, and reads green for the same reason it always did.
@@ -328,12 +202,13 @@ def worst_case_unmeasured_share() -> float:
     check that reads this, so the failure carries the live numbers rather than
     these (L210).
     """
-    ordinary = [s for s in shares().values() if s < EXPENSIVE_SHARE]
+    costly = expensive()
+    ordinary = [s for name, s in shares().items() if name not in costly]
     if not ordinary:
         raise AssertionError(
             "every recorded file is at or above the floor, so there is no "
             "ordinary file to size an unmeasured one against. The record or "
-            f"{EXPENSIVE_SHARE:.0%} is wrong.")
+            f"{EXPENSIVE_COUNT} is wrong.")
     return len(unmeasured()) * max(ordinary)
 
 
@@ -344,10 +219,10 @@ def smallest_expensive_share() -> float:
     could add up to this are enough to change the picture the floor was chosen
     from.
     """
-    over = [s for s in shares().values() if s >= EXPENSIVE_SHARE]
+    over = [s for name, s in shares().items() if name in expensive()]
     if not over:
         raise AssertionError(
-            f"no recorded file reaches {EXPENSIVE_SHARE:.0%} of the run, so "
+            "the record names no expensive file at all, so "
             "there is nothing for the fast run to skip and nothing here to "
             "measure an unmeasured file against.")
     return min(over)

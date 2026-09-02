@@ -42,10 +42,9 @@ import pytest
 
 
 from file_durations import (
-    EXPENSIVE_SHARE,
+    EXPENSIVE_COUNT,
+    MINIMUM_SEPARATION,
     provenance,
-    GAP_ABOVE,
-    GAP_BELOW,
     expensive,
     files_on_disk,
     recorded,
@@ -69,7 +68,7 @@ def test_the_measurement_actually_found_some_expensive_files():
     """If this finds nothing, every check below is measuring an empty set."""
     files = expensive()
     assert len(files) >= 2, (
-        f"only {sorted(files)} measure at or above {EXPENSIVE_SHARE:.0%} of "
+        f"only {sorted(files)} are among the {EXPENSIVE_COUNT} dearest of "
         "the run, so the "
         "fast target is skipping almost nothing and the checks below prove "
         "almost nothing. Re-record with `make record-test-durations`.")
@@ -112,7 +111,7 @@ def test_the_record_still_covers_the_suite():
     safe for the fast run, which then pays for a file it might have skipped, and
     the full run is the gate either way.
 
-    What goes quietly wrong is the reasoning. `EXPENSIVE_SHARE` and the gap it
+    What goes quietly wrong is the reasoning. `EXPENSIVE_COUNT` and the gap it
     sits in are computed over the RECORDED files alone, so a record covering 80
     of 140 files reports a healthy gap while describing a suite that no longer
     exists, and it reads green for exactly the reason it always did (L182).
@@ -130,7 +129,7 @@ def test_the_record_still_covers_the_suite():
         f"{sorted(unmeasured())}. Stood at the largest ordinary file in the "
         f"record they would be {worst_case:.0%} of the run, which is more than "
         f"the {scale:.0%} of the smallest file the fast run skips, so the "
-        "distribution EXPENSIVE_SHARE was chosen from is no longer this suite's. "
+        "distribution EXPENSIVE_COUNT was chosen against is no longer this suite's. "
         "Re-record with `make record-test-durations`.")
 
 
@@ -151,28 +150,39 @@ def test_the_coverage_check_is_measuring_something():
         f"the difference it claims to be: {sorted(unmeasured() - files_on_disk())}")
 
 
-def test_the_floor_still_sits_in_a_gap_in_the_real_distribution():
-    """The floor is only meaningful while nothing is sitting on it (L172).
+def test_the_boundary_between_expensive_and_ordinary_is_a_real_gap():
+    """The Nth file has to be clearly dearer than the N+1th (#1196).
 
-    A threshold inside the dense part of a distribution turns the set it
-    produces into noise: a small change in one file's cost carries it across,
-    and the fast run's contents change for a reason nobody chose.
+    Membership now changes only when two files SWAP ORDER, which is a far
+    weaker requirement than a threshold nothing may sit near. It is not
+    nothing, though: two files a hair apart would swap on ordinary run to run
+    noise, and the fast run's contents would change for a reason nobody chose
+    (L172).
 
-    Measured on 2026-08-21 there is a gap of nearly 5x: 17.3% of the run is the
-    smallest expensive file and 3.5% the largest ordinary one. This turns red
-    when a file lands in that gap, which is the moment to re-measure and
-    re-choose rather than to widen the band.
+    Measured across the eight recorded versions of the duration record: ranks 3
+    and 4 have swapped repeatedly and so have 6 and 7, but the file at rank 5
+    has been the same file every single time. That boundary is the one this
+    guards, and it currently stands at 1.35x.
     """
-    crowding = sorted(
-        (name, f"{share:.1%}") for name, share in shares().items()
-        if EXPENSIVE_SHARE * GAP_BELOW <= share <= EXPENSIVE_SHARE * GAP_ABOVE)
+    ordered = sorted(recorded().values(), reverse=True)
+    assert len(ordered) > EXPENSIVE_COUNT, (
+        f"the record holds {len(ordered)} files, which is not more than the "
+        f"{EXPENSIVE_COUNT} the fast run skips, so there is no boundary here "
+        "to check and this guard is measuring nothing")
 
-    assert not crowding, (
-        f"these files are now close to the {EXPENSIVE_SHARE:.0%} floor: "
-        f"{crowding}. The floor was chosen to sit in a gap so that no small "
-        "change in cost moves a file in or out of the fast run; it no longer "
-        "does. Re-measure with `make record-test-durations` and choose a new "
-        "EXPENSIVE_SHARE from where the distribution actually is.")
+    nth, following = ordered[EXPENSIVE_COUNT - 1], ordered[EXPENSIVE_COUNT]
+    assert following > 0, (
+        "the file just below the boundary reads as costing nothing, which is "
+        "not a reading, so the ratio below is meaningless")
+
+    assert nth / following >= MINIMUM_SEPARATION, (
+        f"the {EXPENSIVE_COUNT}th dearest file is {nth:.0f}s and the next is "
+        f"{following:.0f}s, a factor of {nth / following:.2f}, under the "
+        f"{MINIMUM_SEPARATION}x this asks for. Two files that close swap order "
+        "on ordinary noise, so the fast run's contents would change between "
+        "recordings with nobody choosing it. Re-measure with "
+        "`make record-test-durations` and re-choose EXPENSIVE_COUNT against the "
+        "distribution as it is then.")
 
 
 def test_every_expensive_file_is_marked_slow():
@@ -191,7 +201,7 @@ def test_every_expensive_file_is_marked_slow():
             unmarked.append(name)
 
     assert not unmarked, (
-        f"These files are at or above {EXPENSIVE_SHARE:.0%} of the run but "
+        f"These files are among the {EXPENSIVE_COUNT} dearest in the run but "
         f"carry no "
         f"{SLOW}, so the fast local run still pays for them: "
         + ", ".join(unmarked)
@@ -226,7 +236,7 @@ def test_nothing_else_is_marked_slow():
     assert not strays, (
         "These files are marked slow and are not the measured expensive ones, "
         "so the fast run is skipping more than it should: " + ", ".join(strays)
-        + f". The floor is {EXPENSIVE_SHARE:.0%} of the run; record a file with "
+        + f". The fast run skips the {EXPENSIVE_COUNT} dearest files; record one with "
         "`venv/bin/python tools/record_test_durations.py` rather than marking "
         "it by eye."
     )
@@ -356,7 +366,7 @@ def test_the_readme_says_how_many_files_the_fast_run_skips():
 
 # ── the record says how each reading was taken (#1038) ───────────────────────
 #
-# `EXPENSIVE_SHARE` is a share of the whole recorded run, so every reading has
+# The ranking is over one whole recorded run, so every reading has
 # to be on the same scale for the comparison to mean anything. A full re-record
 # takes them all in one run; a file added later is a reading from a different
 # run under different load. Measured on 2026-08-31, the ratio between a run and
@@ -412,7 +422,7 @@ def test_the_record_is_mostly_one_run_rather_than_a_pile_of_scaled_ones():
     assert share >= 0.75, (
         f"only {share:.0%} of the record comes from its largest single run, so "
         "most of the readings have been scaled onto it from elsewhere and the "
-        "distribution EXPENSIVE_SHARE is chosen from is an assembly rather than "
+        "distribution EXPENSIVE_COUNT is chosen against is an assembly rather than "
         "a measurement. Re-record the whole suite on an idle machine with "
         "`make record-test-durations`.")
 
