@@ -1,0 +1,8 @@
+{
+  "name": "a-review-pass-cannot-rewrite-a-reel-alt",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "        data = dict(data, alt_texts=draft_alt_texts)",
+  "replace": "        pass",
+  "test": "tests/test_reel_alt_text_describes_the_reel.py::test_the_voice_pass_cannot_condense_a_reel_alt_to_one_frame",
+  "breaks": "the voice and humanizer passes get the alt text back, and neither carries the post type, so a compliant reel level alt can be condensed into a single frame description by a later stage while the stage that enforced the rule has already run. A screen reader user is then told a 234 photo reel is a picture of four dancers (#1067, L280)"
+}
