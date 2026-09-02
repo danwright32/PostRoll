@@ -674,20 +674,23 @@ def source_clips(broad_photos, tmp_path) -> list[str]:
             for i, photo in enumerate(broad_photos[:2])]
 
 
-@pytest.fixture
-def silent_audio(tmp_path) -> str:
+def _silent_track(path: Path) -> str:
     """A local silent track.
 
     The reel generators fetch a Jamendo track when handed no audio, so a test
     that passed None would make a network call to a third-party service on every
     run and render against whatever it happened to return.
     """
-    path = tmp_path / "silence.m4a"
     subprocess.run(
         ["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
          "-t", "45", "-c:a", "aac", str(path)],
         check=True, capture_output=True)
     return str(path)
+
+
+@pytest.fixture
+def silent_audio(tmp_path) -> str:
+    return _silent_track(tmp_path / "silence.m4a")
 
 
 def _frame_from_encoded_video(video: str, at_seconds: float, out: Path) -> Image.Image:
@@ -921,26 +924,67 @@ def closing_graphic_bw(photos, tmp_path) -> str:
     return _closing_graphic(photos, tmp_path, bw=photos[2])
 
 
+#: Which frame of the reel to read the divider out of, IN MOTION.
+#:
+#: 30% of the way through the first sweep, which is where the curve replaced in
+#: #1073 changed speed in a step and so where two easings disagree most.
+#: Derived from the module's own timeline, so re-timing the reel moves the
+#: sample with it instead of walking it into a neighbouring hold.
+SLIDER_SWEEP_FRAME = round(
+    (slider_mod.HOLD_RAW + 0.3 * slider_mod.SWEEP_DURATION) * slider_mod.FPS)
+
+
+def _mid_frame_seconds(frame_index: int) -> float:
+    """The MIDDLE of a frame, so a seek cannot land either side of its edge.
+
+    Asking ffmpeg for a time that falls exactly on a boundary leaves which
+    frame comes back to how the seek rounds, and one frame of a sweep is about
+    6px of divider travel, which is the same order as the reading below is
+    trying to resolve.
+    """
+    return (frame_index + 0.5) / slider_mod.FPS
+
+
+SLIDER_SWEEP_SAMPLE_S = _mid_frame_seconds(SLIDER_SWEEP_FRAME)
+
+
+@pytest.fixture(scope="module")
+def slider_reel_video(tmp_path_factory) -> str:
+    """The Tuesday reel, encoded once for the reference frames read out of it.
+
+    Module scoped because the encode is where this file's time goes, about 45
+    seconds, and a second test that rendered its own would pay it twice. The
+    suite runs under `--dist worksteal`, so the two tests below can land on
+    different workers and build this once each; that is the worst case, and it
+    is what two independent renders would have cost anyway.
+
+    Which is also why nothing here depends on the two frames coming from ONE
+    file. Every input is deterministic (seeded photographs, a generated silent
+    track, fixed timings), so a split run encodes the same video twice rather
+    than two different ones.
+
+    A B&W is required: this reel renders three states and nothing in the app
+    reaches it without one (#164, #324). The reference recorded before that was
+    a photograph of the two-photo path, which the product cannot produce.
+    """
+    tmp_folder = tmp_path_factory.mktemp("slider_reel")
+    photos = [_patterned_photo(tmp_folder / f"p{i}.jpg", seed=i) for i in range(3)]
+    return slider_mod.generate_reel_slider(
+        raw_path=photos[0], edit_path=photos[1], bw_path=photos[2],
+        audio_path=_silent_track(tmp_folder / "silence.m4a"),
+        output_path=str(tmp_folder / "slider.mp4"),
+        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
+        closing_frame_path=_closing_graphic(photos, tmp_folder, bw=photos[2]),
+        logo_path=LOGO)
+
+
 @needs_ffmpeg
 @requires_mac_fonts
-def test_slider_reel_matches_its_reference_frame(photos, silent_audio,
-                                                 closing_graphic_bw, tmp_path):
+def test_slider_reel_matches_its_reference_frame(slider_reel_video, tmp_path):
     # 0.6s lands in the opening hold on the RAW, where the plate's chrome and
     # its caption placard sit on the cream mat. That is the frame the
     # invisible-label regression shipped on.
-    #
-    # A B&W is required now: this reel renders three states, and nothing in the
-    # app reaches it without one (#164, #324). The reference recorded before
-    # that was a photograph of the two-photo path, which the product cannot
-    # produce.
-    video = slider_mod.generate_reel_slider(
-        raw_path=photos[0], edit_path=photos[1], bw_path=photos[2],
-        audio_path=silent_audio,
-        output_path=str(tmp_path / "slider.mp4"),
-        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
-        closing_frame_path=closing_graphic_bw, logo_path=LOGO)
-
-    frame = _frame_from_encoded_video(video, 0.6, tmp_path / "slider.png")
+    frame = _frame_from_encoded_video(slider_reel_video, 0.6, tmp_path / "slider.png")
     assert_shows_real_content(frame, "slider_reel")
     _, print_top, _, print_h = slider_mod.print_rect(PHOTO_SIZE)
     caption_top = print_top + print_h + slider_mod.PLACARD_TOP_GAP
@@ -951,6 +995,114 @@ def test_slider_reel_matches_its_reference_frame(photos, silent_audio,
          caption_top + slider_mod.PLACARD_BLOCK_H),
         "slider_reel")
     assert_matches_golden(frame, "slider_reel", tmp_path)
+
+
+#: Where the divider sits on `SLIDER_SWEEP_FRAME`, in canvas pixels.
+#:
+#: A recorded expectation, not a derived one: reading it out of the module's own
+#: easing would make the check agree with whatever curve was there, and it could
+#: never fail (L70).
+#:
+#: Measured from the encoded reel on 2026-09-02 at the ramp the sweep ships
+#: with. The curve #1073 replaced put it at 220.5 on the same frame, so the
+#: tolerance below has to sit well inside that 14px: it is 4, which is far
+#: wider than the encoder moves a 4px line and far narrower than an easing
+#: change moves it.
+SLIDER_DIVIDER_X_MID_SWEEP = 235
+
+
+#: How much of the print's height a column must be white for to be the divider.
+#:
+#: Not 1.0. The line is 4px wide over a checkerboard and the encoder softens it
+#: unevenly down its length, so the best column reads between 0.67 and 1.0 of
+#: the rows depending where in the sweep it is. Well clear of the photographs,
+#: whose brightest column reaches nothing like this.
+DIVIDER_COLUMN_SHARE = 0.4
+
+
+def _divider_x(frame: Image.Image) -> float:
+    """Where the sweep's divider is in a decoded frame, by finding the line.
+
+    The divider is the only near-full-height white column inside the print: the
+    mat around it is outside the print and the photographs are not white
+    anywhere close to top to bottom. Columns are scored by how much of the
+    print's height they are white for, and the answer is the intensity weighted
+    centroid of the ones that qualify, so a 4px line lands within a pixel
+    rather than on the nearest whole column.
+    """
+    left, top, width, height = slider_mod.print_rect(PHOTO_SIZE)
+    pixels = frame.load()
+    rows = range(top + height // 10, top + height - height // 10)
+
+    scores = []
+    for x in range(left, left + width):
+        white = sum(1 for y in rows if min(pixels[x, y]) >= 235)
+        scores.append((x, white / len(rows)))
+
+    peak = max(share for _, share in scores)
+    assert peak >= DIVIDER_COLUMN_SHARE, (
+        f"the whitest column inside the print is white for only {peak:.0%} of "
+        f"its height, so there is no divider here to measure and every reading "
+        f"taken from this frame would be noise")
+
+    line = [(x, share) for x, share in scores if share >= peak / 2]
+    return sum(x * share for x, share in line) / sum(share for _, share in line)
+
+
+@needs_ffmpeg
+@requires_mac_fonts
+def test_the_sliders_divider_is_where_its_easing_puts_it_mid_sweep(
+        slider_reel_video, tmp_path):
+    """The one check in this file that reads a reel while it is MOVING.
+
+    Every reference frame here is a hold, which is how #1073 shipped: the
+    slider's easing was rewritten from a curve that stepped 75% to one that does
+    not, and both of its references passed, because both were stills of a
+    stationary divider. The design fingerprint gate reads those references to
+    decide whether a template renders differently, so it had nothing that could
+    ever see a motion change.
+
+    It measures the divider's POSITION rather than comparing the frame against a
+    recorded PNG, and that is not a convenience. A mid-sweep frame is the one
+    place a pixel comparison cannot survive: a hard reveal edge travelling
+    through a near-Nyquist checkerboard is quantised differently by two ffmpeg
+    versions, so the reference recorded here at 8.1 moved 0.33% of its pixels on
+    CI's 8.1.2, against a limit of 0.01%, while every hold in this file matched.
+    The position is the thing that actually changes when the easing changes, and
+    16px of travel is far outside anything an encoder does.
+
+    A separate node from the hold above because the re-record path skips at its
+    first golden and would never reach a second assertion.
+    """
+    frame = _frame_from_encoded_video(
+        slider_reel_video, SLIDER_SWEEP_SAMPLE_S, tmp_path / "slider_sweep.png")
+    assert_shows_real_content(frame, "slider_reel_sweep")
+
+    x = _divider_x(frame)
+    assert x == pytest.approx(SLIDER_DIVIDER_X_MID_SWEEP, abs=4), (
+        f"the divider is at x={x:.1f} at {SLIDER_SWEEP_SAMPLE_S}s, not the "
+        f"{SLIDER_DIVIDER_X_MID_SWEEP} it was recorded at. The sweep now moves "
+        f"differently, which is a design change: bump reel_slider in "
+        f"MEDIA_DESIGN_VERSIONS and record this position again.")
+
+
+@needs_ffmpeg
+@requires_mac_fonts
+def test_the_divider_reading_can_tell_two_positions_apart(
+        slider_reel_video, tmp_path):
+    """The check above is worth nothing if `_divider_x` returns roughly the
+    same number wherever the divider is (L159). Two moments of the same sweep
+    have to read as two different places, by more than the tolerance."""
+    early = _divider_x(_frame_from_encoded_video(
+        slider_reel_video, _mid_frame_seconds(SLIDER_SWEEP_FRAME - 10),
+        tmp_path / "early.png"))
+    late = _divider_x(_frame_from_encoded_video(
+        slider_reel_video, _mid_frame_seconds(SLIDER_SWEEP_FRAME + 10),
+        tmp_path / "late.png"))
+    assert late - early > 30, (
+        f"the divider reads as {early:.1f} then {late:.1f} across 40% of the "
+        f"sweep, which is not enough separation for the check above to notice "
+        f"the easing changing")
 
 
 @needs_ffmpeg

@@ -36,6 +36,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from .design_tokens import DIVIDER_WHITE as DIVIDER_COLOR
+from .easing import trapezoid_ease
 from .generate_collage import crop_to_fill
 from .program_plate import (  # noqa: F401  (re-exported for callers and bands)
     CANVAS_W,
@@ -93,13 +94,24 @@ DEFAULT_LOGO_FOR_TESTS = (
     Path(__file__).resolve().parent.parent / "assets" / "logo-black.png")
 
 
+#: How much of a sweep the divider spends getting up to speed, and the same
+#: again slowing down. Much longer than the scroll's ramp, because a sweep is a
+#: deliberately dramatic move rather than a steady journey: at 3/7 the middle
+#: runs at 1.75 times the average, which is exactly what the curve this
+#: replaced cruised at. The drama was never the defect (#1073).
+EASE_RAMP = 3.0 / 7.0
+
+
 def ease_in_out(t: float) -> float:
-    """Dramatic ease: slow start, fast middle, slow end."""
-    if t < 0.3:
-        return (t / 0.3) ** 2 * 0.15
-    if t < 0.7:
-        return 0.15 + ((t - 0.3) / 0.4) * 0.7
-    return 0.85 + (1 - (1 - (t - 0.7) / 0.3) ** 2) * 0.15
+    """How far across the print the divider has swept at `t` in [0, 1].
+
+    Dramatic ease: slow start, fast middle, slow end. It replaced three
+    formulas stitched together whose speed stepped from 1.0 to 1.75 times the
+    average at t=0.3 and back down at t=0.7, a 75% jump between one frame and
+    the next. The same defect at 8% was visible to Dan in the scroll reel
+    (#1061), so at 75% it was considerably more so.
+    """
+    return trapezoid_ease(t, EASE_RAMP)
 
 
 def divider_x(rect: tuple[int, int, int, int], progress: float,

@@ -87,8 +87,13 @@ REFERENCE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_golden_frames.py::test_morph_reel_matches_its_reference_frame",
         "tests/test_golden_frames.py::"
         "test_the_closing_hold_matches_its_reference_frame[morph_reel_closing]"),
+    # A third reference, PART WAY THROUGH the first sweep (#1073). Both of the
+    # others are holds, so between them they could not see the easing change at
+    # all, and this door recorded a rewritten curve as an unchanged render.
     "reel_slider": (
         "tests/test_golden_frames.py::test_slider_reel_matches_its_reference_frame",
+        "tests/test_golden_frames.py::"
+        "test_the_sliders_divider_is_where_its_easing_puts_it_mid_sweep",
         "tests/test_golden_frames.py::"
         "test_the_closing_hold_matches_its_reference_frame[slider_reel_closing]"),
     # The three that had no reference of their own until #665. The cover is

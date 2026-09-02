@@ -186,6 +186,7 @@
     "test_reel_alt_text_describes_the_reel.py": 0.7000000000000002,
     "test_reel_audio_failure.py": 3.05,
     "test_reel_audio_fallback.py": 0.0,
+    "test_reel_easing.py": 0.02,
     "test_reel_layout_seed_is_required.py": 5.7,
     "test_reel_photo_selection_batching.py": 0.31,
     "test_reel_scroll_motion.py": 0.54,
@@ -990,6 +991,10 @@
     "test_reel_audio_fallback.py": {
       "run": "full-2026-09-02T04:01Z",
       "scale": 1.0
+    },
+    "test_reel_easing.py": {
+      "run": "partial-2026-09-02T21:37Z",
+      "scale": 0.871
     },
     "test_reel_layout_seed_is_required.py": {
       "run": "full-2026-09-02T04:01Z",
