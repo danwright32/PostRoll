@@ -29,6 +29,11 @@
       "entry": "a-checkout-read-seconds-after-the-last-is-skipped",
       "seconds": 147.25,
       "shard": "2/6"
+    },
+    {
+      "entry": "a-figure-sent-back-unchanged-keeps-its-provenance",
+      "seconds": 18.29,
+      "shard": ""
     }
   ],
   "kinds": {
@@ -67,6 +72,7 @@
     "a-grant-does-not-clear-an-unrelated-refusal": true,
     "a-half-claimed-pair-starts-nothing": true,
     "a-hand-check-step-names-files-that-exist": false,
+    "a-handle-that-changed-hands-is-not-merged-across": true,
     "a-hanging-gui-test-is-given-a-deadline": false,
     "a-job-at-another-commit-is-not-an-answer": false,
     "a-layout-clears-every-surface-it-is-seen-on": false,
@@ -78,6 +84,7 @@
     "a-merge-github-refused-is-not-a-merge": false,
     "a-missing-python-environment-is-refused-by-name": true,
     "a-missing-suite-count-record-is-refused": false,
+    "a-moved-figure-is-only-explained-when-the-mix-moved": true,
     "a-name-in-the-handle-field-is-not-a-handle": true,
     "a-negative-duration-is-never-a-reading": false,
     "a-one-clip-reel-is-not-encoded-fast": false,
@@ -522,6 +529,7 @@
     "the-working-mark-is-never-drawn-on-nothing": true,
     "title-card-type-is-drawn-light": false,
     "type-colour-is-never-drawn-raw": false,
+    "typing-a-number-does-not-erase-the-fetch": true,
     "unnamed-fill-through-a-ternary": false,
     "vacuous-assertion-caught": false,
     "vercel-plugin-stays-disabled": false,
@@ -671,6 +679,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "a-handle-that-changed-hands-is-not-merged-across": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.222
+    },
     "a-hanging-gui-test-is-given-a-deadline": {
       "run": "33415040753",
       "scale": 1.0
@@ -714,6 +726,10 @@
     "a-missing-suite-count-record-is-refused": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "a-moved-figure-is-only-explained-when-the-mix-moved": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.222
     },
     "a-name-in-the-handle-field-is-not-a-handle": {
       "run": "33415040753",
@@ -2491,6 +2507,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "typing-a-number-does-not-erase-the-fetch": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.222
+    },
     "unnamed-fill-through-a-ternary": {
       "run": "33415040753",
       "scale": 1.0
@@ -2559,6 +2579,7 @@
     "a-grant-does-not-clear-an-unrelated-refusal": 40.11,
     "a-half-claimed-pair-starts-nothing": 35.79,
     "a-hand-check-step-names-files-that-exist": 1.24,
+    "a-handle-that-changed-hands-is-not-merged-across": 23.94,
     "a-hanging-gui-test-is-given-a-deadline": 1.26,
     "a-job-at-another-commit-is-not-an-answer": 1.05,
     "a-layout-clears-every-surface-it-is-seen-on": 1.79,
@@ -2570,6 +2591,7 @@
     "a-merge-github-refused-is-not-a-merge": 0.68,
     "a-missing-python-environment-is-refused-by-name": 24.95,
     "a-missing-suite-count-record-is-refused": 0.62,
+    "a-moved-figure-is-only-explained-when-the-mix-moved": 20.71,
     "a-name-in-the-handle-field-is-not-a-handle": 19.04,
     "a-negative-duration-is-never-a-reading": 0.59,
     "a-one-clip-reel-is-not-encoded-fast": 5.98,
@@ -3014,6 +3036,7 @@
     "the-working-mark-is-never-drawn-on-nothing": 21.19,
     "title-card-type-is-drawn-light": 1.72,
     "type-colour-is-never-drawn-raw": 1.26,
+    "typing-a-number-does-not-erase-the-fetch": 22.07,
     "unnamed-fill-through-a-ternary": 0.85,
     "vacuous-assertion-caught": 0.7,
     "vercel-plugin-stays-disabled": 0.48,
