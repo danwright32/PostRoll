@@ -1,0 +1,8 @@
+{
+  "name": "the-profile-title-is-read-through-its-escaping",
+  "file": "postroll/ai/account_numbers.py",
+  "find": "    if found and f\"@{handle.lower()}\" in html.unescape(found.group(1)).lower():",
+  "replace": "    if found and f\"@{handle.lower()}\" in found.group(1).lower():",
+  "test": "tests/test_account_numbers.py::test_the_handle_in_the_title_is_read_through_its_html_escaping",
+  "breaks": "the page classifier looks for an at sign Instagram never sends, so it matches no real profile page at all and every account Meta refuses is reported as could_not_classify: 40 of 40 in the live population, with every invented fixture still passing (#1002, L48)"
+}

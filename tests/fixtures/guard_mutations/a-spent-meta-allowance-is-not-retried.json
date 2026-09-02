@@ -1,0 +1,8 @@
+{
+  "name": "a-spent-meta-allowance-is-not-retried",
+  "file": "postroll/ai/account_numbers.py",
+  "find": "ALLOWANCE_SPENT = 100",
+  "replace": "ALLOWANCE_SPENT = 100_000",
+  "test": "tests/test_account_numbers.py::test_being_over_the_hourly_allowance_is_not_retried_at_all",
+  "breaks": "a rate limit that cannot clear inside a rolling hour is retried three times per account anyway, spending more of the exhausted allowance to be told the same thing: 246 pointless calls in the sweep that found this (#1002)"
+}
