@@ -2,7 +2,7 @@
   "name": "a-divider-drag-respects-the-cell-floor",
   "file": "PostRollApp/Sources/Views/CaptionReview/CollageDividers.swift",
   "find": "        let maxPos   = boundary + (below.map { $0.h }.min()! - minCellPx)",
-  "replace": "        let maxPos   = belowTop + (below.map { $0.h }.min()! - minCellPx) - gap",
+  "replace": "        let maxPos   = belowTop + (below.map { $0.h }.min()! - minCellPx) - 8",
   "test": "PostRollTests/CollageDividerClampTests/testNoDragInEitherDirectionEverProducesACellUnderTheFloor",
-  "breaks": "the drag ceiling is measured from the row below's top and offset by a hardcoded 8px gap rather than this divider's real one, so it overshoots by however much wider the real gap is. On the 90px branded strip that is 82px, and it leaves the shortest cell below at a negative height, which is then persisted to the override and handed to the export renderer (#965)"
+  "breaks": "the drag ceiling is measured from the row below's top and offset by a hardcoded 8px gap rather than this divider's real one (8 spelled out since #969 removed the constant it used to read), so it overshoots by however much wider the real gap is. On the 90px branded strip that is 82px, and it leaves the shortest cell below at a negative height, which is then persisted to the override and handed to the export renderer (#965)"
 }
