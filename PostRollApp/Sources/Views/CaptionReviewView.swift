@@ -399,8 +399,8 @@ struct CaptionReviewView: View {
                             thursdayEditorFailure: day == .thursday ? graphics.thursdayEditorFailure(event.id) : nil,
                             isCoverRegenerating: graphics.coverRegeneratingDays(event.id).contains(day),
                             coverRegenStartedAt: graphics.coverStartedAt(day, for: event.id),
-                            onRegenerateCover: (day == .thursday || day == .friday) ? { regenerateCover(day: day) } : nil,
-                            onChooseCoverOverride: (day == .thursday || day == .friday) ? {
+                            onRegenerateCover: day == .friday ? { regenerateCover(day: day) } : nil,
+                            onChooseCoverOverride: day == .friday ? {
                                 let panel = NSOpenPanel()
                                 panel.title = "Choose a cover photo"
                                 panel.allowedContentTypes = [.image]

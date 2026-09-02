@@ -43,7 +43,6 @@ from typing import Any
 from ..media.generate_story import generate_story
 from .select_cover_photo import (
     select_cover_photo,
-    _cover_candidates_from_photos,
     _cover_candidates_from_friday_plan,
 )
 
@@ -66,15 +65,19 @@ def generate_cover(
 ) -> dict[str, Any]:
     result: dict[str, Any] = {}
 
+    # Named, and BEFORE the override branch (#961). Thursday no longer has a
+    # cover at all, and every Thursday generated before that still carries a
+    # cover_source in events.json, so the override path is exactly the one a
+    # stale caller reaches. Falling through it would write a story composite
+    # into a day whose export is not supposed to have one, quietly and
+    # successfully.
+    if day_name == "thursday":
+        raise ValueError(
+            "thursday has no cover: the slot was removed in #961 and Instagram "
+            "picks its own grid thumbnail from a frame of the reel")
+
     if override_source:
         source_path = override_source
-    elif day_name == "thursday":
-        candidates = _cover_candidates_from_photos(day_info.get("photos", []))
-        if not candidates:
-            raise ValueError("no photos to build cover candidates from")
-        pick = select_cover_photo(candidates)
-        source_path = pick["path"]
-        result["cover_pick"] = {"source_path": source_path, "rationale": pick["rationale"]}
     elif day_name == "friday":
         selections = ((day_info.get("clips_plan") or {}).get("selections")) or []
         if not selections:

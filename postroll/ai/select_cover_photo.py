@@ -33,7 +33,6 @@ from pathlib import Path
 from .claude_client import ClaudeError, run_json_prompt
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 from .select_reel_clips import _extract_representative_frames
-from .select_reel_photos import select_reel_photos, DEFAULT_MAX_REEL_PHOTOS
 
 # 1-2 frames per selected clip so Claude can pick a still-worthy moment
 # without re-sending every frame Stage 2 already saw; only the clips that
@@ -86,17 +85,6 @@ def apply_cover_pick(data: object, candidates: list[dict]) -> dict:
         rationale = ""
 
     return {"index": idx, "path": candidates[idx]["path"], "rationale": rationale}
-
-
-def _cover_candidates_from_photos(photos: list[str]) -> list[dict]:
-    """Thursday's cover candidates: the day's own photos, or (above
-    DEFAULT_MAX_REEL_PHOTOS) the same representative subset already used to
-    cap Claude's image budget elsewhere in this codebase, reused rather
-    than a second cap invented for this feature."""
-    if len(photos) > DEFAULT_MAX_REEL_PHOTOS:
-        sample = select_reel_photos(photos, count=DEFAULT_MAX_REEL_PHOTOS)
-        return [{"path": str(p)} for p in sample]
-    return [{"path": p} for p in photos]
 
 
 def _cover_candidates_from_friday_plan(selections: list[dict], tmp_dir: Path) -> list[dict]:

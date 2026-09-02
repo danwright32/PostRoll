@@ -1464,7 +1464,11 @@ actor PythonBridge {
         guard let pd = event.days[day.rawValue] else { return nil }
         guard let coverPath = event.previewMediaPaths[day.rawValue]?["cover"] else { return nil }
 
-        var dayInfo: [String: Any] = ["photos": pd.photoPaths.map { $0.path }]
+        // No `photos` (#961). They were Thursday's cover candidates, and
+        // Thursday has no cover any more, so `generate_cover` reads nothing out
+        // of them. Friday's candidates are frames re-extracted from
+        // `clips_plan`, which is what this still sends.
+        var dayInfo: [String: Any] = [:]
         if day == .friday, let plan = pd.fridayClipPlan, !plan.selections.isEmpty {
             dayInfo["clips_plan"] = [
                 "selections": plan.selections.map { sel -> [String: Any] in
