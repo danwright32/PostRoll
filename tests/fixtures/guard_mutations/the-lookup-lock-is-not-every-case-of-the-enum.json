@@ -1,0 +1,8 @@
+{
+  "name": "the-lookup-lock-is-not-every-case-of-the-enum",
+  "file": "PostRollApp/Sources/Services/PerformerLookupManager.swift",
+  "find": "        Self.contendingKinds.contains { isRunning($0, for: id) }",
+  "replace": "        Kind.allCases.contains { isRunning($0, for: id) }",
+  "test": "PostRollTests/PerformerLookupManagerTests/testTheLockIsNotBuiltFromEveryCaseOfTheEnum",
+  "breaks": "every kind added to the lookup enum is enrolled in the shared exclusion lock without anybody deciding, so the account numbers fetch would disable both buttons Dan did not press for up to 300 seconds with nothing on screen connecting the two (#1049)"
+}
