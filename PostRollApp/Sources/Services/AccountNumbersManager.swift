@@ -66,6 +66,13 @@ final class AccountNumbersManager {
     private var pending: Task<Void, Never>?
     private var running = false
 
+    /// Whether a fetch is going, or one is waiting for the list to settle.
+    ///
+    /// Both, because a settle that has been queued and not yet fired is work
+    /// this owner started: reporting only the running half would say nothing is
+    /// happening for the three seconds when something is about to.
+    var hasWorkInFlight: Bool { running || pending?.isCancelled == false }
+
     init(book: AccountBook = .shared) {
         self.book = book
     }
@@ -129,5 +136,18 @@ final class AccountNumbersManager {
         "Audience figures could not be fetched, so the collaborator ranking is "
         + "running on the numbers it already had. "
         + ProgramNotesMerge.failureMessage(error)
+    }
+}
+
+/// Asked whenever PostRoll is about to quit or install an update (#862).
+///
+/// Reports honestly that it is running, and the phrase says what losing it
+/// costs, which is nothing: every record it would have written stays
+/// non terminal, so the next time those handles settle it asks again. That is
+/// worth saying rather than leaving Dan to weigh an unexplained "still
+/// running" against closing his laptop.
+extension AccountNumbersManager: BackgroundWork {
+    var workPhrase: String {
+        "audience figures are still being fetched, and nothing is lost if they are not"
     }
 }

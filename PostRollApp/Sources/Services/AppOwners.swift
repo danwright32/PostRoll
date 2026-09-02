@@ -107,7 +107,8 @@ extension View {
             .environment(owners.reflow)
             .environment(owners.captionWork)
             .environment(owners.collageLayouts)
-            // What is running, derived from the nine above rather than named
+            .environment(owners.accountNumbers)
+            // What is running, derived from the ten above rather than named
             // again by whoever needs it (#862).
             .environment(\.workInFlight, owners.workInFlight)
     }
