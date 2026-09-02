@@ -245,13 +245,17 @@ final class AccountNumbersManagerTests: XCTestCase {
             instagramID: nil, reels: nil, feed: nil, detail: "", allowanceSpent: spent)
     }
 
-    func testARunThatWasMostlyRefusedSaysTheAllowanceIsGone() async {
+    func testARunThatWasMostlyRefusedSaysTheAllowanceIsGone() async throws {
         let m = manager { handles in handles.map { Self.limited($0) } }
 
         m.handlesSettled(["a", "b", "c", "d"], asOf: now)
         await settle()
 
-        let note = try! XCTUnwrap(m.failureNote)
+        // `try` rather than `try!`. A forced unwrap turns this assertion
+        // failing into a TRAP, which kills the process and reports zero tests
+        // executed rather than one named failure, and a run that executed
+        // nothing is not a run that passed (L98).
+        let note = try XCTUnwrap(m.failureNote)
         XCTAssertTrue(note.lowercased().contains("allowance")
                       || note.lowercased().contains("limit"), note)
         XCTAssertTrue(note.lowercased().contains("hour"),
