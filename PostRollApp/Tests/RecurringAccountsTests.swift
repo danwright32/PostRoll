@@ -152,7 +152,7 @@ final class RecurringAccountsTests: XCTestCase {
                       event("b", eventHandles: "carnegiehall")]
 
         let items = RecurringAccounts.needingAttention(
-            events: events, stats: { _ in nil }, asOf: Date())
+            events: events, taggedOn: events[0], stats: { _ in nil }, asOf: Date())
 
         XCTAssertEqual(items.map(\.handle), ["carnegiehall"])
         XCTAssertEqual(items.first?.eventCount, 2)
@@ -163,7 +163,8 @@ final class RecurringAccountsTests: XCTestCase {
         let events = [event("a", eventHandles: "dciny"), event("b", eventHandles: "dciny")]
 
         let items = RecurringAccounts.needingAttention(
-            events: events, stats: { _ in self.counted(400) }, asOf: self.now)
+            events: events, taggedOn: events[0], stats: { _ in self.counted(400) },
+            asOf: self.now)
 
         XCTAssertEqual(items.map(\.handle), ["dciny"])
         guard case .stale(let daysOld)? = items.first?.need else {
@@ -176,7 +177,8 @@ final class RecurringAccountsTests: XCTestCase {
         let events = [event("a", eventHandles: "dciny"), event("b", eventHandles: "dciny")]
 
         XCTAssertEqual(RecurringAccounts.needingAttention(
-            events: events, stats: { _ in self.counted(10) }, asOf: self.now), [])
+            events: events, taggedOn: events[0], stats: { _ in self.counted(10) },
+            asOf: self.now), [])
     }
 
     func testAOneOffWithNoNumbersIsNotSurfaced() {
@@ -185,14 +187,15 @@ final class RecurringAccountsTests: XCTestCase {
         let events = [event("a", dayHandles: ["@once"])]
 
         XCTAssertEqual(RecurringAccounts.needingAttention(
-            events: events, stats: { _ in nil }, asOf: Date()), [])
+            events: events, taggedOn: events[0], stats: { _ in nil }, asOf: Date()), [])
     }
 
     func testAOneOffWithStaleNumbersIsNotSurfacedEither() {
         let events = [event("a", dayHandles: ["@once"])]
 
         XCTAssertEqual(RecurringAccounts.needingAttention(
-            events: events, stats: { _ in self.counted(400) }, asOf: self.now), [])
+            events: events, taggedOn: events[0], stats: { _ in self.counted(400) },
+            asOf: self.now), [])
     }
 
     func testTheMostLoadBearingAccountComesFirst() {
@@ -203,15 +206,70 @@ final class RecurringAccountsTests: XCTestCase {
                       event("c", eventHandles: "carnegiehall")]
 
         let items = RecurringAccounts.needingAttention(
-            events: events, stats: { _ in nil }, asOf: Date())
+            events: events, taggedOn: events[0], stats: { _ in nil }, asOf: Date())
 
         XCTAssertEqual(items.map(\.handle), ["carnegiehall", "dciny"])
         XCTAssertEqual(items.map(\.eventCount), [3, 2])
     }
 
-    func testNoEventsMeansNothingToSay() {
+    func testAnEventInALibraryOfOneHasNothingThatRecurs() {
+        let only = event("a", eventHandles: "carnegiehall")
         XCTAssertEqual(RecurringAccounts.needingAttention(
-            events: [], stats: { _ in nil }, asOf: Date()), [])
+            events: [only], taggedOn: only, stats: { _ in nil }, asOf: Date()), [])
+    }
+
+    // MARK: - The banner is about the event on screen (#1012, #1013)
+
+    /// Dan, 2026-09-01, looking at the banner on a church event: "why is it
+    /// showing on events that don't include those accounts? like if it's at a
+    /// random church why is it mentioning carnegie hall?"
+    ///
+    /// It was computed across the whole library and rendered on a per-event
+    /// screen, between two banners that genuinely are about the event, so it
+    /// inherited the page's scope by position and read as a claim about a
+    /// church that has never tagged Carnegie Hall.
+    ///
+    /// Scoping it to the event fixes that at the root and costs no coverage: an
+    /// account that recurs is on several events by definition, so it is still
+    /// asked about, on the events it is actually on.
+
+    func testAnAccountThatRecursElsewhereIsNotNamedOnAnEventItIsNotOn() {
+        let carnegie = [event("a", eventHandles: "carnegiehall"),
+                        event("b", eventHandles: "carnegiehall")]
+        let church = event("church", eventHandles: "stmarks")
+
+        XCTAssertEqual(RecurringAccounts.needingAttention(
+            events: carnegie + [church], taggedOn: church,
+            stats: { _ in nil }, asOf: Date()), [],
+            "the church event tags nobody who recurs, so it has nothing to ask about")
+    }
+
+    func testAnAccountTaggedOnThisEventThatRecursIsStillNamed() {
+        // The positive control (L159). Without it the refusal above is
+        // satisfied by a scope that names nobody anywhere.
+        let carnegie = [event("a", eventHandles: "carnegiehall"),
+                        event("b", eventHandles: "carnegiehall")]
+        let church = event("church", eventHandles: "stmarks")
+
+        let items = RecurringAccounts.needingAttention(
+            events: carnegie + [church], taggedOn: carnegie[0],
+            stats: { _ in nil }, asOf: Date())
+
+        XCTAssertEqual(items.map(\.handle), ["carnegiehall"])
+        XCTAssertEqual(items.first?.eventCount, 2,
+                       "recurrence is still counted across the whole library, because "
+                       + "that is what makes an account one that keeps coming back")
+    }
+
+    func testAnAccountOnThisEventOnlyOnceIsStillNotNamed() {
+        // Scoping to the event must not turn every tag on it into an ask. The
+        // constraint that shapes the whole feature is unchanged: Dan tags most
+        // people once and never again.
+        let church = event("church", eventHandles: "stmarks")
+
+        XCTAssertEqual(RecurringAccounts.needingAttention(
+            events: [church, event("other", eventHandles: "someoneelse")],
+            taggedOn: church, stats: { _ in nil }, asOf: Date()), [])
     }
 
     // MARK: - What Dan is told
@@ -220,10 +278,26 @@ final class RecurringAccountsTests: XCTestCase {
         let events = [event("a", eventHandles: "carnegiehall"),
                       event("b", eventHandles: "carnegiehall")]
         let items = RecurringAccounts.needingAttention(
-            events: events, stats: { _ in nil }, asOf: Date())
+            events: events, taggedOn: events[0], stats: { _ in nil }, asOf: Date())
 
         let summary = try XCTUnwrap(RecurringAccounts.summary(items))
         XCTAssertTrue(summary.contains("carnegiehall"), summary)
+    }
+
+    func testTheSummarySaysTheseAccountsAreOnThisEvent() throws {
+        // The banner sits between the export description above it and the day
+        // list below it, both of which are about the event, so a sentence with
+        // no scope in it is read as one more claim about the event (L287). It
+        // now IS about the event, and says so, so the two agree.
+        let items = [RecurringAccounts.Attention(
+            handle: "carnegiehall", eventCount: 6, need: .neverCounted)]
+
+        let summary = try XCTUnwrap(RecurringAccounts.summary(items))
+
+        XCTAssertTrue(summary.lowercased().contains("this event"), summary)
+        XCTAssertTrue(summary.contains("carnegiehall"), summary)
+        XCTAssertFalse(summary.contains("again and again"),
+                       "the old wording described a library-wide set: \(summary)")
     }
 
     func testTheSummaryKeepsTheTwoCausesApart() throws {

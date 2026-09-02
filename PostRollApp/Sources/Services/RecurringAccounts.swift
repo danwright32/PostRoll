@@ -71,16 +71,45 @@ enum RecurringAccounts {
         return counts
     }
 
-    /// Recurring accounts whose figures need attention, most load-bearing first.
+    /// Recurring accounts TAGGED ON ONE EVENT whose figures need attention,
+    /// most load-bearing first.
+    ///
+    /// Two scopes, deliberately different, and the difference is the whole
+    /// point (#1012, #1013). Recurrence is counted across `events`, the whole
+    /// library, because appearing on several events is what makes an account
+    /// one that keeps coming back. The ANSWER is then narrowed to the accounts
+    /// `event` actually tags, because this is rendered on that event's export
+    /// screen, between two banners that genuinely are about it.
+    ///
+    /// Dan, 2026-09-01: "why is it showing on events that don't include those
+    /// accounts? like if it's at a random church why is it mentioning carnegie
+    /// hall?" It was library-wide, and nothing in the sentence said so, so it
+    /// inherited the page's scope by position and read as a claim about a
+    /// church that has never tagged that account.
+    ///
+    /// Narrowing costs no coverage. An account with `minimumEvents` or more
+    /// appearances is on that many events by definition, so it is still raised,
+    /// on the events it is on, where the ask makes sense and the way in is
+    /// beside it.
+    ///
+    /// `event` is required rather than optional. A default standing for "the
+    /// whole library" would let a caller that forgot it silently get the
+    /// behaviour this exists to remove, and a wrong scope reads as a working
+    /// banner (L168).
     ///
     /// `stats` is a lookup rather than the book itself, so this can be exercised
     /// without a file on disk and called from wherever the figures have already
     /// been copied off the main actor.
     static func needingAttention(events: [Event],
+                                 taggedOn event: Event,
                                  stats: (String) -> AccountStats?,
                                  asOf now: Date) -> [Attention] {
+        // The same reader the counts are built from, so an account can never be
+        // counted as recurring by one spelling and missed by another (L16).
+        let onThisEvent = Set(CaptionBlocks.accountsTagged(event: event).map(AccountBook.key))
         var out: [Attention] = []
-        for (key, count) in eventCounts(events: events) where count >= minimumEvents {
+        for (key, count) in eventCounts(events: events)
+        where count >= minimumEvents && onThisEvent.contains(key) {
             let need: Need
             switch stats(key)?.freshness(asOf: now) ?? .unknown {
             case .unknown:            need = .neverCounted
@@ -103,20 +132,29 @@ enum RecurringAccounts {
     /// Names the accounts rather than only counting them, because a message that
     /// says how many without saying which leaves him nowhere to go (L80). Capped,
     /// so a long list does not become a paragraph.
+    ///
+    /// The scope is stated ONCE, at the front, so it governs both halves (#1012).
+    /// The old wording, "tagged again and again", described a library-wide set
+    /// while sitting on one event's screen, and a sentence with no scope in it
+    /// is read as belonging to whatever surrounds it (L287). Putting the scope
+    /// in the second clause instead would leave the first half of a two part
+    /// message unscoped, which is the same defect in a smaller form.
+    static let scopeLine = "Tagged on this event and coming up on your others: "
+
     static func summary(_ items: [Attention]) -> String? {
         guard !items.isEmpty else { return nil }
         let never = items.filter { $0.need == .neverCounted }
         let stale = items.filter { $0.need != .neverCounted }
         var parts: [String] = []
         if !never.isEmpty {
-            parts.append("\(list(never)) \(never.count == 1 ? "is" : "are") tagged again "
-                       + "and again with no numbers yet")
+            parts.append("\(list(never)) \(never.count == 1 ? "has" : "have") "
+                       + "no numbers yet")
         }
         if !stale.isEmpty {
             parts.append("\(list(stale)) \(stale.count == 1 ? "has numbers" : "have numbers") "
                        + "more than six months old")
         }
-        return parts.joined(separator: ", and ") + "."
+        return scopeLine + parts.joined(separator: ", and ") + "."
     }
 
     /// How many of the named accounts the message itself carries a way in for.
