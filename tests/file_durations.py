@@ -172,11 +172,27 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: global floor over a distribution with no wide gap left is the wrong shape,
 #: and the file's own history is the evidence.
 #:
+#: 6.9% later the SAME DAY, on a seventh recording forced by #1002 adding a
+#: test file. `test_generate_media_friday_clips` came back at 5.17%, down from
+#: 5.97% an hour earlier on the same machine with nothing about it changed,
+#: and that was enough to close the gap the 4.6% floor sat in.
+#:
+#: The widest gap that now fits the band is 5.17% to 9.24%
+#: (`test_frame_legibility`), a factor of 1.79, and 6.91% is its geometric
+#: middle, rounded to 6.9%. The set is four files again and that file is out of
+#: it again, for the eighth time.
+#:
+#: This is the change the note above said should not be made, and it is made
+#: anyway, deliberately and once: the alternative was to hold an unrelated
+#: feature behind a redesign of the test runner. The redesign is #1196, this
+#: note is its provenance, and the next person to arrive here should read that
+#: issue rather than reach for a ninth number.
+#:
 #: `test_fast_subset_stays_honest.py` holds the gap open: a file measured close
 #: to this turns it red and asks for the floor to be re-chosen against the
 #: distribution as it is then, rather than letting it silently drift into the
 #: dense part where a small change moves several files at once.
-EXPENSIVE_SHARE = 0.046
+EXPENSIVE_SHARE = 0.069
 
 #: How much clear air the floor needs either side of it, as a multiplier.
 #:
