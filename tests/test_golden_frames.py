@@ -146,6 +146,33 @@ WORST_UNCHANGED_ON_CI = 26 / (1080 * 1920)
 MEASURED_AGAINST_FFMPEG = "8.1.2_1"
 
 
+#: The ffmpeg MAJOR versions these frames have actually been measured against.
+#:
+#: 8 is where `MAX_CHANGED_FRACTION` was chosen, from the 26 pixels above.
+#:
+#: 9 was added on 2026-09-02, when Homebrew's ffmpeg went to 9.0.1 on the runner
+#: image between two runs an hour apart and the check below caught it with
+#: nothing committed in between, which is what it was written for. What the new
+#: major did to the frames, read off the drift readings run 33687774609
+#: published that day: NOTHING. All eleven reference frames reported
+#: `0 of 2073600 px, 0.0000%`, a whole major version from where they were
+#: recorded, and the run's only failure was this check refusing to vouch for
+#: them.
+#:
+#: So the LIMIT does not move. A reading of zero cannot re-choose one, for the
+#: reason `WORST_UNCHANGED_ON_CI` gives: zero cannot be multiplied into a
+#: headroom. 8.1 against 8.1.2_1 is still the only cross-build drift this repo
+#: has ever measured, and 26 pixels is still what the limit has to clear. What
+#: moves is only the list of encoders there is evidence for, and a major with no
+#: evidence is still refused, which is what
+#: `test_an_unmeasured_ffmpeg_major_is_still_refused` holds open.
+#:
+#: Both majors have to stay listed. Dan's Mac and CI do not upgrade together:
+#: the runner was on 9.0.1 the same afternoon this machine was on 8.1, and
+#: dropping 8 would fail every local run rather than protect anything.
+MEASURED_FFMPEG_MAJORS = (8, 9)
+
+
 def ffmpeg_major(version: str) -> int | None:
     """The major version of an ffmpeg version string, or None if it has none.
 
@@ -369,7 +396,12 @@ def test_the_frames_are_compared_by_the_ffmpeg_the_limit_was_measured_against():
     Judged on the MAJOR version alone, which is what the evidence supports.
     The 26 pixels are already the gap between 8.1 on Dan's Mac and 8.1.2_1 on
     the runner, so a patch release is inside what the tolerance was measured
-    across; a major release is not, and nothing here has ever measured one.
+    across.
+
+    Against the majors there are readings for, rather than against the single
+    build the limit was chosen from. Two now qualify: 8, where it was chosen,
+    and 9, which run 33687774609 measured at zero drift on all eleven frames on
+    2026-09-02. Any other major is still refused.
 
     Gated the same way the comparisons are, so it runs exactly where they run
     and skips where they skip. The Linux leg carries ffmpeg 6 and renders none
@@ -395,16 +427,23 @@ def test_the_frames_are_compared_by_the_ffmpeg_the_limit_was_measured_against():
         "how to read, so nothing can say whether the reading "
         "MAX_CHANGED_FRACTION rests on applies to this run. Teach "
         "`ffmpeg_major` the new spelling rather than widening the comparison.")
-    assert here == measured, (
-        f"these frames are being compared by ffmpeg {running} and the reading "
-        f"MAX_CHANGED_FRACTION was chosen from was taken against "
-        f"{MEASURED_AGAINST_FFMPEG}. A major version apart is outside anything "
-        "measured here, and at 8x of headroom the limit is tight enough that "
-        "a different encoder fails all ten frames at once, which reads as a "
-        "design regression rather than as a new toolchain.\n"
-        "  This run publishes its own drift readings; take the new numbers from "
-        "them, re-choose MAX_CHANGED_FRACTION from WORST_UNCHANGED_ON_CI and "
-        "SMALLEST_REAL_MOVE, and record the version here.")
+    assert measured in MEASURED_FFMPEG_MAJORS, (
+        f"MEASURED_AGAINST_FFMPEG is {MEASURED_AGAINST_FFMPEG!r}, whose major "
+        f"is not in MEASURED_FFMPEG_MAJORS {MEASURED_FFMPEG_MAJORS}. The build "
+        f"the limit was chosen from has to be one of the majors there is "
+        f"evidence for, or the two records are describing different encoders.")
+    assert here in MEASURED_FFMPEG_MAJORS, (
+        f"these frames are being compared by ffmpeg {running}, and the majors "
+        f"they have been measured against are {MEASURED_FFMPEG_MAJORS}. A major "
+        "nothing here has a reading for is outside everything measured, and at "
+        "8x of headroom the limit is tight enough that a different encoder can "
+        "fail all ten frames at once, which reads as a design regression rather "
+        "than as a new toolchain.\n"
+        "  This run publishes its own drift readings. If every frame reads "
+        "0.0000%, this major renders them identically and belongs in "
+        "MEASURED_FFMPEG_MAJORS with that run named beside it. If they moved, "
+        "re-choose MAX_CHANGED_FRACTION from WORST_UNCHANGED_ON_CI and "
+        "SMALLEST_REAL_MOVE first.")
 
 
 # ── what the frame must actually show ─────────────────────────────────────────

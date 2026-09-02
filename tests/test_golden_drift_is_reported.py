@@ -673,6 +673,48 @@ def test_the_two_readings_are_far_enough_apart_to_put_a_limit_between():
 from test_golden_frames import MEASURED_AGAINST_FFMPEG, ffmpeg_note  # noqa: E402
 
 
+def test_an_unmeasured_ffmpeg_major_is_still_refused():
+    """The guard was widened, on 2026-09-02, from one major to the majors there
+    are readings for, because the runner went to ffmpeg 9 while this machine
+    stayed on 8 and a single value cannot be true in both places (#1073).
+
+    Widening a guard is how one stops guarding. This drives it with a major
+    nothing has ever measured and requires it to refuse, so the list is a record
+    of evidence rather than a place versions get added to make a run go green.
+    """
+    import test_golden_frames as frames
+
+    monkey = pytest.MonkeyPatch()
+    try:
+        monkey.setattr(frames, "ffmpeg_versions", lambda: {"ffmpeg": "42.0.1"})
+        with pytest.raises(AssertionError) as refusal:
+            frames.test_the_frames_are_compared_by_the_ffmpeg_the_limit_was_measured_against()
+    finally:
+        monkey.undo()
+
+    assert "42.0.1" in str(refusal.value), str(refusal.value)
+    assert str(frames.MEASURED_FFMPEG_MAJORS) in str(refusal.value), str(refusal.value)
+
+
+def test_every_measured_major_is_actually_accepted():
+    """The refusal above is satisfied by a guard that refuses EVERYTHING (L159).
+
+    Each major in the list has a run behind it, so each has to pass, and the
+    build the limit was chosen from has to be one of them.
+    """
+    import test_golden_frames as frames
+
+    assert frames.ffmpeg_major(MEASURED_AGAINST_FFMPEG) in frames.MEASURED_FFMPEG_MAJORS
+
+    monkey = pytest.MonkeyPatch()
+    try:
+        for major in frames.MEASURED_FFMPEG_MAJORS:
+            monkey.setattr(frames, "ffmpeg_versions", lambda m=major: {"ffmpeg": f"{m}.0.1"})
+            frames.test_the_frames_are_compared_by_the_ffmpeg_the_limit_was_measured_against()
+    finally:
+        monkey.undo()
+
+
 def test_the_note_reads_a_patch_level_difference_the_major_check_cannot_see():
     """The whole of #817 in one assertion.
 
