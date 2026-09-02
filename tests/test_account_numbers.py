@@ -500,10 +500,20 @@ def test_a_measured_account_never_reports_a_page_sourced_follower_count():
     assert figures.followers_from_page is False
 
 
+#: A follower count, on a page that must never be scraped anyway.
+#:
+#: Every one of these carries one. The first version of the test below used
+#: pages with no description at all, so nothing could have been read from them
+#: whether the rule existed or not, and the mutation sweep reported it SURVIVED:
+#: a negative assertion satisfied by a fixture in which the thing could not
+#: happen proves nothing (L159, L165).
+COUNTED = '<meta property="og:description" content="725 Followers, 1 Following, 2 Posts" />'
+
+
 @pytest.mark.parametrize("page", [
-    Response(status=429, headers={}, body=""),
-    wall_page(),
-    Response(status=500, headers={}, body=""),
+    Response(status=429, headers={}, body=COUNTED),
+    Response(status=200, headers={}, body="<html>nothing</html>" + COUNTED),
+    Response(status=500, headers={}, body=COUNTED),
 ])
 def test_a_transient_failure_never_becomes_a_scrape(page):
     # The rule the issue is most explicit about. A page that could not be read
@@ -512,7 +522,9 @@ def test_a_transient_failure_never_becomes_a_scrape(page):
     figures, _, _ = run("aperson", [graph_error(110), page])
 
     assert figures.outcome is Outcome.COULD_NOT_CLASSIFY
-    assert figures.followers is None
+    assert figures.followers is None, (
+        "a page that could not be classified was scraped anyway, and it had a "
+        "follower count sitting right there to take")
     assert figures.followers_from_page is False
 
 
