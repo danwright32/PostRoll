@@ -12,8 +12,13 @@ import CoreGraphics
 enum CollageGeometry {
     static let canvasSize = CGSize(width: 1080, height: 1920)
 
-    /// Gaps up to this many canvas px are real cell dividers (~8px); anything
-    /// wider is the ~90px branded centre strip and is left untouched.
+    /// Gaps up to this many canvas px are real cell dividers; anything wider is
+    /// the 90px branded centre strip and is left untouched.
+    ///
+    /// The ordinary gutter is `GUTTER = 16` in postroll/media/design_tokens.py,
+    /// so this sits exactly on it and there is no margin: a wider gutter would
+    /// make every ordinary boundary read as the strip that must never be
+    /// dragged. `tests/fixtures/collage_gutter.json` holds the pair together.
     static let normalGapLimit = 16
 
     static let blurRadius: CGFloat = 24

@@ -1,0 +1,219 @@
+{
+  "_comment": "Written by tools/record_collage_gutter.py. The gutter between collage tiles, stated once: Python bakes it into the base PNG and the Swift editor computes divider positions and drag clamps over the same layout. The cells are what plan_collage_cells draws.",
+  "gutter_px": 16,
+  "strip_h_px": 90,
+  "min_cell_px": 80,
+  "cases": [
+    {
+      "name": "two over two",
+      "top_pattern": [
+        2
+      ],
+      "bottom_pattern": [
+        2
+      ],
+      "photo_ratio": 1.5,
+      "seed": 7,
+      "strip_y": 915,
+      "cells": [
+        {
+          "photo_path": "/photos/0.jpg",
+          "x": 48,
+          "y": 48,
+          "w": 561,
+          "h": 867
+        },
+        {
+          "photo_path": "/photos/1.jpg",
+          "x": 625,
+          "y": 48,
+          "w": 407,
+          "h": 867
+        },
+        {
+          "photo_path": "/photos/2.jpg",
+          "x": 48,
+          "y": 1005,
+          "w": 425,
+          "h": 867
+        },
+        {
+          "photo_path": "/photos/3.jpg",
+          "x": 489,
+          "y": 1005,
+          "w": 543,
+          "h": 867
+        }
+      ]
+    },
+    {
+      "name": "two over three",
+      "top_pattern": [
+        2
+      ],
+      "bottom_pattern": [
+        3
+      ],
+      "photo_ratio": 1.5,
+      "seed": 7,
+      "strip_y": 1095,
+      "cells": [
+        {
+          "photo_path": "/photos/0.jpg",
+          "x": 48,
+          "y": 48,
+          "w": 561,
+          "h": 1047
+        },
+        {
+          "photo_path": "/photos/1.jpg",
+          "x": 625,
+          "y": 48,
+          "w": 407,
+          "h": 1047
+        },
+        {
+          "photo_path": "/photos/2.jpg",
+          "x": 48,
+          "y": 1185,
+          "w": 285,
+          "h": 687
+        },
+        {
+          "photo_path": "/photos/3.jpg",
+          "x": 349,
+          "y": 1185,
+          "w": 380,
+          "h": 687
+        },
+        {
+          "photo_path": "/photos/4.jpg",
+          "x": 745,
+          "y": 1185,
+          "w": 287,
+          "h": 687
+        }
+      ]
+    },
+    {
+      "name": "three over three",
+      "top_pattern": [
+        3
+      ],
+      "bottom_pattern": [
+        3
+      ],
+      "photo_ratio": 1.5,
+      "seed": 7,
+      "strip_y": 914,
+      "cells": [
+        {
+          "photo_path": "/photos/0.jpg",
+          "x": 48,
+          "y": 48,
+          "w": 285,
+          "h": 866
+        },
+        {
+          "photo_path": "/photos/1.jpg",
+          "x": 349,
+          "y": 48,
+          "w": 285,
+          "h": 866
+        },
+        {
+          "photo_path": "/photos/2.jpg",
+          "x": 650,
+          "y": 48,
+          "w": 382,
+          "h": 866
+        },
+        {
+          "photo_path": "/photos/3.jpg",
+          "x": 48,
+          "y": 1004,
+          "w": 285,
+          "h": 868
+        },
+        {
+          "photo_path": "/photos/4.jpg",
+          "x": 349,
+          "y": 1004,
+          "w": 380,
+          "h": 868
+        },
+        {
+          "photo_path": "/photos/5.jpg",
+          "x": 745,
+          "y": 1004,
+          "w": 287,
+          "h": 868
+        }
+      ]
+    },
+    {
+      "name": "two and two over three",
+      "top_pattern": [
+        2,
+        2
+      ],
+      "bottom_pattern": [
+        3
+      ],
+      "photo_ratio": 1.5,
+      "seed": 7,
+      "strip_y": 1356,
+      "cells": [
+        {
+          "photo_path": "/photos/0.jpg",
+          "x": 48,
+          "y": 48,
+          "w": 561,
+          "h": 646
+        },
+        {
+          "photo_path": "/photos/1.jpg",
+          "x": 625,
+          "y": 48,
+          "w": 407,
+          "h": 646
+        },
+        {
+          "photo_path": "/photos/2.jpg",
+          "x": 48,
+          "y": 710,
+          "w": 425,
+          "h": 646
+        },
+        {
+          "photo_path": "/photos/3.jpg",
+          "x": 489,
+          "y": 710,
+          "w": 543,
+          "h": 646
+        },
+        {
+          "photo_path": "/photos/4.jpg",
+          "x": 48,
+          "y": 1446,
+          "w": 399,
+          "h": 426
+        },
+        {
+          "photo_path": "/photos/5.jpg",
+          "x": 463,
+          "y": 1446,
+          "w": 285,
+          "h": 426
+        },
+        {
+          "photo_path": "/photos/6.jpg",
+          "x": 764,
+          "y": 1446,
+          "w": 268,
+          "h": 426
+        }
+      ]
+    }
+  ]
+}

@@ -14,8 +14,9 @@ struct CollageDivider {
     let maxPos: Int         // drag clamp — boundary cannot go above this
     let rowCanvasY: Int     // top of the row (vertical dividers only)
     let rowCanvasH: Int     // height of the row (vertical dividers only)
-    let actualGapPx: Int    // true pixel gap to the trailing row: about 8 for
-                            // normal rows, about 90 for the branded strip
+    let actualGapPx: Int    // true pixel gap to the trailing row or column: the
+                            // 16px gutter for normal boundaries, 90 for the
+                            // branded strip
 }
 
 extension CollageDivider {
@@ -24,7 +25,10 @@ extension CollageDivider {
     /// Above it is the branded centre strip, which is not a gap at all: it is
     /// the 90px band Python draws the event title and the wordmark into
     /// (`generate_collage.STRIP_H`).
-    static let maxOrdinaryGapPx = 16
+    /// `CollageGeometry.normalGapLimit` rather than a second 16 of its own: two
+    /// constants meaning "the widest an ordinary gap is" is the same split that
+    /// put an 8px gutter in this file against Python's 16 (#969).
+    static let maxOrdinaryGapPx = CollageGeometry.normalGapLimit
 
     /// Whether this boundary is the branded strip rather than a gap between
     /// two rows.
@@ -54,7 +58,6 @@ let minCollageCellPx = 80
 
 func computeCollageDividers(_ cells: [CollageCell]) -> [CollageDivider] {
     guard cells.count > 1 else { return [] }
-    let gap = 8
     let minCellPx = minCollageCellPx
 
     // Group cells into horizontal rows by y-overlap (shared with the export
@@ -98,17 +101,29 @@ func computeCollageDividers(_ cells: [CollageCell]) -> [CollageDivider] {
         let rowH    = row.map { $0.y + $0.h }.max()! - rowY
         for i in 0..<sorted.count - 1 {
             let left = sorted[i], right = sorted[i + 1]
-            let boundary = left.x + left.w + gap / 2
+            // MEASURED from the cells, the way the horizontal boundary above is
+            // (#965), rather than a constant written here.
+            //
+            // It was `let gap = 8` against `GUTTER = 16` in
+            // postroll/media/design_tokens.py, which is the gutter Python bakes
+            // into the base PNG. So every vertical handle sat 4px off the gap it
+            // was meant to be centred in, and both clamps stopped 4px past the
+            // floor, letting a drag squeeze a cell to 76px against a floor of 80
+            // that `CollageCell.layoutProblems` then refuses the save under
+            // (#969). Deriving it cannot disagree with what was drawn, which
+            // sharing a constant only makes less likely.
+            let actualGapW = right.x - (left.x + left.w)
+            let boundary = left.x + left.w + actualGapW / 2
             let leftIdx  = cells.firstIndex { $0.photoPath == left.photoPath }!
             let rightIdx = cells.firstIndex { $0.photoPath == right.photoPath }!
-            let minPos   = left.x + minCellPx + gap / 2
-            let maxPos   = right.x + right.w - minCellPx - gap / 2
+            let minPos   = left.x + minCellPx + actualGapW / 2
+            let maxPos   = right.x + right.w - minCellPx - actualGapW / 2
             result.append(CollageDivider(
                 kind: .vertical, canvasPos: boundary,
                 leading: [leftIdx], trailing: [rightIdx],
                 minPos: minPos, maxPos: maxPos,
                 rowCanvasY: rowY, rowCanvasH: rowH,
-                actualGapPx: gap
+                actualGapPx: actualGapW
             ))
         }
     }
