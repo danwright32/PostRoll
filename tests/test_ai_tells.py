@@ -306,3 +306,74 @@ class TestMarkerPreservation:
         prior = {"body": "[PHOTO: a.jpg | x]"}
         revised = {"body": "[PHOTO: hallucinated.jpg | x]"}
         assert markers_preserved_validator(prior, revised) is not None
+
+    # ── #1141: the two faults the sorted comparison could not see ────────────
+    #
+    # `photo_marker_filenames` sorted, and captured the filename alone, so a
+    # pass that swapped two photographs between paragraphs, or swapped their
+    # descriptions, produced an identical list and was waved through. Alt text
+    # describing the neighbouring photograph is the exact failure #1008 was
+    # filed for, and it reads as plausible because alt text from one shoot
+    # resembles itself.
+
+    def test_validator_flags_two_markers_swapped_between_paragraphs(self):
+        from postroll.ai.ai_tells import markers_preserved_validator
+        prior = {"body": "one\n\n[PHOTO: a.jpg | x]\n\ntwo\n\n[PHOTO: b.jpg | y]"}
+        revised = {"body": "one\n\n[PHOTO: b.jpg | y]\n\ntwo\n\n[PHOTO: a.jpg | x]"}
+        assert markers_preserved_validator(prior, revised) is not None
+
+    def test_validator_flags_two_alt_texts_swapped(self):
+        from postroll.ai.ai_tells import markers_preserved_validator
+        prior = {"body": "[PHOTO: a.jpg | dancers in blue]\n\n[PHOTO: b.jpg | a full choir]"}
+        revised = {"body": "[PHOTO: a.jpg | a full choir]\n\n[PHOTO: b.jpg | dancers in blue]"}
+        assert markers_preserved_validator(prior, revised) is not None
+
+    def test_validator_flags_one_alt_text_rewritten(self):
+        from postroll.ai.ai_tells import markers_preserved_validator
+        prior = {"body": "[PHOTO: a.jpg | four dancers lit in blue]"}
+        revised = {"body": "[PHOTO: a.jpg | a performance]"}
+        assert markers_preserved_validator(prior, revised) is not None
+
+    def test_validator_flags_an_added_marker(self):
+        from postroll.ai.ai_tells import markers_preserved_validator
+        prior = {"body": "[PHOTO: a.jpg | x]"}
+        revised = {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: invented.jpg | y]"}
+        assert markers_preserved_validator(prior, revised) is not None
+
+    def test_each_fault_says_which_one_it_was(self):
+        """A message that reads the same for four different faults tells the
+        reader nothing about what the pass actually did (L11)."""
+        from postroll.ai.ai_tells import markers_preserved_validator
+        prior = {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: b.jpg | y]"}
+        faults = {
+            "added":    {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: b.jpg | y]"
+                                 "\n\n[PHOTO: c.jpg | z]"},
+            "dropped":  {"body": "[PHOTO: a.jpg | x]"},
+            "renamed":  {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: other.jpg | y]"},
+            "reordered": {"body": "[PHOTO: b.jpg | y]\n\n[PHOTO: a.jpg | x]"},
+            "alt":      {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: b.jpg | rewritten]"},
+        }
+        messages = {}
+        for fault, revised in faults.items():
+            problem = markers_preserved_validator(prior, revised)
+            assert problem is not None, fault
+            messages[fault] = problem
+        assert len(set(messages.values())) == len(messages), messages
+        assert "add" in messages["added"], messages["added"]
+        assert "drop" in messages["dropped"], messages["dropped"]
+        assert "rename" in messages["renamed"], messages["renamed"]
+        assert "reorder" in messages["reordered"], messages["reordered"]
+        assert "alt text" in messages["alt"], messages["alt"]
+
+    def test_it_reads_the_ordered_pairs_not_a_sorted_list_of_names(self):
+        from postroll.ai.ai_tells import photo_markers
+        body = "p1\n\n[PHOTO: b.jpg | alt two]\n\np2\n\n[PHOTO: a.jpg | alt one]"
+        assert photo_markers(body) == [("b.jpg", "alt two"), ("a.jpg", "alt one")]
+
+    def test_moving_the_only_marker_within_the_post_is_not_a_reorder(self):
+        """One marker has no relative order to change, and the passes are
+        allowed to move prose about."""
+        from postroll.ai.ai_tells import markers_preserved_validator
+        prior = {"body": "[PHOTO: a.jpg | x]\n\ntext"}
+        revised = {"body": "better text\n\n[PHOTO: a.jpg | x]"}
+        assert markers_preserved_validator(prior, revised) is None
