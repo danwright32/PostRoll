@@ -1,0 +1,8 @@
+{
+  "name": "a-review-pass-may-not-change-the-alt-text-count",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "    if len(produced) != len(draft):",
+  "replace": "    if False:",
+  "test": "tests/test_alt_text_photo_anchor.py::test_a_review_pass_cannot_drop_one_and_shift_the_rest",
+  "breaks": "a review pass that drops one alt text has every entry after the hole move up onto a different photograph, and the alt text list is left a different length from the anchor list that says which photo each belongs to, so nothing can resolve any of them (#1214, #1008, L237)"
+}

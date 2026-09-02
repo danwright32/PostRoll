@@ -275,13 +275,22 @@ jobs:
         # grew. tests/test_guard_sweep_fits_its_deadline.py holds both halves of
         # that and goes red if either stops being true.
         #
-        # Six asks for one more macOS runner than GitHub runs at once, so one
-        # shard waits for a slot. That was the objection to sharding recorded
+        # Seven asks for two more macOS runners than GitHub runs at once, so two
+        # shards wait for a slot. That was the objection to sharding recorded
         # above, and it is much weaker here than it was on the merge path: this
         # is a daily 07:00 job nobody waits on, the deadline is measured inside
         # the step rather than from when the job was queued, and the price is
         # wall clock on a run whose result is read the next day.
-        shard: [1, 2, 3, 4, 5, 6]
+        #
+        # Was six until 2026-09-02, when the registry reached 603 entries and
+        # `test_the_largest_shard_is_projected_well_inside_its_deadline` went
+        # red at exactly 80% of the 1800s deadline. The split was balanced to
+        # 1.00x, so it was the TOTAL that had grown, and the remedy that test
+        # names is a shard rather than a wider share. Seven brings the largest
+        # shard to about 69%. Do not widen the share instead: a shard that runs
+        # out of time reports its remaining entries as UNPROVEN while the
+        # workflow still goes green (L98, L315).
+        shard: [1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -356,7 +365,7 @@ jobs:
         # deadline had to be reversed out of one sweep as 14.4s averaged over
         # 469 entries, which hides a spread of 90x.
         run: |
-          python tools/check_guards.py --shard ${{ matrix.shard }}/6 --deadline-seconds 1800 \
+          python tools/check_guards.py --shard ${{ matrix.shard }}/7 --deadline-seconds 1800 \
             --timings guard-timings-${{ matrix.shard }}.json
 
       # Uploaded rather than committed, because a scheduled job pushing to main

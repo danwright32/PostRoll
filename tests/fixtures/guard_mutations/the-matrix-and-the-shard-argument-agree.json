@@ -1,8 +1,8 @@
 {
   "name": "the-matrix-and-the-shard-argument-agree",
   "file": ".github/workflows/guards.yml",
-  "find": "--shard ${{ matrix.shard }}/6 --deadline-seconds 1800",
+  "find": "--shard ${{ matrix.shard }}/7 --deadline-seconds 1800",
   "replace": "--shard ${{ matrix.shard }}/4 --deadline-seconds 1800",
   "test": "tests/test_guard_sweep_fits_its_deadline.py::test_the_matrix_and_the_command_split_the_sweep_the_same_way",
-  "breaks": "the sweep runs six shards while check_guards is told there are four, so two shards re-prove entries a third of the registry never reaches, and every shard still reports success (#989, L41, L98)"
+  "breaks": "the sweep runs seven shards while check_guards is told there are four, so three shards re-prove entries nearly half the registry never reaches, and every shard still reports success (#989, L41, L98)"
 }

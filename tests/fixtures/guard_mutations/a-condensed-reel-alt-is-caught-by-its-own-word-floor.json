@@ -1,0 +1,8 @@
+{
+  "name": "a-condensed-reel-alt-is-caught-by-its-own-word-floor",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "            if words < floor and words < len(str(was).split()):",
+  "replace": "            if False:",
+  "test": "tests/test_reel_alt_text_describes_the_reel.py::test_a_reel_alt_condensed_under_its_own_floor_is_still_refused",
+  "breaks": "the one check that can tell a clean from a condensation stops firing, so the humanizer may cut a reel level alt down to one frame's description and ship it. Measured against the live store on 2026-09-02, 7 of 21 shipped Thursday alt texts fall under the 25 word floor the scroll reel instruction sets and every one of them describes a single moment, while none of the 9 reel level ones do (#1067)"
+}
