@@ -2,9 +2,12 @@
 
 Both the swap path and the revise path hand the model a body full of
 `[PHOTO: filename | alt text]` markers and tell it to keep them exactly. Neither
-verified it. `markers_preserved_validator` sorts the filenames and never reads
-the alt text, so a pass that rewrote every description while keeping every
-filename was indistinguishable from one that changed nothing.
+verified it. Until #1141 `markers_preserved_validator` sorted the filenames and
+never read the alt text, so a pass that rewrote every description while keeping
+every filename was indistinguishable from one that changed nothing. It now
+compares the ordered (filename, alt text) pairs; the splice stays because a
+validator can only refuse the whole pass, and refusing discards one already
+paid for.
 
 The splice makes the instruction unnecessary: whatever the model returns for a
 retained marker is discarded and the original is put back verbatim.

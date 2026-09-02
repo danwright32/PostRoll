@@ -5,9 +5,11 @@ marker verbatim, and nothing checked it. Three separate holes:
 
   * the pass 1 call at `revise_blog.py` had NO validator at all, so whatever it
     returned went straight into the voice pass;
-  * the two review passes use `markers_preserved_validator`, which SORTS the
-    filenames and never reads the alt text, so a pass that rewrote every
-    description while keeping every filename passed;
+  * the two review passes used `markers_preserved_validator`, which SORTED the
+    filenames and never read the alt text, so a pass that rewrote every
+    description while keeping every filename passed. Since #1141 that validator
+    compares the ordered (filename, alt text) pairs, and this path uses its own
+    ordered validator built on the same comparison;
   * nothing anywhere compared the ORDER of the markers, so a photograph moving
     to a different point in the post, with the prose written about it staying
     put, was invisible.
@@ -125,7 +127,9 @@ def test_what_the_first_call_returns_is_checked_at_all(capsys):
 
 
 def test_a_reordered_marker_is_refused_by_the_validator():
-    """Sorting hides this, and the repo's only marker validator sorts."""
+    """Sorting hides this, and until #1141 the repo's only marker validator
+    sorted. Both validators compare the ordered pairs now, and this stays as
+    the check that says so."""
     from postroll.ai.revise_blog import ordered_markers_validator
 
     reordered = "\n\n".join([PROSE, B, PROSE, A, PROSE])

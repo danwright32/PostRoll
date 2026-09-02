@@ -21,9 +21,12 @@ markers are shared by folded filename, 41 of them (30%) differ in alt text, and
 8 of the 20 show a changed relative marker order.
 
 That measurement decides nothing. The reason the revise path carries a verbatim
-splice is the code reading alone: `revise_blog` sends its pass 1 call with no
-validator, and `markers_preserved_validator` sorts and never reads alt text.
-That is structural and does not need a rate to justify it.
+splice was the code reading alone: at the time `revise_blog` sent its pass 1
+call with no validator, and `markers_preserved_validator` sorted and never read
+alt text. Both have since been closed (#1131 gave pass 1 an ordered validator,
+#1141 taught the shared comparison to read alt text), and the splice stays
+because a validator can only refuse a whole review pass where the splice
+repairs it. That is structural and does not need a rate to justify it.
 """
 
 from __future__ import annotations
