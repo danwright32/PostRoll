@@ -667,6 +667,34 @@ def test_a_withheld_like_count_survives_the_trip(tmp_path):
     assert written["accounts"][0]["likes_hidden"] is True
 
 
+def test_the_row_carries_what_the_allowance_reading_said(tmp_path):
+    # So the app can tell one account hitting a limit from the allowance being
+    # gone. Without it every rate limited account looks like an independent
+    # failure, and fifty of them look like fifty, not like a stopped fetch
+    # (#1207, L77).
+    manifest = tmp_path / "in.json"
+    manifest.write_text(json.dumps({"handles": ["natgeo"]}))
+    figures = Figures(handle="natgeo", outcome=Outcome.RATE_LIMITED,
+                      quota={"call_count": 275, "total_time": 157})
+
+    written = run_command(manifest, tmp_path / "out.json", {"natgeo": figures})
+
+    assert written["accounts"][0]["allowance_spent"] == 275
+
+
+def test_a_row_with_no_reading_says_so_rather_than_zero(tmp_path):
+    # None, not 0. A call Meta sent no usage header for and one at the very
+    # start of a fresh hour are different facts, and zero is what the second
+    # looks like (L11).
+    manifest = tmp_path / "in.json"
+    manifest.write_text(json.dumps({"handles": ["natgeo"]}))
+    figures = Figures(handle="natgeo", outcome=Outcome.NETWORK_FAILED, quota=None)
+
+    written = run_command(manifest, tmp_path / "out.json", {"natgeo": figures})
+
+    assert written["accounts"][0]["allowance_spent"] is None
+
+
 # ── Which outcomes are done with ─────────────────────────────────────────────
 
 def test_exactly_three_outcomes_are_terminal():

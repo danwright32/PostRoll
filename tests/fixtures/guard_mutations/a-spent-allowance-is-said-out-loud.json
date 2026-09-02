@@ -1,0 +1,8 @@
+{
+  "name": "a-spent-allowance-is-said-out-loud",
+  "file": "PostRollApp/Sources/Services/AccountNumbersManager.swift",
+  "find": "            failureNote = Self.allowanceNote(answers)",
+  "replace": "            failureNote = nil",
+  "test": "PostRollTests/AccountNumbersManagerTests/testARunThatWasMostlyRefusedSaysTheAllowanceIsGone",
+  "breaks": "a run in which Meta refused every account reports nothing at all, so a fetch that has stopped working is indistinguishable from one that succeeded, and the ranking quietly goes on using the numbers it already had (#1207, L77)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "one-rate-limit-is-not-reported-as-an-outage",
+  "file": "PostRollApp/Sources/Services/AccountNumbersManager.swift",
+  "find": "        guard Double(limited.count) / Double(answers.count) >= outageShare else { return nil }",
+  "replace": "        guard !limited.isEmpty else { return nil }",
+  "test": "PostRollTests/AccountNumbersManagerTests/testOneRefusedAccountAmongManyIsNotReportedAsAnOutage",
+  "breaks": "a single rate limited account raises the outage notice on an otherwise ordinary run, and a notice that fires on ordinary runs is one Dan learns to skim, which is how the real one stops being read (#1207, L36)"
+}
