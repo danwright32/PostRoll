@@ -23,6 +23,10 @@ struct ExportView: View {
     var previews: PreviewGraphicsManager = .shared
 
     @State private var showingFolderPicker = false
+    /// The separate picker for saying where a finished export was filed (#1110).
+    /// Its own flag rather than sharing `showingFolderPicker`, which starts an
+    /// export on whatever is chosen.
+    @State private var showingRelocatePicker = false
     @State private var lastExportFolder: URL? = nil
     @State private var pendingSingleDay: DayName? = nil
     /// A layout the user picked that needs confirmation before it rebuilds posts (#71).
@@ -144,6 +148,24 @@ struct ExportView: View {
             )
         }
         .fileImporter(
+            isPresented: $showingRelocatePicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case .success(let urls) = result, let picked = urls.first,
+                  // Refuses a folder that is not there either, rather than
+                  // swapping one record the app cannot find for another (L5).
+                  let moved = ExportFolderRelocation.applying(
+                      picked, toEventWithID: event.id, in: appState.events)
+            else { return }
+            appState.updateEvent(moved)
+            // The banner is a claim about where the folder is, so it has to
+            // stop making it the moment the answer changes. `onChange(of:
+            // event.exportPath)` cannot see this: `event` is the snapshot this
+            // screen was built with, not the record just written.
+            exportFolderStatus = ExportFolderStatus.of(moved)
+        }
+        .fileImporter(
             isPresented: $showingFolderPicker,
             allowedContentTypes: [.folder],
             allowsMultipleSelection: false
@@ -210,9 +232,24 @@ struct ExportView: View {
             // wondering why a day is empty. Shown only when there is something
             // wrong: a banner on every visit to a good export is how a real
             // warning stops being read.
-            if let message = exportFolderStatus.message, exportFolderStatus.needsAttention {
-                BrandBanner(icon: "exclamationmark.triangle", message: message, style: .warning)
-                    .padding(.horizontal, Spacing.xl)
+            // Style and icon come from the status rather than being written
+            // here (#1110). Written here, they said "fault" for a folder Dan
+            // had simply filed away, which was every export he has.
+            if let message = exportFolderStatus.message,
+               let banner = ExportFolderBanner.of(exportFolderStatus) {
+                BrandBanner(
+                    icon: banner.icon, message: message, style: banner.style,
+                    // Only the lost-track case has somewhere to go that is not
+                    // "export again", and its message names this button, so the
+                    // two are decided together rather than in two places (L41).
+                    actions: {
+                        guard case .lostTrack = exportFolderStatus else { return [] }
+                        return [BrandBannerAction(label: "Point PostRoll at it again") {
+                            showingRelocatePicker = true
+                        }]
+                    }()
+                )
+                .padding(.horizontal, Spacing.xl)
             }
 
             // Only accounts that keep coming back (#289). Dan tags most people

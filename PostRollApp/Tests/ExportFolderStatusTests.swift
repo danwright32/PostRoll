@@ -108,10 +108,61 @@ final class ExportFolderStatusTests: XCTestCase {
 
     func testAFolderThatIsNoLongerThereIsItsOwnState() {
         let gone = folder.appendingPathComponent("moved-away")
-        guard case .folderGone = ExportFolderStatus.of(folder: gone) else {
+        guard case .lostTrack = ExportFolderStatus.of(folder: gone) else {
             return XCTFail("a missing folder is not an unfinished export")
         }
         XCTAssertTrue(ExportFolderStatus.of(folder: gone).needsAttention)
+    }
+
+    // ── #1110: a filed export is not a lost one ──────────────────────────────
+    //
+    // Measured against the live store on 2026-09-02: 9 of 21 events record an
+    // export path and 0 of those 9 folders are at the recorded path, because
+    // Dan files every finished export into one of his own Finder buckets
+    // afterwards. So the absent path is the ORDINARY state of a finished
+    // export here, not a fault, and the warning fired on all 9 of them.
+
+    func testAnAbsentRecordedPathIsNotAWarning() {
+        let filed = folder.appendingPathComponent("filed-away")
+        XCTAssertEqual(ExportFolderStatus.of(folder: filed).attention, .informational,
+                       "Dan files every finished export elsewhere, so a recorded path "
+                     + "that is absent fires on every export he has. A warning that is "
+                     + "right 0 times out of 9 stops being read (L36).")
+    }
+
+    func testItDoesNotClaimTheExportItselfIsGone() throws {
+        let filed = folder.appendingPathComponent("filed-away")
+        let message = try XCTUnwrap(ExportFolderStatus.of(folder: filed).message)
+        XCTAssertTrue(message.contains("lost track"),
+                      "an absent path is evidence the app no longer knows where the "
+                    + "export is, never that the export was lost (L11): \(message)")
+        XCTAssertFalse(message.contains("Export again"),
+                       "the folder is very likely sitting finished in one of his "
+                     + "buckets, so re-exporting it is work he has already done and "
+                     + "the step cannot change the state he is in (L111): \(message)")
+    }
+
+    func testItOffersToBePointedAtTheFolderAgain() throws {
+        let filed = folder.appendingPathComponent("filed-away")
+        let message = try XCTUnwrap(ExportFolderStatus.of(folder: filed).message)
+        XCTAssertTrue(message.contains("Point PostRoll at it again"),
+                      "the remedy has to be one that actually clears the state, which "
+                    + "is re-recording where the folder went: \(message)")
+    }
+
+    func testAnAbsentPathNamesTheFolderSoHeCanFindIt() throws {
+        let filed = folder.appendingPathComponent("battery_dance_festival_2026-08-14")
+        let message = try XCTUnwrap(ExportFolderStatus.of(folder: filed).message)
+        XCTAssertTrue(message.contains("battery_dance_festival_2026-08-14"),
+                      "a message that names no folder leaves him nothing to search "
+                    + "Finder for (L80): \(message)")
+    }
+
+    func testARealFaultIsStillAWarning() throws {
+        try makeDay("1. Sunday", files: [])
+        XCTAssertEqual(ExportFolderStatus.of(folder: folder).attention, .warning,
+                       "softening the absent-path case must not soften an export that "
+                     + "genuinely did not finish")
     }
 
     func testAnEventNeverExportedSaysNothing() {
@@ -140,12 +191,12 @@ final class ExportFolderStatusTests: XCTestCase {
         XCTAssertTrue(message.lowercased().contains("export again"), message)
     }
 
-    func testTheMissingFolderMessageSaysWhereItWent() throws {
-        let gone = folder.appendingPathComponent("Vocal Colors")
-        let message = try XCTUnwrap(ExportFolderStatus.of(folder: gone).message)
-        XCTAssertTrue(message.contains("Vocal Colors"), message)
-        XCTAssertTrue(message.lowercased().contains("export again"), message)
-    }
+    // testTheMissingFolderMessageSaysWhereItWent was deleted by #1110. Its
+    // second half asserted the absent-folder message tells Dan to export
+    // again, which is the decision that issue reversed, so keeping it would
+    // have left it guarding the defect (L252). Its first half, that the
+    // message names the folder, is now
+    // testAnAbsentPathNamesTheFolderSoHeCanFindIt above.
 
     // MARK: - #451: a folder that cannot be read is not one that never finished
 
