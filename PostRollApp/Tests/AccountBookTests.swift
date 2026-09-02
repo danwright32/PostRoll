@@ -205,6 +205,184 @@ final class AccountBookTests: XCTestCase {
                        "the suite's accounts file is inside the real data root")
     }
 
+    // MARK: - A fetched record carries where each figure came from (#1003)
+
+    /// `AccountStats` held four numbers and a date, so a figure typed by hand
+    /// and one Meta reported were the same thing, and an account the API had
+    /// refused was indistinguishable from one nobody had opened.
+    ///
+    /// The trap this section is mostly about: `record` rebuilt the whole
+    /// `AccountStats` from four values, so typing a follower count into the
+    /// sheet erased the fetch outcome and silently made that account
+    /// unrankable again.
+
+    /// What a completed fetch leaves behind.
+    private func fetched() -> AccountStats {
+        AccountStats(followers: 3_000, likes: 120, comments: 8, recordedOn: stamp,
+                     followersSource: .measured, likesSource: .measured,
+                     commentsSource: .measured, outcome: .measured,
+                     instagramID: "17841400000000000", reels: 4, feed: 8,
+                     isPrivate: false)
+    }
+
+    func testTypingANumberInDoesNotEraseWhatTheFetchFoundOut() {
+        book.write(fetched(), for: "janecellist")
+
+        book.record(handle: "janecellist", followers: 3_500, likes: nil,
+                    comments: nil, on: stamp)
+
+        let stored = book.stats(for: "janecellist")
+        XCTAssertEqual(stored?.followers, 3_500, "the typed figure wins, which is the point")
+        XCTAssertEqual(stored?.followersSource, .typed)
+        XCTAssertEqual(stored?.outcome, .measured,
+                       "the fetch outcome was wiped, so this account reads as one "
+                       + "nobody has ever asked about and becomes unrankable again")
+        XCTAssertEqual(stored?.instagramID, "17841400000000000",
+                       "the stable id was wiped, so a later fetch cannot notice the "
+                       + "handle changed hands")
+        XCTAssertEqual(stored?.reels, 4)
+        XCTAssertEqual(stored?.feed, 8)
+    }
+
+    func testAFigureSentBackUnchangedIsStillAMeasuredOne() {
+        // The sheet is pre-filled with what is stored, so it sends all three
+        // figures back whether or not Dan touched them. Marking every one of
+        // them typed would quietly downgrade a measured figure the first time
+        // he corrected a different field, and the reason line would then claim
+        // he had entered a number Meta reported.
+        book.write(fetched(), for: "janecellist")
+
+        book.record(handle: "janecellist", followers: 3_500, likes: 120,
+                    comments: 8, on: stamp)
+
+        let stored = book.stats(for: "janecellist")
+        XCTAssertEqual(stored?.followersSource, .typed, "this one he really did change")
+        XCTAssertEqual(stored?.likesSource, .measured, "and these two he did not")
+        XCTAssertEqual(stored?.commentsSource, .measured)
+    }
+
+    func testClearingAFieldReallyDoesClearTheFigure() {
+        // The positive control, and the behaviour the rule above must not
+        // break: an emptied box is Dan saying he does not know, which is a real
+        // action and the only way to perform it.
+        book.write(fetched(), for: "janecellist")
+
+        book.record(handle: "janecellist", followers: 3_500, likes: nil,
+                    comments: nil, on: stamp)
+
+        let stored = book.stats(for: "janecellist")
+        XCTAssertNil(stored?.likes)
+        XCTAssertNil(stored?.likesSource, "a figure nobody knows has no source")
+    }
+
+    func testAPrivateMarkSurvivesTypingNumbersIn() {
+        // #982's mark is the only mechanism there is: private is not detectable
+        // from the logged out page. Losing it on a save means an account Dan
+        // marked by hand quietly starts ranking normally again.
+        var private_ = fetched()
+        private_.isPrivate = true
+        book.write(private_, for: "janecellist")
+
+        book.record(handle: "janecellist", followers: 3_500, likes: nil,
+                    comments: nil, on: stamp)
+
+        XCTAssertEqual(book.stats(for: "janecellist")?.isPrivate, true)
+    }
+
+    func testAFetchThatFailedChangesNothingThatWasAlreadyKnown() {
+        book.record(handle: "janecellist", followers: 2_000, likes: 50,
+                    comments: 10, on: stamp)
+
+        book.merge(AccountStats(outcome: .networkFailed), for: "janecellist", on: stamp)
+
+        let stored = book.stats(for: "janecellist")
+        XCTAssertEqual(stored?.followers, 2_000, "a failed fetch erased a typed figure")
+        XCTAssertEqual(stored?.likes, 50)
+        XCTAssertEqual(stored?.outcome, .networkFailed,
+                       "but the failure is recorded, or nothing knows to retry")
+    }
+
+    func testAFollowersOnlyFetchLeavesTypedLikesIntact() {
+        book.record(handle: "janecellist", followers: nil, likes: 50,
+                    comments: 10, on: stamp)
+
+        book.merge(AccountStats(followers: 9_000, recordedOn: stamp,
+                                followersSource: .measured, outcome: .measured),
+                   for: "janecellist", on: stamp)
+
+        let stored = book.stats(for: "janecellist")
+        XCTAssertEqual(stored?.followers, 9_000)
+        XCTAssertEqual(stored?.likes, 50, "the typed likes were thrown away")
+        XCTAssertEqual(stored?.likesSource, .typed)
+    }
+
+    func testAHandleThatChangedHandsIsNotMergedAcross() {
+        // `business_discovery.username(...)` looks up by a MUTABLE display
+        // name. Without the stable id, a renamed handle silently attributes one
+        // account's audience to whoever holds the name next.
+        book.write(fetched(), for: "janecellist")
+
+        book.merge(AccountStats(followers: 900_000, recordedOn: stamp,
+                                followersSource: .measured, outcome: .measured,
+                                instagramID: "17841499999999999"),
+                   for: "janecellist", on: stamp)
+
+        let stored = book.stats(for: "janecellist")
+        XCTAssertEqual(stored?.followers, 3_000,
+                       "the figures of a different account were merged onto this one")
+        XCTAssertEqual(stored?.outcome, .handleChangedHands,
+                       "and nothing says why the merge was refused")
+    }
+
+    func testAFetchForAnAccountWithNoStoredIdIsMergedNormally() {
+        // The positive control (L159). Refusing every merge would satisfy the
+        // assertion above, and no account has an id until its first fetch.
+        book.record(handle: "janecellist", followers: 2_000, likes: 50,
+                    comments: 10, on: stamp)
+
+        book.merge(AccountStats(followers: 9_000, recordedOn: stamp,
+                                followersSource: .measured, outcome: .measured,
+                                instagramID: "17841400000000000"),
+                   for: "janecellist", on: stamp)
+
+        XCTAssertEqual(book.stats(for: "janecellist")?.followers, 9_000)
+        XCTAssertEqual(book.stats(for: "janecellist")?.instagramID, "17841400000000000")
+    }
+
+    func testAnOutcomeThisBuildDoesNotKnowDoesNotDestroyTheWholeBook() throws {
+        // `decodeIfPresent` on an enum THROWS on a raw value it has no case
+        // for, and AccountRecord's decoder lets that propagate, so one record
+        // carrying an outcome a newer build wrote would fail the whole file
+        // and take every account's figures with it.
+        //
+        // The file's decoder is written field by field precisely so an old
+        // record survives a new build. This is the other direction, and it was
+        // fatal rather than lossy.
+        let file = root.appendingPathComponent("accounts.json")
+        let json = """
+            {"records":[{"handle":"janecellist","stats":{"followers":2000,            "likes":50,"outcome":"invented_in_a_later_build"}}]}
+            """
+        try json.write(to: file, atomically: true, encoding: .utf8)
+
+        let reopened = AccountBook(fileURL: file)
+
+        XCTAssertEqual(reopened.stats(for: "janecellist")?.followers, 2_000,
+                       "an unknown outcome took the figures with it")
+        XCTAssertNil(reopened.stats(for: "janecellist")?.outcome,
+                     "and an outcome nothing here understands must read as no "
+                     + "outcome rather than as one of the ones it does")
+    }
+
+    func testAKnownOutcomeStillDecodes() {
+        // The positive control (L159): a decoder that answered nil for every
+        // outcome would satisfy the assertion above.
+        book.write(AccountStats(followers: 2_000, outcome: .rateLimited),
+                   for: "janecellist")
+        let reopened = AccountBook(fileURL: root.appendingPathComponent("accounts.json"))
+
+        XCTAssertEqual(reopened.stats(for: "janecellist")?.outcome, .rateLimited)
+    }
+
     func testANegativeNumberIsRefusedRatherThanStored() {
         // A negative follower count can only be a typo, and it would produce a
         // negative engagement rate that sorts above every real account.

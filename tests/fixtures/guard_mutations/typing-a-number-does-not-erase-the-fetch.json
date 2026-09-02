@@ -1,0 +1,8 @@
+{
+  "name": "typing-a-number-does-not-erase-the-fetch",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "        let was = entry.stats\n        var stats = was",
+  "replace": "        let was = entry.stats\n        var stats = AccountStats()",
+  "test": "PostRollTests/AccountBookTests/testTypingANumberInDoesNotEraseWhatTheFetchFoundOut",
+  "breaks": "typing a follower count into the sheet rebuilds the record from those figures alone, erasing the fetch outcome, the stable Instagram id, the post mix and the private mark, which silently makes that account unrankable again (#1003, L510)"
+}

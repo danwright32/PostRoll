@@ -1,0 +1,8 @@
+{
+  "name": "an-unknown-outcome-does-not-destroy-the-book",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "        outcome         = FetchOutcome(rawValue:\n            try c.decodeIfPresent(String.self, forKey: .outcome) ?? \"\")",
+  "replace": "        outcome         = try c.decodeIfPresent(FetchOutcome.self, forKey: .outcome)",
+  "test": "PostRollTests/AccountBookTests/testAnOutcomeThisBuildDoesNotKnowDoesNotDestroyTheWholeBook",
+  "breaks": "one record carrying a fetch outcome a newer build wrote fails the whole accounts.json decode and takes every account's figures with it, because decodeIfPresent on an enum throws on a raw value it has no case for and AccountRecord lets it propagate (#1003, L337)"
+}

@@ -21,6 +21,91 @@ struct AccountStats: Codable, Equatable, Sendable {
     /// two year old count looks exactly as confident as one built on today's.
     var recordedOn: Date?
 
+    // MARK: - Where each figure came from (#1003)
+    //
+    // Known and accepted, documented rather than defended. `init(from:)` reads
+    // the keys it knows and ignores the rest, which is what lets a record
+    // written by a NEWER build survive a read by an older one. The cost is the
+    // other direction: running an older build over this book decodes every
+    // record without these fields, and `noteTagged` runs on every export
+    // (`ExportManager.swift:448`), so one export under a downgraded build
+    // writes them all back stripped of provenance.
+    //
+    // Not defended against, because the alternative is refusing to load a book
+    // an old build wrote, which turns a downgrade into an app that cannot open
+    // its own data. The figures themselves survive; what is lost is where they
+    // came from, and a refetch restores it.
+
+    /// Where one stored figure came from.
+    ///
+    /// Three values, not two. A figure Dan typed and a figure Meta reported
+    /// are different claims, and an account that ANSWERED while withholding
+    /// one figure is a third thing again: `hidden` is not absent and is
+    /// certainly not zero, and it must never reach the arithmetic as one
+    /// (#1032, L507).
+    enum FigureSource: String, Codable, Equatable, Sendable {
+        case typed
+        case measured
+        case hidden
+    }
+
+    /// How one fetch ended, in the seven states the Python side reports.
+    ///
+    /// Stored so an account that cannot be measured is distinguishable from one
+    /// nobody has looked at, which is the whole of why the fetch has seven
+    /// outcomes rather than two. Mirrors `postroll.ai.account_numbers.Outcome`,
+    /// plus one state only this side can reach.
+    enum FetchOutcome: String, Codable, Equatable, Sendable {
+        case measured
+        case notProfessional = "not_professional"
+        case noSuchAccount = "no_such_account"
+        case couldNotClassify = "could_not_classify"
+        case rateLimited = "rate_limited"
+        case networkFailed = "network_failed"
+        case tokenRejected = "token_rejected"
+        /// The handle now resolves to a DIFFERENT Instagram account, so the
+        /// figures that came back describe somebody else. Only this side can
+        /// see it, because only this side remembers the previous id.
+        case handleChangedHands = "handle_changed_hands"
+
+        /// Whether asking again could produce a different answer.
+        var isWorthRetrying: Bool {
+            switch self {
+            case .measured, .notProfessional, .noSuchAccount:
+                return false
+            case .couldNotClassify, .rateLimited, .networkFailed, .tokenRejected,
+                 .handleChangedHands:
+                return true
+            }
+        }
+    }
+
+    var followersSource: FigureSource?
+    var likesSource: FigureSource?
+    var commentsSource: FigureSource?
+    /// How the last fetch ended, or nil if there has never been one.
+    var outcome: FetchOutcome?
+    /// Meta's stable id for this account.
+    ///
+    /// `business_discovery.username(...)` looks up by a MUTABLE display name,
+    /// so without this a renamed handle silently attributes one account's
+    /// audience to whoever holds the name next.
+    var instagramID: String?
+    /// How many of the sampled posts were reels, and how many were feed posts.
+    ///
+    /// Read by `mixNote`. Measured on the 2026-08-29 sample: reels drew 1.29x
+    /// feed likes at the median and 11 of 46 accounts differed by more than
+    /// double, so a figure that jumps between fetches is often what the account
+    /// posted rather than who is watching.
+    var reels: Int?
+    var feed: Int?
+    /// Marked private by hand (#982).
+    ///
+    /// Not detectable from the logged out page: an account serving a normal
+    /// page with its follower count and no marker was verified on 2026-08-29,
+    /// so the manual mark is the only mechanism there is.
+    var isPrivate: Bool = false
+
     /// True only when there is enough to compute an engagement rate.
     ///
     /// Followers alone cannot: the rate is interactions over followers, so a
@@ -36,18 +121,141 @@ struct AccountStats: Codable, Equatable, Sendable {
     /// whole file fail to decode, which is how saved data gets wiped.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        followers  = try c.decodeIfPresent(Int.self,  forKey: .followers)
-        likes      = try c.decodeIfPresent(Int.self,  forKey: .likes)
-        comments   = try c.decodeIfPresent(Int.self,  forKey: .comments)
-        recordedOn = try c.decodeIfPresent(Date.self, forKey: .recordedOn)
+        followers       = try c.decodeIfPresent(Int.self,  forKey: .followers)
+        likes           = try c.decodeIfPresent(Int.self,  forKey: .likes)
+        comments        = try c.decodeIfPresent(Int.self,  forKey: .comments)
+        recordedOn      = try c.decodeIfPresent(Date.self, forKey: .recordedOn)
+        // Through the raw value, for the reason spelled out under `outcome`
+        // below: an enum this build has no case for would otherwise throw and
+        // take every account's figures with it. The rule is the same for all
+        // four of these, so it is applied to all four rather than to the one a
+        // test happened to be written about (L30).
+        followersSource = FigureSource(rawValue:
+            try c.decodeIfPresent(String.self, forKey: .followersSource) ?? "")
+        likesSource     = FigureSource(rawValue:
+            try c.decodeIfPresent(String.self, forKey: .likesSource) ?? "")
+        commentsSource  = FigureSource(rawValue:
+            try c.decodeIfPresent(String.self, forKey: .commentsSource) ?? "")
+        // Decoded through its RAW value, not as the enum. `decodeIfPresent` on
+        // an enum throws on a raw value it has no case for, and AccountRecord
+        // lets that propagate, so one record carrying an outcome a newer build
+        // wrote would fail the whole file and take every account's figures with
+        // it. The rest of this decoder exists so an old record survives a new
+        // build; this is the other direction, and it was fatal rather than
+        // lossy (L337).
+        //
+        // An outcome nothing here understands reads as NO outcome, which is
+        // the honest answer and the retryable one: the alternative is guessing
+        // at a state and possibly never asking about that account again.
+        outcome         = FetchOutcome(rawValue:
+            try c.decodeIfPresent(String.self, forKey: .outcome) ?? "")
+        instagramID     = try c.decodeIfPresent(String.self, forKey: .instagramID)
+        reels           = try c.decodeIfPresent(Int.self, forKey: .reels)
+        feed            = try c.decodeIfPresent(Int.self, forKey: .feed)
+        isPrivate       = try c.decodeIfPresent(Bool.self, forKey: .isPrivate) ?? false
     }
 
     init(followers: Int? = nil, likes: Int? = nil, comments: Int? = nil,
-         recordedOn: Date? = nil) {
+         recordedOn: Date? = nil,
+         followersSource: FigureSource? = nil,
+         likesSource: FigureSource? = nil,
+         commentsSource: FigureSource? = nil,
+         outcome: FetchOutcome? = nil,
+         instagramID: String? = nil,
+         reels: Int? = nil, feed: Int? = nil,
+         isPrivate: Bool = false) {
         self.followers = followers
         self.likes = likes
         self.comments = comments
         self.recordedOn = recordedOn
+        self.followersSource = followersSource
+        self.likesSource = likesSource
+        self.commentsSource = commentsSource
+        self.outcome = outcome
+        self.instagramID = instagramID
+        self.reels = reels
+        self.feed = feed
+        self.isPrivate = isPrivate
+    }
+
+    // MARK: - Merging, never rebuilding (#1003)
+
+    /// This record with `incoming`'s stated figures written over it.
+    ///
+    /// A COPY of what is already stored, with only the fields the incoming
+    /// record actually carries replaced. Rebuilding from a handful of values is
+    /// how typing a follower count into the sheet came to erase the fetch
+    /// outcome, the stable id and the private mark, silently making that
+    /// account unrankable again (L510).
+    ///
+    /// A nil figure on `incoming` means "this fetch says nothing about it",
+    /// not "this figure is now unknown". The only way to clear a figure is to
+    /// type an empty field, which goes through `AccountBook.record`.
+    func merged(with incoming: AccountStats) -> AccountStats {
+        var merged = self
+        if incoming.followers != nil {
+            merged.followers = incoming.followers
+            merged.followersSource = incoming.followersSource
+        }
+        if incoming.likes != nil || incoming.likesSource == .hidden {
+            merged.likes = incoming.likes
+            merged.likesSource = incoming.likesSource
+        }
+        if incoming.comments != nil {
+            merged.comments = incoming.comments
+            merged.commentsSource = incoming.commentsSource
+        }
+        if let outcome = incoming.outcome { merged.outcome = outcome }
+        if let id = incoming.instagramID { merged.instagramID = id }
+        if incoming.reels != nil || incoming.feed != nil {
+            merged.reels = incoming.reels
+            merged.feed = incoming.feed
+        }
+        if let recordedOn = incoming.recordedOn { merged.recordedOn = recordedOn }
+        // isPrivate is never carried by a fetch: it is a mark Dan makes by
+        // hand and nothing else may clear it (#982).
+        return merged
+    }
+
+    // MARK: - Explaining a figure that moved (#1003)
+
+    /// How much a figure has to move before it is worth explaining.
+    static let materialMove = 0.25
+
+    /// How much the reels share has to move before it can be the explanation.
+    static let materialMixShift = 0.5
+
+    /// Said when a refetch moved a figure AND the account changed what it posts.
+    ///
+    /// Nil the rest of the time, in both directions, and both matter. A note on
+    /// every jump would explain away real audience growth, which is the thing
+    /// the ranking exists to notice; a note on every mix change would be noise
+    /// on an ordinary refetch.
+    ///
+    /// Measured on the 2026-08-29 sample: reels drew 1.29x feed likes at the
+    /// median, and 11 of 46 accounts differed by more than double, so the mix
+    /// really can carry a figure on its own.
+    static func mixNote(before: AccountStats, after: AccountStats) -> String? {
+        guard let wasLikes = before.likes, wasLikes > 0, let nowLikes = after.likes,
+              let wasShare = before.reelsShare, let nowShare = after.reelsShare
+        else { return nil }
+        let moved = abs(Double(nowLikes - wasLikes) / Double(wasLikes))
+        guard moved >= materialMove, abs(nowShare - wasShare) >= materialMixShift
+        else { return nil }
+        let direction = nowShare > wasShare ? "more reels" : "fewer reels"
+        return "This figure moved \(Int((moved * 100).rounded()))% and the account "
+             + "posted \(direction) than last time, so some of the change is what "
+             + "it posted rather than who is watching."
+    }
+
+    /// What share of the sampled posts were reels, or nil if no mix was stored.
+    ///
+    /// Nil rather than zero for an absent mix. Every record written before the
+    /// mix existed has none, and reading those as no reels at all would look
+    /// like a total shift on the first fetch that records one.
+    var reelsShare: Double? {
+        guard let reels, let feed, reels + feed > 0 else { return nil }
+        return Double(reels) / Double(reels + feed)
     }
 }
 
@@ -401,10 +609,93 @@ final class AccountBook {
         guard !key.isEmpty else { return }
         var entry = records[key] ?? AccountRecord(handle: CaptionBlocks.bareUsername(handle))
         entry.handle = CaptionBlocks.bareUsername(handle)
-        entry.stats = AccountStats(followers: nonNegative(followers),
-                                   likes: nonNegative(likes),
-                                   comments: nonNegative(comments),
-                                   recordedOn: date)
+        // A COPY, with the typed figures written over it (#1003). This used to
+        // rebuild `AccountStats` from these four values, so typing a follower
+        // count into the sheet erased the fetch outcome, the stable Instagram
+        // id, the post mix and the private mark, and silently made that account
+        // unrankable again (L510).
+        //
+        // The typed figures are written unconditionally, INCLUDING nil, because
+        // clearing a field is a real action here: this is the one path where an
+        // empty box means "I do not know this" rather than "I am not saying".
+        //
+        // A figure that comes back UNCHANGED keeps the provenance it had. The
+        // sheet is pre-filled with what is stored, so it sends all three
+        // figures back whether or not Dan touched them, and marking every one
+        // of them typed would quietly downgrade a measured figure to a typed
+        // one the first time he corrected a different field.
+        let was = entry.stats
+        var stats = was
+        stats.followers = nonNegative(followers)
+        stats.likes = nonNegative(likes)
+        stats.comments = nonNegative(comments)
+        stats.followersSource = Self.sourceAfterTyping(
+            was: was.followers, now: stats.followers, previous: was.followersSource)
+        stats.likesSource = Self.sourceAfterTyping(
+            was: was.likes, now: stats.likes, previous: was.likesSource)
+        stats.commentsSource = Self.sourceAfterTyping(
+            was: was.comments, now: stats.comments, previous: was.commentsSource)
+        stats.recordedOn = date
+        entry.stats = stats
+        records[key] = entry
+        save()
+    }
+
+    /// What a figure's provenance becomes after a pass through the sheet.
+    ///
+    /// Cleared means nobody knows it, so it has no source. Unchanged means Dan
+    /// did not touch it, so it keeps the one it had. Anything else he typed.
+    private static func sourceAfterTyping(was: Int?, now: Int?,
+                                          previous: AccountStats.FigureSource?)
+        -> AccountStats.FigureSource? {
+        guard now != nil else { return nil }
+        return now == was ? (previous ?? .typed) : .typed
+    }
+
+    /// Store one account's figures outright, replacing whatever was there.
+    ///
+    /// For a caller that has a whole `AccountStats` and means it, which today
+    /// is the tests and #982's private mark. Everything that arrives from a
+    /// FETCH goes through `merge` instead, because a fetch speaks only about
+    /// the figures it actually obtained.
+    func write(_ stats: AccountStats, for handle: String) {
+        let key = Self.key(handle)
+        guard !key.isEmpty else { return }
+        var entry = records[key] ?? AccountRecord(handle: CaptionBlocks.bareUsername(handle))
+        entry.handle = CaptionBlocks.bareUsername(handle)
+        entry.stats = stats
+        records[key] = entry
+        save()
+    }
+
+    /// Fold one fetch's result into what is already known (#1003).
+    ///
+    /// Refuses to merge across a CHANGED Instagram id. `business_discovery`
+    /// looks up by a mutable display name, so a handle that changed hands
+    /// returns a different account's audience under the same name, and merging
+    /// it would attribute one account's figures to another with nothing
+    /// anywhere reporting a problem. The refusal is recorded as an outcome
+    /// rather than swallowed, because a merge that quietly did nothing is
+    /// indistinguishable from one that had nothing to do (L11).
+    func merge(_ incoming: AccountStats, for handle: String, on date: Date) {
+        let key = Self.key(handle)
+        guard !key.isEmpty else { return }
+        var entry = records[key] ?? AccountRecord(handle: CaptionBlocks.bareUsername(handle))
+        entry.handle = CaptionBlocks.bareUsername(handle)
+
+        if let known = entry.stats.instagramID, let arriving = incoming.instagramID,
+           known != arriving {
+            var refused = entry.stats
+            refused.outcome = .handleChangedHands
+            entry.stats = refused
+            records[key] = entry
+            save()
+            return
+        }
+
+        var merged = entry.stats.merged(with: incoming)
+        if merged.recordedOn == nil { merged.recordedOn = date }
+        entry.stats = merged
         records[key] = entry
         save()
     }

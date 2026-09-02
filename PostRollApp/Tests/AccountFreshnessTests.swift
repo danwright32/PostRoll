@@ -122,4 +122,56 @@ final class AccountFreshnessTests: XCTestCase {
         let stats = AccountStats(followers: 1, likes: 1, comments: 1, recordedOn: entered)
         XCTAssertTrue(stats.freshnessLabel(asOf: entered).contains("Mar 31, 2026"))
     }
+
+    // MARK: - The post mix has a reader (#1003)
+
+    /// The mix is stored so that a figure jumping between fetches can be
+    /// explained. Measured on the 2026-08-29 sample: reels drew 1.29x feed
+    /// likes at the median, and 11 of 46 accounts differed by more than double,
+    /// so a jump is often what the account posted rather than who is watching.
+    ///
+    /// Stored with no reader it would be a field written and never read, which
+    /// is indistinguishable from one that works (L46). This is the reader.
+
+    private func stats(likes: Int, reels: Int, feed: Int) -> AccountStats {
+        AccountStats(followers: 1_000, likes: likes, comments: 5,
+                     recordedOn: Date(timeIntervalSince1970: 1_775_000_000),
+                     outcome: .measured, reels: reels, feed: feed)
+    }
+
+    func testAFigureThatJumpedWhileTheMixMovedSaysSo() {
+        let note = AccountStats.mixNote(before: stats(likes: 100, reels: 0, feed: 10),
+                                        after: stats(likes: 300, reels: 10, feed: 0))
+
+        let text = try! XCTUnwrap(note)
+        XCTAssertTrue(text.lowercased().contains("reel"), text)
+        XCTAssertTrue(text.lowercased().contains("more") || text.lowercased().contains("posted"),
+                      "the note has to say the ACCOUNT changed what it posts, not that "
+                      + "its audience grew: \(text)")
+    }
+
+    func testAFigureThatJumpedWithTheMixUnchangedIsNotExplainedAway() {
+        // The positive control (L159), and the more important direction. A note
+        // on every jump would explain away real audience growth, which is the
+        // thing the ranking exists to notice.
+        XCTAssertNil(AccountStats.mixNote(before: stats(likes: 100, reels: 5, feed: 5),
+                                          after: stats(likes: 300, reels: 5, feed: 5)))
+    }
+
+    func testAMixThatMovedWithoutMovingTheFigureSaysNothing() {
+        // Nothing to explain, so nothing to say. A note here would be noise on
+        // every ordinary refetch.
+        XCTAssertNil(AccountStats.mixNote(before: stats(likes: 100, reels: 0, feed: 10),
+                                          after: stats(likes: 104, reels: 10, feed: 0)))
+    }
+
+    func testNoMixRecordedAtAllExplainsNothing() {
+        // Every record written before the mix existed. An absent mix must not
+        // read as a mix of zero reels, which would look like a total shift on
+        // the first fetch that records one.
+        let before = AccountStats(followers: 1_000, likes: 100, outcome: .measured)
+
+        XCTAssertNil(AccountStats.mixNote(before: before,
+                                          after: stats(likes: 300, reels: 10, feed: 0)))
+    }
 }

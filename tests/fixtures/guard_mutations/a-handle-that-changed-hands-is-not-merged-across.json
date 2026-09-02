@@ -1,0 +1,8 @@
+{
+  "name": "a-handle-that-changed-hands-is-not-merged-across",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "        if let known = entry.stats.instagramID, let arriving = incoming.instagramID,\n           known != arriving {",
+  "replace": "        if let known = entry.stats.instagramID, let arriving = incoming.instagramID,\n           known == arriving, false {",
+  "test": "PostRollTests/AccountBookTests/testAHandleThatChangedHandsIsNotMergedAcross",
+  "breaks": "a handle that now belongs to somebody else has that account's audience merged onto the old record, because business_discovery looks up by a mutable display name, and nothing anywhere reports a problem (#1003)"
+}

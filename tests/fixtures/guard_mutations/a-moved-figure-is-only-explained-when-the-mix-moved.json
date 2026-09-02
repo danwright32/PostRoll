@@ -1,0 +1,8 @@
+{
+  "name": "a-moved-figure-is-only-explained-when-the-mix-moved",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "        guard moved >= materialMove, abs(nowShare - wasShare) >= materialMixShift",
+  "replace": "        guard moved >= materialMove",
+  "test": "PostRollTests/AccountFreshnessTests/testAFigureThatJumpedWithTheMixUnchangedIsNotExplainedAway",
+  "breaks": "every figure that moves is explained away as a change in what the account posted, including real audience growth, which is the thing the ranking exists to notice (#1003)"
+}
