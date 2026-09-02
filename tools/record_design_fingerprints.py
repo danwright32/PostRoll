@@ -93,7 +93,7 @@ REFERENCE_TESTS: dict[str, tuple[str, ...]] = {
     "reel_slider": (
         "tests/test_golden_frames.py::test_slider_reel_matches_its_reference_frame",
         "tests/test_golden_frames.py::"
-        "test_the_sliders_divider_matches_its_reference_frame_mid_sweep",
+        "test_the_sliders_divider_is_where_its_easing_puts_it_mid_sweep",
         "tests/test_golden_frames.py::"
         "test_the_closing_hold_matches_its_reference_frame[slider_reel_closing]"),
     # The three that had no reference of their own until #665. The cover is
